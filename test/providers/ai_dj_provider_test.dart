@@ -45,26 +45,28 @@ AiDjBatch _batch(int from, int count) => AiDjBatch(
 );
 
 /// 与控制器一致的「AI 队列」快照（上下文名）。
-BackendSnapshot _radioSnapshot({
+TestPlaybackFrame _radioSnapshot({
   required Track current,
   required List<Track> queue,
   required int currentIndex,
   bool isPlaying = true,
   Duration position = Duration.zero,
   String? contextName = kAiDjContextName,
-}) => BackendSnapshot(
-  current: current,
-  queue: queue,
-  currentIndex: currentIndex,
-  isPlaying: isPlaying,
+}) => (
+  snapshot: PlaybackSnapshot(
+    current: current,
+    queue: queue,
+    currentIndex: currentIndex,
+    isPlaying: isPlaying,
+    context: contextName == null
+        ? null
+        : PlaybackContext(name: contextName, uri: 'lx:$contextName'),
+  ),
   position: position,
-  context: contextName == null
-      ? null
-      : PlaybackContext(name: contextName, uri: 'lx:$contextName'),
 );
 
-/// 可阻塞 enqueue 的假后端：验证「已入队后被取消仍要补齐账本」。
-class _GatedEnqueueBackend extends FakePlaybackBackend {
+/// 可阻塞 enqueue 的假引擎：验证「已入队后被取消仍要补齐账本」。
+class _GatedEnqueueFacade extends FakePlaybackFacade {
   Completer<void>? enqueueGate;
 
   @override
@@ -89,7 +91,7 @@ class _FailingHistoryStore extends AiRecommendationStore {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late FakePlaybackBackend backend;
+  late FakePlaybackFacade backend;
   late PlaybackProvider playbackProvider;
   late LibraryProvider libraryProvider;
   late FakeAiDjGenerator generator;
@@ -137,7 +139,7 @@ void main() {
   /// 让电台进入 playing（起播当前列表）。
   Future<void> startRadio() async {
     await provider.startRadio();
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(0),
         queue: _tracks(0, 20),
@@ -150,8 +152,8 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     secrets = MemorySettingsSecretStore();
-    backend = FakePlaybackBackend();
-    playbackProvider = buildTestPlaybackProvider(backend: backend);
+    backend = FakePlaybackFacade();
+    playbackProvider = buildTestPlaybackProvider(facade: backend);
     await playbackProvider.preferencesReady;
     libraryProvider = LibraryProvider(
       repository: FakeLibraryRepository(),
@@ -247,7 +249,7 @@ void main() {
     await enableWithList();
 
     await provider.startRadio(fromIndex: 1);
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(current: _track(1), queue: _tracks(0, 3), currentIndex: 1),
     );
 
@@ -265,7 +267,7 @@ void main() {
 
   test('enqueueRecommendations：只追加未入队曲目，不重复追加', () async {
     await enableWithList();
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(0),
         queue: [_track(0), ..._tracks(100, 10)],
@@ -299,7 +301,7 @@ void main() {
         .toList();
 
     generator.batchFactory = () => _batch(20, 20);
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(16),
         queue: _tracks(0, 20),
@@ -332,7 +334,7 @@ void main() {
     generator.batchFactory = () => _batch(0, 20);
     backend.lastEnqueued = null;
 
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(18),
         queue: _tracks(0, 20),
@@ -354,7 +356,7 @@ void main() {
     await provider.startRadio();
 
     for (var index = 0; index < 4; index++) {
-      backend.emit(
+      backend.emitFrame(
         _radioSnapshot(
           current: _track(index),
           queue: _tracks(0, 20),
@@ -365,7 +367,7 @@ void main() {
     }
     expect(provider.queuedCount, isZero, reason: '起播的三首都已播过');
 
-    backend.emit(BackendSnapshot.empty);
+    backend.emit(PlaybackSnapshot.empty);
     expect(provider.queuedCount, isZero, reason: '播放结束后队列里没有推荐');
   });
 
@@ -374,7 +376,7 @@ void main() {
     await provider.setEnabled(true);
     provider.dispose();
 
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(18),
         queue: _tracks(0, 20),
@@ -403,7 +405,7 @@ void main() {
     await provider.setEnabled(true);
     provider.dispose();
 
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(0),
         queue: _tracks(0, 20),
@@ -417,7 +419,7 @@ void main() {
     expect(provider.queuedCount, 20);
 
     provider.onPositionChanged();
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(1),
         queue: _tracks(0, 20),
@@ -435,7 +437,7 @@ void main() {
     await startRadio();
     await provider.setAutoFeed(false);
 
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(18),
         queue: _tracks(0, 20),
@@ -447,7 +449,7 @@ void main() {
     expect(generator.calls, 1);
 
     await provider.setAutoFeed(true);
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(18),
         queue: _tracks(0, 20),
@@ -468,7 +470,7 @@ void main() {
     generator.gate = gate;
     generator.batchFactory = () => _batch(20, 3);
 
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(18),
         queue: _tracks(0, 20),
@@ -494,7 +496,7 @@ void main() {
       provider.preferences.copyWith(autoFeed: true),
     );
     for (var i = 0; i < 3; i++) {
-      backend.emit(
+      backend.emitFrame(
         _radioSnapshot(
           current: _track(18),
           queue: _tracks(0, 20),
@@ -519,12 +521,12 @@ void main() {
   });
 
   test('自动补歌入队后被取消：仍补齐历史 / 队列计数 / 会话跟踪', () async {
-    final gated = _GatedEnqueueBackend();
+    final gated = _GatedEnqueueFacade();
     provider.dispose();
     libraryProvider.dispose();
     playbackProvider.dispose();
     backend = gated;
-    playbackProvider = buildTestPlaybackProvider(backend: gated);
+    playbackProvider = buildTestPlaybackProvider(facade: gated);
     await playbackProvider.preferencesReady;
     libraryProvider = LibraryProvider(
       repository: FakeLibraryRepository(),
@@ -538,7 +540,7 @@ void main() {
     final gate = Completer<void>();
     gated.enqueueGate = gate;
 
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(18),
         queue: _tracks(0, 20),
@@ -588,7 +590,7 @@ void main() {
       ),
       rawResponse: 'silent-raw',
     );
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(18),
         queue: _tracks(0, 20),
@@ -611,7 +613,7 @@ void main() {
     generator.gate = gate;
     generator.batchFactory = () => _batch(6, 6);
 
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(current: _track(5), queue: _tracks(0, 6), currentIndex: 5),
     );
     provider.onPlaybackChanged();
@@ -619,7 +621,7 @@ void main() {
     expect(generator.calls, 2);
 
     // 生成期间队列播完。
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(5),
         queue: _tracks(0, 6),
@@ -692,7 +694,7 @@ void main() {
     generator.error = StateError('boom');
 
     for (var i = 0; i < 3; i++) {
-      backend.emit(
+      backend.emitFrame(
         _radioSnapshot(
           current: _track(18),
           queue: _tracks(0, 20),
@@ -712,7 +714,7 @@ void main() {
     expect(backend.lastEnqueued, isNull);
 
     generator.calls = 0;
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(18),
         queue: _tracks(0, 20),
@@ -731,7 +733,7 @@ void main() {
     generator.gate = gate;
     generator.batchFactory = () => _batch(20, 3);
 
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(18),
         queue: _tracks(0, 20),
@@ -1101,7 +1103,7 @@ void main() {
     await enableWithList(count: 1);
     await startRadio();
     // startRadio 用 20 首队列会触发自动补歌；换成长队列避免干扰。
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(0),
         queue: [_track(0), _track(99), ..._tracks(200, 18)],
@@ -1112,7 +1114,7 @@ void main() {
     provider.onPlaybackChanged();
     provider.onPositionChanged();
 
-    backend.emit(
+    backend.emitFrame(
       _radioSnapshot(
         current: _track(99),
         queue: [_track(0), _track(99), ..._tracks(200, 18)],

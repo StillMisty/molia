@@ -1,16 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/mapping/track_mapper.dart';
-import 'package:molia/data/playback/local_playback_backend.dart';
+import 'package:molia/data/playback/playback_engine.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
+import 'package:molia/domain/ports/playback_facade.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/playback/queue_projection.dart';
 import 'package:molia/sources/source_track.dart';
 
-/// 覆写状态的假服务：不触碰 just_audio 平台通道，只验证 backend 的映射/委托。
+/// 覆写状态的假服务：不触碰 just_audio 平台通道，只验证引擎的映射/命令。
 class _FakeService extends LocalPlaybackService {
   _FakeService()
     : super(
@@ -305,31 +306,27 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _FakeService service;
-  late LocalPlaybackBackend backend;
+  late PlaybackEngine engine;
 
   setUp(() {
     service = _FakeService();
-    backend = LocalPlaybackBackend(
-      service: service,
-      resolver: (track, quality) async =>
-          PlayableStream(Uri.parse('http://127.0.0.1/${track.id.id}.wav')),
-    );
+    engine = PlaybackEngine(service: service);
   });
 
   tearDown(() {
-    backend.dispose();
+    engine.dispose();
     service.dispose();
   });
 
   test('enqueueTracks 转换后追加队列（快照队列增长，不打断当前）', () async {
     service.seed([_source('a')], index: 0, playing: true);
-    final before = backend.state.value.queue.length;
+    final before = engine.snapshot.value.queue.length;
 
-    await backend.enqueueTracks([trackFromSourceTrack(_source('b'))]);
+    await engine.enqueueTracks([trackFromSourceTrack(_source('b'))]);
 
     expect(service.calls, contains('enqueueTracks'));
     expect(service.enqueued.single.single.id, 'fake:b');
-    final snapshot = backend.state.value;
+    final snapshot = engine.snapshot.value;
     expect(snapshot.queue.length, before + 1);
     expect(snapshot.queue.last.id.id, 'b');
     expect(snapshot.current?.id.id, 'a', reason: '当前曲目不变');
@@ -338,12 +335,12 @@ void main() {
   test('队列编辑：转发服务并把变化结果回给调用方', () async {
     service.seed([_source('a'), _source('b'), _source('c')], index: 0);
 
-    expect(await backend.moveQueueIndex(2, 1), isTrue);
+    expect(await engine.moveQueueIndex(2, 1), isTrue);
     expect(service.lastMoveFrom, 2);
     expect(service.lastMoveTo, 1);
 
     service.removeResult = false;
-    expect(await backend.removeQueueIndex(2), isFalse);
+    expect(await engine.removeQueueIndex(2), isFalse);
     expect(service.lastRemovedIndex, 2);
     expect(service.calls, contains('removeQueueIndex'));
   });
@@ -360,7 +357,7 @@ void main() {
       error: 'LxEngineException: 音源不可用',
     );
 
-    final snapshot = backend.state.value;
+    final snapshot = engine.snapshot.value;
     expect(snapshot.current?.id, const TrackId('fake', 'a'));
     expect(snapshot.queue, hasLength(2));
     expect(snapshot.currentIndex, 0);
@@ -371,7 +368,7 @@ void main() {
 
     // 下标回退：previous / previousOfPrevious 透传服务解析结果。
     service.seed([a, b], index: 1, playing: true);
-    final atEnd = backend.state.value;
+    final atEnd = engine.snapshot.value;
     expect(atEnd.previous?.id.id, 'a');
     expect(atEnd.previousOfPrevious, isNull);
     expect(atEnd.next, isNull);
@@ -379,56 +376,112 @@ void main() {
     expect(snapshot.duration, const Duration(seconds: 42));
     expect(snapshot.context?.name, '集成测试');
     expect(snapshot.error?.kind, FailureKind.scriptError);
-    expect(backend.kind, PlaybackBackendKind.local);
-    expect(backend.canHandle(snapshot.current!), isTrue);
   });
 
-  test('state 值未变不发；变化才发', () {
+  test('position 通道 ≥250ms 变化才发（≤4Hz），换曲直接对齐', () {
+    final track = _source('a');
+    service.seed([track], index: 0, playing: true);
+
+    var positionNotifies = 0;
+    engine.position.addListener(() => positionNotifies++);
+
+    // 首帧对齐到 0 时值未变，不会额外通知。
+    for (var ms = 100; ms <= 1000; ms += 100) {
+      service.change(position: Duration(milliseconds: ms));
+    }
+    expect(positionNotifies, 3, reason: '10 次 tick 只发 3 次（≤4Hz）');
+    expect(
+      engine.position.value,
+      const Duration(milliseconds: 900),
+      reason: '小于阈值的 tick 不更新通道值（最多滞后 250ms）',
+    );
+
+    // 换曲：即使进度回退到 0 也直接对齐，不受阈值抑制。
+    service.seed([_source('b')], index: 0, playing: true);
+    expect(positionNotifies, 4);
+    expect(engine.position.value, Duration.zero);
+  });
+
+  test('只经 PlaybackFacade 接口即可驱动命令、快照与进度通道', () async {
+    final PlaybackFacade facade = engine;
+    final a = _source('a');
+    final b = _source('b');
+    service.seed([a, b], index: 0, playing: false);
+
+    expect(facade.snapshot.value.current?.id.id, 'a');
+    expect(facade.position.value, Duration.zero);
+
+    await facade.play();
+    expect(facade.snapshot.value.isPlaying, isTrue);
+
+    await facade.seek(const Duration(seconds: 3));
+    expect(facade.position.value, const Duration(seconds: 3));
+    expect(facade.snapshot.value.current?.id.id, 'a');
+
+    await facade.next();
+    expect(service.calls.last, 'next');
+
+    await facade.playQueueIndex(1);
+    expect(facade.snapshot.value.current?.id.id, 'b');
+    expect(facade.snapshot.value.currentIndex, 1);
+
+    await facade.setMode(PlayMode.shuffle);
+    expect(facade.snapshot.value.mode, PlayMode.shuffle);
+
+    await facade.pause();
+    expect(facade.snapshot.value.isPlaying, isFalse);
+  });
+
+  test('快照值变才发；position tick 只走独立通道', () {
     final a = _source('a');
     var notifies = 0;
-    backend.state.addListener(() => notifies++);
+    var positionNotifies = 0;
+    engine.snapshot.addListener(() => notifies++);
+    engine.position.addListener(() => positionNotifies++);
 
     service.seed([a], index: 0, playing: true);
     expect(notifies, 1);
 
-    // 相同值（仅重新 notify）→ backend 快照相等，不发。
+    // 相同值（仅重新 notify）→ 快照相等，不发。
     service.change();
     expect(notifies, 1);
 
-    // position 变化属于后端快照（facade 负责拆分高频通道）。
+    // 位置推进：快照不含 position，不得触发低频通知；进度通道按阈值发。
     service.change(position: const Duration(seconds: 1));
-    expect(notifies, 2);
+    expect(notifies, 1);
+    expect(positionNotifies, 1);
+    expect(engine.position.value, const Duration(seconds: 1));
   });
 
   test('队列 revision 变化：身份缓存裁到当前队列，当前 / 下一首映射复用', () {
     final a = _source('a');
     final b = _source('b');
     service.seed([a, b], index: 0);
-    final first = backend.state.value;
-    expect(backend.trackCacheLength, 2);
+    final first = engine.snapshot.value;
+    expect(engine.trackCacheLength, 2);
 
     // 同一批 SourceTrack 对象进入更长队列：当前 / 下一首复用同一 Track。
     service.seed([a, b, _source('c')], index: 0);
-    final second = backend.state.value;
+    final second = engine.snapshot.value;
     expect(identical(second.current, first.current), isTrue);
     expect(identical(second.queue[0], first.queue[0]), isTrue);
     expect(identical(second.queue[1], first.queue[1]), isTrue);
-    expect(backend.trackCacheLength, 3);
+    expect(engine.trackCacheLength, 3);
 
     // 整体换队列（上一份身份全部离队）：缓存不能继续膨胀。
     service.seed([_source('a')], index: 0);
-    expect(backend.trackCacheLength, 1);
-    expect(backend.state.value.queue.single.id.id, 'a');
+    expect(engine.trackCacheLength, 1);
+    expect(engine.snapshot.value.queue.single.id.id, 'a');
   });
 
   test('stop 清空身份缓存', () async {
     service.seed([_source('a'), _source('b')], index: 0);
-    expect(backend.trackCacheLength, 2);
+    expect(engine.trackCacheLength, 2);
 
-    await backend.stop();
+    await engine.stop();
 
-    expect(backend.trackCacheLength, 0);
-    expect(backend.state.value.queue, isEmpty);
+    expect(engine.trackCacheLength, 0);
+    expect(engine.snapshot.value.queue, isEmpty);
   });
 
   test('next/previous/previousOfPrevious/upNext 与投影一致：线性模式', () {
@@ -438,7 +491,7 @@ void main() {
       mode: PlayMode.sequential,
     );
 
-    var snapshot = backend.state.value;
+    var snapshot = engine.snapshot.value;
     expect(snapshot.next?.id.id, 'c');
     expect(snapshot.previous?.id.id, 'a');
     expect(snapshot.previousOfPrevious, isNull);
@@ -451,7 +504,7 @@ void main() {
       index: 2,
       mode: PlayMode.listLoop,
     );
-    snapshot = backend.state.value;
+    snapshot = engine.snapshot.value;
     expect(snapshot.next?.id.id, 'a');
     expect(snapshot.previous?.id.id, 'b');
     expect(snapshot.previousOfPrevious?.id.id, 'a');
@@ -471,7 +524,7 @@ void main() {
       mode: PlayMode.shuffle,
       shuffleIndices: const [2, 0, 1],
     );
-    var snapshot = backend.state.value;
+    var snapshot = engine.snapshot.value;
     expect(snapshot.next?.id.id, 'b');
     expect(snapshot.previous, isNull);
     expect(snapshot.previousOfPrevious, isNull);
@@ -484,7 +537,7 @@ void main() {
       mode: PlayMode.shuffle,
       shuffleIndices: const [2, 0, 1],
     );
-    snapshot = backend.state.value;
+    snapshot = engine.snapshot.value;
     expect(snapshot.next, isNull);
     expect(snapshot.previous?.id.id, 'a');
     expect(snapshot.previousOfPrevious, isNull);
@@ -498,7 +551,7 @@ void main() {
       previousIndex: 2,
       previousOfPreviousIndex: 0,
     );
-    snapshot = backend.state.value;
+    snapshot = engine.snapshot.value;
     expect(snapshot.previous?.id.id, 'c');
     expect(snapshot.previousOfPrevious?.id.id, 'a');
   });
@@ -510,7 +563,7 @@ void main() {
     service.change(position: const Duration(seconds: 2));
 
     expect(service.projectionBuilds, 0);
-    expect(backend.state.value.position, const Duration(seconds: 2));
+    expect(engine.position.value, const Duration(seconds: 2));
   });
 
   test('大队列：位置 tick 复用投影 / upNext，只有下标 / 模式 / 队列变化才重算', () async {
@@ -519,91 +572,91 @@ void main() {
     final tracks = [for (var i = 0; i < 2000; i++) _source('$i')];
     service.seed(tracks, index: 1000, mode: PlayMode.listLoop);
 
-    final initial = backend.state.value;
+    final initial = engine.snapshot.value;
     service.projectionBuilds = 0;
 
     for (var i = 1; i <= 50; i++) {
       service.change(position: Duration(milliseconds: i * 400));
     }
 
-    final afterTicks = backend.state.value;
+    final afterTicks = engine.snapshot.value;
     expect(service.projectionBuilds, 0, reason: '位置 tick 不得重算投影');
-    expect(afterTicks.position, const Duration(milliseconds: 20000));
+    expect(engine.position.value, const Duration(milliseconds: 20000));
     expect(identical(afterTicks.queue, initial.queue), isTrue);
     expect(identical(afterTicks.upNext, initial.upNext), isTrue);
     expect(identical(afterTicks.upNextIndices, initial.upNextIndices), isTrue);
 
     // 下标变化：一次重算，随后再次位置 tick 继续复用。
-    await backend.playQueueIndex(1001);
+    await engine.playQueueIndex(1001);
     expect(service.projectionBuilds, 1);
-    final afterIndex = backend.state.value;
+    final afterIndex = engine.snapshot.value;
     service.change(position: const Duration(seconds: 21));
     expect(service.projectionBuilds, 1);
-    expect(identical(backend.state.value.upNext, afterIndex.upNext), isTrue);
+    expect(identical(engine.snapshot.value.upNext, afterIndex.upNext), isTrue);
 
     // 模式变化：一次重算。
-    await backend.setMode(PlayMode.shuffle);
+    await engine.setMode(PlayMode.shuffle);
     expect(service.projectionBuilds, 2);
 
     // 队列内容变化：一次重算。
-    await backend.enqueueTracks([trackFromSourceTrack(_source('extra'))]);
+    await engine.enqueueTracks([trackFromSourceTrack(_source('extra'))]);
     expect(service.projectionBuilds, 3);
   });
 
   test('队列映射按 queueRevision 复用：位置 / 播放态变化不重建', () {
     service.seed([_source('a'), _source('b')], index: 0);
 
-    final initial = backend.state.value.queue;
+    final initial = engine.snapshot.value.queue;
     expect(initial, hasLength(2));
 
     service.change(playing: false, position: const Duration(seconds: 1));
 
-    final afterTick = backend.state.value;
+    final afterTick = engine.snapshot.value;
     expect(afterTick.isPlaying, isFalse);
-    expect(afterTick.position, const Duration(seconds: 1));
+    expect(engine.position.value, const Duration(seconds: 1));
     expect(identical(afterTick.queue, initial), isTrue, reason: '队列未变应复用');
     expect(identical(afterTick.queue[0], initial[0]), isTrue);
   });
 
   test('queueRevision 变更使队列映射失效', () async {
     service.seed([_source('a'), _source('b')], index: 0);
-    final initial = backend.state.value.queue;
+    final initial = engine.snapshot.value.queue;
 
     // 追加：队列内容变化 → 重新映射。
-    await backend.enqueueTracks([trackFromSourceTrack(_source('c'))]);
-    final appended = backend.state.value.queue;
+    await engine.enqueueTracks([trackFromSourceTrack(_source('c'))]);
+    final appended = engine.snapshot.value.queue;
     expect(appended.map((t) => t.id.id), ['a', 'b', 'c']);
     expect(identical(appended, initial), isFalse);
 
     // 补图：原地替换同样自增版本号 → 新映射，封面更新。
-    await backend.updateTrackArtwork(
+    await engine.updateTrackArtwork(
       'fake:b',
       Uri.parse('https://img.example/b-new.jpg'),
     );
-    final artwork = backend.state.value.queue;
+    final artwork = engine.snapshot.value.queue;
     expect(identical(artwork, appended), isFalse);
     expect(artwork[1].artwork?.uri.toString(), 'https://img.example/b-new.jpg');
 
     // 换源：命中队列 → 失效并反映新曲目。
-    await backend.replaceQueueTrack(
+    await engine.replaceQueueTrack(
       'fake:b',
       trackFromSourceTrack(_source('b', title: '新版本')),
     );
-    final replaced = backend.state.value.queue;
+    final replaced = engine.snapshot.value.queue;
     expect(identical(replaced, artwork), isFalse);
     expect(replaced[1].title, '新版本');
 
     // 清空：停止后队列为空且不复用旧映射。
-    await backend.stop();
-    expect(backend.state.value.queue, isEmpty);
-    expect(identical(backend.state.value.queue, replaced), isFalse);
+    await engine.stop();
+    expect(engine.snapshot.value.queue, isEmpty);
+    expect(identical(engine.snapshot.value.queue, replaced), isFalse);
   });
 
   test('load 委托 playTracks 且 raw 原样回传', () async {
     final domainA = trackFromSourceTrack(_source('a'));
     final domainB = trackFromSourceTrack(_source('b'));
 
-    await backend.load(
+    await engine.playTracks(
       PlaybackRequest(
         tracks: [domainA, domainB],
         startIndex: 1,
@@ -619,7 +672,7 @@ void main() {
       isTrue,
       reason: 'raw 必须原样回传',
     );
-    expect(backend.state.value.context?.name, 'ctx');
+    expect(engine.snapshot.value.context?.name, 'ctx');
     expect(service.lastShuffleIndices, isNull, reason: '未提供排列时不伪造');
   });
 
@@ -630,7 +683,7 @@ void main() {
       trackFromSourceTrack(_source('c')),
     ];
 
-    await backend.load(
+    await engine.playTracks(
       PlaybackRequest(
         tracks: tracks,
         startIndex: 1,
@@ -642,58 +695,46 @@ void main() {
     expect(service.lastShuffleIndices, [1, 2, 0]);
   });
 
-  test('解析器端口：Track → PlayableStream', () async {
-    final stream = await backend.resolveStream(
-      trackFromSourceTrack(_source('a')),
-      const AudioQuality(type: '320k'),
-    );
-    expect(stream.uri.toString(), 'http://127.0.0.1/a.wav');
-    final streamNoQuality = await backend.resolveStream(
-      trackFromSourceTrack(_source('b')),
-    );
-    expect(streamNoQuality.uri.path, '/b.wav');
-  });
-
-  test('控制委托：play/pause/seek/next/previous/setMode/stop/queueIndex', () async {
+  test('控制命令：play/pause/seek/next/previous/setMode/stop/queueIndex', () async {
     final a = _source('a');
     final b = _source('b');
     service.seed([a, b], index: 0, playing: false);
 
-    await backend.play();
+    await engine.play();
     expect(service.calls.last, 'toggle');
-    expect(backend.state.value.isPlaying, isTrue);
+    expect(engine.snapshot.value.isPlaying, isTrue);
 
-    await backend.pause();
+    await engine.pause();
     expect(service.calls.last, 'toggle');
-    expect(backend.state.value.isPlaying, isFalse);
+    expect(engine.snapshot.value.isPlaying, isFalse);
 
-    await backend.seek(const Duration(seconds: 3));
+    await engine.seek(const Duration(seconds: 3));
     expect(service.calls.last, 'seek');
-    expect(backend.state.value.position, const Duration(seconds: 3));
+    expect(engine.position.value, const Duration(seconds: 3));
 
-    await backend.next();
+    await engine.next();
     expect(service.calls.last, 'next');
-    await backend.previous();
+    await engine.previous();
     expect(service.calls.last, 'previous');
 
-    await backend.setMode(PlayMode.shuffle);
+    await engine.setMode(PlayMode.shuffle);
     expect(service.calls.last, 'setMode');
-    expect(backend.state.value.mode, PlayMode.shuffle);
+    expect(engine.snapshot.value.mode, PlayMode.shuffle);
 
-    await backend.playQueueIndex(1);
+    await engine.playQueueIndex(1);
     expect(service.playQueueIndexCalls, 1);
-    expect(backend.state.value.currentIndex, 1);
+    expect(engine.snapshot.value.currentIndex, 1);
 
-    await backend.stop();
+    await engine.stop();
     expect(service.stopCalls, 1);
-    expect(backend.state.value.current, isNull);
+    expect(engine.snapshot.value.current, isNull);
   });
 
   test('stopAfterCurrentTrack：标志转发到服务', () {
-    backend.setStopAfterCurrentTrack(true);
+    engine.setStopAfterCurrentTrack(true);
     expect(service.stopAfterCurrentTrack, isTrue);
 
-    backend.setStopAfterCurrentTrack(false);
+    engine.setStopAfterCurrentTrack(false);
     expect(service.stopAfterCurrentTrack, isFalse);
   });
 
@@ -701,11 +742,11 @@ void main() {
     service.seed([_source('a'), _source('b')], index: 0, playing: true);
     final replacement = trackFromSourceTrack(_source('b', title: '新版本'));
 
-    await backend.replaceQueueTrack('fake:b', replacement);
+    await engine.replaceQueueTrack('fake:b', replacement);
 
     expect(service.calls, contains('replaceQueueTrack'));
     expect(service.replacedTracks['fake:b']?.title, '新版本');
-    final snapshot = backend.state.value;
+    final snapshot = engine.snapshot.value;
     expect(snapshot.queue.map((t) => t.title), ['Title', '新版本']);
     expect(snapshot.queue.last.id, const TrackId('fake', 'b'));
     expect(snapshot.current?.id.id, 'a', reason: '未命中当前曲目时不重载');
@@ -714,30 +755,20 @@ void main() {
   test('setCurrentQuality：委托服务，快照带当前音质', () async {
     service.seed([_source('a')], index: 0, playing: true);
 
-    await backend.setCurrentQuality('flac');
+    await engine.setCurrentQuality('flac');
 
     expect(service.calls, contains('setCurrentQuality:flac'));
-    expect(backend.state.value.quality, 'flac');
+    expect(engine.snapshot.value.quality, 'flac');
   });
 
-  test('setVolume 委托服务；能力位 volume 为真', () async {
-    expect(backend.capabilities.volume, isTrue);
-    await backend.setVolume(0.4);
+  test('setVolume 委托服务且不发布快照', () async {
+    var snapshotNotifies = 0;
+    engine.snapshot.addListener(() => snapshotNotifies++);
+
+    await engine.setVolume(0.4);
+
     expect(service.calls, contains('setVolume'));
     expect(service.volumes, [0.4]);
-  });
-
-  test('可选能力：toggleFavorite 抛 unsupported', () async {
-    final track = trackFromSourceTrack(_source('a'));
-    await expectLater(
-      backend.toggleFavorite(track),
-      throwsA(
-        isA<SourceFailure>().having(
-          (f) => f.kind,
-          'kind',
-          FailureKind.unsupported,
-        ),
-      ),
-    );
+    expect(snapshotNotifies, 0, reason: '音量不属于播放快照');
   });
 }

@@ -2,7 +2,7 @@
 /// 路由、恢复态与 live 的交接、以及「PlaybackSessionStore 唯一写者」的落盘
 /// 口径（动作落盘、无周期写、flush 可 await）。
 ///
-/// 假后端 + 真实 facade + 记录型假 store：断言只经公开接口（displaySnapshot /
+/// 假播放引擎 + 记录型假 store：断言只经公开接口（displaySnapshot /
 /// liveSnapshot / phase / 命令路由结果 / position / livePosition）与注入的假入口，
 /// 不读私有字段。
 library;
@@ -10,7 +10,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/playback/default_playback_facade.dart';
+import 'package:molia/domain/ports/playback_facade.dart';
 import 'package:molia/data/settings/settings_access.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
@@ -35,8 +35,8 @@ Track _track(String id) => Track(
   payload: {'songmid': 'mid_$id'},
 );
 
-/// 真实播放的一帧后端快照（与真实后端同构：队列 + 下标 + 进度）。
-BackendSnapshot _live(
+/// 真实播放的一帧状态（快照 + 独立进度，与真实引擎同构）。
+TestPlaybackFrame _live(
   Track current, {
   List<Track>? queue,
   int index = 0,
@@ -45,7 +45,7 @@ BackendSnapshot _live(
   PlayMode mode = PlayMode.sequential,
 }) {
   final tracks = queue ?? [current];
-  return BackendSnapshot(
+  final snapshot = PlaybackSnapshot(
     current: current,
     queue: tracks,
     currentIndex: index,
@@ -54,10 +54,10 @@ BackendSnapshot _live(
     previousOfPrevious: index > 1 ? tracks[index - 2] : null,
     upNext: index >= 0 ? tracks.sublist(index + 1) : const [],
     isPlaying: playing,
-    position: position,
     duration: current.duration ?? Duration.zero,
     mode: mode,
   );
+  return (snapshot: snapshot, position: position);
 }
 
 /// 恢复态 shuffle 快照应是一份完整的本轮排列：
@@ -125,10 +125,10 @@ class _RecordingSessionStore extends PlaybackSessionStore {
   }
 }
 
-/// 模拟真实后端的装载过程：load 时先推送「当前曲目 + 进度 0」的加载态
+/// 模拟真实引擎的装载过程：load 时先推送「当前曲目 + 进度 0」的加载态
 /// （复现恢复播放的进度闪回窗口），[gate] 非空时停在取链阶段（用户操作窗口）。
-class _LoadingBackend extends FakePlaybackBackend {
-  _LoadingBackend({this.gate});
+class _LoadingFacade extends FakePlaybackFacade {
+  _LoadingFacade({this.gate});
 
   final Completer<void>? gate;
 
@@ -142,61 +142,61 @@ class _LoadingBackend extends FakePlaybackBackend {
   }
 
   @override
-  Future<void> load(PlaybackRequest request) async {
-    await super.load(request);
+  Future<void> playTracks(PlaybackRequest request) async {
+    await super.playTracks(request);
     final track = request.tracks[request.startIndex];
     emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: track,
         queue: request.tracks,
         currentIndex: request.startIndex,
         isLoading: true,
-        position: Duration.zero,
         duration: track.duration ?? Duration.zero,
-        mode: state.value.mode,
+        mode: snapshot.value.mode,
       ),
+      position: Duration.zero,
     );
     final gate = this.gate;
     if (gate != null) await gate.future;
   }
 }
 
-/// 队列跳转后像真实后端一样推一帧新下标快照（命令提交点据此写 cursor）。
-class _QueueJumpBackend extends FakePlaybackBackend {
+/// 队列跳转后像真实引擎一样推一帧新下标快照（命令提交点据此写 cursor）。
+class _QueueJumpFacade extends FakePlaybackFacade {
   @override
   Future<void> playQueueIndex(int index) async {
     await super.playQueueIndex(index);
-    final snapshot = state.value;
-    if (index < 0 || index >= snapshot.queue.length) return;
-    final track = snapshot.queue[index];
+    final current = snapshot.value;
+    if (index < 0 || index >= current.queue.length) return;
+    final track = current.queue[index];
     emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: track,
-        queue: snapshot.queue,
+        queue: current.queue,
         currentIndex: index,
-        next: index + 1 < snapshot.queue.length
-            ? snapshot.queue[index + 1]
+        next: index + 1 < current.queue.length
+            ? current.queue[index + 1]
             : null,
-        previous: index > 0 ? snapshot.queue[index - 1] : null,
-        previousOfPrevious: index > 1 ? snapshot.queue[index - 2] : null,
-        upNext: snapshot.queue.sublist(index + 1),
-        isPlaying: snapshot.isPlaying,
-        position: snapshot.position,
+        previous: index > 0 ? current.queue[index - 1] : null,
+        previousOfPrevious: index > 1 ? current.queue[index - 2] : null,
+        upNext: current.queue.sublist(index + 1),
+        isPlaying: current.isPlaying,
         duration: track.duration ?? Duration.zero,
-        mode: snapshot.mode,
-        context: snapshot.context,
-        error: snapshot.error,
+        mode: current.mode,
+        context: current.context,
+        error: current.error,
       ),
+      position: position.value,
     );
   }
 }
 
-/// 按 [PlaybackRequest.shuffleIndices] 推 live 快照的假后端：复现真实后端
+/// 按 [PlaybackRequest.shuffleIndices] 推 live 快照的假引擎：复现真实引擎
 /// 恢复播放后 next / upNext 来自恢复态展示过的排列，而不是重新洗牌。
-class _ShuffleAwareBackend extends FakePlaybackBackend {
+class _ShuffleAwareFacade extends FakePlaybackFacade {
   @override
-  Future<void> load(PlaybackRequest request) async {
-    await super.load(request);
+  Future<void> playTracks(PlaybackRequest request) async {
+    await super.playTracks(request);
     final index = request.startIndex.clamp(0, request.tracks.length - 1);
     final track = request.tracks[index];
     final order = request.shuffleIndices;
@@ -205,7 +205,7 @@ class _ShuffleAwareBackend extends FakePlaybackBackend {
         ? const <int>[]
         : order!.sublist(position + 1);
     emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: track,
         queue: request.tracks,
         currentIndex: index,
@@ -216,7 +216,7 @@ class _ShuffleAwareBackend extends FakePlaybackBackend {
         upNextIndices: List<int>.of(upNextIndices),
         isPlaying: true,
         duration: track.duration ?? Duration.zero,
-        mode: state.value.mode,
+        mode: snapshot.value.mode,
         context: request.context,
       ),
     );
@@ -245,8 +245,8 @@ class _RecordingQueueCoordinator extends PlaybackSessionCoordinator {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late FakePlaybackBackend backend;
-  late DefaultPlaybackFacade facade;
+  late FakePlaybackFacade backend;
+  late PlaybackFacade facade;
   late _RecordingSessionStore store;
   late PlaybackSessionCoordinator session;
 
@@ -255,15 +255,15 @@ void main() {
   /// [settings] 给与 provider 同源的设置注册表（重载钩子测试），
   /// [powerPolicy] 给共享的功耗策略（前后台落盘节流测试）。
   PlaybackSessionCoordinator build({
-    FakePlaybackBackend? backendOverride,
+    FakePlaybackFacade? backendOverride,
     bool persistStore = false,
     RestoredTrackReporter? onRestoredTrack,
     SettingsAccess? settings,
     PlaybackPowerPolicy? powerPolicy,
     bool recordQueueRouting = false,
   }) {
-    backend = backendOverride ?? FakePlaybackBackend();
-    facade = DefaultPlaybackFacade(backend: backend);
+    backend = backendOverride ?? FakePlaybackFacade();
+    facade = backend;
     store = _RecordingSessionStore(persist: persistStore);
     final coordinator = recordQueueRouting
         ? _RecordingQueueCoordinator(
@@ -327,15 +327,15 @@ void main() {
 
     // 真实播放接管：恢复数据丢弃，快照原样透传 facade。
     final live = _track('c');
-    backend.emit(_live(live, position: const Duration(seconds: 3)));
+    backend.emitFrame(_live(live, position: const Duration(seconds: 3)));
     expect(session.phase, PlaybackSessionPhase.live);
     expect(session.hasRestoredSession, isFalse);
     expect(session.displaySnapshot.current?.id.id, 'c');
     expect(session.position.value, const Duration(seconds: 3));
 
-    // 停止播放（真实后端随后清空队列）：回 idle。
+    // 停止播放（真实引擎随后清空队列）：回 idle。
     await session.stopPlayback();
-    backend.emit(BackendSnapshot.empty);
+    backend.emit(PlaybackSnapshot.empty);
     expect(session.phase, PlaybackSessionPhase.idle);
   });
 
@@ -365,7 +365,7 @@ void main() {
 
     // 真实播放接管：两个投影都指向 live，展示进度交还底层。
     final live = _track('c');
-    backend.emit(_live(live, position: const Duration(seconds: 3)));
+    backend.emitFrame(_live(live, position: const Duration(seconds: 3)));
     expect(session.displaySnapshot.current?.id.id, 'c');
     expect(session.liveSnapshot.current?.id.id, 'c');
     expect(session.liveSnapshotChannel.value.current?.id.id, 'c');
@@ -374,7 +374,7 @@ void main() {
   });
 
   test('恢复播放后展示面回落到 live，不再返回旧恢复快照', () async {
-    build(backendOverride: _LoadingBackend());
+    build(backendOverride: _LoadingFacade());
     await seedSession(
       PlaybackSession(
         tracks: [_track('a')],
@@ -506,7 +506,7 @@ void main() {
   });
 
   test('恢复态 shuffle → 恢复播放：live 右槽 next 与恢复快照一致', () async {
-    build(backendOverride: _ShuffleAwareBackend());
+    build(backendOverride: _ShuffleAwareFacade());
     await seedSession(
       PlaybackSession(
         tracks: [_track('a'), _track('b'), _track('c')],
@@ -610,7 +610,7 @@ void main() {
 
   test('play-by-id 恢复态：解析下标后走 playQueueIndex，装载提交一次', () async {
     final recorder = build(
-      backendOverride: _LoadingBackend(),
+      backendOverride: _LoadingFacade(),
       recordQueueRouting: true,
     ) as _RecordingQueueCoordinator;
     await seedSession(
@@ -629,7 +629,7 @@ void main() {
     );
     expect(recorder.playedIndexes, [1]);
     expect(backend.calls, ['setMode', 'load']);
-    expect((backend as _LoadingBackend).lastRequest?.startIndex, 1);
+    expect((backend as _LoadingFacade).lastRequest?.startIndex, 1);
     expect(store.calls, ['save'], reason: '装载提交一次，恢复流程末尾按内容去重');
 
     // 未命中：不解析下标、不转发、不再提交。
@@ -643,12 +643,12 @@ void main() {
 
   test('play-by-id live：解析下标后走 playQueueIndex，下标变化提交一次', () async {
     final recorder = build(
-      backendOverride: _QueueJumpBackend(),
+      backendOverride: _QueueJumpFacade(),
       recordQueueRouting: true,
     ) as _RecordingQueueCoordinator;
     final a = _track('a');
     final b = _track('b');
-    backend.emit(_live(a, queue: [a, b], index: 0));
+    backend.emitFrame(_live(a, queue: [a, b], index: 0));
     expect(store.calls, ['save']);
 
     // live 队列优先：同一个 id 先解析成下标，再由 playQueueIndex 转发后端。
@@ -707,7 +707,7 @@ void main() {
   });
 
   test('恢复播放：会话模式先落地 + seek 回保存进度，成功后恢复数据丢弃', () async {
-    build(backendOverride: _LoadingBackend());
+    build(backendOverride: _LoadingFacade());
     await seedSession(
       PlaybackSession(
         tracks: [_track('a')],
@@ -734,7 +734,7 @@ void main() {
 
   test('恢复装载：进度不闪回 0、用户 seek 优先、末尾写回用户目标', () async {
     final gate = Completer<void>();
-    build(backendOverride: _LoadingBackend(gate: gate));
+    build(backendOverride: _LoadingFacade(gate: gate));
     await seedSession(
       PlaybackSession(
         tracks: [_track('a')],
@@ -759,10 +759,7 @@ void main() {
     gate.complete();
     expect(await resume, PlaybackCommandOutcome.trackAndQueue);
 
-    expect(
-      (backend as _LoadingBackend).seeks.last,
-      const Duration(seconds: 60),
-    );
+    expect((backend as _LoadingFacade).seeks.last, const Duration(seconds: 60));
     expect(session.position.value, const Duration(seconds: 60));
     expect(store.saves.last.position, const Duration(seconds: 60));
     expect(observed, isNot(contains(Duration.zero)));
@@ -777,7 +774,7 @@ void main() {
     expect(backend.calls, isEmpty);
 
     final a = _track('a');
-    backend.emit(_live(a, playing: false));
+    backend.emitFrame(_live(a, playing: false));
     expect(store.calls, ['save']);
 
     // 暂停态收到播放键：下发 play，并作为显式动作提交一次 cursor。
@@ -786,11 +783,13 @@ void main() {
     expect(store.saves, hasLength(2), reason: '播放是动作，提交一次进度');
 
     // 已在播：幂等，不下发播放命令。
-    backend.emit(_live(a, playing: true, position: const Duration(seconds: 1)));
+    backend.emitFrame(
+      _live(a, playing: true, position: const Duration(seconds: 1)),
+    );
     expect(await session.play(), PlaybackCommandOutcome.none);
     expect(backend.calls, ['play']);
 
-    // 暂停：快照监听会强制落盘；这里假后端不推暂停态，命令面补一次。
+    // 暂停：快照监听会强制落盘；这里假引擎不推暂停态，命令面补一次。
     final savesBeforePause = store.saves.length;
     final paused = await session.pause();
     expect(paused, PlaybackCommandOutcome.trackOnly);
@@ -827,7 +826,7 @@ void main() {
 
   test('命令面切模式：live 写当前模式并立即落盘', () async {
     build();
-    backend.emit(_live(_track('a'), mode: PlayMode.sequential));
+    backend.emitFrame(_live(_track('a'), mode: PlayMode.sequential));
 
     await session.togglePlayMode();
 
@@ -855,7 +854,7 @@ void main() {
   });
 
   test('命令面队列跳转：恢复态按下标恢复播放，live 直达后端，越界空操作', () async {
-    build(backendOverride: _LoadingBackend());
+    build(backendOverride: _LoadingFacade());
     await seedSession(
       PlaybackSession(
         tracks: [_track('a'), _track('b')],
@@ -873,7 +872,7 @@ void main() {
       PlaybackCommandOutcome.trackAndQueue,
     );
     expect(backend.calls, ['setMode', 'load']);
-    expect((backend as _LoadingBackend).lastRequest?.startIndex, 1);
+    expect((backend as _LoadingFacade).lastRequest?.startIndex, 1);
     expect(session.hasRestoredSession, isFalse);
 
     // 恢复后进入 live：同一命令转发给后端队列跳转。
@@ -958,7 +957,7 @@ void main() {
       'b',
       'c',
     ]);
-    expect(backend.calls, isEmpty, reason: '恢复态不触碰真实后端');
+    expect(backend.calls, isEmpty, reason: '恢复态不触碰真实引擎');
   });
 
   test('恢复态 shuffle：移动 no-op，移除同步调整队列', () async {
@@ -1024,7 +1023,7 @@ void main() {
 
   test('live 队列编辑：转发后端并提交会话，当前曲目不可移除', () async {
     build(persistStore: true);
-    backend.emit(
+    backend.emitFrame(
       _live(_track('a'), queue: [_track('a'), _track('b'), _track('c')]),
     );
     expect(store.saves, isNotEmpty);
@@ -1055,11 +1054,11 @@ void main() {
   test('系统停止命令：先提交当前会话再停，保留可恢复会话', () async {
     build(persistStore: true);
     final a = _track('a');
-    backend.emit(_live(a, position: const Duration(seconds: 5)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 5)));
     expect(store.saves, hasLength(1));
 
     // 进度推进本身不落盘（没有周期写）；只有停止前的强制提交能带上它。
-    backend.emit(_live(a, position: const Duration(seconds: 7)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 7)));
     expect(store.saves, hasLength(1));
 
     await session.stop();
@@ -1079,7 +1078,9 @@ void main() {
     build(persistStore: true);
     final a = _track('a');
     final b = _track('b');
-    backend.emit(_live(a, queue: [a, b], position: const Duration(seconds: 5)));
+    backend.emitFrame(
+      _live(a, queue: [a, b], position: const Duration(seconds: 5)),
+    );
     expect(session.lastWrittenSession, isNotNull);
 
     // UI 的「本次会话结束」：清持久化之外，也不再引用上一份完整队列。
@@ -1088,7 +1089,7 @@ void main() {
     expect(session.lastWrittenSession, isNull, reason: '停止后常驻内存里不应还挂着一整份队列');
 
     // 系统媒体「停止」是可恢复语义：随后的会话提交与引用都要保留。
-    backend.emit(_live(_track('c'), queue: [_track('c')]));
+    backend.emitFrame(_live(_track('c'), queue: [_track('c')]));
     expect(session.lastWrittenSession, isNotNull);
     await session.stop();
     expect(session.lastWrittenSession, isNotNull);
@@ -1105,18 +1106,18 @@ void main() {
     final a = _track('a');
 
     // 切歌：提交（队列 / 下标 / 模式 / 上下文与当前进度）。
-    backend.emit(_live(a, position: const Duration(seconds: 5)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 5)));
     expect(store.calls, ['save']);
     expect(store.saves.single.tracks.single.id.uri, 'fake:a');
     expect(store.saves.single.index, 0);
     expect(store.saves.single.position, const Duration(seconds: 5));
 
     // 进度推进：不落盘（快照内容没变）。
-    backend.emit(_live(a, position: const Duration(seconds: 6)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 6)));
     expect(store.calls, ['save']);
 
     // 暂停：播放态转暂停是动作，立即落盘最新进度。
-    backend.emit(
+    backend.emitFrame(
       _live(a, position: const Duration(seconds: 7), playing: false),
     );
     expect(store.calls, ['save', 'save']);
@@ -1131,7 +1132,7 @@ void main() {
 
   test('同步端口：远端应用 / 删除走同一个 store 写队列，与本地保存在途时按序', () async {
     build(persistStore: true);
-    backend.emit(_live(_track('a'), position: const Duration(seconds: 1)));
+    backend.emitFrame(_live(_track('a'), position: const Duration(seconds: 1)));
 
     // 本地强制落盘与远端应用接连入队：pendingWrite 是同一个队列的尾巴，
     // 远端写入不会插到在途本地保存之前。
@@ -1169,7 +1170,7 @@ void main() {
   test('live seek：落点强制落盘并等写完（与系统 seek 同口径）', () async {
     build();
     final a = _track('a');
-    backend.emit(_live(a, position: const Duration(seconds: 5)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 5)));
     expect(store.saves, hasLength(1));
 
     // 应用内 seek 也必须立即落盘（进程随后被杀可恢复新位置）。
@@ -1184,7 +1185,7 @@ void main() {
     build();
     final a = _track('a');
     final b = _track('b');
-    backend.emit(_live(b, queue: [a, b], index: 1));
+    backend.emitFrame(_live(b, queue: [a, b], index: 1));
     expect(store.calls, ['save'], reason: '起播切歌一次');
 
     // 当前曲目换源：新 id 触发快照监听提交，不应再补写一遍。
@@ -1219,7 +1220,7 @@ void main() {
     expect(session.displaySnapshot.current?.id.id, 'a');
 
     // live：uri 不在队列 → no-op（不转发、不落盘）。
-    backend.emit(_live(a, position: const Duration(seconds: 1)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 1)));
     expect(store.calls, ['save']);
     expect(
       await session.replaceQueueTrack('fake:zzz', _track('zzz2')),
@@ -1272,7 +1273,7 @@ void main() {
     );
     expect(await session.load(), isTrue);
     // 交接窗口：facade 已推了队列但还没有当前曲目；恢复阶段仍以保存会话为准。
-    backend.emit(BackendSnapshot(queue: [a, b], currentIndex: -1));
+    backend.emit(PlaybackSnapshot(queue: [a, b], currentIndex: -1));
 
     // 自动换源（liveOnly）：恢复态没有真实队列可换，不转发也不改保存的会话。
     expect(
@@ -1289,7 +1290,7 @@ void main() {
 
     // 交接窗口：facade 已有队列但还没有当前曲目，恢复态仍然保留。此时两处
     // 都含同一个 uri——各自换成新来源，命令只产生一次写请求。
-    backend.emit(BackendSnapshot(queue: [a, b], currentIndex: -1));
+    backend.emit(PlaybackSnapshot(queue: [a, b], currentIndex: -1));
     expect(
       await session.replaceTrack(a, _track('a2')),
       PlaybackCommandOutcome.trackAndQueue,
@@ -1315,14 +1316,16 @@ void main() {
   test('进度 tick / loading 抖动：不写 payload，也不做周期落盘', () async {
     build();
     final a = _track('a');
-    backend.emit(_live(a));
+    backend.emitFrame(_live(a));
     expect(store.calls, ['save']);
     expect(store.positions, isEmpty);
 
     // 位置推进 / loading 抖动都不改变可持久化内容。
-    backend.emit(_live(a, position: const Duration(seconds: 1)));
-    backend.emit(_live(a, position: const Duration(seconds: 2), playing: true));
-    backend.emit(_live(a, position: const Duration(seconds: 3)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 1)));
+    backend.emitFrame(
+      _live(a, position: const Duration(seconds: 2), playing: true),
+    );
+    backend.emitFrame(_live(a, position: const Duration(seconds: 3)));
     expect(store.calls, ['save']);
     expect(store.positions, isEmpty);
   });
@@ -1331,14 +1334,14 @@ void main() {
     build();
     final a = _track('a');
     final queue = [a, a];
-    backend.emit(
+    backend.emitFrame(
       _live(a, queue: queue, index: 0, position: const Duration(seconds: 2)),
     );
     expect(store.saves, hasLength(1));
     expect(store.saves.last.index, 0);
 
     // trackId / 队列内容 / 模式 / 上下文都没变，只有槽位从 0 → 1。
-    backend.emit(
+    backend.emitFrame(
       _live(a, queue: queue, index: 1, position: const Duration(seconds: 5)),
     );
     expect(store.saves, hasLength(2));
@@ -1346,7 +1349,7 @@ void main() {
     expect(store.saves.last.current!.id, a.id);
 
     // 同槽位继续推进：没有周期写，不能再提交。
-    backend.emit(
+    backend.emitFrame(
       _live(a, queue: queue, index: 1, position: const Duration(seconds: 6)),
     );
     expect(store.saves, hasLength(2));
@@ -1357,10 +1360,10 @@ void main() {
     addTearDown(policy.dispose);
     build(powerPolicy: policy);
     final a = _track('a');
-    backend.emit(_live(a, position: const Duration(seconds: 1)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 1)));
     expect(store.calls, ['save']);
 
-    backend.emit(_live(a, position: const Duration(seconds: 2)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 2)));
     expect(store.calls, ['save']);
 
     policy.markBackground();
@@ -1369,8 +1372,8 @@ void main() {
     expect(store.saves.last.tracks.single.id.uri, 'fake:a');
 
     // 后台再推进很久：没有定时器，不写盘。
-    backend.emit(_live(a, position: const Duration(seconds: 16)));
-    backend.emit(_live(a, position: const Duration(seconds: 17)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 16)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 17)));
     expect(store.calls, ['save', 'save']);
     expect(store.positions, isEmpty);
 
@@ -1385,11 +1388,13 @@ void main() {
     build(powerPolicy: policy);
     final a = _track('a');
     final b = _track('b');
-    backend.emit(_live(a, position: const Duration(seconds: 1), queue: [a, b]));
+    backend.emitFrame(
+      _live(a, position: const Duration(seconds: 1), queue: [a, b]),
+    );
 
     policy.markBackground();
     final savesBeforePause = store.saves.length;
-    backend.emit(
+    backend.emitFrame(
       _live(
         a,
         position: const Duration(seconds: 2),
@@ -1401,7 +1406,9 @@ void main() {
     expect(store.saves.last.position, const Duration(seconds: 2));
 
     // 切歌：同样立即落盘（含新曲目 / 下标）。
-    backend.emit(_live(b, index: 1, position: Duration.zero, queue: [a, b]));
+    backend.emitFrame(
+      _live(b, index: 1, position: Duration.zero, queue: [a, b]),
+    );
     expect(store.saves.length, savesBeforePause + 2);
     expect(store.saves.last.tracks.map((track) => track.id.uri), [
       'fake:a',
@@ -1413,7 +1420,7 @@ void main() {
   test('曲末完成：单曲循环 / 列表循环单曲重播也落盘一次', () async {
     build();
     final a = _track('a');
-    backend.emit(_live(a, position: const Duration(seconds: 29)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 29)));
     expect(store.saves, hasLength(1));
 
     backend.emitTrackCompletion(a);
@@ -1421,8 +1428,8 @@ void main() {
     expect(store.saves.last.position, const Duration(seconds: 29));
 
     // 单曲循环重播：后端从 0 重新推进，曲目 id 不变；完成事件再写一次。
-    backend.emit(_live(a, position: Duration.zero));
-    backend.emit(_live(a, position: const Duration(seconds: 30)));
+    backend.emitFrame(_live(a, position: Duration.zero));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 30)));
     expect(store.saves, hasLength(2), reason: '进度 tick 本身不落盘');
     backend.emitTrackCompletion(a);
     expect(store.saves, hasLength(3));
@@ -1432,7 +1439,7 @@ void main() {
     build();
     final a = _track('a');
     final b = _track('b');
-    backend.emit(_live(a, queue: [a]));
+    backend.emitFrame(_live(a, queue: [a]));
     expect(store.saves, hasLength(1));
 
     await backend.enqueueTracks([b]);
@@ -1440,16 +1447,18 @@ void main() {
     expect(store.saves.last.tracks.map((track) => track.id.id), ['a', 'b']);
 
     // 同一队列 + 同一曲目，进度 / loading 抖动不写。
-    backend.emit(_live(a, queue: [a, b], position: const Duration(seconds: 3)));
+    backend.emitFrame(
+      _live(a, queue: [a, b], position: const Duration(seconds: 3)),
+    );
     expect(store.saves, hasLength(2));
   });
 
   test('flushSession：把最新进度写回并等它写完（退后台 / 退出入口）', () async {
     build(persistStore: true);
     final a = _track('a');
-    backend.emit(_live(a, position: const Duration(seconds: 5)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 5)));
 
-    backend.emit(_live(a, position: const Duration(seconds: 30)));
+    backend.emitFrame(_live(a, position: const Duration(seconds: 30)));
     expect(store.saves, hasLength(1), reason: '进度推进不会自动落盘');
 
     await session.flushSession();
@@ -1470,7 +1479,7 @@ void main() {
     expect(session.phase, PlaybackSessionPhase.idle);
 
     // 已有真实播放（如系统媒体会话恢复）：恢复数据不覆盖它。
-    backend.emit(_live(_track('c')));
+    backend.emitFrame(_live(_track('c')));
     await seedSession(PlaybackSession(tracks: [_track('a')], index: 0));
     expect(await session.load(), isFalse);
     expect(session.hasRestoredSession, isFalse);
@@ -1617,7 +1626,7 @@ void main() {
     expect(session.displaySnapshot.current?.id.id, 'b');
 
     // 真实播放中：恢复数据不覆盖它。
-    backend.emit(_live(_track('c')));
+    backend.emitFrame(_live(_track('c')));
     expect(await session.reloadFromStore(), isFalse);
     expect(session.displaySnapshot.current?.id.id, 'c');
   });

@@ -1,14 +1,14 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/playback/default_playback_facade.dart';
+import 'package:molia/domain/ports/playback_facade.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/playback_volume_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
 
-/// 应用内音量链路：provider 状态 → facade → 后端，以及设备本地持久化。
+/// 应用内音量链路：provider 状态 → 播放引擎，以及设备本地持久化。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -16,10 +16,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  /// 组装 provider 并记录假后端的音量下发（启动加载已并入 preferencesReady）。
-  ({PlaybackProvider provider, FakePlaybackBackend backend}) build() {
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+  /// 组装 provider 并记录假引擎的音量下发（启动加载已并入 preferencesReady）。
+  ({PlaybackProvider provider, FakePlaybackFacade backend}) build() {
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     return (provider: provider, backend: backend);
   }
@@ -203,8 +203,8 @@ void main() {
   });
 
   test('音量变化不进低频快照（快照契约不新增字段）', () async {
-    final backend = FakePlaybackBackend();
-    final facade = DefaultPlaybackFacade(backend: backend);
+    final backend = FakePlaybackFacade();
+    final PlaybackFacade facade = backend;
     final provider = buildTestPlaybackProvider(facade: facade);
     addTearDown(provider.dispose);
     await provider.preferencesReady;

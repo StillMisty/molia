@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/data/sync/adapters/session_sync_adapter.dart';
 import 'package:molia/data/sync/sync_journal.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
@@ -66,7 +65,7 @@ void main() {
     // 共用同一个写队列；这里的 store 只是同一队列的种子 / 断言入口。
     coordinator = PlaybackSessionCoordinator(
       settings: testSettingsRegistry(),
-      facade: DefaultPlaybackFacade(backend: FakePlaybackBackend()),
+      facade: FakePlaybackFacade(),
       store: store,
     );
     addTearDown(coordinator.dispose);

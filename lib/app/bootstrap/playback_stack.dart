@@ -1,5 +1,5 @@
 /// 播放栈：本地播放链路（just_audio，见 `local_playback_chain.dart`）→
-/// DefaultPlaybackFacade → PlaybackSessionCoordinator → PlaybackProvider，
+/// PlaybackEngine → PlaybackSessionCoordinator → PlaybackProvider，
 /// 含播放副作用观察者与系统媒体会话。
 ///
 /// **前向引用如何消失**：
@@ -12,10 +12,8 @@
 ///   调用点仍在 `runApp` 之前。
 library;
 
-import '../../domain/ports/playback_backend.dart';
 import '../../domain/ports/playback_facade.dart';
 import '../../domain/ports/ui_messenger.dart';
-import '../../data/playback/default_playback_facade.dart';
 import '../../data/settings/settings_keys.dart';
 import '../../data/settings/settings_registry.dart';
 import '../../playback/local_audio_handler.dart';
@@ -45,7 +43,7 @@ typedef MediaSessionFactory = Future<LocalAudioHandler?> Function(
 /// 播放栈产物（构造顺序见 [buildPlaybackStack]）。
 ///
 /// [localPlaybackService] 仅在构建真实 just_audio 链路时非空——注入
-/// `backend` seam（测试）时没有真实服务，媒体会话也随之跳过。
+/// `facade` seam（测试）时没有真实服务，媒体会话也随之跳过。
 typedef PlaybackStack = ({
   /// 组合根的注册表（与 catalog / library 同一实例；组合根测试据此核对
   /// 「唯一注册表」）。
@@ -68,7 +66,7 @@ typedef PlaybackStack = ({
 
 /// 装配本地播放链路、播放 provider 与系统媒体会话。
 ///
-/// [backend] 与 [mediaSessionFactory] 是测试 seam：前者给假后端（不加载
+/// [facade] 与 [mediaSessionFactory] 是测试 seam：前者给假播放引擎（不加载
 /// just_audio 插件），后者传 null 跳过音频会话初始化；生产由 `main()` 注入
 /// `initSystemMediaSession`。
 ///
@@ -80,7 +78,7 @@ Future<PlaybackStack> buildPlaybackStack({
   required LibraryStack library,
   required UiMessenger messenger,
   MediaSessionFactory? mediaSessionFactory,
-  PlaybackBackend? backend,
+  PlaybackFacade? facade,
   PlaybackPowerPolicy? powerPolicy,
 }) async {
   final sourceManager = catalog.sourceManager;
@@ -97,12 +95,12 @@ Future<PlaybackStack> buildPlaybackStack({
 
   final LocalPlaybackService? localPlaybackService;
   final PlaybackFacade playbackFacade;
-  final injectedBackend = backend;
-  if (injectedBackend != null) {
-    // 测试 / 特殊宿主：外部给后端，其余接线（观察者 / provider / 媒体会话
-    // seam）与生产完全同构。
+  final injectedFacade = facade;
+  if (injectedFacade != null) {
+    // 测试 / 特殊宿主：外部给播放引擎，其余接线（观察者 / provider / 媒体
+    // 会话 seam）与生产完全同构。
     localPlaybackService = null;
-    playbackFacade = DefaultPlaybackFacade(backend: injectedBackend);
+    playbackFacade = injectedFacade;
   } else {
     final chain = LocalPlaybackChain(
       catalog: catalog,
@@ -111,9 +109,7 @@ Future<PlaybackStack> buildPlaybackStack({
     );
     final service = chain.buildService(playWithOtherApps: audioFocusSettings);
     localPlaybackService = service;
-    playbackFacade = DefaultPlaybackFacade(
-      backend: chain.buildBackend(service: service),
-    );
+    playbackFacade = chain.buildEngine(service: service);
   }
 
   // 播放观察者：快照副作用扇出（最后播放 / 桌面小组件 / 历史 / 封面预取与

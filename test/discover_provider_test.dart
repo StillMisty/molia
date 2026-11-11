@@ -16,7 +16,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late FakeLibraryRepository repository;
-  late FakePlaybackBackend backend;
+  late FakePlaybackFacade backend;
   late PlaybackProvider playback;
   late LibraryProvider library;
   late FakeDiscoverSource source;
@@ -50,9 +50,9 @@ void main() {
 
   setUp(() {
     repository = FakeLibraryRepository();
-    backend = FakePlaybackBackend();
+    backend = FakePlaybackFacade();
     playback = buildTestPlaybackProvider(
-      backend: backend,
+      facade: backend,
       libraryRepository: repository,
     );
     library = LibraryProvider(

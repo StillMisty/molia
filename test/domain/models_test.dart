@@ -406,60 +406,6 @@ void main() {
   });
 
   group('Playback / Catalog / Source 模型', () {
-    test('BackendSnapshot：position 参与后端快照相等性', () {
-      final track = _track();
-      final a = BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-      );
-      final b = BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-      );
-      expect(a, b);
-      expect(a.hashCode, b.hashCode);
-
-      final moved = BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-        position: const Duration(seconds: 1),
-      );
-      expect(a, isNot(moved));
-
-      final withPreviousOfPrevious = BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-        previousOfPrevious: track,
-      );
-      expect(a, isNot(withPreviousOfPrevious));
-
-      final withQuality = BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-        quality: 'flac',
-      );
-      expect(a, isNot(withQuality));
-
-      final withIndices = BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-        upNextIndices: const [0],
-      );
-      expect(a, isNot(withIndices));
-    });
-
     test('PlaybackSnapshot：不含 position，值比较稳定', () {
       final track = _track();
       final a = PlaybackSnapshot(

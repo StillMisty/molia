@@ -72,7 +72,7 @@ class QueueProjection<T> {
 
 /// 队列投影的缓存键：只有会改变投影结果的状态才参与。
 ///
-/// 位置 tick（~400ms）只改 `BackendSnapshot.position`，队列 / 下标 / 模式 /
+/// 位置 tick（~400ms）只走独立 position 通道，队列 / 下标 / 模式 /
 /// 播放顺序 / 洗牌排列都不变；用这个键命中缓存后，快照重建不再跑 O(N) 的
 /// `projectQueue` 与 upNext 映射。
 ///

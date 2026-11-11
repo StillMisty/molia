@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
-import 'package:molia/data/playback/default_playback_facade.dart';
+import 'package:molia/domain/ports/playback_facade.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
@@ -150,13 +150,13 @@ void main() {
     retryable: true,
   );
 
-  late FakePlaybackBackend backend;
-  late DefaultPlaybackFacade facade;
+  late FakePlaybackFacade backend;
+  late PlaybackFacade facade;
   late SourceSwapSettings settings;
 
   setUp(() {
-    backend = FakePlaybackBackend();
-    facade = DefaultPlaybackFacade(backend: backend);
+    backend = FakePlaybackFacade();
+    facade = backend;
     settings = SourceSwapSettings(settings: testSettingsRegistry());
   });
 
@@ -186,7 +186,7 @@ void main() {
 
   void emitError(Track failing) {
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: failing,
         queue: [failing],
         currentIndex: 0,
@@ -340,7 +340,7 @@ void main() {
     addTearDown(provider.dispose);
 
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: failing,
         queue: [failing],
         currentIndex: 0,

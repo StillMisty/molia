@@ -46,7 +46,7 @@ const String _favoritesName = '__favorites__';
 /// 需要从首帧就用手机宽度装配——播放页会在 1440 宽走大屏两栏版式（没有
 /// 迷你态），且运行中跨断点切换会让隐藏页的两套歌词视图短暂共用一个
 /// ScrollController。
-Future<FakePlaybackBackend> pumpPerfApp(
+Future<FakePlaybackFacade> pumpPerfApp(
   WidgetTester tester, {
   required bool desktopShell,
   int favoritesCount = 1000,
@@ -87,10 +87,10 @@ Future<FakePlaybackBackend> pumpPerfApp(
       ),
   ], favoriteChange: true);
 
-  final backend = FakePlaybackBackend();
+  final backend = FakePlaybackFacade();
   final playback = buildTestPlaybackProvider(
     settings: testSettingsRegistry(),
-    backend: backend,
+    facade: backend,
     libraryRepository: repository,
   );
   addTearDown(playback.dispose);
@@ -160,15 +160,15 @@ Future<FakePlaybackBackend> pumpPerfApp(
       ),
   ];
   backend.emit(
-    BackendSnapshot(
+    PlaybackSnapshot(
       current: queue.first,
       queue: queue,
       currentIndex: 0,
       isPlaying: true,
-      position: const Duration(seconds: 30),
       duration: queue.first.duration ?? Duration.zero,
       upNext: queue.sublist(1),
     ),
+    position: const Duration(seconds: 30),
   );
 
   tester.view.physicalSize = size;

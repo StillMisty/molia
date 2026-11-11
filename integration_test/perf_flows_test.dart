@@ -159,21 +159,21 @@ void main() {
     FrameStats.instance.reportNow('end');
 
     FrameStats.instance.beginScenario('desktop-track-switch');
-    final queue = backend.state.value.queue;
+    final queue = backend.snapshot.value.queue;
     for (var i = 0; i < 10; i++) {
       final next = (i + 1) % queue.length;
       final track = queue[next];
       backend.emit(
-        BackendSnapshot(
+        PlaybackSnapshot(
           current: track,
           queue: queue,
           currentIndex: next,
           next: queue[(next + 1) % queue.length],
           isPlaying: true,
-          position: Duration.zero,
           duration: track.duration ?? Duration.zero,
           upNext: queue.sublist(next + 1),
         ),
+        position: Duration.zero,
       );
       await pumpFrames(tester, frames: 24);
     }

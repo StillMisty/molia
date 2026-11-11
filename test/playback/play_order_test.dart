@@ -46,8 +46,8 @@ void main() {
 
   // 默认播放模式（设置项）：持久化 + 启动时无曲目应用。
   test('默认 listLoop：启动不额外下发 setMode', () async {
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
 
     await provider.preferencesReady;
@@ -57,8 +57,8 @@ void main() {
   });
 
   test('togglePlayMode 按 列表循环 → 顺序 → 单曲 → 随机 循环', () async {
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
@@ -76,8 +76,8 @@ void main() {
 
   test('启动时加载持久化的 shuffle 并应用到 facade（无曲目）', () async {
     SharedPreferences.setMockInitialValues({'default_play_mode': 'shuffle'});
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
 
     await provider.preferencesReady;
@@ -87,8 +87,8 @@ void main() {
   });
 
   test('setDefaultPlayMode 持久化且无曲目时立即应用', () async {
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
@@ -101,15 +101,15 @@ void main() {
   });
 
   test('有曲目时不打断当前会话，仅持久化默认值', () async {
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
     // 当前正在播放（有曲目）时切换默认模式。
     final track = _track('a');
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: track,
         queue: [track],
         currentIndex: 0,

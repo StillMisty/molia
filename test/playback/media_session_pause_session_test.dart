@@ -4,10 +4,10 @@
 /// - 暂停 / 停止 / 切播放顺序这些控制动作走同一个播放命令面（handler →
 ///   `PlaybackSessionCoordinator`），返回时会话必须已经写回本地，且一个动作
 ///   只写一次（命令面内 await `pendingWrite`，handler 不再额外 flush）；
-/// - 冷启动（新 provider / 新后端，同一存储）恢复上一首 + 队列 + 模式 + 进度，
+/// - 冷启动（新 provider / 新引擎，同一存储）恢复上一首 + 队列 + 模式 + 进度，
 ///   且 `isPlaying=false`（不自动起播）。
 ///
-/// 装配与组合根 `buildPlaybackStack` 同构：真实 facade / 观察者 / 会话协调者 /
+/// 装配与组合根 `buildPlaybackStack` 同构：真实引擎 / 观察者 / 会话协调者 /
 /// provider + 假服务（不触碰 just_audio），`LocalAudioHandler` 直接注入协调者
 /// 作为命令面。
 library;
@@ -16,8 +16,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/mapping/track_mapper.dart';
-import 'package:molia/data/playback/default_playback_facade.dart';
-import 'package:molia/data/playback/local_playback_backend.dart';
+import 'package:molia/data/playback/playback_engine.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/l10n/app_localizations.dart';
@@ -198,15 +197,10 @@ class _RecordingStore extends PlaybackSessionStore {
   }
 }
 
-/// 组合根同构装配：假服务 ← 真实后端 / facade / 观察者 / provider + handler。
+/// 组合根同构装配：假服务 ← 真实引擎 / 观察者 / provider + handler。
 class _Harness {
   _Harness() {
-    final backend = LocalPlaybackBackend(
-      service: service,
-      resolver: (track, quality) async =>
-          PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
-    );
-    facade = DefaultPlaybackFacade(backend: backend);
+    facade = PlaybackEngine(service: service);
     store = _RecordingStore();
     observer = PlaybackObserver(facade: facade);
     final settings = testSettingsRegistry();
@@ -240,7 +234,7 @@ class _Harness {
   final _FakeService service = _FakeService();
   final FakeMediaSessionBackend mediaBackend = FakeMediaSessionBackend();
   late final ValueNotifier<MediaSessionCopy> copy;
-  late final DefaultPlaybackFacade facade;
+  late final PlaybackEngine facade;
   late final _RecordingStore store;
   late final PlaybackObserver observer;
   late final PlaybackSessionCoordinator session;

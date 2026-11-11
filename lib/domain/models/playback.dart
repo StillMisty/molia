@@ -3,9 +3,6 @@ import 'equality.dart';
 import 'failure.dart';
 import 'track.dart';
 
-/// 播放后端种类（当前仅本地 just_audio 后端；any-listen 为预留）。
-enum PlaybackBackendKind { local, anyListen }
-
 /// 播放上下文（名称/类型/封面）。
 class PlaybackContext {
   final String? name;
@@ -72,112 +69,7 @@ class PlaybackRequest {
   );
 }
 
-/// 播放后端的状态快照（低频事件驱动）。
-///
-/// [position] 为高频字段：facade 会把它拆到独立的 `position` 通道，
-/// 不参与低频快照的相等性比较（见 DefaultPlaybackFacade）。
-class BackendSnapshot {
-  final Track? current;
-
-  /// 完整队列（记录回放需要按下标或 id 查找）。
-  final List<Track> queue;
-  final int currentIndex;
-
-  /// 按当前模式解析出的下一首（shuffle 时由后端随机决定，界面预览用）。
-  final Track? next;
-
-  /// 可展示的上一首：实际播放顺序最近一首 → 队列前一位；无 / 与当前曲目
-  /// 同 id 为 null（队首的「重播当前」不算上一首）。
-  final Track? previous;
-
-  /// 可展示的再上一首：实际播放顺序次近一首 → 「上一首」的队列前一位。
-  ///
-  /// 封面左槽向后拖动时提前渲染「再上一首」用；[previous] 为 null 时
-  /// 也为 null（没有可回退目标就不猜）。
-  final Track? previousOfPrevious;
-
-  /// 实际播放顺序中当前曲目之后的曲目（shuffle 为洗牌排列的剩余；
-  /// 队列面板「接下来」展示用）。
-  final List<Track> upNext;
-
-  /// [upNext] 在 [queue] 中的真实下标（shuffle / 回绕时与面板行号不同）。
-  final List<int> upNextIndices;
-
-  final bool isPlaying;
-  final bool isLoading;
-  final Duration position;
-  final Duration duration;
-  final PlayMode mode;
-  final PlaybackContext? context;
-
-  /// 当前曲目本次播放选用的音质（解析请求值，不是实际码率）；
-  /// 无曲目 / 尚未取链时为 null。
-  final String? quality;
-  final SourceFailure? error;
-
-  const BackendSnapshot({
-    this.current,
-    this.queue = const [],
-    this.currentIndex = -1,
-    this.next,
-    this.previous,
-    this.previousOfPrevious,
-    this.upNext = const [],
-    this.upNextIndices = const [],
-    this.isPlaying = false,
-    this.isLoading = false,
-    this.position = Duration.zero,
-    this.duration = Duration.zero,
-    this.mode = PlayMode.listLoop,
-    this.context,
-    this.quality,
-    this.error,
-  });
-
-  static const BackendSnapshot empty = BackendSnapshot();
-
-  @override
-  bool operator ==(Object other) =>
-      other is BackendSnapshot &&
-      other.current == current &&
-      deepEquals(other.queue, queue) &&
-      other.currentIndex == currentIndex &&
-      other.next == next &&
-      other.previous == previous &&
-      other.previousOfPrevious == previousOfPrevious &&
-      deepEquals(other.upNext, upNext) &&
-      deepEquals(other.upNextIndices, upNextIndices) &&
-      other.isPlaying == isPlaying &&
-      other.isLoading == isLoading &&
-      other.position == position &&
-      other.duration == duration &&
-      other.mode == mode &&
-      other.context == context &&
-      other.quality == quality &&
-      other.error == error;
-
-  @override
-  int get hashCode => Object.hash(
-    current,
-    deepHash(queue),
-    currentIndex,
-    next,
-    previous,
-    previousOfPrevious,
-    deepHash(upNext),
-    deepHash(upNextIndices),
-    isPlaying,
-    isLoading,
-    position,
-    duration,
-    mode,
-    context,
-    quality,
-    error,
-  );
-}
-
-/// 对 UI 暴露的播放快照（低频）：曲目/队列/播放中/模式/后端/错误。
+/// 对 UI 暴露的播放快照（低频）：曲目/队列/播放中/模式/错误。
 ///
 /// 不含 position：进度走 [PlaybackFacade.position] 独立通道。
 class PlaybackSnapshot {
@@ -212,7 +104,6 @@ class PlaybackSnapshot {
   final Duration duration;
   final PlayMode mode;
   final PlaybackContext? context;
-  final PlaybackBackendKind backend;
 
   /// 当前曲目本次播放选用的音质（解析请求值，不是实际码率）；
   /// 恢复态 / 尚未取链时为 null。
@@ -233,7 +124,6 @@ class PlaybackSnapshot {
     this.duration = Duration.zero,
     this.mode = PlayMode.listLoop,
     this.context,
-    this.backend = PlaybackBackendKind.local,
     this.quality,
     this.error,
   });
@@ -256,7 +146,6 @@ class PlaybackSnapshot {
       other.duration == duration &&
       other.mode == mode &&
       other.context == context &&
-      other.backend == backend &&
       other.quality == quality &&
       other.error == error;
 
@@ -275,7 +164,6 @@ class PlaybackSnapshot {
     duration,
     mode,
     context,
-    backend,
     quality,
     error,
   );

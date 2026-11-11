@@ -20,7 +20,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    playback = buildTestPlaybackProvider(backend: FakePlaybackBackend());
+    playback = buildTestPlaybackProvider(facade: FakePlaybackFacade());
     await playback.preferencesReady;
   });
 
