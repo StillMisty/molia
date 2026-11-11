@@ -317,8 +317,8 @@ void main() {
         state: state,
         adapters: [adapter],
         stamps: state.stampIssuer,
-        collect: (categories) async {
-          final collected = await adapter.collect();
+        collect: (categories, {bool fresh = false}) async {
+          final collected = await adapter.collect(fresh: fresh);
           return {
             for (final entry in collected.entries)
               if (categories.contains(entry.key)) entry.key: entry.value,

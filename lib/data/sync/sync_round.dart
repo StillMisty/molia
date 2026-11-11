@@ -328,7 +328,9 @@ class SyncRoundRunner {
     final journal = _journal;
     final head = journal == null ? 0 : await journal.headSeq();
     final base = journal == null ? 0 : await journal.baseSeq();
-    final records = await collect(categories);
+    // 全量快照必须拿适配器的整份视图：会话等类别在增量模式下可能返回
+    // 不含 tracks 的游标记录，不能作为新 / 落后对端的 bootstrap。
+    final records = await collect(categories, fresh: true);
     final pruned = _envelopeFrom(records).pruneTombstones(
       now: _nowMs(),
       tombstoneRetentionMs: tombstoneRetentionMs,

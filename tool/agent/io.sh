@@ -9,7 +9,9 @@
 # 说明:
 # - 采样对象是正在运行的应用：先 `tool/agent/app.sh run -d linux`；
 # - prefs 每次 set* 都会重写整个 `shared_preferences.json`：脚本按 mtime 变化
-#   计一次写，并打印文件大小与相邻两次的增量；DB / WAL / SHM 只打印大小；
+#   计一次写，并打印文件大小与相邻两次的增量；桌面封面元数据
+#   `molia_artwork_cache.json` 同样按 mtime 计数（touch-only 优化后应保持 0）；
+#   DB / WAL / SHM 只打印大小；
 # - mtime 是轮询采样，快于 1/interval 的连续写入只能合并计数；本脚本用于
 #   前后相对比较，不宣称精确 syscall 次数（需要精确值时用 strace / 应用内埋点）；
 # - `/proc/<pid>/io` 在部分 WSL 内核不可读：缺文件时打印一行提示并继续，
@@ -44,6 +46,8 @@ done
 
 data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/$APP_ID"
 prefs="$data_dir/shared_preferences.json"
+artwork_meta="$data_dir/molia_artwork_cache.json"
+artwork_dir="$data_dir/artwork_cache"
 db="$data_dir/molia_database_v2.sqlite"
 
 if [[ -z "$pid" ]]; then
@@ -119,6 +123,9 @@ io_write_start=$write_bytes
 last_mtime="$(file_mtime "$prefs")"
 last_size="$(file_size "$prefs")"
 prefs_writes=0
+last_artwork_mtime="$(file_mtime "$artwork_meta")"
+last_artwork_size="$(file_size "$artwork_meta")"
+artwork_writes=0
 start="$(date +%s)"
 
 log "采样 PID $pid，每 ${interval}s 一次${timeout_s:+，最长 ${timeout_s}s}；数据目录 $data_dir"
@@ -151,6 +158,23 @@ while kill -0 "$pid" 2>/dev/null; do
     last_size="$size"
   fi
 
+  artwork_mtime="$(file_mtime "$artwork_meta")"
+  artwork_size="$(file_size "$artwork_meta")"
+  if [[ "$artwork_mtime" != "$last_artwork_mtime" ]]; then
+    artwork_writes=$((artwork_writes + 1))
+    if [[ "$last_artwork_size" =~ ^[0-9]+$ && "$artwork_size" =~ ^[0-9]+$ ]]; then
+      artwork_delta="$((artwork_size - last_artwork_size))"
+      artwork_delta_label="$(printf '%+d' "$artwork_delta")B"
+    else
+      artwork_delta_label='-'
+    fi
+    printf '[%s] artwork 元数据写入 #%d：%s（Δ%s）\n' \
+      "$(date +%H:%M:%S)" "$artwork_writes" \
+      "$(human_bytes "$artwork_size")" "$artwork_delta_label"
+    last_artwork_mtime="$artwork_mtime"
+    last_artwork_size="$artwork_size"
+  fi
+
   if ((timeout_s > 0)) && (($(date +%s) - start >= timeout_s)); then
     break
   fi
@@ -161,9 +185,18 @@ if ((io_available)); then
   read_proc_io || true
 fi
 
-printf '\n汇总：prefs 写入 %d 次；prefs %s，DB %s，WAL %s，SHM %s\n' \
-  "$prefs_writes" \
+artwork_files=0
+artwork_bytes=0
+if [[ -d "$artwork_dir" ]]; then
+  artwork_files="$(find "$artwork_dir" -type f 2>/dev/null | wc -l)"
+  artwork_bytes="$(du -sb "$artwork_dir" 2>/dev/null | cut -f1)"
+fi
+
+printf '\n汇总：prefs 写入 %d 次，artwork 元数据写入 %d 次；prefs %s，artwork 元数据 %s（%s 个文件 / %s），DB %s，WAL %s，SHM %s\n' \
+  "$prefs_writes" "$artwork_writes" \
   "$(human_bytes "$(file_size "$prefs")")" \
+  "$(human_bytes "$(file_size "$artwork_meta")")" \
+  "$artwork_files" "$(human_bytes "$artwork_bytes")" \
   "$(human_bytes "$(file_size "$db")")" \
   "$(human_bytes "$(file_size "$db-wal")")" \
   "$(human_bytes "$(file_size "$db-shm")")"

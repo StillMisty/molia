@@ -283,20 +283,22 @@ pending / keepAlive，当前展示的封面不受影响。
 | `lib/managers/artwork_cache.dart` | 封面元数据 `updateOrInsert` 跳过「只有 touched 变化」的整文件重写；淘汰仍按文件 mtime |
 | `lib/services/window/window_bounds_store.dart`、`playback_volume_store.dart`、`nav_provider.dart` | 窗口几何 / 音量 + 静音 / 导航布局各合并成单键 JSON：一次动作的整份 prefs 重写从 4 / 2 / 3 次降为 1 次；旧键保留只读兜底 |
 | `lib/data/molia_database.dart` | `journal_size_limit = 4MB`、`wal_autocheckpoint = 1000`，限制 WAL 高水位 |
+| `lib/data/sync/adapters/session_sync_adapter.dart`、`sync_backup.dart`、`sync_round.dart` | 会话 journal 增量化：队列未变时只写 `sessionCursor` 小记录（约 0.3KB），队列变化 / 首次 / 进程重启后首轮才写整份 tracks；`collect(fresh: true)`（全量快照、备份、anti-entropy）强制整份且不重复追加 journal；同批多条 session 记录按最大版本应用；本地下载曲目存在时把游标下标映射回原始队列 |
 
 ### 9.2 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：**2580 passed / 11 skipped**（新增：延迟 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate）；
+- `flutter test --no-pub`：**2592 passed / 11 skipped**（新增：延迟 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate、会话 cursor 增量 / fresh 快照 / 最大版本应用 / 本地曲目下标映射）；
 - Linux 集成（Xvfb，debug）`integration_test/lx_engine_integration_test.dart`：**5 passed / 1 skipped**；新增用例 `桌面托盘内存：隐藏后清理图片缓存并压低上限，恢复后还原` 单独运行通过；
   - 单跑 `[tray-memory-test] rss_before=544.3MB rss_after=519.8MB`；
   - 全套 `[tray-memory-test] rss_before=651.4MB rss_after=621.3MB`；
   - 这是 debug + Xvfb 的进程 RSS，绝对值不代表 release；断言的是 `imageCache` 归零、上限 16MiB、`liveImageCount == 0`、恢复 64MiB 与窗口 hide/show 往返。
-- 写次数由单测断言：窗口几何 4→1、音量 + 静音 2→1、导航 3→1；封面元数据 touch-only 0 次写。绝对磁盘字节未测。
+- 写次数由单测断言：窗口几何 4→1、音量 + 静音 2→1、导航 3→1；封面元数据 touch-only 0 次写；会话 cursor 记录 <1KB（测试用每首 4KB payload 的队列），同队列保存不再追加整份队列。按本地 journal 8 行 / 278KB（平均约 33KB/行）估算，同队列保存的 journal 字节约降 99%；2MB 大队列的降幅更大，但绝对字节仍以真实 Windows 库复测为准。
+  `tool/agent/io.sh` 已增加 `molia_artwork_cache.json` 的写入计数与 artwork 目录大小，后续可直接按「滚动 / 切歌前后元数据 mtime 是否变化」复测。
 
 ### 9.3 未覆盖 / 下一步
 
 - **Windows 200MB 未复现 / 未复测**：本轮按用户要求在 Linux 验证清理逻辑；Windows release 的专用工作集与 `molia.memory` 仍需在真实 Windows 上跑 `tool/agent/memory.ps1` / `perf.sh memory windows`，不能把 Linux 的差额当成 Windows 收益。
 - **最小化不省内存**：产品语义保持不变；只静音 ticker（动画不跑），页面 / 图片 / 浏览缓存仍保留。
-- **同步 journal 的 session 整队列 payload**（单行可达 2MB、占本地 journal 94%）未改；需要单独设计「cursor 小记录 + 队列内容哈希去重」，本轮只释放内存缓存，不改变写放大。
+- **同步 journal 的 session 整队列 payload** 已做 cursor 增量；全量快照 / 备份仍会写一次整份 tracks（预期行为）。真正的大队列 A/B 仍需在真实库上测 journal 字节与同步轮次耗时。
 - `molia.memory` 仍只有 RSS + imageCache；Windows 专用工作集 / 提交大小日志未加。

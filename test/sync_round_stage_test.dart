@@ -98,6 +98,12 @@ void main() {
     startedAt: 7000,
   );
 
+  test('全量快照：收集强制 fresh，避免游标增量进入 bootstrap', () async {
+    await runner.serveSnapshot();
+    expect(adapter.collectFresh, isNotEmpty, reason: '快照必须实际触发一次收集');
+    expect(adapter.collectFresh.last, isTrue);
+  });
+
   test('类别受限适配器：collect 收到本轮请求的类别集合', () async {
     final scoped = _ScopedAdapter();
     final scopedRunner = SyncRoundRunner(
@@ -696,6 +702,7 @@ class _ReleaseProbeAdapter extends _RecordingAdapter {
 class _RecordingAdapter implements SyncAdapter {
   bool failNext = false;
   final List<String> appliedKeys = [];
+  final List<bool> collectFresh = [];
 
   @override
   Set<SyncCategory> get categories => const {SyncCategory.settings};
@@ -706,15 +713,18 @@ class _RecordingAdapter implements SyncAdapter {
   @override
   Future<Map<SyncCategory, List<SyncRecord>>> collect({
     bool fresh = false,
-  }) async => const {
-    SyncCategory.settings: [
-      SyncRecord(
-        key: 'theme_mode',
-        version: SyncVersion(physical: 1000, deviceId: 'devA'),
-        data: {'v': 'light'},
-      ),
-    ],
-  };
+  }) async {
+    collectFresh.add(fresh);
+    return const {
+      SyncCategory.settings: [
+        SyncRecord(
+          key: 'theme_mode',
+          version: SyncVersion(physical: 1000, deviceId: 'devA'),
+          data: {'v': 'light'},
+        ),
+      ],
+    };
+  }
 
   @override
   Future<SyncApplyOutcome> apply(

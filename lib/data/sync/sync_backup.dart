@@ -14,8 +14,9 @@ import 'sync_stamp.dart';
 /// 不同视图。只暴露这一个读动作，备份不接触引擎的轮次状态。
 typedef SyncRecordCollector =
     Future<Map<SyncCategory, List<SyncRecord>>> Function(
-      Set<SyncCategory> categories,
-    );
+      Set<SyncCategory> categories, {
+      bool fresh,
+    });
 
 /// 完整备份（导出 / 导入）：与同步共用 envelope、适配器与版本戳，但不需要
 /// 启用同步或轮次。
@@ -62,7 +63,9 @@ class SyncBackup {
   /// 显式排除凭证的逃生口；备份文件本身为明文 JSON，调用方负责保管。
   Future<String> exportBackupJson({bool includeCredentials = true}) async {
     final categories = _backupCategories(includeCredentials);
-    final records = await _collect(categories);
+    // 备份是完整快照：必须绕过适配器的增量视图（会话的游标记录不含队列
+    // tracks），否则导出文件无法在新设备上恢复完整会话。
+    final records = await _collect(categories, fresh: true);
     final envelope = _envelopeFrom(records);
     final json = const JsonEncoder.withIndent('  ').convert({
       'kind': backupKind,

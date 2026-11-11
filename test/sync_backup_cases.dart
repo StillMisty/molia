@@ -26,6 +26,7 @@ void main() {
   late SyncBackup backup;
   var now = 7000;
   var exportReleaseCalls = 0;
+  final collectFresh = <bool>[];
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -33,6 +34,7 @@ void main() {
     secrets = MemorySyncSecretStore();
     now = 7000;
     exportReleaseCalls = 0;
+    collectFresh.clear();
     state = SyncStateStore(
       preferences: prefs,
       secrets: secrets,
@@ -54,8 +56,9 @@ void main() {
       stamps: state.stampIssuer,
       onExported: () => exportReleaseCalls++,
       clock: () => DateTime.fromMillisecondsSinceEpoch(now),
-      collect: (categories) async {
-        final collected = await adapter.collect();
+      collect: (categories, {bool fresh = false}) async {
+        collectFresh.add(fresh);
+        final collected = await adapter.collect(fresh: fresh);
         return {
           for (final entry in collected.entries)
             if (categories.contains(entry.key)) entry.key: entry.value,
@@ -102,6 +105,11 @@ void main() {
   test('导出完成：调用缓存释放钩子', () async {
     await backup.exportBackupJson();
     expect(exportReleaseCalls, 1);
+  });
+
+  test('导出：收集请求 fresh，避免把增量视图写进完整备份', () async {
+    await backup.exportBackupJson();
+    expect(collectFresh, [true]);
   });
 
   test('导出：includeCredentials=false 时显式排除全部凭证', () async {
