@@ -7,6 +7,7 @@ import 'global_hotkeys_cases.dart' as global_hotkeys;
 import 'key_claims_cases.dart' as key_claims;
 import 'notification_cases.dart' as notification;
 import 'shortcut_bindings_cases.dart' as shortcut_bindings;
+import 'swap_query_planner_cases.dart' as swap_query_planner;
 import 'window_bounds_store_cases.dart' as window_bounds_store;
 
 void main() {
@@ -17,5 +18,6 @@ void main() {
   group('key claims', key_claims.main);
   group('notification', notification.main);
   group('shortcut bindings', shortcut_bindings.main);
+  group('swap query planner', swap_query_planner.main);
   group('window bounds store', window_bounds_store.main);
 }

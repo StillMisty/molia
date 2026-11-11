@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/services/source_swap/auto_source_swap_service.dart';
+import 'package:molia/services/source_swap/swap_query_planner.dart';
 
 import '../support/fake_music_source.dart';
 
@@ -28,15 +29,20 @@ void main() {
   late Map<String, FakeMusicSource> sources;
   late AutoSourceSwapService service;
 
+  AutoSourceSwapService buildService() {
+    final registry = FakeSourceRegistry(sources);
+    return AutoSourceSwapService(
+      catalog: CatalogService(registry: registry),
+      planner: SwapQueryPlanner(registry: registry),
+    );
+  }
+
   setUp(() {
     wy = FakeMusicSource('wy');
     kg = FakeMusicSource('kg');
     tx = FakeMusicSource('tx');
     sources = {'wy': wy, 'kg': kg, 'tx': tx};
-    service = AutoSourceSwapService(
-      catalog: CatalogService(registry: FakeSourceRegistry(sources)),
-      registry: FakeSourceRegistry(sources),
-    );
+    service = buildService();
   });
 
   test('跨源严格找回：跳过原源与不同版本，选中最优匹配', () async {
@@ -67,6 +73,20 @@ void main() {
     expect(kg.searchCalls, 0);
   });
 
+  test('B 站种子：UP 主不进关键词，种子源不参与自动换源', () async {
+    final bili = FakeMusicSource('bili');
+    sources = {'bili': bili, 'kg': kg, 'tx': tx};
+    service = buildService();
+
+    // 只验证查询规划（关键词 / 候选源）；严格匹配的歌手维度由 song_match
+    // 自身的用例覆盖，这里不让候选的 artist 干扰断言。
+    await service.findMatch(track('bili', 'BV1', artist: '某UP主'));
+
+    expect(bili.searchCalls, 0, reason: '种子源不参与自动换源');
+    expect(kg.lastQuery?.keyword, '晴天', reason: 'UP 主不是歌手，只搜标题');
+    expect(tx.lastQuery?.keyword, '晴天');
+  });
+
   test('全部无命中 / 全部排除：返回 null（宁可不换）', () async {
     kg.items = [track('kg', 'short', seconds: 100)];
     tx.items = [track('tx', 'live', title: '晴天 (Live)')];
@@ -90,10 +110,7 @@ void main() {
 
     // 两个源都失败（新服务避免命中 5min 搜索缓存）：返回 null，不抛异常。
     tx.fail = true;
-    final fresh = AutoSourceSwapService(
-      catalog: CatalogService(registry: FakeSourceRegistry(sources)),
-      registry: FakeSourceRegistry(sources),
-    );
+    final fresh = buildService();
     expect(await fresh.findMatch(track('wy', '1')), isNull);
   });
 

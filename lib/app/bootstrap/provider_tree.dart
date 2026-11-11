@@ -113,6 +113,7 @@ List<SingleChildWidget> buildAppProviders({
       create: (context) => SourceSwapProvider(
         catalogService: catalogService,
         sourceRegistry: sourceRegistry,
+        swapQueryPlanner: catalog.swapQueryPlanner,
         libraryProvider: context.read<LibraryProvider>(),
         playbackProvider: context.read<PlaybackProvider>(),
         // 换源成功后把自定义封面复制到新曲目键（非破坏性）。

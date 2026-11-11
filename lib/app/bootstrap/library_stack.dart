@@ -124,7 +124,7 @@ Future<LibraryStack> buildLibraryStack({
   // 统计收尾 / 裁剪同属启动维护，也由首帧后统一触发。
   final autoSourceSwapService = AutoSourceSwapService(
     catalog: catalog.catalogService,
-    registry: catalog.sourceRegistry,
+    planner: catalog.swapQueryPlanner,
   );
 
   final stack = (
