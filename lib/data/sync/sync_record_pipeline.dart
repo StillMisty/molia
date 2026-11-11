@@ -160,6 +160,10 @@ class SyncRecordPipeline {
 
   /// 合并一次远端载荷并只把版本变化的胜者交给适配器。
   ///
+  /// [local] / [categories] 是轮次在 collect 阶段捕获的显式视图：`serveSnapshot`
+  /// 可能在轮次进行中并发做 fresh 收集，若 apply 读「最近一次 collect」就会
+  /// 拿错合并基线。完整备份省略这两个参数，使用自己刚 collect 的视图。
+  ///
   /// [forcedKeys] 是「请求全量拿到的记录」：合并时剔除本地同版本记录，让
   /// 权威视图胜出（同版本但内容不一致 = 本地被直接改写，不能按「先出现者
   /// 胜」保留），也绕过登记过滤重复交付一次。完整备份把载荷里的全部键都作为
@@ -170,8 +174,13 @@ class SyncRecordPipeline {
   Future<SyncPipelineApplyResult> apply(
     SyncEnvelope remote, {
     Set<SyncKnownKey> forcedKeys = const {},
+    Map<SyncCategory, List<SyncRecord>>? local,
+    Set<SyncCategory>? categories,
   }) async {
-    final collected = _lastCollected;
+    final explicit = local != null && categories != null;
+    final collected = explicit
+        ? _CollectedView(categories: {...categories}, records: local)
+        : _lastCollected;
     if (collected == null) {
       throw StateError('SyncRecordPipeline.apply 之前必须先 collect');
     }

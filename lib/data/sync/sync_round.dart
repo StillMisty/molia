@@ -8,15 +8,14 @@
 /// 现在 [SyncRoundRunner.runRound] 只顺序调用六个阶段并组装报告；每个阶段
 /// 返回一个结果值（[SyncRoundCollected] / [SyncRoundPulled] /
 /// [SyncRoundConsumed] / [SyncRoundApplied] / [SyncRoundPublished]），下一阶段
-/// 只读这些值，不读上一阶段写过的共享字段。阶段入口标了 `@visibleForTesting`，
-/// 测试可以逐段驱动，生产调用方仍只经 [SyncRoundRunner.runRound]。
+/// 只读这些值，不读上一阶段写过的共享字段。阶段入口私有：生产与测试都只经
+/// [SyncRoundRunner.runRound] 驱动，测试不能绕过「先 collect 后 apply」。
 /// 同步语义（应用成功才推进游标、forced delivery、缺口二次拉取、
 /// anti-entropy、入站轮、名册失败记账、报告五态）逐条保留。
 library;
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:logging/logging.dart';
 
 import '../../domain/models/device_sync.dart';
@@ -407,22 +406,22 @@ class SyncRoundRunner {
     final peerFailures = SyncRoundPeerFailures();
     _activePeerFailures = peerFailures;
     try {
-      final collected = await collectStage(request);
-      final pulled = await pullStage(request, collected, peerFailures);
-      final consumed = await consumeStage(
+      final collected = await _collectStage(request);
+      final pulled = await _pullStage(request, collected, peerFailures);
+      final consumed = await _consumeStage(
         request,
         collected,
         pulled,
         peerFailures,
       );
-      final applied = await applyStage(request, collected, pulled, consumed);
-      final published = await publishStage(
+      final applied = await _applyStage(request, collected, pulled, consumed);
+      final published = await _publishStage(
         request,
         collected,
         applied,
         peerFailures,
       );
-      final report = await reportStage(
+      final report = await _reportStage(
         request,
         collected,
         consumed,
@@ -456,8 +455,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 1：口令、传输、本地视图、变更判定、名册登记基线。
-  @visibleForTesting
-  Future<SyncRoundCollected> collectStage(SyncRoundRequest request) async {
+  Future<SyncRoundCollected> _collectStage(SyncRoundRequest request) async {
     final passphrase = await _state.readPassphrase();
     if (passphrase == null || passphrase.trim().isEmpty) {
       throw const _RoundAbort(SyncIssue(code: SyncIssueCode.noPassphrase));
@@ -510,8 +508,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 2：anti-entropy 名单 + 一次拉取（入站轮不主动拉）。
-  @visibleForTesting
-  Future<SyncRoundPulled> pullStage(
+  Future<SyncRoundPulled> _pullStage(
     SyncRoundRequest request,
     SyncRoundCollected collected,
     SyncRoundPeerFailures peerFailures,
@@ -561,8 +558,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 3：消费载荷（游标 / ack / 缺口）+ 缺口二次拉取。
-  @visibleForTesting
-  Future<SyncRoundConsumed> consumeStage(
+  Future<SyncRoundConsumed> _consumeStage(
     SyncRoundRequest request,
     SyncRoundCollected collected,
     SyncRoundPulled pulled,
@@ -620,8 +616,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 4：记录管道应用 + 应用成功才提交游标。
-  @visibleForTesting
-  Future<SyncRoundApplied> applyStage(
+  Future<SyncRoundApplied> _applyStage(
     SyncRoundRequest request,
     SyncRoundCollected collected,
     SyncRoundPulled pulled,
@@ -637,6 +632,8 @@ class SyncRoundRunner {
           records: consumed.remoteRecords,
         ),
         forcedKeys: consumed.forcedDelivery,
+        local: collected.local,
+        categories: collected.categories,
       );
       applied = result.applied;
       applyFailures = result.applyFailures;
@@ -667,8 +664,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 5：裁日志 + 构建本轮外发视图 + 推送。
-  @visibleForTesting
-  Future<SyncRoundPublished> publishStage(
+  Future<SyncRoundPublished> _publishStage(
     SyncRoundRequest request,
     SyncRoundCollected collected,
     SyncRoundApplied applied,
@@ -805,8 +801,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 6：五态判定与报告（不写状态；引擎在 `runRound` 返回后落报告 / 通知）。
-  @visibleForTesting
-  Future<SyncRoundReport> reportStage(
+  Future<SyncRoundReport> _reportStage(
     SyncRoundRequest request,
     SyncRoundCollected collected,
     SyncRoundConsumed consumed,
