@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show TextEditingController;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/artist.dart';
@@ -1020,5 +1021,170 @@ void main() {
     expect(provider.searchResults, isEmpty);
     expect(provider.songResults.page, 0);
     expect(provider.songResults.items, isEmpty);
+  });
+
+  test('能力位 → 搜索类型只有一处映射（SourceCapabilities）', () {
+    const capabilities = domain.SourceCapabilities(
+      search: true,
+      artist: true,
+      lyricSearch: true,
+    );
+    expect(capabilities.searchKinds, [
+      SearchKind.song,
+      SearchKind.artist,
+      SearchKind.lyric,
+    ]);
+    expect(capabilities.supportsAnySearch, isTrue);
+    expect(capabilities.supportsSearchKind(SearchKind.artist), isTrue);
+
+    const noSearch = domain.SourceCapabilities(lyrics: true);
+    expect(noSearch.searchKinds, isEmpty);
+    expect(noSearch.supportsAnySearch, isFalse);
+  });
+
+  test('输入绑定：控制器 → 会话防抖重启；会话清空 → 控制器立即清空', () {
+    final source = _FakeMusicSource('kw');
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final binding = SearchInputBinding(
+      session: provider.session,
+      controller: controller,
+    );
+    addTearDown(binding.dispose);
+    // 第二个宿主（资料库 tab / 遮罩可同时挂载）共用同一会话，不各自镜像。
+    final secondController = TextEditingController();
+    addTearDown(secondController.dispose);
+    final secondBinding = SearchInputBinding(
+      session: provider.session,
+      controller: secondController,
+    );
+    addTearDown(secondBinding.dispose);
+
+    fakeAsync((async) {
+      controller.text = 'hello';
+      expect(secondController.text, 'hello', reason: '两个宿主的输入框同源');
+      expect(provider.searchQuery, 'hello');
+      expect(provider.isSearchPending, isTrue, reason: '输入只重启，不立即请求');
+      expect(provider.songResults.items, isEmpty);
+
+      async.elapse(const Duration(milliseconds: 299));
+      expect(source.searchCalls, 0);
+      async.elapse(const Duration(milliseconds: 1));
+      async.flushMicrotasks();
+      expect(source.searchCalls, 1);
+      expect(provider.songResults.items, isNotEmpty);
+
+      // 会话侧清空（托盘释放 / 其它宿主）必须立即反映到所有输入框，不等下一帧。
+      provider.clearSearch();
+      expect(controller.text, isEmpty);
+      expect(secondController.text, isEmpty);
+      expect(provider.searchQuery, isEmpty);
+      expect(provider.filteredResults, isEmpty);
+      expect(provider.songResults.items, isEmpty);
+    });
+  });
+
+  test('预览会话：8 行截断、排序、高亮移动与换词重置（不挂遮罩）', () {
+    final preview = SearchPreviewSession();
+    addTearDown(preview.dispose);
+    final rows = [
+      for (var index = 0; index < 10; index++)
+        SearchRow(track: _track('kw', 'r$index')),
+    ];
+    SearchResults<Object> results(List<SearchRow> items) =>
+        SearchResults<Object>(items: items);
+
+    preview.update(
+      kind: SearchKind.song,
+      results: results(rows),
+      sourceKey: 'kw',
+      query: 'hello',
+    );
+    expect(preview.totalItems, 10, reason: '总数不是截断后的数量');
+    expect(preview.items, hasLength(SearchPreviewSession.defaultMaxItems));
+    expect(preview.items.map((item) => item.key), [
+      for (var index = 0; index < 8; index++) 'track:kw:r$index',
+    ]);
+    expect(preview.highlightedKey, 'track:kw:r0');
+
+    preview.moveHighlight(2);
+    expect(preview.highlightedKey, 'track:kw:r2');
+    expect(preview.highlightedItem, isA<SearchPreviewTrack>());
+    preview.moveHighlight(-1);
+    expect(preview.highlightedKey, 'track:kw:r1');
+    preview.moveHighlight(-100);
+    expect(preview.highlightedKey, 'track:kw:r0', reason: '负向越界夹到首行');
+    preview.moveHighlight(100);
+    expect(preview.highlightedKey, 'track:kw:r7', reason: '正向越界夹到末行');
+
+    // 同一关键词、行身份仍在：用户移动后的高亮保留。
+    preview.update(
+      kind: SearchKind.song,
+      results: results(rows),
+      sourceKey: 'kw',
+      query: 'hello',
+    );
+    expect(preview.highlightedKey, 'track:kw:r7');
+
+    // 换词重置策略：新查询从第一条重新开始。
+    preview.update(
+      kind: SearchKind.song,
+      results: results(rows),
+      sourceKey: 'kw',
+      query: 'next',
+    );
+    expect(preview.highlightedKey, 'track:kw:r0');
+
+    // 歌手类型的预览顺序与行身份来自同一份投影。
+    final artists = [
+      for (var index = 0; index < 3; index++)
+        ArtistSummary(id: 'a$index', name: '歌手 $index'),
+    ];
+    preview.update(
+      kind: SearchKind.artist,
+      results: SearchResults<Object>(items: artists),
+      sourceKey: 'kw',
+      query: 'next',
+    );
+    expect(preview.items.map((item) => item.key), [
+      'artist:kw:a0',
+      'artist:kw:a1',
+      'artist:kw:a2',
+    ]);
+    expect(preview.highlightedItem, isA<SearchPreviewArtist>());
+  });
+
+  test('切类型后结果投影与预览一起换（不挂遮罩）', () async {
+    final source = _FakeMusicSource(
+      'kw',
+      capabilities: const domain.SourceCapabilities(
+        search: true,
+        pagination: true,
+        artist: true,
+      ),
+    );
+    final registry = _FakeRegistry(
+      {'kw': source},
+      [_descriptor('kw', '酷我', capabilities: source.capabilities)],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('hello');
+    await _waitUntil(() => provider.songResults.items.isNotEmpty);
+    expect(provider.session.projection.trackItems, isNotEmpty);
+    expect(provider.session.projection.artistItems, isEmpty);
+
+    provider.selectSearchKind(SearchKind.artist);
+    await _waitUntil(() => provider.artistResults.items.isNotEmpty);
+    final projection = provider.session.projection;
+    expect(projection.kind, SearchKind.artist);
+    expect(projection.trackItems, isEmpty);
+    expect(projection.artistItems.single.id, 'hello-a1');
+    expect(provider.session.preview.items.single, isA<SearchPreviewArtist>());
+    expect(provider.session.preview.highlightedKey, 'artist:kw:hello-a1');
   });
 }

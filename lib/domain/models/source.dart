@@ -1,3 +1,5 @@
+import 'catalog.dart' show SearchKind;
+
 /// 音源种类。
 ///
 /// 领域层自定枚举（`lib/domain/**` 不依赖 `lib/sources/**`）；
@@ -45,6 +47,22 @@ class SourceCapabilities {
     this.lyricsTranslation = false,
     this.comment = false,
   });
+
+  /// 当前能力位支持的全部搜索类型（顺序 = 搜索页分段顺序）。
+  ///
+  /// 能力位 → [SearchKind] 的唯一映射：搜索会话、资料库 tab 显隐与类型
+  /// 分段都读这里，不再各自维护 `_supports` / `sourceSupportsAnySearch`。
+  List<SearchKind> get searchKinds => [
+    if (search) SearchKind.song,
+    if (artist) SearchKind.artist,
+    if (lyricSearch) SearchKind.lyric,
+  ];
+
+  /// 是否至少具备一种搜索能力。
+  bool get supportsAnySearch => searchKinds.isNotEmpty;
+
+  /// 是否支持指定搜索类型。
+  bool supportsSearchKind(SearchKind kind) => searchKinds.contains(kind);
 
   @override
   bool operator ==(Object other) =>
