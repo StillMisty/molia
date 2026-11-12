@@ -236,10 +236,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - name: 系统依赖
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgtk-3-dev libsecret-1-dev libx11-dev libxi-dev ninja-build libglu1-mesa binutils file zip
+      - name: 系统依赖（GTK / X11 / secret + 打包工具）
+        uses: ./.github/actions/linux-system-deps
+        with:
+          # libsecret 供 flutter_secure_storage；binutils / file 供 strip 与守卫脚本；
+          # zip 打符号包。基础 GTK / X11 依赖在 action 里。
+          packages: libsecret-1-dev binutils file zip
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.47.9

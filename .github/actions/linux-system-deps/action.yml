@@ -1,0 +1,47 @@
+name: Linux 系统依赖
+description: >-
+  安装 Linux 构建所需的 GTK / X11 / ninja / GLU 开发包（native assets 的构建 hook
+  依赖 pkg-config 能找到 gtk+-3.0 / x11 / xi），调用方可用 packages 追加额外的包。
+
+# 抽成 composite action 的唯一理由是 apt 需要重试：runner 出网的 DNS 偶发失败，
+# 单次 `apt-get install` 会一边解析失败一边以 4KB/s 续传，最后拖到半小时才 exit 100
+# （v0.1.1-beta.1 的 Linux job 就这样整条挂掉）。这里缩短单次超时并整段重试，
+# 让失败在几十秒内暴露而不是耗掉 job 大半的时限。
+inputs:
+  packages:
+    description: 追加安装的包（空格分隔）
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: apt-get（失败整段重试）
+      shell: bash
+      env:
+        EXTRA_PACKAGES: ${{ inputs.packages }}
+      run: |
+        set -euo pipefail
+        EXTRA_PACKAGES="${EXTRA_PACKAGES:-}"
+        # Acquire::Retries 让 apt 自己重试单个文件，ForceIPv4 避开解析到不可达 v6 的情况；
+        # 外层循环兜住「update 成功、install 半途 DNS 挂掉」这类整段失败。
+        apt=(sudo apt-get
+          -o Acquire::Retries=3
+          -o Acquire::http::Timeout=20
+          -o Acquire::https::Timeout=20
+          -o Acquire::ForceIPv4=true)
+        packages=(libgtk-3-dev libx11-dev libxi-dev ninja-build libglu1-mesa)
+        for pkg in $EXTRA_PACKAGES; do
+          packages+=("$pkg")
+        done
+        for attempt in 1 2 3; do
+          if "${apt[@]}" update && \
+             "${apt[@]}" install -y --no-install-recommends "${packages[@]}"; then
+            echo "系统依赖就绪：${packages[*]}"
+            exit 0
+          fi
+          echo "::warning::系统依赖安装第 $attempt 次失败，10 秒后重试"
+          sleep 10
+        done
+        echo "::error::系统依赖安装失败（已重试 3 次，多为 runner DNS 抖动，可稍后 rerun）"
+        exit 1
