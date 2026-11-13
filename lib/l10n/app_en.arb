@@ -5,6 +5,7 @@
   "lyricsTab": "LYRICS",
   "cancel": "Cancel",
   "close": "Close",
+  "loading": "Loading",
   "playbackFailed": "Playback failed: {error}",
   "@playbackFailed": {
     "placeholders": {

@@ -9,6 +9,7 @@ import 'package:material_ui/material_ui.dart';
 import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/m3e_context.dart';
+import 'skeleton.dart';
 
 /// 生成阶段步进：整理偏好 → AI 选歌 → 本地找歌。
 ///
@@ -93,60 +94,6 @@ class _PhaseStep extends StatelessWidget {
   }
 }
 
-/// 让子树做呼吸式明暗变化（骨架 / 状态卡）。
-class AiDjPulse extends StatefulWidget {
-  const AiDjPulse({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  State<AiDjPulse> createState() => _AiDjPulseState();
-}
-
-class _AiDjPulseState extends State<AiDjPulse>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _opacity;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
-    _opacity = Tween<double>(
-      begin: 0.5,
-      end: 1,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final disabled = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    if (disabled) {
-      _controller.stop();
-      _controller.value = 1;
-    } else if (!_controller.isAnimating) {
-      _controller.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final disabled = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    if (disabled) return widget.child;
-    return FadeTransition(opacity: _opacity, child: widget.child);
-  }
-}
-
 /// 首次生成时的推荐行骨架（脉冲）。
 class AiDjPulsingSkeleton extends StatelessWidget {
   const AiDjPulsingSkeleton({super.key, this.rows = 5});
@@ -156,7 +103,7 @@ class AiDjPulsingSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return AiDjPulse(
+    return SkeletonPulse(
       child: Column(
         key: const Key('aiDjPulsingSkeleton'),
         children: [

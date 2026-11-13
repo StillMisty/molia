@@ -25,6 +25,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get close => 'Close';
 
   @override
+  String get loading => 'Loading';
+
+  @override
   String playbackFailed(String error) {
     return 'Playback failed: $error';
   }

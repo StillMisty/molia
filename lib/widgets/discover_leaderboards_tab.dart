@@ -9,6 +9,7 @@ import '../providers/discover_provider.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import 'app_network_image.dart';
+import 'cover_hero.dart';
 import 'discover_layout.dart';
 import 'empty_state.dart';
 import 'm3e_page_route.dart';
@@ -16,6 +17,11 @@ import 'shell_page_visibility.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
+
+/// 榜单封面共享元素 tag：`board.id` 已含平台前缀（`wy__<bangid>`），
+/// 同一 Navigator 内唯一；详情页复用同一个值作为目标端。
+String _leaderboardCoverTag(DiscoverLeaderboard board) =>
+    'discover-leaderboard-cover:${board.id}';
 
 /// 资料页「热榜」tab：当前渠道的榜单磁贴（点击进入榜单曲目页）。
 ///
@@ -61,6 +67,7 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
         builder: (_) => DiscoverTracksPage(
           title: board.name,
           coverUrl: cachedCover,
+          coverHeroTag: _leaderboardCoverTag(board),
           // 磁贴通常已经在按需加载封面：复用同一个 future，头部就绪后更新，
           // 不为了封面阻塞曲目首屏。缓存未命中时这里再发起一次轻量请求。
           coverFuture: cachedCover == null
@@ -172,7 +179,10 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
       padding: const EdgeInsets.all(8),
       child: Row(
         children: [
-          _LeaderboardCover(key: ValueKey(board.id), board: board),
+          CoverHero(
+            tag: _leaderboardCoverTag(board),
+            child: _LeaderboardCover(key: ValueKey(board.id), board: board),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(

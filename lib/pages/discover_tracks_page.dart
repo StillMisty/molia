@@ -11,6 +11,7 @@ import '../providers/paged_list_controller.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/detail_page/detail_cover_header.dart';
 import '../widgets/discover_actions.dart';
+import '../widgets/discover_tracks_skeleton.dart';
 import '../widgets/paged_track_collection.dart';
 import '../widgets/track_handoff.dart';
 import '../widgets/track_row.dart';
@@ -41,6 +42,11 @@ class DiscoverTracksPage extends StatefulWidget {
   /// 完成后再更新头部；失败 / 为空保持 [coverUrl] 或 fallback 图标。
   final Future<String?>? coverFuture;
 
+  /// 与来源卡片一致的封面共享元素标签（歌单卡片 / 榜单磁贴生成）。
+  ///
+  /// 链接打开的详情没有来源端，保持 null 不参与 Hero。
+  final Object? coverHeroTag;
+
   final DiscoverTracksLoader loader;
 
   /// 是否提供「导入到我的列表」（歌单支持；榜单不提供）。
@@ -52,6 +58,7 @@ class DiscoverTracksPage extends StatefulWidget {
     required this.loader,
     this.coverUrl,
     this.coverFuture,
+    this.coverHeroTag,
     this.importable = false,
   });
 
@@ -227,6 +234,13 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
       emptyIcon: Icons.playlist_play_rounded,
       failureText: l10n.discoverLoadFailed,
       retryText: l10n.discoverRetry,
+      loadingBuilder: (context) => DiscoverTracksSkeleton(
+        title: widget.title,
+        tableColumns: tableColumns,
+        coverUrl: widget.coverUrl,
+        coverFuture: widget.coverFuture,
+        coverHeroTag: widget.coverHeroTag,
+      ),
     );
   }
 
@@ -262,6 +276,7 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
         onShuffle: () => unawaited(_playShuffled()),
         // 导入到我的列表仍在 AppBar 的图标键上，头部不重复提供。
       ),
+      heroTag: widget.coverHeroTag,
     );
 
     final coverFuture = widget.coverFuture;
