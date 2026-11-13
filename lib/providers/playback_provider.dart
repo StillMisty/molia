@@ -146,6 +146,8 @@ class PlaybackProvider extends ChangeNotifier {
     AutoSourceSwapTrackHook? onAutoSourceSwapped,
     required this._settings,
     bool Function()? isForeground,
+    // 仅在测试里压短；生产用默认 400ms（见 [_volumePersistDebounce]）。
+    this._volumePersistDebounce = const Duration(milliseconds: 400),
   }) : _session = sessionCoordinator,
        _volumeStore = volumeStore ?? PlaybackVolumeStore() {
     _errorRecovery = PlaybackErrorRecovery(
@@ -538,8 +540,9 @@ class PlaybackProvider extends ChangeNotifier {
     });
   }
 
-  /// 音量落盘防抖窗口（见 [_scheduleVolumePersist]）。
-  static const Duration _volumePersistDebounce = Duration(milliseconds: 400);
+  /// 音量落盘防抖窗口（构造函数可覆盖：测试压短到几十毫秒，生产保持
+  /// 400ms，避免拖动滑杆时逐帧写偏好文件）。
+  final Duration _volumePersistDebounce;
 
   Timer? _volumePersistTimer;
 

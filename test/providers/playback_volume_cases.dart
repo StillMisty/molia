@@ -17,9 +17,17 @@ void main() {
   });
 
   /// 组装 provider 并记录假引擎的音量下发（启动加载已并入 preferencesReady）。
-  ({PlaybackProvider provider, FakePlaybackFacade backend}) build() {
+  ///
+  /// 防抖窗口默认压到 20ms：落盘仍走真实的 Timer 回调，但用例不用等生产
+  /// 的 400ms（见「防抖」两条用例）。
+  ({PlaybackProvider provider, FakePlaybackFacade backend}) build({
+    Duration volumePersistDebounce = const Duration(milliseconds: 20),
+  }) {
     final backend = FakePlaybackFacade();
-    final provider = buildTestPlaybackProvider(facade: backend);
+    final provider = buildTestPlaybackProvider(
+      facade: backend,
+      volumePersistDebounce: volumePersistDebounce,
+    );
     addTearDown(provider.dispose);
     return (provider: provider, backend: backend);
   }
@@ -145,15 +153,21 @@ void main() {
 
   test('adjustVolume 走防抖落盘：连按不逐次写盘，停手后落定', () async {
     final harness = build();
+    final prefs = await SharedPreferences.getInstance();
     await harness.provider.preferencesReady;
     await harness.provider.adjustVolume(-0.05);
     await harness.provider.adjustVolume(-0.05);
 
-    final duringDebounce = build();
-    await duringDebounce.provider.preferencesReady;
-    expect(duringDebounce.provider.volume, 1.0, reason: '防抖窗口内不写盘');
+    // 防抖窗口内：同步读偏好即可判定，不再新建 provider（那要多等一次
+    // 异步启动，机器慢时还可能把「窗口内」误判成「已落盘」）。
+    expect(
+      prefs.getString(PlaybackVolumeStore.keyState),
+      isNull,
+      reason: '防抖窗口内不写盘',
+    );
 
-    await Future<void>.delayed(const Duration(milliseconds: 500));
+    // 停手（防抖窗口过去）后：写入，下一次启动读到。
+    await Future<void>.delayed(const Duration(milliseconds: 60));
     final afterDebounce = build();
     await afterDebounce.provider.preferencesReady;
     expect(afterDebounce.provider.volume, closeTo(0.9, 1e-9));
@@ -175,16 +189,19 @@ void main() {
 
   test('音量落盘防抖：拖动中的值不逐帧写盘，停手后落定', () async {
     final harness = build();
+    final prefs = await SharedPreferences.getInstance();
     await harness.provider.preferencesReady;
     await harness.provider.setVolume(0.4);
 
     // 防抖窗口内：还没写盘（滑杆拖动每帧都会走到 setVolume）。
-    final duringDrag = build();
-    await duringDrag.provider.preferencesReady;
-    expect(duringDrag.provider.volume, 1.0, reason: '拖动中的中间值不立即落盘');
+    expect(
+      prefs.getString(PlaybackVolumeStore.keyState),
+      isNull,
+      reason: '拖动中的中间值不立即落盘',
+    );
 
     // 停手（防抖窗口过去）后：写入，下一次启动读到。
-    await Future<void>.delayed(const Duration(milliseconds: 500));
+    await Future<void>.delayed(const Duration(milliseconds: 60));
     final afterDrag = build();
     await afterDrag.provider.preferencesReady;
     expect(afterDrag.provider.volume, closeTo(0.4, 1e-9));

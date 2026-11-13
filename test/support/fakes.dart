@@ -383,6 +383,7 @@ PlaybackProvider buildTestPlaybackProvider({
   PlaybackSessionStore? sessionStore,
   SettingsRegistry? settings,
   Future<String?> Function(Track track)? artworkResolver,
+  Duration volumePersistDebounce = const Duration(milliseconds: 400),
 }) {
   final playbackFacade = facade ?? FakePlaybackFacade();
   // 设置注册表一处实例：provider 的重载钩子与协调者的读取同源（组合根口径）。
@@ -405,6 +406,7 @@ PlaybackProvider buildTestPlaybackProvider({
     observer: observer,
     sessionCoordinator: session,
     settings: registry,
+    volumePersistDebounce: volumePersistDebounce,
   );
   // 与组合根同构：provider 先订阅、观察者后挂接（facade 监听顺序一致）。
   observer.attach();
