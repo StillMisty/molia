@@ -15,6 +15,7 @@ import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/playback_power_policy.dart';
 import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/playback_feel_store.dart';
 import 'package:molia/services/playback_observer.dart';
 import 'package:molia/services/playback_session_store.dart';
 
@@ -287,6 +288,28 @@ class FakePlaybackFacade implements PlaybackFacade {
     volumes.add(value);
   }
 
+  /// 暂停淡出进行中（真实服务在淡出窗口内为 true；假引擎默认 false）。
+  @override
+  bool pauseTransitioning = false;
+
+  /// 播放手感 / 睡眠淡出的最近下发值（provider 与定时关闭接线测试用）。
+  Duration? fadeDuration;
+  bool? smartShuffle;
+  final List<Duration> sleepFades = [];
+  final List<bool> sleepFadeCancels = [];
+
+  @override
+  void setFadeDuration(Duration duration) => fadeDuration = duration;
+
+  @override
+  void setSmartShuffle(bool enabled) => smartShuffle = enabled;
+
+  @override
+  void startSleepFade(Duration duration) => sleepFades.add(duration);
+
+  @override
+  void cancelSleepFade({bool restore = true}) => sleepFadeCancels.add(restore);
+
   @override
   Future<void> updateTrackArtwork(String trackUri, Uri? artwork) async {
     calls.add('updateTrackArtwork:$trackUri');
@@ -384,6 +407,7 @@ PlaybackProvider buildTestPlaybackProvider({
   SettingsRegistry? settings,
   Future<String?> Function(Track track)? artworkResolver,
   Duration volumePersistDebounce = const Duration(milliseconds: 400),
+  PlaybackFeelStore? feelStore,
 }) {
   final playbackFacade = facade ?? FakePlaybackFacade();
   // 设置注册表一处实例：provider 的重载钩子与协调者的读取同源（组合根口径）。
@@ -407,6 +431,7 @@ PlaybackProvider buildTestPlaybackProvider({
     sessionCoordinator: session,
     settings: registry,
     volumePersistDebounce: volumePersistDebounce,
+    feelStore: feelStore,
   );
   // 与组合根同构：provider 先订阅、观察者后挂接（facade 监听顺序一致）。
   observer.attach();

@@ -1490,6 +1490,17 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   默认播放页；存储首页被隐藏时按导航顺序兜底且**不改写存储**，避免同步回环）。
   应用内音量（`PlaybackProvider.volume/muted`，设备本地持久化、落盘防抖 400ms）
   经 `PlaybackFacade.setVolume` 落到 just_audio（桌面 media_kit 同一播放器）。
+  播放手感（`lib/services/playback_feel_store.dart` 单键 JSON，设备本地）：
+  淡入淡出档位（关 / 0.15 / 0.2 / 0.3 秒，默认 0.2）与智能随机开关（默认开）
+  由 provider 读取并推给 facade；`LocalPlaybackService` 只保留用户音量的私有
+  副本用于包络乘法（`playback/fade_envelope.dart` 纯函数），音量 / 静音 /
+  持久化的所有者仍是 provider。普通淡变只作用于起播 / 恢复 / 暂停 / 停止；
+  切歌、换音质、急停（焦点丢失 / 拔耳机 / 设备消失）与退出保持硬切；睡眠
+  定时的专用淡出（倒计时最后 5 秒 / 播完当前曲前 3 秒）独立于该设置，只经
+  注入的淡出 / 撤销回调落地。智能随机的「最近听过」证据由组合根注入
+  （`services/playback_recent_tracks.dart`：统计优先、历史兜底），播放层只拿
+  `Set<String>`；短队列 / 关闭 / 空证据退化为均匀洗牌（`shuffle_order.dart`
+  的 `shuffleWeightsFor`）。
 - 取色模型（唯一优先级，见 ADR-0001）：**基础配色**（壁纸 / 自定义，单选）+
   **封面覆盖**（当前曲目已有封面取色结果时用封面 seed 覆盖基础配色，包括
   盖过莫奈；启动恢复态在首帧前用本地缓存预解析；无封面回退）+
@@ -1593,8 +1604,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   收藏页多选栏也走这套收口：浮层缩放是 spatial 弹簧、透明度从同一进度截断
   0..1；多选栏与页头同高交叉淡入淡出（effects 时长 + 曲线，离场层
   `IgnorePointer`）。
-- 设置页：首屏 7 个语义分区（外观 / 封面 / 播放 / 歌词与展示 / 内容与来源 /
-  通用 / 数据），分组标题 + 分段卡片行：行表面统一走共享的
+- 设置页：首屏 8 个语义分区（外观 / 封面 / 播放 / 播放细节 / 歌词与展示 /
+  内容与来源 / 通用 / 数据），分组标题 + 分段卡片行：行表面统一走共享的
   `lib/widgets/card_list_surface.dart`
   （`CardListSurface`：静止内 4dp / 首末外侧 16dp、hover 12dp、press 16dp，
   expressive spatial 形状弹簧；`TrackRow`、设置行、AI 推荐卡同一套形状语言），

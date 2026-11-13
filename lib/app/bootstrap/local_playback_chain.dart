@@ -75,11 +75,13 @@ class LocalPlaybackChain {
 
   LocalPlaybackService buildService({
     required ValueListenable<bool> playWithOtherApps,
+    Future<Set<String>> Function()? recentTrackIds,
   }) => LocalPlaybackService(
     preferredQuality: preferredQuality,
     resolver: resolveSourceStream,
     powerPolicy: powerPolicy,
     playWithOtherApps: playWithOtherApps,
+    recentTrackIds: recentTrackIds,
     // 下一首预载：起播后预热直链（命中取链缓存）+ 音频字节预取到缓存。
     nextTrackPreloader: NextTrackPreloader(
       resolver: resolveSourceStream,

@@ -82,7 +82,12 @@ class PlaybackSessionCoordinator
     required this._settings,
     this._onRestoredTrack,
     PlaybackPowerPolicy? powerPolicy,
-  }) : _powerPolicy = powerPolicy ?? PlaybackPowerPolicy() {
+    Future<Set<String>> Function()? recentTrackIds,
+    bool Function()? smartShuffleEnabled,
+  }) : _powerPolicy = powerPolicy ?? PlaybackPowerPolicy(),
+       // ignore: prefer_initializing_formals
+       _recentTrackIds = recentTrackIds,
+       _smartShuffleEnabled = smartShuffleEnabled ?? (() => true) {
     _position = _RestoredPositionChannel(_facade.position);
     _facade.snapshot.addListener(_onLiveSnapshot);
     // 曲末完成只在事件到达时写一次：单曲循环 / 列表循环单曲重播没有
@@ -103,6 +108,14 @@ class PlaybackSessionCoordinator
 
   /// 播放功耗策略（组合根注入共享实例；默认前台实例便于单测）。
   final PlaybackPowerPolicy _powerPolicy;
+
+  /// 恢复态生成新一轮洗牌时的证据与开关（与真实播放同一套策略）。
+  ///
+  /// 只拿「最近听过」的曲目 id 集合，不 import 统计 / 历史服务；队列装载
+  /// 时刷新一次，之后同一轮不再重排。
+  final Future<Set<String>> Function()? _recentTrackIds;
+  final bool Function() _smartShuffleEnabled;
+  Set<String> _restoredRecentTrackIds = const {};
 
   /// 上一帧是否前台：只在「前台 → 后台」那一刻提交一次。
   bool _wasForeground = true;
@@ -242,6 +255,8 @@ class PlaybackSessionCoordinator
         _restoredShuffleOrder = null;
       }
       _restoredSession = session;
+      // 恢复态也是「装载队列」：与真实播放同一份随机证据；失败静默降级。
+      await _refreshRestoredRecentTrackIds(session);
       _restoredPosition = session.position;
       _position.setRestored(session.position);
       _onRestoredTrack?.call(session.current!);
@@ -327,8 +342,10 @@ class PlaybackSessionCoordinator
   Future<PlaybackCommandOutcome> play() async {
     if (phase == PlaybackSessionPhase.restored) return resume();
     final live = _facade.snapshot.value;
-    // 无曲目 / 已在播：不下发播放命令。
-    if (live.current == null || live.isPlaying) {
+    // 无曲目 / 已在播：不下发播放命令。暂停淡出期间快照仍是 playing，
+    // 但最新意图是播放，必须放行（反向淡入）。
+    if (live.current == null ||
+        (live.isPlaying && !_facade.pauseTransitioning)) {
       return PlaybackCommandOutcome.none;
     }
     await _facade.play();
@@ -993,7 +1010,32 @@ class PlaybackSessionCoordinator
       return;
     }
     _restoredShuffleOrder = PlaybackShuffleOrder()
-      ..reset(session.tracks.length, startIndex: session.index);
+      ..reset(
+        session.tracks.length,
+        startIndex: session.index,
+        weights: shuffleWeightsFor(
+          trackIds: [for (final track in session.tracks) track.id.uri],
+          recentTrackIds: _restoredRecentTrackIds,
+          enabled: _smartShuffleEnabled(),
+        ),
+      );
+  }
+
+  /// 恢复态装载时的随机证据；非随机 / 无 loader / 失败都保持空集合。
+  Future<void> _refreshRestoredRecentTrackIds(PlaybackSession session) async {
+    final loader = _recentTrackIds;
+    if (loader == null ||
+        session.mode != PlayMode.shuffle ||
+        session.tracks.length < kSmartShuffleMinQueue) {
+      _restoredRecentTrackIds = const {};
+      return;
+    }
+    try {
+      _restoredRecentTrackIds = await loader();
+    } catch (e) {
+      _logger.fine('读取恢复态随机证据失败，使用均匀随机', e);
+      _restoredRecentTrackIds = const {};
+    }
   }
 
   /// 撤下恢复数据：真实播放接管 / 停止播放 / 关闭恢复开关时调用。

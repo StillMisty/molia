@@ -133,9 +133,9 @@ class PlaybackEngine implements PlaybackFacade {
 
   @override
   Future<void> play() async {
-    if (_service.hasTrack && !_service.isPlaying) {
-      await _service.toggle();
-    }
+    // 服务内部区分「已暂停」与「暂停淡出中」：后者要反向淡入，不能被
+    // isPlaying（仍是 true）挡掉。
+    await _service.play();
     _publish();
   }
 
@@ -197,7 +197,10 @@ class PlaybackEngine implements PlaybackFacade {
   Future<void> toggle() async {
     // 与 play / pause 同一判据，但只发布一次：toggle 是单个用户动作，
     // 不应因为复用命令方法而多走一轮快照 / 进度对齐。
-    if (_snapshot.value.isPlaying) {
+    if (_service.pauseIntentPending) {
+      // 暂停淡出途中再点一次：最新意图是继续播放。
+      await _service.play();
+    } else if (_snapshot.value.isPlaying) {
       if (_service.isPlaying) await _service.toggle();
     } else if (_service.hasTrack && !_service.isPlaying) {
       await _service.toggle();
@@ -210,6 +213,23 @@ class PlaybackEngine implements PlaybackFacade {
   /// 音量是设备本地状态，不属于播放快照：不发布快照、也不碰进度通道。
   @override
   Future<void> setVolume(double value) => _service.setVolume(value);
+
+  @override
+  bool get pauseTransitioning => _service.pauseIntentPending;
+
+  @override
+  void setFadeDuration(Duration duration) => _service.setFadeDuration(duration);
+
+  @override
+  void setSmartShuffle(bool enabled) =>
+      _service.setSmartShuffleEnabled(enabled);
+
+  @override
+  void startSleepFade(Duration duration) => _service.startSleepFade(duration);
+
+  @override
+  void cancelSleepFade({bool restore = true}) =>
+      _service.cancelSleepFade(restore: restore);
 
   /// 音源补图：原地更新队列曲目封面（新 SourceTrack 触发领域映射重建）。
   @override

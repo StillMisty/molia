@@ -283,6 +283,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPlaybackTitle => 'Playback';
 
   @override
+  String get settingsPlaybackDetailsTitle => 'Playback details';
+
+  @override
+  String get settingsFadeTitle => 'Fade in and out';
+
+  @override
+  String get settingsFadeSubtitle =>
+      'Smooths the volume when you play or pause. Track changes stay instant.';
+
+  @override
+  String get settingsFadeOff => 'Off';
+
+  @override
+  String get settingsFade150 => '0.15 s';
+
+  @override
+  String get settingsFade200 => '0.2 s';
+
+  @override
+  String get settingsFade300 => '0.3 s';
+
+  @override
+  String get settingsSmartShuffleTitle => 'Fewer recent repeats';
+
+  @override
+  String get settingsSmartShuffleSubtitle =>
+      'Recently played songs come up less often in shuffle.';
+
+  @override
   String get settingsDefaultPlayMode => 'Default play mode';
 
   @override

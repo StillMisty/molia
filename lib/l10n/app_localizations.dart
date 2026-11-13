@@ -614,6 +614,60 @@ abstract class AppLocalizations {
   /// **'Playback'**
   String get settingsPlaybackTitle;
 
+  /// No description provided for @settingsPlaybackDetailsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback details'**
+  String get settingsPlaybackDetailsTitle;
+
+  /// No description provided for @settingsFadeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Fade in and out'**
+  String get settingsFadeTitle;
+
+  /// No description provided for @settingsFadeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Smooths the volume when you play or pause. Track changes stay instant.'**
+  String get settingsFadeSubtitle;
+
+  /// No description provided for @settingsFadeOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get settingsFadeOff;
+
+  /// No description provided for @settingsFade150.
+  ///
+  /// In en, this message translates to:
+  /// **'0.15 s'**
+  String get settingsFade150;
+
+  /// No description provided for @settingsFade200.
+  ///
+  /// In en, this message translates to:
+  /// **'0.2 s'**
+  String get settingsFade200;
+
+  /// No description provided for @settingsFade300.
+  ///
+  /// In en, this message translates to:
+  /// **'0.3 s'**
+  String get settingsFade300;
+
+  /// No description provided for @settingsSmartShuffleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Fewer recent repeats'**
+  String get settingsSmartShuffleTitle;
+
+  /// No description provided for @settingsSmartShuffleSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recently played songs come up less often in shuffle.'**
+  String get settingsSmartShuffleSubtitle;
+
   /// No description provided for @settingsDefaultPlayMode.
   ///
   /// In en, this message translates to:

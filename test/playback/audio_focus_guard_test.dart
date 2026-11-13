@@ -51,7 +51,10 @@ class _RecordingService extends LocalPlaybackService {
   int pauseCalls = 0;
 
   @override
-  Future<bool> pause({bool fromInterruption = false}) async {
+  Future<bool> pause({
+    bool fromInterruption = false,
+    bool urgent = false,
+  }) async {
     pauseCalls++;
     return true;
   }
