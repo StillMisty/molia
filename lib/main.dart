@@ -254,6 +254,9 @@ void main() async {
       coverResolver: local.customCovers.resolution,
     ),
   );
+  // 标题编辑直接写会话 JSON：先等会话层排空，避免被在途保存写回旧标题。
+  local.localMetadata.awaitSessionWrites = () =>
+      playback.sessionStore.pendingWrite;
   _markStartup('播放栈（含媒体会话）', startup);
   // 资料库 provider（收藏/历史/列表）：AI 推歌、托盘、Provider 树共用。
   final libraryProvider = LibraryProvider(

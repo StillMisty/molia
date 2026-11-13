@@ -106,6 +106,64 @@ class DownloadsRepository {
     _notifyChanged();
   }
 
+  /// 写入一次文件探测结果（存在 / 缺失）。
+  ///
+  /// 存在：更新 `mtimeMs` 并清空 `missingAt`；缺失：只写 `missingAt`，保留
+  /// 旧 `mtimeMs` 与整条记录（UI 仍能看到「文件不见」）。只改这两列，避免
+  /// 与标题编辑等并发写入互相覆盖。
+  Future<void> setFileProbe({
+    required String originSourceKey,
+    required String originSongId,
+    required int? mtimeMs,
+    required bool missing,
+    required int missingAt,
+    int? sizeBytes,
+  }) async {
+    final changed =
+        await (_db.update(_db.downloads)..where(
+              (t) =>
+                  t.originSourceKey.equals(originSourceKey) &
+                  t.originSongId.equals(originSongId),
+            ))
+            .write(
+              DownloadsCompanion(
+                mtimeMs: Value(mtimeMs),
+                missingAt: Value(missing ? missingAt : null),
+                sizeBytes: missing || sizeBytes == null
+                    ? const Value.absent()
+                    : Value(sizeBytes),
+              ),
+            );
+    if (changed > 0) _notifyChanged();
+  }
+
+  /// 重定位：更新路径 / 大小 / 修改时间并清除缺失状态。
+  ///
+  /// 身份列（`localKey` / `originSongId`）不动；导入与下载副本都适用。
+  Future<void> relocate({
+    required String originSourceKey,
+    required String originSongId,
+    required String filePath,
+    required int sizeBytes,
+    required int? mtimeMs,
+  }) async {
+    final changed =
+        await (_db.update(_db.downloads)..where(
+              (t) =>
+                  t.originSourceKey.equals(originSourceKey) &
+                  t.originSongId.equals(originSongId),
+            ))
+            .write(
+              DownloadsCompanion(
+                filePath: Value(filePath),
+                sizeBytes: Value(sizeBytes),
+                mtimeMs: Value(mtimeMs),
+                missingAt: const Value(null),
+              ),
+            );
+    if (changed > 0) _notifyChanged();
+  }
+
   /// 删除下载记录（文件删除由服务负责）。
   Future<void> delete(String sourceKey, String songId) async {
     final removed =

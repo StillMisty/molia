@@ -28,6 +28,13 @@ import '../../services/covers/custom_cover_store.dart';
 import '../../services/data_saver_service.dart';
 import '../../services/download/download_service.dart';
 import '../../services/download/download_settings.dart';
+import '../../services/download/missing_file_probe.dart';
+import '../../data/local_title_store.dart';
+import '../../services/local/local_library_service.dart';
+import '../../services/local/local_metadata_service.dart';
+import '../../services/local/music_folder_scanner.dart';
+import '../../services/local/music_folder_watcher.dart';
+import '../../services/local/music_folders.dart';
 import '../../services/local_cover_identity_sweep.dart';
 import '../../services/lyrics_cache.dart';
 import '../../services/lyrics_service.dart';
@@ -41,6 +48,9 @@ typedef LocalDataStack = ({
   DownloadSettings downloadSettings,
   DownloadService downloadService,
   LocalCoverIdentitySweep localCoverSweep,
+  MissingFileProbe missingFileProbe,
+  LocalLibraryService localLibrary,
+  LocalMetadataService localMetadata,
   LyricsService lyricsService,
   CoverBackfillService coverBackfill,
   AudioPredownloader audioCacheWriter,
@@ -180,6 +190,30 @@ Future<LocalDataStack> buildLocalDataStack({
     preferredQuality: () =>
         dataSaver.effectiveQuality(sourceManager.preferredQuality),
   );
+  // 缺文件探测：下载记录就绪后空闲批量执行；扫描 / 手动检查共用同一入口。
+  final missingFileProbe = MissingFileProbe(
+    records: downloadService.records,
+    repository: downloadsRepository,
+    storage: downloadStorage,
+  );
+
+  // 本地曲库：音乐文件夹配置 + 扫描 + 监听 + 缺文件检查（首帧后 idle 启动）。
+  final musicFolders = MusicFoldersStore();
+  late final LocalLibraryService localLibrary;
+  localLibrary = LocalLibraryService(
+    folders: musicFolders,
+    scanner: MusicFolderScanner(target: downloadService),
+    probe: missingFileProbe,
+    watcher: MusicFolderWatcher(onTrigger: () => localLibrary.scanAll()),
+  );
+
+  // 标题编辑：标签文件 + 一处数据库事务（会话 gate 在播放栈建好后接线）。
+  final localMetadata = LocalMetadataService(
+    storage: downloadStorage,
+    store: LocalTitleStore(),
+    records: downloadService.records,
+  );
+
   // 身份迁移第三阶段：封面索引键清扫（失败下一次启动重试，不阻断启动）。
   final localCoverSweep = LocalCoverIdentitySweep(
     covers: customCovers,
@@ -214,6 +248,9 @@ Future<LocalDataStack> buildLocalDataStack({
     downloadSettings: downloadSettings,
     downloadService: downloadService,
     localCoverSweep: localCoverSweep,
+    missingFileProbe: missingFileProbe,
+    localLibrary: localLibrary,
+    localMetadata: localMetadata,
     lyricsService: lyricsService,
     coverBackfill: coverBackfill,
     audioCacheWriter: audioCacheWriter,

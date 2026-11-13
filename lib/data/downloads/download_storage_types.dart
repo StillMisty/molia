@@ -45,6 +45,9 @@ abstract interface class DownloadStorage {
   /// 文件是否存在。
   Future<bool> fileExists(String path);
 
+  /// 目录是否存在（缺文件探测判断挂载根是否还在）。
+  Future<bool> directoryExists(String path);
+
   /// 文件大小（字节）；不存在 / 不可读返回 0。
   Future<int> fileSize(String path);
 

@@ -21,6 +21,9 @@ class FakeDownloadStorage implements DownloadStorage {
   /// 路径 → 文件内容。
   final Map<String, List<int>> files = {};
 
+  /// 已存在的目录（缺文件探测判断根目录是否可用）。
+  final Set<String> directories = {};
+
   /// 路径 → 修改时间（毫秒）；未登记的路径返回 0。
   final Map<String, int> mtimes = {};
 
@@ -38,6 +41,11 @@ class FakeDownloadStorage implements DownloadStorage {
 
   @override
   Future<bool> fileExists(String path) async => files.containsKey(path);
+
+  @override
+  Future<bool> directoryExists(String path) async =>
+      directories.contains(path) ||
+      files.keys.any((key) => key.startsWith('$path/'));
 
   @override
   Future<int> fileSize(String path) async => files[path]?.length ?? 0;

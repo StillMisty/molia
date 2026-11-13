@@ -130,6 +130,15 @@ class IoDownloadStorage implements DownloadStorage {
   }
 
   @override
+  Future<bool> directoryExists(String path) async {
+    try {
+      return await Directory(path).exists();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
   Future<int?> fileMtime(String path) async {
     try {
       final file = File(path);

@@ -72,6 +72,7 @@ import '../../domain/models/track.dart';
 import '../../managers/artwork_cache.dart';
 import '../../models/lyrics_result.dart';
 import '../../services/cache_service.dart';
+import '../local/music_folder_scanner.dart';
 import '../covers/cover_bytes_downloader.dart';
 import '../covers/cover_resolution.dart';
 import '../../sources/source_track.dart' show pickQualityFor;
@@ -98,7 +99,19 @@ typedef DownloadLyricsResolver = Future<DownloadLyrics?> Function(Track track);
 typedef DownloadArtworkResolver = Future<String?> Function(Track track);
 
 /// 本地下载服务（`ChangeNotifier`：UI 用 `Selector` 订阅状态）。
-class DownloadService extends DownloadManager implements DownloadMaintenance {
+/// 重定位结果（UI 只按这些分支提示）。
+enum LocalRelocateResult {
+  relocated,
+
+  /// 后缀不在音频集合内。
+  unsupportedFormat,
+
+  /// 新路径不存在 / 不可读。
+  fileMissing,
+}
+
+class DownloadService extends DownloadManager
+    implements DownloadMaintenance, LocalScanTarget {
   DownloadService({
     required this._catalog,
     required DownloadsRepository repository,
@@ -942,6 +955,34 @@ class DownloadService extends DownloadManager implements DownloadMaintenance {
     _tokens[key]?.cancel();
   }
 
+  /// 重定位（「重新选择文件」）：只改路径 / 大小 / 修改时间并清除缺失状态。
+  ///
+  /// 导入保留 `localKey` 与全部引用；下载副本保留原音源键。文件不存在 /
+  /// 后缀不在音频集合内 / 记录没有音频时返回对应结果，不改任何状态。
+  Future<LocalRelocateResult> relocate(
+    DownloadedTrack record,
+    String newPath,
+  ) async {
+    final path = p.normalize(newPath.trim());
+    final extension = p.extension(path).toLowerCase();
+    if (path.isEmpty ||
+        !DownloadFileLayout.audioExtensions.contains(
+          extension.replaceFirst('.', ''),
+        )) {
+      return LocalRelocateResult.unsupportedFormat;
+    }
+    final size = await _storage.fileSize(path);
+    if (size <= 0) return LocalRelocateResult.fileMissing;
+    final mtime = await _storage.fileMtime(path);
+    await _recordStore.relocate(
+      record,
+      path: path,
+      sizeBytes: size,
+      mtimeMs: mtime,
+    );
+    return LocalRelocateResult.relocated;
+  }
+
   /// 删除下载：先删数据库记录（避免残留半删记录），再删音频 / 歌词 / 封面文件
   /// 与公共 Downloads 副本（发布副本随下载一起回收；失败只记日志）。
   ///
@@ -991,26 +1032,86 @@ class DownloadService extends DownloadManager implements DownloadMaintenance {
         skipped++;
         continue;
       }
-      final head =
-          await _storage.readHead(path, kAudioTagReadLimit) ?? Uint8List(0);
-      final tags = readAudioTags(head, extension: extension, fileSize: size);
-      final fallback = splitFileNameMetadata(p.basenameWithoutExtension(path));
-      final existing = _recordStore.records.importedRecordForPath(path);
-      final record = _assembler.forLocalImport(
-        filePath: path,
-        sizeBytes: size,
-        title: tags.title ?? fallback.title,
-        artist: tags.artist ?? fallback.artist,
-        album: tags.album ?? '',
-        durationMs: tags.durationMs,
-        // 同路径重复导入必须复用旧身份，否则收藏 / 列表会变成失效引用。
-        localKey: existing?.localKey ?? newLocalKey(),
-        mtimeMs: await _storage.fileMtime(path),
-      );
-      await _recordStore.save(record);
+      // 重复导入复用稳定身份，只刷新元数据；扫描的新文件走 importFile。
+      await _importLocalFile(path, sizeBytes: size);
       imported++;
     }
     return (imported, skipped);
+  }
+
+  /// 扫描器端口：当前全部导入记录。
+  @override
+  Future<List<DownloadedTrack>> listImported() async {
+    await _ensureReady();
+    return [
+      for (final record in _recordStore.records.downloads)
+        if (record.imported) record,
+    ];
+  }
+
+  /// 扫描器端口：新文件 import（读标签，生成 / 复用稳定身份）。
+  @override
+  Future<void> importFile(
+    String path, {
+    required int sizeBytes,
+    required int mtimeMs,
+  }) async {
+    await _ensureReady();
+    await _importLocalFile(path, sizeBytes: sizeBytes, mtimeMs: mtimeMs);
+  }
+
+  /// 扫描器端口：已有文件只刷新技术字段（标题等用户可见元数据不动）。
+  @override
+  Future<void> refreshFile(
+    DownloadedTrack record, {
+    required int sizeBytes,
+    required int mtimeMs,
+  }) async {
+    final path = record.filePath;
+    if (path == null || path.isEmpty) return;
+    await _recordStore.relocate(
+      record,
+      path: path,
+      sizeBytes: sizeBytes,
+      mtimeMs: mtimeMs,
+    );
+  }
+
+  /// 扫描器端口：根目录成功枚举后仍找不到的文件标记缺失。
+  @override
+  Future<void> markMissing(DownloadedTrack record) async {
+    if (!record.hasAudio || record.isMissing) return;
+    final missingAt = DateTime.now().millisecondsSinceEpoch;
+    await _recordStore.markMissing(record, missingAt: missingAt);
+  }
+
+  /// 单文件导入的唯一实现（手动导入 / 扫描共用）。
+  ///
+  /// [mtimeMs] 未给时现读；同路径旧记录复用 `localKey`。
+  Future<DownloadedTrack> _importLocalFile(
+    String path, {
+    required int sizeBytes,
+    int? mtimeMs,
+  }) async {
+    final extension = p.extension(path).toLowerCase();
+    final head =
+        await _storage.readHead(path, kAudioTagReadLimit) ?? Uint8List(0);
+    final tags = readAudioTags(head, extension: extension, fileSize: sizeBytes);
+    final fallback = splitFileNameMetadata(p.basenameWithoutExtension(path));
+    final existing = _recordStore.records.importedRecordForPath(path);
+    final record = _assembler.forLocalImport(
+      filePath: path,
+      sizeBytes: sizeBytes,
+      title: tags.title ?? fallback.title,
+      artist: tags.artist ?? fallback.artist,
+      album: tags.album ?? '',
+      durationMs: tags.durationMs,
+      // 同路径重复导入必须复用旧身份，否则收藏 / 列表会变成失效引用。
+      localKey: existing?.localKey ?? newLocalKey(),
+      mtimeMs: mtimeMs ?? await _storage.fileMtime(path),
+    );
+    await _recordStore.save(record);
+    return record;
   }
 
   /// 补发布：把已有音频但还没有公共副本的记录发布到公共 Downloads。

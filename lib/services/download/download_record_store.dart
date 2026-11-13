@@ -43,6 +43,45 @@ class DownloadRecordStore {
     if (clearJournal) await _journal.remove(record.key);
   }
 
+  /// 重定位：库行路径 / 大小 / 修改时间 + 清缺失，再换内存记录。
+  Future<void> relocate(
+    DownloadedTrack record, {
+    required String path,
+    required int sizeBytes,
+    required int? mtimeMs,
+  }) async {
+    await _repository.relocate(
+      originSourceKey: record.originSourceKey,
+      originSongId: record.originSongId,
+      filePath: path,
+      sizeBytes: sizeBytes,
+      mtimeMs: mtimeMs,
+    );
+    records.put(
+      record.copyWith(
+        filePath: path,
+        sizeBytes: sizeBytes,
+        mtimeMs: mtimeMs,
+        clearMissingAt: true,
+      ),
+    );
+  }
+
+  /// 标记文件缺失（只写 missingAt，保留旧 mtime 与记录）。
+  Future<void> markMissing(
+    DownloadedTrack record, {
+    required int missingAt,
+  }) async {
+    await _repository.setFileProbe(
+      originSourceKey: record.originSourceKey,
+      originSongId: record.originSongId,
+      mtimeMs: record.mtimeMs,
+      missing: true,
+      missingAt: missingAt,
+    );
+    records.put(record.copyWith(missingAt: missingAt));
+  }
+
   /// 删除一条记录（库行 → 内存 → marker）。
   ///
   /// 删除意味着「这首已经不在本地」：顺手清掉可能残留的 marker，避免下次

@@ -58,6 +58,7 @@ void initAfterFirstFrame({
     local.downloadService
         .init()
         .then((_) => local.localCoverSweep.sweepIfNeeded())
+        .then((_) => local.localLibrary.startAfterFirstFrame())
         .whenComplete(
           () => markStartupStep('sub.downloadService.init（首帧后）', downloadWatch),
         ),
