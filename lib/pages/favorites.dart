@@ -1108,7 +1108,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
             searchEmpty: l10n.browseSearchEmpty,
             selectHint: l10n.browseSelectHint,
             resetSignature:
-                '${mode.name}|${_searchController.text}|${_session.sort.name}',
+                '${mode.name}|${_session.selectedId}|'
+                '${_searchController.text}|${_session.sort.name}',
             twoPane: twoPane,
             isFavorite: (track) => context.read<LibraryProvider>().isFavorite(
               track.sourceKey,
