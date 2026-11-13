@@ -9250,12 +9250,6 @@ abstract class AppLocalizations {
   /// **'Leave empty for no group'**
   String get playlistFolderHint;
 
-  /// No description provided for @playlistFolderUngrouped.
-  ///
-  /// In en, this message translates to:
-  /// **'Ungrouped'**
-  String get playlistFolderUngrouped;
-
   /// No description provided for @playlistEditDetails.
   ///
   /// In en, this message translates to:
@@ -9400,17 +9394,17 @@ abstract class AppLocalizations {
   /// **'Keeps full track data; Molia only'**
   String get playlistExportMoliaSubtitle;
 
-  /// No description provided for @playlistExportMissing.
+  /// No description provided for @playlistExportMoliaUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'{count} files are missing; their paths are still written'**
-  String playlistExportMissing(int count);
+  /// **'Unavailable now; enable sync first'**
+  String get playlistExportMoliaUnavailable;
 
-  /// No description provided for @playlistExportDone.
+  /// No description provided for @playlistExportSavedWithMissing.
   ///
   /// In en, this message translates to:
-  /// **'Exported'**
-  String get playlistExportDone;
+  /// **'Exported to {path}; {count} files are missing'**
+  String playlistExportSavedWithMissing(String path, int count);
 
   /// No description provided for @playlistExportFailed.
   ///
@@ -9429,6 +9423,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Rename group'**
   String get playlistFolderRename;
+
+  /// No description provided for @playlistFolderNameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a group name'**
+  String get playlistFolderNameRequired;
+
+  /// No description provided for @playlistFolderNameTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Group names can have at most 40 characters'**
+  String get playlistFolderNameTooLong;
+
+  /// No description provided for @playlistFolderNameInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Group names can\'t contain control characters'**
+  String get playlistFolderNameInvalid;
 
   /// No description provided for @playlistFolderDelete.
   ///
@@ -9460,12 +9472,6 @@ abstract class AppLocalizations {
   /// **'Import playlist file'**
   String get playlistImport;
 
-  /// No description provided for @playlistImportTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Import playlist'**
-  String get playlistImportTitle;
-
   /// No description provided for @playlistImportReviewTitle.
   ///
   /// In en, this message translates to:
@@ -9487,7 +9493,7 @@ abstract class AppLocalizations {
   /// No description provided for @playlistImportConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Import {count}'**
+  /// **'Import {count} tracks'**
   String playlistImportConfirm(int count);
 
   /// No description provided for @playlistImportSkipNote.
@@ -9499,7 +9505,7 @@ abstract class AppLocalizations {
   /// No description provided for @playlistImportDone.
   ///
   /// In en, this message translates to:
-  /// **'Imported {added}; skipped {skipped}'**
+  /// **'Imported {added} tracks; skipped {skipped}'**
   String playlistImportDone(int added, int skipped);
 
   /// No description provided for @playlistImportFailed.

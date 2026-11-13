@@ -5,6 +5,7 @@
 /// 下载记录由调用方以函数注入，便于测试且不把 UI / 存储依赖带进来。
 library;
 
+import '../../data/local_identity.dart';
 import '../../domain/models/download.dart';
 import '../../domain/models/library.dart';
 import 'playlist_file_codec.dart';
@@ -49,22 +50,25 @@ class PlaylistExportBuilder {
     final entries = <PlaylistExportEntry>[];
     for (final track in tracks) {
       final record = downloadedRecordOf(track);
-      final path = record?.hasAudio == true ? record!.filePath : null;
+      final path = _localPathOf(track, record);
       final moliaKey = _moliaKeyOf(track);
       final String location;
       if (path != null && path.isNotEmpty) {
+        // 本地 / 导入行始终写绝对路径，即使文件已不在（摘要计数，不换地址）。
         if (!await fileExists(path)) missing++;
         location = path;
       } else if (track.sourceKey == kLocalSourceKey) {
-        // 本地身份存在但文件记录已丢失：仍写 Molia 回退地址并计入缺失，
-        // 让导出摘要如实说明「这条在本机解析不到文件」。
+        // 没有记录也没有路径：稳定身份仍可用 molia 回退键；旧路径身份没有
+        // 可写位置，计入缺失。
         missing++;
-        location = moliaTrackUri(moliaKey);
+        location = moliaKey == null
+            ? (legacyLocalPathOf(track.songId) ?? track.songId)
+            : moliaTrackUri(moliaKey);
       } else {
         final pageUrl = pageUrlOf(track);
         location = pageUrl != null && pageUrl.isNotEmpty
             ? pageUrl
-            : moliaTrackUri(moliaKey);
+            : moliaTrackUri(moliaKey!);
       }
       entries.add(
         PlaylistExportEntry(
@@ -83,8 +87,26 @@ class PlaylistExportBuilder {
     );
   }
 
-  /// 导出键：在线曲目保留原音源键；本地导入使用 #56 的稳定 `file:<uuid>`
-  /// 身份（`local:<songId>`），不把绝对路径写进键里。
-  static String _moliaKeyOf(PlaylistTrack track) =>
-      '${track.sourceKey}:${track.songId}';
+  /// 本机路径：下载 / 导入记录优先；本地行回退到 raw 里记录的路径或旧
+  /// `local:<绝对路径>` 身份。在线行没有本地路径返回 null。
+  static String? _localPathOf(PlaylistTrack track, DownloadedTrack? record) {
+    if (record?.hasAudio == true) return record!.filePath;
+    if (track.sourceKey != kLocalSourceKey) return null;
+    final rawPath = track.raw['path'];
+    if (rawPath is String && rawPath.isNotEmpty) return rawPath;
+    return legacyLocalPathOf(track.songId);
+  }
+
+  /// 导出键：在线曲目保留原音源键；本地导入使用稳定 `file:<uuid>` 身份
+  /// （`local:<songId>`），旧路径身份没有稳定键时返回 null（不写 #MOLIA）。
+  static String? _moliaKeyOf(PlaylistTrack track) {
+    if (track.sourceKey != kLocalSourceKey) {
+      return '${track.sourceKey}:${track.songId}';
+    }
+    if (isStableLocalKey(track.songId)) return 'local:${track.songId}';
+    if (isLegacyLocalIdentity(track.songId)) return null;
+    // 下载副本的领域 id 是原音源键（`wy:123`）：导出时回到在线键 + 路径。
+    if (track.songId.contains(':')) return track.songId;
+    return null;
+  }
 }

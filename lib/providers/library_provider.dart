@@ -20,6 +20,7 @@ import '../data/library_read_model.dart';
 import '../data/mapping/track_mapper.dart';
 import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/library.dart';
+import '../domain/models/playlist_cover_keys.dart';
 import '../domain/models/track.dart';
 import '../models/play_mode.dart';
 import '../sources/raw_track.dart';
@@ -1279,7 +1280,7 @@ class LibraryProvider extends ChangeNotifier {
   Future<String?> ensurePlaylistCoverKey(int playlistId) async {
     try {
       final syncId = await _repository.ensurePlaylistSyncId(playlistId);
-      return syncId.isEmpty ? null : 'playlist:$syncId';
+      return playlistCoverKeyForSyncId(syncId);
     } catch (e) {
       debugPrint('[Library] 补齐列表 syncId 失败: $e');
       return null;

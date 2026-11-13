@@ -23,6 +23,7 @@ import 'package:drift/drift.dart';
 
 import '../domain/models/device_sync.dart';
 import '../domain/models/library.dart';
+import '../domain/models/playlist_folders.dart';
 import 'molia_database.dart';
 import 'sync/sync_journal.dart';
 import 'sync/sync_stamp.dart';
@@ -482,7 +483,7 @@ class LibraryWriteEngine {
             PlaylistsCompanion(
               name: Value(name),
               description: Value(description.trim()),
-              folder: Value(folder.trim()),
+              folder: Value(normalizePlaylistFolderName(folder)),
               versionPhysical: Value(version.physical),
               versionCounter: Value(version.counter),
               deviceId: Value(version.deviceId),
@@ -543,15 +544,15 @@ class LibraryWriteEngine {
   ///
   /// 返回受影响列表数；`from` 为空 / `from == to` / 分组不存在时 no-op。
   Future<int> renamePlaylistFolder(String from, String to) async {
-    final source = from.trim();
-    final target = to.trim();
+    final source = normalizePlaylistFolderName(from);
+    final target = normalizePlaylistFolderName(to);
     if (source.isEmpty || source == target) return 0;
     return _rewritePlaylistFolder(source, target);
   }
 
   /// 分组删除 = 只解除分组（`folder = ''`），不删列表、不删曲目、不删封面。
   Future<int> deletePlaylistFolder(String folder) {
-    final source = folder.trim();
+    final source = normalizePlaylistFolderName(folder);
     if (source.isEmpty) return Future<int>.value(0);
     return _rewritePlaylistFolder(source, '');
   }
@@ -561,12 +562,13 @@ class LibraryWriteEngine {
     final db = _db;
     var affected = 0;
     await db.transaction(() async {
-      final rows =
-          await (db.select(db.playlists)
-                ..where((t) => t.folder.equals(from))
-                ..orderBy([(t) => OrderingTerm.asc(t.id)]))
-              .get();
+      // 不能按原始字符串精确查询：历史 / 远端记录可能带首尾空白。统一按
+      // 归一口径比较，保证「看得到的分组」一定也能重命名 / 删除。
+      final rows = await (db.select(
+        db.playlists,
+      )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
       for (final row in rows) {
+        if (normalizePlaylistFolderName(row.folder) != from) continue;
         final syncId = await _ensurePlaylistSyncId(db, row.id);
         final version = _nextVersion();
         await (db.update(
@@ -1436,7 +1438,8 @@ class LibraryWriteEngine {
     ).toJson(),
   );
 
-  /// 列表行 → 同步记录：所有写入路径共用，避免某个入口漏带新字段。
+  /// 已有列表行 → 同步记录：改名 / 详情 / 封面 / 分组扇出共用，避免漏带
+  /// 新字段；新建列表没有行可读，走带空默认值的 [_playlistSyncRecord]。
   SyncRecord _playlistSyncRecordForRow(
     String syncId,
     Playlist row,
@@ -1446,7 +1449,7 @@ class LibraryWriteEngine {
     name: row.name,
     createdAt: row.createdAt,
     description: row.description,
-    folder: row.folder,
+    folder: normalizePlaylistFolderName(row.folder),
     coverKey: row.coverKey,
     version: version,
   );

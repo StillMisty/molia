@@ -646,7 +646,7 @@
   "playlistImportFromFile": "Import from .lxmc file",
   "playlistImportFromLink": "Import from playlist or favorites link",
   "playlistImportChannel": "Platform",
-  "playlistImportEmpty": "Playlist or favorites has no importable tracks",
+  "playlistImportEmpty": "Nothing to import",
   "playlistImportedName": "Imported playlist",
   "discoverSectionTitle": "Discover",
   "discoverLeaderboards": "Charts",
@@ -2857,7 +2857,6 @@
   "playlistDescriptionHint": "What is this playlist for?",
   "playlistFolder": "Group",
   "playlistFolderHint": "Leave empty for no group",
-  "playlistFolderUngrouped": "Ungrouped",
   "playlistEditDetails": "Edit details",
   "playlistSaveDetailsFailed": "Couldn't save. The playlist is unchanged.",
   "playlistCover": "Playlist cover",
@@ -2889,18 +2888,24 @@
   "playlistExportM3u8Subtitle": "Opens in other players too",
   "playlistExportMolia": "Molia file",
   "playlistExportMoliaSubtitle": "Keeps full track data; Molia only",
-  "playlistExportMissing": "{count} files are missing; their paths are still written",
-  "@playlistExportMissing": {
+  "playlistExportMoliaUnavailable": "Unavailable now; enable sync first",
+  "playlistExportSavedWithMissing": "Exported to {path}; {count} files are missing",
+  "@playlistExportSavedWithMissing": {
     "placeholders": {
+      "path": {
+        "type": "String"
+      },
       "count": {
         "type": "int"
       }
     }
   },
-  "playlistExportDone": "Exported",
   "playlistExportFailed": "Couldn't export",
   "playlistDownloadSelected": "Download selected",
   "playlistFolderRename": "Rename group",
+  "playlistFolderNameRequired": "Enter a group name",
+  "playlistFolderNameTooLong": "Group names can have at most 40 characters",
+  "playlistFolderNameInvalid": "Group names can't contain control characters",
   "playlistFolderDelete": "Delete group",
   "playlistFolderDeleteConfirm": "Delete group “{name}”? Playlists become ungrouped; nothing is deleted.",
   "@playlistFolderDeleteConfirm": {
@@ -2913,7 +2918,6 @@
   "playlistFolderRenamed": "Group renamed",
   "playlistFolderDeleted": "Group deleted",
   "playlistImport": "Import playlist file",
-  "playlistImportTitle": "Import playlist",
   "playlistImportReviewTitle": "Confirm import",
   "playlistImportResolved": "{count} ready to import",
   "@playlistImportResolved": {
@@ -2931,7 +2935,7 @@
       }
     }
   },
-  "playlistImportConfirm": "Import {count}",
+  "playlistImportConfirm": "Import {count} tracks",
   "@playlistImportConfirm": {
     "placeholders": {
       "count": {
@@ -2947,8 +2951,7 @@
       }
     }
   },
-  "playlistImportEmpty": "Nothing to import",
-  "playlistImportDone": "Imported {added}; skipped {skipped}",
+  "playlistImportDone": "Imported {added} tracks; skipped {skipped}",
   "@playlistImportDone": {
     "placeholders": {
       "added": {

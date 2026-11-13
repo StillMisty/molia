@@ -1356,15 +1356,20 @@ class PlaylistSyncRecord {
     Map<String, Object?> data, {
     SyncVersion? version,
   }) => PlaylistSyncRecord(
-    syncId: data['syncId'] as String? ?? '',
-    name: data['name'] as String? ?? '',
-    createdAt: (data['createdAt'] as num?)?.toInt() ?? 0,
-    description: data['description'] as String? ?? '',
-    folder: data['folder'] as String? ?? '',
+    syncId: _string(data['syncId']),
+    name: _string(data['name']),
+    createdAt: data['createdAt'] is num
+        ? (data['createdAt'] as num).toInt()
+        : 0,
+    description: _string(data['description']),
+    folder: _string(data['folder']),
     coverKey: _nonEmpty(data['coverKey']),
     version:
         version ?? SyncVersion.fromJson(data['version']) ?? SyncVersion.zero,
   );
+
+  /// 类型不符按空串处理：远端 / 旧备份里的脏值不能让整条记录解析失败。
+  static String _string(Object? value) => value is String ? value : '';
 
   static String? _nonEmpty(Object? value) =>
       value is String && value.isNotEmpty ? value : null;

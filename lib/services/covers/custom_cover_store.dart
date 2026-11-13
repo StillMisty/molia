@@ -398,11 +398,13 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
   Future<Uint8List?> readTrackCover(TrackId id) =>
       _readFile(trackCoverPath(id));
 
-  /// 按封面键读取曲目封面字节（同步适配器 / 下载读取已规范化键）。
-  ///
-  /// 列表键也走同一入口：同步适配器按索引键读取，不关心键属于哪个目标。
+  /// 按封面键读取曲目封面字节（不存在 / 不可读返回 null）。
   @override
   Future<Uint8List?> readTrackCoverByKey(String key) =>
+      _readFile(_tracks[key]?.path);
+
+  /// 按任意封面键读取字节（曲目 / 列表；同步适配器按索引键读取）。
+  Future<Uint8List?> readCoverBytesByKey(String key) =>
       _readFile((_tracks[key] ?? _playlists[key])?.path);
 
   /// 按列表封面键读取字节（不存在 / 不可读返回 null）。

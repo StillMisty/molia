@@ -10,6 +10,7 @@ import '../l10n/app_localizations.dart';
 import '../models/play_mode.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
+import '../services/library/playlist_batch_create.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'add_to_playlist_sheet.dart' show showPlaylistNameDialog;
@@ -115,33 +116,35 @@ class QueueDisplay extends StatelessWidget {
           : contextName!,
     );
     if (name == null || !context.mounted) return;
-    final int playlistId;
     try {
-      playlistId = await provider.createPlaylist(name);
-    } catch (_) {
-      if (context.mounted) {
-        M3ESnackbar.show(context, message: l10n.queueSaveFailed);
-      }
-      return;
-    }
-    try {
-      final addedAt = DateTime.now().millisecondsSinceEpoch;
-      final outcome = await provider.addTracksToPlaylist(playlistId, [
-        for (final track in queue)
-          PlaylistTrack.fromTrack(track, addedAt: addedAt),
-      ]);
-      if (outcome.isFailure) throw outcome.error ?? StateError('add failed');
+      final result = await createPlaylistWithRollback<({int added})>(
+        name: name,
+        createPlaylist: provider.createPlaylist,
+        write: (playlistId) async {
+          final addedAt = DateTime.now().millisecondsSinceEpoch;
+          final outcome = await provider.addTracksToPlaylist(playlistId, [
+            for (final track in queue)
+              PlaylistTrack.fromTrack(track, addedAt: addedAt),
+          ]);
+          if (outcome.isFailure) {
+            throw PlaylistBatchWriteException(outcome.error);
+          }
+          return (added: outcome.changed);
+        },
+        deletePlaylist: (playlistId) async {
+          await provider.deletePlaylist(playlistId);
+        },
+      );
       if (!context.mounted) return;
       M3ESnackbar.show(
         context,
         message: l10n.queueSavedAsPlaylist(
           name,
-          outcome.changed,
-          queue.length - outcome.changed,
+          result.added,
+          queue.length - result.added,
         ),
       );
     } catch (_) {
-      await provider.deletePlaylist(playlistId);
       if (context.mounted) {
         M3ESnackbar.show(context, message: l10n.queueSaveFailed);
       }

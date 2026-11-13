@@ -259,6 +259,8 @@ class CoverSyncAdapter
 
     final bytes = key == SyncRecordKeys.defaultCoverKey
         ? await _store.readDefaultCover()
+        : isPlaylistCoverKey(key)
+        ? await _store.readPlaylistCover(key)
         : await _store.readTrackCoverByKey(key);
     if (bytes == null) {
       _logUnsyncable(key, '读取失败');

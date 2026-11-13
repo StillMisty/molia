@@ -27,6 +27,7 @@ import '../providers/library_outcome.dart';
 import '../providers/library_provider.dart';
 import '../providers/local_library_provider.dart';
 import '../providers/local_songs_collection.dart';
+import '../providers/playlist_batch_download.dart';
 import '../domain/models/library_browse.dart';
 import '../domain/models/smart_lists.dart';
 import '../providers/lyrics_provider.dart';
@@ -48,7 +49,7 @@ import '../services/local/local_metadata_service.dart';
 import '../services/playlist/playlist_export_builder.dart';
 import '../services/playlist/playlist_file_codec.dart';
 import '../services/playlist/playlist_import_service.dart';
-import '../services/poster/playlist_poster_layout.dart';
+import '../services/playlist/playlist_share_source.dart';
 import '../theme/poster_palette.dart';
 import '../services/escape_claims.dart';
 import '../services/haptics.dart';
@@ -60,11 +61,11 @@ import '../theme/scheme_builder.dart';
 import '../utils/responsive.dart';
 import '../utils/collection_row_query.dart';
 import '../utils/download_failure_label.dart';
+import '../utils/file_name.dart';
 import '../utils/save_as_label.dart';
 import '../utils/scroll_to_top.dart';
 import '../utils/smart_list_rows.dart';
 import '../utils/sync_format.dart';
-import '../widgets/add_to_playlist_sheet.dart' show showPlaylistNameDialog;
 import '../widgets/app_search_bar.dart';
 import '../widgets/collection_handoff.dart';
 import '../widgets/collection_mode_switch.dart';
@@ -81,6 +82,8 @@ import '../widgets/link_import_dialog.dart';
 import '../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 import '../widgets/playlist_cover.dart';
+import '../widgets/playlist_folder_dialog.dart';
+import '../widgets/playlist_header_overflow.dart';
 import '../widgets/playlist_sheets.dart';
 import '../widgets/row_actions.dart';
 import '../widgets/settings/settings_tiles.dart';
@@ -94,11 +97,6 @@ import '../widgets/track_table_header.dart';
 /// 此时回退到简体中文（与 lxmc_import / 其他页面同一约定）。
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
-
-String _safePlaylistFileName(String value) {
-  final trimmed = value.trim().replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-  return trimmed.isEmpty ? 'playlist' : trimmed;
-}
 
 /// 当前合集的表格列规范：播放历史多一列「播放时间」，收藏 / 本地歌曲与
 /// 搜索结果同档（唯一来源，表头与行都从这里取）。
@@ -222,8 +220,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 记录 revision 随本地歌曲输入一起交给状态机做失效判定。
   DownloadRecords? _downloadRecords;
 
-  /// 列表分组收起状态（设备本地；只影响侧栏 / 合集弹层）。
-  Set<String> _collapsedFolders = <String>{};
+  /// 列表分组收起状态（设备本地；页面侧栏与合集弹层共用这一个持有者）。
+  late final PlaylistFolderCollapseController _folderCollapse =
+      PlaylistFolderCollapseController();
 
   /// 播放历史列表滚动控制器（常显滚动条，支持手拖定位）。
   final ScrollController _historyScrollController = ScrollController();
@@ -252,11 +251,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
     // 恢复（顺序 / 选集 / 滚动偏移）与会话内的首帧加载都在模块内，页面
     // 既不落 setState 校准，也不编排 ensure*。
     unawaited(_session.start());
-    unawaited(
-      PlaylistFolderCollapseStore.load().then((collapsed) {
-        if (mounted) setState(() => _collapsedFolders = collapsed);
-      }),
-    );
+    _folderCollapse.addListener(_onFolderCollapseChanged);
+    unawaited(_folderCollapse.load());
+  }
+
+  void _onFolderCollapseChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -310,6 +310,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _cacheService?.revision.removeListener(_onCacheRevision);
     _downloadRecords?.removeListener(_onDownloadsChanged);
     _collectionRequest?.removeListener(_onCollectionRequest);
+    _folderCollapse
+      ..removeListener(_onFolderCollapseChanged)
+      ..dispose();
     _session.removeListener(_onSessionChanged);
     _searchController.dispose();
     _searchFocus.dispose();
@@ -562,7 +565,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
             trackCount: entry.trackCount,
             selected: entry.selected,
             playlistId: entry.playlistId,
-            folder: info.folder,
+            folder: normalizePlaylistFolderName(info.folder),
           ),
         );
       }
@@ -604,7 +607,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
             selected: false,
             folder: group.folder,
             isFolderHeader: true,
-            folderCollapsed: _collapsedFolders.contains(group.folder),
+            folderCollapsed: _folderCollapse.isCollapsed(group.folder),
           ),
           for (final playlist in group.playlists)
             if (byId[playlist.id] != null)
@@ -685,12 +688,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       onDelete: provider.deletePlaylist,
       onCreate: provider.createPlaylist,
       onRename: provider.renamePlaylist,
-      onFolderToggle: (folder) {
-        setState(() {
-          if (!_collapsedFolders.remove(folder)) _collapsedFolders.add(folder);
-        });
-        unawaited(PlaylistFolderCollapseStore.save(_collapsedFolders));
-      },
+      folderCollapse: _folderCollapse,
       onFolderRename: (from, to) async {
         try {
           await provider.renamePlaylistFolder(from, to);
@@ -1101,13 +1099,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final launcher = context.read<DownloadLauncher?>();
     if (launcher == null) return const [];
     final provider = context.read<LibraryProvider>();
-    return [
+    final selectedRows = [
       for (final row in _selectedRows(view))
-        if (row is TrackCollectionRow)
-          if (launcher.statusOf(provider.trackFromPlaylistTrack(row.track)) ==
-              DownloadIntentStatus.ready)
-            provider.trackFromPlaylistTrack(row.track),
+        if (row is TrackCollectionRow) row.track,
     ];
+    final actionable = PlaylistBatchDownloadAction.downloadableRows(
+      selectedRows,
+      toTrack: provider.trackFromPlaylistTrack,
+      statusOf: launcher.statusOf,
+    );
+    return [for (final row in actionable) provider.trackFromPlaylistTrack(row)];
   }
 
   Future<void> _downloadSelected(CollectionView view) async {
@@ -1115,10 +1116,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final launcher = context.read<DownloadLauncher?>();
     if (tracks.isEmpty || launcher == null) return;
     final l10n = _l10n(context);
-    if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
-    final ok = await _runBatchDownload(l10n, launcher, tracks);
-    // 只有批入口成功返回才清选择；失败保留，用户可直接重试。
-    if (ok && mounted) _session.clearSelection();
+    await _runBatchDownload(
+      l10n,
+      launcher,
+      tracks,
+      onSucceeded: () {
+        if (mounted) _session.clearSelection();
+      },
+    );
   }
 
   @override
@@ -1313,7 +1318,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     String? hiddenFolder;
     for (final entry in all) {
       if (entry.isFolderHeader) {
-        hiddenFolder = _collapsedFolders.contains(entry.folder)
+        hiddenFolder = _folderCollapse.isCollapsed(entry.folder)
             ? entry.folder
             : null;
         entries.add(entry);
@@ -1328,7 +1333,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       itemBuilder: (context, index) {
         final entry = entries[index];
         if (entry.isFolderHeader) {
-          final collapsed = _collapsedFolders.contains(entry.folder);
+          final collapsed = _folderCollapse.isCollapsed(entry.folder);
           return M3ECard(
             variant: M3ECardVariant.filled,
             color: Colors.transparent,
@@ -1336,12 +1341,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
             borderRadius: BorderRadius.circular(12),
             padding: EdgeInsets.zero,
             onPressed: () {
-              setState(() {
-                if (!_collapsedFolders.remove(entry.folder)) {
-                  _collapsedFolders.add(entry.folder);
-                }
-              });
-              unawaited(PlaylistFolderCollapseStore.save(_collapsedFolders));
+              unawaited(_folderCollapse.toggle(entry.folder));
             },
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -1427,21 +1427,19 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   Future<void> _renameFolderFromSide(String folder) async {
     final l10n = _l10n(context);
-    final name = await showPlaylistNameDialog(
+    final name = await showPlaylistFolderNameDialog(
       context,
-      title: l10n.playlistFolderRename,
-      confirmLabel: l10n.saveChanges,
-      existingNames: const [],
       initialValue: folder,
     );
     if (name == null || !mounted || name == folder) return;
     final provider = context.read<LibraryProvider>();
+    final merging = provider.playlists.any(
+      (playlist) => normalizePlaylistFolderName(playlist.folder) == name,
+    );
     try {
       await provider.renamePlaylistFolder(folder, name);
       if (!mounted) return;
-      // 新名字默认展开：不把旧名字的收起状态搬过去。
-      setState(() => _collapsedFolders.remove(folder));
-      unawaited(PlaylistFolderCollapseStore.save(_collapsedFolders));
+      unawaited(_folderCollapse.rename(folder, name, merged: merging));
       M3ESnackbar.show(context, message: l10n.playlistFolderRenamed);
     } catch (_) {
       if (mounted) {
@@ -1474,8 +1472,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     try {
       await provider.deletePlaylistFolder(folder);
       if (!mounted) return;
-      setState(() => _collapsedFolders.remove(folder));
-      unawaited(PlaylistFolderCollapseStore.save(_collapsedFolders));
+      unawaited(_folderCollapse.delete(folder));
       M3ESnackbar.show(context, message: l10n.playlistFolderDeleted);
     } catch (_) {
       if (mounted) {
@@ -1839,83 +1836,26 @@ class _FavoritesPageState extends State<FavoritesPage> {
             ),
             if (isRealPlaylist && currentPlaylist != null) ...[
               const SizedBox(width: 4),
-              _buildPlaylistOverflow(
-                context,
-                l10n,
-                view,
-                currentPlaylist,
-                playlists,
+              PlaylistHeaderOverflow(
+                onEditDetails: () => unawaited(
+                  _editPlaylistDetails(l10n, currentPlaylist!, playlists),
+                ),
+                onChangeCover: () =>
+                    unawaited(_changePlaylistCover(l10n, currentPlaylist!)),
+                onShare: () =>
+                    unawaited(_sharePlaylist(l10n, currentPlaylist!, view)),
+                onExport: () =>
+                    unawaited(_exportPlaylist(l10n, currentPlaylist!, view)),
+                onDownloadAll:
+                    context.read<DownloadLauncher?>() != null &&
+                        view.tracks.isNotEmpty
+                    ? () => unawaited(_downloadPlaylist(l10n, view))
+                    : null,
               ),
             ],
           ],
         ),
       ),
-    );
-  }
-
-  /// 列表头部的唯一溢出菜单：详情 / 封面 / 分享 / 导出 / 全部下载。
-  ///
-  /// 不是常驻编辑工具栏：所有低频动作收在这里，标题行其余部分保持原样。
-  Widget _buildPlaylistOverflow(
-    BuildContext context,
-    AppLocalizations l10n,
-    CollectionView view,
-    PlaylistInfo playlist,
-    List<PlaylistInfo> playlists,
-  ) {
-    final launcher = context.read<DownloadLauncher?>();
-    final downloadAvailable = launcher != null && view.tracks.isNotEmpty;
-    return M3EMenu.entries(
-      position: M3EMenuAnchorPosition.bottomEnd,
-      anchorBuilder: (context, open) => M3EIconButton(
-        key: const Key('playlistHeaderOverflow'),
-        variant: M3EIconButtonVariant.standard,
-        semanticLabel: l10n.playlistDetails,
-        icon: const Icon(Icons.more_vert_rounded),
-        onPressed: open,
-      ),
-      onSelected: (value) {
-        switch (value) {
-          case 'details':
-            unawaited(_editPlaylistDetails(l10n, playlist, playlists));
-          case 'cover':
-            unawaited(_changePlaylistCover(l10n, playlist));
-          case 'share':
-            unawaited(_sharePlaylist(l10n, playlist, view));
-          case 'export':
-            unawaited(_exportPlaylist(l10n, playlist, view));
-          case 'download':
-            unawaited(_downloadPlaylist(l10n, view));
-        }
-      },
-      entries: [
-        M3EMenuEntry(
-          label: l10n.playlistEditDetails,
-          value: 'details',
-          leading: const Icon(Icons.edit_rounded, size: 20),
-        ),
-        M3EMenuEntry(
-          label: l10n.playlistCoverChange,
-          value: 'cover',
-          leading: const Icon(Icons.image_rounded, size: 20),
-        ),
-        M3EMenuEntry(
-          label: l10n.playlistShare,
-          value: 'share',
-          leading: const Icon(Icons.ios_share_rounded, size: 20),
-        ),
-        M3EMenuEntry(
-          label: l10n.playlistExport,
-          value: 'export',
-          leading: const Icon(Icons.file_upload_rounded, size: 20),
-        ),
-        if (downloadAvailable)
-          M3EMenuEntry(
-            label: l10n.downloadAll,
-            value: 'download',
-            leading: const Icon(Icons.download_rounded, size: 20),
-          ),
-      ],
     );
   }
 
@@ -1974,22 +1914,21 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final paletteService = context.read<ArtworkPaletteService?>();
     final appScheme = Theme.of(context).colorScheme;
     final textStyle = context.typeScale.bodyMedium;
-    final content = PlaylistShareContent(
-      name: view.displayName,
-      description: playlist.description,
+    final source = PlaylistShareSource(
+      playlist: playlist,
+      tracks: view.tracks,
+      playlistCoverPathOf: (key) => covers?.playlistCoverPath(key),
+      downloadedCoverPathOf: (track) =>
+          records?.recordFor(track.sourceKey, track.songId)?.coverPath,
+      customCoverPathOf: (track) =>
+          covers?.trackCoverPath(TrackId(track.sourceKey, track.songId)),
+    );
+    final content = source.buildContent(
+      displayName: view.displayName,
       trackCountLabel: l10n.playlistTrackCount(view.tracks.length),
       andMoreLabel: l10n.playlistShareMore,
-      tracks: [
-        for (final track in view.tracks)
-          PlaylistShareTrack(title: track.title, artist: track.artist),
-      ],
     );
-    final localCoverPaths = _playlistLocalCoverPaths(
-      playlist,
-      view.tracks,
-      records,
-      covers,
-    );
+    final localCoverPaths = source.localCoverPaths();
     final saved = await PosterColorStore.load();
     if (!mounted) return;
     var scheme = appScheme;
@@ -2020,64 +1959,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
     };
     await showPlaylistShareSheet(
       context,
-      content: PlaylistShareContent(
-        name: content.name,
-        description: content.description,
-        trackCountLabel: content.trackCountLabel,
-        tracks: content.tracks,
-        andMoreLabel: content.andMoreLabel,
-        coverCount: localCoverPaths.length,
-      ),
-      loadCovers: () async {
-        final bytes = <Uint8List?>[];
-        for (final path in localCoverPaths) {
-          try {
-            final file = File(path);
-            if (!await file.exists()) continue;
-            final data = await file.readAsBytes();
-            if (data.isNotEmpty) bytes.add(data);
-          } catch (_) {
-            // 读不到的一张只留空槽，不让整张海报失败。
-          }
-        }
-        return bytes;
-      },
+      content: content,
+      loadCovers: source.loadCovers,
       palette: PosterPalette.fromScheme(scheme),
       fontFamily: font.family,
       fontFamilyFallback: font.fallback,
     );
-  }
-
-  /// 本机可用的封面文件（列表封面优先，其次各曲目自定义 / 下载封面）。
-  ///
-  /// 只返回本地路径供读取字节；这些路径不会进入分享模型或海报。
-  List<String> _playlistLocalCoverPaths(
-    PlaylistInfo playlist,
-    List<PlaylistTrack> tracks,
-    DownloadRecords? records,
-    CustomCoverStore? covers,
-  ) {
-    final paths = <String>[];
-    final key = playlist.effectiveCoverKey;
-    final playlistPath = key == null ? null : covers?.playlistCoverPath(key);
-    if (playlistPath != null && playlistPath.isNotEmpty) {
-      paths.add(playlistPath);
-    }
-    for (final track in tracks) {
-      if (paths.length >= 9) break;
-      final record = records?.recordFor(track.sourceKey, track.songId);
-      final coverPath = record?.coverPath;
-      final custom = covers?.trackCoverPath(
-        TrackId(track.sourceKey, track.songId),
-      );
-      final path = (coverPath != null && coverPath.isNotEmpty)
-          ? coverPath
-          : custom;
-      if (path != null && path.isNotEmpty && !paths.contains(path)) {
-        paths.add(path);
-      }
-    }
-    return paths;
   }
 
   Future<void> _downloadPlaylist(
@@ -2087,7 +1974,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final launcher = context.read<DownloadLauncher?>();
     final provider = context.read<LibraryProvider>();
     if (launcher == null || view.tracks.isEmpty) return;
-    if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
     await _runBatchDownload(l10n, launcher, [
       for (final track in view.tracks) provider.trackFromPlaylistTrack(track),
     ]);
@@ -2096,11 +1982,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
   Future<bool> _runBatchDownload(
     AppLocalizations l10n,
     DownloadLauncher launcher,
-    List<Track> tracks,
-  ) async {
+    List<Track> tracks, {
+    void Function()? onSucceeded,
+  }) async {
     try {
-      final result = await launcher.startBatch(
-        tracks,
+      final result = await const PlaylistBatchDownloadAction().run(
+        tracks: tracks,
+        confirm: () => confirmDownloadOnDataSaver(context),
+        startBatch: launcher.startBatch,
+        onSucceeded: onSucceeded,
         onEnqueued: (enqueued) {
           if (!mounted) return;
           M3ESnackbar.show(
@@ -2111,7 +2001,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
           );
         },
       );
-      if (!mounted || result.enqueued == 0) return true;
+      if (!mounted || result == null || result.enqueued == 0) {
+        return result != null;
+      }
       M3ESnackbar.show(
         context,
         message: l10n.downloadsBatchDone(result.done, result.failed),
@@ -2155,7 +2047,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
           fileExists: (path) => File(path).exists(),
         ).buildM3u8(name: view.displayName, tracks: view.tracks);
         final result = await saveAs.saveBytes(
-          fileName: '${_safePlaylistFileName(view.displayName)}.m3u8',
+          fileName:
+              '${sanitizeFileName(view.displayName, fallback: 'playlist')}.m3u8',
           bytes: Uint8List.fromList(utf8.encode(export.text)),
           mimeType: 'audio/x-mpegurl',
           relativeDir: saveAsExportsDirName,
@@ -2171,15 +2064,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
           }
           return;
         }
-        final syncId = coverKey.startsWith(kPlaylistCoverKeyPrefix)
-            ? coverKey.substring(kPlaylistCoverKeyPrefix.length)
-            : coverKey;
+        final syncId = playlistSyncIdFromCoverKey(coverKey) ?? coverKey;
         final json = await sync.commands.backup.exportPlaylistJson(
           playlistSyncId: syncId,
           coverKey: playlist.effectiveCoverKey ?? coverKey,
         );
         final result = await saveAs.saveBytes(
-          fileName: '${_safePlaylistFileName(view.displayName)}.molia.json',
+          fileName:
+              '${sanitizeFileName(view.displayName, fallback: 'playlist')}.molia.json',
           bytes: Uint8List.fromList(utf8.encode(json)),
           mimeType: 'application/json',
           relativeDir: saveAsExportsDirName,
@@ -2204,14 +2096,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
       case SaveAsSaved(:final displayPath, :final kind):
         M3ESnackbar.show(
           context,
-          message: savedLocationMessage(l10n, kind, displayPath),
+          message: playlistExportMessage(l10n, kind, displayPath, missingFiles),
         );
-        if (missingFiles > 0) {
-          M3ESnackbar.show(
-            context,
-            message: l10n.playlistExportMissing(missingFiles),
-          );
-        }
       case SaveAsCancelled():
         break;
       case SaveAsFailed():
@@ -2964,12 +2850,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 }
 
-/// 页头两态（常规 / 多选）交叉淡入淡出。
-///
-/// 两态高度相同（顶部 / 底部留白 + 56 行高），避免切换时头部跳高、列表
-/// 滚动位置抖动。落定后只挂当前层：隐藏态不参与 finder / 焦点 / 点击。
-/// 用自绘控制器而不是 `AnimatedSwitcher`（图标切换专用，架构测试会拦），
-/// 也不直接用 `AnimatedCrossFade`（隐藏层仍留在树里，测试与焦点会命中原层）。
 /// 本机路径导入端口：复用下载服务的导入路径与稳定身份。
 class _PagePlaylistLocalImporter implements PlaylistLocalImporter {
   _PagePlaylistLocalImporter(this._records, this._downloads);
@@ -3043,6 +2923,12 @@ class _PagePlaylistImportTarget implements PlaylistImportTarget {
   }
 }
 
+/// 页头两态（常规 / 多选）交叉淡入淡出。
+///
+/// 两态高度相同（顶部 / 底部留白 + 56 行高），避免切换时头部跳高、列表
+/// 滚动位置抖动。落定后只挂当前层：隐藏态不参与 finder / 焦点 / 点击。
+/// 用自绘控制器而不是 `AnimatedSwitcher`（图标切换专用，架构测试会拦），
+/// 也不直接用 `AnimatedCrossFade`（隐藏层仍留在树里，测试与焦点会命中原层）。
 class _HeaderCrossFade extends StatefulWidget {
   const _HeaderCrossFade({
     required this.selecting,

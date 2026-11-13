@@ -17,6 +17,7 @@ import 'package:drift/drift.dart';
 
 import '../domain/models/device_sync.dart';
 import '../domain/models/library.dart';
+import '../domain/models/playlist_folders.dart';
 import '../domain/ports/library_store.dart';
 import '../domain/ports/library_sync_store.dart';
 import 'library_write_engine.dart';
@@ -508,7 +509,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
           name: row.name,
           createdAt: row.createdAt,
           description: row.description,
-          folder: row.folder,
+          folder: normalizePlaylistFolderName(row.folder),
           coverKey: row.coverKey,
           version: row.syncVersion,
         ),
@@ -923,6 +924,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
           skipped++;
           continue;
         }
+        final folder = normalizePlaylistFolderName(record.folder);
         final local = await _playlistRowBySyncId(db, syncId);
         if (local == null) {
           final id = await db
@@ -931,7 +933,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
                 PlaylistsCompanion.insert(
                   name: name,
                   description: Value(record.description),
-                  folder: Value(record.folder),
+                  folder: Value(folder),
                   coverKey: Value(record.coverKey),
                   createdAt: record.createdAt,
                   syncId: Value(syncId),
@@ -956,7 +958,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
               PlaylistsCompanion(
                 name: Value(name),
                 description: Value(record.description),
-                folder: Value(record.folder),
+                folder: Value(folder),
                 coverKey: Value(record.coverKey),
                 versionPhysical: Value(record.version.physical),
                 versionCounter: Value(record.version.counter),
@@ -1077,7 +1079,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
       row.name == record.name &&
       row.createdAt == record.createdAt &&
       row.description == record.description &&
-      row.folder == record.folder &&
+      row.folder == normalizePlaylistFolderName(record.folder) &&
       row.coverKey == record.coverKey &&
       (row.syncId ?? '') == syncId;
 

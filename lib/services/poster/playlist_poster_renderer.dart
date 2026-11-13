@@ -5,9 +5,9 @@
 /// 按缩略图目标尺寸解码（不是九张全分辨率封面），所有图像在返回前释放。
 library;
 
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../theme/poster_palette.dart';
@@ -36,16 +36,11 @@ class PlaylistPosterRenderer {
     const mosaicGap = 12.0;
 
     final images = <ui.Image?>[];
-    ui.Picture? picture;
-    ui.Image? rendered;
     ui.Image? mark;
     try {
       try {
-        final data = await rootBundle.load(
+        mark = await posterLoadAssetImage(
           'assets/icons/adaptive_icon_monochrome.png',
-        );
-        mark = await posterDecodeImage(
-          data.buffer.asUint8List(),
           targetWidth: 64,
         );
       } catch (_) {
@@ -98,23 +93,14 @@ class PlaylistPosterRenderer {
           mosaicCell,
           mosaicCell,
         );
-        final radius = RRect.fromRectAndRadius(rect, const Radius.circular(18));
         final image = images[index];
-        canvas.save();
-        canvas.clipRRect(radius);
         if (image != null) {
-          canvas.drawImageRect(
-            image,
-            posterCoverCropRect(
-              sourceWidth: image.width.toDouble(),
-              sourceHeight: image.height.toDouble(),
-              targetWidth: rect.width,
-              targetHeight: rect.height,
-            ),
-            rect,
-            Paint()..filterQuality = FilterQuality.medium,
-          );
+          posterDrawCover(canvas, image, rect, cornerRadius: 18);
         } else {
+          canvas.save();
+          canvas.clipRRect(
+            RRect.fromRectAndRadius(rect, const Radius.circular(18)),
+          );
           canvas.drawRect(
             rect,
             Paint()..color = palette.watermark.withValues(alpha: 0.10),
@@ -138,8 +124,8 @@ class PlaylistPosterRenderer {
             ),
           );
           note.dispose();
+          canvas.restore();
         }
-        canvas.restore();
       }
       y += mosaicCell * 3 + mosaicGap * 2 + 48;
 
@@ -201,35 +187,22 @@ class PlaylistPosterRenderer {
         ),
         textDirection: TextDirection.ltr,
       )..layout(maxWidth: contentWidth);
-      var watermarkX = margin;
-      final watermarkY = height - margin - 28;
-      if (mark != null) {
-        const iconSize = 28.0;
-        canvas.drawImageRect(
-          mark,
-          Rect.fromLTWH(0, 0, mark.width.toDouble(), mark.height.toDouble()),
-          Rect.fromLTWH(watermarkX, watermarkY, iconSize, iconSize),
-          Paint()
-            ..colorFilter = ColorFilter.mode(
-              palette.watermark,
-              BlendMode.srcIn,
-            ),
-        );
-        watermarkX += iconSize + 8;
-      }
-      watermark.paint(canvas, Offset(watermarkX, watermarkY));
+      posterDrawWatermark(
+        canvas,
+        icon: mark,
+        painter: watermark,
+        leftX: margin,
+        centerY: height - margin - 14,
+        color: palette.watermark,
+      );
       watermark.dispose();
 
-      picture = recorder.endRecording();
-      rendered = await picture.toImage(
-        kPlaylistPosterWidth,
-        kPlaylistPosterMaxHeight,
+      return await posterEncodePng(
+        recorder,
+        width: kPlaylistPosterWidth,
+        height: kPlaylistPosterMaxHeight,
       );
-      final data = await rendered.toByteData(format: ui.ImageByteFormat.png);
-      return data!.buffer.asUint8List();
     } finally {
-      rendered?.dispose();
-      picture?.dispose();
       mark?.dispose();
       for (final image in images) {
         image?.dispose();

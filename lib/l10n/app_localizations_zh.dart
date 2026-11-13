@@ -4975,9 +4975,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get playlistFolderHint => '留空表示不分组';
 
   @override
-  String get playlistFolderUngrouped => '未分组';
-
-  @override
   String get playlistEditDetails => '编辑详情';
 
   @override
@@ -5052,12 +5049,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get playlistExportMoliaSubtitle => '保留完整曲目信息，仅 Molia 可读';
 
   @override
-  String playlistExportMissing(int count) {
-    return '有 $count 个文件已不在，导出仍保留路径';
-  }
+  String get playlistExportMoliaUnavailable => '当前不可用；先启用同步再导出';
 
   @override
-  String get playlistExportDone => '已导出';
+  String playlistExportSavedWithMissing(String path, int count) {
+    return '已导出到 $path；有 $count 个文件已不在';
+  }
 
   @override
   String get playlistExportFailed => '导出失败';
@@ -5067,6 +5064,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get playlistFolderRename => '重命名分组';
+
+  @override
+  String get playlistFolderNameRequired => '请输入分组名';
+
+  @override
+  String get playlistFolderNameTooLong => '分组名最多 40 个字符';
+
+  @override
+  String get playlistFolderNameInvalid => '分组名不能包含控制字符';
 
   @override
   String get playlistFolderDelete => '删除分组';
@@ -5084,9 +5090,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get playlistImport => '导入列表文件';
-
-  @override
-  String get playlistImportTitle => '导入列表';
 
   @override
   String get playlistImportReviewTitle => '确认导入';

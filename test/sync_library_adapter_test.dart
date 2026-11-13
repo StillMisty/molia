@@ -10,6 +10,7 @@ import 'package:molia/data/sync/adapters/playlist_sync_adapter.dart';
 import 'package:molia/data/sync/sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
+import 'package:molia/domain/models/playlist_folders.dart';
 
 import 'support/sync_test_support.dart';
 
@@ -346,6 +347,54 @@ void main() {
     expect(info!.description, '');
     expect(info.folder, '');
     expect(info.coverKey, isNull);
+  });
+
+  test('脏类型的新字段按空值解析，不抛异常', () {
+    final record = PlaylistSyncRecord.fromJson({
+      'syncId': 123,
+      'name': false,
+      'createdAt': 'x',
+      'description': 7,
+      'folder': ['Work'],
+      'coverKey': 9,
+    });
+    expect(record.syncId, '');
+    expect(record.name, '');
+    expect(record.createdAt, 0);
+    expect(record.description, '');
+    expect(record.folder, '');
+    expect(record.coverKey, isNull);
+  });
+
+  test('同步带来的 " Work " 归一为 Work，并可重命名 / 删除', () async {
+    await repoA.createPlaylist('通勤');
+    final row = (await repoA.syncExportPlaylists()).single;
+    await adapterB.apply({
+      SyncCategory.playlists: [
+        SyncRecord(
+          key: row.syncId,
+          version: const SyncVersion(physical: 5000, deviceId: 'devA'),
+          data: PlaylistSyncRecord(
+            syncId: row.syncId,
+            name: '通勤',
+            createdAt: row.createdAt,
+            folder: ' Work ',
+            version: const SyncVersion(physical: 5000, deviceId: 'devA'),
+          ).toJson(),
+        ),
+      ],
+    });
+    var info = await repoB.findPlaylistByName('通勤');
+    expect(info!.folder, 'Work');
+    expect(
+      groupPlaylistsByFolder(await repoB.listPlaylists()).single.folder,
+      'Work',
+    );
+    expect(await repoB.renamePlaylistFolder('Work', 'Gym'), 1);
+    info = await repoB.findPlaylistByName('通勤');
+    expect(info!.folder, 'Gym');
+    expect(await repoB.deletePlaylistFolder('Gym'), 1);
+    expect((await repoB.findPlaylistByName('通勤'))!.folder, '');
   });
 
   test('分组重命名扇出抵达对端并收敛', () async {

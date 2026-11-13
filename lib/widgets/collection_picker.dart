@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/library_outcome.dart';
 import '../services/haptics.dart';
+import '../services/library/playlist_folder_prefs.dart';
 import '../theme/m3e_context.dart';
 import 'add_to_playlist_sheet.dart' show showPlaylistNameDialog;
+import 'playlist_folder_dialog.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载弹层而不注册 delegate，
 /// 此时回退到简体中文（与收藏页 / 其它弹层同一约定）。
@@ -107,10 +111,10 @@ Future<CollectionPickerOutcome?> showCollectionPicker(
   required Future<LibraryMutationOutcome> Function(int playlistId) onDelete,
   required Future<LibraryMutationOutcome> Function(int playlistId, String name)
   onRename,
-  ValueChanged<String>? onFolderToggle,
   Future<LibraryMutationOutcome> Function(String from, String to)?
   onFolderRename,
   Future<LibraryMutationOutcome> Function(String folder)? onFolderDelete,
+  PlaylistFolderCollapseController? folderCollapse,
 }) {
   return M3EBottomSheet.show<CollectionPickerOutcome>(
     context,
@@ -122,9 +126,9 @@ Future<CollectionPickerOutcome?> showCollectionPicker(
       onCreate: onCreate,
       onDelete: onDelete,
       onRename: onRename,
-      onFolderToggle: onFolderToggle,
       onFolderRename: onFolderRename,
       onFolderDelete: onFolderDelete,
+      folderCollapse: folderCollapse,
     ),
   );
 }
@@ -138,9 +142,9 @@ class _CollectionPickerSheet extends StatefulWidget {
     required this.onDelete,
     required this.onCreate,
     required this.onRename,
-    this.onFolderToggle,
     this.onFolderRename,
     this.onFolderDelete,
+    this.folderCollapse,
   });
 
   final String title;
@@ -151,10 +155,10 @@ class _CollectionPickerSheet extends StatefulWidget {
   final Future<int> Function(String name) onCreate;
   final Future<LibraryMutationOutcome> Function(int playlistId, String name)
   onRename;
-  final ValueChanged<String>? onFolderToggle;
   final Future<LibraryMutationOutcome> Function(String from, String to)?
   onFolderRename;
   final Future<LibraryMutationOutcome> Function(String folder)? onFolderDelete;
+  final PlaylistFolderCollapseController? folderCollapse;
 
   @override
   State<_CollectionPickerSheet> createState() => _CollectionPickerSheetState();
@@ -166,11 +170,34 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
     ...widget.smartEntries,
   ];
 
-  /// 已收起的分组名（设备本地状态，只影响本弹层与之后打开的弹层）。
-  late final Set<String> _collapsed = {
-    for (final entry in widget.entries)
-      if (entry.isFolderHeader && entry.folderCollapsed) entry.folder,
-  };
+  /// 分组收起状态的唯一持有者（注入时与页面 / 侧栏共享）。
+  late final PlaylistFolderCollapseController _collapse =
+      widget.folderCollapse ??
+      PlaylistFolderCollapseController(
+        initiallyCollapsed: {
+          for (final entry in widget.entries)
+            if (entry.isFolderHeader && entry.folderCollapsed) entry.folder,
+        },
+      );
+  late final bool _ownsCollapse = widget.folderCollapse == null;
+
+  @override
+  void initState() {
+    super.initState();
+    _collapse.addListener(_onCollapseChanged);
+    if (_ownsCollapse) unawaited(_collapse.load());
+  }
+
+  @override
+  void dispose() {
+    _collapse.removeListener(_onCollapseChanged);
+    if (_ownsCollapse) _collapse.dispose();
+    super.dispose();
+  }
+
+  void _onCollapseChanged() {
+    if (mounted) setState(() {});
+  }
 
   List<String> get _existingNames => [
     for (final entry in _entries)
@@ -189,7 +216,9 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
     String? hiddenFolder;
     for (final entry in _entries) {
       if (entry.isFolderHeader) {
-        hiddenFolder = _collapsed.contains(entry.folder) ? entry.folder : null;
+        hiddenFolder = _collapse.isCollapsed(entry.folder)
+            ? entry.folder
+            : null;
         result.add(entry);
         continue;
       }
@@ -222,20 +251,13 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
   }
 
   void _toggleFolder(String folder) {
-    setState(() {
-      if (!_collapsed.remove(folder)) _collapsed.add(folder);
-    });
-    widget.onFolderToggle?.call(folder);
+    unawaited(_collapse.toggle(folder));
   }
 
   Future<void> _renameFolder(CollectionPickerEntry header) async {
     final l10n = _l10n(context);
-    final name = await showPlaylistNameDialog(
+    final name = await showPlaylistFolderNameDialog(
       context,
-      title: l10n.playlistFolderRename,
-      confirmLabel: l10n.saveChanges,
-      // 允许改成已有分组名 = 合并；因此不把已有分组算作冲突。
-      existingNames: const [],
       initialValue: header.folder,
     );
     if (name == null || !mounted || name == header.folder) return;
@@ -247,11 +269,11 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
       _showFailure();
       return;
     }
+    // 改到已有分组 = 合并：删除旧分组标题，组内列表接到目标分组下。
+    final merging = _entries.any(
+      (item) => item.isFolderHeader && item.folder == name,
+    );
     setState(() {
-      // 改到已有分组 = 合并：删除旧分组标题，组内列表接到目标分组下。
-      final merging = _entries.any(
-        (item) => item.isFolderHeader && item.folder == name,
-      );
       _entries.removeWhere(
         (item) =>
             merging && item.isFolderHeader && item.folder == header.folder,
@@ -264,9 +286,9 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
           _entries[index] = _copyWithFolder(entry, name);
         }
       }
-      // 重命名后的新名字按展开处理，不迁移旧名字的瞬时收起状态。
-      _collapsed.remove(header.folder);
     });
+    // 重命名后的新名字按展开处理；合并时目标分组也展开。
+    unawaited(_collapse.rename(header.folder, name, merged: merging));
     if (mounted) {
       M3ESnackbar.show(context, message: l10n.playlistFolderRenamed);
     }
@@ -310,8 +332,8 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
           _entries[index] = _copyWithFolder(entry, '');
         }
       }
-      _collapsed.remove(header.folder);
     });
+    unawaited(_collapse.delete(header.folder));
     if (mounted) {
       M3ESnackbar.show(context, message: l10n.playlistFolderDeleted);
     }
@@ -475,7 +497,7 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
               itemBuilder: (context, index) {
                 final entry = visible[index];
                 if (entry.isFolderHeader) {
-                  final collapsed = _collapsed.contains(entry.folder);
+                  final collapsed = _collapse.isCollapsed(entry.folder);
                   return Padding(
                     key: ValueKey<String>(entry.key),
                     padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),

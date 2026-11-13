@@ -5,6 +5,7 @@
 library;
 
 import 'device_sync.dart';
+import 'playlist_cover_keys.dart';
 import 'track.dart';
 
 /// 曲目在列表/播放历史中的唯一键（`sourceKey` + `songId`）。
@@ -119,8 +120,7 @@ class PlaylistInfo {
   String? get effectiveCoverKey {
     final key = coverKey;
     if (key != null && key.isNotEmpty) return key;
-    final stable = syncId;
-    return stable == null || stable.isEmpty ? null : 'playlist:$stable';
+    return playlistCoverKeyForSyncId(syncId);
   }
 
   @override

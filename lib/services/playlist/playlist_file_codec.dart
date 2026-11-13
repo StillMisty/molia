@@ -137,7 +137,6 @@ PlaylistFileParseResult parsePlaylistFile(
       : _parseM3u(normalized, resolvedFormat, baseDirectory: baseDirectory);
 }
 
-// ---------------------------------------------------------------------------
 // 序列化
 
 /// 一个导出条目（位置与曲目键由导出构建器决定）。
@@ -209,7 +208,6 @@ String? parseMoliaTrackUri(String value) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // M3U / M3U8
 
 PlaylistFileParseResult _parseM3u(
@@ -335,7 +333,6 @@ PlaylistFileParseResult _parseM3u(
   );
 }
 
-// ---------------------------------------------------------------------------
 // PLS
 
 PlaylistFileParseResult _parsePls(String text, {String? baseDirectory}) {
@@ -439,7 +436,6 @@ String _artistFromPlsTitle(String title) {
   return separator > 0 ? title.substring(0, separator).trim() : '';
 }
 
-// ---------------------------------------------------------------------------
 // 位置分类
 
 ({String location, PlaylistLocationKind kind}) _classifyLocation(

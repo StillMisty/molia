@@ -3,19 +3,59 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playlist_folders.dart';
+import 'package:molia/domain/models/track.dart';
+import 'package:molia/providers/playlist_batch_download.dart';
+import 'package:molia/services/download/download_intent.dart';
 import 'package:molia/services/playlist/playlist_export_builder.dart';
 import 'package:molia/services/playlist/playlist_file_codec.dart';
 import 'package:molia/services/playlist/playlist_import_service.dart';
 import 'package:molia/services/poster/playlist_poster_layout.dart';
 import 'package:molia/services/poster/playlist_poster_renderer.dart';
+import 'package:molia/services/poster/poster_draw.dart';
+import 'package:molia/services/poster/poster_share_file.dart';
+import 'package:molia/services/library/playlist_folder_prefs.dart';
+import 'package:molia/services/save_as_types.dart';
+import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/utils/save_as_label.dart';
 import 'package:molia/theme/poster_palette.dart';
 import 'package:material_ui/material_ui.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('分组收起状态（单一持有者）', () {
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
+    test('toggle 持久化；重命名 / 合并 / 删除都清旧键', () async {
+      final controller = PlaylistFolderCollapseController();
+      addTearDown(controller.dispose);
+      await controller.load();
+      await controller.toggle('Work');
+      expect(controller.isCollapsed('Work'), isTrue);
+
+      final reloaded = PlaylistFolderCollapseController();
+      addTearDown(reloaded.dispose);
+      await reloaded.load();
+      expect(reloaded.isCollapsed('Work'), isTrue);
+
+      await reloaded.rename('Work', 'Gym');
+      expect(reloaded.isCollapsed('Work'), isFalse);
+      expect(reloaded.isCollapsed('Gym'), isFalse, reason: '重命名后展开');
+      await reloaded.toggle('Gym');
+      await reloaded.toggle('Office');
+      await reloaded.rename('Gym', 'Office', merged: true);
+      expect(reloaded.isCollapsed('Gym'), isFalse);
+      expect(reloaded.isCollapsed('Office'), isFalse, reason: '合并目标也展开');
+      await reloaded.toggle('Office');
+      await reloaded.delete('Office');
+      expect(reloaded.isCollapsed('Office'), isFalse);
+    });
+  });
 
   group('播放列表文件编解码', () {
     test('M3U8：BOM / CRLF / #PLAYLIST / EXTINF 逗号 / #MOLIA 绑定下一行', () {
@@ -158,6 +198,36 @@ void main() {
       );
     });
 
+    test('未 trim 的存量值按归一口径分组；排序忽略大小写', () {
+      final groups = groupPlaylistsByFolder([
+        p(1, 'a', folder: '  Work  '),
+        p(2, 'b', folder: 'commute'),
+        p(3, 'c', folder: 'Commute'),
+      ]);
+      expect(groups.map((g) => g.folder), ['Commute', 'commute', 'Work']);
+      expect(groups[0].playlists.map((x) => x.name), ['c']);
+      expect(groups[1].playlists.map((x) => x.name), ['b']);
+    });
+
+    test('分组名归一 / 校验：trim、40 上限、控制字符', () {
+      expect(normalizePlaylistFolderName('  Work  '), 'Work');
+      expect(
+        normalizePlaylistFolderName('  ${'x' * 50}  ').runes.length,
+        kPlaylistFolderNameMaxLength,
+      );
+      expect(checkPlaylistFolderName(' Work ').normalized, 'Work');
+      expect(checkPlaylistFolderName(' Work ').isValid, isTrue);
+      expect(
+        checkPlaylistFolderName('x' * 41).issue,
+        PlaylistFolderNameIssue.tooLong,
+      );
+      expect(
+        checkPlaylistFolderName('a\u0007b').issue,
+        PlaylistFolderNameIssue.controlCharacters,
+      );
+      expect(checkPlaylistFolderName('   ').normalized, '');
+    });
+
     test('封面键由 syncId 推导且命名空间稳定', () {
       expect(p(1, 'a').effectiveCoverKey, 'playlist:s1');
       expect(
@@ -270,6 +340,87 @@ void main() {
     });
   });
 
+  group('批量下载动作', () {
+    PlaylistTrack row(String id) => PlaylistTrack(
+      playlistId: 1,
+      sourceKey: 'wy',
+      songId: id,
+      title: id,
+      addedAt: 1,
+    );
+
+    test('已下载 / 本地 / 进行中跳过，只留下可下载行', () {
+      final rows = [row('ready'), row('done'), row('local')];
+      final actionable = PlaylistBatchDownloadAction.downloadableRows(
+        rows,
+        toTrack: (item) => Track(
+          id: TrackId(item.sourceKey, item.songId),
+          title: item.title,
+          origin: TrackOrigin.builtin,
+        ),
+        statusOf: (track) => switch (track.id.id) {
+          'ready' => DownloadIntentStatus.ready,
+          'done' => DownloadIntentStatus.alreadyDownloaded,
+          _ => DownloadIntentStatus.unsupported,
+        },
+      );
+      expect(actionable.map((item) => item.songId), ['ready']);
+    });
+
+    test('省流取消不调批量入口；成功才回调清选择；失败不回调', () async {
+      var confirmCalls = 0;
+      var startCalls = 0;
+      var succeeded = 0;
+      final action = const PlaylistBatchDownloadAction();
+      final tracks = [
+        Track(
+          id: const TrackId('wy', '1'),
+          title: 'One',
+          origin: TrackOrigin.builtin,
+        ),
+      ];
+      final cancelled = await action.run(
+        tracks: tracks,
+        confirm: () async {
+          confirmCalls++;
+          return false;
+        },
+        startBatch: (items, {onEnqueued}) async {
+          startCalls++;
+          return const DownloadBatchStart(enqueued: 0, done: 0, failed: 0);
+        },
+        onSucceeded: () => succeeded++,
+      );
+      expect(cancelled, isNull);
+      expect(confirmCalls, 1);
+      expect(startCalls, 0);
+      expect(succeeded, 0);
+
+      await action.run(
+        tracks: tracks,
+        confirm: () async => true,
+        startBatch: (items, {onEnqueued}) async {
+          startCalls++;
+          return const DownloadBatchStart(enqueued: 0, done: 0, failed: 0);
+        },
+        onSucceeded: () => succeeded++,
+      );
+      expect(startCalls, 1);
+      expect(succeeded, 1);
+
+      await expectLater(
+        action.run(
+          tracks: tracks,
+          confirm: () async => true,
+          startBatch: (items, {onEnqueued}) async => throw StateError('queue'),
+          onSucceeded: () => succeeded++,
+        ),
+        throwsStateError,
+      );
+      expect(succeeded, 1);
+    });
+  });
+
   group('M3U8 导出构建', () {
     late Directory temp;
 
@@ -341,6 +492,62 @@ void main() {
       expect(export.missingFiles, 0);
     });
 
+    test('下载副本（local 行）导出原在线键 + 绝对路径', () async {
+      final path = '${temp.path}/downloaded.mp3';
+      final downloaded = DownloadedTrack(
+        originSourceKey: 'wy',
+        originSongId: '9',
+        title: 'Downloaded',
+        filePath: path,
+        downloadedAt: 1,
+      );
+      final row = PlaylistTrack(
+        playlistId: 1,
+        sourceKey: kLocalSourceKey,
+        songId: 'wy:9',
+        title: 'Downloaded',
+        addedAt: 1,
+      );
+      final export = await PlaylistExportBuilder(
+        pageUrlOf: (_) => null,
+        downloadedRecordOf: (_) => downloaded,
+        fileExists: (candidate) async => candidate == path,
+      ).buildM3u8(name: 'Trip', tracks: [row]);
+      expect(export.text, contains('#MOLIA:wy:9\n$path'));
+    });
+
+    test('本地行没有记录时仍写 raw 中的绝对路径，不换成 molia://', () async {
+      final path = '${temp.path}/offline.mp3';
+      final local = PlaylistTrack(
+        playlistId: 1,
+        sourceKey: kLocalSourceKey,
+        songId: 'file:abc',
+        title: 'Local',
+        raw: {'path': path},
+        addedAt: 1,
+      );
+      final export = await PlaylistExportBuilder(
+        pageUrlOf: (_) => null,
+        downloadedRecordOf: (_) => null,
+        fileExists: (candidate) async => candidate == path,
+      ).buildM3u8(name: 'Trip', tracks: [local]);
+      expect(export.text, contains('#MOLIA:local:file:abc\n$path'));
+      expect(export.text, isNot(contains('molia://')));
+      expect(export.missingFiles, 0);
+    });
+
+    test('成功与缺失文件合并成一条反馈，不连发两条 Snackbar', () {
+      final l10n = lookupAppLocalizations(const Locale('zh'));
+      final combined = playlistExportMessage(
+        l10n,
+        SaveLocationKind.fileSystem,
+        '/tmp/a.m3u8',
+        2,
+      );
+      expect(combined, contains('/tmp/a.m3u8'));
+      expect(combined, contains('2'));
+    });
+
     test('缺失文件仍写出并计入摘要', () async {
       final export = await PlaylistExportBuilder(
         pageUrlOf: (_) => null,
@@ -349,6 +556,30 @@ void main() {
       ).buildM3u8(name: 'Trip', tracks: [track('local', 'file:missing')]);
       expect(export.text, contains('molia://track/'));
       expect(export.missingFiles, 1);
+    });
+  });
+
+  group('共享海报绘制 / 分享临时文件', () {
+    test('posterEncodePng 统一编码尺寸；临时文件在分享后删除', () async {
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawRect(
+        const Rect.fromLTWH(0, 0, 20, 10),
+        Paint()..color = const Color(0xFF000000),
+      );
+      final bytes = await posterEncodePng(recorder, width: 20, height: 10);
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      expect(frame.image.width, 20);
+      expect(frame.image.height, 10);
+      frame.image.dispose();
+      codec.dispose();
+
+      late String path;
+      await withTemporaryPosterPng(bytes, (file) async {
+        path = file.path;
+        expect(await file.exists(), isTrue);
+      });
+      expect(await File(path).exists(), isFalse);
     });
   });
 

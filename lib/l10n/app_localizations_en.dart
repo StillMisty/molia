@@ -5193,9 +5193,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistFolderHint => 'Leave empty for no group';
 
   @override
-  String get playlistFolderUngrouped => 'Ungrouped';
-
-  @override
   String get playlistEditDetails => 'Edit details';
 
   @override
@@ -5271,12 +5268,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistExportMoliaSubtitle => 'Keeps full track data; Molia only';
 
   @override
-  String playlistExportMissing(int count) {
-    return '$count files are missing; their paths are still written';
-  }
+  String get playlistExportMoliaUnavailable =>
+      'Unavailable now; enable sync first';
 
   @override
-  String get playlistExportDone => 'Exported';
+  String playlistExportSavedWithMissing(String path, int count) {
+    return 'Exported to $path; $count files are missing';
+  }
 
   @override
   String get playlistExportFailed => 'Couldn\'t export';
@@ -5286,6 +5284,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistFolderRename => 'Rename group';
+
+  @override
+  String get playlistFolderNameRequired => 'Enter a group name';
+
+  @override
+  String get playlistFolderNameTooLong =>
+      'Group names can have at most 40 characters';
+
+  @override
+  String get playlistFolderNameInvalid =>
+      'Group names can\'t contain control characters';
 
   @override
   String get playlistFolderDelete => 'Delete group';
@@ -5305,9 +5314,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistImport => 'Import playlist file';
 
   @override
-  String get playlistImportTitle => 'Import playlist';
-
-  @override
   String get playlistImportReviewTitle => 'Confirm import';
 
   @override
@@ -5322,7 +5328,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String playlistImportConfirm(int count) {
-    return 'Import $count';
+    return 'Import $count tracks';
   }
 
   @override
@@ -5332,7 +5338,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String playlistImportDone(int added, int skipped) {
-    return 'Imported $added; skipped $skipped';
+    return 'Imported $added tracks; skipped $skipped';
   }
 
   @override

@@ -19,6 +19,9 @@
   whole-record LWW；旧版本设备重命名会清掉新字段，因此同组设备必须一起升级。
 - `folder` 只是字符串，没有分组实体、空分组、嵌套或排序。重命名 / 删除分组在
   一个事务里逐行取新版本、逐行写同步记录；删除只把 `folder` 置空。
+- 写库 / 应用远端 / 投影 / 扇出统一走 `normalizePlaylistFolderName`（trim、
+  去控制字符、40 字符上限）；排序是 `compareFolderNames`（大小写不敏感、
+  稳定），没有引入 ICU collator：中文仍按码位排序，这是已知限制。
 
 ### 封面
 

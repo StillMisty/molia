@@ -7,6 +7,7 @@
 library;
 
 import '../../domain/models/library.dart';
+import '../library/playlist_batch_create.dart';
 import 'playlist_file_codec.dart';
 
 /// 未解析原因（UI 映射本地化文案）。
@@ -219,24 +220,19 @@ class PlaylistImportService {
       throw StateError('没有可导入的曲目');
     }
     final name = uniquePlaylistName(plan.name, existingNames);
-    final playlistId = await target.createPlaylist(name);
-    try {
-      final added = await target.addTracks(playlistId, plan.resolved);
-      return PlaylistImportResult(
-        playlistId: playlistId,
-        name: name,
-        added: added,
-        skipped: plan.skippedCount + (plan.resolved.length - added),
-      );
-    } catch (_) {
-      // 不能把「创建了但没写进去」的空列表留在侧栏里。
-      try {
-        await target.deletePlaylist(playlistId);
-      } catch (_) {
-        // 清理失败不覆盖原始失败。
-      }
-      rethrow;
-    }
+    final result = await createPlaylistWithRollback<({int id, int added})>(
+      name: name,
+      createPlaylist: target.createPlaylist,
+      write: (id) async =>
+          (id: id, added: await target.addTracks(id, plan.resolved)),
+      deletePlaylist: target.deletePlaylist,
+    );
+    return PlaylistImportResult(
+      playlistId: result.id,
+      name: name,
+      added: result.added,
+      skipped: plan.skippedCount + (plan.resolved.length - result.added),
+    );
   }
 }
 

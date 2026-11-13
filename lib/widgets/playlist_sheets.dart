@@ -6,24 +6,25 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../domain/models/library.dart';
+import '../domain/models/playlist_folders.dart';
 import '../l10n/app_localizations.dart';
 import '../services/notification_service.dart';
 import '../services/playlist/playlist_import_service.dart';
 import '../services/poster/playlist_poster_layout.dart';
 import '../services/poster/playlist_poster_renderer.dart';
+import '../services/poster/poster_share_file.dart';
 import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
 import '../theme/poster_palette.dart';
+import '../utils/file_name.dart';
 import '../utils/responsive.dart';
 import '../utils/save_as_label.dart';
 import 'empty_state.dart';
@@ -91,6 +92,7 @@ class _PlaylistDetailsSheetState extends State<PlaylistDetailsSheet> {
   );
   bool _busy = false;
   String? _nameError;
+  String? _folderError;
 
   @override
   void dispose() {
@@ -117,12 +119,27 @@ class _PlaylistDetailsSheetState extends State<PlaylistDetailsSheet> {
         return;
       }
     }
+    // 收藏列表不支持分组：即使输入框被隐藏，也不把旧值意外写回。
+    var folder = '';
+    if (!widget.playlist.isFavorites) {
+      final check = checkPlaylistFolderName(_folder.text);
+      if (!check.isValid) {
+        setState(() {
+          _folderError = switch (check.issue!) {
+            PlaylistFolderNameIssue.tooLong => l10n.playlistFolderNameTooLong,
+            PlaylistFolderNameIssue.controlCharacters =>
+              l10n.playlistFolderNameInvalid,
+          };
+        });
+        return;
+      }
+      folder = check.normalized;
+    }
     setState(() {
       _busy = true;
       _nameError = null;
+      _folderError = null;
     });
-    // 收藏列表不支持分组：即使输入框被隐藏，也不把旧值意外写回。
-    final folder = widget.playlist.isFavorites ? '' : _folder.text.trim();
     final ok = await widget.onSave(name, _description.text.trim(), folder);
     if (!mounted) return;
     if (ok) {
@@ -180,9 +197,10 @@ class _PlaylistDetailsSheetState extends State<PlaylistDetailsSheet> {
               label: l10n.playlistFolder,
               placeholder: l10n.playlistFolderHint,
               maxLength: 40,
-              inputFormatters: [
-                FilteringTextInputFormatter.deny(_controlCharacters),
-              ],
+              errorText: _folderError,
+              onChanged: (_) {
+                if (_folderError != null) setState(() => _folderError = null);
+              },
             ),
           ],
           const SizedBox(height: 16),
@@ -197,7 +215,6 @@ class _PlaylistDetailsSheetState extends State<PlaylistDetailsSheet> {
   }
 }
 
-// ---------------------------------------------------------------------------
 // 分享
 
 /// 分享弹层：图片 / 文本两个 section（同一层，不做 tabs）。
@@ -230,9 +247,13 @@ class PlaylistShareSheet extends StatefulWidget {
     required this.palette,
     this.fontFamily,
     this.fontFamilyFallback,
+    this.autoGenerate = true,
   });
 
   final PlaylistShareContent content;
+
+  /// 打开即生成图片；测试可关闭以只验证 section 结构。
+  final bool autoGenerate;
 
   /// 读取本机封面字节（顺序即马赛克槽位）；不返回任何路径。
   final Future<List<Uint8List?>> Function() loadCovers;
@@ -253,7 +274,12 @@ class _PlaylistShareSheetState extends State<PlaylistShareSheet> {
   @override
   void initState() {
     super.initState();
-    if (widget.content.tracks.isNotEmpty) unawaited(_generate());
+    // 生成会读 l10n；首帧后启动，避免在 initState 里依赖 InheritedWidget。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.autoGenerate && widget.content.tracks.isNotEmpty) {
+        unawaited(_generate());
+      }
+    });
   }
 
   Future<void> _generate() async {
@@ -296,17 +322,12 @@ class _PlaylistShareSheetState extends State<PlaylistShareSheet> {
   Future<void> _shareImage() async {
     final bytes = _image;
     if (bytes == null) return;
-    final file = File(
-      p.join(
-        Directory.systemTemp.path,
-        'molia_playlist_${DateTime.now().microsecondsSinceEpoch}.png',
-      ),
-    );
     try {
-      await file.writeAsBytes(bytes, flush: true);
-      await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path)], text: widget.content.name),
-      );
+      await withTemporaryPosterPng(bytes, (file) async {
+        await SharePlus.instance.share(
+          ShareParams(files: [XFile(file.path)], text: widget.content.name),
+        );
+      });
     } catch (_) {
       if (mounted) _message(_l10n(context).playlistShareFailed);
     }
@@ -318,7 +339,8 @@ class _PlaylistShareSheetState extends State<PlaylistShareSheet> {
     if (bytes == null || saveAs == null) return;
     final l10n = _l10n(context);
     final result = await saveAs.saveBytes(
-      fileName: '${_safeFileName(widget.content.name)}.png',
+      fileName:
+          '${sanitizeFileName(widget.content.name, fallback: 'playlist')}.png',
       bytes: bytes,
       mimeType: 'image/png',
       relativeDir: saveAsPostersDirName,
@@ -401,31 +423,31 @@ class _PlaylistShareSheetState extends State<PlaylistShareSheet> {
                     child: Text(l10n.retryButton),
                   ),
                 ],
-              )
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: M3EButton.filled(
-                      key: const Key('playlistShareImageAction'),
-                      onPressed: _image == null
-                          ? null
-                          : () => unawaited(_shareImage()),
-                      child: Text(l10n.playlistShareImage),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: M3EButton.outlined(
-                      key: const Key('playlistShareSaveImage'),
-                      onPressed: _image == null
-                          ? null
-                          : () => unawaited(_saveImage()),
-                      child: Text(l10n.playlistShareSaveImage),
-                    ),
-                  ),
-                ],
               ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: M3EButton.filled(
+                    key: const Key('playlistShareImageAction'),
+                    onPressed: _image == null
+                        ? null
+                        : () => unawaited(_shareImage()),
+                    child: Text(l10n.playlistShareImage),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: M3EButton.outlined(
+                    key: const Key('playlistShareSaveImage'),
+                    onPressed: _image == null
+                        ? null
+                        : () => unawaited(_saveImage()),
+                    child: Text(l10n.playlistShareSaveImage),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
             _SectionTitle(l10n.playlistShareText),
             Padding(
@@ -477,7 +499,6 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
 // 导出
 
 /// 导出格式。
@@ -514,22 +535,24 @@ class PlaylistExportSheet extends StatelessWidget {
             supportingText: l10n.playlistExportM3u8Subtitle,
             onTap: () => Navigator.of(context).pop(PlaylistExportFormat.m3u8),
           ),
-          if (moliaAvailable)
-            M3EListItem(
-              key: const Key('playlistExportMolia'),
-              leading: const Icon(Icons.inventory_2_rounded),
-              headline: l10n.playlistExportMolia,
-              supportingText: l10n.playlistExportMoliaSubtitle,
-              onTap: () =>
-                  Navigator.of(context).pop(PlaylistExportFormat.molia),
-            ),
+          M3EListItem(
+            key: const Key('playlistExportMolia'),
+            leading: const Icon(Icons.inventory_2_rounded),
+            headline: l10n.playlistExportMolia,
+            supportingText: moliaAvailable
+                ? l10n.playlistExportMoliaSubtitle
+                : l10n.playlistExportMoliaUnavailable,
+            enabled: moliaAvailable,
+            onTap: moliaAvailable
+                ? () => Navigator.of(context).pop(PlaylistExportFormat.molia)
+                : null,
+          ),
         ],
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
 // 导入复核
 
 /// 导入复核弹层：列出未解析条目并明确「确认后跳过这些」。
@@ -630,8 +653,3 @@ String _issueReason(AppLocalizations l10n, PlaylistImportIssueReason reason) =>
       PlaylistImportIssueReason.noLocation =>
         l10n.playlistImportReasonNoLocation,
     };
-
-String _safeFileName(String value) {
-  final trimmed = value.trim().replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-  return trimmed.isEmpty ? 'playlist' : trimmed;
-}

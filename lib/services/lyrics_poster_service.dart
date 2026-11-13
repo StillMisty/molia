@@ -10,7 +10,15 @@ import 'package:dio/dio.dart';
 import '../data/http/app_dio.dart';
 import '../managers/artwork_cache.dart';
 import '../models/poster_lyric_line.dart';
-import 'poster/poster_draw.dart' show posterCoverCropRect;
+import 'poster/poster_draw.dart'
+    show
+        posterCoverCropRect,
+        posterDrawCover,
+        posterDrawWatermark,
+        posterEncodePng,
+        posterLoadAssetImage,
+        posterPaintTextAligned,
+        posterPaintTextPainter;
 
 final logger = Logger('molia.lyrics_poster_service');
 
@@ -332,8 +340,6 @@ class LyricsPosterService {
     // 绘制与编码阶段产生的所有图像句柄都在这里统一释放：封面 / 水印图标
     // 是解码出来的，picture / 成品位图是录制出来的，任何一步抛错都要回收，
     // 否则一次失败就会留下一整张封面或海报位图（1440×N）常驻。
-    ui.Picture? picture;
-    ui.Image? renderedImage;
     try {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(
@@ -386,25 +392,12 @@ class LyricsPosterService {
           albumArtSize,
           albumArtSize,
         );
-        final albumRRect = RRect.fromRectAndRadius(
-          albumRect,
-          const Radius.circular(albumCornerRadius),
-        );
-
-        canvas.save();
-        canvas.clipRRect(albumRRect);
-        canvas.drawImageRect(
+        posterDrawCover(
+          canvas,
           loadedAlbumImage,
-          coverCropSourceRect(
-            sourceWidth: loadedAlbumImage.width.toDouble(),
-            sourceHeight: loadedAlbumImage.height.toDouble(),
-            targetWidth: albumRect.width,
-            targetHeight: albumRect.height,
-          ),
           albumRect,
-          Paint()..filterQuality = FilterQuality.medium,
+          cornerRadius: albumCornerRadius,
         );
-        canvas.restore();
 
         final textStartX = albumX + albumArtSize + headerSpacing;
 
@@ -453,7 +446,7 @@ class LyricsPosterService {
         );
         artistPainter.layout(maxWidth: contentWidth);
 
-        _drawText(
+        posterPaintTextAligned(
           canvas,
           trackTitle,
           Offset(horizontalMargin, currentY + titlePainter.height / 2),
@@ -463,7 +456,7 @@ class LyricsPosterService {
         );
         currentY += titlePainter.height + interTextSpacing;
 
-        _drawText(
+        posterPaintTextAligned(
           canvas,
           artistName,
           Offset(horizontalMargin, currentY + artistPainter.height / 2),
@@ -476,7 +469,7 @@ class LyricsPosterService {
 
       for (int i = 0; i < lyricLinePainters.length; i++) {
         final painter = lyricLinePainters[i];
-        _drawTextPainter(
+        posterPaintTextPainter(
           canvas,
           painter,
           Offset(horizontalMargin, currentY + painter.height / 2),
@@ -489,58 +482,22 @@ class LyricsPosterService {
       }
 
       final watermarkY = currentY + (watermarkHeight / 2);
-
-      if (watermarkIcon != null) {
-        final watermarkStartX = horizontalMargin;
-
-        final iconY =
-            watermarkY -
-            (watermarkHeight / 2) +
-            (watermarkHeight - iconSize) / 2;
-        canvas.drawImageRect(
-          watermarkIcon,
-          Rect.fromLTWH(
-            0,
-            0,
-            watermarkIcon.width.toDouble(),
-            watermarkIcon.height.toDouble(),
-          ),
-          Rect.fromLTWH(watermarkStartX, iconY, iconSize, iconSize),
-          Paint()
-            ..colorFilter = ColorFilter.mode(watermarkColor, BlendMode.srcIn),
-        );
-
-        final textX = watermarkStartX + iconSize + iconTextSpacing;
-        final textY =
-            watermarkY -
-            (watermarkHeight / 2) +
-            (watermarkHeight - watermarkPainter.height) / 2;
-        watermarkPainter.paint(canvas, Offset(textX, textY));
-      } else {
-        _drawText(
-          canvas,
-          watermarkText,
-          Offset(horizontalMargin, watermarkY),
-          watermarkStyle,
-          contentWidth,
-          TextAlign.left,
-        );
-      }
-
-      final recordedPicture = recorder.endRecording();
-      picture = recordedPicture;
-      final img = await recordedPicture.toImage(
-        width.toInt(),
-        finalPosterHeight.toInt(),
+      posterDrawWatermark(
+        canvas,
+        icon: watermarkIcon,
+        painter: watermarkPainter,
+        leftX: horizontalMargin,
+        centerY: watermarkY,
+        color: watermarkColor,
+        iconTextSpacing: iconTextSpacing,
       );
-      renderedImage = img;
-      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
 
-      return byteData!.buffer.asUint8List();
+      return await posterEncodePng(
+        recorder,
+        width: width.toInt(),
+        height: finalPosterHeight.toInt(),
+      );
     } finally {
-      // PNG 字节是 toByteData 的独立拷贝，返回前即可释放位图。
-      renderedImage?.dispose();
-      picture?.dispose();
       loadedAlbumImage?.dispose();
       watermarkIcon?.dispose();
     }
@@ -590,11 +547,8 @@ class LyricsPosterService {
     return null;
   }
 
-  Future<ui.Image> _loadAssetImage(String assetPath) async {
-    final data = await rootBundle.load(assetPath);
-    final bytes = data.buffer.asUint8List();
-    return _decodeImage(bytes, _watermarkImageTargetWidth);
-  }
+  Future<ui.Image> _loadAssetImage(String assetPath) =>
+      posterLoadAssetImage(assetPath, targetWidth: _watermarkImageTargetWidth);
 
   /// 按目标宽度等比解码；codec 在取到帧后立即释放，返回的 image 由调用方
   /// 负责 dispose。
@@ -609,47 +563,5 @@ class LyricsPosterService {
     } finally {
       codec.dispose();
     }
-  }
-
-  void _drawText(
-    Canvas canvas,
-    String text,
-    Offset position, // x 为对齐基准（左/中/右），y 为垂直中心
-    TextStyle style,
-    double maxWidth,
-    TextAlign textAlign,
-  ) {
-    final textPainter = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: TextDirection.ltr,
-      textAlign: textAlign,
-    );
-    textPainter.layout(maxWidth: maxWidth);
-
-    double dx = position.dx;
-    if (textAlign == TextAlign.center) {
-      dx -= textPainter.width / 2;
-    } else if (textAlign == TextAlign.right) {
-      dx -= textPainter.width;
-    }
-    final offsetY = position.dy - textPainter.height / 2;
-
-    textPainter.paint(canvas, Offset(dx, offsetY));
-  }
-
-  void _drawTextPainter(
-    Canvas canvas,
-    TextPainter textPainter,
-    Offset position,
-    TextAlign textAlign,
-  ) {
-    double dx = position.dx;
-    if (textAlign == TextAlign.center) {
-      dx -= textPainter.width / 2;
-    } else if (textAlign == TextAlign.right) {
-      dx -= textPainter.width;
-    }
-    final offsetY = position.dy - textPainter.height / 2;
-    textPainter.paint(canvas, Offset(dx, offsetY));
   }
 }

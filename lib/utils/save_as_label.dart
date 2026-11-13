@@ -14,3 +14,16 @@ String savedLocationMessage(
   SaveLocationKind.downloads => l10n.savedToDownloads(displayPath),
   SaveLocationKind.filesApp => l10n.savedToFilesApp(displayPath),
 };
+
+/// 列表导出的单条反馈：成功与缺失文件合并，避免连续两条 Snackbar 互相覆盖。
+String playlistExportMessage(
+  AppLocalizations l10n,
+  SaveLocationKind kind,
+  String displayPath,
+  int missingFiles,
+) {
+  final saved = savedLocationMessage(l10n, kind, displayPath);
+  return missingFiles <= 0
+      ? saved
+      : l10n.playlistExportSavedWithMissing(saved, missingFiles);
+}

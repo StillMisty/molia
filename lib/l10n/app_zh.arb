@@ -472,7 +472,7 @@
   "playlistImportFromFile": "从 .lxmc 文件导入",
   "playlistImportFromLink": "从歌单 / 收藏夹链接导入",
   "playlistImportChannel": "平台",
-  "playlistImportEmpty": "歌单 / 收藏夹没有可导入的曲目",
+  "playlistImportEmpty": "没有可导入的曲目",
   "playlistImportedName": "导入的歌单",
   "discoverSectionTitle": "发现",
   "discoverLeaderboards": "热榜",
@@ -2461,7 +2461,6 @@
   "playlistDescriptionHint": "说说这个列表用来做什么",
   "playlistFolder": "分组",
   "playlistFolderHint": "留空表示不分组",
-  "playlistFolderUngrouped": "未分组",
   "playlistEditDetails": "编辑详情",
   "playlistSaveDetailsFailed": "保存失败，列表没有改动",
   "playlistCover": "列表封面",
@@ -2493,18 +2492,24 @@
   "playlistExportM3u8Subtitle": "其它播放器也能打开",
   "playlistExportMolia": "Molia 文件",
   "playlistExportMoliaSubtitle": "保留完整曲目信息，仅 Molia 可读",
-  "playlistExportMissing": "有 {count} 个文件已不在，导出仍保留路径",
-  "@playlistExportMissing": {
+  "playlistExportMoliaUnavailable": "当前不可用；先启用同步再导出",
+  "playlistExportSavedWithMissing": "已导出到 {path}；有 {count} 个文件已不在",
+  "@playlistExportSavedWithMissing": {
     "placeholders": {
+      "path": {
+        "type": "String"
+      },
       "count": {
         "type": "int"
       }
     }
   },
-  "playlistExportDone": "已导出",
   "playlistExportFailed": "导出失败",
   "playlistDownloadSelected": "下载所选",
   "playlistFolderRename": "重命名分组",
+  "playlistFolderNameRequired": "请输入分组名",
+  "playlistFolderNameTooLong": "分组名最多 40 个字符",
+  "playlistFolderNameInvalid": "分组名不能包含控制字符",
   "playlistFolderDelete": "删除分组",
   "playlistFolderDeleteConfirm": "删除分组「{name}」？列表会变成未分组，不会被删除。",
   "@playlistFolderDeleteConfirm": {
@@ -2517,7 +2522,6 @@
   "playlistFolderRenamed": "分组已重命名",
   "playlistFolderDeleted": "分组已删除",
   "playlistImport": "导入列表文件",
-  "playlistImportTitle": "导入列表",
   "playlistImportReviewTitle": "确认导入",
   "playlistImportResolved": "{count} 首可导入",
   "@playlistImportResolved": {
@@ -2551,7 +2555,6 @@
       }
     }
   },
-  "playlistImportEmpty": "没有可导入的曲目",
   "playlistImportDone": "已导入 {added} 首，跳过 {skipped} 首",
   "@playlistImportDone": {
     "placeholders": {
