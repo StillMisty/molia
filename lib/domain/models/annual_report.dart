@@ -209,8 +209,6 @@ class AnnualReport {
 
   bool get hasData => countablePlayCount > 0;
 
-  bool get hasTopTracks => topTracks.isNotEmpty;
-
   List<PlayStatTrackEntry> get pageTopTracks =>
       topTracks.take(pageTopLimit).toList(growable: false);
 
@@ -287,12 +285,19 @@ AnnualReport buildAnnualReport({
       ? null
       : (currentYear ? DateTime(now.year, now.month, now.day) : lastActiveDay);
 
+  // 「完整的一年」不要求恰好从 1 月 1 日 / 到 12 月 31 日都有播放：起止各留
+  // 两周容差，避免正常用户（例如 1 月 5 日才开始用）被误判为数据不完整。
+  // 只有明显晚开始 / 早结束，或统计关闭，才提示报告只覆盖部分时段。
+  const edgeTolerance = Duration(days: 14);
   final startsAtYearStart =
-      coverageStart != null && !coverageStart.isAfter(window.start);
+      coverageStart != null &&
+      !coverageStart.isAfter(window.start.add(edgeTolerance));
   final endsAtYearEnd =
       currentYear ||
       (lastActiveDay != null &&
-          !lastActiveDay.isBefore(DateTime(year, 12, 31)));
+          !lastActiveDay.isBefore(
+            DateTime(year, 12, 31).subtract(const Duration(days: 13)),
+          ));
 
   final notice = !recordingEnabled
       ? AnnualReportNotice.recordingOff

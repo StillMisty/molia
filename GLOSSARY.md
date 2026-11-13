@@ -337,9 +337,10 @@
   并全选。搜索条是 `ChannelSearchBar`：单层胶囊，左侧透明背景 + 描边的渠道
   chip 直接占据搜索图标位置，右侧裸输入 + 清除键；
   选择渠道会同时切发现内容与搜索，并把焦点还给输入框。
-  结果只搜当前渠道，与资料库同一条播放语义；输入框保持焦点时 ↑↓ 移动高亮、
-  Enter 播放 / 打开高亮项、Ctrl+Enter
-  看全部结果，Tab 锁在遮罩内，底部提示行 `searchKeyboardHint`。空关键词时结果面留空；
+  结果只搜当前渠道，与资料库同一条播放语义；输入框保持焦点时，建议可见则
+  ↑↓ 先移动建议高亮、Enter 选中建议；建议消失后 ↑↓ 移动结果预览高亮、
+  Enter 播放 / 打开高亮项；Ctrl+Enter 看全部结果，Tab 锁在遮罩内，底部提示行
+  `searchKeyboardHint`。空关键词聚焦时露出搜索辅助芯片，输入时露出 ≤6 条本地建议。
   Esc 由视图自收（壳层经 `EscapeClaims` 让位）、方向键 / Space / Enter 经 `KeyClaims`
   让位；壳层另叠一层整窗 `BackdropFilter` 跟遮罩开合淡入淡出。
 
@@ -574,6 +575,22 @@
   类型），互不共享关键词 / 页码 / 失败。当前渠道不支持目标类型时回退到第一个支持的
   kind（优先 song）。端口 `MusicSource.searchArtists` / `searchLyrics` 经 `CatalogService`
   （缓存 key `search:{source}:artist|lyric:...`，与单曲共用 5min 缓存实例）路由。
+- **Search assist（搜索辅助）** — `lib/domain/search/search_assist.dart` +
+  `lib/providers/search_assist_controller.dart` + `lib/widgets/search_assist_panel.dart`：
+  Ctrl+F 与资料库搜索 tab 共用的建议 / 历史 surface。历史由组合根注册的
+  `SearchHistoryStore`（`lib/services/search_history_store.dart`）持有：设备本地、
+  按渠道隔离、每渠道最多 20 条，不登记同步设置、不进完整备份、日志不写查询文本。
+  空词聚焦显示最近搜索（≤4）+ 热搜（≤2）芯片，输入时从历史 + 发现页缓存热搜词
+  生成 ≤6 条精确 / 前缀 / 包含建议；零结果纠错只对成功的单曲搜索给出一个
+  bounded Damerau-Levenshtein 候选，绝不自动改写输入。只有显式提交记录历史，
+  输入防抖不记录，聚焦 / 输入不发网络请求。
+- **Annual listening report（年度听歌报告）** — 统计页内的只读年度视图：
+  `lib/domain/models/annual_report.dart` 负责窗口 / 月度 / 平台 / 连续天数 /
+  覆盖与纠错聚合，`AnnualReportProvider` 调度年份与统计变更，报告页是设置子页
+  （无新导航目的地），`lib/services/annual_poster_service.dart` 离线渲染
+  1440×1920 海报。入口年份来自统计页已有的全量日历 rollup（`allHistoryDaily`），
+  12–1 月高强调；报告只读既有 `play_events` / `play_tracks`，不新增表 / 列、
+  不改口径，Top 50 经既有资料库导入引擎存成歌单。
 - **Search row（搜索结果行）** — `lib/providers/search_row.dart` 的 `SearchRow`：
   单曲 / 歌词搜索结果的唯一形状（领域 `Track` + 可选 `lyricSnippet`）。搜索行从
   `CatalogService` 到会话、投影、播放全程只持领域 `Track`：`SearchRow.track` 就是

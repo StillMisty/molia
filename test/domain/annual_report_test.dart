@@ -172,6 +172,32 @@ void main() {
       expect(report.notice, AnnualReportNotice.recordingOff);
     });
 
+    test('正常完整的一年不因首末日期不是 1/1、12/31 而提示部分覆盖', () {
+      final report = buildAnnualReport(
+        year: 2025,
+        now: DateTime(2026, 2, 1),
+        knownSourceNames: const {},
+        data: _snapshot(
+          summary: _summary(
+            firstPlayedAt: DateTime(2025, 1, 5).millisecondsSinceEpoch,
+          ),
+          daily: [
+            DayListened(
+              day: DateTime(2025, 1, 5),
+              listenedMs: 1000,
+              playCount: 1,
+            ),
+            DayListened(
+              day: DateTime(2025, 12, 28),
+              listenedMs: 1000,
+              playCount: 1,
+            ),
+          ],
+        ),
+      );
+      expect(report.notice, AnnualReportNotice.none);
+    });
+
     test('往年覆盖不完整时提示 partialCoverage', () {
       final report = buildAnnualReport(
         year: 2025,

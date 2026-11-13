@@ -320,8 +320,6 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   late final SearchSession _session;
   late final SearchInputBinding _input;
   late final SearchAssistController _assist;
-  late final SearchHistoryStore _history;
-  bool _ownsHistory = false;
 
   /// 上一次已播报的内容（关键词 + 文案）：同一条消息不重复播报。
   String? _lastAnnouncement;
@@ -337,12 +335,10 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     // 会话是搜索状态的唯一源：遮罩打开时用绑定器种上当前关键词，
     // 之后资料库改词 / 清空也会立即反映到输入框（不再逐帧补同步）。
     _input = SearchInputBinding(session: _session, controller: _field);
-    final registered = context.read<SearchHistoryStore?>();
-    _history = registered ?? SearchHistoryStore();
-    _ownsHistory = registered == null;
     _assist = SearchAssistController(
       search: _search,
-      history: _history,
+      // 仓库生命周期归组合根（Provider 树），宿主只消费。
+      history: context.read<SearchHistoryStore>(),
       hotKeywords: () =>
           context.read<DiscoverProvider?>()?.hotSearches ?? const [],
     );
@@ -361,7 +357,6 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     _assist.removeListener(_onAssistChanged);
     _focusNode.removeListener(_onFieldFocus);
     _assist.dispose();
-    if (_ownsHistory) _history.dispose();
     _input.dispose();
     _field.dispose();
     _focusNode.dispose();

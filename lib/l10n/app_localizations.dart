@@ -3836,6 +3836,12 @@ abstract class AppLocalizations {
   /// **'Couldn\'t make the poster. Try again.'**
   String get annualReportShareFailed;
 
+  /// No description provided for @annualReportLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load the report'**
+  String get annualReportLoadFailed;
+
   /// No description provided for @annualReportSavePlaylist.
   ///
   /// In en, this message translates to:

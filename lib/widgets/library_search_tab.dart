@@ -37,8 +37,6 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
   late final SearchInputBinding _searchInput;
   late final SearchProvider _searchProvider;
   late final SearchAssistController _assist;
-  late final SearchHistoryStore _history;
-  bool _ownsHistory = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -51,12 +49,10 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
       session: _searchProvider.session,
       controller: _searchController,
     );
-    final registered = context.read<SearchHistoryStore?>();
-    _history = registered ?? SearchHistoryStore();
-    _ownsHistory = registered == null;
     _assist = SearchAssistController(
       search: _searchProvider,
-      history: _history,
+      // 仓库生命周期归组合根（Provider 树），宿主只消费。
+      history: context.read<SearchHistoryStore>(),
       hotKeywords: () =>
           context.read<DiscoverProvider?>()?.hotSearches ?? const [],
     );
@@ -69,7 +65,6 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
   void dispose() {
     _searchFocusNode.removeListener(_onFocusChanged);
     _assist.dispose();
-    if (_ownsHistory) _history.dispose();
     _searchInput.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();

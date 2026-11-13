@@ -373,6 +373,11 @@
   统计页（`play_statistics_page.dart`）消费 provider 投影：日历热力图（hero，
   全量历史 + 范围高亮）、作息热力图（7×24，随范围过滤）、汇总/指标/榜单
   （Top 曲目可点播）；导出 JSON 面向 AI 消费（全量汇总 + 最近明细、不含 raw）。
+  统计页首个内容块是**年度听歌报告**入口：可用年份取自 `allHistoryDaily`
+  （全量日历 rollup，不受 30 天范围影响），12–1 月高强调；报告页是设置子页，
+  按 `[1 月 1 日, 次年 1 月 1 日)` 本地窗口读既有表，单页展示汇总 / 榜单 /
+  平台 / 月度 / 连续天数 / 首末播放与覆盖范围，海报离线渲染（1440×1920），
+  Top 50 可存成歌单；不改统计口径、表结构或采集链路。
   与 `play_history`（最近播放，500 条上限）是两套数据。
 - **AI 推歌（Phase 2，可选，默认关闭）**：`lib/services/ai/**` 是唯一数据出口与
   网络层——`TasteProfileBuilder`（按发送范围读聚合画像 + 合并去重后的已听清单
@@ -674,6 +679,14 @@
   宿主 `TextEditingController`（资料库 tab 与 Ctrl+F 共享同一会话），
   `SearchProjection` / `SearchPreviewSession` 提供一次取齐的结果 / 预览 / 空态与
   键盘高亮；`SourceCapabilities.searchKinds` 是能力位 → 搜索类型的唯一映射。
+- **搜索辅助**：`lib/domain/search/search_assist.dart` 是纯建议 / 纠错排序，
+  `SearchAssistController` 拥有焦点、建议高亮与可见性，`SearchAssistPanel`
+  是 Ctrl+F 与资料库搜索 tab 共用的唯一呈现模块。历史由组合根注册的
+  `SearchHistoryStore` 持有（设备本地、按渠道隔离、每渠道 20 条、不同步 /
+  不备份 / 不记录查询文本）；只有显式提交（回车 / 芯片 / 建议 / 纠错 /
+  结果激活）写入历史，输入防抖永不写。热搜词只读发现页缓存，聚焦与输入不
+  发网络请求；建议 ≤6 条，零结果纠错只在单曲搜索成功且无结果时给出一个候选，
+  不自动改写输入。
 - **发现页布局**：`lib/widgets/discover_layout.dart` 集中 gutter / 内容宽度 /
   网格断点。搜索、热榜、歌单三个 tab 共用
   `ResponsivePageType.browse` 的页边距（compact 12 / 手机 16 / 平板桌面 24），
@@ -1419,8 +1432,9 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   切发现内容与搜索，并把焦点还给输入框；当前渠道不支持搜索时面板显示专用空态。
   结果面只有当前渠道一组，
   保留宽屏表格与触底自动分页，遮罩最多预览 8 行并以「查看全部结果」收尾。
-  遮罩键盘：输入框保持焦点，↑↓ 移动高亮、Enter 播放 / 打开高亮项、Ctrl+Enter
-  打开完整结果页、Tab 锁在遮罩内、底部提示行走 l10n `searchKeyboardHint`；遮罩打开时
+  遮罩键盘：输入框保持焦点；建议可见时 ↑↓ 先在建议列表移动高亮、Enter 选中建议，
+  建议消失后 ↑↓ 仍移动结果预览高亮、Enter 播放 / 打开高亮项；Ctrl+Enter
+  始终打开完整结果页、Tab 锁在遮罩内、底部提示行走 l10n `searchKeyboardHint`；遮罩打开时
   壳层 Esc 让位（`EscapeClaims`），方向键 / Space / Enter 经 `KeyClaims` 让位，
   另有一层整窗 `BackdropFilter` 跟遮罩开合淡入淡出
   （自绘 scrim 只压暗，模糊由壳层补；关闭时 `Opacity` 为 0、不参与合成）。

@@ -33,6 +33,7 @@ import '../services/notification_service.dart';
 import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
+import '../utils/listened_duration.dart';
 import '../utils/responsive.dart';
 import '../utils/save_as_label.dart';
 import '../widgets/settings/settings_subpage.dart';
@@ -134,7 +135,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       onChanged: (range) => unawaited(provider.setRange(range)),
     );
     final sections = <Widget>[
-      if (provider.snapshot != null) ..._annualEntry(provider.snapshot!.daily),
+      if (provider.snapshot != null) ..._annualEntry(provider.allHistoryDaily),
       rangeRow,
       const SizedBox(height: 16),
       if (provider.isEmpty)
@@ -264,7 +265,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       _StatBlock(
         icon: Icons.schedule_rounded,
         iconColor: scheme.secondary,
-        value: _formatListened(l10n, summary.totalListenedMs),
+        value: formatListenedDuration(l10n, summary.totalListenedMs),
         label: l10n.statsListened,
       ),
       _StatBlock(
@@ -393,7 +394,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
             tooltipFor: (day, value) => l10n.statsTooltip(
               localizations.formatMediumDate(day),
               duration
-                  ? _formatListened(l10n, value)
+                  ? formatListenedDuration(l10n, value)
                   : l10n.statsPlaysCount(value),
             ),
             onDayTap: (day) {
@@ -435,7 +436,9 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
         values: values,
         tooltipFor: (weekday, hour, value) => l10n.statsTooltip(
           '${narrow[(weekday + 1) % 7]} $hour:00',
-          duration ? _formatListened(l10n, value) : l10n.statsPlaysCount(value),
+          duration
+              ? formatListenedDuration(l10n, value)
+              : l10n.statsPlaysCount(value),
         ),
       ),
     );
@@ -515,7 +518,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  _formatListened(l10n, sources[i].listenedMs),
+                  formatListenedDuration(l10n, sources[i].listenedMs),
                   style: context.typeScale.labelSmall.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -557,7 +560,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
               trackId: TrackId(tracks[i].sourceKey, tracks[i].songId),
               trailingText:
                   '${l10n.statsPlaysCount(tracks[i].playCount)} · '
-                  '${_formatListened(l10n, tracks[i].listenedMs)}',
+                  '${formatListenedDuration(l10n, tracks[i].listenedMs)}',
             ),
             position: calculateCardPosition(i, tracks.length),
             onTap: () => unawaited(_playTopTracks(tracks, i)),
@@ -957,7 +960,7 @@ class _DayDetailSheet extends StatelessWidget {
             child: Text(
               l10n.statsDaySummary(
                 detail.playCount,
-                _formatListened(l10n, detail.listenedMs),
+                formatListenedDuration(l10n, detail.listenedMs),
               ),
               style: context.typeScale.bodySmall.copyWith(
                 color: scheme.onSurfaceVariant,
@@ -989,7 +992,7 @@ class _DayDetailSheet extends StatelessWidget {
                     durationMs: event.durationMs,
                     trackId: TrackId(event.sourceKey, event.songId),
                     trailingText:
-                        '$time · ${_formatListened(l10n, event.listenedMs)}',
+                        '$time · ${formatListenedDuration(l10n, event.listenedMs)}',
                   ),
                   position: calculateCardPosition(index, detail.events.length),
                   onTap: () => onPlay(index),
@@ -1001,13 +1004,4 @@ class _DayDetailSheet extends StatelessWidget {
       ),
     );
   }
-}
-
-/// 收听时长文案（秒 / 分钟 / 小时·分）。
-String _formatListened(AppLocalizations l10n, int listenedMs) {
-  final totalSeconds = listenedMs ~/ 1000;
-  if (totalSeconds < 60) return l10n.statsDurationSeconds(totalSeconds);
-  final minutes = totalSeconds ~/ 60;
-  if (minutes < 60) return l10n.statsDurationMinutes(minutes);
-  return l10n.statsDurationHours(minutes ~/ 60, minutes % 60);
 }
