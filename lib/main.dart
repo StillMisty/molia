@@ -12,6 +12,7 @@ import 'app/app_shell.dart';
 import 'app/bootstrap/ai_stack.dart';
 import 'app/bootstrap/app_ui_messenger.dart';
 import 'app/bootstrap/catalog_stack.dart';
+import 'app/bootstrap/diagnostics_stack.dart';
 import 'app/bootstrap/desktop_stack.dart';
 import 'app/bootstrap/library_stack.dart';
 import 'app/bootstrap/local_data_stack.dart';
@@ -25,6 +26,10 @@ import 'app/bootstrap/sync_stack.dart';
 import 'app/bootstrap/update_stack.dart';
 import 'app/perf/data_path_scenario.dart';
 import 'app/perf/frame_stats.dart';
+import 'data/diagnostics/database_counts.dart';
+import 'data/diagnostics/settings_snapshot.dart';
+import 'data/diagnostics/source_health_probe.dart';
+import 'data/diagnostics/source_snapshot.dart';
 import 'data/molia_database.dart';
 import 'data/settings/settings_keys.dart';
 import 'data/settings/settings_module.dart';
@@ -35,9 +40,13 @@ import 'playback/playback_power_policy.dart';
 import 'providers/channel_selection.dart';
 import 'providers/library_provider.dart';
 import 'providers/search_provider.dart';
+import 'providers/sync_ui_state.dart';
 import 'sources/builtin/builtin_search.dart';
 import 'sources/builtin/discover_source.dart';
 import 'services/app_logging.dart';
+import 'services/diagnostics/app_info.dart';
+import 'services/diagnostics/diagnostics_export.dart';
+import 'services/diagnostics/source_health_checker.dart';
 import 'services/app_presence.dart';
 import 'services/global_hotkeys.dart';
 import 'services/notification_service.dart';
@@ -54,6 +63,28 @@ final _startupLog = Logger('molia.startup');
 
 void _markStartup(String stage, Stopwatch watch) =>
     _startupLog.info('$stage：${watch.elapsedMilliseconds}ms');
+
+/// 同步状态的诊断投影：只挑布尔 / 计数 / 主机名，口令与密码值不进入快照。
+DiagnosticsSyncInfo _diagnosticsSyncInfo(SyncUiState state) {
+  String? host(String raw) {
+    final uri = Uri.tryParse(raw.trim());
+    final value = uri?.host ?? '';
+    return value.isEmpty ? null : value;
+  }
+
+  return DiagnosticsSyncInfo(
+    enabled: state.enabled,
+    categories: {
+      for (final entry in state.categories.entries) entry.key.name: entry.value,
+    },
+    transports: [
+      for (final transport in state.enabledTransports) transport.name,
+    ],
+    pairedDevices: state.peers.length,
+    webdavConfigured: state.webdav.isConfigured,
+    webdavHost: host(state.webdav.baseUrl),
+  );
+}
 
 /// 系统低内存信号：只有在这种情况下释放可重建的浏览 / 搜索 / 目录缓存。
 ///
@@ -96,6 +127,9 @@ void main() async {
 
   // 日志装配（package:logging 的 handler / level 只在这里和测试配置里设一次）
   initAppLogging();
+  // 诊断核心（失败缓冲 + 轮转文件日志）：构造无 I/O；文件 sink 在首次写入时
+  // 才解析应用数据目录，启动不等待磁盘。
+  final diagnostics = buildDiagnosticsStack();
 
   // 帧统计：默认编译期关闭；`MOLIA_PERF_TRACE=true` 时才注册回调。
   FrameStats.instance.install();
@@ -173,7 +207,13 @@ void main() async {
   final notifications = NotificationService(hostContextKey: appRootKey);
 
   // ① 音源与目录（设置注册表 → SourceManager → 目录/评论/专辑/歌手）。
-  final catalog = buildCatalogStack();
+  final catalog = buildCatalogStack(failures: diagnostics.failures);
+  // 健康检查探针依赖目录服务：catalog 建好后挂到同一个诊断服务上。
+  diagnostics.service.attachHealth(
+    SourceHealthChecker(
+      probe: CatalogSourceHealthProbe(registry: catalog.sourceRegistry),
+    ),
+  );
   // 主库预热：播放会话首帧前就要读（恢复态可见），提前与本地数据 / 资料库
   // 并行开库。Windows 首次启动的旧库复制 + v1→v2 迁移是一次性成本，单独埋点。
   final dbPrewarmWatch = Stopwatch()..start();
@@ -204,6 +244,7 @@ void main() async {
     library: library,
     messenger: AppUiMessenger(notifications),
     powerPolicy: powerPolicy,
+    failures: diagnostics.failures,
     mediaSessionFactory: (service, session) => initSystemMediaSession(
       service,
       // handler 只翻译动作；恢复态回落、阶段路由与提交都在会话命令面。
@@ -359,6 +400,31 @@ void main() async {
   final update = buildUpdateStack(quitApp: desktop.quitApp);
   _markStartup('更新栈（装配完成）', startup);
 
+  // 诊断导出器：设置 / 渠道 / 数据库 / 更新信息由注入的 gatherer 读取；
+  // 日志读取、脱敏与组装在后台 isolate 完成。未打开诊断页时不执行。
+  final diagnosticsExporter = DiagnosticsExporter(
+    service: diagnostics.service,
+    appInfo: DiagnosticsAppInfoGatherer(
+      updateChannel: () => update.provider.channel.wireName,
+      updateAutoCheck: () => update.provider.autoCheckEnabled,
+    ),
+    settings: () => gatherDiagnosticsSettings(
+      registry: catalog.settings,
+      sync: _diagnosticsSyncInfo(sync.provider.state),
+      extraValues: {
+        'data_saver_enabled': local.dataSaver.enabled,
+        'data_saver_active': local.dataSaver.active,
+        'data_saver_quality_cap': local.dataSaver.qualityCap,
+        'data_saver_covers': local.dataSaver.coversSaverEnabled,
+        'update_channel': update.provider.channel.wireName,
+        'update_auto_check': update.provider.autoCheckEnabled,
+      },
+    ),
+    sources: () async => gatherDiagnosticsSources(catalog.sourceManager),
+    database: gatherDiagnosticsDatabaseCounts,
+    logDirectory: diagnostics.logSink.directory,
+  );
+
   // 应用生命周期扇出的唯一 owner：main 只把系统事件转进来，同步 / 会话 /
   // 统计 / 网络 / 更新的反应由各子系统注册，不再由 main 与 app_shell
   // 各持一份 WidgetsBindingObserver 分散触发。
@@ -474,6 +540,8 @@ void main() async {
     },
     onPause: () => onAppBackground(paused: true),
     onHide: onAppBackground,
+    // 进程销毁：关掉文件日志（有界刷盘），不影响系统回收速度。
+    onDetach: () => unawaited(diagnostics.service.dispose()),
   );
 
   runApp(
@@ -493,6 +561,8 @@ void main() async {
         display: display,
         sync: sync,
         update: update,
+        diagnosticsService: diagnostics.service,
+        diagnosticsExporter: diagnosticsExporter,
         notifications: notifications,
       ),
       child: MyThemedApp(

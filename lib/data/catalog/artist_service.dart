@@ -1,4 +1,5 @@
 import '../../domain/models/artist.dart';
+import '../../services/diagnostics/failure_ring_buffer.dart';
 import '../cache/request_cache.dart';
 import 'cached_page_service.dart';
 
@@ -26,6 +27,8 @@ class ArtistService {
     required ArtistFetcher fetch,
     RequestCache? cache,
     Duration ttl = const Duration(minutes: 10),
+    FailureRecorder? failures,
+    String Function(String sourceKey)? channelDisplayName,
   }) : _pages = CachedPageService<ArtistDetail, _ArtistQuery>(
          fetch: (query, {required page, required limit}) =>
              fetch(query.sourceKey, query.artistId, page: page, limit: limit),
@@ -40,6 +43,12 @@ class ArtistService {
          maxEntries: 16,
          ttl: ttl,
          cache: cache,
+         failures: failures,
+         failureContext: (query) => (
+           key: query.sourceKey,
+           displayName:
+               channelDisplayName?.call(query.sourceKey) ?? query.sourceKey,
+         ),
        );
 
   final CachedPageService<ArtistDetail, _ArtistQuery> _pages;

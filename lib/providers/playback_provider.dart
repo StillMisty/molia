@@ -19,6 +19,7 @@ import '../models/play_mode.dart';
 import '../playback/playback_error_recovery.dart';
 import '../playback/playback_session_coordinator.dart';
 import '../services/data_saver_service.dart';
+import '../services/diagnostics/failure_ring_buffer.dart';
 import '../services/playback_feel_store.dart';
 import '../services/playback_observer.dart';
 import '../services/playback_volume_store.dart';
@@ -79,6 +80,15 @@ class PlaybackProvider extends ChangeNotifier {
   final SettingsAccess _settings;
   final UiMessenger _messenger;
   final SourceManager? _sourceManager;
+
+  String _channelDisplayName(String key) {
+    final manager = _sourceManager;
+    if (manager == null) return key;
+    for (final channel in manager.channels) {
+      if (channel.key == key) return channel.displayName;
+    }
+    return key;
+  }
 
   /// 省流模式（可选注入）：音质标签读取（`currentQualityType`）。
   final DataSaverService? _dataSaver;
@@ -156,6 +166,7 @@ class PlaybackProvider extends ChangeNotifier {
     SourceSwapSettings? autoSwapSettings,
     AutoSourceSwapResolver? autoSwapResolver,
     AutoSourceSwapTrackHook? onAutoSourceSwapped,
+    FailureRecorder? failures,
     required this._settings,
     bool Function()? isForeground,
     // 仅在测试里压短；生产用默认 400ms（见 [_volumePersistDebounce]）。
@@ -171,6 +182,8 @@ class PlaybackProvider extends ChangeNotifier {
       autoSwapSettings: autoSwapSettings,
       autoSwapResolver: autoSwapResolver,
       onAutoSourceSwapped: onAutoSourceSwapped,
+      failures: failures,
+      channelDisplayName: _channelDisplayName,
     );
     _notifyThrottler = CategorizedNotifyThrottler(
       notifyCallback: super.notifyListeners,

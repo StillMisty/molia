@@ -2,6 +2,7 @@ import '../../domain/models/comment.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/music_source.dart';
 import '../../domain/ports/source_registry.dart';
+import '../../services/diagnostics/failure_ring_buffer.dart';
 import '../cache/request_cache.dart';
 import 'cached_page_service.dart';
 
@@ -13,10 +14,12 @@ import 'cached_page_service.dart';
 /// [invalidateTrack] 清该曲目全部页。
 class CommentsService {
   CommentsService({
-    required this._registry,
+    required SourceRegistry registry,
     RequestCache? cache,
     Duration ttl = const Duration(minutes: 5),
-  }) : _pages = CachedPageService<CommentPage, _CommentQuery>(
+    FailureRecorder? failures,
+  }) : _registry = registry,
+       _pages = CachedPageService<CommentPage, _CommentQuery>(
          fetch: (query, {required page, required limit}) => query.source
              .comments(query.track, kind: query.kind, page: page, limit: limit),
          keyOf: (query, page, limit) =>
@@ -26,6 +29,11 @@ class CommentsService {
          maxEntries: 32,
          ttl: ttl,
          cache: cache,
+         failures: failures,
+         failureContext: (query) {
+           final key = query.track.id.sourceKey;
+           return (key: key, displayName: _displayNameFor(registry, key));
+         },
        );
 
   final SourceRegistry _registry;
@@ -65,6 +73,13 @@ class CommentsService {
   /// 指定曲目当前的评论缓存条目数（含 in-flight）。
   int countForTrack(Track track) =>
       _pages.countPrefix(trackCacheKeyPrefix(track));
+
+  static String _displayNameFor(SourceRegistry registry, String key) {
+    for (final descriptor in registry.descriptors) {
+      if (descriptor.key == key) return descriptor.displayName;
+    }
+    return key;
+  }
 
   /// 缓存 key：`comments:{source}:{songId}:{kind}:{page}:{limit}`。
   static String cacheKey(

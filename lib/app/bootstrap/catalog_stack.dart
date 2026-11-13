@@ -18,6 +18,7 @@ import '../../data/settings/settings_registry.dart';
 import '../../domain/ports/source_registry.dart';
 import '../../services/app_branding_service.dart';
 import '../../services/bili_account_service.dart';
+import '../../services/diagnostics/failure_ring_buffer.dart';
 import '../../services/language_service.dart';
 import '../../services/shortcut_settings.dart';
 import '../../services/source_swap/swap_query_planner.dart';
@@ -40,7 +41,7 @@ typedef CatalogStack = ({
 ///
 /// 「数据源维护」不在这里：脚本加载是启动后的
 /// `sourceManager.init()`（首帧回调，见 `post_frame_init.dart`）。
-CatalogStack buildCatalogStack() {
+CatalogStack buildCatalogStack({FailureRecorder? failures}) {
   // 设置注册表（登记键的唯一家）：读 / 写 / 同步往返 / 应用远端后的 reload
   // 钩子都走它；键的声明见 data/settings/settings_keys.dart。
   final settingsRegistry = SettingsRegistry(keys: kAllSettingsKeys);
@@ -117,19 +118,34 @@ CatalogStack buildCatalogStack() {
   // 适配层：SourceManager → SourceRegistry → CatalogService。
   // SearchProvider 只依赖后两者（搜索缓存 single-flight + LRU + TTL 5min）。
   final sourceRegistry = SourceRegistryImpl(sourceManager);
+  String channelDisplayName(String key) {
+    for (final descriptor in sourceRegistry.descriptors) {
+      if (descriptor.key == key) return descriptor.displayName;
+    }
+    return key;
+  }
+
   // 换源查询规划：手动换源、自动换源与封面补取共用同一实例，关键词口径
   // 与候选来源不再各拼一份。
   final swapQueryPlanner = SwapQueryPlanner(registry: sourceRegistry);
-  final catalogService = CatalogService(registry: sourceRegistry);
+  final catalogService = CatalogService(
+    registry: sourceRegistry,
+    failures: failures,
+  );
   // 评论：与目录服务同构的缓存层（single-flight + LRU + 5min TTL，
   // key = comments:{source}:{songId}:{kind}:{page}）。
-  final commentsService = CommentsService(registry: sourceRegistry);
+  final commentsService = CommentsService(
+    registry: sourceRegistry,
+    failures: failures,
+  );
   // 专辑：同一取数模式（single-flight + LRU + 10min TTL，
   // key = album:{source}:{albumId}:{page}）；取数注入 SourceManager.fetchAlbum，
   // 服务本身不依赖 sources 层。
   final albumService = AlbumService(
     fetch: (sourceKey, albumId, {required page, required limit}) =>
         sourceManager.fetchAlbum(sourceKey, albumId, page: page, limit: limit),
+    failures: failures,
+    channelDisplayName: channelDisplayName,
   );
   // 歌手：同一取数模式（key = artist:{source}:{artistId}:{page}）；
   // 取数注入 SourceManager.fetchArtist。
@@ -141,6 +157,8 @@ CatalogStack buildCatalogStack() {
           page: page,
           limit: limit,
         ),
+    failures: failures,
+    channelDisplayName: channelDisplayName,
   );
 
   return (

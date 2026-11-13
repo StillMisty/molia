@@ -1,4 +1,5 @@
 import '../../domain/models/failure.dart';
+import '../../services/diagnostics/failure_ring_buffer.dart';
 import '../cache/request_cache.dart';
 
 /// 分页取数函数：查询 + 页码 / 每页条数 → 一页结果。
@@ -23,18 +24,22 @@ class CachedPageService<T, Q> {
     required int maxEntries,
     Duration ttl = const Duration(minutes: 10),
     RequestCache? cache,
+    this._failures,
+    this._failureContext,
   }) : _cache = cache ?? RequestCache(maxEntries: maxEntries, ttl: ttl);
 
   final PageFetcher<T, Q> _fetch;
   final String Function(Q query, int page, int limit) _keyOf;
   final RequestCache _cache;
+  final FailureRecorder? _failures;
+  final ({String key, String displayName}) Function(Q query)? _failureContext;
 
   /// 取一页；同 key 在 TTL 内共享结果，异常归一化为 [SourceFailure]。
   Future<T> load(Q query, {required int page, required int limit}) {
     final key = _keyOf(query, page, limit);
     return _cache.getOrCreate<T>(
       key,
-      () => _guard(() => _fetch(query, page: page, limit: limit)),
+      () => _guard(query, () => _fetch(query, page: page, limit: limit)),
     );
   }
 
@@ -47,11 +52,20 @@ class CachedPageService<T, Q> {
   /// 与 [prefix] 匹配的缓存条目数（含 in-flight）。
   int countPrefix(String prefix) => _cache.countPrefix(prefix);
 
-  Future<T> _guard(Future<T> Function() call) async {
+  Future<T> _guard(Q query, Future<T> Function() call) async {
     try {
       return await call();
     } catch (e) {
-      throw SourceFailure.from(e);
+      final failure = SourceFailure.from(e);
+      final context = _failureContext?.call(query);
+      if (context != null) {
+        _failures?.recordFailure(
+          failure: failure,
+          channelKey: context.key,
+          channelDisplayName: context.displayName,
+        );
+      }
+      throw failure;
     }
   }
 }

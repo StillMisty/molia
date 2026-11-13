@@ -17,6 +17,7 @@ import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'cache_management_page.dart';
+import 'diagnostics_page.dart';
 import 'download_settings_page.dart';
 import 'downloads_manage_page.dart';
 
@@ -105,6 +106,20 @@ class DataSettingsPage extends StatelessWidget {
               title: l10n.libraryImportFavorites,
               subtitle: l10n.libraryImportFavoritesSubtitle,
               onTap: () => importLxmcFavoritesFlow(context),
+            ),
+          ],
+        ),
+        const SizedBox(height: kSettingsSectionSpacing),
+        SettingsSectionCard(
+          title: l10n.settingsTroubleshootingSection,
+          children: [
+            SettingsNavTile(
+              key: const Key('settingsDiagnosticsItem'),
+              icon: Icons.support_agent_rounded,
+              title: l10n.diagnosticsTitle,
+              subtitle: l10n.diagnosticsSubtitle,
+              onTap: () =>
+                  openSettingsSubPage(context, const DiagnosticsPage()),
             ),
           ],
         ),
