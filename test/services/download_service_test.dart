@@ -759,6 +759,34 @@ void main() {
       expect(storage.files.containsKey('/music/歌手 - 歌名.mp3'), isTrue);
     });
 
+    test('从文件刷新信息：显式重读标签，保留身份与导入标记', () async {
+      storage.files['/music/歌手 - 歌名.mp3'] = localMp3(
+        title: '旧标题',
+        artist: '旧歌手',
+      );
+      final service = makeService();
+      await service.init();
+      await service.importLocalFiles(['/music/歌手 - 歌名.mp3']);
+      final before = service.records.downloads.single;
+
+      storage.files['/music/歌手 - 歌名.mp3'] = localMp3(
+        title: '新标签标题',
+        artist: '新标签歌手',
+      );
+      final updated = await service.refreshLocalMetadata(before);
+      expect(updated, isNotNull);
+      expect(updated!.title, '新标签标题');
+      expect(updated.artist, '新标签歌手');
+      expect(updated.imported, isTrue);
+      expect(updated.localKey, before.localKey);
+      expect(updated.localSongId, before.localSongId);
+      expect(service.records.downloads.single.title, '新标签标题');
+      expect(
+        await repository.findByOrigin(kLocalSourceKey, before.localKey!),
+        isNotNull,
+      );
+    });
+
     test('无标签：文件名兜底拆「歌手 - 歌名」', () async {
       storage.files['/music/老王 - 晚风.mp3'] = [1, 2, 3, 4];
       final service = makeService();

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -116,6 +117,9 @@ void main() {
       final outcome = await scanner.scan(root.path);
       expect(outcome.added, 2);
       expect(outcome.skipped, 4);
+      expect(outcome.skipReasons[ScanSkipReason.unsupportedFormat], 1);
+      expect(outcome.skipReasons[ScanSkipReason.hidden], 2);
+      expect(outcome.skipReasons[ScanSkipReason.zeroBytes], 1);
       expect(outcome.cancelled, isFalse);
       expect(
         target.imports.map((path) => path.split('/').last),
@@ -182,6 +186,7 @@ void main() {
       final outcome = await MusicFolderScanner(target: target)
           .scan('${root.path}-not-mounted');
       expect(outcome.unavailable, isTrue);
+      expect(outcome.skipReasons[ScanSkipReason.rootUnavailable], 1);
       expect(target.missing, isEmpty);
     });
 
@@ -192,7 +197,8 @@ void main() {
       final scanner = MusicFolderScanner(target: target);
       final outcome = await scanner.scan(root.path);
       expect(outcome.added, 1, reason: '链接与真实路径去重');
-      expect(outcome.skipped, greaterThan(0), reason: '环与重复路径计入跳过');
+      expect(outcome.skipReasons[ScanSkipReason.duplicatePath], 1);
+      expect(outcome.skipReasons[ScanSkipReason.symlinkCycle], greaterThan(0));
     });
 
     test('深度上限：超过 32 层的文件计入跳过', () async {
@@ -205,32 +211,18 @@ void main() {
       await file.writeAsBytes([1, 2, 3]);
       final outcome = await MusicFolderScanner(target: target).scan(root.path);
       expect(outcome.added, 0);
-      expect(outcome.skipped, greaterThan(0));
+      expect(outcome.skipReasons[ScanSkipReason.depthExceeded], 1);
     });
 
-    test('取消：停止枚举，已提交批次保留', () async {
-      final files = <File>[];
+    test('取消：不再处理后续文件，已提交批次不回滚', () async {
       for (var i = 0; i < 20; i++) {
-        files.add(await write('a$i.mp3'));
+        await write('a$i.mp3');
       }
-      final cancellation = ScanCancellation();
-      var yielded = 0;
-      final outcome = await MusicFolderScanner(
-        target: target,
-        lister: (directory) async* {
-          if (directory.path == root.path) {
-            for (final file in files) {
-              if (yielded++ > 0) cancellation.cancel();
-              yield file;
-            }
-            return;
-          }
-          yield* directory.list();
-        },
-      ).scan(root.path, cancellation: cancellation);
+      final cancellation = ScanCancellation()..cancel();
+      final outcome = await MusicFolderScanner(target: target)
+          .scan(root.path, cancellation: cancellation);
       expect(outcome.cancelled, isTrue);
-      expect(outcome.added, 1);
-      expect(target.imports, hasLength(1), reason: '已提交批次保留');
+      expect(target.imports, isEmpty);
     });
 
     test('根目录枚举失败：整轮 unavailable，绝不标记缺失', () async {
@@ -257,6 +249,7 @@ void main() {
         },
       ).scan(root.path);
       expect(outcome.unavailable, isTrue);
+      expect(outcome.skipReasons[ScanSkipReason.rootUnavailable], 1);
       expect(target.missing, isEmpty);
       expect(target.imports, isEmpty);
     });
@@ -362,6 +355,71 @@ void main() {
   });
 
   group('LocalLibraryService platform rules', () {
+    test('无文件夹也执行一次空闲探测（桌面）', () async {
+      SharedPreferences.setMockInitialValues({});
+      final db = openMemoryDatabase();
+      addTearDown(db.close);
+      final storage = FakeDownloadStorage();
+      storage.files['/music/a.mp3'] = [1, 2, 3, 4];
+      storage.mtimes['/music/a.mp3'] = 4321;
+      final records = DownloadRecords(
+        supported: true,
+        initialized: true,
+        records: const [
+          DownloadedTrack(
+            originSourceKey: kLocalSourceKey,
+            originSongId: 'file:a',
+            title: 'a',
+            filePath: '/music/a.mp3',
+            sizeBytes: 4,
+            imported: true,
+            localKey: 'file:a',
+            downloadedAt: 1,
+          ),
+        ],
+      );
+      final probe = MissingFileProbe(
+        records: records,
+        repository: DownloadsRepository(databaseProvider: () => db),
+        storage: storage,
+      );
+      final service = LocalLibraryService(
+        folders: MusicFoldersStore(),
+        scanner: MusicFolderScanner(target: _FakeTarget()),
+        probe: probe,
+        watcher: MusicFolderWatcher(onTrigger: (paths) async {}),
+        canWatch: false,
+        canScanOnStartup: true,
+        canAddFolder: true,
+      );
+      await service.startAfterFirstFrame();
+      expect(records.downloads.single.mtimeMs, 4321);
+    });
+
+    test('平台默认值：桌面启动扫描；Android 仅手动；iOS 不提供目录', () async {
+      SharedPreferences.setMockInitialValues({});
+      LocalLibraryService build() => LocalLibraryService(
+        folders: MusicFoldersStore(),
+        scanner: MusicFolderScanner(target: _FakeTarget()),
+        probe: MissingFileProbe(
+          records: DownloadRecords(supported: true, initialized: true),
+          repository: DownloadsRepository(),
+          storage: FakeDownloadStorage(),
+        ),
+        watcher: MusicFolderWatcher(onTrigger: (paths) async {}),
+      );
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      expect(build().canScanOnStartup, isTrue);
+      expect(build().canAddFolder, isTrue);
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      expect(build().canScanOnStartup, isFalse);
+      expect(build().canAddFolder, isTrue);
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      expect(build().canScanOnStartup, isFalse);
+      expect(build().canAddFolder, isFalse);
+      debugDefaultTargetPlatformOverride = null;
+    });
+
     test('不允许添加文件夹时返回 invalid；启动扫描受平台开关控制', () async {
       SharedPreferences.setMockInitialValues({});
       final db = openMemoryDatabase();

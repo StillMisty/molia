@@ -9034,18 +9034,6 @@ abstract class AppLocalizations {
   /// **'Android may only allow part of this folder. If it can\'t be read, import files instead.'**
   String get musicFoldersAndroidNote;
 
-  /// No description provided for @musicFoldersCheckFiles.
-  ///
-  /// In en, this message translates to:
-  /// **'Check files'**
-  String get musicFoldersCheckFiles;
-
-  /// No description provided for @musicFoldersChecking.
-  ///
-  /// In en, this message translates to:
-  /// **'Checking…'**
-  String get musicFoldersChecking;
-
   /// No description provided for @localFileMissing.
   ///
   /// In en, this message translates to:
@@ -9214,12 +9202,6 @@ abstract class AppLocalizations {
   /// **'{count} versions'**
   String duplicateVersions(int count);
 
-  /// No description provided for @duplicateShowAll.
-  ///
-  /// In en, this message translates to:
-  /// **'Show all versions'**
-  String get duplicateShowAll;
-
   /// No description provided for @missingFilesCount.
   ///
   /// In en, this message translates to:
@@ -9237,6 +9219,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Back'**
   String get backButton;
+
+  /// No description provided for @localRefreshInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh info from file'**
+  String get localRefreshInfo;
+
+  /// No description provided for @localTitleUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Title updated'**
+  String get localTitleUpdated;
+
+  /// No description provided for @localFileRelocated.
+  ///
+  /// In en, this message translates to:
+  /// **'File re-linked'**
+  String get localFileRelocated;
+
+  /// No description provided for @localInfoUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Info updated'**
+  String get localInfoUpdated;
 }
 
 class _AppLocalizationsDelegate

@@ -233,6 +233,7 @@ class CollectionRowActionWiring {
     this.onDeleteLocalSong,
     this.onEditLocalTitle,
     this.onLocateLocalFile,
+    this.onRefreshLocalInfo,
     this.isFavorite = false,
     this.localSongCached = false,
     this.localSongImported = false,
@@ -247,6 +248,7 @@ class CollectionRowActionWiring {
   final Future<void> Function()? onDeleteLocalSong;
   final Future<void> Function()? onEditLocalTitle;
   final Future<void> Function()? onLocateLocalFile;
+  final Future<void> Function()? onRefreshLocalInfo;
 
   /// 本地歌曲行当前是否已收藏（收藏开关的图标与文案）。
   final bool isFavorite;
@@ -313,6 +315,11 @@ List<RowAction> buildCollectionRowActions({
         icon: Icons.find_replace_rounded,
         label: l10n.localFileLocate,
         onPressed: wiring.onLocateLocalFile,
+      ),
+      CollectionRowActionKind.refreshLocalInfo => _action(
+        icon: Icons.sync_rounded,
+        label: l10n.localRefreshInfo,
+        onPressed: wiring.onRefreshLocalInfo,
       ),
       CollectionRowActionKind.deleteLocalSong => _action(
         icon: Icons.delete_rounded,

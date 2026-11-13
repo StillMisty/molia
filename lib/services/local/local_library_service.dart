@@ -24,7 +24,7 @@ class LocalLibraryService extends ChangeNotifier {
     bool? canScanOnStartup,
     bool? canAddFolder,
   }) : _canWatch = canWatch ?? _defaultCanWatch(),
-       _canScanOnStartup = canScanOnStartup ?? _defaultCanWatch(),
+       _canScanOnStartup = canScanOnStartup ?? _defaultCanScanOnStartup(),
        _canAddFolder = canAddFolder ?? _defaultCanAddFolder();
 
   final MusicFoldersStore folders;
@@ -36,6 +36,9 @@ class LocalLibraryService extends ChangeNotifier {
   final bool _canAddFolder;
 
   static bool _defaultCanWatch() => _isDesktop;
+
+  /// 启动扫描只在桌面：Android 明确要求手动 / 中断续扫，iOS 不提供目录。
+  static bool _defaultCanScanOnStartup() => _isDesktop;
 
   static bool _defaultCanAddFolder() =>
       _isDesktop || defaultTargetPlatform == TargetPlatform.android;
@@ -56,6 +59,7 @@ class LocalLibraryService extends ChangeNotifier {
   String? get scanningFolderId => _scanningFolderId;
   ScanProgress? get progress => _progress;
   bool get canWatchFolders => _canWatch;
+  bool get canScanOnStartup => _canScanOnStartup;
   bool get canAddFolder => _canAddFolder;
 
   Future<void> init() async {
@@ -121,10 +125,12 @@ class LocalLibraryService extends ChangeNotifier {
   /// 启动 idle 尾巴：加载配置 → 顺序扫描 → 监听（失败静默降级）。
   Future<void> startAfterFirstFrame() async {
     await init();
-    // Android / iOS 不在启动时静默扫描；只做一次空闲缺文件探测。
+    // 桌面顺序扫描（扫描收尾自带一轮探测）；Android / iOS 不静默扫描，
+    // 至少执行一次空闲缺文件探测；没有任何文件夹时也必须探测。
     if (_canScanOnStartup) {
       await scanAll();
-    } else {
+    }
+    if (!_canScanOnStartup || folders.folders.isEmpty) {
       await probe.probeAll();
     }
     if (canWatchFolders) {

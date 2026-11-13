@@ -86,6 +86,7 @@ Future<CollectionPickerOutcome?> showCollectionPicker(
   BuildContext context, {
   required String title,
   required List<CollectionPickerEntry> entries,
+  List<CollectionPickerEntry> smartEntries = const [],
   required ValueChanged<List<String>> onOrderChanged,
   required Future<int> Function(String name) onCreate,
   required Future<LibraryMutationOutcome> Function(int playlistId) onDelete,
@@ -97,6 +98,7 @@ Future<CollectionPickerOutcome?> showCollectionPicker(
     builder: (_) => _CollectionPickerSheet(
       title: title,
       entries: entries,
+      smartEntries: smartEntries,
       onOrderChanged: onOrderChanged,
       onCreate: onCreate,
       onDelete: onDelete,
@@ -109,6 +111,7 @@ class _CollectionPickerSheet extends StatefulWidget {
   const _CollectionPickerSheet({
     required this.title,
     required this.entries,
+    required this.smartEntries,
     required this.onOrderChanged,
     required this.onDelete,
     required this.onCreate,
@@ -117,6 +120,7 @@ class _CollectionPickerSheet extends StatefulWidget {
 
   final String title;
   final List<CollectionPickerEntry> entries;
+  final List<CollectionPickerEntry> smartEntries;
   final ValueChanged<List<String>> onOrderChanged;
   final Future<LibraryMutationOutcome> Function(int playlistId) onDelete;
   final Future<int> Function(String name) onCreate;
@@ -128,7 +132,10 @@ class _CollectionPickerSheet extends StatefulWidget {
 }
 
 class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
-  late final List<CollectionPickerEntry> _entries = List.of(widget.entries);
+  late final List<CollectionPickerEntry> _entries = [
+    ...widget.entries,
+    ...widget.smartEntries,
+  ];
 
   List<String> get _existingNames => [
     for (final entry in _entries)
@@ -140,13 +147,21 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
 
   void _onReorder(int oldIndex, int newIndex) {
     if (oldIndex >= _reorderableCount || newIndex >= _reorderableCount) {
+      // 智能列表 / 分组标题不参与排序：把视觉上的移动恢复原状。
+      setState(() {
+        _entries
+          ..clear()
+          ..addAll([...widget.entries, ...widget.smartEntries]);
+      });
       return;
     }
     setState(() {
       final moved = _entries.removeAt(oldIndex);
       _entries.insert(newIndex, moved);
     });
-    widget.onOrderChanged([for (final entry in _entries) entry.key]);
+    widget.onOrderChanged([
+      for (var i = 0; i < _reorderableCount; i++) _entries[i].key,
+    ]);
   }
 
   void _showFailure() {

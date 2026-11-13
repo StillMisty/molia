@@ -154,6 +154,16 @@ void main() {
       ]);
     });
 
+    test('saveOrder 过滤智能列表虚拟键', () async {
+      final collections = LibraryCollections();
+      await collections.saveOrder([
+        'favorites',
+        'smart:recently-added',
+        'playlist:7',
+      ]);
+      expect(await collections.loadOrder(), ['favorites', 'playlist:7']);
+    });
+
     test('未保存时返回空列表', () async {
       expect(await LibraryCollections().loadOrder(), isEmpty);
     });

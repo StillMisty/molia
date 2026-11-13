@@ -1,13 +1,12 @@
-import 'dart:async';
-
-import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/providers/library_browse_controller.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/library_browse.dart';
 import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/domain/models/smart_lists.dart';
+import 'package:molia/providers/collection_presenter.dart';
+import 'package:molia/providers/library_collections.dart';
+import 'package:molia/utils/smart_list_rows.dart';
 
 /// 专辑 / 歌手聚合、重复版本与智能列表（纯函数）。
 void main() {
@@ -336,68 +335,45 @@ void main() {
     });
   });
 
-  group('LibraryBrowseController', () {
-    BrowseSource sourceWith(String title) => BrowseSource(
-      favorites: [
-        PlaylistTrack(
-          playlistId: 1,
-          sourceKey: 'wy',
-          songId: '1',
-          title: title,
-          addedAt: 1,
-        ),
-      ],
+  group('智能列表重复版本展示', () {
+    PlaylistTrack row(
+      String id, {
+      String title = 'Song',
+      int duration = 200000,
+    }) => PlaylistTrack(
+      playlistId: 0,
+      sourceKey: 'wy',
+      songId: id,
+      title: title,
+      artist: 'Artist',
+      album: 'Album',
+      durationMs: duration,
+      addedAt: 1,
     );
 
-    test('revision 变化防抖重建；相同 revision 不重复读取', () {
-      fakeAsync((async) {
-        var loads = 0;
-        final controller = LibraryBrowseController(
-          loader: () async {
-            loads++;
-            return sourceWith('v$loads');
-          },
-        );
-        controller.schedule(revision: 1);
-        controller.schedule(revision: 1);
-        async.elapse(const Duration(milliseconds: 149));
-        expect(loads, 0);
-        async.elapse(const Duration(milliseconds: 1));
-        expect(loads, 1);
-        controller.schedule(revision: 1);
-        async.elapse(const Duration(milliseconds: 300));
-        expect(loads, 1);
-        controller.schedule(revision: 2);
-        async.elapse(const Duration(milliseconds: 150));
-        expect(loads, 2);
-        controller.dispose();
-      });
+    test('代表行 + 展开版本；计数按代表行 key', () {
+      final rows = [
+        TrackCollectionRow(row('1')),
+        TrackCollectionRow(row('2', duration: 201000)),
+      ];
+      final collapsed = buildSmartListDisplayRows(rows, {});
+      expect(collapsed.rows, hasLength(1));
+      expect(collapsed.versionCounts['wy:1'], 2);
+      final expanded = buildSmartListDisplayRows(rows, {'wy:1'});
+      expect(expanded.rows, hasLength(2));
+      expect(expanded.rows.last.favoriteKey.songId, '2');
     });
 
-    test('重建期间旧快照保持可见，完成后一次通知', () {
-      fakeAsync((async) {
-        final gate = Completer<BrowseSource>();
-        var loads = 0;
-        final controller = LibraryBrowseController(
-          loader: () {
-            loads++;
-            return loads == 1 ? Future.value(sourceWith('旧')) : gate.future;
-          },
-        );
-        controller.schedule(revision: 1);
-        async.elapse(const Duration(milliseconds: 150));
-        expect(controller.snapshot!.index.tracks.single.title, '旧');
-        controller.schedule(revision: 2);
-        async.elapse(const Duration(milliseconds: 150));
-        // 新读取挂起：旧快照仍在，loading 为 true。
-        expect(controller.snapshot!.index.tracks.single.title, '旧');
-        expect(controller.loading, isTrue);
-        gate.complete(sourceWith('新'));
-        async.flushMicrotasks();
-        expect(controller.snapshot!.index.tracks.single.title, '新');
-        expect(controller.loading, isFalse);
-        controller.dispose();
-      });
+    test('未知智能哨兵回退默认收藏，不落到最近添加', () {
+      expect(
+        LibraryCollections.resolveSelection(
+          selected: -99,
+          playlists: const [],
+          favoritesId: 1,
+        ),
+        LibraryCollections.favoritesSentinel,
+      );
+      expect(LibraryCollections.smartIdFor(-99), isNull);
     });
   });
 }

@@ -9,6 +9,7 @@ library;
 
 import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/library.dart';
+import '../domain/models/library_browse.dart';
 import '../utils/collection_row_query.dart';
 import 'library_collections.dart';
 import 'local_songs_collection.dart';
@@ -211,6 +212,7 @@ enum CollectionRowActionKind {
   deleteLocalSong,
   editLocalTitle,
   locateLocalFile,
+  refreshLocalInfo,
 }
 
 /// 一条行动作的声明（不含图标 / 文案 / 回调）。
@@ -463,8 +465,8 @@ class CollectionPresenter {
           ),
         ];
       case LocalSongCollectionRow(:final song) when identity.isSmartList:
-        // 智能列表只允许播放 / 收藏 / 加入列表；「文件不见」额外提供
-        // 重新选择文件与移除记录。
+        // 智能列表只允许播放 / 收藏 / 加入列表；「文件不见」例外：只提供
+        // 重新选择文件与移除记录，不提供播放（避免必然失败）。
         final record = song.record;
         return [
           if (record?.isMissing == true)
@@ -484,6 +486,10 @@ class CollectionPresenter {
           if (record != null)
             const CollectionRowActionSpec(
               CollectionRowActionKind.editLocalTitle,
+            ),
+          if (record != null && !record.isMissing)
+            const CollectionRowActionSpec(
+              CollectionRowActionKind.refreshLocalInfo,
             ),
           if (record?.isMissing == true)
             const CollectionRowActionSpec(
@@ -518,11 +524,11 @@ class CollectionPresenter {
   }
 
   static bool _rowMatchesQuery(CollectionRow row, String query) {
-    final q = query.trim().toLowerCase();
+    final q = normalizeBrowseText(query);
     if (q.isEmpty) return true;
-    return row.title.toLowerCase().contains(q) ||
-        row.artist.toLowerCase().contains(q) ||
-        row.album.toLowerCase().contains(q);
+    return normalizeBrowseText(row.title).contains(q) ||
+        normalizeBrowseText(row.artist).contains(q) ||
+        normalizeBrowseText(row.album).contains(q);
   }
 
   static String? _playlistName(List<PlaylistInfo> playlists, int id) {

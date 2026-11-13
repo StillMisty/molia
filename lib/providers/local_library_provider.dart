@@ -18,9 +18,15 @@ import '../domain/models/play_statistics.dart';
 import '../domain/models/smart_lists.dart';
 import '../services/download/download_records.dart';
 import 'collection_presenter.dart';
-import 'library_browse_controller.dart';
 import 'library_provider.dart';
 import 'local_songs_collection.dart';
+
+/// 曲库浏览快照（只含 UI 需要的聚合索引）。
+class LibraryBrowseSnapshot {
+  const LibraryBrowseSnapshot({required this.index});
+
+  final LibraryBrowseIndex index;
+}
 
 class LocalLibraryProvider extends ChangeNotifier {
   LocalLibraryProvider({
@@ -86,29 +92,31 @@ class LocalLibraryProvider extends ChangeNotifier {
           downloads: downloadList,
         ),
       );
-      final groups = groupDuplicates(index.tracks);
-      List<PlayStatTrackEntry> stats = const [];
+      var stats = const <PlayStatTrackEntry>[];
+      var statsByTime = const <PlayStatTrackEntry>[];
+      Set<String>? playedKeys;
       try {
-        stats = await statistics.topTracks(limit: 100000);
+        stats = await statistics.topTracks(limit: 100);
+        statsByTime = await statistics.topTracks(limit: 100, byListening: true);
+        playedKeys = await statistics.playedTrackKeys();
       } catch (e) {
         debugPrint('[Molia] 读取听歌统计失败（智能列表降级）: $e');
       }
       final sources = SmartListSources(
         downloads: downloadList,
         history: library.history,
-        stats: stats,
+        stats: _mostPlayedMetric == SmartListMetric.listeningTime
+            ? statsByTime
+            : stats,
         browse: index,
+        playedKeys: playedKeys,
       );
       final smartRows = <String, List<CollectionRow>>{
         for (final id in SmartListIds.all)
           id: _rowsFor(id, sources, downloadList),
       };
       if (_disposed) return;
-      _snapshot = LibraryBrowseSnapshot(
-        index: index,
-        duplicateGroups: groups,
-        versionCounts: duplicateVersionCounts(groups),
-      );
+      _snapshot = LibraryBrowseSnapshot(index: index);
       _smartRows = smartRows;
       notifyListeners();
     } catch (e) {

@@ -16,8 +16,10 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../domain/models/library.dart';
+import '../domain/models/smart_lists.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/library_collection_request.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/download/download_intent.dart';
@@ -478,9 +480,12 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   ) async {
     final service = context.read<LocalLibraryService?>();
     final notifications = context.read<NotificationService?>();
+    final request = context.read<LibraryCollectionRequest?>();
     if (service == null) return;
     final result = await service.checkFiles();
     if (!mounted) return;
+    // 请求收藏页切到「文件不见」，用户关掉设置后即可看到明细。
+    request?.requestSmartList(SmartListIds.missingFiles);
     notifications?.showSnackBar(l10n.missingFilesCount(result.changed));
   }
 

@@ -2391,8 +2391,6 @@
   "musicFoldersNested": "请选择上层文件夹",
   "musicFoldersInvalid": "这个位置不能添加",
   "musicFoldersAndroidNote": "系统可能只允许读取部分文件夹；读不到时可以逐个导入文件",
-  "musicFoldersCheckFiles": "检查文件",
-  "musicFoldersChecking": "正在检查…",
   "localFileMissing": "本地文件不存在，可能已被删除",
   "localFileLocate": "重新选择文件",
   "localTitleEdit": "修改标题",
@@ -2441,7 +2439,6 @@
   "browseSearchEmpty": "没有匹配的专辑或歌手",
   "browseSelectHint": "选择一个专辑或歌手",
   "duplicateVersions": "{count} 个版本",
-  "duplicateShowAll": "显示全部版本",
   "missingFilesCount": "{count} 个文件不见",
   "localFileCheckFiles": "检查文件",
   "@duplicateVersions": {
@@ -2458,5 +2455,9 @@
       }
     }
   },
-  "backButton": "返回"
+  "backButton": "返回",
+  "localRefreshInfo": "从文件刷新信息",
+  "localTitleUpdated": "标题已更新",
+  "localFileRelocated": "文件已重新关联",
+  "localInfoUpdated": "信息已更新"
 }

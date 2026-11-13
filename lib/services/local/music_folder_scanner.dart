@@ -7,6 +7,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 
 import '../../data/local_identity.dart';
@@ -74,6 +75,18 @@ abstract interface class LocalScanTarget {
   Future<void> commitBatch(List<LocalScanChange> changes);
 }
 
+/// 扫描跳过原因（D4 的八类；日志只记数量，不暴露路径）。
+enum ScanSkipReason {
+  unsupportedFormat,
+  hidden,
+  permissionDenied,
+  symlinkCycle,
+  depthExceeded,
+  zeroBytes,
+  duplicatePath,
+  rootUnavailable,
+}
+
 class FolderScanOutcome {
   const FolderScanOutcome({
     this.added = 0,
@@ -81,6 +94,7 @@ class FolderScanOutcome {
     this.skipped = 0,
     this.cancelled = false,
     this.unavailable = false,
+    this.skipReasons = const {},
   });
 
   final int added;
@@ -88,6 +102,7 @@ class FolderScanOutcome {
   final int skipped;
   final bool cancelled;
   final bool unavailable;
+  final Map<ScanSkipReason, int> skipReasons;
 }
 
 class ScanProgress {
@@ -117,6 +132,7 @@ class MusicFolderScanner {
        _lister = lister ?? _defaultLister;
 
   final LocalScanTarget target;
+  final Logger _logger = Logger('molia.music_folder_scanner');
 
   /// 目录枚举 seam（测试注入不可读根 / 权限失败）；默认流式枚举，不整树读入。
   final Stream<FileSystemEntity> Function(Directory directory) _lister;
@@ -139,7 +155,10 @@ class MusicFolderScanner {
   }) async {
     final rootDir = Directory(root);
     if (!await rootDir.exists()) {
-      return const FolderScanOutcome(unavailable: true);
+      return const FolderScanOutcome(
+        unavailable: true,
+        skipReasons: {ScanSkipReason.rootUnavailable: 1},
+      );
     }
     final imported = await target.listImported();
     final byStoredPath = <String, DownloadedTrack>{
@@ -159,6 +178,12 @@ class MusicFolderScanner {
     var rootFailed = false;
     var lastProgress = DateTime.fromMillisecondsSinceEpoch(0);
     final pending = <LocalScanChange>[];
+    final reasons = <ScanSkipReason, int>{};
+
+    void skip(ScanSkipReason reason) {
+      skipped++;
+      reasons[reason] = (reasons[reason] ?? 0) + 1;
+    }
 
     void report(String directory) {
       final now = _clock();
@@ -179,7 +204,9 @@ class MusicFolderScanner {
       try {
         await target.commitBatch(batch);
       } catch (_) {
-        skipped += batch.length;
+        for (var i = 0; i < batch.length; i++) {
+          skip(ScanSkipReason.permissionDenied);
+        }
       }
     }
 
@@ -189,7 +216,7 @@ class MusicFolderScanner {
           .toLowerCase()
           .replaceFirst('.', '');
       if (!DownloadFileLayout.audioExtensions.contains(extension)) {
-        skipped++;
+        skip(ScanSkipReason.unsupportedFormat);
         return;
       }
       final storedKey = _pathKey(storedPath);
@@ -197,23 +224,23 @@ class MusicFolderScanner {
       try {
         canonical = _pathKey(await File(storedPath).resolveSymbolicLinks());
       } catch (_) {
-        skipped++;
+        skip(ScanSkipReason.permissionDenied);
         return;
       }
       if (!seenStored.add(storedKey) || !seenCanonical.add(canonical)) {
-        skipped++; // 同一文件的链接 + 真实路径
+        skip(ScanSkipReason.duplicatePath); // 同一文件的链接 + 真实路径
         return;
       }
       FileStat stat;
       try {
         stat = await File(canonical).stat();
       } catch (_) {
-        skipped++;
+        skip(ScanSkipReason.permissionDenied);
         return;
       }
       final size = stat.size;
       if (size <= 0) {
-        skipped++;
+        skip(ScanSkipReason.zeroBytes);
         return;
       }
       final mtime = stat.modified.millisecondsSinceEpoch;
@@ -244,7 +271,7 @@ class MusicFolderScanner {
         return;
       }
       if (depth > kMaxScanDepth) {
-        skipped++;
+        skip(ScanSkipReason.depthExceeded);
         return;
       }
       String canonical;
@@ -252,24 +279,30 @@ class MusicFolderScanner {
         canonical = _pathKey(await directory.resolveSymbolicLinks());
       } catch (_) {
         if (depth == 0) rootFailed = true;
-        skipped++;
+        skip(
+          depth == 0
+              ? ScanSkipReason.rootUnavailable
+              : ScanSkipReason.permissionDenied,
+        );
         return;
       }
       if (!visitedDirs.add(canonical)) {
-        skipped++; // 目录符号链接环
+        skip(ScanSkipReason.symlinkCycle);
         return;
       }
       try {
-        // 流式枚举：不把整棵树 / 整个目录读进列表；确定性交给文件系统
-        // 自身顺序（同一目录树未变化时重复扫描结果一致）。
-        await for (final entity in _lister(directory)) {
+        // 每个目录单独枚举后按路径排序：不把整棵树读进内存，同时保证
+        // 同一目录树的处理顺序确定。
+        final entries = await _lister(directory).toList();
+        entries.sort((a, b) => a.path.compareTo(b.path));
+        for (final entity in entries) {
           if (cancelled || cancellation?.isCancelled == true) {
             cancelled = true;
             return;
           }
           final name = p.basename(entity.path);
           if (name.startsWith('.')) {
-            skipped++;
+            skip(ScanSkipReason.hidden);
             continue;
           }
           if (entity is Directory) {
@@ -286,7 +319,7 @@ class MusicFolderScanner {
                 await processFile(entity.path);
               }
             } catch (_) {
-              skipped++;
+              skip(ScanSkipReason.permissionDenied);
             }
             continue;
           }
@@ -297,8 +330,9 @@ class MusicFolderScanner {
         // 跳过该子树。
         if (depth == 0) {
           rootFailed = true;
+          skip(ScanSkipReason.rootUnavailable);
         } else {
-          skipped++;
+          skip(ScanSkipReason.permissionDenied);
         }
       }
     }
@@ -312,6 +346,7 @@ class MusicFolderScanner {
         updated: updated,
         skipped: skipped,
         cancelled: true,
+        skipReasons: Map.unmodifiable(reasons),
       );
     }
     if (rootFailed) {
@@ -320,6 +355,7 @@ class MusicFolderScanner {
         updated: updated,
         skipped: skipped,
         unavailable: true,
+        skipReasons: Map.unmodifiable(reasons),
       );
     }
     // 根目录完整枚举成功后才标记「不再存在」的导入记录；整卷离线时已经在
@@ -347,10 +383,20 @@ class MusicFolderScanner {
       try {
         await target.commitBatch([LocalScanMissing(record)]);
       } catch (_) {
-        skipped++;
+        skip(ScanSkipReason.permissionDenied);
       }
     }
-    return FolderScanOutcome(added: added, updated: updated, skipped: skipped);
+    final outcome = FolderScanOutcome(
+      added: added,
+      updated: updated,
+      skipped: skipped,
+      skipReasons: Map.unmodifiable(reasons),
+    );
+    _logger.info(
+      '扫描完成：新增 $added / 更新 $updated / 跳过 $skipped'
+      '${reasons.isEmpty ? '' : '（$reasons）'}',
+    );
+    return outcome;
   }
 
   /// 只处理给定路径（监听事件能定位到文件时）：只 stat / 更新这些路径，

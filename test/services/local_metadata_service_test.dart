@@ -7,8 +7,10 @@ import 'package:molia/data/local_title_store.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/services/download/download_records.dart';
 import 'package:molia/services/local/local_metadata_service.dart';
+import 'package:molia/services/playback_session_store.dart';
 
 import '../support/fake_download_storage.dart';
+import '../support/fakes.dart';
 import '../support/memory_database.dart';
 
 /// 标题编辑：标签 + 一处数据库事务 + app-only 回退。
@@ -274,5 +276,33 @@ void main() {
         )
         .getSingle();
     expect(onlineRow.data['title'], 'online original');
+  });
+
+  test('组合根接线：提交后同步刷新恢复态当前曲目标题', () async {
+    final store = testSessionStore();
+    final facade = FakePlaybackFacade();
+    final coordinator = buildTestSessionCoordinator(
+      facade: facade,
+      sessionStore: store,
+    );
+    addTearDown(coordinator.dispose);
+    await store.save(PlaybackSession(tracks: [record.localTrack!], index: 0));
+    expect(await coordinator.load(), isTrue);
+    expect(coordinator.displaySnapshot.current?.title, 'old');
+
+    final wired = LocalMetadataService(
+      storage: storage,
+      store: LocalTitleStore(database: () => db),
+      records: records,
+      awaitSessionWrites: () => store.pendingWrite,
+      onCommitted: (updated) {
+        final track = updated.localTrack;
+        if (track != null) coordinator.updateTrackMetadata(track);
+      },
+    );
+    expect(await wired.editTitle(record, '新标题'), LocalTitleEditStatus.written);
+    await Future<void>.delayed(Duration.zero);
+    await store.pendingWrite;
+    expect(coordinator.displaySnapshot.current?.title, '新标题');
   });
 }

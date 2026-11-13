@@ -4863,12 +4863,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get musicFoldersAndroidNote => '系统可能只允许读取部分文件夹；读不到时可以逐个导入文件';
 
   @override
-  String get musicFoldersCheckFiles => '检查文件';
-
-  @override
-  String get musicFoldersChecking => '正在检查…';
-
-  @override
   String get localFileMissing => '本地文件不存在，可能已被删除';
 
   @override
@@ -4955,9 +4949,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get duplicateShowAll => '显示全部版本';
-
-  @override
   String missingFilesCount(int count) {
     return '$count 个文件不见';
   }
@@ -4967,4 +4958,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backButton => '返回';
+
+  @override
+  String get localRefreshInfo => '从文件刷新信息';
+
+  @override
+  String get localTitleUpdated => '标题已更新';
+
+  @override
+  String get localFileRelocated => '文件已重新关联';
+
+  @override
+  String get localInfoUpdated => '信息已更新';
 }

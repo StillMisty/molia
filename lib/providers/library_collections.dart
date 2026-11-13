@@ -80,6 +80,8 @@ class LibraryCollections {
     if (selected == historySentinel) return historySentinel;
     if (selected == downloadsSentinel) return downloadsSentinel;
     if (isSmartSentinel(selected)) return selected;
+    // 未知的负哨兵（旧版本 / 损坏持久化）不静默落到最近添加；回退默认合集。
+    if (selected < downloadsSentinel) return favoritesSentinel;
     if (selected != unset && selected != favoritesSentinel) {
       if (playlists.any((playlist) => playlist.id == selected)) return selected;
     } else if (selected == favoritesSentinel) {
@@ -129,7 +131,11 @@ class LibraryCollections {
   Future<void> saveOrder(List<String> keys) async {
     try {
       final prefs = await _prefsOrNull();
-      await prefs?.setStringList(orderKey, keys);
+      // 智能列表是虚拟身份，永远不进入合集顺序。
+      await prefs?.setStringList(orderKey, [
+        for (final key in keys)
+          if (!key.startsWith('smart:')) key,
+      ]);
     } catch (e) {
       debugPrint('[LibraryCollections] 保存合集顺序失败: $e');
     }

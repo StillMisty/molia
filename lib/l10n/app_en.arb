@@ -2787,8 +2787,6 @@
   "musicFoldersNested": "Pick the parent folder instead",
   "musicFoldersInvalid": "This location can't be added",
   "musicFoldersAndroidNote": "Android may only allow part of this folder. If it can't be read, import files instead.",
-  "musicFoldersCheckFiles": "Check files",
-  "musicFoldersChecking": "Checking…",
   "localFileMissing": "The file is missing. It may have been deleted.",
   "localFileLocate": "Locate file",
   "localTitleEdit": "Edit title",
@@ -2837,7 +2835,6 @@
   "browseSearchEmpty": "No matching albums or artists",
   "browseSelectHint": "Pick an album or artist",
   "duplicateVersions": "{count} versions",
-  "duplicateShowAll": "Show all versions",
   "missingFilesCount": "{count} missing files",
   "localFileCheckFiles": "Check files",
   "@duplicateVersions": {
@@ -2854,5 +2851,9 @@
       }
     }
   },
-  "backButton": "Back"
+  "backButton": "Back",
+  "localRefreshInfo": "Refresh info from file",
+  "localTitleUpdated": "Title updated",
+  "localFileRelocated": "File re-linked",
+  "localInfoUpdated": "Info updated"
 }

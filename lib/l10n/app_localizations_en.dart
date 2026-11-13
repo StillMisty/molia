@@ -5079,12 +5079,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Android may only allow part of this folder. If it can\'t be read, import files instead.';
 
   @override
-  String get musicFoldersCheckFiles => 'Check files';
-
-  @override
-  String get musicFoldersChecking => 'Checking…';
-
-  @override
   String get localFileMissing =>
       'The file is missing. It may have been deleted.';
 
@@ -5174,9 +5168,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get duplicateShowAll => 'Show all versions';
-
-  @override
   String missingFilesCount(int count) {
     return '$count missing files';
   }
@@ -5186,4 +5177,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backButton => 'Back';
+
+  @override
+  String get localRefreshInfo => 'Refresh info from file';
+
+  @override
+  String get localTitleUpdated => 'Title updated';
+
+  @override
+  String get localFileRelocated => 'File re-linked';
+
+  @override
+  String get localInfoUpdated => 'Info updated';
 }

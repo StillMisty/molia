@@ -99,7 +99,6 @@ typedef DownloadLyricsResolver = Future<DownloadLyrics?> Function(Track track);
 /// 下载时封面 URL 解析（组合根注入：`SourceManager.fetchPic` 适配）。
 typedef DownloadArtworkResolver = Future<String?> Function(Track track);
 
-/// 本地下载服务（`ChangeNotifier`：UI 用 `Selector` 订阅状态）。
 /// 重定位结果（UI 只按这些分支提示）。
 enum LocalRelocateResult {
   relocated,
@@ -111,6 +110,7 @@ enum LocalRelocateResult {
   fileMissing,
 }
 
+/// 本地下载服务（`ChangeNotifier`：UI 用 `Selector` 订阅状态）。
 class DownloadService extends DownloadManager
     implements DownloadMaintenance, LocalScanTarget {
   DownloadService({
@@ -1051,6 +1051,38 @@ class DownloadService extends DownloadManager
     }
     return (imported, skipped);
   }
+
+  @override
+  Future<DownloadedTrack?> refreshLocalMetadata(DownloadedTrack record) =>
+      _writeGate.run(() async {
+        final path = record.filePath;
+        if (path == null || path.isEmpty) return null;
+        final extension = p.extension(path).toLowerCase();
+        if (!DownloadFileLayout.audioExtensions.contains(
+          extension.replaceFirst('.', ''),
+        )) {
+          return null;
+        }
+        final size = await _storage.fileSize(path);
+        if (size <= 0) return null;
+        final head =
+            await _storage.readHead(path, kAudioTagReadLimit) ?? Uint8List(0);
+        final tags = readAudioTags(head, extension: extension, fileSize: size);
+        final fallback = splitFileNameMetadata(
+          p.basenameWithoutExtension(path),
+        );
+        final updated = record.copyWith(
+          title: tags.title ?? fallback.title,
+          artist: tags.artist ?? fallback.artist,
+          album: tags.album ?? record.album,
+          durationMs: tags.durationMs,
+          sizeBytes: size,
+          mtimeMs: await _storage.fileMtime(path),
+          clearMissingAt: !await _storage.fileExists(path) ? false : true,
+        );
+        await _recordStore.save(updated);
+        return updated;
+      });
 
   /// 扫描器端口：当前全部导入记录。
   @override

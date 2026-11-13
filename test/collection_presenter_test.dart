@@ -445,6 +445,8 @@ void main() {
         const CollectionRowActionSpec(CollectionRowActionKind.editLocalTitle);
     CollectionRowActionSpec locateFile() =>
         const CollectionRowActionSpec(CollectionRowActionKind.locateLocalFile);
+    CollectionRowActionSpec refreshInfo() =>
+        const CollectionRowActionSpec(CollectionRowActionKind.refreshLocalInfo);
 
     test('曲目行：收藏 / 自建列表 / 本地音源的动作集合', () {
       final presenter = CollectionPresenter();
@@ -517,7 +519,7 @@ void main() {
       );
     });
 
-    test('缺文件行：改标题 + 重新选择文件 + 删除', () {
+    test('缺文件行：改标题 + 重新选择 + 删除', () {
       final row = LocalSongCollectionRow(localSong('1', missing: true));
       expect(
         presenter().rowActionsFor(
@@ -528,7 +530,7 @@ void main() {
       );
     });
 
-    test('本地歌曲行：加入列表 + 收藏开关 + 改标题 + 删除', () {
+    test('本地歌曲行：加入列表 + 收藏开关 + 改标题 + 刷新 + 删除', () {
       final row = LocalSongCollectionRow(localSong('1'));
 
       expect(
@@ -536,7 +538,7 @@ void main() {
           row,
           identityFor(LibraryCollections.downloadsSentinel),
         ),
-        [add(), toggleFavorite(), editTitle(), deleteLocal()],
+        [add(), toggleFavorite(), editTitle(), refreshInfo(), deleteLocal()],
       );
     });
   });

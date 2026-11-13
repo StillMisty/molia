@@ -8,7 +8,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../domain/models/download.dart' show DownloadedTrack;
+import '../domain/models/download.dart' show DownloadedTrack, kLocalSourceKey;
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
@@ -17,6 +17,7 @@ import '../providers/collection_mode.dart';
 import '../providers/collection_presenter.dart';
 import '../providers/collection_session.dart';
 import '../providers/discover_provider.dart';
+import '../providers/library_collection_request.dart';
 import '../providers/library_collections.dart';
 import '../providers/library_outcome.dart';
 import '../providers/library_provider.dart';
@@ -40,6 +41,7 @@ import '../theme/motion_policy.dart';
 import '../utils/responsive.dart';
 import '../utils/collection_row_query.dart';
 import '../utils/scroll_to_top.dart';
+import '../utils/smart_list_rows.dart';
 import '../utils/sync_format.dart';
 import '../widgets/app_search_bar.dart';
 import '../widgets/collection_handoff.dart';
@@ -171,11 +173,19 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 顺序（顺序在停留期间冻结，见 LibraryProvider）。未挂壳层的单测按可见。
   bool _pageVisible = true;
 
+  /// 智能列表的重复版本展开（按代表行 key）与当前计数。
+  final Set<String> _expandedSmartVersions = {};
+  Map<String, int> _smartVersionCounts = const {};
+  String _smartVersionSignature = '';
+
   /// 缓存服务（可能未注册）：缓存 revision 联动（清缓存 / LRU 淘汰后重算缓存行）。
   CacheService? _cacheService;
 
   /// 本地数据唯一读取口（可能未注册）：批量判定历史曲目的音频两档状态。
   TrackLocalDataService? _localDataService;
+
+  /// 跨页面「打开智能列表」请求（下载维护 → 文件不见）。
+  LibraryCollectionRequest? _collectionRequest;
 
   /// 下载记录（可能未注册）：只在记录 / 能力 / 初始化变化（低频）时重建。
   /// 记录 revision 随本地歌曲输入一起交给状态机做失效判定。
@@ -221,9 +231,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
       cache?.revision.addListener(_onCacheRevision);
     }
     _localDataService = context.read<TrackLocalDataService?>();
+    final request = context.read<LibraryCollectionRequest?>();
+    if (!identical(request, _collectionRequest)) {
+      _collectionRequest?.removeListener(_onCollectionRequest);
+      _collectionRequest = request;
+      request?.addListener(_onCollectionRequest);
+      _onCollectionRequest();
+    }
     final records = context.read<DownloadRecords?>();
     if (!identical(records, _downloadRecords)) {
       _downloadRecords?.removeListener(_onDownloadsChanged);
+      _collectionRequest?.removeListener(_onCollectionRequest);
       _downloadRecords = records;
       records?.addListener(_onDownloadsChanged);
     }
@@ -252,6 +270,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     widget.reselect?.removeListener(_handleReselect);
     _cacheService?.revision.removeListener(_onCacheRevision);
     _downloadRecords?.removeListener(_onDownloadsChanged);
+    _collectionRequest?.removeListener(_onCollectionRequest);
     _session.removeListener(_onSessionChanged);
     _searchController.dispose();
     _searchFocus.dispose();
@@ -267,6 +286,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 会话状态（选择 / 模式 / 恢复完成）变化：页面重建。
   void _onSessionChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onCollectionRequest() {
+    final id = _collectionRequest?.take();
+    if (id == null || !mounted) return;
+    _selectCollection(LibraryCollections.smartSentinelFor(id));
   }
 
   /// 下载记录变化（低频：完成 / 删除 / 导入 / 启动加载 / 能力变化）：
@@ -477,10 +502,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
       final entry = available.remove(key);
       if (entry != null) ordered.add(entry);
     }
+    return ordered;
+  }
+
+  List<CollectionPickerEntry> _smartPickerEntries(
+    AppLocalizations l10n,
+    int selected,
+  ) {
     final localLibrary = context.read<LocalLibraryProvider?>();
-    final smartNames = _smartListNames(l10n);
+    final names = _smartListNames(l10n);
     return [
-      ...ordered,
       CollectionPickerEntry(
         key: 'smart:header',
         id: LibraryCollections.unset,
@@ -494,7 +525,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         CollectionPickerEntry(
           key: id,
           id: LibraryCollections.smartSentinelFor(id),
-          name: smartNames[id] ?? id,
+          name: names[id] ?? id,
           icon: _smartListIcon(id),
           trackCount: localLibrary?.smartRows[id]?.length ?? 0,
           selected: selected == LibraryCollections.smartSentinelFor(id),
@@ -532,6 +563,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         selected,
         records,
       ),
+      smartEntries: _smartPickerEntries(l10n, selected),
       onOrderChanged: _session.reorderCollections,
       onDelete: provider.deletePlaylist,
       onCreate: provider.createPlaylist,
@@ -854,6 +886,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final playlists = provider.playlists;
     final favoritesId = LibraryCollections.favoritesPlaylistId(playlists);
 
+    final smartRows = context
+        .select<LocalLibraryProvider?, Map<String, List<CollectionRow>>>(
+          (provider) => provider?.smartRows ?? const {},
+        );
     // 会话是 build 里唯一的「状态机」：身份解析、ensure 加载、恢复校准、
     // 加载组合、选择失效与滚动键激活都在 sync 内完成，页面只消费结果。
     final sessionView = _session.sync(
@@ -865,8 +901,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           localSongs: l10n.libraryLocalSongs,
           smartLists: _smartListNames(l10n),
         ),
-        smartRows:
-            context.watch<LocalLibraryProvider?>()?.smartRows ?? const {},
+        smartRows: smartRows,
         query: _searchController.text,
         downloads: _downloadsSnapshot,
         cacheRevision: _cacheService?.revision.value ?? -1,
@@ -876,8 +911,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final reorderActive = sessionView.reorderActive;
     final mode =
         context.watch<CollectionModeStore?>()?.mode ?? CollectionMode.songs;
-    final localLibrary = context.watch<LocalLibraryProvider?>();
-    final browseIndex = localLibrary?.snapshot?.index;
+    final browseIndex = context
+        .select<LocalLibraryProvider?, LibraryBrowseIndex?>(
+          (provider) => provider?.snapshot?.index,
+        );
 
     // 合集切换只有标题行弹层一个入口：条目不额外解析一份，弹层打开时按
     // 当下 provider 状态现算。
@@ -924,7 +961,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         ? Row(
             children: [
               SizedBox(
-                width: 280,
+                width: DesktopLayout.collectionSidePaneWidth,
                 child: _buildCollectionSidePane(
                   context,
                   l10n,
@@ -934,7 +971,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
                   view.selectedId,
                 ),
               ),
-              const VerticalDivider(width: 1),
+              const M3EDivider(axis: M3EDividerAxis.vertical),
               Expanded(child: body),
             ],
           )
@@ -1013,14 +1050,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
     int? favoritesId,
     int selectedId,
   ) {
-    final entries = _collectionEntries(
-      l10n,
-      provider,
-      playlists,
-      favoritesId,
-      selectedId,
-      _downloadRecords,
-    );
+    final entries = [
+      ..._collectionEntries(
+        l10n,
+        provider,
+        playlists,
+        favoritesId,
+        selectedId,
+        _downloadRecords,
+      ),
+      ..._smartPickerEntries(l10n, selectedId),
+    ];
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: entries.length,
@@ -1130,10 +1170,41 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 TrackCollectionRow(track.toPlaylistTrack(addedAt: 0)),
               ]);
             },
+            canRefreshLocal: (track) => _localRecordOf(track) != null,
+            onRefreshLocal: (track) async {
+              final record = _localRecordOf(track);
+              if (record == null) return;
+              final manager = context.read<DownloadManager?>();
+              final notifications = context.read<NotificationService?>();
+              final updated = await manager?.refreshLocalMetadata(record);
+              if (!mounted) return;
+              notifications?.showSnackBar(
+                updated == null ? l10n.localTitleFailed : l10n.localInfoUpdated,
+              );
+            },
+            onSwap: (track) async {
+              final library = context.read<LibraryProvider>();
+              await showSourceSwapPage(
+                context,
+                seed: library.trackFromPlaylistTrack(
+                  track.toPlaylistTrack(addedAt: 0),
+                ),
+                lyricsProvider: context.read<LyricsProvider>(),
+              );
+            },
           ),
         ),
       ],
     );
+  }
+
+  DownloadedTrack? _localRecordOf(BrowseTrack track) {
+    if (track.sourceKey != kLocalSourceKey) return null;
+    for (final record
+        in _downloadRecords?.downloads ?? const <DownloadedTrack>[]) {
+      if (record.localSongId == track.songId) return record;
+    }
+    return null;
   }
 
   String? _firstCover(List<BrowseTrack> tracks) {
@@ -1214,7 +1285,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final horizontalPadding = context
         .layoutType(ResponsivePageType.browse)
         .horizontalPadding;
-    final canPlay = view.visibleCount > 0;
+    final missingSmartList =
+        view.isSmartList &&
+        view.identity.smartListId == SmartListIds.missingFiles;
+    final canPlay = view.visibleCount > 0 && !missingSmartList;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         horizontalPadding,
@@ -1643,11 +1717,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final spec = _columnSpec(view.columnLayout);
     final tableColumns = DesktopLayout.of(context).tableColumnsFor(spec);
     final columnSpec = tableColumns ? spec : null;
+    // 智能列表按展示层重复聚类：代表行 + 展开后的版本行；不删除任何记录。
+    final rows = view.isSmartList ? _smartDisplayRows(view) : view.visibleRows;
     // 三种合集的可见行已是同一份有序联合：列表脚手架只搭一次，行内展示与
     // 行动作按行变体分派，不再按合集类型选列表形状。
     final body = CollectionTrackList<CollectionRow>(
       controller: _scrollControllerForKey(view.collectionKey),
-      rows: view.visibleRows,
+      rows: rows,
       keyOf: (row) => ValueKey<String>(row.key),
       // 合集本身为空 → 合集空态；有内容但被搜索过滤掉 → 搜索空态。
       empty: view.hasItems
@@ -1667,6 +1743,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         index,
         reorderActive: reorderActive,
         columnSpec: columnSpec,
+        totalRows: rows.length,
       ),
     );
     // 表头固定在滚动区之上（与搜索页同一口径）：列标题不随列表滚走，
@@ -1686,6 +1763,22 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
+  /// 智能列表的展示行：重复组只展开一次代表行，版本行按需插入。
+  List<CollectionRow> _smartDisplayRows(CollectionView view) {
+    final signature =
+        '${view.identity.smartListId}|${_searchController.text}|${_session.sort.name}';
+    if (_smartVersionSignature != signature) {
+      _smartVersionSignature = signature;
+      _expandedSmartVersions.clear();
+    }
+    final result = buildSmartListDisplayRows(
+      view.visibleRows,
+      _expandedSmartVersions,
+    );
+    _smartVersionCounts = result.versionCounts;
+    return result.rows;
+  }
+
   /// 三种合集共用同一行外壳：展示字段来自行联合，行尾标签 / 拖动把手与
   /// 行动作按行变体分派；点播 / 多选 / 排序手势与既有语义一致。
   Widget _buildRow(
@@ -1696,6 +1789,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     int index, {
     required bool reorderActive,
     required TrackRowColumnSpec? columnSpec,
+    int? totalRows,
   }) {
     // 行尾缓存标签：非表格档保留文字；表格档塞进 56dp 固定槽，用紧凑图标
     // （与 ⋮ 并排时不挤掉列）。多选 / 排序模式不渲染 ⋮（见 CollectionTrackRow）。
@@ -1704,23 +1798,37 @@ class _FavoritesPageState extends State<FavoritesPage> {
       LocalSongCollectionRow(:final song) when song.isCached => true,
       _ => false,
     };
-    final cachedTrailing = !cached
+    final versionCount = _smartVersionCounts[row.key] ?? 0;
+    final versionTrailing = versionCount <= 1
         ? null
-        : table
-        ? Icon(
-            Icons.download_done_rounded,
-            size: 16,
-            semanticLabel: l10n.localSongsCachedTag,
-          )
-        : Text(
-            l10n.localSongsCachedTag,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            softWrap: false,
-            style: context.typeScale.labelSmall.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+        : M3EButton.text(
+            key: ValueKey('smartVersions-${row.key}'),
+            onPressed: () => setState(() {
+              if (!_expandedSmartVersions.remove(row.key)) {
+                _expandedSmartVersions.add(row.key);
+              }
+            }),
+            child: Text(l10n.duplicateVersions(versionCount)),
           );
+    final cachedTrailing =
+        versionTrailing ??
+        (!cached
+            ? null
+            : table
+            ? Icon(
+                Icons.download_done_rounded,
+                size: 16,
+                semanticLabel: l10n.localSongsCachedTag,
+              )
+            : Text(
+                l10n.localSongsCachedTag,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: context.typeScale.labelSmall.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ));
     return RowActionsBuilder(
       // Sliver itemBuilder 里不能直接 select：动作构造放进独立 build。
       actions: (rowContext) => (reorderActive || _selecting)
@@ -1756,7 +1864,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 color: Theme.of(rowContext).colorScheme.onSurfaceVariant,
               )
             : cachedTrailing,
-        position: calculateCardPosition(index, view.visibleCount),
+        position: calculateCardPosition(index, totalRows ?? view.visibleCount),
         onTap: reorderActive || _missingSmartRow(view, row)
             ? null
             : () => _onRowTap(view, index),
@@ -1850,6 +1958,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
       onLocateLocalFile: localRecord?.isMissing == true
           ? () => _locateLocalFile(localRecord!)
           : null,
+      onRefreshLocalInfo: localRecord == null
+          ? null
+          : () => _refreshLocalMetadata(localRecord),
       isFavorite: commands.isFavorite,
       localSongCached: commands.localSongCached,
       localSongImported: commands.localSongImported,
@@ -1947,10 +2058,24 @@ class _FavoritesPageState extends State<FavoritesPage> {
     }
     if (!mounted) return;
     if (status == LocalTitleEditStatus.written) {
-      notifications?.showSnackBar(l10n.save);
+      notifications?.showSnackBar(l10n.localTitleUpdated);
     } else if (status == LocalTitleEditStatus.failed) {
       notifications?.showErrorSnackBar(l10n.localTitleFailed);
     }
+  }
+
+  /// 显式「从文件刷新信息」：重读标签并覆盖展示元数据；扫描不会自动调用。
+  Future<void> _refreshLocalMetadata(DownloadedTrack record) async {
+    final l10n = AppLocalizations.of(context)!;
+    final notifications = context.read<NotificationService?>();
+    final manager = context.read<DownloadManager?>();
+    final updated = await manager?.refreshLocalMetadata(record);
+    if (!mounted) return;
+    if (updated == null) {
+      notifications?.showErrorSnackBar(l10n.localTitleFailed);
+      return;
+    }
+    notifications?.showSnackBar(l10n.save);
   }
 
   /// 重定位：选一个可读音频文件，身份 / 引用保持不变。
@@ -1970,7 +2095,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     if (!mounted) return;
     switch (result) {
       case LocalRelocateResult.relocated:
-        notifications?.showSnackBar(l10n.save);
+        notifications?.showSnackBar(l10n.localFileRelocated);
       case LocalRelocateResult.unsupportedFormat:
         notifications?.showErrorSnackBar(l10n.localFileMissing);
       case LocalRelocateResult.fileMissing:

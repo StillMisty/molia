@@ -13,6 +13,7 @@ import '../l10n/app_localizations.dart';
 import '../theme/m3e_context.dart';
 import 'app_network_image.dart';
 import 'collection_track_list.dart';
+import 'desktop_layout.dart';
 import 'empty_state.dart';
 import 'row_actions.dart';
 import 'track_row.dart';
@@ -52,6 +53,9 @@ class LibraryBrowseView extends StatefulWidget {
     required this.onAdd,
     required this.onToggleFavorite,
     required this.isFavorite,
+    required this.canRefreshLocal,
+    required this.onRefreshLocal,
+    required this.onSwap,
     this.twoPane = false,
   });
 
@@ -76,6 +80,9 @@ class LibraryBrowseView extends StatefulWidget {
   final Future<void> Function(List<BrowseTrack> tracks) onAdd;
   final Future<void> Function(BrowseTrack track) onToggleFavorite;
   final bool Function(BrowseTrack track) isFavorite;
+  final bool Function(BrowseTrack track) canRefreshLocal;
+  final Future<void> Function(BrowseTrack track) onRefreshLocal;
+  final Future<void> Function(BrowseTrack track) onSwap;
   final bool twoPane;
 
   @override
@@ -85,6 +92,7 @@ class LibraryBrowseView extends StatefulWidget {
 class _LibraryBrowseViewState extends State<LibraryBrowseView> {
   String? _selectedKey;
   final Set<String> _expanded = {};
+  final Set<String> _selectedTracks = {};
   final ScrollController _listController = ScrollController();
   final ScrollController _detailController = ScrollController();
 
@@ -93,6 +101,7 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.resetSignature != widget.resetSignature) {
       _expanded.clear();
+      _selectedTracks.clear();
     }
     if (_selectedKey != null &&
         !widget.groups.any((group) => group.key == _selectedKey)) {
@@ -171,8 +180,8 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
     }
     return Row(
       children: [
-        SizedBox(width: 320, child: pane),
-        const VerticalDivider(width: 1),
+        SizedBox(width: DesktopLayout.browseGroupPaneWidth, child: pane),
+        const M3EDivider(axis: M3EDividerAxis.vertical),
         Expanded(
           child: group == null
               ? Center(
@@ -274,13 +283,28 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
                     : () =>
                           widget.onPlay(group, representatives, shuffle: true),
               ),
+              if (_selectedTracks.isNotEmpty)
+                M3EIconButton(
+                  variant: M3EIconButtonVariant.standard,
+                  icon: const Icon(Icons.close_rounded),
+                  semanticLabel: l10n.cancel,
+                  onPressed: () => setState(_selectedTracks.clear),
+                ),
               M3EIconButton(
                 variant: M3EIconButtonVariant.standard,
                 icon: const Icon(Icons.playlist_add_rounded),
                 semanticLabel: l10n.addToPlaylist,
                 onPressed: representatives.isEmpty
                     ? null
-                    : () => widget.onAdd(representatives),
+                    : () => widget.onAdd(
+                        _selectedTracks.isEmpty
+                            ? representatives
+                            : [
+                                for (final track in filtered)
+                                  if (_selectedTracks.contains(track.key))
+                                    track,
+                              ],
+                      ),
               ),
             ],
           ),
@@ -313,6 +337,7 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
                             row.track.sourceKey,
                             row.track.songId,
                           ),
+                          selected: _selectedTracks.contains(row.track.key),
                         ),
                         position: M3ECardPosition.single,
                         trailing: row.versionCount > 1
@@ -328,7 +353,22 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
                                 ),
                               )
                             : null,
-                        onTap: () => widget.onPlayTrack(row.track),
+                        onTap: () {
+                          if (_selectedTracks.isNotEmpty) {
+                            setState(() {
+                              if (!_selectedTracks.remove(row.track.key)) {
+                                _selectedTracks.add(row.track.key);
+                              }
+                            });
+                            return;
+                          }
+                          widget.onPlayTrack(row.track);
+                        },
+                        onLongPress: () => setState(() {
+                          if (!_selectedTracks.remove(row.track.key)) {
+                            _selectedTracks.add(row.track.key);
+                          }
+                        }),
                         actions: [
                           RowAction(
                             icon: Icons.playlist_add_rounded,

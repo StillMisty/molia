@@ -304,6 +304,10 @@ class _FakeDownloadManager extends DownloadManager {
   ) async => LocalRelocateResult.relocated;
 
   @override
+  Future<DownloadedTrack?> refreshLocalMetadata(DownloadedTrack record) async =>
+      record;
+
+  @override
   String defaultQualityFor(Track track) => '320k';
 
   @override

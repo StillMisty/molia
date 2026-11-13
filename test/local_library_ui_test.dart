@@ -9,8 +9,15 @@ import 'package:molia/domain/models/library_browse.dart';
 import 'package:molia/domain/models/smart_lists.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/downloads_manage_page.dart';
+import 'package:molia/data/downloads/downloads_repository.dart';
+import 'package:molia/providers/library_collection_request.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/download/download_records.dart';
+import 'package:molia/services/download/missing_file_probe.dart';
+import 'package:molia/services/local/local_library_service.dart';
+import 'package:molia/services/local/music_folder_scanner.dart';
+import 'package:molia/services/local/music_folder_watcher.dart';
+import 'package:molia/services/local/music_folders.dart';
 import 'package:molia/providers/collection_mode.dart';
 import 'package:molia/providers/library_collections.dart';
 import 'package:molia/widgets/collection_mode_switch.dart';
@@ -18,7 +25,9 @@ import 'package:molia/widgets/collection_picker.dart';
 import 'package:molia/widgets/library_browse_view.dart';
 
 import 'support/cover_test_support.dart';
+import 'support/fake_download_storage.dart';
 import 'support/fakes.dart';
+import 'support/memory_database.dart';
 
 Widget host(Widget child) => M3EMaterialApp(
   data: M3EThemeData.fromMaterial(ThemeData.light()),
@@ -76,6 +85,8 @@ void main() {
                     trackCount: 2,
                     selected: true,
                   ),
+                ],
+                smartEntries: [
                   const CollectionPickerEntry(
                     key: 'smart:header',
                     id: LibraryCollections.unset,
@@ -112,6 +123,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('智能列表'), findsOneWidget);
     expect(find.text('文件不见'), findsOneWidget);
+    // 智能列表 / 分组标题没有拖动把手：只有普通合集参与排序。
+    expect(find.byIcon(Icons.drag_handle_rounded), findsOneWidget);
     await tester.tap(find.text('文件不见'));
     await tester.pumpAndSettle();
     expect(
@@ -179,6 +192,7 @@ void main() {
       required List<LibraryBrowseGroup> groups,
       bool twoPane = false,
       String signature = 'songs||added',
+      Future<void> Function(List<BrowseTrack>)? onAdd,
     }) => host(
       withCoverStore(
         LibraryBrowseView(
@@ -194,8 +208,11 @@ void main() {
           isFavorite: (_) => false,
           onPlay: (_, _, {shuffle = false}) async {},
           onPlayTrack: (_) async {},
-          onAdd: (_) async {},
+          onAdd: onAdd ?? (_) async {},
           onToggleFavorite: (_) async {},
+          canRefreshLocal: (_) => false,
+          onRefreshLocal: (_) async {},
+          onSwap: (_) async {},
         ),
       ),
     );
@@ -259,5 +276,107 @@ void main() {
       expect(find.text('Song'), findsOneWidget);
       expect(find.text('选择一个专辑'), findsNothing);
     });
+    testWidgets('多选后批量加入列表只带选中行', (tester) async {
+      final added = <String>[];
+      final groups = [
+        LibraryBrowseGroup(
+          key: 'a',
+          title: 'Album A',
+          subtitle: 'Artist',
+          tracks: [
+            track('1'),
+            track('2', title: 'Song B'),
+          ],
+        ),
+      ];
+      await tester.pumpWidget(
+        browse(
+          groups: groups,
+          onAdd: (tracks) async {
+            added.addAll(tracks.map((track) => track.songId));
+          },
+        ),
+      );
+      await tester.tap(find.text('Album A'));
+      await tester.pumpAndSettle();
+      await tester.longPress(find.text('Song').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Song').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.playlist_add_rounded).first);
+      await tester.pumpAndSettle();
+      expect(added, ['1', '2']);
+    });
   });
+
+  testWidgets('检查文件：向收藏页发出「文件不见」请求', (tester) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = openMemoryDatabase();
+    addTearDown(db.close);
+    final storage = FakeDownloadStorage();
+    final records = DownloadRecords(initialized: true, supported: true);
+    final request = LibraryCollectionRequest();
+    final service = LocalLibraryService(
+      folders: MusicFoldersStore(),
+      scanner: MusicFolderScanner(target: _NoopScanTarget()),
+      probe: MissingFileProbe(
+        records: records,
+        repository: DownloadsRepository(databaseProvider: () => db),
+        storage: storage,
+      ),
+      watcher: MusicFolderWatcher(onTrigger: (_) async {}),
+    );
+    final playback = buildTestPlaybackProvider();
+    addTearDown(playback.dispose);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          ChangeNotifierProvider<DownloadRecords>.value(value: records),
+          ChangeNotifierProvider<LocalLibraryService>.value(value: service),
+          ChangeNotifierProvider<LibraryCollectionRequest>.value(
+            value: request,
+          ),
+        ],
+        child: host(const DownloadsManagePage()),
+      ),
+    );
+    await tester.ensureVisible(
+      find.byKey(const Key('downloadsMissingFilesItem')),
+    );
+    await tester.tap(find.text('检查文件'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(request.pendingSmartListId, SmartListIds.missingFiles);
+    expect(request.take(), SmartListIds.missingFiles);
+    expect(request.pendingSmartListId, isNull);
+  });
+}
+
+class _NoopScanTarget implements LocalScanTarget {
+  @override
+  Future<List<DownloadedTrack>> listImported() async => const [];
+
+  @override
+  Future<void> importFile(
+    String path, {
+    required int sizeBytes,
+    required int mtimeMs,
+  }) async {}
+
+  @override
+  Future<void> refreshFile(
+    DownloadedTrack record, {
+    required int sizeBytes,
+    required int mtimeMs,
+  }) async {}
+
+  @override
+  Future<void> markMissing(DownloadedTrack record) async {}
+
+  @override
+  Future<void> commitBatch(List<LocalScanChange> changes) async {}
 }

@@ -38,12 +38,16 @@ class SmartListSources {
     required this.history,
     required this.stats,
     required this.browse,
+    this.playedKeys,
   });
 
   final List<DownloadedTrack> downloads;
   final List<PlayHistoryEntry> history;
   final List<PlayStatTrackEntry> stats;
   final LibraryBrowseIndex browse;
+
+  /// 统计曲目表的全部键（null = 退化用 [stats] 的键）。
+  final Set<String>? playedKeys;
 }
 
 /// 构建一个智能列表；缺失记录的排除规则按列表语义处理。
