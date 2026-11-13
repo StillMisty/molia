@@ -270,18 +270,20 @@
   来源优先级 `custom > original > default`，并把**真实封面** `RealCover`
   （只允许 custom / original）与**展示封面** `DisplayCover`（真实封面 + 默认
   兜底）做成两个类型：取色 / 下载 / 标签只接受 `RealCover`，默认封面在类型上
-  到不了这些消费面。封面键归一化（`local:` 下载副本剥一层、本地导入保留
-  `local:<path>`）与变更信号也在这里。
+  到不了这些消费面。封面键归一化（下载副本的本地 id 已直接是原音源键、本地
+  导入用稳定 `file:<uuid>`）与变更信号也在这里。
 - **TrackArtwork（封面渲染适配器）** — `lib/widgets/track_artwork.dart`：widget 层
   唯一订阅封面变化并渲染解析结果的地方（`TrackArtwork` / `CoverChangeBuilder` /
   `coverResolverOf`）。封面解析器经 `context.read<CustomCoverStore>()` 从组合根
   Provider 读取，缺失即接线错误（直接抛错，不回退全局存储）。列表行 / 播放器 /
   顶栏 / AI DJ / 歌曲信息 / 海报不再各自
   `ValueListenableBuilder(revision)` + 直接查 store；默认封面只作为主图失败回退。
-- **Cover key（封面键）** — 曲目键 `sourceKey:songId`；`sourceKey == local` 的下载
-  副本剥掉一层 `local:` 前缀（`local:wy:123` → `wy:123`），让下载前设置的封面
-  继续作用于本地副本；本地导入保持 `local:<path>` 记录键。归一化唯一实现在
-  Cover resolution 的 `coverKeyOf` / `normalizeCoverKey`。
+- **Cover key（封面键）** — 曲目键 `sourceKey:songId`；`sourceKey == local` 时
+  直接用 `TrackId.id`：下载副本是原音源键（`wy:123`，与下载前设置的封面共键），
+  导入曲目是稳定 `localKey`（`file:<uuid>`，见 **Local identity**）。导入封面
+  只在设备本地，不进入 `covers` 同步；归一化唯一实现在 Cover resolution 的
+  `coverKeyOf` / `normalizeCoverKey`，是否设备本地见 `local_identity.dart`
+  的 `isDeviceLocalCoverKey`。
 - **Default cover（默认封面）** — 设置 › 外观里的全局占位封面：只在歌曲没有
   封面或远端封面加载失败时显示；不参与取色、下载与标签嵌入，也不是一张
   「每曲封面」。
@@ -1306,7 +1308,15 @@
 - **Collection list（合集列表模块）** — `lib/widgets/collection_track_list.dart`：收藏页各合集共用的一份列表脚手架（Scrollbar 参数、`itemExtent = TrackRow.extentOf(context, tableColumns: …) + gap`、懒构建、重排模式、空态 / 搜索空态、行动作（触摸端行尾 ⋮ / 桌面右键菜单）与行外壳 `CollectionTrackRow`）；行内容由调用方 `itemBuilder` 提供，页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`（`collectionRowMatches` / `sortCollectionTracks`）。
 - **Collection scroll bookkeeping（合集滚动簿记）** — `lib/widgets/collection_scroll_bookkeeping.dart`：按合集键保存 / 恢复滚动位置的唯一实现（节流 ≤2 次/秒、切换合集各自只恢复一次、夹取到可滚动范围）；调度器（`CollectionScrollScheduler`）可注入，脱离 widget 树可单测。
 - **Local songs（本地歌曲合集）** — 收藏页的伪合集（`downloadsSentinel` ↔ `downloadsOrderKey`）：数据来自 `DownloadService.downloads`（下载副本 + 本地导入）与 `TrackLocalDataService.cachedAudioTrackIds`（播放历史 × 完整音频缓存命中且无音频下载，一次目录列举），不落列表表；仅在下载能力可用（`DownloadService.supported`）时出现在合集弹层，排序固定按下载 / 导入时间倒序。合集弹层打开前先把缓存行重算到当前输入，弹层计数与列表行数同源。
-- **Local import（本地导入）** — `downloads` 表 `imported` 行 = **就地引用**用户自己的音频文件：`originSourceKey = 'local'`、`originSongId` = 文件绝对路径（同路径重复导入幂等），`filePath` 指向原文件；删除记录只移行、不删文件，补发布跳过。写入唯一入口 `DownloadService.importLocalFiles`（标签解析见 `lib/data/downloads/audio_tag_reader.dart`：mp3 ID3v2 / flac Vorbis Comment，其余格式按文件名兜底）。
+- **Local import（本地导入）** — `downloads` 表 `imported` 行 = **就地引用**用户自己的音频文件：`originSourceKey = 'local'`、`originSongId` = 稳定 `localKey`（`file:<uuid>`，同路径重复导入按 `filePath` 复用），`filePath` 指向原文件；删除记录只移行、不删文件，补发布跳过。导入曲目的领域身份是 `TrackId(local, localKey)`，记录键是 `local:<localKey>`；路径不再是身份（见 **Local identity**）。写入唯一入口 `DownloadService.importLocalFiles`（标签解析见 `lib/data/downloads/audio_tag_reader.dart`：mp3 ID3v2 / flac Vorbis Comment，其余格式按文件名兜底）。
+- **Local identity（本地稳定身份）** — `lib/data/local_identity.dart`：导入曲目的设备本地 id 规则（`localKey = file:<uuid v4>`、旧身份 `local:<绝对路径>` 的判定、封面键是否设备本地）。迁移改写见 `local_identity_migration.dart`，封面键清扫见 `local_cover_identity_sweep.dart`；规则与后果见 ADR-0021。下载副本不在此列：它的本地 id 就是原音源键（`wy:123`），本来就不依赖路径。
+- **Music folders（音乐文件夹）** — `lib/services/local/music_folders.dart`：设备本地目录配置（稳定 id / 根路径 / 添加时间 / 最近扫描摘要）；去重、拒绝嵌套根、移除只停扫描不碰文件。用户可见文案是「音乐文件夹 / Music folder」，与列表「分组 / Group」严格区分；不登记设置注册表、不参与同步。
+- **Music folder scanner（音乐文件夹扫描器）** — `lib/services/local/music_folder_scanner.dart`：递归流式枚举、按 `路径 + mtime + size` 增量、取消、跳过原因分类与缺文件标记；只读文件头，不复制 / 移动 / 删除用户文件。扫描目标以 `LocalScanChange` 批次提交（≤200 条）。
+- **Music folder watcher（音乐文件夹监听）** — `lib/services/local/music_folder_watcher.dart`：`Directory.watch` 只是防抖后的重扫触发器；能定位路径时只重查该路径，事件过多 / 无法定位时回退整树增量；监听失败静默降级为启动 / 手动扫描。
+- **Missing file probe（缺文件探测）** — `lib/services/local/missing_file_probe.dart`：空闲批量检查本地音频是否存在，写 `downloads.missingAt` / `mtimeMs`；根目录不可用时不标记；与扫描 / 导入共用 `local_write_gate.dart` 的串行写队列。
+- **Local library service（本地曲库编排）** — `lib/services/local/local_library_service.dart`：音乐文件夹配置 + 扫描 + 监听 + 缺文件检查的 UI 入口；平台开关（桌面启动扫描 / Android 仅手动 / iOS 不提供目录）。
+- **Audio title editor（只改标题的标签编辑器）** — `lib/data/downloads/audio_title_editor.dart`：MP3 ID3v2.3/2.4 只替换 `TIT2`、FLAC 只替换 Vorbis `TITLE`，其它帧 / 块与音频字节原样保留；临时文件 + 原子改名，失败原文件不变。
+- **Local path resolver（本地路径解析端口）** — `lib/data/catalog/local_path_resolver.dart`：稳定身份 → 当前文件路径的窄回调，组合根在下载记录就绪后接线；`local` 音源只消费它（没有记录时回退 payload `path`），重定位 / 扫描只改一条记录。
 - **Save As（另存服务）** — `lib/services/save_as.dart`：所有用户可见文件导出的唯一入口（备份 JSON / 听歌统计 JSON / 歌词海报 PNG / 音频副本）。桌面弹“另存为”并默认指向另存目录，取消不报错；Android 写临时文件后经 `DownloadsPublisher` 进 MediaStore；iOS 直接写应用文档目录。结果分 saved / cancelled / failed，UI 按 `SaveLocationKind` 选提示文案；文件名与子目录在服务内清洗（拒绝 `..` 与路径分隔符）。
 - **Public output root（另存目录 / 公共输出根）** — `lib/data/files/public_downloads_path.dart` + `SaveAs.rootPath`：应用对用户可见的输出根。桌面 = 系统公共下载目录（Windows Known Folder / Linux XDG）下的 `Molia/`，设置页自选目录优先；Android = `Download/Molia`（MediaStore，Dart 不直接写）；iOS = 文件 App 可见的应用文档目录 `Molia/`（没有系统公共 Downloads 概念）。音频在根下，导出 JSON 进 `exports/`，海报进 `posters/`；下载根与另存根共用同一解析（Android 例外：私有播放副本 + 默认公共副本）。
 - **Download notifications（下载通知模块）** — `lib/data/downloads/download_notifications*.dart`（平台 seam：IO=MethodChannel，其它平台 no-op，通道异常只记日志、绝不影响下载本身）+ Android `DownloadNotificationService`（`dataSync` 前台服务）：下载进行中在系统通知显示进度（批量共享一条「N/N」），完成 / 失败 / 取消收尾并移除；API 33+ 未授予通知权限时降级为「无通知但继续下载」；开关 `download_notifications`（设备本地键，默认开）。通知生命周期的编排见 Download notification presenter。

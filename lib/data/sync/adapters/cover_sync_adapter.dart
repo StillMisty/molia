@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:logging/logging.dart';
 
+import '../../local_identity.dart';
 import '../../../domain/models/device_sync.dart';
 import '../../../services/covers/custom_cover_store.dart';
 import '../sync_adapter.dart';
@@ -140,6 +141,9 @@ class CoverSyncAdapter
     // 这次删除输给更陈旧的远端墓碑）。
     for (final key in _state.coverStamps.keys.toList()) {
       if (current.containsKey(key)) continue;
+      // 设备本地封面（导入曲目）：不产生远端墓碑，旧版本已经同步上去的
+      // 记录不主动删除（可能是另一台设备的数据）。
+      if (isDeviceLocalCoverKey(key)) continue;
       final version = _state.stampIssuer.next();
       newTombstones[key] = SyncStamp(version: version);
       removedStamps.add(key);
@@ -157,6 +161,8 @@ class CoverSyncAdapter
 
     for (final entry in current.entries) {
       final key = entry.key;
+      // 导入曲目的封面是设备本地数据：不导出、不参与 covers 类别。
+      if (isDeviceLocalCoverKey(key)) continue;
       final stamp = _state.coverStamps[key];
       final tombstone = _state.coverTombstones[key];
       final data = await _recordData(key, entry.value);
@@ -203,6 +209,7 @@ class CoverSyncAdapter
     final allTombstones = {..._state.coverTombstones, ...newTombstones};
     for (final entry in allTombstones.entries) {
       if (current.containsKey(entry.key)) continue;
+      if (isDeviceLocalCoverKey(entry.key)) continue;
       if (removedTombstones.contains(entry.key)) continue;
       records.add(
         SyncRecord.tombstone(
@@ -292,6 +299,11 @@ class CoverSyncAdapter
     var applied = 0;
     var skipped = 0;
     for (final record in records[SyncCategory.covers] ?? const <SyncRecord>[]) {
+      // 设备本地封面键（导入曲目）永远不落地，也不写登记 / 墓碑。
+      if (isDeviceLocalCoverKey(record.key)) {
+        skipped++;
+        continue;
+      }
       if (record.key.isEmpty) {
         skipped++;
         continue;

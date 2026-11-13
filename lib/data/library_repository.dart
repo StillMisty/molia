@@ -21,6 +21,7 @@ import '../domain/ports/library_store.dart';
 import '../domain/ports/library_sync_store.dart';
 import 'library_write_engine.dart';
 import 'lxmc_decoder.dart';
+import '../domain/models/library_browse.dart';
 import 'molia_database.dart';
 import 'sync/sync_journal.dart';
 import 'sync/sync_stamp.dart';
@@ -197,6 +198,47 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     if (limit != null) query.limit(limit);
     final rows = await query.get();
     return [for (final row in rows) _trackFromRow(row)];
+  }
+
+  /// 聚合读取：收藏曲目 + 每个非收藏列表的曲目（一次 SQL，按列表 id /
+  /// sortOrder 稳定排序）。专辑 / 歌手浏览与智能列表共用，避免 N 次查询。
+  Future<({List<PlaylistTrack> favorites, List<BrowsePlaylist> playlists})>
+  loadBrowseTracks() async {
+    final db = _db;
+    final rows = await db.customSelect('''
+      SELECT t.*, p.name AS playlistName
+      FROM playlist_tracks t
+      JOIN playlists p ON p.id = t.playlistId
+      ORDER BY p.id ASC, t.sortOrder ASC, t.addedAt ASC, t.id ASC
+    ''').get();
+    final favorites = <PlaylistTrack>[];
+    final byPlaylist = <int, List<PlaylistTrack>>{};
+    for (final row in rows) {
+      final data = row.data;
+      final track = PlaylistTrack(
+        playlistId: (data['playlistId'] as num).toInt(),
+        sourceKey: data['sourceKey']! as String,
+        songId: data['songId']! as String,
+        title: data['title']! as String,
+        artist: data['artist'] as String? ?? '',
+        album: data['album'] as String? ?? '',
+        coverUrl: data['coverUrl'] as String?,
+        durationMs: (data['durationMs'] as num?)?.toInt(),
+        raw: _decodeRaw(data['raw']),
+        addedAt: (data['addedAt'] as num).toInt(),
+        sortOrder: (data['sortOrder'] as num?)?.toInt() ?? 0,
+      );
+      if (data['playlistName'] == favoritesPlaylistRowName) {
+        favorites.add(track);
+      } else {
+        byPlaylist.putIfAbsent(track.playlistId, () => []).add(track);
+      }
+    }
+    final playlists = [
+      for (final entry in byPlaylist.entries)
+        BrowsePlaylist(id: entry.key, tracks: entry.value),
+    ]..sort((a, b) => a.id.compareTo(b.id));
+    return (favorites: favorites, playlists: playlists);
   }
 
   @override

@@ -37,6 +37,10 @@ class DesktopLayout extends InheritedWidget {
     required super.child,
   });
 
+  /// 收藏 / 曲库两栏布局的固定栏宽（左合集列表 / 左专辑歌手分组）。
+  static const double collectionSidePaneWidth = 280;
+  static const double browseGroupPaneWidth = 320;
+
   /// 当前平台是否桌面（linux / windows / macOS）：桌面增强的总开关。
   ///
   /// 与壳层骨架分流同源（`defaultTargetPlatform`），测试里可经

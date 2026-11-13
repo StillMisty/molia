@@ -730,6 +730,26 @@ class LocalPlaybackService extends ChangeNotifier {
     }
   }
 
+  /// 只更新队列中同 id 曲目的元数据（标题等），不重新取链。
+  ///
+  /// 与 [replaceQueueTrack] 的区别：当前曲目也**不**重载播放器，只替换
+  /// 队列 / 当前曲目对象并通知一次，播放进度与音频源保持不变。
+  Future<void> updateQueueTrackMetadata(
+    String trackId,
+    SourceTrack track,
+  ) async {
+    var hit = false;
+    for (var index = 0; index < _queue.length; index++) {
+      if (_queue[index].id != trackId) continue;
+      _queue[index] = track;
+      if (index == _currentIndex) _currentTrack = track;
+      hit = true;
+    }
+    if (!hit) return;
+    _queueRevision++;
+    notifyListeners();
+  }
+
   /// 换队列 / 显式停止时回收 just_audio 播放器。
   ///
   /// just_audio 0.10.x 把每个 `setAudioSource` 创建的 source 保存在

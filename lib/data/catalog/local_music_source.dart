@@ -20,11 +20,14 @@ import '../../domain/models/source.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/music_source.dart';
 import 'local_file_probe.dart';
+import 'local_path_resolver.dart';
 
 class LocalMusicSource implements MusicSource {
-  /// [fileExists] 仅测试注入（默认走平台文件探测）。
-  LocalMusicSource({Future<bool> Function(String path)? fileExists})
-    : _fileExists = fileExists ?? localFileExists;
+  /// [fileExists] / [pathResolver] 仅测试注入（默认走平台文件探测 / payload 路径）。
+  LocalMusicSource({
+    Future<bool> Function(String path)? fileExists,
+    this.pathResolver,
+  }) : _fileExists = fileExists ?? localFileExists;
 
   /// 本地音源 key（与 `kLocalSourceKey` 同值；数据层不反向依赖领域模型）。
   static const String sourceKey = 'local';
@@ -32,6 +35,9 @@ class LocalMusicSource implements MusicSource {
   static const String _displayName = 'Local';
 
   final Future<bool> Function(String path) _fileExists;
+
+  /// 稳定身份 → 当前路径（组合根接线；测试可注入假实现）。
+  final LocalPathResolver? pathResolver;
 
   @override
   String get key => sourceKey;
@@ -57,14 +63,21 @@ class LocalMusicSource implements MusicSource {
     );
   }
 
-  /// 读 payload 里的文件路径回 `Uri.file(...)`；文件缺失归一化为 notFound。
+  /// 解析当前文件路径：稳定身份经注入端口查下载记录，缺失时回退 payload
+  /// 里的路径（旧引用 / 记录已删除）；文件缺失归一化为 notFound。
   @override
   Future<PlayableStream> resolve(
     Track track, {
     AudioQuality? preferredQuality,
   }) async {
-    final path = track.payload['path'];
-    if (path is! String || path.trim().isEmpty) {
+    final resolved = await pathResolver?.resolve(track);
+    final payloadPath = track.payload['path'];
+    final path = resolved != null && resolved.isNotEmpty
+        ? resolved
+        : (payloadPath is String && payloadPath.trim().isNotEmpty
+              ? payloadPath
+              : null);
+    if (path == null) {
       throw const SourceFailure(
         kind: FailureKind.notFound,
         message: '本地文件记录缺少路径',

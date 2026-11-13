@@ -246,6 +246,15 @@ class PlaybackEngine implements PlaybackFacade {
     _publish();
   }
 
+  @override
+  Future<void> updateQueueTrackMetadata(String trackUri, Track track) async {
+    await _service.updateQueueTrackMetadata(
+      trackUri,
+      sourceTrackFromTrack(track),
+    );
+    _publish();
+  }
+
   void dispose() {
     _service.removeListener(_onServiceChanged);
     _snapshot.dispose();

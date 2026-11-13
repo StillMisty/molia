@@ -4809,4 +4809,168 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagnosticsExportSection => '导出';
+
+  @override
+  String get musicFoldersTitle => '音乐文件夹';
+
+  @override
+  String get musicFoldersSubtitle => '自动收录文件夹里的音频，不会移动文件';
+
+  @override
+  String get musicFoldersAdd => '添加文件夹';
+
+  @override
+  String get musicFoldersEmptyTitle => '还没有添加文件夹';
+
+  @override
+  String get musicFoldersEmptyBody => '添加一个文件夹，Molia 会找出里面的音频';
+
+  @override
+  String musicFoldersScanning(int count) {
+    return '正在扫描 · 已处理 $count 个文件';
+  }
+
+  @override
+  String get musicFoldersCancelScan => '取消扫描';
+
+  @override
+  String musicFoldersSummary(int added, int updated, int skipped) {
+    return '新增 $added 首，更新 $updated 首，跳过 $skipped 个';
+  }
+
+  @override
+  String get musicFoldersUnavailable => '暂时读不到这个文件夹';
+
+  @override
+  String get musicFoldersCancelled => '扫描已取消';
+
+  @override
+  String get musicFoldersRescan => '重新扫描';
+
+  @override
+  String get musicFoldersRemove => '移除';
+
+  @override
+  String get musicFoldersAdded => '已添加文件夹';
+
+  @override
+  String get musicFoldersDuplicate => '这个文件夹已经添加过了';
+
+  @override
+  String get musicFoldersNested => '请选择上层文件夹';
+
+  @override
+  String get musicFoldersInvalid => '这个位置不能添加';
+
+  @override
+  String get musicFoldersAndroidNote => '系统可能只允许读取部分文件夹；读不到时可以逐个导入文件';
+
+  @override
+  String get localFileMissing => '本地文件不存在，可能已被删除';
+
+  @override
+  String get localFileLocate => '重新选择文件';
+
+  @override
+  String get localTitleEdit => '修改标题';
+
+  @override
+  String get localTitleNote => '只改标题，其它标签保持不变';
+
+  @override
+  String get localTitleMoliaOnly => '只在 Molia 中修改';
+
+  @override
+  String get localTitleMoliaOnlyNote => '不改文件';
+
+  @override
+  String get localTitleInvalid => '标题不能为空';
+
+  @override
+  String get localTitleFailed => '没有改成，请再试一次';
+
+  @override
+  String get collectionModeSongs => '歌曲';
+
+  @override
+  String get collectionModeAlbums => '专辑';
+
+  @override
+  String get collectionModeArtists => '歌手';
+
+  @override
+  String get unknownAlbum => '未知专辑';
+
+  @override
+  String get smartListsSection => '智能列表';
+
+  @override
+  String get smartRecentlyAdded => '最近添加';
+
+  @override
+  String get smartRecentlyPlayed => '最近播放';
+
+  @override
+  String get smartMostPlayed => '最常播放';
+
+  @override
+  String get smartNeverPlayed => '从未播放';
+
+  @override
+  String get smartLocalOnly => '仅本地';
+
+  @override
+  String get smartDownloaded => '已下载';
+
+  @override
+  String get smartMissingFiles => '文件不见';
+
+  @override
+  String get smartMetricPlayCount => '按播放次数';
+
+  @override
+  String get smartMetricListeningTime => '按收听时长';
+
+  @override
+  String get smartEmpty => '这里还没有歌曲';
+
+  @override
+  String get browseEmptyTitle => '这里还没有专辑或歌手';
+
+  @override
+  String get browseEmptyBody => '收藏、列表和本地歌曲里的内容会出现在这里';
+
+  @override
+  String get browseSearchEmpty => '没有匹配的专辑或歌手';
+
+  @override
+  String get browseSelectHint => '选择一个专辑或歌手';
+
+  @override
+  String duplicateVersions(int count) {
+    return '$count 个版本';
+  }
+
+  @override
+  String missingFilesCount(int count) {
+    return '$count 个文件不见';
+  }
+
+  @override
+  String get localFileCheckFiles => '检查文件';
+
+  @override
+  String get backButton => '返回';
+
+  @override
+  String get localRefreshInfo => '从文件刷新信息';
+
+  @override
+  String get localTitleUpdated => '标题已更新';
+
+  @override
+  String get localFileRelocated => '文件已重新关联';
+
+  @override
+  String get localInfoUpdated => '信息已更新';
 }

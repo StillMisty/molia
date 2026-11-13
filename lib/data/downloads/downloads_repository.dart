@@ -51,6 +51,30 @@ class DownloadsRepository {
     return row == null ? null : _fromRow(row);
   }
 
+  /// 按本地文件路径查找导入记录（同路径重复导入复用 `localKey` 的依据）。
+  ///
+  /// 只匹配导入行：下载副本的 `filePath` 在下载目录里，不会被用户重复导入。
+  Future<DownloadedTrack?> findByFilePath(String filePath) async {
+    final row =
+        await (_db.select(_db.downloads)
+              ..where(
+                (t) => t.imported.equals(true) & t.filePath.equals(filePath),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+    return row == null ? null : _fromRow(row);
+  }
+
+  /// 全部导入记录（封面键清扫与扫描器使用）。
+  Future<List<DownloadedTrack>> listImported() async {
+    final rows =
+        await (_db.select(_db.downloads)
+              ..where((t) => t.imported.equals(true))
+              ..orderBy([(t) => OrderingTerm.asc(t.id)]))
+            .get();
+    return [for (final row in rows) _fromRow(row)];
+  }
+
   /// 插入下载记录（同原曲唯一键冲突时整体替换）。
   Future<void> insert(DownloadedTrack track) async {
     await _db
@@ -72,11 +96,72 @@ class DownloadsRepository {
             coverPath: Value(track.coverPath),
             publicUri: Value(track.publicUri),
             imported: Value(track.imported),
+            localKey: Value(track.localKey),
+            mtimeMs: Value(track.mtimeMs),
+            missingAt: Value(track.missingAt),
             downloadedAt: track.downloadedAt,
           ),
           mode: InsertMode.insertOrReplace,
         );
     _notifyChanged();
+  }
+
+  /// 写入一次文件探测结果（存在 / 缺失）。
+  ///
+  /// 存在：更新 `mtimeMs` 并清空 `missingAt`；缺失：只写 `missingAt`，保留
+  /// 旧 `mtimeMs` 与整条记录（UI 仍能看到「文件不见」）。只改这两列，避免
+  /// 与标题编辑等并发写入互相覆盖。
+  Future<void> setFileProbe({
+    required String originSourceKey,
+    required String originSongId,
+    required int? mtimeMs,
+    required bool missing,
+    required int missingAt,
+    int? sizeBytes,
+  }) async {
+    final changed =
+        await (_db.update(_db.downloads)..where(
+              (t) =>
+                  t.originSourceKey.equals(originSourceKey) &
+                  t.originSongId.equals(originSongId),
+            ))
+            .write(
+              DownloadsCompanion(
+                mtimeMs: Value(mtimeMs),
+                missingAt: Value(missing ? missingAt : null),
+                sizeBytes: missing || sizeBytes == null
+                    ? const Value.absent()
+                    : Value(sizeBytes),
+              ),
+            );
+    if (changed > 0) _notifyChanged();
+  }
+
+  /// 重定位：更新路径 / 大小 / 修改时间并清除缺失状态。
+  ///
+  /// 身份列（`localKey` / `originSongId`）不动；导入与下载副本都适用。
+  Future<void> relocate({
+    required String originSourceKey,
+    required String originSongId,
+    required String filePath,
+    required int sizeBytes,
+    required int? mtimeMs,
+  }) async {
+    final changed =
+        await (_db.update(_db.downloads)..where(
+              (t) =>
+                  t.originSourceKey.equals(originSourceKey) &
+                  t.originSongId.equals(originSongId),
+            ))
+            .write(
+              DownloadsCompanion(
+                filePath: Value(filePath),
+                sizeBytes: Value(sizeBytes),
+                mtimeMs: Value(mtimeMs),
+                missingAt: const Value(null),
+              ),
+            );
+    if (changed > 0) _notifyChanged();
   }
 
   /// 删除下载记录（文件删除由服务负责）。
@@ -111,6 +196,9 @@ class DownloadsRepository {
     coverPath: row.coverPath,
     publicUri: row.publicUri,
     imported: row.imported,
+    localKey: row.localKey,
+    mtimeMs: row.mtimeMs,
+    missingAt: row.missingAt,
     downloadedAt: row.downloadedAt,
   );
 

@@ -9,6 +9,7 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../../domain/models/download.dart';
+import '../../data/local_identity.dart';
 import '../../domain/models/track.dart';
 
 /// 下载记录的只读视图 + 下载服务专用的写入面。
@@ -66,9 +67,25 @@ class DownloadRecords extends ChangeNotifier {
       _records['$sourceKey:$songId'];
 
   /// 当前曲目的下载记录：本地曲目按自身 id 反查，在线曲目按原音源键。
+  ///
+  /// 导入记录的领域 id 是 `file:<uuid>`（`localKey`），记录键是
+  /// `local:<localKey>`；下载副本的 id 本身就是记录键。两者分开查，不能
+  /// 假设 `TrackId.id == 记录键`。
   DownloadedTrack? recordForTrack(Track track) {
-    if (track.id.sourceKey == kLocalSourceKey) return _records[track.id.id];
+    if (track.id.sourceKey == kLocalSourceKey) {
+      final id = track.id.id;
+      if (isStableLocalKey(id)) return _records['local:$id'];
+      return _records[id] ?? _records['local:$id'];
+    }
     return _records['${track.id.sourceKey}:${track.id.id}'];
+  }
+
+  /// 按文件路径查找导入记录（同路径重复导入复用稳定身份）。
+  DownloadedTrack? importedRecordForPath(String path) {
+    for (final record in _records.values) {
+      if (record.imported && record.filePath == path) return record;
+    }
+    return null;
   }
 
   // 以下写入面只由 `DownloadService` 调用（见类文档）。

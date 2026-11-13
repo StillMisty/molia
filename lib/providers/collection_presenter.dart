@@ -9,12 +9,13 @@ library;
 
 import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/library.dart';
+import '../domain/models/library_browse.dart';
 import '../utils/collection_row_query.dart';
 import 'library_collections.dart';
 import 'local_songs_collection.dart';
 
 /// 当前合集的四种形态（收藏 / 播放历史 / 本地歌曲 / 自建列表）。
-enum CollectionKind { favorites, history, localSongs, custom }
+enum CollectionKind { favorites, history, localSongs, custom, smartList }
 
 /// 行内表格列档位（页面映射到 `TrackRowColumnSpec`，本层不依赖 widget）。
 enum CollectionColumnLayout { standard, history }
@@ -26,6 +27,7 @@ class CollectionIdentity {
     required this.kind,
     required this.playlistId,
     required this.displayName,
+    this.smartListId,
   });
 
   /// 解析后的选集（哨兵或列表 id），用于持久化与弹层选中态。
@@ -39,10 +41,14 @@ class CollectionIdentity {
 
   final String displayName;
 
+  /// 智能列表 id（`smart:*`；仅 [CollectionKind.smartList] 非空）。
+  final String? smartListId;
+
   bool get isHistory => kind == CollectionKind.history;
   bool get isFavorites => kind == CollectionKind.favorites;
   bool get isLocalSongs => kind == CollectionKind.localSongs;
   bool get isCustom => kind == CollectionKind.custom;
+  bool get isSmartList => kind == CollectionKind.smartList;
 
   /// 当前合集的持久化键：收藏 / 历史 / 本地歌曲用固定键，自建列表按 id。
   ///
@@ -55,6 +61,8 @@ class CollectionIdentity {
       playlistId == null
           ? LibraryCollections.favoritesOrderKey
           : LibraryCollections.playlistOrderKey(playlistId!),
+    CollectionKind.smartList =>
+      smartListId ?? LibraryCollections.favoritesOrderKey,
   };
 
   /// 列规范：只有播放历史多一列「播放时间」。
@@ -202,6 +210,9 @@ enum CollectionRowActionKind {
   toggleFavorite,
   deleteHistoryEntry,
   deleteLocalSong,
+  editLocalTitle,
+  locateLocalFile,
+  refreshLocalInfo,
 }
 
 /// 一条行动作的声明（不含图标 / 文案 / 回调）。
@@ -249,6 +260,7 @@ class CollectionView {
   bool get isFavorites => identity.isFavorites;
   bool get isLocalSongs => identity.isLocalSongs;
   bool get isCustom => identity.isCustom;
+  bool get isSmartList => identity.isSmartList;
 
   /// 全量曲目（历史 / 本地歌曲集合为空）；只用于空态与「调整顺序」入口判定。
   final List<PlaylistTrack> tracks;
@@ -288,20 +300,26 @@ class CollectionPresenter {
     required String favoritesName,
     required String historyName,
     required String localSongsName,
+    Map<String, String> smartListNames = const {},
   }) {
     final selected = LibraryCollections.resolveSelection(
       selected: selectedId,
       playlists: playlists,
       favoritesId: favoritesId,
     );
-    final kind = switch (selected) {
-      LibraryCollections.historySentinel => CollectionKind.history,
-      LibraryCollections.downloadsSentinel => CollectionKind.localSongs,
-      LibraryCollections.favoritesSentinel => CollectionKind.favorites,
-      _ => CollectionKind.custom,
-    };
+    final smartListId = LibraryCollections.smartIdFor(selected);
+    final kind = smartListId != null
+        ? CollectionKind.smartList
+        : switch (selected) {
+            LibraryCollections.historySentinel => CollectionKind.history,
+            LibraryCollections.downloadsSentinel => CollectionKind.localSongs,
+            LibraryCollections.favoritesSentinel => CollectionKind.favorites,
+            _ => CollectionKind.custom,
+          };
     final playlistId = switch (kind) {
-      CollectionKind.history || CollectionKind.localSongs => null,
+      CollectionKind.history ||
+      CollectionKind.localSongs ||
+      CollectionKind.smartList => null,
       CollectionKind.favorites => favoritesId,
       CollectionKind.custom => selected,
     };
@@ -311,12 +329,15 @@ class CollectionPresenter {
       CollectionKind.favorites => favoritesName,
       CollectionKind.custom =>
         _playlistName(playlists, selected) ?? favoritesName,
+      CollectionKind.smartList =>
+        smartListNames[smartListId] ?? smartListId ?? favoritesName,
     };
     return CollectionIdentity(
       selectedId: selected,
       kind: kind,
       playlistId: playlistId,
       displayName: displayName,
+      smartListId: smartListId,
     );
   }
 
@@ -327,14 +348,18 @@ class CollectionPresenter {
     required List<PlaylistTrack> tracks,
     required List<PlayHistoryEntry> history,
     required List<CollectionLocalSong> localSongs,
+    Map<String, List<CollectionRow>> smartRows = const {},
     required String query,
     required CollectionTrackSort sort,
   }) {
     // 只把该合集真正读取的源列表放进键：收藏页不依赖历史列表，后台写入
     // 历史（列表引用替换）不能让整页可见行失效。
+    final smartKey = identity.smartListId;
     final Object source = switch (identity.kind) {
       CollectionKind.history => history,
       CollectionKind.localSongs => localSongs,
+      CollectionKind.smartList =>
+        smartRows[smartKey] ?? const <CollectionRow>[],
       CollectionKind.favorites || CollectionKind.custom => tracks,
     };
     final key = _CollectionViewKey(
@@ -374,15 +399,22 @@ class CollectionPresenter {
         ))
           TrackCollectionRow(track),
       ],
+      CollectionKind.smartList => [
+        for (final row in smartRows[smartKey] ?? const <CollectionRow>[])
+          if (_rowMatchesQuery(row, query)) row,
+      ],
     };
     final hasItems = switch (identity.kind) {
       CollectionKind.history => history.isNotEmpty,
       CollectionKind.localSongs => localSongs.isNotEmpty,
+      CollectionKind.smartList =>
+        (smartRows[smartKey] ?? const <CollectionRow>[]).isNotEmpty,
       CollectionKind.favorites || CollectionKind.custom => tracks.isNotEmpty,
     };
     final view = CollectionView(
       identity: identity,
-      tracks: identity.isHistory || identity.isLocalSongs
+      tracks:
+          identity.isHistory || identity.isLocalSongs || identity.isSmartList
           ? const <PlaylistTrack>[]
           : tracks,
       visibleRows: visibleRows,
@@ -400,6 +432,12 @@ class CollectionPresenter {
   ) {
     switch (row) {
       case TrackCollectionRow(:final track):
+        if (identity.isSmartList) {
+          return const [
+            CollectionRowActionSpec(CollectionRowActionKind.addToPlaylist),
+            CollectionRowActionSpec(CollectionRowActionKind.toggleFavorite),
+          ];
+        }
         return [
           const CollectionRowActionSpec(CollectionRowActionKind.addToPlaylist),
           if (identity.playlistId != null && track.sourceKey != kLocalSourceKey)
@@ -426,11 +464,38 @@ class CollectionPresenter {
             destructive: true,
           ),
         ];
-      case LocalSongCollectionRow():
-        return const [
-          CollectionRowActionSpec(CollectionRowActionKind.addToPlaylist),
-          CollectionRowActionSpec(CollectionRowActionKind.toggleFavorite),
-          CollectionRowActionSpec(
+      case LocalSongCollectionRow(:final song) when identity.isSmartList:
+        // 智能列表只允许播放 / 收藏 / 加入列表；「文件不见」例外：只提供
+        // 重新选择文件与移除记录，不提供播放（避免必然失败）。
+        final record = song.record;
+        return [
+          if (record?.isMissing == true)
+            const CollectionRowActionSpec(
+              CollectionRowActionKind.locateLocalFile,
+            ),
+          const CollectionRowActionSpec(
+            CollectionRowActionKind.deleteLocalSong,
+            destructive: true,
+          ),
+        ];
+      case LocalSongCollectionRow(:final song):
+        final record = song.record;
+        return [
+          const CollectionRowActionSpec(CollectionRowActionKind.addToPlaylist),
+          const CollectionRowActionSpec(CollectionRowActionKind.toggleFavorite),
+          if (record != null)
+            const CollectionRowActionSpec(
+              CollectionRowActionKind.editLocalTitle,
+            ),
+          if (record != null && !record.isMissing)
+            const CollectionRowActionSpec(
+              CollectionRowActionKind.refreshLocalInfo,
+            ),
+          if (record?.isMissing == true)
+            const CollectionRowActionSpec(
+              CollectionRowActionKind.locateLocalFile,
+            ),
+          const CollectionRowActionSpec(
             CollectionRowActionKind.deleteLocalSong,
             destructive: true,
           ),
@@ -456,6 +521,14 @@ class CollectionPresenter {
       query: query,
       fields: (track) => (title: track.title, artist: track.artist),
     );
+  }
+
+  static bool _rowMatchesQuery(CollectionRow row, String query) {
+    final q = normalizeBrowseText(query);
+    if (q.isEmpty) return true;
+    return normalizeBrowseText(row.title).contains(q) ||
+        normalizeBrowseText(row.artist).contains(q) ||
+        normalizeBrowseText(row.album).contains(q);
   }
 
   static String? _playlistName(List<PlaylistInfo> playlists, int id) {

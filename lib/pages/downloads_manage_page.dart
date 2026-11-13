@@ -16,12 +16,16 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../domain/models/library.dart';
+import '../domain/models/smart_lists.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/library_collection_request.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/download/download_intent.dart';
 import '../services/download/download_maintenance.dart';
+import '../services/download/download_records.dart';
+import '../services/local/local_library_service.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_queue.dart';
 import '../services/notification_service.dart';
@@ -148,6 +152,26 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                     ? null
                     : () => unawaited(_publishPublic(maintenance)),
               ),
+            // 缺文件：只显示数量 + 检查入口（不恢复完整已完成列表）。
+            Builder(
+              builder: (context) {
+                final records = context.watch<DownloadRecords?>();
+                final missing = records == null
+                    ? 0
+                    : records.downloads
+                          .where((record) => record.isMissing)
+                          .length;
+                return SettingsNavTile(
+                  key: const Key('downloadsMissingFilesItem'),
+                  icon: Icons.report_gmailerrorred_rounded,
+                  title: l10n.localFileCheckFiles,
+                  subtitle: l10n.missingFilesCount(missing),
+                  onTap: _busy || records == null
+                      ? null
+                      : () => unawaited(_checkMissingFiles(context, l10n)),
+                );
+              },
+            ),
             FutureBuilder<String?>(
               future: _rootPath,
               builder: (context, snapshot) => SettingsInfoTile(
@@ -447,6 +471,22 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// 手动检查一次文件，并在提示里给出结果；缺失明细在收藏 › 文件不见。
+  Future<void> _checkMissingFiles(
+    BuildContext context,
+    AppLocalizations l10n,
+  ) async {
+    final service = context.read<LocalLibraryService?>();
+    final notifications = context.read<NotificationService?>();
+    final request = context.read<LibraryCollectionRequest?>();
+    if (service == null) return;
+    final result = await service.checkFiles();
+    if (!mounted) return;
+    // 请求收藏页切到「文件不见」，用户关掉设置后即可看到明细。
+    request?.requestSmartList(SmartListIds.missingFiles);
+    notifications?.showSnackBar(l10n.missingFilesCount(result.changed));
   }
 
   Future<void> _cleanupParts(DownloadMaintenance maintenance) async {

@@ -1,6 +1,7 @@
+import 'package:flutter/foundation.dart';
+
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -20,6 +21,7 @@ import 'cache_management_page.dart';
 import 'diagnostics_page.dart';
 import 'download_settings_page.dart';
 import 'downloads_manage_page.dart';
+import 'music_folders_page.dart';
 
 /// 数据与存储子页：缓存、听歌统计与数据导入导出。
 ///
@@ -66,6 +68,16 @@ class DataSettingsPage extends StatelessWidget {
               onTap: () =>
                   openSettingsSubPage(context, const DownloadsManagePage()),
             ),
+            // 音乐文件夹：扫描目录、进度 / 摘要与手动重扫（iOS 不展示）。
+            if (defaultTargetPlatform != TargetPlatform.iOS)
+              SettingsNavTile(
+                key: const Key('settingsMusicFoldersItem'),
+                icon: Icons.folder_copy_rounded,
+                title: l10n.musicFoldersTitle,
+                subtitle: l10n.musicFoldersSubtitle,
+                onTap: () =>
+                    openSettingsSubPage(context, const MusicFoldersPage()),
+              ),
             // 统计采集开关（关闭 = 停止记录新事件，已有数据保留）；
             // 统计明细入口在设置首屏「数据」卡（与听歌统计同一处）。
             ValueListenableBuilder<bool>(

@@ -346,6 +346,34 @@ class FakePlaybackFacade implements PlaybackFacade {
     );
   }
 
+  /// 只更新元数据：不重载，不清错误。
+  @override
+  Future<void> updateQueueTrackMetadata(String trackUri, Track track) async {
+    calls.add('updateQueueTrackMetadata:$trackUri');
+    lastReplacedTrackUri = trackUri;
+    lastReplacedTrack = track;
+    final current = _notifier.value;
+    Track swap(Track item) => item.id.uri == trackUri ? track : item;
+    _notifier.value = PlaybackSnapshot(
+      current: current.current == null ? null : swap(current.current!),
+      queue: [for (final item in current.queue) swap(item)],
+      currentIndex: current.currentIndex,
+      next: current.next == null ? null : swap(current.next!),
+      previous: current.previous == null ? null : swap(current.previous!),
+      previousOfPrevious: current.previousOfPrevious == null
+          ? null
+          : swap(current.previousOfPrevious!),
+      upNext: [for (final item in current.upNext) swap(item)],
+      isPlaying: current.isPlaying,
+      isLoading: current.isLoading,
+      duration: current.duration,
+      mode: current.mode,
+      context: current.context,
+      quality: current.quality,
+      error: current.error,
+    );
+  }
+
   /// 最近一次封面回写的曲目与 URL（封面补取测试用）。
   String? lastArtworkTrackUri;
   String? lastArtworkUri;

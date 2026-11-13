@@ -8937,6 +8937,318 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Export'**
   String get diagnosticsExportSection;
+
+  /// No description provided for @musicFoldersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Music folders'**
+  String get musicFoldersTitle;
+
+  /// No description provided for @musicFoldersSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Adds audio from these folders. Files stay where they are.'**
+  String get musicFoldersSubtitle;
+
+  /// No description provided for @musicFoldersAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add folder'**
+  String get musicFoldersAdd;
+
+  /// No description provided for @musicFoldersEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No folders yet'**
+  String get musicFoldersEmptyTitle;
+
+  /// No description provided for @musicFoldersEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a folder and Molia will find the audio inside'**
+  String get musicFoldersEmptyBody;
+
+  /// No description provided for @musicFoldersScanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning · {count} files checked'**
+  String musicFoldersScanning(int count);
+
+  /// No description provided for @musicFoldersCancelScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop scanning'**
+  String get musicFoldersCancelScan;
+
+  /// No description provided for @musicFoldersSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {added}, updated {updated}, skipped {skipped}'**
+  String musicFoldersSummary(int added, int updated, int skipped);
+
+  /// No description provided for @musicFoldersUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This folder isn\'t available right now'**
+  String get musicFoldersUnavailable;
+
+  /// No description provided for @musicFoldersCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning stopped'**
+  String get musicFoldersCancelled;
+
+  /// No description provided for @musicFoldersRescan.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescan'**
+  String get musicFoldersRescan;
+
+  /// No description provided for @musicFoldersRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get musicFoldersRemove;
+
+  /// No description provided for @musicFoldersAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder added'**
+  String get musicFoldersAdded;
+
+  /// No description provided for @musicFoldersDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'This folder is already added'**
+  String get musicFoldersDuplicate;
+
+  /// No description provided for @musicFoldersNested.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick the parent folder instead'**
+  String get musicFoldersNested;
+
+  /// No description provided for @musicFoldersInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'This location can\'t be added'**
+  String get musicFoldersInvalid;
+
+  /// No description provided for @musicFoldersAndroidNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Android may only allow part of this folder. If it can\'t be read, import files instead.'**
+  String get musicFoldersAndroidNote;
+
+  /// No description provided for @localFileMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is missing. It may have been deleted.'**
+  String get localFileMissing;
+
+  /// No description provided for @localFileLocate.
+  ///
+  /// In en, this message translates to:
+  /// **'Locate file'**
+  String get localFileLocate;
+
+  /// No description provided for @localTitleEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit title'**
+  String get localTitleEdit;
+
+  /// No description provided for @localTitleNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the title changes. Other tags stay as they are.'**
+  String get localTitleNote;
+
+  /// No description provided for @localTitleMoliaOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Change in Molia only'**
+  String get localTitleMoliaOnly;
+
+  /// No description provided for @localTitleMoliaOnlyNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Doesn\'t change the file'**
+  String get localTitleMoliaOnlyNote;
+
+  /// No description provided for @localTitleInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Title can\'t be empty'**
+  String get localTitleInvalid;
+
+  /// No description provided for @localTitleFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Didn\'t change. Try again.'**
+  String get localTitleFailed;
+
+  /// No description provided for @collectionModeSongs.
+  ///
+  /// In en, this message translates to:
+  /// **'Songs'**
+  String get collectionModeSongs;
+
+  /// No description provided for @collectionModeAlbums.
+  ///
+  /// In en, this message translates to:
+  /// **'Albums'**
+  String get collectionModeAlbums;
+
+  /// No description provided for @collectionModeArtists.
+  ///
+  /// In en, this message translates to:
+  /// **'Artists'**
+  String get collectionModeArtists;
+
+  /// No description provided for @unknownAlbum.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown album'**
+  String get unknownAlbum;
+
+  /// No description provided for @smartListsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Smart lists'**
+  String get smartListsSection;
+
+  /// No description provided for @smartRecentlyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Recently added'**
+  String get smartRecentlyAdded;
+
+  /// No description provided for @smartRecentlyPlayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Recently played'**
+  String get smartRecentlyPlayed;
+
+  /// No description provided for @smartMostPlayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Most played'**
+  String get smartMostPlayed;
+
+  /// No description provided for @smartNeverPlayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Never played'**
+  String get smartNeverPlayed;
+
+  /// No description provided for @smartLocalOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Local only'**
+  String get smartLocalOnly;
+
+  /// No description provided for @smartDownloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded'**
+  String get smartDownloaded;
+
+  /// No description provided for @smartMissingFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing files'**
+  String get smartMissingFiles;
+
+  /// No description provided for @smartMetricPlayCount.
+  ///
+  /// In en, this message translates to:
+  /// **'By plays'**
+  String get smartMetricPlayCount;
+
+  /// No description provided for @smartMetricListeningTime.
+  ///
+  /// In en, this message translates to:
+  /// **'By listening time'**
+  String get smartMetricListeningTime;
+
+  /// No description provided for @smartEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No songs here yet'**
+  String get smartEmpty;
+
+  /// No description provided for @browseEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No albums or artists yet'**
+  String get browseEmptyTitle;
+
+  /// No description provided for @browseEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Music from favorites, playlists and local files shows up here'**
+  String get browseEmptyBody;
+
+  /// No description provided for @browseSearchEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching albums or artists'**
+  String get browseSearchEmpty;
+
+  /// No description provided for @browseSelectHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick an album or artist'**
+  String get browseSelectHint;
+
+  /// No description provided for @duplicateVersions.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} versions'**
+  String duplicateVersions(int count);
+
+  /// No description provided for @missingFilesCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} missing files'**
+  String missingFilesCount(int count);
+
+  /// No description provided for @localFileCheckFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Check files'**
+  String get localFileCheckFiles;
+
+  /// No description provided for @backButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get backButton;
+
+  /// No description provided for @localRefreshInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh info from file'**
+  String get localRefreshInfo;
+
+  /// No description provided for @localTitleUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Title updated'**
+  String get localTitleUpdated;
+
+  /// No description provided for @localFileRelocated.
+  ///
+  /// In en, this message translates to:
+  /// **'File re-linked'**
+  String get localFileRelocated;
+
+  /// No description provided for @localInfoUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Info updated'**
+  String get localInfoUpdated;
 }
 
 class _AppLocalizationsDelegate

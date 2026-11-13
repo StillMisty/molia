@@ -28,6 +28,15 @@ import '../../services/covers/custom_cover_store.dart';
 import '../../services/data_saver_service.dart';
 import '../../services/download/download_service.dart';
 import '../../services/download/download_settings.dart';
+import '../../services/download/missing_file_probe.dart';
+import '../../data/local_title_store.dart';
+import '../../services/local/local_library_service.dart';
+import '../../services/local/local_metadata_service.dart';
+import '../../services/local/local_write_gate.dart';
+import '../../services/local/music_folder_scanner.dart';
+import '../../services/local/music_folder_watcher.dart';
+import '../../services/local/music_folders.dart';
+import '../../services/local_cover_identity_sweep.dart';
 import '../../services/lyrics_cache.dart';
 import '../../services/lyrics_service.dart';
 import '../../sources/builtin/builtin_search.dart';
@@ -39,6 +48,10 @@ typedef LocalDataStack = ({
   DataSaverService dataSaver,
   DownloadSettings downloadSettings,
   DownloadService downloadService,
+  LocalCoverIdentitySweep localCoverSweep,
+  MissingFileProbe missingFileProbe,
+  LocalLibraryService localLibrary,
+  LocalMetadataService localMetadata,
   LyricsService lyricsService,
   CoverBackfillService coverBackfill,
   AudioPredownloader audioCacheWriter,
@@ -162,9 +175,12 @@ Future<LocalDataStack> buildLocalDataStack({
   // 共用同一个 LyricsService（缓存 → 原生 → 跨平台回退），封面经 ArtworkCache
   // 命中直读、未命中先走本渠道原生、再按名字跨渠道严格兜底；音频命中完整
   // 缓存时直接拷贝，不触网。
+  final downloadsRepository = DownloadsRepository();
+  // 扫描导入 / 手动导入 / 缺文件探测共用一条串行写队列。
+  final localWriteGate = LocalWriteGate();
   final downloadService = DownloadService(
     catalog: catalog.catalogService,
-    repository: DownloadsRepository(),
+    repository: downloadsRepository,
     storage: downloadStorage,
     cacheService: CacheService.instance,
     artworkCache: ArtworkCache.instance,
@@ -176,7 +192,50 @@ Future<LocalDataStack> buildLocalDataStack({
     coverResolver: customCovers.resolution,
     preferredQuality: () =>
         dataSaver.effectiveQuality(sourceManager.preferredQuality),
+    writeGate: localWriteGate,
   );
+  // 缺文件探测：下载记录就绪后空闲批量执行；扫描 / 手动检查共用同一入口。
+  final missingFileProbe = MissingFileProbe(
+    records: downloadService.records,
+    repository: downloadsRepository,
+    storage: downloadStorage,
+    writeGate: localWriteGate,
+  );
+
+  // 本地曲库：音乐文件夹配置 + 扫描 + 监听 + 缺文件检查（首帧后 idle 启动）。
+  final musicFolders = MusicFoldersStore();
+  late final LocalLibraryService localLibrary;
+  localLibrary = LocalLibraryService(
+    folders: musicFolders,
+    scanner: MusicFolderScanner(target: downloadService),
+    probe: missingFileProbe,
+    watcher: MusicFolderWatcher(
+      onTrigger: (paths) => localLibrary.scanEventPaths(paths),
+    ),
+  );
+
+  // 标题编辑：标签文件 + 一处数据库事务（会话 gate 在播放栈建好后接线）。
+  final localMetadata = LocalMetadataService(
+    storage: downloadStorage,
+    store: LocalTitleStore(),
+    records: downloadService.records,
+  );
+
+  // 身份迁移第三阶段：封面索引键清扫（失败下一次启动重试，不阻断启动）。
+  final localCoverSweep = LocalCoverIdentitySweep(
+    covers: customCovers,
+    downloads: downloadsRepository,
+  );
+
+  // 下载记录的稳定身份 → 当前路径：本地音源经这个窄端口解析，重定位 / 扫描
+  // 只改一条记录即可，音源不依赖下载服务。记录未加载时返回 null，音源回退
+  // payload 里的路径。
+  catalog.localPathResolver.attach((track) async {
+    final record = downloadService.records.recordForTrack(track);
+    final path = record?.filePath;
+    return path == null || path.isEmpty ? null : path;
+  });
+
   // 下载记录 / `.part` 清扫后移到首帧之后：存储根解析、全量记录读取与目录
   // 扫描都不参与首帧内容。服务先构造好交给 Provider 树，`post_frame_init`
   // 调 `init()`；依赖记录的方法经 `ready` 自行等待就绪。
@@ -195,6 +254,10 @@ Future<LocalDataStack> buildLocalDataStack({
     dataSaver: dataSaver,
     downloadSettings: downloadSettings,
     downloadService: downloadService,
+    localCoverSweep: localCoverSweep,
+    missingFileProbe: missingFileProbe,
+    localLibrary: localLibrary,
+    localMetadata: localMetadata,
     lyricsService: lyricsService,
     coverBackfill: coverBackfill,
     audioCacheWriter: audioCacheWriter,

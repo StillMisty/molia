@@ -409,6 +409,10 @@ class PlaybackProvider extends ChangeNotifier {
     }
   }
 
+  /// 只更新队列 / 恢复态同 id 曲目的元数据（标题），不重新取链。
+  Future<void> updateTrackMetadata(Track track) =>
+      _session.updateTrackMetadata(track);
+
   /// 换源：把队列中 [oldTrack] 原地替换为 [newTrack]，返回是否命中。
   ///
   /// 真实队列与冷启动恢复态会话都由协调者按范围改写并落盘；这里只按命令

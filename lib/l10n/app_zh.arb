@@ -243,7 +243,7 @@
   "libraryLoadFailed": "资料库加载失败",
   "languageEnglish": "English",
   "languageSimplifiedChinese": "简体中文",
-    "noItemsFound": "未找到项目",
+  "noItemsFound": "未找到项目",
   "copyButtonText": "复制",
   "posterButtonLabel": "海报",
   "retryButton": "重试",
@@ -1569,7 +1569,14 @@
   "syncPeerBehind": "待同步 {count} 项",
   "syncPeerBehindBytes": "待同步 {count} 项（约 {size}）",
   "@syncPeerBehindBytes": {
-    "placeholders": { "count": { "type": "int" }, "size": { "type": "String" } }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
   },
   "syncPeerClockSkew": "设备时间相差 {minutes} 分钟",
   "syncPeerLastError": "最近失败：{error}",
@@ -1678,7 +1685,11 @@
   "syncIssueWebdavUploadFailed": "WebDAV 同步数据上传失败",
   "syncIssueDeleteRemoteFailed": "清理设备 {peer} 的云端文件失败",
   "@syncIssueDeleteRemoteFailed": {
-    "placeholders": { "peer": { "type": "String" } }
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
   },
   "syncIssueInternal": "同步出错",
   "syncActionGrantPermission": "授予权限",
@@ -2229,7 +2240,7 @@
   "shortcutsGlobalHint": "全局快捷键，窗口不在前台也生效；必须包含 Ctrl / Alt / Shift",
   "shortcutsGlobalUnsupportedKey": "全局快捷键只支持字母、数字、F1–F12 与空格",
   "shortcutsGlobalFailed": "部分全局快捷键未能生效：{detail}",
-"shortcutsGlobalLinuxHint": "Linux 由桌面门户提供；精简桌面环境可能不支持，届时会提示失败",
+  "shortcutsGlobalLinuxHint": "Linux 由桌面门户提供；精简桌面环境可能不支持，届时会提示失败",
   "shortcutsEnabledSwitch": "启用软件内快捷键",
   "shortcutsGlobalEnabledSwitch": "启用全局快捷键",
   "shortcutsResetAll": "恢复默认",
@@ -2363,5 +2374,91 @@
     }
   },
   "diagnosticsLoading": "读取中…",
-  "diagnosticsExportSection": "导出"
+  "diagnosticsExportSection": "导出",
+  "musicFoldersTitle": "音乐文件夹",
+  "musicFoldersSubtitle": "自动收录文件夹里的音频，不会移动文件",
+  "musicFoldersAdd": "添加文件夹",
+  "musicFoldersEmptyTitle": "还没有添加文件夹",
+  "musicFoldersEmptyBody": "添加一个文件夹，Molia 会找出里面的音频",
+  "musicFoldersScanning": "正在扫描 · 已处理 {count} 个文件",
+  "musicFoldersCancelScan": "取消扫描",
+  "musicFoldersSummary": "新增 {added} 首，更新 {updated} 首，跳过 {skipped} 个",
+  "musicFoldersUnavailable": "暂时读不到这个文件夹",
+  "musicFoldersCancelled": "扫描已取消",
+  "musicFoldersRescan": "重新扫描",
+  "musicFoldersRemove": "移除",
+  "musicFoldersAdded": "已添加文件夹",
+  "musicFoldersDuplicate": "这个文件夹已经添加过了",
+  "musicFoldersNested": "请选择上层文件夹",
+  "musicFoldersInvalid": "这个位置不能添加",
+  "musicFoldersAndroidNote": "系统可能只允许读取部分文件夹；读不到时可以逐个导入文件",
+  "localFileMissing": "本地文件不存在，可能已被删除",
+  "localFileLocate": "重新选择文件",
+  "localTitleEdit": "修改标题",
+  "localTitleNote": "只改标题，其它标签保持不变",
+  "localTitleMoliaOnly": "只在 Molia 中修改",
+  "localTitleMoliaOnlyNote": "不改文件",
+  "localTitleInvalid": "标题不能为空",
+  "localTitleFailed": "没有改成，请再试一次",
+  "@musicFoldersScanning": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@musicFoldersSummary": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "updated": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "collectionModeSongs": "歌曲",
+  "collectionModeAlbums": "专辑",
+  "collectionModeArtists": "歌手",
+  "unknownAlbum": "未知专辑",
+  "smartListsSection": "智能列表",
+  "smartRecentlyAdded": "最近添加",
+  "smartRecentlyPlayed": "最近播放",
+  "smartMostPlayed": "最常播放",
+  "smartNeverPlayed": "从未播放",
+  "smartLocalOnly": "仅本地",
+  "smartDownloaded": "已下载",
+  "smartMissingFiles": "文件不见",
+  "smartMetricPlayCount": "按播放次数",
+  "smartMetricListeningTime": "按收听时长",
+  "smartEmpty": "这里还没有歌曲",
+  "browseEmptyTitle": "这里还没有专辑或歌手",
+  "browseEmptyBody": "收藏、列表和本地歌曲里的内容会出现在这里",
+  "browseSearchEmpty": "没有匹配的专辑或歌手",
+  "browseSelectHint": "选择一个专辑或歌手",
+  "duplicateVersions": "{count} 个版本",
+  "missingFilesCount": "{count} 个文件不见",
+  "localFileCheckFiles": "检查文件",
+  "@duplicateVersions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@missingFilesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backButton": "返回",
+  "localRefreshInfo": "从文件刷新信息",
+  "localTitleUpdated": "标题已更新",
+  "localFileRelocated": "文件已重新关联",
+  "localInfoUpdated": "信息已更新"
 }

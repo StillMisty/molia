@@ -11,6 +11,8 @@ import '../../data/catalog/album_service.dart';
 import '../../data/catalog/artist_service.dart';
 import '../../data/catalog/catalog_service.dart';
 import '../../data/catalog/comments_service.dart';
+import '../../data/catalog/local_music_source.dart';
+import '../../data/catalog/local_path_resolver.dart';
 import '../../data/catalog/source_registry_impl.dart';
 import '../../data/settings/settings_keys.dart';
 import '../../data/settings/settings_module.dart';
@@ -27,6 +29,7 @@ import '../../sources/source_manager.dart';
 /// 目录栈产物（字段即子系统的对外面；构造顺序见 [buildCatalogStack]）。
 typedef CatalogStack = ({
   SettingsRegistry settings,
+  LocalPathResolver localPathResolver,
   SourceManager sourceManager,
   SourceRegistry sourceRegistry,
   SwapQueryPlanner swapQueryPlanner,
@@ -117,7 +120,11 @@ CatalogStack buildCatalogStack({FailureRecorder? failures}) {
 
   // 适配层：SourceManager → SourceRegistry → CatalogService。
   // SearchProvider 只依赖后两者（搜索缓存 single-flight + LRU + TTL 5min）。
-  final sourceRegistry = SourceRegistryImpl(sourceManager);
+  final localPathResolver = LocalPathResolver();
+  final sourceRegistry = SourceRegistryImpl(
+    sourceManager,
+    localSource: LocalMusicSource(pathResolver: localPathResolver),
+  );
   String channelDisplayName(String key) {
     for (final descriptor in sourceRegistry.descriptors) {
       if (descriptor.key == key) return descriptor.displayName;
@@ -163,6 +170,7 @@ CatalogStack buildCatalogStack({FailureRecorder? failures}) {
 
   return (
     settings: settingsRegistry,
+    localPathResolver: localPathResolver,
     sourceManager: sourceManager,
     sourceRegistry: sourceRegistry,
     swapQueryPlanner: swapQueryPlanner,

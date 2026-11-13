@@ -20,6 +20,7 @@ import 'package:molia/services/covers/cover_resolution.dart';
 import 'package:molia/services/download/download_journal.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/download/download_settings.dart';
+import 'package:molia/services/download/missing_file_probe.dart';
 
 import '../support/fake_cover_index.dart';
 import '../support/fake_download_notifications.dart';
@@ -745,12 +746,45 @@ void main() {
       expect(record.sizeBytes, storage.files['/music/歌手 - 歌名.mp3']!.length);
       expect(record.localTrack?.id.sourceKey, kLocalSourceKey);
       expect(record.localTrack?.payload['path'], '/music/歌手 - 歌名.mp3');
+      // 领域身份是稳定 localKey（file:<uuid>），不是旧路径身份。
+      expect(record.localKey, startsWith('file:'));
+      expect(record.localSongId, record.localKey);
+      expect(record.localTrack?.id.id, record.localKey);
       // 落库（跨启动恢复）且原文件保留。
       expect(
-        await repository.findByOrigin(kLocalSourceKey, '/music/歌手 - 歌名.mp3'),
+        await repository.findByOrigin(kLocalSourceKey, record.localKey!),
         isNotNull,
       );
+      expect(await repository.findByFilePath('/music/歌手 - 歌名.mp3'), isNotNull);
       expect(storage.files.containsKey('/music/歌手 - 歌名.mp3'), isTrue);
+    });
+
+    test('从文件刷新信息：显式重读标签，保留身份与导入标记', () async {
+      storage.files['/music/歌手 - 歌名.mp3'] = localMp3(
+        title: '旧标题',
+        artist: '旧歌手',
+      );
+      final service = makeService();
+      await service.init();
+      await service.importLocalFiles(['/music/歌手 - 歌名.mp3']);
+      final before = service.records.downloads.single;
+
+      storage.files['/music/歌手 - 歌名.mp3'] = localMp3(
+        title: '新标签标题',
+        artist: '新标签歌手',
+      );
+      final updated = await service.refreshLocalMetadata(before);
+      expect(updated, isNotNull);
+      expect(updated!.title, '新标签标题');
+      expect(updated.artist, '新标签歌手');
+      expect(updated.imported, isTrue);
+      expect(updated.localKey, before.localKey);
+      expect(updated.localSongId, before.localSongId);
+      expect(service.records.downloads.single.title, '新标签标题');
+      expect(
+        await repository.findByOrigin(kLocalSourceKey, before.localKey!),
+        isNotNull,
+      );
     });
 
     test('无标签：文件名兜底拆「歌手 - 歌名」', () async {
@@ -1950,6 +1984,142 @@ void main() {
       DownloadService.audioMimeTypeForPath('/a/b.unknown'),
       'application/octet-stream',
     );
+  });
+  group('缺文件探测 / 重定位', () {
+    test('文件消失（根目录可用）标记缺失；再次探测不重复通知', () async {
+      await repository.insert(
+        const DownloadedTrack(
+          originSourceKey: 'kw',
+          originSongId: '1',
+          title: '测试歌曲',
+          filePath: '/downloads/a.mp3',
+          sizeBytes: 4,
+          downloadedAt: 1,
+        ),
+      );
+      final service = makeService();
+      await service.init();
+      final record = service.records.downloads.single;
+      storage.directories.add('/downloads');
+
+      final probe = MissingFileProbe(
+        records: service.records,
+        repository: repository,
+        storage: storage,
+        clock: () => DateTime.fromMillisecondsSinceEpoch(5000),
+      );
+      final first = await probe.probeAll();
+      expect(first.changed, 1);
+      final missing = service.records.recordFor('kw', '1')!;
+      expect(missing.isMissing, isTrue);
+      expect(missing.missingAt, 5000);
+      expect(missing.mtimeMs, record.mtimeMs);
+      final row = await repository.findByOrigin('kw', '1');
+      expect(row!.missingAt, 5000);
+
+      final second = await probe.probeAll();
+      expect(second.changed, 0);
+    });
+
+    test('文件存在：更新 mtime 并清除缺失状态；根目录不可用不标记', () async {
+      await repository.insert(
+        const DownloadedTrack(
+          originSourceKey: 'kw',
+          originSongId: '1',
+          title: '测试歌曲',
+          filePath: '/downloads/a.mp3',
+          sizeBytes: 4,
+          downloadedAt: 1,
+        ),
+      );
+      final service = makeService();
+      await service.init();
+      final record = service.records.downloads.single;
+      storage.files[record.filePath!] = [1, 2, 3, 4];
+      storage.mtimes[record.filePath!] = 777;
+      final probe = MissingFileProbe(
+        records: service.records,
+        repository: repository,
+        storage: storage,
+      );
+      await probe.probeAll();
+      expect(service.records.recordFor('kw', '1')!.mtimeMs, 777);
+      expect(service.records.recordFor('kw', '1')!.isMissing, isFalse);
+
+      // 整个根目录读不到（外接盘 / 网络卷离线）：不把整库标缺失。
+      storage.files.remove(record.filePath);
+      storage.directories.remove('/downloads');
+      final result = await probe.probeAll();
+      expect(result.changed, 0);
+      expect(service.records.recordFor('kw', '1')!.isMissing, isFalse);
+    });
+
+    test('重定位：路径 / 大小 / mtime 更新，导入身份与引用不变', () async {
+      storage.directories.add('/music');
+      storage.files['/music/歌手 - 歌名.mp3'] = [...utf8.encode('not-a-real-mp3')];
+      final service = makeService();
+      await service.init();
+      expect(await service.importLocalFiles(['/music/歌手 - 歌名.mp3']), (1, 0));
+      final before = service.records.downloads.single;
+      final localKey = before.localKey;
+
+      storage.files['/music/moved.mp3'] = storage.files.remove(
+        '/music/歌手 - 歌名.mp3',
+      )!;
+      storage.mtimes['/music/moved.mp3'] = 888;
+      expect(
+        await service.relocate(before, '/music/moved.mp3'),
+        LocalRelocateResult.relocated,
+      );
+
+      final after = service.records.downloads.single;
+      expect(after.localKey, localKey, reason: '重定位不改身份');
+      expect(after.localSongId, localKey);
+      expect(after.filePath, '/music/moved.mp3');
+      expect(after.mtimeMs, 888);
+      expect(after.isMissing, isFalse);
+      expect(after.localTrack!.payload['path'], '/music/moved.mp3');
+      expect(await repository.findByFilePath('/music/moved.mp3'), isNotNull);
+
+      expect(
+        await service.relocate(after, '/music/moved.txt'),
+        LocalRelocateResult.unsupportedFormat,
+      );
+      expect(
+        await service.relocate(after, '/music/not-there.mp3'),
+        LocalRelocateResult.fileMissing,
+      );
+    });
+
+    test('并发导入同一路径：串行写队列只产生一条记录', () async {
+      storage.directories.add('/music');
+      storage.files['/music/a.mp3'] = [1, 2, 3, 4];
+      final service = makeService();
+      await service.init();
+      final results = await Future.wait([
+        service.importLocalFiles(['/music/a.mp3']),
+        service.importLocalFiles(['/music/a.mp3']),
+      ]);
+      expect(results.map((result) => result.$1), [1, 1]);
+      expect(service.records.downloads, hasLength(1));
+      final record = service.records.downloads.single;
+      expect(record.localKey, startsWith('file:'));
+      expect(await repository.listImported(), hasLength(1));
+    });
+
+    test('删除导入只删记录，文件保留', () async {
+      storage.directories.add('/music');
+      storage.files['/music/a.mp3'] = [1, 2, 3, 4];
+      final service = makeService();
+      await service.init();
+      await service.importLocalFiles(['/music/a.mp3']);
+      final record = service.records.downloads.single;
+      await service.delete(record);
+      expect(service.records.downloads, isEmpty);
+      expect(await repository.findByFilePath('/music/a.mp3'), isNull);
+      expect(storage.files.containsKey('/music/a.mp3'), isTrue);
+      expect(storage.deleted, isNot(contains('/music/a.mp3')));
+    });
   });
 }
 

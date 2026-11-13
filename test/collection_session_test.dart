@@ -2,10 +2,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/domain/models/smart_lists.dart';
+import 'package:molia/providers/collection_presenter.dart';
 import 'package:molia/providers/collection_session.dart';
 import 'package:molia/providers/library_collections.dart';
 import 'package:molia/providers/library_outcome.dart';
 import 'package:molia/providers/library_provider.dart';
+import 'package:molia/providers/local_songs_collection.dart';
 import 'package:molia/utils/collection_row_query.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -804,5 +807,131 @@ void main() {
       'favorites',
       'playlist:2',
     ]);
+  });
+
+  group('智能列表虚拟身份', () {
+    CollectionSessionInput smartInput(
+      _FakeLibrary library,
+      Map<String, List<CollectionRow>> rows,
+    ) => CollectionSessionInput(
+      library: library,
+      names: const CollectionNames(
+        favorites: '收藏',
+        history: '历史',
+        localSongs: '本地',
+        smartLists: {
+          SmartListIds.recentlyAdded: '最近添加',
+          SmartListIds.missingFiles: '文件不见',
+        },
+      ),
+      query: '',
+      smartRows: rows,
+    );
+
+    test('哨兵解析为智能列表；行来自虚拟输入且动作只有收藏 / 加入列表', () {
+      final library = _FakeLibrary();
+      final session = CollectionSession();
+      addTearDown(session.dispose);
+      final sentinel = LibraryCollections.smartSentinelFor(
+        SmartListIds.recentlyAdded,
+      );
+      expect(session.selectCollection(sentinel), isTrue);
+      final rows = <String, List<CollectionRow>>{
+        SmartListIds.recentlyAdded: [
+          TrackCollectionRow(track('1')),
+          TrackCollectionRow(track('2')),
+        ],
+      };
+      final view = session.sync(smartInput(library, rows)).view;
+      expect(view.kind, CollectionKind.smartList);
+      expect(view.displayName, '最近添加');
+      expect(view.collectionKey, SmartListIds.recentlyAdded);
+      expect(view.visibleRows.map((row) => row.title), ['Song 1', 'Song 2']);
+      expect(session.rowActionsFor(view.visibleRows.first, view), const [
+        CollectionRowActionSpec(CollectionRowActionKind.addToPlaylist),
+        CollectionRowActionSpec(CollectionRowActionKind.toggleFavorite),
+      ]);
+      expect(
+        library.loads.where((load) => load.playlistId != null),
+        isEmpty,
+        reason: '智能列表不落列表表，不发列表曲目读取',
+      );
+    });
+
+    test('搜索按行字段过滤；滚动键使用智能列表 id', () {
+      final library = _FakeLibrary();
+      final scroll = _FakeScroll();
+      final session = CollectionSession(scroll: scroll);
+      addTearDown(session.dispose);
+      session.selectCollection(
+        LibraryCollections.smartSentinelFor(SmartListIds.recentlyAdded),
+      );
+      final input = CollectionSessionInput(
+        library: library,
+        names: const CollectionNames(
+          favorites: '收藏',
+          history: '历史',
+          localSongs: '本地',
+          smartLists: {SmartListIds.recentlyAdded: '最近添加'},
+        ),
+        query: 'Song 2',
+        smartRows: {
+          SmartListIds.recentlyAdded: [
+            TrackCollectionRow(track('1')),
+            TrackCollectionRow(track('2')),
+          ],
+        },
+      );
+      session.sync(input);
+      final view = session.sync(input).view;
+      expect(view.visibleRows.map((row) => row.title), ['Song 2']);
+      expect(scroll.activated.last, SmartListIds.recentlyAdded);
+    });
+
+    test('文件不见：本地行只提供重新选择 / 移除', () {
+      final library = _FakeLibrary();
+      final session = CollectionSession();
+      addTearDown(session.dispose);
+      session.selectCollection(
+        LibraryCollections.smartSentinelFor(SmartListIds.missingFiles),
+      );
+      final record = DownloadedTrack(
+        originSourceKey: kLocalSourceKey,
+        originSongId: 'file:x',
+        title: 'Missing',
+        filePath: '/music/missing.mp3',
+        sizeBytes: 1,
+        imported: true,
+        localKey: 'file:x',
+        missingAt: 9,
+        downloadedAt: 1,
+      );
+      final view = session
+          .sync(
+            CollectionSessionInput(
+              library: library,
+              names: const CollectionNames(
+                favorites: '收藏',
+                history: '历史',
+                localSongs: '本地',
+                smartLists: {SmartListIds.missingFiles: '文件不见'},
+              ),
+              query: '',
+              smartRows: {
+                SmartListIds.missingFiles: [
+                  LocalSongCollectionRow(CollectionLocalSong.download(record)),
+                ],
+              },
+            ),
+          )
+          .view;
+      expect(session.rowActionsFor(view.visibleRows.single, view), const [
+        CollectionRowActionSpec(CollectionRowActionKind.locateLocalFile),
+        CollectionRowActionSpec(
+          CollectionRowActionKind.deleteLocalSong,
+          destructive: true,
+        ),
+      ]);
+    });
   });
 }

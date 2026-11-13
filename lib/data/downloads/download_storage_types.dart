@@ -45,8 +45,16 @@ abstract interface class DownloadStorage {
   /// 文件是否存在。
   Future<bool> fileExists(String path);
 
+  /// 目录是否存在（缺文件探测判断挂载根是否还在）。
+  Future<bool> directoryExists(String path);
+
   /// 文件大小（字节）；不存在 / 不可读返回 0。
   Future<int> fileSize(String path);
+
+  /// 文件修改时间（毫秒）；不存在 / 不可读返回 null。
+  ///
+  /// 扫描器的增量判定用 `path + mtime + size`，探测只比较存在与大小。
+  Future<int?> fileMtime(String path);
 
   /// 复制文件（缓存 → 下载目录的命中拷贝；父目录自动创建）。
   Future<void> copyFile(String from, String to);

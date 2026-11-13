@@ -281,7 +281,7 @@
   "libraryLoadFailed": "Couldn't load your library",
   "languageEnglish": "English",
   "languageSimplifiedChinese": "简体中文",
-    "noItemsFound": "No items found",
+  "noItemsFound": "No items found",
   "copyButtonText": "Copy",
   "posterButtonLabel": "Poster",
   "retryButton": "Retry",
@@ -1864,7 +1864,14 @@
   "syncPeerBehind": "{count} pending",
   "syncPeerBehindBytes": "{count} pending (~{size})",
   "@syncPeerBehindBytes": {
-    "placeholders": { "count": { "type": "int" }, "size": { "type": "String" } }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
   },
   "@syncPeerBehind": {
     "placeholders": {
@@ -2018,7 +2025,11 @@
   "syncIssueWebdavUploadFailed": "Failed to upload sync data to WebDAV",
   "syncIssueDeleteRemoteFailed": "Failed to clean up cloud files for {peer}",
   "@syncIssueDeleteRemoteFailed": {
-    "placeholders": { "peer": { "type": "String" } }
+    "placeholders": {
+      "peer": {
+        "type": "String"
+      }
+    }
   },
   "syncIssueInternal": "Sync error",
   "syncActionGrantPermission": "Grant permission",
@@ -2604,7 +2615,7 @@
       }
     }
   },
-"shortcutsGlobalLinuxHint": "On Linux these are provided through the desktop portal; minimal desktops may not support it and will report a failure",
+  "shortcutsGlobalLinuxHint": "On Linux these are provided through the desktop portal; minimal desktops may not support it and will report a failure",
   "shortcutsEnabledSwitch": "Enable in-app shortcuts",
   "shortcutsGlobalEnabledSwitch": "Enable global shortcuts",
   "shortcutsResetAll": "Reset to defaults",
@@ -2759,5 +2770,91 @@
     }
   },
   "diagnosticsLoading": "Loading…",
-  "diagnosticsExportSection": "Export"
+  "diagnosticsExportSection": "Export",
+  "musicFoldersTitle": "Music folders",
+  "musicFoldersSubtitle": "Adds audio from these folders. Files stay where they are.",
+  "musicFoldersAdd": "Add folder",
+  "musicFoldersEmptyTitle": "No folders yet",
+  "musicFoldersEmptyBody": "Add a folder and Molia will find the audio inside",
+  "musicFoldersScanning": "Scanning · {count} files checked",
+  "musicFoldersCancelScan": "Stop scanning",
+  "musicFoldersSummary": "Added {added}, updated {updated}, skipped {skipped}",
+  "musicFoldersUnavailable": "This folder isn't available right now",
+  "musicFoldersCancelled": "Scanning stopped",
+  "musicFoldersRescan": "Rescan",
+  "musicFoldersRemove": "Remove",
+  "musicFoldersAdded": "Folder added",
+  "musicFoldersDuplicate": "This folder is already added",
+  "musicFoldersNested": "Pick the parent folder instead",
+  "musicFoldersInvalid": "This location can't be added",
+  "musicFoldersAndroidNote": "Android may only allow part of this folder. If it can't be read, import files instead.",
+  "localFileMissing": "The file is missing. It may have been deleted.",
+  "localFileLocate": "Locate file",
+  "localTitleEdit": "Edit title",
+  "localTitleNote": "Only the title changes. Other tags stay as they are.",
+  "localTitleMoliaOnly": "Change in Molia only",
+  "localTitleMoliaOnlyNote": "Doesn't change the file",
+  "localTitleInvalid": "Title can't be empty",
+  "localTitleFailed": "Didn't change. Try again.",
+  "@musicFoldersScanning": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@musicFoldersSummary": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "updated": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "collectionModeSongs": "Songs",
+  "collectionModeAlbums": "Albums",
+  "collectionModeArtists": "Artists",
+  "unknownAlbum": "Unknown album",
+  "smartListsSection": "Smart lists",
+  "smartRecentlyAdded": "Recently added",
+  "smartRecentlyPlayed": "Recently played",
+  "smartMostPlayed": "Most played",
+  "smartNeverPlayed": "Never played",
+  "smartLocalOnly": "Local only",
+  "smartDownloaded": "Downloaded",
+  "smartMissingFiles": "Missing files",
+  "smartMetricPlayCount": "By plays",
+  "smartMetricListeningTime": "By listening time",
+  "smartEmpty": "No songs here yet",
+  "browseEmptyTitle": "No albums or artists yet",
+  "browseEmptyBody": "Music from favorites, playlists and local files shows up here",
+  "browseSearchEmpty": "No matching albums or artists",
+  "browseSelectHint": "Pick an album or artist",
+  "duplicateVersions": "{count} versions",
+  "missingFilesCount": "{count} missing files",
+  "localFileCheckFiles": "Check files",
+  "@duplicateVersions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@missingFilesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backButton": "Back",
+  "localRefreshInfo": "Refresh info from file",
+  "localTitleUpdated": "Title updated",
+  "localFileRelocated": "File re-linked",
+  "localInfoUpdated": "Info updated"
 }

@@ -28,6 +28,10 @@ class DownloadRecordStore {
   /// 内存记录表 / 可监听读模型（UI 只订阅它）。
   DownloadRecords get records => _records;
 
+  /// 按路径查导入记录（内存表缺失时回退数据库，避免生成第二个身份）。
+  Future<DownloadedTrack?> findImportedByPath(String path) =>
+      _repository.findByFilePath(path);
+
   /// 启动时把 drift 全表灌进内存表。
   Future<void> load() async {
     _records.replaceAll(await _repository.listAll());
@@ -41,6 +45,45 @@ class DownloadRecordStore {
     await _repository.insert(record);
     records.put(record);
     if (clearJournal) await _journal.remove(record.key);
+  }
+
+  /// 重定位：库行路径 / 大小 / 修改时间 + 清缺失，再换内存记录。
+  Future<void> relocate(
+    DownloadedTrack record, {
+    required String path,
+    required int sizeBytes,
+    required int? mtimeMs,
+  }) async {
+    await _repository.relocate(
+      originSourceKey: record.originSourceKey,
+      originSongId: record.originSongId,
+      filePath: path,
+      sizeBytes: sizeBytes,
+      mtimeMs: mtimeMs,
+    );
+    records.put(
+      record.copyWith(
+        filePath: path,
+        sizeBytes: sizeBytes,
+        mtimeMs: mtimeMs,
+        clearMissingAt: true,
+      ),
+    );
+  }
+
+  /// 标记文件缺失（只写 missingAt，保留旧 mtime 与记录）。
+  Future<void> markMissing(
+    DownloadedTrack record, {
+    required int missingAt,
+  }) async {
+    await _repository.setFileProbe(
+      originSourceKey: record.originSourceKey,
+      originSongId: record.originSongId,
+      mtimeMs: record.mtimeMs,
+      missing: true,
+      missingAt: missingAt,
+    );
+    records.put(record.copyWith(missingAt: missingAt));
   }
 
   /// 删除一条记录（库行 → 内存 → marker）。

@@ -301,11 +301,22 @@ class PlayStatisticsRepository {
     return row.data['firstAt'] as int?;
   }
 
+  /// 统计曲目表里出现过的曲目键（智能列表「从未播放」用；不做聚合）。
+  Future<Set<String>> playedTrackKeys() async {
+    final rows = await _db
+        .customSelect('SELECT sourceKey, songId FROM play_tracks')
+        .get();
+    return {
+      for (final row in rows) '${row.data['sourceKey']}:${row.data['songId']}',
+    };
+  }
+
   /// Top 曲目（有效播放次数排序；只出现至少一次有效播放的曲目）。
   Future<List<PlayStatTrackEntry>> topTracks({
     int? since,
     int? until,
     int limit = 10,
+    bool byListening = false,
   }) async {
     final rows = await _db
         .customSelect(
@@ -329,7 +340,7 @@ class PlayStatisticsRepository {
       WHERE $_countablePredicate${_rangeClause(since, until)}
       GROUP BY e.trackId
       HAVING playCount > 0
-      ORDER BY playCount DESC, listenedMs DESC, lastPlayedAt DESC
+      ORDER BY ${byListening ? 'listenedMs DESC' : 'playCount DESC'}, lastPlayedAt DESC
       LIMIT ?
     ''',
           variables: [

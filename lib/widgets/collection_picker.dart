@@ -25,6 +25,8 @@ class CollectionPickerEntry {
     required this.trackCount,
     required this.selected,
     this.playlistId,
+    this.isSmart = false,
+    this.isHeader = false,
   });
 
   /// 顺序持久化键：`favorites` / `history` / `downloads` / `playlist:<id>`。
@@ -43,6 +45,12 @@ class CollectionPickerEntry {
   /// 非空表示自建列表（可重命名 / 删除）。
   final int? playlistId;
 
+  /// 智能列表（虚拟身份：不可重命名 / 删除 / 拖动）。
+  final bool isSmart;
+
+  /// 分组标题行（不可选、不可拖）。
+  final bool isHeader;
+
   CollectionPickerEntry copyWithName(String name) => CollectionPickerEntry(
     key: key,
     id: id,
@@ -51,6 +59,8 @@ class CollectionPickerEntry {
     trackCount: trackCount,
     selected: selected,
     playlistId: playlistId,
+    isSmart: isSmart,
+    isHeader: isHeader,
   );
 }
 
@@ -76,6 +86,7 @@ Future<CollectionPickerOutcome?> showCollectionPicker(
   BuildContext context, {
   required String title,
   required List<CollectionPickerEntry> entries,
+  List<CollectionPickerEntry> smartEntries = const [],
   required ValueChanged<List<String>> onOrderChanged,
   required Future<int> Function(String name) onCreate,
   required Future<LibraryMutationOutcome> Function(int playlistId) onDelete,
@@ -87,6 +98,7 @@ Future<CollectionPickerOutcome?> showCollectionPicker(
     builder: (_) => _CollectionPickerSheet(
       title: title,
       entries: entries,
+      smartEntries: smartEntries,
       onOrderChanged: onOrderChanged,
       onCreate: onCreate,
       onDelete: onDelete,
@@ -99,6 +111,7 @@ class _CollectionPickerSheet extends StatefulWidget {
   const _CollectionPickerSheet({
     required this.title,
     required this.entries,
+    required this.smartEntries,
     required this.onOrderChanged,
     required this.onDelete,
     required this.onCreate,
@@ -107,6 +120,7 @@ class _CollectionPickerSheet extends StatefulWidget {
 
   final String title;
   final List<CollectionPickerEntry> entries;
+  final List<CollectionPickerEntry> smartEntries;
   final ValueChanged<List<String>> onOrderChanged;
   final Future<LibraryMutationOutcome> Function(int playlistId) onDelete;
   final Future<int> Function(String name) onCreate;
@@ -118,20 +132,36 @@ class _CollectionPickerSheet extends StatefulWidget {
 }
 
 class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
-  late final List<CollectionPickerEntry> _entries = List.of(widget.entries);
+  late final List<CollectionPickerEntry> _entries = [
+    ...widget.entries,
+    ...widget.smartEntries,
+  ];
 
   List<String> get _existingNames => [
     for (final entry in _entries)
       if (entry.playlistId != null) entry.name,
   ];
 
+  /// 普通合集条目数量（其后是智能列表分组，不参与拖动排序）。
+  int get _reorderableCount => widget.entries.length;
+
   void _onReorder(int oldIndex, int newIndex) {
-    // onReorderItem 已按移除后位置调整 newIndex，直接插入即可。
+    if (oldIndex >= _reorderableCount || newIndex >= _reorderableCount) {
+      // 智能列表 / 分组标题不参与排序：把视觉上的移动恢复原状。
+      setState(() {
+        _entries
+          ..clear()
+          ..addAll([...widget.entries, ...widget.smartEntries]);
+      });
+      return;
+    }
     setState(() {
       final moved = _entries.removeAt(oldIndex);
       _entries.insert(newIndex, moved);
     });
-    widget.onOrderChanged([for (final entry in _entries) entry.key]);
+    widget.onOrderChanged([
+      for (var i = 0; i < _reorderableCount; i++) _entries[i].key,
+    ]);
   }
 
   void _showFailure() {
@@ -272,6 +302,20 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
               itemCount: _entries.length,
               itemBuilder: (context, index) {
                 final entry = _entries[index];
+                if (entry.isHeader) {
+                  return KeyedSubtree(
+                    key: ValueKey<String>(entry.key),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+                      child: Text(
+                        entry.name,
+                        style: context.typeScale.labelMedium.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  );
+                }
                 return M3EListItem(
                   key: ValueKey<String>(entry.key),
                   leading: Icon(entry.icon),
@@ -283,51 +327,56 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                   onTap: () =>
                       Navigator.of(context)
                           .pop(CollectionPickerOutcome.select(entry.id)),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (entry.playlistId != null)
-                        M3EMenu.entries(
-                          position: M3EMenuAnchorPosition.bottomEnd,
-                          anchorBuilder: (context, open) => M3EIconButton(
-                            variant: M3EIconButtonVariant.standard,
-                            icon: const Icon(Icons.more_vert_rounded),
-                            semanticLabel: l10n.playlistRename,
-                            onPressed: open,
-                          ),
-                          onSelected: (value) {
-                            if (value == 'rename') {
-                              _rename(entry);
-                            } else if (value == 'delete') {
-                              _confirmDelete(context, entry);
-                            }
-                          },
-                          entries: [
-                            M3EMenuEntry(
-                              label: l10n.playlistRename,
-                              value: 'rename',
-                              leading: const Icon(Icons.edit_rounded, size: 20),
-                            ),
-                            M3EMenuEntry(
-                              label: l10n.playlistDelete,
-                              value: 'delete',
-                              isDestructive: true,
-                              leading: const Icon(
-                                Icons.delete_outline_rounded,
-                                size: 20,
+                  trailing: entry.isSmart
+                      ? null
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (entry.playlistId != null)
+                              M3EMenu.entries(
+                                position: M3EMenuAnchorPosition.bottomEnd,
+                                anchorBuilder: (context, open) => M3EIconButton(
+                                  variant: M3EIconButtonVariant.standard,
+                                  icon: const Icon(Icons.more_vert_rounded),
+                                  semanticLabel: l10n.playlistRename,
+                                  onPressed: open,
+                                ),
+                                onSelected: (value) {
+                                  if (value == 'rename') {
+                                    _rename(entry);
+                                  } else if (value == 'delete') {
+                                    _confirmDelete(context, entry);
+                                  }
+                                },
+                                entries: [
+                                  M3EMenuEntry(
+                                    label: l10n.playlistRename,
+                                    value: 'rename',
+                                    leading: const Icon(
+                                      Icons.edit_rounded,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  M3EMenuEntry(
+                                    label: l10n.playlistDelete,
+                                    value: 'delete',
+                                    isDestructive: true,
+                                    leading: const Icon(
+                                      Icons.delete_outline_rounded,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ReorderableDragStartListener(
+                              index: index,
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8),
+                                child: Icon(Icons.drag_handle_rounded),
                               ),
                             ),
                           ],
                         ),
-                      ReorderableDragStartListener(
-                        index: index,
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Icon(Icons.drag_handle_rounded),
-                        ),
-                      ),
-                    ],
-                  ),
                 );
               },
             ),

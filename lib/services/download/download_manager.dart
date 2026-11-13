@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart';
 import '../../domain/models/download.dart';
 import '../../domain/models/track.dart';
 import 'download_queue.dart';
+import 'download_service.dart' show LocalRelocateResult;
 
 /// 下载命令面（由 `DownloadService` 实现）。
 ///
@@ -93,6 +94,12 @@ abstract class DownloadManager extends ChangeNotifier {
 
   /// 导入本地音频文件（就地引用）。
   Future<(int, int)> importLocalFiles(Iterable<String> paths);
+
+  /// 重定位缺失文件：只改路径 / 大小 / 修改时间并清除缺失状态。
+  Future<LocalRelocateResult> relocate(DownloadedTrack record, String newPath);
+
+  /// 显式「从文件刷新信息」：重读标签并覆盖展示元数据（扫描不会自动调用）。
+  Future<DownloadedTrack?> refreshLocalMetadata(DownloadedTrack record);
 
   /// 缺省下载音质：偏好音质 × 曲目可用音质。
   String defaultQualityFor(Track track);

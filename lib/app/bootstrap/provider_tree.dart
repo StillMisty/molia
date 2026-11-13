@@ -5,6 +5,8 @@
 /// （PlaybackProvider / LibraryProvider / SearchProvider …），顺序不能随意调整。
 library;
 
+import 'dart:async';
+
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 
@@ -19,7 +21,10 @@ import '../../providers/annual_report_provider.dart';
 import '../../providers/comments_provider.dart';
 import '../../providers/diagnostics_provider.dart';
 import '../../providers/discover_provider.dart';
+import '../../providers/collection_mode.dart';
+import '../../providers/library_collection_request.dart';
 import '../../providers/library_provider.dart';
+import '../../providers/local_library_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../providers/play_statistics_provider.dart';
 import '../../providers/search_provider.dart';
@@ -36,6 +41,8 @@ import '../../services/diagnostics/diagnostics_export.dart';
 import '../../services/diagnostics/diagnostics_service.dart';
 import '../../services/download/download_manager.dart';
 import '../../services/download/download_records.dart';
+import '../../services/local/local_library_service.dart';
+import '../../services/local/local_metadata_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/play_statistics_service.dart';
 import '../../services/save_as.dart';
@@ -78,6 +85,15 @@ List<SingleChildWidget> buildAppProviders({
   final catalogService = catalog.catalogService;
   final playbackProvider = playback.playbackProvider;
   final downloadService = local.downloadService;
+  final localLibraryProvider = LocalLibraryProvider(
+    repository: library.libraryRepository,
+    downloads: downloadService.records,
+    library: libraryProvider,
+    statistics: library.playStatisticsRepository,
+  );
+  final collectionMode = CollectionModeStore();
+  final collectionRequest = LibraryCollectionRequest();
+  unawaited(collectionMode.load());
   // “另存目录”服务：下载设置里的桌面自选目录同时作用于导出；未设置时用
   // 各平台公共下载目录。页面经 Provider 读取，测试注入 fake。
   final saveAs = createSaveAs(customRoot: () => local.downloadSettings.saveDir);
@@ -126,6 +142,16 @@ List<SingleChildWidget> buildAppProviders({
     ChangeNotifierProvider<SearchHistoryStore>.value(value: searchHistoryStore),
     // 资料库（收藏/历史/列表）：顶层创建（AI 推歌读取收藏作为反馈）。
     ChangeNotifierProvider.value(value: libraryProvider),
+    // 曲库浏览 / 智能列表：聚合读取缓存（设备本地，不同步）。
+    ChangeNotifierProvider<LocalLibraryProvider>.value(
+      value: localLibraryProvider,
+    ),
+    // 歌曲 / 专辑 / 歌手模式：设备本地 UI 状态。
+    ChangeNotifierProvider<CollectionModeStore>.value(value: collectionMode),
+    // 跨页面「打开某个智能列表」请求（下载维护 → 收藏 › 文件不见）。
+    ChangeNotifierProvider<LibraryCollectionRequest>.value(
+      value: collectionRequest,
+    ),
     // 自定义封面（每曲 + 默认）：歌曲信息页 / 设置页 / 封面选择弹层读取。
     Provider<CustomCoverStore>.value(value: local.customCovers),
     // 换源：跨音源搜索 + 原位替换 + 队列跟随（收藏页 / 播放页入口）。
@@ -209,6 +235,12 @@ List<SingleChildWidget> buildAppProviders({
     Provider<DownloadMaintenance>.value(value: downloadService),
     // 下载设置：保存位置 / 文件名格式 / 标签嵌入（设置页读写）。
     ChangeNotifierProvider.value(value: local.downloadSettings),
+    // 本地曲库：音乐文件夹配置 / 扫描进度 / 缺文件检查（设置页与本地歌曲）。
+    ChangeNotifierProvider<LocalLibraryService>.value(
+      value: local.localLibrary,
+    ),
+    // 标题编辑：本地歌曲行菜单（标签文件 + 一处数据库事务）。
+    Provider<LocalMetadataService>.value(value: local.localMetadata),
     Provider<NotificationService>.value(value: notifications),
     // 省流模式：设置页读写开关/音质上限；取链与封面网关已在上方接线。
     ChangeNotifierProvider.value(value: local.dataSaver),

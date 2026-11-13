@@ -7,6 +7,8 @@ import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/services/download/download_intent.dart';
+import 'package:molia/services/download/download_service.dart'
+    show LocalRelocateResult;
 import 'package:molia/services/download/download_manager.dart';
 import 'package:molia/services/download/download_queue.dart';
 import 'package:molia/services/download/download_records.dart';
@@ -294,6 +296,16 @@ class _FakeDownloadManager extends DownloadManager {
 
   @override
   Future<(int, int)> importLocalFiles(Iterable<String> paths) async => (0, 0);
+
+  @override
+  Future<LocalRelocateResult> relocate(
+    DownloadedTrack record,
+    String newPath,
+  ) async => LocalRelocateResult.relocated;
+
+  @override
+  Future<DownloadedTrack?> refreshLocalMetadata(DownloadedTrack record) async =>
+      record;
 
   @override
   String defaultQualityFor(Track track) => '320k';

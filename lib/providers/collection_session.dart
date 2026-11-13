@@ -191,11 +191,15 @@ class CollectionNames {
     required this.favorites,
     required this.history,
     required this.localSongs,
+    this.smartLists = const {},
   });
 
   final String favorites;
   final String history;
   final String localSongs;
+
+  /// 智能列表 id → 展示名。
+  final Map<String, String> smartLists;
 }
 
 /// 滚动簿记端口：页面持有 ScrollController 与簿记，会话只发意图。
@@ -221,6 +225,7 @@ class CollectionSessionInput {
     required this.query,
     this.downloads = const CollectionDownloads.unavailable(),
     this.cacheRevision = -1,
+    this.smartRows = const {},
   });
 
   final CollectionLibrary library;
@@ -233,6 +238,9 @@ class CollectionSessionInput {
 
   /// 音频缓存 revision（清缓存 / LRU 淘汰后变化）。
   final int cacheRevision;
+
+  /// 智能列表 id → 已投影的行（设备本地虚拟数据，不落库）。
+  final Map<String, List<CollectionRow>> smartRows;
 }
 
 /// [CollectionSession.sync] 一帧解析出的完整输入。
@@ -353,6 +361,7 @@ class CollectionSession extends ChangeNotifier {
   @visibleForTesting
   CollectionSelection get selection => _selection;
 
+  int get selectedId => _selectedId;
   bool get selecting => _selection.isSelecting;
   int get selectedCount => _selection.selectedCount;
   bool get searching => _searching;
@@ -441,6 +450,7 @@ class CollectionSession extends ChangeNotifier {
       tracks: tracks,
       history: snapshot.history,
       localSongs: localSongs,
+      smartRows: input.smartRows,
       query: input.query,
       sort: _sort,
     );
@@ -463,6 +473,7 @@ class CollectionSession extends ChangeNotifier {
     final tracksLoading =
         !identity.isHistory &&
         !identity.isLocalSongs &&
+        !identity.isSmartList &&
         selectedPlaylistId != null &&
         (tracksView?.loading ?? false);
     final historyLoading =
@@ -516,6 +527,7 @@ class CollectionSession extends ChangeNotifier {
           ? snapshot.historyState.error
           : null;
     }
+    if (identity.isSmartList) return null;
     if (identity.isLocalSongs) {
       // 本地歌曲以下载 / 导入记录为准，历史缓存行失败不影响列表可用。
       return null;
@@ -697,6 +709,7 @@ class CollectionSession extends ChangeNotifier {
     favoritesName: input.names.favorites,
     historyName: input.names.history,
     localSongsName: input.names.localSongs,
+    smartListNames: input.names.smartLists,
   );
 
   /// 恢复的选集校准：首次合集列表加载完成后，若持久化选集已不存在
@@ -724,6 +737,7 @@ class CollectionSession extends ChangeNotifier {
         previous == LibraryCollections.unset ||
         previous == LibraryCollections.favoritesSentinel ||
         previous == LibraryCollections.historySentinel ||
+        LibraryCollections.isSmartSentinel(previous) ||
         (previous == LibraryCollections.downloadsSentinel &&
             input.downloads.supported) ||
         playlists.any((playlist) => playlist.id == previous);

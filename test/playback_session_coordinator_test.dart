@@ -1647,4 +1647,47 @@ void main() {
     // 装载不进写路径：恢复曲目并未真正起播。
     expect(store.calls, isEmpty);
   });
+
+  test('标题元数据：live 只替换对象不重新取链，会话落盘新标题', () async {
+    build();
+    backend.emitFrame(_live(_track('a'), position: Duration.zero));
+    expect(session.phase, PlaybackSessionPhase.live);
+    backend.calls.clear();
+    final renamed = _track('a').copyWith(title: '新标题');
+    await session.updateTrackMetadata(renamed);
+    expect(
+      backend.calls.where((call) => call.startsWith('replaceQueueTrack')),
+      isEmpty,
+    );
+    expect(backend.calls, contains('updateQueueTrackMetadata:fake:a'));
+    expect(session.displaySnapshot.current?.title, '新标题');
+    expect(store.saves.last.current?.title, '新标题');
+  });
+
+  test('标题元数据：恢复态当前曲目显示新标题并落盘', () async {
+    build();
+    await seedSession(
+      PlaybackSession(tracks: [_track('a'), _track('b')], index: 0),
+    );
+    await session.load();
+    expect(session.phase, PlaybackSessionPhase.restored);
+    final renamed = _track('a').copyWith(title: '新标题');
+    await session.updateTrackMetadata(renamed);
+    expect(session.displaySnapshot.current?.title, '新标题');
+    expect(store.saves.last.current?.title, '新标题');
+  });
+
+  test('并发在途保存 + 标题更新：最终会话与当前曲目都是新标题', () async {
+    build(persistStore: true);
+    backend.emitFrame(_live(_track('a'), position: Duration.zero));
+    final seek = session.seekToPosition(const Duration(seconds: 5));
+    final update = session.updateTrackMetadata(
+      _track('a').copyWith(title: '新标题'),
+    );
+    await Future.wait([seek, update]);
+    await store.pendingWrite;
+    final persisted = await PlaybackSessionStore().load();
+    expect(persisted!.current?.title, '新标题');
+    expect(session.displaySnapshot.current?.title, '新标题');
+  });
 }

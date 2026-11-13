@@ -684,6 +684,38 @@ class PlaybackSessionCoordinator
     return PlaybackCommandOutcome.trackAndQueue;
   }
 
+  /// 只更新曲目元数据（标题）：不重新取链，不打断播放。
+  ///
+  /// 先改 live 队列对象（元数据替换）与恢复态保存队列，再走正常会话提交
+  /// 路径；与在途保存共用同一个写队列，最终落盘的标题一定是新的。
+  Future<void> updateTrackMetadata(Track newTrack) async {
+    final uri = newTrack.id.uri;
+    final live = _facade.snapshot.value;
+    final liveHit = live.queue.any((track) => track.id.uri == uri);
+    if (liveHit) {
+      await _facade.updateQueueTrackMetadata(uri, newTrack);
+    }
+    final session = _restoredSession;
+    final restoredHit =
+        session != null && session.tracks.any((track) => track.id.uri == uri);
+    if (restoredHit) {
+      _restoredSession = session.copyWith(
+        tracks: [
+          for (final track in session.tracks)
+            track.id.uri == uri ? newTrack : track,
+        ],
+      );
+      _publishRestoredSnapshot();
+    }
+    if (!liveHit && !restoredHit) return;
+    if (liveHit && _hasSavableSession(_facade.snapshot.value)) {
+      await _commitLiveSession();
+    } else if (restoredHit) {
+      await _store.save(_restoredSession!);
+    }
+    await _store.pendingWrite;
+  }
+
   /// 换源的单一提交点（见 [_replaceTrack]）。
   Future<void> _commitReplacement({
     required bool liveHit,
