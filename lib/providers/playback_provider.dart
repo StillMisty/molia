@@ -10,6 +10,7 @@ import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
 import '../data/mapping/track_mapper.dart';
 import '../domain/models/playback.dart';
+import '../domain/models/playback_feel.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/playback_facade.dart';
 import '../domain/ports/state_listenable.dart';
@@ -18,6 +19,7 @@ import '../models/play_mode.dart';
 import '../playback/playback_error_recovery.dart';
 import '../playback/playback_session_coordinator.dart';
 import '../services/data_saver_service.dart';
+import '../services/playback_feel_store.dart';
 import '../services/playback_observer.dart';
 import '../services/playback_volume_store.dart';
 import '../services/source_swap/source_swap_settings.dart';
@@ -118,6 +120,9 @@ class PlaybackProvider extends ChangeNotifier {
   /// 应用内音量持久化（设备本地键，见 [PlaybackVolumeStore]）。
   final PlaybackVolumeStore _volumeStore;
 
+  /// 播放手感持久化（设备本地，见 [PlaybackFeelStore]）。
+  final PlaybackFeelStore _feelStore;
+
   /// 已展示过的播放错误（避免同一错误反复弹提示）。
   String? _lastShownError;
 
@@ -130,6 +135,12 @@ class PlaybackProvider extends ChangeNotifier {
   /// 是否静音：不改 [_volume] 的值，有效音量按 0 下发。
   bool _muted = PlaybackVolumeStore.defaultMuted;
 
+  /// 淡入淡出档位（设备本地；服务默认值与这里同源）。
+  PlaybackFadePreset _fadePreset = PlaybackFadePreset.defaultPreset;
+
+  /// 随机播放时少放最近听过的歌（设备本地，默认开）。
+  bool _smartShuffleEnabled = PlaybackFeelStore.defaultSmartShuffle;
+
   late final Future<void> _preferencesReady;
 
   PlaybackProvider({
@@ -141,6 +152,7 @@ class PlaybackProvider extends ChangeNotifier {
     this._dataSaver,
     this._observer,
     PlaybackVolumeStore? volumeStore,
+    PlaybackFeelStore? feelStore,
     SourceSwapSettings? autoSwapSettings,
     AutoSourceSwapResolver? autoSwapResolver,
     AutoSourceSwapTrackHook? onAutoSourceSwapped,
@@ -149,7 +161,8 @@ class PlaybackProvider extends ChangeNotifier {
     // 仅在测试里压短；生产用默认 400ms（见 [_volumePersistDebounce]）。
     this._volumePersistDebounce = const Duration(milliseconds: 400),
   }) : _session = sessionCoordinator,
-       _volumeStore = volumeStore ?? PlaybackVolumeStore() {
+       _volumeStore = volumeStore ?? PlaybackVolumeStore(),
+       _feelStore = feelStore ?? PlaybackFeelStore() {
     _errorRecovery = PlaybackErrorRecovery(
       commands: _session,
       readSnapshot: () => _session.liveSnapshot,
@@ -181,6 +194,11 @@ class PlaybackProvider extends ChangeNotifier {
       onFire: () async {
         await _session.pause();
       },
+      // 定时关闭只决定「什么时候淡、什么时候停」；音频动作仍走 facade
+      //（启动淡出 / 撤销淡出是两个独立命令，最后几秒取消不会和暂停赛跑）。
+      onFadeStart: _facade.startSleepFade,
+      onFadeCancel: ({required bool restore}) =>
+          _facade.cancelSleepFade(restore: restore),
       // 勾选「退出应用」时，暂停落地后再走统一退出路径（会话提交 /
       // 音频收尾 / 统计落盘由组合根负责）。
       onExit: () async {
@@ -210,6 +228,7 @@ class PlaybackProvider extends ChangeNotifier {
       await _loadDefaultPlayMode();
       await _loadPlaybackSession();
       await _loadVolume();
+      await _loadPlaybackFeel();
     }();
     // 构造时同步一次快照（系统媒体会话可能在构造前已恢复曲目）。
     _handlePlaybackSnapshot();
@@ -545,6 +564,44 @@ class PlaybackProvider extends ChangeNotifier {
   final Duration _volumePersistDebounce;
 
   Timer? _volumePersistTimer;
+
+  /// 淡入淡出档位（设备本地；UI 只读这里）。
+  PlaybackFadePreset get fadePreset => _fadePreset;
+
+  /// 随机播放是否少放最近听过的歌（设备本地）。
+  bool get smartShuffleEnabled => _smartShuffleEnabled;
+
+  /// 设置淡入淡出档位：立即推给播放服务并落盘（离散选择，不需要防抖）。
+  Future<void> setFadePreset(PlaybackFadePreset preset) async {
+    if (_fadePreset == preset) return;
+    _fadePreset = preset;
+    _facade.setFadeDuration(preset.duration);
+    notifyListeners();
+    await _feelStore.save(
+      fade: _fadePreset,
+      smartShuffle: _smartShuffleEnabled,
+    );
+  }
+
+  /// 设置智能随机：从下一轮 / 下一次队列装载生效，不重排当前轮。
+  Future<void> setSmartShuffleEnabled(bool enabled) async {
+    if (_smartShuffleEnabled == enabled) return;
+    _smartShuffleEnabled = enabled;
+    _facade.setSmartShuffle(enabled);
+    notifyListeners();
+    await _feelStore.save(fade: _fadePreset, smartShuffle: enabled);
+  }
+
+  /// 启动加载播放手感：默认值已在字段 / 服务里一致，读失败也照常播放。
+  ///
+  /// 不通知 UI：启动链在首帧前 await [preferencesReady]，首帧直接读到新值。
+  Future<void> _loadPlaybackFeel() async {
+    final saved = await _feelStore.load();
+    _fadePreset = saved.fade;
+    _smartShuffleEnabled = saved.smartShuffle;
+    _facade.setFadeDuration(saved.fade.duration);
+    _facade.setSmartShuffle(saved.smartShuffle);
+  }
 
   /// 有效音量：静音用 0 下发（跨平台最稳，不依赖后端的静音语义）。
   double get _effectiveVolume => _muted ? 0.0 : _volume;

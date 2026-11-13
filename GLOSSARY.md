@@ -145,6 +145,16 @@
   执行；当前 / 下一首歌词只在有任一词输出时后台加载；下一首直链仍预热，音频字节
   预取只在前台）。桌面端不接生命周期，恒为前台。
 - **Playback observer（播放观察者模块）** — `lib/services/playback_observer.dart`：播放副作用扇出的唯一实现（最后播放 / 桌面小组件 / 播放历史 / 封面预取与补取 / 通知权限），直连 facade 快照通道（不经 provider 的节流通知），由组合根挂接；会话落盘与恢复态属 `PlaybackSessionCoordinator`，睡眠定时属 `PlaybackProvider`（与 `PlayStatisticsService`、`ArtworkThemeSync` 同为观察者形态）。
+- **Playback feel（播放手感）** — `lib/services/playback_feel_store.dart` 单键 JSON（设备本地、
+  不同步）：淡入淡出档位与智能随机开关。`PlaybackProvider` 是唯一状态所有者，
+  启动读取后推给 `PlaybackFacade`（`setFadeDuration` / `setSmartShuffle`）。
+- **Fade envelope（淡变包络）** — `lib/playback/fade_envelope.dart` 纯数值 +
+  `LocalPlaybackService` 的分步写入：播放器实际音量 = 用户基值 × 包络。基值仍归
+  provider；切歌 / 急停 / 退出不走包络，睡眠定时用独立的固定时长淡出。
+- **Smart shuffle（智能随机）** — `lib/playback/shuffle_order.dart` 的加权轮次
+  （`shuffleWeightsFor`，最近听过权重 0.15、队列 < 10 或关闭时退化为均匀洗牌）+
+  组合根注入的只读证据（`lib/services/playback_recent_tracks.dart`：统计优先、
+  历史兜底，播放层只拿 `Set<String>`）。
 - **Sleep timer（定时关闭）** — `lib/providers/sleep_timer.dart`：歌曲信息页入口的
   「到点暂停」。两种模式：倒计时（**仅播放时计时**，暂停冻结；实现为**绝对
   deadline** 而非相对累减——tick / 快照变化 / 回前台三路各自比较 `now >= deadline`，

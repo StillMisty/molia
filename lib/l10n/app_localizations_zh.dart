@@ -253,6 +253,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPlaybackTitle => '播放';
 
   @override
+  String get settingsPlaybackDetailsTitle => '播放细节';
+
+  @override
+  String get settingsFadeTitle => '淡入淡出';
+
+  @override
+  String get settingsFadeSubtitle => '播放和暂停时音量渐入渐出，切歌不受影响';
+
+  @override
+  String get settingsFadeOff => '关闭';
+
+  @override
+  String get settingsFade150 => '0.15 秒';
+
+  @override
+  String get settingsFade200 => '0.2 秒';
+
+  @override
+  String get settingsFade300 => '0.3 秒';
+
+  @override
+  String get settingsSmartShuffleTitle => '少放最近听过的';
+
+  @override
+  String get settingsSmartShuffleSubtitle => '随机播放时少放最近听过的歌';
+
+  @override
   String get settingsDefaultPlayMode => '默认播放模式';
 
   @override

@@ -39,9 +39,16 @@ class _FakeAudioPlayer extends AudioPlayer {
   ProcessingState _processingState = ProcessingState.idle;
   Duration _position = Duration.zero;
   Duration? _duration;
+  double _volume = 1.0;
+
+  /// 平台收到的音量写入（按顺序）：淡变 / 音量 / 静音断言用。
+  final List<double> volumeCalls = [];
 
   @override
   bool get playing => _playing;
+
+  @override
+  double get volume => _volume;
 
   @override
   ProcessingState get processingState => _processingState;
@@ -104,7 +111,10 @@ class _FakeAudioPlayer extends AudioPlayer {
   }
 
   @override
-  Future<void> setVolume(double volume) async {}
+  Future<void> setVolume(double volume) async {
+    _volume = volume;
+    volumeCalls.add(volume);
+  }
 
   @override
   Future<void> stop() async {
@@ -207,12 +217,15 @@ void main() {
   Future<({LocalPlaybackService service, _FakeAudioPlayer player})> start({
     PlayMode mode = PlayMode.listLoop,
     int trackCount = 1,
+    // 既有用例不测淡变：关闭可避免每个 pause 都等一个真实淡变窗口。
+    Duration fadeDuration = Duration.zero,
   }) async {
     final player = _FakeAudioPlayer();
     final service = LocalPlaybackService(
       resolver: (track, {String? quality}) async =>
           PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
       player: player,
+      fadeDuration: fadeDuration,
     );
     addTearDown(service.dispose);
     await service.setMode(mode);
@@ -987,6 +1000,234 @@ void main() {
       expect(service.removeQueueIndex(9), isFalse);
       await pumpEventQueue();
       expect(predownloader.calls.length, callsBefore);
+    });
+  });
+
+  group('智能随机', () {
+    test('装载随机队列与进入随机各刷新一次证据；读取失败静默降级', () async {
+      var calls = 0;
+      final player = _FakeAudioPlayer();
+      final service = LocalPlaybackService(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+        player: player,
+        random: math.Random(11),
+        fadeDuration: Duration.zero,
+        recentTrackIds: () async {
+          calls++;
+          // 第二次故意失败：证据读取不能打断播放或洗牌。
+          if (calls == 2) throw StateError('统计库不可用');
+          return {'test:a1', 'test:a3'};
+        },
+      );
+      addTearDown(service.dispose);
+      await service.setMode(PlayMode.shuffle);
+
+      await service.playTracks([
+        for (var i = 0; i < 12; i++) _track(index: i),
+      ], 0);
+      await pumpEventQueue();
+      expect(calls, 1);
+      expect(service.isPlaying, isTrue);
+      expect(service.queueProjection.upNextIndices, isNotEmpty);
+
+      await service.setMode(PlayMode.listLoop);
+      await service.setMode(PlayMode.shuffle);
+      expect(calls, 2, reason: '进入随机刷新证据');
+      expect(service.isPlaying, isTrue, reason: '证据失败不影响当前播放');
+      expect(service.queueProjection.next, isNotNull);
+    });
+
+    test('关闭智能随机后不读取证据', () async {
+      var calls = 0;
+      final service = LocalPlaybackService(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+        player: _FakeAudioPlayer(),
+        random: math.Random(2),
+        fadeDuration: Duration.zero,
+        smartShuffleEnabled: false,
+        recentTrackIds: () async {
+          calls++;
+          return {'test:a1'};
+        },
+      );
+      addTearDown(service.dispose);
+      await service.setMode(PlayMode.shuffle);
+      await service.setMode(PlayMode.listLoop);
+      await service.setMode(PlayMode.shuffle);
+      expect(calls, 0, reason: '关闭后完全走均匀随机，不查历史');
+    });
+  });
+
+  group('淡入淡出', () {
+    test('暂停：先淡到静音再暂停，服务仍回报用户音量', () async {
+      final (:service, :player) = await start();
+      await service.setVolume(0.8);
+      service.setFadeDuration(const Duration(milliseconds: 120));
+      player.volumeCalls.clear();
+
+      final pause = service.pause();
+      expect(service.isPlaying, isTrue, reason: '淡出期间暂停尚未落地');
+
+      await pause;
+      expect(service.isPlaying, isFalse);
+      expect(player.calls.last, 'pause');
+      expect(player.volumeCalls.last, 0.0);
+      expect(service.volume, 0.8, reason: '包络不外泄，用户音量不变');
+      expect(service.envelopeGain, 0.0);
+    });
+
+    test('恢复播放：从静音淡入，结束回到用户音量', () async {
+      final (:service, :player) = await start();
+      await service.setVolume(0.8);
+      service.setFadeDuration(const Duration(milliseconds: 120));
+      await service.pause();
+      player.volumeCalls.clear();
+
+      await service.toggle();
+      await pumpEventQueue();
+      // 淡出后播放器已经是 0：起播前不会再重复写一次 0。
+      expect(
+        player.volumeCalls.isEmpty || player.volumeCalls.first == 0.0,
+        isTrue,
+        reason: '起播第一声必须是静音',
+      );
+      expect(service.isPlaying, isTrue);
+
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+      expect(player.volumeCalls.last, closeTo(0.8, 1e-6));
+      expect(service.envelopeGain, 1.0);
+    });
+
+    test('切歌不淡变：新源直接使用用户音量', () async {
+      final (:service, :player) = await start(trackCount: 2);
+      await service.setVolume(0.5);
+      service.setFadeDuration(const Duration(milliseconds: 150));
+      player.volumeCalls.clear();
+
+      await service.skipToNext();
+      await pumpEventQueue();
+
+      expect(player.volumeCalls, isEmpty, reason: '手动切歌保持硬切');
+      expect(service.isPlaying, isTrue);
+      expect(service.envelopeGain, 1.0);
+    });
+
+    test('急停（耳机拔出 / 焦点丢失 / 设备消失）不等淡变', () async {
+      final (:service, :player) = await start();
+      await service.setVolume(0.6);
+      service.setFadeDuration(const Duration(milliseconds: 300));
+      player.volumeCalls.clear();
+      player.calls.clear();
+
+      final started = DateTime.now();
+      await service.pause(urgent: true);
+      expect(DateTime.now().difference(started).inMilliseconds, lessThan(120));
+      expect(player.volumeCalls, isEmpty);
+      expect(player.calls.last, 'pause');
+      expect(service.isPlaying, isFalse);
+    });
+
+    test('淡变中改音量：立即生效且剩余段从新基值继续', () async {
+      final (:service, :player) = await start();
+      await service.setVolume(0.8);
+      service.setFadeDuration(const Duration(milliseconds: 200));
+      await service.pause();
+      player.volumeCalls.clear();
+
+      await service.toggle();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await service.setVolume(0.4);
+      await Future<void>.delayed(const Duration(milliseconds: 220));
+
+      expect(player.volumeCalls.last, closeTo(0.4, 1e-6));
+      expect(service.volume, 0.4);
+      expect(service.envelopeGain, 1.0);
+      expect(
+        player.volumeCalls.any((value) => value > 0.41),
+        isFalse,
+        reason: '新基值生效后不能继续朝旧音量爬升',
+      );
+    });
+
+    test('淡变中静音保持无声，取消静音恢复音量', () async {
+      final (:service, :player) = await start();
+      await service.setVolume(0.6);
+      service.setFadeDuration(const Duration(milliseconds: 200));
+      await service.pause();
+      player.volumeCalls.clear();
+
+      await service.toggle();
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      await service.setVolume(0);
+      await Future<void>.delayed(const Duration(milliseconds: 220));
+      expect(player.volumeCalls.last, 0.0);
+
+      await service.setVolume(0.6);
+      expect(player.volumeCalls.last, closeTo(0.6, 1e-6));
+    });
+
+    test('暂停淡出中反向播放：最新意图胜出，不真正暂停', () async {
+      final (:service, :player) = await start();
+      await service.setVolume(0.8);
+      service.setFadeDuration(const Duration(milliseconds: 200));
+      player.calls.clear();
+
+      final pause = service.pause();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(service.pauseIntentPending, isTrue);
+
+      final play = service.play();
+      expect(await pause, isFalse, reason: '被播放意图取代的暂停不落地');
+      await play;
+      await Future<void>.delayed(const Duration(milliseconds: 240));
+
+      expect(service.isPlaying, isTrue);
+      expect(player.calls, isNot(contains('pause')));
+      expect(player.volumeCalls.last, closeTo(0.8, 1e-6));
+    });
+
+    test('淡出完成后紧接暂停不跑第二次淡变', () async {
+      final (:service, :player) = await start();
+      await service.setVolume(0.7);
+      service.setFadeDuration(const Duration(milliseconds: 80));
+
+      service.startSleepFade(const Duration(milliseconds: 80));
+      await Future<void>.delayed(const Duration(milliseconds: 130));
+      expect(service.envelopeGain, 0.0);
+
+      player.volumeCalls.clear();
+      await service.pause();
+      expect(player.volumeCalls, isEmpty, reason: '已经静音，暂停立即落地');
+      expect(service.isPlaying, isFalse);
+    });
+
+    test('睡眠淡出取消：按普通淡变时长回到用户音量', () async {
+      final (:service, :player) = await start();
+      await service.setVolume(0.6);
+      service.setFadeDuration(const Duration(milliseconds: 100));
+
+      service.startSleepFade(const Duration(milliseconds: 80));
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      service.cancelSleepFade();
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+
+      expect(player.volumeCalls.last, closeTo(0.6, 1e-6));
+      expect(service.envelopeGain, 1.0);
+      expect(service.isPlaying, isTrue);
+    });
+
+    test('淡变不产生快照通知：只在真正暂停时通知一次', () async {
+      final (:service, :player) = await start();
+      service.setFadeDuration(const Duration(milliseconds: 100));
+      var notifications = 0;
+      service.addListener(() => notifications++);
+      player.volumeCalls.clear();
+
+      await service.pause();
+      await pumpEventQueue();
+      expect(notifications, 1, reason: '仅播放器状态变化的低频通知');
     });
   });
 }

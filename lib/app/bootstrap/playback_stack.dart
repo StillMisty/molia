@@ -25,6 +25,7 @@ import '../../providers/playback_provider.dart';
 import '../../providers/sleep_timer.dart';
 import '../../services/audio_focus_settings.dart';
 import '../../services/playback_observer.dart';
+import '../../services/playback_recent_tracks.dart';
 import '../../services/playback_session_store.dart';
 import '../app_shell.dart';
 import 'catalog_stack.dart';
@@ -86,6 +87,12 @@ Future<PlaybackStack> buildPlaybackStack({
   final dataSaver = local.dataSaver;
   final policy = powerPolicy ?? PlaybackPowerPolicy();
   final covers = local.customCovers;
+  // 智能随机的「最近听过」证据：统计优先、历史兜底，播放层只拿到 id 集合。
+  final recentTracks = PlaybackRecentTracks(
+    statistics: library.playStatisticsRepository,
+    history: library.libraryRepository,
+    statisticsEnabled: () => library.playStatisticsService.enabled,
+  );
 
   // 音频焦点偏好必须在建播放器之前读好：默认开（与其他应用同时播放），
   // 但用户可能已关闭；首次中断不应按错的策略处理。
@@ -113,7 +120,10 @@ Future<PlaybackStack> buildPlaybackStack({
       local: local,
       powerPolicy: policy,
     );
-    final service = chain.buildService(playWithOtherApps: audioFocusSettings);
+    final service = chain.buildService(
+      playWithOtherApps: audioFocusSettings,
+      recentTrackIds: recentTracks.recentTrackIds,
+    );
     localPlaybackService = service;
     playbackFacade = chain.buildEngine(service: service);
   }
@@ -170,6 +180,10 @@ Future<PlaybackStack> buildPlaybackStack({
     settings: playbackSettings,
     onRestoredTrack: playbackObserver.showRestoredTrack,
     powerPolicy: policy,
+    // 恢复态的洗牌与真实播放同一套证据 / 开关（provider 已构造完成，
+    // load() 的异步读取发生在其后，读到的是加载后的设置）。
+    recentTrackIds: recentTracks.recentTrackIds,
+    smartShuffleEnabled: () => playbackProvider.smartShuffleEnabled,
   );
   playbackProvider = PlaybackProvider(
     settings: playbackSettings,

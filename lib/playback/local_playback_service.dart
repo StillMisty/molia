@@ -16,6 +16,7 @@ import 'audio_cache_source.dart';
 import 'audio_focus_guard.dart';
 import 'audio_focus_policy.dart';
 import 'audio_output_policy.dart';
+import 'fade_envelope.dart';
 import 'next_track_preloader.dart';
 import 'playback_order.dart';
 import 'playback_power_policy.dart';
@@ -171,6 +172,40 @@ class LocalPlaybackService extends ChangeNotifier {
   String? _contextName;
   PlayMode _mode = PlayMode.listLoop;
 
+  /// 用户音量（0..1）的**服务内副本**，只用于淡变乘法。
+  ///
+  /// 用户音量的所有者仍是 provider（持久化 / 静音 / UI 都读它）；这里不
+  /// 持久化、不暴露第二套音量 API，[volume] 也只回报这个基值。
+  double _baseVolume = 1.0;
+
+  /// 当前包络倍数（0..1）；播放器实际音量 = 基值 × 包络。
+  double _envelope = 1.0;
+
+  /// 用户暂停 / 播放淡变时长；[Duration.zero] = 关闭。
+  Duration _fadeDuration;
+
+  /// 上一次真正写给播放器的音量：避免轨切换时重复写同一个值。
+  double _lastWrittenVolume = 1.0;
+
+  /// 串行化平台音量写入；中间步骤在途时允许跳过，最终值一定排队写出。
+  Future<void> _volumeWriteTail = Future<void>.value();
+  int _volumeWritesInFlight = 0;
+
+  Timer? _fadeTimer;
+  Completer<bool>? _fadeCompleter;
+
+  /// 睡眠定时专用淡出进行中：用户暂停 / 取消时要能单独撤销它。
+  bool _sleepFadeActive = false;
+
+  /// 暂停淡出进行中：此刻 `_isPlaying` 仍为 true，但用户最新意图是暂停。
+  /// 快速点「播放」要能反向淡入，而不是再暂停一次。
+  bool _pauseIntentPending = false;
+
+  /// 智能随机开关与最近听过证据（组合根注入只读快照；null = 均匀洗牌）。
+  bool _smartShuffleEnabled;
+  final Future<Set<String>> Function()? _recentTrackIds;
+  Set<String> _cachedRecentTrackIds = const {};
+
   /// 当前曲目本次播放选用的音质（解析请求值；null = 尚未取链）。
   String? _currentQuality;
 
@@ -276,6 +311,12 @@ class LocalPlaybackService extends ChangeNotifier {
     Stream<AudioDevicesChangedEvent>? audioDevicesChanged,
     ValueListenable<bool>? playWithOtherApps,
     PlaybackPowerPolicy? powerPolicy,
+    // 组合根注入的「最近听过」只读证据；只有播放层拿到的 Set，没有统计 /
+    // 历史服务。缺省（测试 / 无证据）走均匀洗牌。
+    Future<Set<String>> Function()? recentTrackIds,
+    // 与设置默认值同源：偏好加载前播放已经是正确手感。
+    Duration fadeDuration = const Duration(milliseconds: 200),
+    bool smartShuffleEnabled = true,
     // 单测注入假播放器（生产不传，内部创建 just_audio 播放器）。
     @visibleForTesting AudioPlayer? player,
     // 单测注入「换队列时创建新播放器」的工厂；生产缺省为真实播放器。
@@ -291,6 +332,12 @@ class LocalPlaybackService extends ChangeNotifier {
        _audioDevicesOverride = audioDevicesChanged,
        _playWithOtherApps = playWithOtherApps ?? _alwaysPlayWithOtherApps,
        _powerPolicy = powerPolicy ?? PlaybackPowerPolicy(),
+       // ignore: prefer_initializing_formals
+       _recentTrackIds = recentTrackIds,
+       // ignore: prefer_initializing_formals
+       _fadeDuration = fadeDuration,
+       // ignore: prefer_initializing_formals
+       _smartShuffleEnabled = smartShuffleEnabled,
        _shuffleOrder = PlaybackShuffleOrder(random: random) {
     _playerStateSubscription = _player.playerStateStream.listen(_onPlayerState);
     _playWithOtherApps.addListener(_onPlayWithOtherAppsChanged);
@@ -501,12 +548,12 @@ class LocalPlaybackService extends ChangeNotifier {
     guard.attach(interruptions);
   }
 
-  /// 耳机拔出（becoming noisy）始终暂停：just_audio 的内建处理已关闭，
-  /// 不补这一条会让外放突然出声。
+  /// 耳机拔出（becoming noisy）始终立即暂停：just_audio 的内建处理已关闭，
+  /// 不补这一条会让外放突然出声；安全优先，不等淡变。
   void _attachBecomingNoisy(Stream<void> events) {
     unawaited(_becomingNoisySubscription?.cancel());
     _becomingNoisySubscription = events.listen(
-      (_) => unawaited(pause()),
+      (_) => unawaited(pause(urgent: true)),
       onError: (Object e) => debugPrint('[LocalPlayback] 耳机拔出事件失败: $e'),
     );
   }
@@ -519,7 +566,8 @@ class LocalPlaybackService extends ChangeNotifier {
     unawaited(_audioDevicesSubscription?.cancel());
     _audioDevicesSubscription = events.listen((event) {
       if (!shouldPauseForDeviceRemoval(event.devicesRemoved)) return;
-      unawaited(pause());
+      // 输出设备消失同理：立即停，不为了听感多放 200ms。
+      unawaited(pause(urgent: true));
     }, onError: (Object e) => debugPrint('[LocalPlayback] 音频设备变化失败: $e'));
   }
 
@@ -533,7 +581,8 @@ class LocalPlaybackService extends ChangeNotifier {
         _sourceUnloaded) {
       return;
     }
-    _resumeCurrentTrack();
+    // 急停之后重新出声同样走淡入：焦点归还属于「恢复播放」。
+    _resumeCurrentTrack(fadeIn: true);
   }
 
   bool get hasTrack => _currentTrack != null;
@@ -707,7 +756,9 @@ class LocalPlaybackService extends ChangeNotifier {
       return;
     }
     final old = _player;
-    final volume = old.volume;
+    // 用基值而不是当前播放器音量：回收可能落在淡出中途，新播放器必须
+    // 回到用户实际设置的音量。
+    final volume = _baseVolume;
     _playerStateSubscription?.cancel();
     _playerStateSubscription = null;
     _errorSubscription?.cancel();
@@ -728,6 +779,8 @@ class LocalPlaybackService extends ChangeNotifier {
     try {
       await _player.setVolume(volume);
     } catch (_) {}
+    _envelope = 1.0;
+    _lastWrittenVolume = volume;
     _lastProcessingState = ProcessingState.idle;
     _sourceRegistrations = 0;
     _syncPositionSampling();
@@ -764,6 +817,9 @@ class LocalPlaybackService extends ChangeNotifier {
     List<int>? shuffleIndices,
   }) async {
     if (tracks.isEmpty) return;
+    // 淡入只属于「从空闲起播 / 恢复同一首」；替换已装载的曲目（哪怕暂停中）
+    // 是切歌，不能比手动切歌更柔和。必须在装载前判断（_playIndex 会改状态）。
+    final fadeIn = _currentTrack == null && !_player.playing;
     // 旧队列的 source 不再需要：先回收播放器，避免 just_audio 的 source
     // 注册表随「换专辑 / 换歌单」线性累积。必须在装载新源前完成。
     await _recyclePlayerForQueueChange();
@@ -775,21 +831,28 @@ class LocalPlaybackService extends ChangeNotifier {
     _order.clear();
     final safeIndex = index.clamp(0, tracks.length - 1);
     if (_mode == PlayMode.shuffle) {
+      // 证据只在装载队列 / 进入随机时刷新；本轮进行中的排列不会被重排。
+      await _refreshRecentTrackIds();
+      final weights = _shuffleWeights();
       if (shuffleIndices != null &&
           isValidShuffleOrder(
             shuffleIndices,
             length: _queue.length,
             currentIndex: safeIndex,
           )) {
-        _shuffleOrder.adopt(shuffleIndices);
+        _shuffleOrder.adopt(shuffleIndices, weights: weights);
       } else {
-        _shuffleOrder.reset(_queue.length, startIndex: safeIndex);
+        _shuffleOrder.reset(
+          _queue.length,
+          startIndex: safeIndex,
+          weights: weights,
+        );
       }
     } else {
       _shuffleOrder.clear();
     }
     _contextName = contextName;
-    await _playIndex(safeIndex, recordHistory: false);
+    await _playIndex(safeIndex, recordHistory: false, fadeIn: fadeIn);
   }
 
   /// 追加曲目到队列末尾（AI 推歌续推等）：不打断当前播放。
@@ -914,8 +977,13 @@ class LocalPlaybackService extends ChangeNotifier {
     Duration? resumeAt,
     bool autoplay = true,
     bool unloadCurrent = true,
+    bool fadeIn = false,
   }) async {
     if (index < 0 || index >= _queue.length) return;
+    _pauseIntentPending = false;
+    // 切歌 / 换音质 / 换源都不继承半淡的音量：新源从用户音量开始。
+    // 淡入路径留给起播前自己把电平压到静音（见 [_prepareFadeIn]）。
+    if (!fadeIn) await _resetEnvelopeForSource();
     // 新曲目 = 用户主动选择，撤销音频中断的待续播。
     _focusGuard?.cancelPendingResume();
     // 切到不同曲目时把「离开的当前曲目」压入播放顺序；显式回退不重复压栈。
@@ -1022,6 +1090,9 @@ class LocalPlaybackService extends ChangeNotifier {
         }
       }
       if (autoplay) {
+        // 只有「从空 / 暂停的同一首重新起播」才淡入：播放启动前先把当前
+        // 有效音量压到起点（暂停时是 0），避免出现第一声硬切。
+        final rampIn = fadeIn && await _prepareFadeIn();
         // 播放启动后立即返回：just_audio 的 play() Future 在「播完/暂停」才
         // 完成，挂在这里会拖住调用方（自动切歌完成处理器）并吞掉后续
         // completed 事件；启动失败单独捕获进 lastError。
@@ -1035,6 +1106,7 @@ class LocalPlaybackService extends ChangeNotifier {
             }
           }),
         );
+        if (rampIn) unawaited(_runEnvelope(1.0, _fadeDuration));
       } else if (_player.playing) {
         // 暂停中切换音质：只换源 + 对齐进度，不重新起播。
         await _player.pause();
@@ -1169,13 +1241,68 @@ class LocalPlaybackService extends ChangeNotifier {
   ///
   /// 与 [toggle] 的暂停分支同语义：无曲目 / 已暂停时无操作（幂等——中断事件
   /// 可能连续到达，重复调用不叠加副作用）。
-  Future<bool> pause({bool fromInterruption = false}) async {
+  /// [urgent] 为 true（耳机拔出 / 输出设备消失 / 音频焦点丢失）时立即暂停：
+  /// 安全与响应速度优先于听感，淡变不参与。
+  Future<bool> pause({
+    bool fromInterruption = false,
+    bool urgent = false,
+  }) async {
     if (!fromInterruption) _focusGuard?.cancelPendingResume();
     if (_playerDisposed || _currentTrack == null) return false;
     if (!_player.playing) return false;
+    final immediate =
+        urgent ||
+        fromInterruption ||
+        _baseVolume <= 0 ||
+        _fadeDuration < kMinimumAudibleFade ||
+        _envelope <= 0.001;
+    if (immediate) {
+      // 用户暂停可能落在睡眠淡出途中：撤销它，但不把音量拉回基值再淡出，
+      // 否则会先变响再变轻。
+      _cancelActiveRamp();
+      _sleepFadeActive = false;
+      _pauseIntentPending = false;
+      await _player.pause();
+      return true;
+    }
+    // 睡眠淡出进行中：交回普通短淡出（从当前电平继续），不重复补一次。
+    _sleepFadeActive = false;
+    _pauseIntentPending = true;
+    final completed = await _runEnvelope(0, _fadeDuration);
+    if (!completed) return false;
+    _pauseIntentPending = false;
     await _player.pause();
     return true;
   }
+
+  /// 用户 / 系统「播放」键：幂等起播。
+  ///
+  /// 与 [toggle] 的差别只在暂停淡出窗口：期间对外仍是 playing，toggle 会
+  /// 再暂停一次；这里按最新意图反向淡入。
+  Future<void> play() async {
+    if (!hasTrack) return;
+    if (isLoading) return;
+    final reversingPause = _pauseIntentPending;
+    _pauseIntentPending = false;
+    if (reversingPause) {
+      _focusGuard?.cancelPendingResume();
+      final fadeIn = await _prepareFadeIn();
+      unawaited(
+        _player.play().catchError((Object e) {
+          _lastError = e.toString();
+          _isPlaying = false;
+          notifyListeners();
+        }),
+      );
+      if (fadeIn) unawaited(_runEnvelope(1.0, _fadeDuration));
+      return;
+    }
+    if (isPlaying) return;
+    await toggle();
+  }
+
+  /// 暂停淡出是否在进行中（引擎 toggle 据此把「播放」翻译成反向淡入）。
+  bool get pauseIntentPending => _pauseIntentPending;
 
   Future<void> toggle() async {
     if (_currentTrack == null) return;
@@ -1195,6 +1322,7 @@ class LocalPlaybackService extends ChangeNotifier {
         recordHistory: false,
         resumeAt: _position,
         unloadCurrent: false,
+        fadeIn: true,
       );
       return;
     }
@@ -1205,6 +1333,7 @@ class LocalPlaybackService extends ChangeNotifier {
     if (_isAtTrackEnd) {
       await _restartFromStart();
     }
+    final fadeIn = await _prepareFadeIn();
     unawaited(
       _player.play().catchError((Object e) {
         _lastError = e.toString();
@@ -1212,6 +1341,7 @@ class LocalPlaybackService extends ChangeNotifier {
         notifyListeners();
       }),
     );
+    if (fadeIn) unawaited(_runEnvelope(1.0, _fadeDuration));
   }
 
   Future<void> seek(Duration position) async {
@@ -1257,13 +1387,184 @@ class LocalPlaybackService extends ChangeNotifier {
     await _seekPlayer(Duration.zero);
   }
 
-  /// 应用内音量（0..1；直接读播放器，构造默认 1.0）。
-  double get volume => _player.volume;
+  /// 用户音量（0..1，构造默认 1.0）：只回报基值，不泄漏淡变中的包络。
+  double get volume => _baseVolume;
 
-  /// 设置应用内音量：clamp 0..1 后直达 [AudioPlayer]（桌面 media_kit 后端
-  /// 与移动端共用同一播放器，无需分支）；失败向上抛，由调用方兜底。
+  /// 当前淡入淡出时长（测试 / 断点观察用）。
+  @visibleForTesting
+  Duration get fadeDuration => _fadeDuration;
+
+  /// 当前包络倍数（测试 / 断点观察用）。
+  @visibleForTesting
+  double get envelopeGain => _envelope;
+
+  /// 设置应用内音量：只更新基值，立即按当前包络重算实际音量。
+  ///
+  /// 拖动滑杆 / 静音都走这里：淡变进行中改音量不会重启淡变，剩余段从新
+  /// 基值继续；静音（基值 0）在整个淡变里保持无声。
   Future<void> setVolume(double volume) async {
-    await _player.setVolume(volume.clamp(0.0, 1.0));
+    _baseVolume = volume.clamp(0.0, 1.0);
+    await _applyEffectiveVolume();
+  }
+
+  /// 设置淡入淡出时长；进行中的淡变保持原时长。
+  void setFadeDuration(Duration duration) {
+    _fadeDuration = duration < Duration.zero ? Duration.zero : duration;
+  }
+
+  /// 智能随机开关：只影响下一次生成轮次（进行中的排列不重排）。
+  void setSmartShuffleEnabled(bool enabled) {
+    _smartShuffleEnabled = enabled;
+  }
+
+  /// 把「基值 × 包络」写给播放器；淡变进行中允许跳过中间步。
+  Future<void> _applyEffectiveVolume() {
+    final target = (_baseVolume * _envelope).clamp(0.0, 1.0);
+    // 静音必须立刻归零：即使上一次写入在途，也要排队一次 0，不能等下一
+    // 个淡变 tick 才静下来。
+    if (target <= 0) return _enqueueVolumeWrite(0);
+    // 只有分步淡变在跑时才允许跳步；普通赋值必须落在平台上。
+    if (_fadeTimer != null) {
+      _offerVolume(target);
+      return Future<void>.value();
+    }
+    return _enqueueVolumeWrite(target);
+  }
+
+  /// 排队一次平台音量写入（串行；失败只记日志）。
+  Future<void> _enqueueVolumeWrite(double value) {
+    final clamped = value.clamp(0.0, 1.0);
+    if ((clamped - _lastWrittenVolume).abs() < 1e-6 &&
+        _volumeWritesInFlight == 0) {
+      return Future<void>.value();
+    }
+    _lastWrittenVolume = clamped;
+    _volumeWritesInFlight++;
+    final future = _volumeWriteTail.then((_) async {
+      try {
+        await _player.setVolume(clamped);
+      } catch (e) {
+        debugPrint('[LocalPlayback] 写入音量失败: $e');
+      }
+    });
+    _volumeWriteTail = future.whenComplete(() {
+      _volumeWritesInFlight--;
+    });
+    return future;
+  }
+
+  /// 淡变中间步：平台还在写上一笔时直接跳过（墙钟时长不被慢调用拉长）。
+  void _offerVolume(double value) {
+    if (_volumeWritesInFlight > 0) return;
+    unawaited(_enqueueVolumeWrite(value));
+  }
+
+  /// 取消正在跑的淡变（不改变当前包络），完成返回 false 的等待方。
+  void _cancelActiveRamp() {
+    _fadeTimer?.cancel();
+    _fadeTimer = null;
+    final pending = _fadeCompleter;
+    _fadeCompleter = null;
+    if (pending != null && !pending.isCompleted) pending.complete(false);
+  }
+
+  /// 按墙钟推进包络到 [target]；返回是否走到终点（被新意图取代时 false）。
+  Future<bool> _runEnvelope(double target, Duration duration) {
+    _cancelActiveRamp();
+    final completer = Completer<bool>();
+    _fadeCompleter = completer;
+    final ramp = FadeRamp(
+      from: _envelope.clamp(0.0, 1.0),
+      to: target.clamp(0.0, 1.0),
+      duration: duration,
+    );
+    if (ramp.isImmediate) {
+      _envelope = ramp.to;
+      unawaited(
+        _enqueueVolumeWrite(_baseVolume * _envelope).then((_) {
+          if (identical(_fadeCompleter, completer)) _fadeCompleter = null;
+          if (!completer.isCompleted) completer.complete(true);
+        }),
+      );
+      return completer.future;
+    }
+    final watch = Stopwatch()..start();
+    _fadeTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (completer.isCompleted) return;
+      final elapsed = watch.elapsed;
+      if (!ramp.isComplete(elapsed)) {
+        _envelope = ramp.gainAt(elapsed);
+        _offerVolume(_baseVolume * _envelope);
+        return;
+      }
+      _fadeTimer?.cancel();
+      _fadeTimer = null;
+      _envelope = ramp.to;
+      // 最终值一定写出并等待完成，暂停只能在静音落地之后发生。
+      unawaited(
+        _enqueueVolumeWrite(_baseVolume * _envelope).then((_) {
+          if (identical(_fadeCompleter, completer)) _fadeCompleter = null;
+          if (!completer.isCompleted) completer.complete(true);
+        }),
+      );
+    });
+    return completer.future;
+  }
+
+  /// 起播前的淡入准备：先把当前有效音量写下去，返回是否要启动渐变。
+  ///
+  /// 已暂停时从 0 开始（即使上次是急停、播放器仍停在基值）；淡出途中
+  /// 反向播放则从当前电平继续，避免先跳到 0 再爬升。
+  Future<bool> _prepareFadeIn() async {
+    _cancelActiveRamp();
+    _sleepFadeActive = false;
+    final base = _baseVolume;
+    if (base <= 0 || _fadeDuration < kMinimumAudibleFade) {
+      _envelope = 1.0;
+      await _enqueueVolumeWrite(base);
+      return false;
+    }
+    final from = _player.playing ? _envelope.clamp(0.0, 1.0) : 0.0;
+    _envelope = from;
+    await _enqueueVolumeWrite(base * from);
+    return true;
+  }
+
+  /// 新音源落位后取消包络并回到基值：切歌不能继承半淡的音量。
+  Future<void> _resetEnvelopeForSource() async {
+    _cancelActiveRamp();
+    _sleepFadeActive = false;
+    _envelope = 1.0;
+    await _enqueueVolumeWrite(_baseVolume);
+  }
+
+  /// 定时关闭的专用淡出：只降音量，不暂停（暂停由命令面单独下发）。
+  void startSleepFade(Duration duration) {
+    if (_playerDisposed || _baseVolume <= 0) return;
+    _sleepFadeActive = true;
+    unawaited(
+      _runEnvelope(
+        0,
+        duration < kMinimumAudibleFade
+            ? const Duration(milliseconds: 50)
+            : duration,
+      ),
+    );
+  }
+
+  /// 撤销睡眠淡出：[restore] 时按普通淡变时长回到用户音量。
+  void cancelSleepFade({bool restore = true}) {
+    if (!_sleepFadeActive) return;
+    _sleepFadeActive = false;
+    _cancelActiveRamp();
+    if (restore) {
+      // 定时取消 / 后退 seek：把音量还给用户，但不打断正在播放的曲目。
+      unawaited(_runEnvelope(1.0, _fadeDuration));
+      return;
+    }
+    // 曲末完成早到：直接压到静音，让随后的暂停立即落地（不再补一次淡出）。
+    _envelope = 0;
+    unawaited(_enqueueVolumeWrite(0));
   }
 
   Future<void> skipToNext() async {
@@ -1299,10 +1600,13 @@ class LocalPlaybackService extends ChangeNotifier {
     _mode = mode;
     if (changed) {
       if (mode == PlayMode.shuffle && _queue.isNotEmpty) {
+        // 进入随机 = 刷新一次证据（关闭开关 / 短队列 / 空证据时权重为空）。
+        await _refreshRecentTrackIds();
         // 以当前曲目置首重洗：切到随机模式不会立刻跳走正在播放的曲目。
         _shuffleOrder.reset(
           _queue.length,
           startIndex: _currentIndex >= 0 ? _currentIndex : 0,
+          weights: _shuffleWeights(),
         );
       } else if (mode != PlayMode.shuffle) {
         _shuffleOrder.clear();
@@ -1311,12 +1615,54 @@ class LocalPlaybackService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 读取最近的播放证据；失败静默为空集合（降级为均匀洗牌）。
+  Future<void> _refreshRecentTrackIds() async {
+    final loader = _recentTrackIds;
+    if (loader == null) {
+      _cachedRecentTrackIds = const {};
+      return;
+    }
+    try {
+      _cachedRecentTrackIds = await loader();
+    } catch (e) {
+      debugPrint('[LocalPlayback] 读取最近播放失败，改用均匀随机: $e');
+      _cachedRecentTrackIds = const {};
+    }
+  }
+
+  /// 当前队列的随机权重；无证据 / 短队列 / 开关关闭时为 null。
+  List<double>? _shuffleWeights() => shuffleWeightsFor(
+    trackIds: [for (final track in _queue) track.id],
+    recentTrackIds: _cachedRecentTrackIds,
+    enabled: _smartShuffleEnabled,
+  );
+
   Future<void> toggleMode() async {
     await setMode(_mode.next);
   }
 
   /// 停止本地播放并清空状态。
+  ///
+  /// 系统媒体「停止」与用户停止都属于可感知的动作：先按用户淡变时长收声，
+  /// 再真正 stop。被新的播放意图抢走时（快速播放）以最新意图为准，不再停。
   Future<void> stop({bool clear = true}) async {
+    final shouldFade =
+        !_playerDisposed &&
+        _player.playing &&
+        _baseVolume > 0 &&
+        _envelope > 0.001 &&
+        _fadeDuration >= kMinimumAudibleFade;
+    if (shouldFade) {
+      _sleepFadeActive = false;
+      _pauseIntentPending = true;
+      final completed = await _runEnvelope(0, _fadeDuration);
+      if (!completed) return;
+      _pauseIntentPending = false;
+    } else {
+      _cancelActiveRamp();
+      _sleepFadeActive = false;
+      _pauseIntentPending = false;
+    }
     _playRequestId++;
     _stopAfterCurrentTrack = false;
     _suppressPositionUpdates = false;
@@ -1378,6 +1724,7 @@ class LocalPlaybackService extends ChangeNotifier {
       _shuffleOrder.reset(
         _queue.length,
         startIndex: _currentIndex >= 0 ? _currentIndex : 0,
+        weights: _shuffleWeights(),
       );
     }
   }
@@ -1503,15 +1850,23 @@ class LocalPlaybackService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 续播当前曲目（单曲循环重播）：与 `_playIndex` 一致，不等待整曲播完。
-  void _resumeCurrentTrack() {
-    unawaited(
-      _player.play().catchError((Object e) {
-        _lastError = e.toString();
-        _isPlaying = false;
-        notifyListeners();
-      }),
-    );
+  /// 续播当前曲目（单曲循环重播 / 焦点归还）：与 `_playIndex` 一致，
+  /// 不等待整曲播完。
+  ///
+  /// [fadeIn] 只给用户可感知的「恢复播放」；自动重播（单曲循环 / 列表循环
+  /// 单曲）保持硬切，避免每次循环都做一次音量起伏。
+  void _resumeCurrentTrack({bool fadeIn = false}) {
+    unawaited(() async {
+      final rampIn = fadeIn && await _prepareFadeIn();
+      unawaited(
+        _player.play().catchError((Object e) {
+          _lastError = e.toString();
+          _isPlaying = false;
+          notifyListeners();
+        }),
+      );
+      if (rampIn) unawaited(_runEnvelope(1.0, _fadeDuration));
+    }());
   }
 
   void _scheduleNotify() {
@@ -1535,6 +1890,9 @@ class LocalPlaybackService extends ChangeNotifier {
   Future<void> shutdownAudioForQuit() async {
     if (_playerDisposed) return;
     _playerDisposed = true;
+    // 退出不走淡变：包络立即取消，有界收尾不能被 200ms 音量循环拖住。
+    _cancelActiveRamp();
+    _sleepFadeActive = false;
     // 退出路径不经过 dispose：在途预取 / 后台缓存写入都在这里收掉，避免
     // 进程退出时留下 `.predl` 半成品。
     _nextTrackPreloader?.cancelAll();
@@ -1555,6 +1913,8 @@ class LocalPlaybackService extends ChangeNotifier {
   @override
   void dispose() {
     _playRequestId++;
+    _cancelActiveRamp();
+    _sleepFadeActive = false;
     _stopAfterCurrentTrack = false;
     _powerPolicy.removeListener(_syncPositionSampling);
     _stopPositionSampleTimer();

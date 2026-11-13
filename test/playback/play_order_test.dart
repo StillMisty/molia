@@ -24,6 +24,23 @@ Track _track(String id) {
   );
 }
 
+/// 按脚本吐随机数的随机源：验证加权抽样在固定 roll 下的取舍。
+class _ScriptedRandom implements Random {
+  _ScriptedRandom(this.values);
+
+  final List<double> values;
+  int _cursor = 0;
+
+  @override
+  double nextDouble() => values[_cursor++ % values.length];
+
+  @override
+  int nextInt(int max) => (nextDouble() * max).floor();
+
+  @override
+  bool nextBool() => nextDouble() < 0.5;
+}
+
 /// 顺序栈测试用曲目（队列还原）。
 SourceTrack _source(String id) => SourceTrack(
   sourceKey: 'fake',
@@ -374,6 +391,94 @@ void main() {
             index,
       ]);
       expect(order.indices.toSet(), {0, 1, 2, 3});
+    });
+  });
+
+  group('加权随机（少放最近听过的）', () {
+    test('加权轮次仍是完整排列且当前曲目置首', () {
+      final weights = List<double>.filled(20, 1.0)..[3] = 0.15;
+      for (var seed = 0; seed < 30; seed++) {
+        final order = PlaybackShuffleOrder(random: Random(seed))
+          ..reset(20, startIndex: 7, weights: weights);
+        expect(order.positionOf(7), 0);
+        expect(order.indices.toSet(), {for (var i = 0; i < 20; i++) i});
+        expect(order.indices, hasLength(20));
+      }
+    });
+
+    test('低权重候选在受控 roll 下让位给普通曲目，但不会被排除', () {
+      // 候选顺序 = [1（普通）, 2（最近）]：普通 roll 0.9，最近 roll 0.95。
+      // 不加权时 0.95 会赢；加权后 recent 的键被压到约 0.71。
+      final skipped = PlaybackShuffleOrder(random: _ScriptedRandom([0.9, 0.95]))
+        ..reset(3, startIndex: 0, weights: const [1.0, 1.0, 0.15]);
+      expect(skipped.remainingAfter(0), [1, 2], reason: '普通曲目排在最近曲目前面');
+
+      final included = PlaybackShuffleOrder(random: _ScriptedRandom([0.1, 0.9]))
+        ..reset(3, startIndex: 0, weights: const [1.0, 1.0, 0.15]);
+      expect(included.remainingAfter(0), [2, 1], reason: '低权重仍可出现在前半段');
+    });
+
+    test('轮末重洗沿用同一份权重（下一轮仍偏向普通曲目）', () {
+      final order = PlaybackShuffleOrder(random: _ScriptedRandom([0.9, 0.95]))
+        ..reset(2, startIndex: 0, weights: const [1.0, 0.15]);
+      // 走完当前轮后重洗：当前曲目 1 置首，剩下的 0 是普通曲目。
+      expect(order.next(0), 1);
+      expect(order.next(1), 0, reason: '新一轮仍按权重生成，不丢证据');
+    });
+
+    test('队列编辑重映射权重：移除 / 移动后仍是合法排列', () {
+      final order = PlaybackShuffleOrder(random: Random(4))
+        ..reset(6, startIndex: 0, weights: const [1, 0.15, 1, 0.15, 1, 1]);
+      order.removeIndex(2);
+      expect(order.indices.toSet(), {0, 1, 2, 3, 4});
+      order.moveIndex(1, 3);
+      expect(order.indices.toSet(), {0, 1, 2, 3, 4});
+      expect(order.indices, hasLength(5));
+    });
+
+    test('策略回退：关闭 / 短队列 / 空证据都返回 null（均匀随机）', () {
+      final ids = [for (var i = 0; i < 10; i++) 'kw:$i'];
+      expect(
+        shuffleWeightsFor(
+          trackIds: ids,
+          recentTrackIds: {'kw:1'},
+          enabled: false,
+        ),
+        isNull,
+      );
+      expect(
+        shuffleWeightsFor(
+          trackIds: ids.take(9).toList(),
+          recentTrackIds: {'kw:1'},
+          enabled: true,
+        ),
+        isNull,
+      );
+      expect(
+        shuffleWeightsFor(
+          trackIds: ids,
+          recentTrackIds: const {},
+          enabled: true,
+        ),
+        isNull,
+      );
+      expect(
+        shuffleWeightsFor(
+          trackIds: ids,
+          recentTrackIds: {'other:1'},
+          enabled: true,
+        ),
+        isNull,
+        reason: '证据与队列不相交时与均匀随机完全一致',
+      );
+      expect(
+        shuffleWeightsFor(
+          trackIds: ids,
+          recentTrackIds: {'kw:1'},
+          enabled: true,
+        ),
+        [1.0, 0.15, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+      );
     });
   });
 

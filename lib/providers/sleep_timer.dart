@@ -83,6 +83,10 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     SleepTimerAlarm? alarm,
     Stream<Track>? trackCompletions,
     this._setStopAfterCurrentTrack,
+    // 定时只负责「什么时候开始 / 撤销淡出」；音频动作全部交给命令面注入的
+    // 回调，定时器自己不碰播放器。
+    this._onFadeStart,
+    this._onFadeCancel,
     bool Function()? isForeground,
     bool exitAppByDefault = false,
     bool waitForTrackEndByDefault = false,
@@ -113,9 +117,27 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   /// 倒计时 tick 周期（tick 只负责刷新剩余时间，到点判定看绝对 deadline）。
   static const Duration _tickInterval = Duration(seconds: 1);
 
+  /// 倒计时最后几秒开始淡出：先降音量，到点再停。
+  static const Duration _countdownFadeWindow = Duration(seconds: 5);
+
+  /// 剩余时间短于可听窗口时不做补淡：直接到点暂停。
+  static const Duration _countdownMinFade = Duration(milliseconds: 300);
+
+  /// 「播完当前歌曲」的淡出窗口（实时位置可靠时）。
+  static const Duration _endFadeWindow = Duration(seconds: 3);
+
+  /// 位置通道多久没更新算「不新鲜」：熄屏节流后不拿旧进度赌曲末。
+  static const Duration _positionFreshness = Duration(milliseconds: 2500);
+
   final StateListenable<PlaybackSnapshot> _snapshot;
   final StateListenable<Duration> _position;
   final Future<void> Function() _onFire;
+
+  /// 开始一次专用淡出（与普通淡入淡出设置无关）。
+  final void Function(Duration duration)? _onFadeStart;
+
+  /// 撤销淡出；[restore] = true 回到用户音量，false 保持当前电平等暂停。
+  final void Function({required bool restore})? _onFadeCancel;
 
   /// 到点暂停落地后，若勾选了「退出应用」，再执行这里。
   ///
@@ -190,6 +212,19 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   /// 「刚播完那首」的时长（下一次事件才覆盖）。
   Duration _lastKnownDuration = Duration.zero;
 
+  /// 倒计时淡出是否已启动（一次倒计时只启动一次；暂停 / 取消 / 重开时清）。
+  bool _countdownFadeStarted = false;
+
+  /// 「播完当前歌曲」的 3 秒淡出是否已启动（切歌 / 后退 seek 时清）。
+  bool _endFadeStarted = false;
+
+  /// 位置通道最近一次真值变化的时间：判断曲末淡出用的进度是否新鲜。
+  DateTime? _positionChangedAt;
+  Duration _previousPosition = Duration.zero;
+
+  /// 进度是否在最近一次更新中前进（时钟在走，而不是停在旧值）。
+  bool _positionAdvancing = false;
+
   /// 当前是否具备「播完当前歌曲」条件（真实播放已装载曲目）。
   bool get canArmAfterCurrentTrack => _snapshot.value.current != null;
 
@@ -205,6 +240,10 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   /// 开启倒计时（到点暂停）。重复调用覆盖旧定时。
   void startCountdown(Duration duration) {
     if (duration <= Duration.zero) return;
+    // 覆盖旧定时前先把它的淡出还回去，否则新定时会从静音开始。
+    _cancelFade(restore: true);
+    _countdownFadeStarted = false;
+    _endFadeStarted = false;
     // 与「播完当前歌曲」互斥：切到倒计时时撤销后端的停止标志。
     _setStopAfterCurrentTrack?.call(false);
     _mode = SleepTimerMode.countdown;
@@ -234,6 +273,11 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   }) {
     final uri = _snapshot.value.current?.id.uri;
     if (uri == null) return;
+    // 从倒计时 / 其它模式切进等待阶段时，已有淡出必须撤回：音乐还要继续，
+    // 不能静音等到曲末。普通「播完当前歌曲」进入时本来就没有淡出。
+    _cancelFade(restore: true);
+    _countdownFadeStarted = false;
+    _endFadeStarted = false;
     _mode = SleepTimerMode.afterCurrentTrack;
     _armedTrackUri = uri;
     _setStopAfterCurrentTrack?.call(true);
@@ -267,10 +311,16 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
         _waitingAfterDeadline &&
         _mode == SleepTimerMode.afterCurrentTrack) {
       _fireNow();
+      return;
     }
+    // 倒计时途中取消「等本曲播完」：若已进入最后 5 秒，下一次 tick 之前
+    // 也应立即开始淡出。
+    if (_mode == SleepTimerMode.countdown) _syncTicker();
   }
 
   void dispose() {
+    _countdownFadeStarted = false;
+    _endFadeStarted = false;
     _completionSubscription?.cancel();
     _completionSubscription = null;
     _setStopAfterCurrentTrack?.call(false);
@@ -304,22 +354,58 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   /// 把定时重新武装到下一首。
   void _onTrackCompleted(Track _) {
     if (_mode != SleepTimerMode.afterCurrentTrack) return;
+    // 曲末早于预期到达（淡出还没跑完）：取消淡出并立即暂停，不再补一次。
+    if (_endFadeStarted) {
+      _cancelFade(restore: false);
+    }
     _fireNow();
   }
 
   void _onPosition() {
     final position = _position.value;
+    final changed = position != _previousPosition;
+    if (changed) {
+      _positionAdvancing = position > _previousPosition;
+      _previousPosition = position;
+      _positionChangedAt = _now();
+    }
+    final backwardSeek = changed && !_positionAdvancing;
+    if (_mode == SleepTimerMode.afterCurrentTrack &&
+        backwardSeek &&
+        _endFadeStarted) {
+      // 回到开头（单曲循环重播）仍是「这一遍结束」；退回曲中才是用户
+      // 后退 seek。两者都表现为位置从曲末回跳，只能按落点区分。
+      if (position < const Duration(seconds: 1)) {
+        _cancelFade(restore: false);
+        _fireNow();
+        return;
+      }
+      // 后退 seek 是对「旧曲末」的否定：撤销淡出，重新等新的曲末。
+      _cancelFade(restore: true);
+      if (position > _maxPosition) _maxPosition = position;
+      _maybeStartEndFade();
+      return;
+    }
     if (_mode == SleepTimerMode.afterCurrentTrack &&
         _completedArmedTrack &&
         position + _restartGap < _maxPosition) {
       // 单曲循环：曲目没换，位置从曲末回跳 = 已播完一轮。
+      _cancelFade(restore: false);
       _fireNow();
       return;
     }
     if (position > _maxPosition) _maxPosition = position;
+    if (_mode == SleepTimerMode.afterCurrentTrack) {
+      _maybeStartEndFade();
+    }
   }
 
   void _handleAfterTrackSnapshot(PlaybackSnapshot snapshot) {
+    // 用户在曲末淡出途中手动暂停：撤销淡出；恢复播放后位置事件会按新的
+    // 剩余时间重新进入 3 秒窗口。
+    if (!snapshot.isPlaying && _endFadeStarted) {
+      _cancelFade(restore: true);
+    }
     final uri = snapshot.current?.id.uri;
     if (uri == null) {
       // 队列被清空 / 播放停止：没有可等待的曲目。
@@ -328,13 +414,22 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     }
     if (uri != _armedTrackUri) {
       if (_completedArmedTrack) {
-        // 自然播完（下一首已装载）：到点暂停。
+        // 自然播完（下一首已装载）：早于淡出结束就进入完成 → 撤销淡出并
+        // 立即暂停（保持当前低电平，不再补一次）。
+        if (_endFadeStarted) {
+          _cancelFade(restore: false);
+        }
         _fireNow();
         return;
       }
-      // 手动切歌 / 自动换源替换：跟随新曲目继续等待「这一首播完」。
+      // 手动切歌 / 自动换源替换：撤销旧曲目的淡出（否则新歌从静音开始），
+      // 跟随新曲目继续等待「这一首播完」。
+      if (_endFadeStarted) {
+        _cancelFade(restore: true);
+      }
       _armedTrackUri = uri;
       _maxPosition = _position.value;
+      _positionChangedAt = null;
       return;
     }
     if (!snapshot.isPlaying && _completedArmedTrack) {
@@ -385,11 +480,18 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
       final expired = _freeze();
       _cancelTicker();
       _cancelAlarm();
-      if (expired) _onCountdownDeadline();
+      if (expired) {
+        _onCountdownDeadline();
+      } else if (_countdownFadeStarted) {
+        // 用户在淡出途中手动暂停：撤销淡出并恢复音量，恢复播放后会按剩余
+        // 时间重新进入窗口。到点冻结时不走这里（暂停要立即落地）。
+        _cancelFade(restore: true);
+      }
       return;
     }
     if (_deadlinePassed) {
-      // 已经越过 deadline（冻结期间到点后重新获得调度）：立即补触发。
+      // 已经越过 deadline（冻结期间到点后重新获得调度）：立即补触发，
+      // 不做一次「补淡」——不能把已经过去的几秒装成渐变。
       _onCountdownDeadline();
       return;
     }
@@ -399,6 +501,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
       _deadlineAt = _now().add(remaining);
       _ticker = Timer.periodic(_tickInterval, (_) => _onTick());
     }
+    _maybeStartCountdownFade();
     // 即使 Dart ticker 已在跑，也重新 arm 原生定时器：通道重建 / 回前台 /
     // 快照变化后都能恢复熄屏补触发。
     _armAlarm(foregroundOverride: foregroundOverride);
@@ -434,6 +537,8 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
       return;
     }
     if (!_deadlinePassed) {
+      // 原生定时器只在当前 deadline 触发；提前醒来时补一次窗口检查。
+      _maybeStartCountdownFade();
       _armAlarm();
       return;
     }
@@ -486,7 +591,72 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
       return;
     }
     _remaining = deadline.difference(now);
+    _maybeStartCountdownFade();
     _publish();
+  }
+
+  /// 倒计时进入最后 5 秒时启动一次淡出。
+  ///
+  /// 倒计时淡出是定时关闭承诺的一部分，不受普通「淡入淡出」设置影响；
+  /// 但用户勾了「等当前曲目播完」时不做——那段时间音乐还要继续，最后
+  /// 再由 after-current-track 的 3 秒淡出收尾。
+  void _maybeStartCountdownFade() {
+    if (_mode != SleepTimerMode.countdown ||
+        _countdownFadeStarted ||
+        waitForTrackEnd.value ||
+        !_snapshot.value.isPlaying) {
+      return;
+    }
+    final deadline = _deadlineAt;
+    if (deadline == null) return;
+    final remaining = deadline.difference(_now());
+    if (remaining <= Duration.zero ||
+        remaining < _countdownMinFade ||
+        remaining > _countdownFadeWindow) {
+      return;
+    }
+    _countdownFadeStarted = true;
+    _onFadeStart?.call(remaining);
+  }
+
+  /// after-current-track：位置新鲜且确实在前进时，曲末前 3 秒淡出。
+  ///
+  /// 位置未知 / 停更（熄屏节流）时不猜：宁可等完成事件立即停，也不在
+  /// 一首歌的中间误降音量。
+  void _maybeStartEndFade() {
+    if (_mode != SleepTimerMode.afterCurrentTrack ||
+        _endFadeStarted ||
+        !_snapshot.value.isPlaying) {
+      return;
+    }
+    final changedAt = _positionChangedAt;
+    if (changedAt == null ||
+        !_positionAdvancing ||
+        _now().difference(changedAt) > _positionFreshness) {
+      return;
+    }
+    final duration = _lastKnownDuration > _completionTolerance
+        ? _lastKnownDuration
+        : (_snapshot.value.duration > _completionTolerance
+              ? _snapshot.value.duration
+              : null);
+    if (duration == null) return;
+    final remaining = duration - _position.value;
+    if (remaining <= Duration.zero ||
+        remaining < _countdownMinFade ||
+        remaining > _endFadeWindow) {
+      return;
+    }
+    _endFadeStarted = true;
+    _onFadeStart?.call(remaining < _endFadeWindow ? remaining : _endFadeWindow);
+  }
+
+  /// 撤销当前淡出（if any）；不影响定时模式本身。
+  void _cancelFade({required bool restore}) {
+    if (!_countdownFadeStarted && !_endFadeStarted) return;
+    _countdownFadeStarted = false;
+    _endFadeStarted = false;
+    _onFadeCancel?.call(restore: restore);
   }
 
   /// 倒计时到点：勾选「本曲播完再停」且当前有真实播放曲目时，转入等待阶段；
@@ -498,8 +668,16 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
         snapshot.isPlaying &&
         snapshot.current != null &&
         !_completedArmedTrack) {
+      // 还要继续听：把最后几秒的淡出还回去，进入等待阶段。
+      _cancelFade(restore: true);
       _startAfterTrackWait(keepDuration: _duration, afterDeadline: true);
       return;
+    }
+    // 淡出已接近静音（或刚好还差一点）：直接落静音，让随后暂停立即生效，
+    // 不再补第二次淡出。没开始过淡出时由服务按普通暂停路径处理。
+    if (_countdownFadeStarted) {
+      _countdownFadeStarted = false;
+      _onFadeCancel?.call(restore: false);
     }
     _fireNow();
   }
@@ -511,7 +689,9 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   /// 更糟；两个动作各自记日志。
   void _fireNow() {
     final shouldExit = exitApp.value;
-    _reset(notify: true);
+    // 不撤销淡出：到点时若淡出已经跑完，暂停路径会跳过第二次淡出；
+    // 若还没跑完，也让暂停从当前电平继续。
+    _reset(notify: true, cancelFade: false);
     unawaited(() async {
       try {
         await _onFire();
@@ -533,7 +713,10 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     }
   }
 
-  void _reset({required bool notify}) {
+  void _reset({required bool notify, bool cancelFade = true}) {
+    if (cancelFade) _cancelFade(restore: true);
+    _countdownFadeStarted = false;
+    _endFadeStarted = false;
     _setStopAfterCurrentTrack?.call(false);
     _mode = SleepTimerMode.off;
     _remaining = null;

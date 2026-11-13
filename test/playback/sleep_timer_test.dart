@@ -70,6 +70,8 @@ void main() {
   late int exited;
   late List<String> events;
   late _FakeSleepTimerAlarm alarm;
+  late List<Duration> fades;
+  late List<bool> fadeCancels;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -77,6 +79,8 @@ void main() {
     fired = 0;
     exited = 0;
     events = [];
+    fades = [];
+    fadeCancels = [];
     backend = FakePlaybackFacade();
     facade = backend;
     alarm = _FakeSleepTimerAlarm();
@@ -97,6 +101,9 @@ void main() {
         exited++;
         events.add('exit');
       },
+      // 淡出动作只记录：定时器不碰播放器，音频结果由服务测试覆盖。
+      onFadeStart: fades.add,
+      onFadeCancel: ({required bool restore}) => fadeCancels.add(restore),
       now: () => now,
       alarm: alarm,
     );
@@ -902,6 +909,222 @@ void main() {
     // 过期 token 在已复位状态下不再触发。
     alarm.fire(token);
     await tester.pump();
+    expect(fired, 1);
+  });
+
+  testWidgets('倒计时：最后 5 秒只启动一次淡出，到点暂停', (tester) async {
+    final a = _track('a');
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.startCountdown(const Duration(seconds: 8));
+    await advance(tester, const Duration(seconds: 3));
+    expect(fades, [const Duration(seconds: 5)], reason: '进入 5 秒窗口启动一次淡出');
+
+    await advance(tester, const Duration(seconds: 4));
+    expect(fades, hasLength(1), reason: '窗口内不重复启动');
+    expect(timer.value.mode, SleepTimerMode.countdown);
+
+    await advance(tester, const Duration(seconds: 1));
+    expect(fired, 1);
+    expect(fadeCancels, [false], reason: '到点直接落静音（restore=false），暂停不再补第二次淡出');
+  });
+
+  testWidgets('倒计时：越过 deadline 的回调立即暂停，不补淡', (tester) async {
+    final a = _track('a');
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.startCountdown(const Duration(seconds: 10));
+    now = now.add(const Duration(seconds: 11));
+    timer.recheckDeadline();
+    await tester.pump();
+
+    expect(fired, 1);
+    expect(fades, isEmpty, reason: '冻结越过后不做 catch-up fade');
+  });
+
+  testWidgets('倒计时：冻结后恢复，按真实剩余时间淡出', (tester) async {
+    final a = _track('a');
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.startCountdown(const Duration(seconds: 10));
+    await advance(tester, const Duration(seconds: 3));
+    now = now.add(const Duration(seconds: 5));
+    timer.recheckDeadline();
+    await tester.pump();
+
+    expect(fades, [const Duration(seconds: 2)], reason: '淡出按实际剩余时间');
+    await advance(tester, const Duration(seconds: 2));
+    expect(fired, 1);
+  });
+
+  testWidgets('倒计时：剩余不足可听窗口时直接暂停', (tester) async {
+    final a = _track('a');
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.startCountdown(const Duration(seconds: 10));
+    now = now.add(const Duration(milliseconds: 9800));
+    timer.recheckDeadline();
+    await tester.pump();
+    expect(fades, isEmpty);
+
+    // ticker 在 t0 建表，手动跳时钟后补一次 deadline 判定。
+    now = now.add(const Duration(milliseconds: 200));
+    timer.recheckDeadline();
+    await tester.pump();
+    expect(fired, 1);
+    expect(fades, isEmpty);
+  });
+
+  testWidgets('倒计时：淡出中手动暂停 → 撤销淡出并冻结，恢复后可再次淡出', (tester) async {
+    final a = _track('a');
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.startCountdown(const Duration(seconds: 6));
+    await advance(tester, const Duration(seconds: 2));
+    expect(fades, hasLength(1));
+
+    backend.emitFrame(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        isPlaying: false,
+      ),
+    );
+    expect(fadeCancels, [true], reason: '用户暂停撤销淡出、恢复音量');
+    expect(fired, 0);
+    final frozen = timer.value.remaining;
+
+    await advance(tester, const Duration(seconds: 10));
+    expect(fired, 0);
+    expect(timer.value.remaining, frozen, reason: '暂停期间冻结');
+
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
+    expect(fades, hasLength(2), reason: '恢复后按剩余时间重新淡出');
+    await advance(tester, frozen!);
+    expect(fired, 1);
+  });
+
+  testWidgets('倒计时：淡出中取消 → 恢复音量且不暂停', (tester) async {
+    final a = _track('a');
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.startCountdown(const Duration(seconds: 6));
+    await advance(tester, const Duration(seconds: 2));
+    expect(fades, hasLength(1));
+
+    timer.cancel();
+    expect(fadeCancels, [true]);
+    expect(fired, 0);
+    expect(timer.value.mode, SleepTimerMode.off);
+
+    await advance(tester, const Duration(seconds: 20));
+    expect(fired, 0);
+  });
+
+  testWidgets('倒计时：勾选等本曲播完时，deadline 不淡出，进入等待阶段', (tester) async {
+    final a = _track('a');
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.setWaitForTrackEnd(true);
+    timer.startCountdown(const Duration(seconds: 5));
+    await advance(tester, const Duration(seconds: 5));
+
+    expect(fades, isEmpty, reason: '还要继续听，不能静音等下一首');
+    expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
+
+    // 进入等待后，曲末前 3 秒照常启用专用淡出。
+    backend.emitFrame(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: const Duration(seconds: 29),
+      ),
+    );
+    expect(fades, [const Duration(seconds: 1)]);
+  });
+
+  testWidgets('播完当前歌曲：位置不新鲜时不用旧进度淡出', (tester) async {
+    final a = _track('a', duration: const Duration(seconds: 100));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.startAfterCurrentTrack();
+    await tester.pump();
+    backend.emitFrame(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: const Duration(seconds: 96),
+      ),
+    );
+    expect(fades, isEmpty, reason: '离曲末还远，不淡出');
+
+    // 时钟前进但位置没再更新：旧位置不再可信。
+    now = now.add(const Duration(seconds: 5));
+    backend.emitFrame(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: const Duration(seconds: 96),
+      ),
+    );
+    expect(fades, isEmpty);
+
+    backend.emitTrackCompletion(a);
+    await tester.pump();
+    expect(fired, 1, reason: '位置不可靠时退回完成事件立即停');
+  });
+
+  testWidgets('播完当前歌曲：3 秒淡出中后退 seek → 撤销并等新的曲末', (tester) async {
+    final a = _track('a');
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.startAfterCurrentTrack();
+    backend.emitFrame(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: const Duration(seconds: 28),
+      ),
+    );
+    expect(fades, [const Duration(seconds: 2)]);
+
+    backend.emitFrame(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: const Duration(seconds: 5),
+      ),
+    );
+    expect(fadeCancels, [true]);
+    expect(fired, 0);
+    expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
+  });
+
+  testWidgets('播完当前歌曲：淡出未完成就收到完成事件 → 撤销并立即暂停', (tester) async {
+    final a = _track('a');
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.startAfterCurrentTrack();
+    backend.emitFrame(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: const Duration(seconds: 28),
+      ),
+    );
+    expect(fades, hasLength(1));
+
+    backend.emitTrackCompletion(a);
+    await tester.pump();
+
+    expect(fadeCancels, [false], reason: '保持当前电平，让暂停立即落地');
     expect(fired, 1);
   });
 

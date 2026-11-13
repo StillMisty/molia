@@ -61,6 +61,34 @@ abstract interface class PlaybackFacade {
 
   /// 应用内音量 0..1（不含静音状态，静音由 provider 层表达）。
   Future<void> setVolume(double volume);
+
+  /// 暂停淡出是否还在进行（此时快照仍是 playing）。
+  ///
+  /// 命令面用它区分「真的在播」与「已经在淡出」：后者收到播放键要反向
+  /// 淡入，而不是把第二次按键当暂停。
+  bool get pauseTransitioning;
+
+  /// 用户暂停 / 播放时的淡入淡出时长；[Duration.zero] = 关闭。
+  ///
+  /// 只影响之后的过渡，正在跑的淡变保持原时长。用户音量仍归 provider /
+  /// [setVolume] 所有，包络只是播放器上的音频细节。
+  void setFadeDuration(Duration duration);
+
+  /// 智能随机开关：只降低最近听过曲目的出现概率，不排除。
+  void setSmartShuffle(bool enabled);
+
+  /// 定时关闭倒计时 / 播完当前曲的专用淡出（固定时长，与淡入淡出设置无关）。
+  ///
+  /// 只降音量、不暂停：到点暂停仍由命令面单独下发，最后几秒取消定时
+  /// 才能只撤销淡出、不和一次待执行的暂停赛跑。
+  void startSleepFade(Duration duration);
+
+  /// 撤销睡眠淡出；[restore] 为 true 时按普通淡变时长回到用户音量。
+  ///
+  /// 完成前就收到曲末 / 用户取消时，[restore] 为 false 让随后的暂停立即
+  /// 落地（保持静音，不再补第二次淡出）。
+  void cancelSleepFade({bool restore = true});
+
   Future<void> stop();
 
   /// 原地更新队列曲目封面（音源补图；低频快照通知，值变才发）。

@@ -529,6 +529,34 @@ class PlayStatisticsRepository {
     );
   }
 
+  /// 最近播放过的曲目 id（`sourceKey:songId`），供随机播放降低重复率。
+  ///
+  /// 口径由调用方给 [since]（当前是 7 天）：取「[since] 之后播放过」与
+  /// 「最近 [limit] 条播放事件」的并集，两者谁更大就用谁。这里只返回
+  /// 身份集合，不暴露事件明细，也不参与同步 / 持久化。
+  Future<Set<String>> recentTrackKeys({
+    required int since,
+    int limit = 50,
+  }) async {
+    final rows = await _db
+        .customSelect(
+          'SELECT DISTINCT pt.sourceKey AS sourceKey, pt.songId AS songId '
+          'FROM play_events e '
+          'JOIN play_tracks pt ON pt.id = e.trackId '
+          'WHERE e.startedAt >= ? OR e.id IN ('
+          'SELECT id FROM play_events ORDER BY startedAt DESC, id DESC '
+          'LIMIT ?)',
+          variables: [Variable.withInt(since), Variable.withInt(limit)],
+        )
+        .get();
+    return {
+      for (final row in rows)
+        if ((row.data['sourceKey'] as String?)?.isNotEmpty == true &&
+            (row.data['songId'] as String?)?.isNotEmpty == true)
+          '${row.data['sourceKey']}:${row.data['songId']}',
+    };
+  }
+
   /// 导出用明细（最近 [limit] 条已收尾事件，含 error——导出是原始日志）。
   Future<List<PlayEvent>> listEventsForExport({
     int limit = PlayStatisticsLimits.exportEventLimit,
