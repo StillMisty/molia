@@ -45,6 +45,7 @@ import '../../services/local/local_library_service.dart';
 import '../../services/local/local_metadata_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/play_statistics_service.dart';
+import '../../services/scrobble/scrobble_service.dart';
 import '../../services/save_as.dart';
 import '../../services/search_history_store.dart';
 import '../../services/shortcut_settings.dart';
@@ -57,6 +58,7 @@ import 'lyrics_display_stack.dart';
 import 'lyrics_stack.dart';
 import 'local_data_stack.dart';
 import 'playback_stack.dart';
+import 'scrobble_stack.dart';
 import 'sync_stack.dart';
 import 'update_stack.dart';
 
@@ -76,6 +78,7 @@ List<SingleChildWidget> buildAppProviders({
   required LyricsDisplayStack display,
   required SyncStack sync,
   required UpdateStack update,
+  required ScrobbleStack scrobble,
   required DiagnosticsService diagnosticsService,
   required DiagnosticsExporter diagnosticsExporter,
   required NotificationService notifications,
@@ -175,6 +178,8 @@ List<SingleChildWidget> buildAppProviders({
       value: library.playStatisticsRepository,
     ),
     Provider<PlayStatisticsService>.value(value: library.playStatisticsService),
+    // 听歌同步：设置页读写同一实例；服务本身是纯观察者（首帧后 init）。
+    ChangeNotifierProvider<ScrobbleService>.value(value: scrobble.service),
     // 听歌统计页状态（范围 / 加载 / 清空 / 导出）；页面打开期间
     // 自行订阅仓库变更，关闭后取消。
     ChangeNotifierProvider(

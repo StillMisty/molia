@@ -5165,4 +5165,233 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get localInfoUpdated => '信息已更新';
+
+  @override
+  String get settingsListeningSyncTitle => '听歌同步';
+
+  @override
+  String get settingsListeningSyncSubtitle =>
+      '把正在播放和播放记录发送到 ListenBrainz 或 Last.fm';
+
+  @override
+  String get listeningSyncTitle => '听歌同步';
+
+  @override
+  String get listeningSyncIntro => '默认关闭。连接后，只有你在这里开启的服务会收到播放记录。';
+
+  @override
+  String get listeningSyncMaster => '总开关';
+
+  @override
+  String get listeningSyncMasterSubtitle => '关闭后停止发送；已排队的记录保留，断开连接会清空';
+
+  @override
+  String get listeningSyncSentTitle => '会发送';
+
+  @override
+  String get listeningSyncSent => '歌曲名、歌手、专辑、时长、开始播放的时间，以及你的服务账号。';
+
+  @override
+  String get listeningSyncNotSent => '不会发送本地文件路径、歌单内容、设备标识或应用设置。';
+
+  @override
+  String get listeningSyncNetwork => '发送请求时，服务会看到你的网络地址。';
+
+  @override
+  String get listeningSyncConnect => '连接';
+
+  @override
+  String get listeningSyncDisconnect => '断开连接';
+
+  @override
+  String listeningSyncDisconnectTitle(String name) {
+    return '断开 $name？';
+  }
+
+  @override
+  String get listeningSyncDisconnectBody =>
+      '会删除本机保存的授权和这个服务待发送的记录。其它设备上的删除取决于同步设置。';
+
+  @override
+  String listeningSyncConnectedAs(String name) {
+    return '已连接：$name';
+  }
+
+  @override
+  String get listeningSyncDisconnected => '未连接';
+
+  @override
+  String get listeningSyncNeedsAuth => '需要重新授权';
+
+  @override
+  String get listeningSyncRetrying => '发送失败，稍后自动重试';
+
+  @override
+  String get listeningSyncError => '发送失败';
+
+  @override
+  String listeningSyncQueued(int count) {
+    return '待发送 $count 条';
+  }
+
+  @override
+  String listeningSyncConsentTitle(String name) {
+    return '开启 $name 的听歌同步？';
+  }
+
+  @override
+  String get listeningSyncConsentBody =>
+      '开启后会把上面列出的曲目信息和你的服务账号发送给该服务，请求也会让对方看到你的网络地址。你可以随时断开。';
+
+  @override
+  String get listeningSyncConsentAgree => '同意并开启';
+
+  @override
+  String get listeningSyncCancel => '取消';
+
+  @override
+  String get listeningSyncTokenTitle => '输入访问密码';
+
+  @override
+  String get listeningSyncTokenLabel => '访问密码';
+
+  @override
+  String get listeningSyncTokenHint => '在 ListenBrainz 的设置页复制';
+
+  @override
+  String get listeningSyncTokenInvalid => '访问密码无效，请检查后重试';
+
+  @override
+  String get listeningSyncTokenUnreachable => '暂时连不上 ListenBrainz，请检查网络后重试';
+
+  @override
+  String get listeningSyncLastFmNotConfigured => '这个版本没有内置 Last.fm 应用密钥，暂时无法连接';
+
+  @override
+  String get listeningSyncLastFmBegin => '在浏览器中授权';
+
+  @override
+  String get listeningSyncLastFmWaiting => '在浏览器完成授权后，回到这里确认';
+
+  @override
+  String get listeningSyncLastFmConfirm => '我已完成授权';
+
+  @override
+  String get listeningSyncLastFmFailed => '授权没有完成，请重试';
+
+  @override
+  String get listeningSyncLearnMoreListenBrainz => '了解 ListenBrainz';
+
+  @override
+  String get listeningSyncLearnMoreLastFm => '了解 Last.fm';
+
+  @override
+  String get listeningSyncUnavailable => '听歌同步还没有准备好，请稍后再试';
+
+  @override
+  String get listeningSyncConnected => '已连接';
+
+  @override
+  String get seekBarLabel => '播放进度';
+
+  @override
+  String seekBarValue(String current, String total) {
+    return '$current，共 $total';
+  }
+
+  @override
+  String get seekBarUnavailable => '没有可拖动的进度';
+
+  @override
+  String get seekForward => '快进 10 秒';
+
+  @override
+  String get seekBackward => '后退 10 秒';
+
+  @override
+  String openCoverFor(String title) {
+    return '查看「$title」的封面';
+  }
+
+  @override
+  String openPlayerFor(String title) {
+    return '打开播放页：$title';
+  }
+
+  @override
+  String get lyricCurrentLine => '当前歌词';
+
+  @override
+  String get onboardingSkip => '跳过';
+
+  @override
+  String get onboardingNext => '下一步';
+
+  @override
+  String get onboardingStart => '开始使用';
+
+  @override
+  String get onboardingBack => '上一步';
+
+  @override
+  String onboardingStep(int current, int total) {
+    return '第 $current 步，共 $total 步';
+  }
+
+  @override
+  String get onboardingPrivacyTitle => '音乐留在本机';
+
+  @override
+  String get onboardingPrivacyBody => '下载和导入的歌曲只保存在这台设备。同步是可选项，默认关闭。';
+
+  @override
+  String get onboardingPrivacyScriptsTitle => '第三方音源脚本';
+
+  @override
+  String get onboardingPrivacyScriptsBody => '脚本会在本机运行代码，可能访问网络。请只导入你信任的来源。';
+
+  @override
+  String get onboardingChannelsTitle => '选择音源渠道';
+
+  @override
+  String get onboardingChannelsBody => '所有渠道默认开启；随时可以在设置里调整。';
+
+  @override
+  String get onboardingChannelsPreparing => '正在准备渠道…';
+
+  @override
+  String get onboardingQualityTitle => '音质与省流';
+
+  @override
+  String get onboardingQualityBody => '选择默认音质。省流模式只在移动数据下降低音质。';
+
+  @override
+  String get onboardingQualityLabel => '默认音质';
+
+  @override
+  String get onboardingDataSaver => '省流模式';
+
+  @override
+  String get onboardingDataSaverHint => '仅在移动数据下生效';
+
+  @override
+  String get onboardingOptionalTitle => '可选功能';
+
+  @override
+  String get onboardingOptionalSync => '跨设备同步';
+
+  @override
+  String get onboardingOptionalSyncBody => '默认关闭。开启后，歌单、设置和密钥会在你的设备之间加密传输。';
+
+  @override
+  String get onboardingOptionalAi => 'AI 推歌';
+
+  @override
+  String get onboardingOptionalAiBody => '默认关闭。需要你自己的 AI 服务密钥，推荐内容才会发送给该服务。';
+
+  @override
+  String get onboardingOptionalNoAccount => '不需要登录，引导过程也不会联网。';
+
+  @override
+  String get listeningSyncNeedsConsent => '需要重新确认发送内容';
 }

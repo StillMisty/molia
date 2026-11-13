@@ -22,6 +22,7 @@ import '../l10n/app_localizations.dart';
 import '../pages/favorites.dart';
 import '../pages/library.dart';
 import '../pages/nowplaying.dart';
+import '../pages/onboarding_flow.dart';
 import '../pages/sync_nearby_pairing_dialogs.dart';
 import '../pages/sync_notices.dart';
 import '../providers/nav_provider.dart';
@@ -31,12 +32,14 @@ import '../providers/theme_provider.dart';
 import '../services/app_branding_service.dart';
 import '../services/haptics.dart';
 import '../services/language_service.dart';
+import '../services/onboarding_store.dart';
 import '../services/system_fonts_service.dart';
 import '../services/window/window_chrome.dart';
 import '../theme/animated_scheme.dart';
 import '../theme/app_theme.dart';
 import '../theme/motion_policy.dart';
 import '../utils/responsive.dart';
+import '../widgets/adaptive_layout.dart';
 import '../widgets/cover_fallback.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/global_search_overlay.dart';
@@ -172,11 +175,22 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key, this.desktopShell});
+  const MyApp({
+    super.key,
+    this.desktopShell,
+    this.showOnboarding = false,
+    this.onboardingStore,
+  });
 
   /// 桌面骨架开关（**测试专用**）：null = 按平台判定（Linux / Windows /
   /// macOS 走桌面骨架），true / false 强制指定。真机永远走平台判定。
   final bool? desktopShell;
+
+  /// 首帧是否渲染首次引导（组合根在 runApp 前读设备本地标记决定）。
+  final bool showOnboarding;
+
+  /// 完成标记写入器（测试注入；生产为默认 prefs 实现）。
+  final OnboardingStore? onboardingStore;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -186,6 +200,9 @@ class _MyAppState extends State<MyApp>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   /// 顶栏 ↔ 播放页共享元素飞行控制器。
   final PlayerMorphController _morph = PlayerMorphController();
+
+  /// 首次引导是否仍在显示：完成 / 跳过后切回正常壳层，不经过路由。
+  late bool _showOnboarding;
 
   /// 顶栏曲目信息区（歌名/作者 + 播放/下一首按钮）的入场进度。
   ///
@@ -311,6 +328,7 @@ class _MyAppState extends State<MyApp>
   @override
   void initState() {
     super.initState();
+    _showOnboarding = widget.showOnboarding;
     WidgetsBinding.instance.addObserver(this);
     _morphAnimation.addListener(_onMorphTick);
     // 启动首页：导航偏好在首帧前已就绪（组合根 await 过 preferencesReady），
@@ -659,10 +677,17 @@ class _MyAppState extends State<MyApp>
     );
   }
 
+  /// 引导完成 / 跳过：先写设备本地标记（失败下次仍会显示），再切回壳层。
+  Future<void> _finishOnboarding() async {
+    await (widget.onboardingStore ?? OnboardingStore()).markCompleted();
+    if (mounted) setState(() => _showOnboarding = false);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final shellLayout = context.layoutType(ResponsivePageType.shell);
-    final isLargeScreen = shellLayout.preferTwoPane;
+    if (_showOnboarding) {
+      return OnboardingFlow(onFinished: _finishOnboarding);
+    }
     final l10n = AppLocalizations.of(context)!;
     final visibleDestinations = context
         .watch<NavProvider>()
@@ -688,25 +713,28 @@ class _MyAppState extends State<MyApp>
     // 桌面布局值在这里解析一次（窗口宽 / 平台位），页面与骨架只消费
     // （见 `widgets/desktop_layout.dart`）。
     if (_desktopShell) {
-      return DesktopLayout.scope(
+      return AdaptiveLayoutScope.scope(
         context,
-        child: DesktopShell(
-          chrome: chrome,
-          pageStack: _buildPageStack(),
-          morph: _morph,
-          // 搜索遮罩：入口（品牌区 / Ctrl+F）与「查看全部结果」分别接线。
-          // 后者落在资料库目的地：完整结果（分段 / 分页 / 歌手链接）在那里，
-          // 且共用同一个 SearchProvider 实例。
-          onViewAllResults: _openLibrarySearch,
-          onOpenSearch: _openGlobalSearch,
-          // 全局快捷键：Ctrl+F 打开搜索遮罩、Ctrl+1/2/3 切可见目的地，
-          // DesktopShell 只负责在顶层监听按键，落点由壳层回调决定。
-          searchController: _globalSearch,
-          onSelectDestinationIndex: _selectVisibleDestinationAt,
-          // 队列入口（底栏按钮）与 Esc 的「关闭队列」都要落回播放页右栏，
-          // 由壳层持有控制器后分发。
-          onOpenQueue: _openQueue,
-          onCloseQueuePanel: _closeQueuePanel,
+        child: DesktopLayout.scope(
+          context,
+          child: DesktopShell(
+            chrome: chrome,
+            pageStack: _buildPageStack(),
+            morph: _morph,
+            // 搜索遮罩：入口（品牌区 / Ctrl+F）与「查看全部结果」分别接线。
+            // 后者落在资料库目的地：完整结果（分段 / 分页 / 歌手链接）在那里，
+            // 且共用同一个 SearchProvider 实例。
+            onViewAllResults: _openLibrarySearch,
+            onOpenSearch: _openGlobalSearch,
+            // 全局快捷键：Ctrl+F 打开搜索遮罩、Ctrl+1/2/3 切可见目的地，
+            // DesktopShell 只负责在顶层监听按键，落点由壳层回调决定。
+            searchController: _globalSearch,
+            onSelectDestinationIndex: _selectVisibleDestinationAt,
+            // 队列入口（底栏按钮）与 Esc 的「关闭队列」都要落回播放页右栏，
+            // 由壳层持有控制器后分发。
+            onOpenQueue: _openQueue,
+            onCloseQueuePanel: _closeQueuePanel,
+          ),
         ),
       );
     }
@@ -715,6 +743,7 @@ class _MyAppState extends State<MyApp>
     // 整条顶栏是窗口拖动区（隐藏标题栏后唯一的拖动入口），高度 = 56 工具行
     // + 10 波浪进度，非桌面平台 WindowDragArea 是纯透传。
     final appBar = chrome.appBar(
+      context: context,
       title: WindowDoubleTapMaximize(
         // 双击顶栏标题区（拖动区的非按钮部分）= 最大化 / 还原（桌面肌肉记忆）；
         // 按钮区不参与，避免双击按钮顺带改窗口状态。
@@ -741,43 +770,48 @@ class _MyAppState extends State<MyApp>
       ),
     );
 
-    return DesktopLayout.scope(
+    final adaptive = AdaptiveLayoutScope.of(context);
+    final useRail = adaptive.usesNavigationRail;
+    return AdaptiveLayoutScope.scope(
       context,
-      child: Scaffold(
-        appBar: appBar,
-        body: Row(
-          children: [
-            if (isLargeScreen)
-              M3ENavigationRail(
-                // 固定 96dp 窄轨（alwaysCollapse）：无展开按钮、不可展开；
-                // 标签常显，替代 Material 侧 hover 才出现的 tooltip。
-                type: M3ENavigationRailType.alwaysCollapse,
-                selectedIndex: selectedIndex,
-                onDestinationSelected: chrome.selectDestinationAt,
-                sections: [
-                  M3ENavigationRailSection(
-                    destinations: chrome.railDestinations(),
-                  ),
-                ],
-              ),
-            Expanded(child: _buildPageStack()),
-          ],
-        ),
-        bottomNavigationBar: isLargeScreen
-            ? null
-            : SafeArea(
-                bottom: false,
-                child: M3ENavigationBar(
-                  // iOS 使用紧凑高度（M3E 最小档 64）。
-                  size: defaultTargetPlatform == TargetPlatform.iOS
-                      ? M3ENavBarSize.small
-                      : M3ENavBarSize.medium,
-                  labelBehavior: M3ENavBarLabelBehavior.alwaysShow,
+      child: DesktopLayout.scope(
+        context,
+        child: Scaffold(
+          appBar: appBar,
+          body: Row(
+            children: [
+              if (useRail)
+                M3ENavigationRail(
+                  // 固定 96dp 窄轨（alwaysCollapse）：无展开按钮、不可展开；
+                  // 标签常显，替代 Material 侧 hover 才出现的 tooltip。
+                  type: M3ENavigationRailType.alwaysCollapse,
                   selectedIndex: selectedIndex,
                   onDestinationSelected: chrome.selectDestinationAt,
-                  destinations: chrome.barDestinations(),
+                  sections: [
+                    M3ENavigationRailSection(
+                      destinations: chrome.railDestinations(),
+                    ),
+                  ],
                 ),
-              ),
+              Expanded(child: _buildPageStack()),
+            ],
+          ),
+          bottomNavigationBar: useRail
+              ? null
+              : SafeArea(
+                  bottom: false,
+                  child: M3ENavigationBar(
+                    // iOS 使用紧凑高度（M3E 最小档 64）。
+                    size: defaultTargetPlatform == TargetPlatform.iOS
+                        ? M3ENavBarSize.small
+                        : M3ENavBarSize.medium,
+                    labelBehavior: M3ENavBarLabelBehavior.alwaysShow,
+                    selectedIndex: selectedIndex,
+                    onDestinationSelected: chrome.selectDestinationAt,
+                    destinations: chrome.barDestinations(),
+                  ),
+                ),
+        ),
       ),
     );
   }
@@ -1199,10 +1233,21 @@ class IncomingPairingQueue {
 }
 
 class MyThemedApp extends StatefulWidget {
-  const MyThemedApp({super.key, this.onUserInteraction});
+  const MyThemedApp({
+    super.key,
+    this.onUserInteraction,
+    this.showOnboarding = false,
+    this.onboardingStore,
+  });
 
   /// 用户交互回调（组合根接同步调度器：续期「最近交互」的活跃窗口）。
   final VoidCallback? onUserInteraction;
+
+  /// 首帧是否渲染首次引导（组合根在 runApp 前读设备本地标记决定）。
+  final bool showOnboarding;
+
+  /// 完成标记写入器（测试注入；生产为默认 prefs 实现）。
+  final OnboardingStore? onboardingStore;
 
   @override
   State<MyThemedApp> createState() => _MyThemedAppState();
@@ -1471,7 +1516,13 @@ class _MyThemedAppState extends State<MyThemedApp> {
                     // 显式包一层路由级 M3E 主题，页面才不依赖 App 级
                     // DefaultTextStyle（预测返回退场 + 主题重建的断言见
                     // lib/widgets/m3e_page_route.dart）。
-                    home: M3ERouteTheme(builder: (_) => MyApp(key: appRootKey)),
+                    home: M3ERouteTheme(
+                      builder: (_) => MyApp(
+                        key: appRootKey,
+                        showOnboarding: widget.showOnboarding,
+                        onboardingStore: widget.onboardingStore,
+                      ),
+                    ),
                   );
                 },
               ),

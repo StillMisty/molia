@@ -177,6 +177,28 @@ class NowPlayingTrackText extends StatelessWidget {
     });
     final (name, artists) = info;
     if (name == null || name.isEmpty) return const NowPlayingAppTitle();
+    // 顶栏是固定高度槽：大字号下只保留歌名，作者行让位，避免标题块被裁。
+    final double textScale = MediaQuery.textScalerOf(context).scale(1);
+    // 顶栏工具行只有 48dp 的动作槽：大字号把两行重排成一行「歌名 · 作者」，
+    // 而不是把作者藏掉；两者都保持 200% 字号。
+    if (textScale > 1.5 && artists != null && artists.isNotEmpty) {
+      return Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: name,
+              style: context.typeScale.bodyMedium.copyWith(height: 1.0),
+            ),
+            TextSpan(
+              text: '  ·  $artists',
+              style: context.typeScale.labelSmall,
+            ),
+          ],
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,

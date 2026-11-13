@@ -23,6 +23,7 @@ class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.title,
     this.actions = const <Widget>[],
     this.bottom,
+    this.toolbarHeight = defaultToolbarHeight,
   });
 
   /// 顶栏标题（桌面 = 品牌区 + 空白拖动区；移动 = 曲目信息区）。
@@ -39,7 +40,10 @@ class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
   ///
   /// 与旧 `kToolbarHeight`（56）一致：工具行高度是壳层对外承诺，测试按它
   /// 校验，改 M3E 档位时这里先红。
-  static const double toolbarHeight = 56;
+  static const double defaultToolbarHeight = 56;
+
+  /// 本次构建的工具行高度：随系统字号放大（否则 200% 字号下标题块溢出）。
+  final double toolbarHeight;
 
   @override
   Size get preferredSize =>
@@ -53,14 +57,20 @@ class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
     final overlay = Theme.of(context).appBarTheme.systemOverlayStyle;
     final Widget bar = M3EAppBar.top(
       density: M3EAppBarDensity.compact,
+      toolbarHeight: toolbarHeight,
       // 壳层是根页面，永远不需要返回键；路由内的局部历史条目（如 M3E 下拉
       // 菜单打开时）会让 ModalRoute.canPop 变真，默认的 imply 会冒出返回箭头。
       automaticallyImplyLeading: false,
-      title: Row(
-        children: [
-          Expanded(child: title),
-          ...actions,
-        ],
+      // M3E 的标题槽按动作行扣掉上下留白：给内容一个明确高度，字号放大时
+      // 由行内文本自己省略，不让标题块撑破工具行。
+      title: SizedBox(
+        height: 44,
+        child: Row(
+          children: [
+            Expanded(child: title),
+            ...actions,
+          ],
+        ),
       ),
     );
     final Widget stack = Column(

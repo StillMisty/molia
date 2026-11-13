@@ -5389,4 +5389,252 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get localInfoUpdated => 'Info updated';
+
+  @override
+  String get settingsListeningSyncTitle => 'Listening sync';
+
+  @override
+  String get settingsListeningSyncSubtitle =>
+      'Send what you play to ListenBrainz or Last.fm';
+
+  @override
+  String get listeningSyncTitle => 'Listening sync';
+
+  @override
+  String get listeningSyncIntro =>
+      'Off by default. After connecting, only the services you enable here receive your listening history.';
+
+  @override
+  String get listeningSyncMaster => 'Master switch';
+
+  @override
+  String get listeningSyncMasterSubtitle =>
+      'Off stops sending; queued plays stay until you disconnect';
+
+  @override
+  String get listeningSyncSentTitle => 'What is sent';
+
+  @override
+  String get listeningSyncSent =>
+      'Track title, artist, album, duration, playback start time, and your account name on the service.';
+
+  @override
+  String get listeningSyncNotSent =>
+      'Local file paths, playlist contents, device identifiers, and app settings are never sent.';
+
+  @override
+  String get listeningSyncNetwork =>
+      'The request necessarily shows your network address to the service.';
+
+  @override
+  String get listeningSyncConnect => 'Connect';
+
+  @override
+  String get listeningSyncDisconnect => 'Disconnect';
+
+  @override
+  String listeningSyncDisconnectTitle(String name) {
+    return 'Disconnect $name?';
+  }
+
+  @override
+  String get listeningSyncDisconnectBody =>
+      'This deletes the authorization saved on this device and any plays queued for this service. Other devices follow your sync settings.';
+
+  @override
+  String listeningSyncConnectedAs(String name) {
+    return 'Connected as $name';
+  }
+
+  @override
+  String get listeningSyncDisconnected => 'Not connected';
+
+  @override
+  String get listeningSyncNeedsAuth => 'Needs authorization again';
+
+  @override
+  String get listeningSyncRetrying => 'Sending failed; retrying later';
+
+  @override
+  String get listeningSyncError => 'Sending failed';
+
+  @override
+  String listeningSyncQueued(int count) {
+    return '$count waiting to send';
+  }
+
+  @override
+  String listeningSyncConsentTitle(String name) {
+    return 'Turn on listening sync for $name?';
+  }
+
+  @override
+  String get listeningSyncConsentBody =>
+      'Track details listed above and your account name are sent to this service, which will also see your network address. You can disconnect at any time.';
+
+  @override
+  String get listeningSyncConsentAgree => 'Agree and turn on';
+
+  @override
+  String get listeningSyncCancel => 'Cancel';
+
+  @override
+  String get listeningSyncTokenTitle => 'Enter access password';
+
+  @override
+  String get listeningSyncTokenLabel => 'Access password';
+
+  @override
+  String get listeningSyncTokenHint =>
+      'Copy it from your ListenBrainz settings';
+
+  @override
+  String get listeningSyncTokenInvalid =>
+      'That access password did not work. Check it and try again.';
+
+  @override
+  String get listeningSyncTokenUnreachable =>
+      'Cannot reach ListenBrainz right now. Check your network and try again.';
+
+  @override
+  String get listeningSyncLastFmNotConfigured =>
+      'This build has no Last.fm application key, so it cannot connect yet';
+
+  @override
+  String get listeningSyncLastFmBegin => 'Authorize in browser';
+
+  @override
+  String get listeningSyncLastFmWaiting =>
+      'Finish in the browser, then confirm here';
+
+  @override
+  String get listeningSyncLastFmConfirm => 'I finished authorizing';
+
+  @override
+  String get listeningSyncLastFmFailed =>
+      'Authorization did not finish. Try again.';
+
+  @override
+  String get listeningSyncLearnMoreListenBrainz => 'About ListenBrainz';
+
+  @override
+  String get listeningSyncLearnMoreLastFm => 'About Last.fm';
+
+  @override
+  String get listeningSyncUnavailable =>
+      'Listening sync is not ready yet. Try again shortly.';
+
+  @override
+  String get listeningSyncConnected => 'Connected';
+
+  @override
+  String get seekBarLabel => 'Playback position';
+
+  @override
+  String seekBarValue(String current, String total) {
+    return '$current of $total';
+  }
+
+  @override
+  String get seekBarUnavailable => 'Nothing to seek';
+
+  @override
+  String get seekForward => 'Forward 10 seconds';
+
+  @override
+  String get seekBackward => 'Back 10 seconds';
+
+  @override
+  String openCoverFor(String title) {
+    return 'Open cover for $title';
+  }
+
+  @override
+  String openPlayerFor(String title) {
+    return 'Open player for $title';
+  }
+
+  @override
+  String get lyricCurrentLine => 'Current lyric';
+
+  @override
+  String get onboardingSkip => 'Skip';
+
+  @override
+  String get onboardingNext => 'Next';
+
+  @override
+  String get onboardingStart => 'Start using Molia';
+
+  @override
+  String get onboardingBack => 'Back';
+
+  @override
+  String onboardingStep(int current, int total) {
+    return 'Step $current of $total';
+  }
+
+  @override
+  String get onboardingPrivacyTitle => 'Your music stays here';
+
+  @override
+  String get onboardingPrivacyBody =>
+      'Downloaded and imported songs stay on this device. Sync is optional and off by default.';
+
+  @override
+  String get onboardingPrivacyScriptsTitle => 'Third-party source scripts';
+
+  @override
+  String get onboardingPrivacyScriptsBody =>
+      'Scripts run code on this device and may access the network. Only import sources you trust.';
+
+  @override
+  String get onboardingChannelsTitle => 'Choose sources';
+
+  @override
+  String get onboardingChannelsBody =>
+      'All channels are on by default. You can change them in Settings anytime.';
+
+  @override
+  String get onboardingChannelsPreparing => 'Preparing channels…';
+
+  @override
+  String get onboardingQualityTitle => 'Quality and data saver';
+
+  @override
+  String get onboardingQualityBody =>
+      'Pick a default quality. Data saver lowers quality only on mobile data.';
+
+  @override
+  String get onboardingQualityLabel => 'Default quality';
+
+  @override
+  String get onboardingDataSaver => 'Data saver';
+
+  @override
+  String get onboardingDataSaverHint => 'Applies on mobile data only';
+
+  @override
+  String get onboardingOptionalTitle => 'Optional features';
+
+  @override
+  String get onboardingOptionalSync => 'Cross-device sync';
+
+  @override
+  String get onboardingOptionalSyncBody =>
+      'Off by default. When on, playlists, settings, and keys are encrypted between your devices.';
+
+  @override
+  String get onboardingOptionalAi => 'AI recommendations';
+
+  @override
+  String get onboardingOptionalAiBody =>
+      'Off by default. Your own AI service key is required before anything is sent.';
+
+  @override
+  String get onboardingOptionalNoAccount =>
+      'No sign-in is needed, and this guide never goes online.';
+
+  @override
+  String get listeningSyncNeedsConsent => 'Confirm what is sent again';
 }

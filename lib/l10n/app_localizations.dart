@@ -9597,6 +9597,426 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Info updated'**
   String get localInfoUpdated;
+
+  /// No description provided for @settingsListeningSyncTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening sync'**
+  String get settingsListeningSyncTitle;
+
+  /// No description provided for @settingsListeningSyncSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send what you play to ListenBrainz or Last.fm'**
+  String get settingsListeningSyncSubtitle;
+
+  /// No description provided for @listeningSyncTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening sync'**
+  String get listeningSyncTitle;
+
+  /// No description provided for @listeningSyncIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Off by default. After connecting, only the services you enable here receive your listening history.'**
+  String get listeningSyncIntro;
+
+  /// No description provided for @listeningSyncMaster.
+  ///
+  /// In en, this message translates to:
+  /// **'Master switch'**
+  String get listeningSyncMaster;
+
+  /// No description provided for @listeningSyncMasterSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Off stops sending; queued plays stay until you disconnect'**
+  String get listeningSyncMasterSubtitle;
+
+  /// No description provided for @listeningSyncSentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What is sent'**
+  String get listeningSyncSentTitle;
+
+  /// No description provided for @listeningSyncSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Track title, artist, album, duration, playback start time, and your account name on the service.'**
+  String get listeningSyncSent;
+
+  /// No description provided for @listeningSyncNotSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Local file paths, playlist contents, device identifiers, and app settings are never sent.'**
+  String get listeningSyncNotSent;
+
+  /// No description provided for @listeningSyncNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'The request necessarily shows your network address to the service.'**
+  String get listeningSyncNetwork;
+
+  /// No description provided for @listeningSyncConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect'**
+  String get listeningSyncConnect;
+
+  /// No description provided for @listeningSyncDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect'**
+  String get listeningSyncDisconnect;
+
+  /// No description provided for @listeningSyncDisconnectTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect {name}?'**
+  String listeningSyncDisconnectTitle(String name);
+
+  /// No description provided for @listeningSyncDisconnectBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This deletes the authorization saved on this device and any plays queued for this service. Other devices follow your sync settings.'**
+  String get listeningSyncDisconnectBody;
+
+  /// No description provided for @listeningSyncConnectedAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected as {name}'**
+  String listeningSyncConnectedAs(String name);
+
+  /// No description provided for @listeningSyncDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected'**
+  String get listeningSyncDisconnected;
+
+  /// No description provided for @listeningSyncNeedsAuth.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs authorization again'**
+  String get listeningSyncNeedsAuth;
+
+  /// No description provided for @listeningSyncRetrying.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending failed; retrying later'**
+  String get listeningSyncRetrying;
+
+  /// No description provided for @listeningSyncError.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending failed'**
+  String get listeningSyncError;
+
+  /// No description provided for @listeningSyncQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} waiting to send'**
+  String listeningSyncQueued(int count);
+
+  /// No description provided for @listeningSyncConsentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on listening sync for {name}?'**
+  String listeningSyncConsentTitle(String name);
+
+  /// No description provided for @listeningSyncConsentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Track details listed above and your account name are sent to this service, which will also see your network address. You can disconnect at any time.'**
+  String get listeningSyncConsentBody;
+
+  /// No description provided for @listeningSyncConsentAgree.
+  ///
+  /// In en, this message translates to:
+  /// **'Agree and turn on'**
+  String get listeningSyncConsentAgree;
+
+  /// No description provided for @listeningSyncCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get listeningSyncCancel;
+
+  /// No description provided for @listeningSyncTokenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter access password'**
+  String get listeningSyncTokenTitle;
+
+  /// No description provided for @listeningSyncTokenLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Access password'**
+  String get listeningSyncTokenLabel;
+
+  /// No description provided for @listeningSyncTokenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy it from your ListenBrainz settings'**
+  String get listeningSyncTokenHint;
+
+  /// No description provided for @listeningSyncTokenInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'That access password did not work. Check it and try again.'**
+  String get listeningSyncTokenInvalid;
+
+  /// No description provided for @listeningSyncTokenUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot reach ListenBrainz right now. Check your network and try again.'**
+  String get listeningSyncTokenUnreachable;
+
+  /// No description provided for @listeningSyncLastFmNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'This build has no Last.fm application key, so it cannot connect yet'**
+  String get listeningSyncLastFmNotConfigured;
+
+  /// No description provided for @listeningSyncLastFmBegin.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorize in browser'**
+  String get listeningSyncLastFmBegin;
+
+  /// No description provided for @listeningSyncLastFmWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish in the browser, then confirm here'**
+  String get listeningSyncLastFmWaiting;
+
+  /// No description provided for @listeningSyncLastFmConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'I finished authorizing'**
+  String get listeningSyncLastFmConfirm;
+
+  /// No description provided for @listeningSyncLastFmFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorization did not finish. Try again.'**
+  String get listeningSyncLastFmFailed;
+
+  /// No description provided for @listeningSyncLearnMoreListenBrainz.
+  ///
+  /// In en, this message translates to:
+  /// **'About ListenBrainz'**
+  String get listeningSyncLearnMoreListenBrainz;
+
+  /// No description provided for @listeningSyncLearnMoreLastFm.
+  ///
+  /// In en, this message translates to:
+  /// **'About Last.fm'**
+  String get listeningSyncLearnMoreLastFm;
+
+  /// No description provided for @listeningSyncUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening sync is not ready yet. Try again shortly.'**
+  String get listeningSyncUnavailable;
+
+  /// No description provided for @listeningSyncConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get listeningSyncConnected;
+
+  /// No description provided for @seekBarLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback position'**
+  String get seekBarLabel;
+
+  /// No description provided for @seekBarValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{current} of {total}'**
+  String seekBarValue(String current, String total);
+
+  /// No description provided for @seekBarUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to seek'**
+  String get seekBarUnavailable;
+
+  /// No description provided for @seekForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Forward 10 seconds'**
+  String get seekForward;
+
+  /// No description provided for @seekBackward.
+  ///
+  /// In en, this message translates to:
+  /// **'Back 10 seconds'**
+  String get seekBackward;
+
+  /// No description provided for @openCoverFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Open cover for {title}'**
+  String openCoverFor(String title);
+
+  /// No description provided for @openPlayerFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Open player for {title}'**
+  String openPlayerFor(String title);
+
+  /// No description provided for @lyricCurrentLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Current lyric'**
+  String get lyricCurrentLine;
+
+  /// No description provided for @onboardingSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get onboardingSkip;
+
+  /// No description provided for @onboardingNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get onboardingNext;
+
+  /// No description provided for @onboardingStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start using Molia'**
+  String get onboardingStart;
+
+  /// No description provided for @onboardingBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get onboardingBack;
+
+  /// No description provided for @onboardingStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {current} of {total}'**
+  String onboardingStep(int current, int total);
+
+  /// No description provided for @onboardingPrivacyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your music stays here'**
+  String get onboardingPrivacyTitle;
+
+  /// No description provided for @onboardingPrivacyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded and imported songs stay on this device. Sync is optional and off by default.'**
+  String get onboardingPrivacyBody;
+
+  /// No description provided for @onboardingPrivacyScriptsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Third-party source scripts'**
+  String get onboardingPrivacyScriptsTitle;
+
+  /// No description provided for @onboardingPrivacyScriptsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Scripts run code on this device and may access the network. Only import sources you trust.'**
+  String get onboardingPrivacyScriptsBody;
+
+  /// No description provided for @onboardingChannelsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose sources'**
+  String get onboardingChannelsTitle;
+
+  /// No description provided for @onboardingChannelsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'All channels are on by default. You can change them in Settings anytime.'**
+  String get onboardingChannelsBody;
+
+  /// No description provided for @onboardingChannelsPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing channels…'**
+  String get onboardingChannelsPreparing;
+
+  /// No description provided for @onboardingQualityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Quality and data saver'**
+  String get onboardingQualityTitle;
+
+  /// No description provided for @onboardingQualityBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a default quality. Data saver lowers quality only on mobile data.'**
+  String get onboardingQualityBody;
+
+  /// No description provided for @onboardingQualityLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Default quality'**
+  String get onboardingQualityLabel;
+
+  /// No description provided for @onboardingDataSaver.
+  ///
+  /// In en, this message translates to:
+  /// **'Data saver'**
+  String get onboardingDataSaver;
+
+  /// No description provided for @onboardingDataSaverHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies on mobile data only'**
+  String get onboardingDataSaverHint;
+
+  /// No description provided for @onboardingOptionalTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional features'**
+  String get onboardingOptionalTitle;
+
+  /// No description provided for @onboardingOptionalSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Cross-device sync'**
+  String get onboardingOptionalSync;
+
+  /// No description provided for @onboardingOptionalSyncBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Off by default. When on, playlists, settings, and keys are encrypted between your devices.'**
+  String get onboardingOptionalSyncBody;
+
+  /// No description provided for @onboardingOptionalAi.
+  ///
+  /// In en, this message translates to:
+  /// **'AI recommendations'**
+  String get onboardingOptionalAi;
+
+  /// No description provided for @onboardingOptionalAiBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Off by default. Your own AI service key is required before anything is sent.'**
+  String get onboardingOptionalAiBody;
+
+  /// No description provided for @onboardingOptionalNoAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'No sign-in is needed, and this guide never goes online.'**
+  String get onboardingOptionalNoAccount;
+
+  /// No description provided for @listeningSyncNeedsConsent.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm what is sent again'**
+  String get listeningSyncNeedsConsent;
 }
 
 class _AppLocalizationsDelegate

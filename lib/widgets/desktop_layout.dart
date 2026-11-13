@@ -58,12 +58,6 @@ class DesktopLayout extends InheritedWidget {
   /// 展开，宽度来源要跟着换（而不是在这里加一个「估算值」）。
   final double railWidth;
 
-  /// 页面级桌面增强（窗口宽语义）：桌面平台 + 窗口宽 ≥ [Breakpoints.desktop]。
-  ///
-  /// 消费方：设置首屏两列（窄窗回单列）。阈值只维护在这里，页面不自推。
-  bool get masterDetail =>
-      isDesktopPlatform && windowWidth >= Breakpoints.desktop;
-
   /// 内容宽（窗口宽语义）：窗口宽 − 实际栏宽（[railWidth] 的不变量：
   /// 壳层只有侧栏一条常驻栏，这里就是内容区可用宽）。
   double get contentWidth => windowWidth - railWidth;
@@ -79,7 +73,7 @@ class DesktopLayout extends InheritedWidget {
   /// 宽屏表格列（窗口宽语义，按规范）：列多的一套（播放历史）需要更宽的
   /// 内容区才不溢出，阈值跟着 [spec] 走。
   bool tableColumnsFor(TrackRowColumnSpec spec) =>
-      isDesktopPlatform && contentWidth >= spec.minContentWidth;
+      contentWidth >= spec.minContentWidth;
 
   /// 壳层提供入口：解析当前 context 的窗口宽 / 平台位，并用结果包住 [child]。
   static Widget scope(BuildContext context, {required Widget child}) =>

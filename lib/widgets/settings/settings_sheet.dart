@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../pages/settings_page.dart';
-import '../desktop_layout.dart';
+import '../adaptive_layout.dart';
 import '../modal_page_navigator.dart';
 
 /// 打开设置弹层（顶栏入口与测试共用）。
@@ -12,7 +12,7 @@ import '../modal_page_navigator.dart';
 Future<void> showSettingsSheet(BuildContext context) {
   return showPageModalWithNavigator<void>(
     context: context,
-    maxWidth: DesktopLayout.of(context).masterDetail
+    maxWidth: AdaptiveLayoutScope.of(context).isExpanded
         ? kSettingsSheetDesktopWidth
         : null,
     initialPageBuilder: (context, scrollController) =>

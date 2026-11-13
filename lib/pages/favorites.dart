@@ -59,6 +59,7 @@ import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/responsive.dart';
+import '../widgets/adaptive_layout.dart';
 import '../utils/collection_row_query.dart';
 import '../utils/download_failure_label.dart';
 import '../utils/file_name.dart';
@@ -165,6 +166,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 搜索行不套这个固定高度：展开搜索后由 AppSearchBar 按系统文字缩放
   /// 自行决定高度，大字体下才能容纳完整 hint 与输入行框。
   static const double _headerRowHeight = 56;
+
+  /// 头部行高：随系统字号放大，避免标题 / 副标题在 200% 字号下被裁。
+  static double _headerHeight(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(_headerRowHeight);
 
   /// 头部（标题行 / 搜索行 / 多选栏）垂直留白：三者切换时留白一致；
   /// 搜索行高度本身由 AppSearchBar 决定。
@@ -1168,6 +1173,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
           (provider) => provider?.snapshot?.index,
         );
 
+    // 分栏判定先算：右栏宽度不够时不能再叠表格列（判据仍只看宽度，
+    // 只是这里把左栏占掉的宽度算进「内容宽是否允许」）。
+    final twoPane = collectionsUseSplitLayout(
+      AdaptiveLayoutScope.of(context).sizeClass,
+    );
     // 合集切换只有标题行弹层一个入口：条目不额外解析一份，弹层打开时按
     // 当下 provider 状态现算。
     final listColumn = Column(
@@ -1194,12 +1204,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
               ? const Center(child: M3ELoadingIndicator())
               : sessionView.hasFailed
               ? _buildReadFailed(context, l10n, sessionView.frame)
-              : _buildBody(context, l10n, view, reorderActive: reorderActive),
+              : _buildBody(
+                  context,
+                  l10n,
+                  view,
+                  reorderActive: reorderActive,
+                  tableColumnsAllowed: !twoPane,
+                ),
         ),
       ],
     );
 
-    final twoPane = context.layoutType(ResponsivePageType.browse).preferTwoPane;
     final body = mode == CollectionMode.songs
         ? listColumn
         : _buildBrowsePage(
@@ -1213,6 +1228,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         ? Row(
             children: [
               SizedBox(
+                key: const Key('collectionSplitView'),
                 width: DesktopLayout.collectionSidePaneWidth,
                 child: _buildCollectionSidePane(
                   context,
@@ -1698,7 +1714,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         _headerPaddingBottom,
       ),
       child: SizedBox(
-        height: _headerRowHeight,
+        height: _headerHeight(context),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -2366,7 +2382,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         child: IconTheme.merge(
           data: IconThemeData(color: foreground),
           child: SizedBox(
-            height: _headerRowHeight,
+            height: _headerHeight(context),
             child: Row(
               children: [
                 const SizedBox(width: 4),
@@ -2411,11 +2427,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
     AppLocalizations l10n,
     CollectionView view, {
     required bool reorderActive,
+    required bool tableColumnsAllowed,
   }) {
     // 行 / 表头同一份列规范（历史多一列「播放时间」），表格档判定按规范
     // 取阈值：行内是否给列、表头画哪几列、行高取哪一档都由这一个决定。
     final spec = _columnSpec(view.columnLayout);
-    final tableColumns = DesktopLayout.of(context).tableColumnsFor(spec);
+    final tableColumns =
+        tableColumnsAllowed && DesktopLayout.of(context).tableColumnsFor(spec);
     final columnSpec = tableColumns ? spec : null;
     // 智能列表按展示层重复聚类：代表行 + 展开后的版本行；不删除任何记录。
     final rows = view.isSmartList ? _smartDisplayRows(view) : view.visibleRows;

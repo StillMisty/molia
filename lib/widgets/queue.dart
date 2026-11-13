@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:material_3_expressive/material_3_expressive.dart';
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -423,37 +424,54 @@ class _QueueTrackRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actions = _actions(context);
-    return TrackRow(
-      model: TrackRowModel(
-        title: track.title,
-        artist: track.artistLabel,
-        coverUrl: _coverUrlOf(track),
-        durationMs: track.duration?.inMilliseconds,
-        trackId: track.id,
+    final queueActions = _queueActions(context);
+    // 屏幕阅读器直接给出与菜单同边界的移动 / 移除动作；当前行与不可移动
+    // 行不会出现在集合里（与可见菜单同一判定）。
+    final customActions = <CustomSemanticsAction, VoidCallback>{
+      for (final action in queueActions)
+        CustomSemanticsAction(label: action.label): action.onPressed,
+    };
+    return Semantics(
+      key: ValueKey<String>('queueRowSemantics-${queueIndex ?? 'none'}'),
+      customSemanticsActions: customActions,
+      child: TrackRow(
+        model: TrackRowModel(
+          title: track.title,
+          artist: track.artistLabel,
+          coverUrl: _coverUrlOf(track),
+          durationMs: track.duration?.inMilliseconds,
+          trackId: track.id,
+        ),
+        surface: const TrackRowSurface(coverSize: 40),
+        position: position,
+        onTap: onTap,
+        onSecondaryTap: rowActionsAtPointer(context, actions),
+        trailing: isDesktopPlatform() || actions.isEmpty
+            ? null
+            : RowActionMenuButton(
+                actions: actions,
+                semanticLabel: AppLocalizations.of(context)!
+                    .trackActionsTooltip,
+                compact: true,
+              ),
       ),
-      surface: const TrackRowSurface(coverSize: 40),
-      position: position,
-      onTap: onTap,
-      onSecondaryTap: rowActionsAtPointer(context, actions),
-      trailing: isDesktopPlatform() || actions.isEmpty
-          ? null
-          : RowActionMenuButton(
-              actions: actions,
-              semanticLabel: AppLocalizations.of(context)!.trackActionsTooltip,
-              compact: true,
-            ),
     );
   }
 
   List<RowAction> _actions(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final index = queueIndex;
     final common = trackRowActionMenuForTrack(
       context,
       track,
       includeAddToQueue: false,
     );
-    if (index == null) return common;
+    return mergeRowActions(_queueActions(context), common);
+  }
+
+  /// 队列编辑动作：边界由真实队列下标决定（当前行 / 回绕行不出现）。
+  List<RowAction> _queueActions(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final index = queueIndex;
+    if (index == null) return const [];
     final shuffle = mode == PlayMode.shuffle;
     // 列表循环的 upNext 末尾会补上队首到当前之前的行：这些行已在当前曲目
     // 之前，移动没有意义（只保留移除）。
@@ -494,6 +512,6 @@ class _QueueTrackRow extends StatelessWidget {
         ),
       );
     }
-    return mergeRowActions(queueActions, common);
+    return queueActions;
   }
 }

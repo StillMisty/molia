@@ -1413,12 +1413,15 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   预测返回退场与主题重建（封面取色 / 亮度切换）交错时，页面内 `Text` 若依赖
   App 级 `DefaultTextStyle`，失效元素会残留在其依赖表里并触发「不是我们的后代」
   断言；路由级主题随路由生灭，退场时页面依赖与页面一起销毁。
-- 桌面骨架（`lib/app/desktop/**`，仅 linux/windows/macOS；移动骨架逐像素不变）：
+- 桌面骨架（`lib/app/desktop/**`，仅 linux/windows/macOS；桌面骨架结构不变，移动骨架按宽度档位扩展）：
   两套骨架的导航 / 顶栏共享 spec 在 `lib/app/shell_chrome.dart`（目的地 → 图标 /
   标签映射、设置按钮、窗口控件、标题槽左缘 / 拖动区只一份；骨架各自适配渲染），
-  布局阈值在 `lib/widgets/desktop_layout.dart`（壳层解析一次，页面 / 骨架只消费）。
+  结构断点在 `lib/widgets/adaptive_layout.dart`（`WindowSizeClassResolver`：
+  compact < 600 / medium 600–839 / expanded ≥ 840，只按宽度；壳层经
+  `AdaptiveLayoutScope` 解析一次，页面 / 弹层只消费）。`DesktopLayout` 只保留
+  桌面内容宽 / 侧栏宽等桌面增强，不再决定导航、分栏或表格档位。
   顶栏本体是 `lib/app/shell_app_bar.dart::ShellAppBar`：`M3EAppBar.top(density:
-  compact)`（56dp 工具行）+ 可选底部槽（移动骨架的波浪进度）+ `WindowDragArea`
+  compact)`（默认 56dp 工具行，随系统字号放大）+ 可选底部槽（移动骨架的波浪进度）+ `WindowDragArea`
   + `AnnotatedRegion<SystemUiOverlayStyle>`。**整条工具条（标题 + 按钮）放进
   M3E 的 title 槽**：桌面窗口控件是一整块可变宽的 Row（约 180dp），而
   `M3EAppBar.actions` 按 48dp/个预留标题宽度，直接放会重叠；title 槽拿到的是
@@ -1499,16 +1502,19 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   壳层可配置命令**（用户把别的命令绑到 Esc 也一样让位）；登记方自己的按键处理器
   接 Esc（与登记同源、不依赖焦点位置；收藏页多选与音量弹层都是 `HardwareKeyboard`
   处理器）。
-  内容版式（阈值与宽度来源的选择唯一在 `DesktopLayout`，判据一律「窗口宽 /
-  窗口宽 − 侧栏折叠宽」，页面不再自己量宽）：宽屏表格列（`TrackRowModel` / `TrackRowSurface` /
+  内容版式（结构判据统一在 `AdaptiveLayoutScope`；宽度来源仍是窗口宽 /
+  窗口宽 − 侧栏折叠宽，页面不自己量窗口）：宽屏表格列（`TrackRowModel` / `TrackRowSurface` /
   `TrackTableHeader`；`tableColumns` / `tableColumnsFor`，阈值 = 内容宽 ≥ 720
-  （播放历史档 812），使用点：搜索 / 收藏 / 发现详情；行高两档走
-  `TrackRow.extentOf`（M3E token 为最小值，按系统文字缩放动态增长；
-  1.0× 仍是表格单行 56 / 列表双行 72）；发现页表头为 pinned sliver
+  （播放历史档 812），**只看宽度，不看桌面平台标记**；使用点：搜索 / 发现详情
+  （收藏页在分栏时右栏宽度不足，不再叠表格列）；行高两档走 `TrackRow.extentOf`（M3E token 为最小值，按系统文字
+  缩放动态增长；1.0× 仍是表格单行 56 / 列表双行 72）；发现页表头为 pinned sliver
   （封面头部滚走后列标题仍在），搜索 / 收藏页表头固定在滚动区之上）、
-  设置首屏两列（`masterDetail`：桌面 + 窗口宽 ≥ 900；列优先瀑布式，分区按
-  内容量显式分列，短卡不再按行留空）、设置弹层宽屏 880 + 首屏两列
-  （`showSettingsSheet` 显式 `maxWidth`，公共 modal 档保持 560）、二级页侧滑桌面档 720。
+  设置首屏两列（宽度档位 expanded，即 ≥ 840；弹层内容经
+  `AdaptiveLayoutScope.local` 按弹层自身宽度解析，窗口 1200 / 弹层 880 时不会
+  误判；列优先瀑布式，分区按内容量显式分列，短卡不再按行留空）、设置弹层
+  宽屏 880（`showSettingsSheet` 显式 `maxWidth`，公共 modal 档保持 560）、
+  二级页侧滑桌面档 720。移动骨架 medium 起用导航轨、expanded 才出合集 /
+  浏览分栏与宽播放页；桌面骨架结构不变。
   页边距：桌面档与平板档同宽（24），内容区宽度由「窗口宽 − 侧栏折叠宽」表达。
   启动首页由 `NavProvider.effectiveHomeDestination` 决定（设置 › 通用 › 启动时打开，
   默认播放页；存储首页被隐藏时按导航顺序兜底且**不改写存储**，避免同步回环）。

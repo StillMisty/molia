@@ -21,6 +21,8 @@ import 'app/bootstrap/lyrics_stack.dart';
 import 'app/bootstrap/playback_stack.dart';
 import 'app/bootstrap/post_frame_init.dart';
 import 'app/bootstrap/provider_tree.dart';
+import 'app/bootstrap/scrobble_stack.dart';
+import 'services/onboarding_store.dart';
 import 'app/bootstrap/startup_trace.dart';
 import 'app/bootstrap/sync_stack.dart';
 import 'app/bootstrap/update_stack.dart';
@@ -231,6 +233,8 @@ void main() async {
   ).wait;
   await databasePrewarm;
   _markStartup('本地数据/资料库栈', startup);
+  // 听歌同步：纯构造（不读安全存储）；服务在首帧后 init，之前完全惰性。
+  final scrobble = buildScrobbleStack(settings: catalog.settings);
   // 健康检查探针依赖目录服务与省流上限：两者都就绪后挂到同一个诊断服务上。
   // 偏好音质直接读正常播放同源的 `dataSaver × sourceManager`，不另建配置。
   diagnostics.service.attachHealth(
@@ -373,6 +377,15 @@ void main() async {
     playback: playback.playbackProvider,
     service: library.playStatisticsService,
   );
+  // 听歌同步同源接线（只读观察：快照 + 进度），不进入播放命令路径。
+  playback.playbackProvider.addListener(
+    () => scrobble.service.onSnapshot(playback.playbackProvider.snapshot),
+  );
+  playback.playbackProvider.position.addListener(
+    () =>
+        scrobble.service.onPosition(playback.playbackProvider.currentPosition),
+  );
+  scrobble.service.onSnapshot(playback.playbackProvider.snapshot);
   // ⑩ 跨设备同步（可选子系统；引擎 init / 调度器启动后移到首帧，见
   //    post_frame_init.dart 的 startSync）。
   final sync = await buildSyncStack(
@@ -559,6 +572,9 @@ void main() async {
     onDetach: () => unawaited(diagnostics.service.dispose()),
   );
 
+  // 首次引导标记：在 runApp 前读一次，首帧要么是引导、要么是正常壳层，
+  // 不会先闪一下首页。读失败按「未完成」处理。
+  final onboardingCompleted = await OnboardingStore().isCompleted();
   runApp(
     MultiProvider(
       providers: buildAppProviders(
@@ -566,6 +582,7 @@ void main() async {
         local: local,
         library: library,
         playback: playback,
+        scrobble: scrobble,
         libraryProvider: libraryProvider,
         channelSelection: channelSelection,
         searchProvider: searchProvider,
@@ -583,6 +600,7 @@ void main() async {
       child: MyThemedApp(
         // 用户交互 → 同步调度器续期活跃窗口（最近交互判定）。
         onUserInteraction: sync.provider.notifyInteraction,
+        showOnboarding: !onboardingCompleted,
       ),
     ),
   );
@@ -598,6 +616,7 @@ void main() async {
       catalog: catalog,
       local: local,
       library: library,
+      scrobble: scrobble,
       desktop: desktop,
       ai: ai,
       update: update,

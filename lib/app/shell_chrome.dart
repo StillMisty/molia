@@ -79,6 +79,7 @@ class ShellChrome {
   /// [bottom] 是骨架自己的底部槽（移动骨架的波浪进度条）。标题留白 / 拖动区 /
   /// 状态栏明暗由 [ShellAppBar] 统一处理，两套骨架不再各配自己的一份。
   PreferredSizeWidget appBar({
+    required BuildContext context,
     required Widget title,
     List<Widget> actions = const [],
     PreferredSizeWidget? bottom,
@@ -86,6 +87,9 @@ class ShellChrome {
     title: title,
     actions: [...actions, ..._trailingActions()],
     bottom: bottom,
+    // 标题块随系统字号增长；固定 56 在 200% 字号下会裁掉副标题。
+    toolbarHeight: MediaQuery.textScalerOf(context)
+        .scale(ShellAppBar.defaultToolbarHeight),
   );
 
   /// 顶栏尾部动作：设置 + 窗口控件 + 右侧留白（两套骨架同一份）。

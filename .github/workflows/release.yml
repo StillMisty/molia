@@ -119,6 +119,9 @@ jobs:
       - name: pub get
         run: flutter pub get --enforce-lockfile
       - name: 构建 APK / AAB
+        env:
+          MOLIA_LASTFM_API_KEY: ${{ secrets.MOLIA_LASTFM_API_KEY }}
+          MOLIA_LASTFM_API_SECRET: ${{ secrets.MOLIA_LASTFM_API_SECRET }}
         run: |
           set -euo pipefail
           # APK / AAB 必须共用同一组 AOT 参数，第二次 Gradle 才会 UP-TO-DATE；
@@ -133,6 +136,8 @@ jobs:
             --target-platform android-arm,android-arm64,android-x64
             --split-debug-info=build/symbols
             --obfuscate
+            --dart-define=MOLIA_LASTFM_API_KEY=${MOLIA_LASTFM_API_KEY:-}
+            --dart-define=MOLIA_LASTFM_API_SECRET=${MOLIA_LASTFM_API_SECRET:-}
           )
           flutter build apk "${flags[@]}" --split-per-abi
           flutter build appbundle "${flags[@]}"
@@ -197,12 +202,17 @@ jobs:
         shell: pwsh
         run: choco install innosetup -y --no-progress
       - name: 构建 + 打包（便携 zip + 安装器 setup.exe）
+        env:
+          MOLIA_LASTFM_API_KEY: ${{ secrets.MOLIA_LASTFM_API_KEY }}
+          MOLIA_LASTFM_API_SECRET: ${{ secrets.MOLIA_LASTFM_API_SECRET }}
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $v = "${{ needs.prepare.outputs.version }}"
           $build = "${{ needs.prepare.outputs.build }}"
-          flutter build windows --release --build-name "$v" --build-number "$build"
+          flutter build windows --release --build-name "$v" --build-number "$build" `
+            --dart-define=MOLIA_LASTFM_API_KEY=$env:MOLIA_LASTFM_API_KEY `
+            --dart-define=MOLIA_LASTFM_API_SECRET=$env:MOLIA_LASTFM_API_SECRET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           $stage = "dist/molia-$v-windows-x64"
@@ -250,6 +260,9 @@ jobs:
       - name: pub get
         run: flutter pub get --enforce-lockfile
       - name: 构建 + 打包
+        env:
+          MOLIA_LASTFM_API_KEY: ${{ secrets.MOLIA_LASTFM_API_KEY }}
+          MOLIA_LASTFM_API_SECRET: ${{ secrets.MOLIA_LASTFM_API_SECRET }}
         run: |
           set -euo pipefail
           v="${{ needs.prepare.outputs.version }}"
@@ -257,7 +270,9 @@ jobs:
           # 符号单独 zip；不要混进用户下载的 tar.gz。
           flutter build linux --release \
             --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}" \
-            --split-debug-info=build/symbols/linux
+            --split-debug-info=build/symbols/linux \
+            --dart-define=MOLIA_LASTFM_API_KEY="${MOLIA_LASTFM_API_KEY:-}" \
+            --dart-define=MOLIA_LASTFM_API_SECRET="${MOLIA_LASTFM_API_SECRET:-}"
           # 统一守卫：kernel_blob 残留 / 非 release 引擎都直接失败。
           tool/agent/check_linux_bundle.sh build/linux/x64/release/bundle
           # 只 strip 第三方插件库；libapp.so / libflutter_linux_gtk.so 保持原样。
@@ -296,11 +311,16 @@ jobs:
       - name: pub get
         run: flutter pub get --enforce-lockfile
       - name: 构建（无签名；只验证可编译，产物仅供侧载）
+        env:
+          MOLIA_LASTFM_API_KEY: ${{ secrets.MOLIA_LASTFM_API_KEY }}
+          MOLIA_LASTFM_API_SECRET: ${{ secrets.MOLIA_LASTFM_API_SECRET }}
         run: |
           set -euo pipefail
           v="${{ needs.prepare.outputs.version }}"
           flutter build ios --release --no-codesign \
-            --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}"
+            --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}" \
+            --dart-define=MOLIA_LASTFM_API_KEY="${MOLIA_LASTFM_API_KEY:-}" \
+            --dart-define=MOLIA_LASTFM_API_SECRET="${MOLIA_LASTFM_API_SECRET:-}"
           mkdir -p dist
           (cd build/ios/iphoneos && zip -qry "$GITHUB_WORKSPACE/dist/molia-$v-ios-unsigned.zip" Runner.app)
       - uses: actions/upload-artifact@v7
@@ -324,11 +344,16 @@ jobs:
       - name: pub get
         run: flutter pub get --enforce-lockfile
       - name: 构建（ad-hoc 签名；产物仅供验证，不入更新清单）
+        env:
+          MOLIA_LASTFM_API_KEY: ${{ secrets.MOLIA_LASTFM_API_KEY }}
+          MOLIA_LASTFM_API_SECRET: ${{ secrets.MOLIA_LASTFM_API_SECRET }}
         run: |
           set -euo pipefail
           v="${{ needs.prepare.outputs.version }}"
           flutter build macos --release \
-            --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}"
+            --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}" \
+            --dart-define=MOLIA_LASTFM_API_KEY="${MOLIA_LASTFM_API_KEY:-}" \
+            --dart-define=MOLIA_LASTFM_API_SECRET="${MOLIA_LASTFM_API_SECRET:-}"
           arch="$(uname -m)"
           if [ "$arch" = "arm64" ]; then arch="arm64"; else arch="x64"; fi
           mkdir -p dist
