@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show ValueListenable, VoidCallback;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, VoidCallback, visibleForTesting;
 import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -226,9 +227,11 @@ class PlaybackProvider extends ChangeNotifier {
     _preferencesReady = () async {
       if (_observer != null) await _observer.ready;
       await _loadDefaultPlayMode();
+      // 手感必须先于恢复态装载：协调者生成恢复态本轮洗牌时要读智能随机
+      // 开关，晚加载会让「关闭」的用户仍拿到一轮加权顺序。
+      await _loadPlaybackFeel();
       await _loadPlaybackSession();
       await _loadVolume();
-      await _loadPlaybackFeel();
     }();
     // 构造时同步一次快照（系统媒体会话可能在构造前已恢复曲目）。
     _handlePlaybackSnapshot();
@@ -242,6 +245,10 @@ class PlaybackProvider extends ChangeNotifier {
 
   /// 是否有可恢复的上次播放会话（无真实曲目时才生效）。
   bool get hasRestoredSession => _session.hasRestoredSession;
+
+  /// 恢复态本轮洗牌是否加权（测试 / 诊断用）。
+  @visibleForTesting
+  bool get restoredRoundWeighted => _session.restoredRoundWeighted;
 
   /// 高频进度通道：订阅它做进度条/歌词行更新，避免整 Provider 重建。
   ValueListenable<Duration> get position => _positionChannel;

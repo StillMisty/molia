@@ -51,11 +51,13 @@ class PlaybackShuffleOrder {
 
   List<int> _order = const [];
 
-  /// 最近一次生成轮次时使用的权重；轮末自动重洗沿用同一份。
+  /// 本轮是否按权重生成（测试 / 诊断用）。
   ///
-  /// 下一轮看到的是「上一次刷新时」的证据，而不是轮末临时查询——洗牌是
-  /// 同步动作，不能在这里等数据库。
-  List<double>? _weights;
+  /// 权重不跨轮保存：轮末由调用方传入当前证据与开关，关闭智能随机后
+  /// 下一轮必须立刻回到均匀洗牌。
+  bool _weightedRound = false;
+
+  bool get isWeightedRound => _weightedRound;
 
   /// 排列内容版本号：重置 / 采用 / 扩展 / 重映射 / 清空 / 轮末重洗都自增。
   ///
@@ -75,7 +77,10 @@ class PlaybackShuffleOrder {
   /// 抽样，否则保持均匀洗牌。当前曲目永远置首，不参与抽样。
   void reset(int length, {int startIndex = 0, List<double>? weights}) {
     _revision++;
-    _weights = weights != null && weights.length == length ? weights : null;
+    final weighted = weights != null && weights.length == length
+        ? weights
+        : null;
+    _weightedRound = weighted != null;
     if (length <= 0) {
       _order = const [];
       return;
@@ -85,7 +90,6 @@ class PlaybackShuffleOrder {
       for (var index = 0; index < length; index++)
         if (index != first) index,
     ];
-    final weighted = _weights;
     if (weighted == null) {
       candidates.shuffle(_random);
     } else {
@@ -101,9 +105,7 @@ class PlaybackShuffleOrder {
   void adopt(List<int> indices, {List<double>? weights}) {
     _revision++;
     _order = List<int>.of(indices);
-    _weights = weights != null && weights.length == indices.length
-        ? List<double>.of(weights)
-        : null;
+    _weightedRound = weights != null && weights.length == indices.length;
   }
 
   /// 按权重不放回抽样：每个候选生成一次随机键，按键降序一次排序。
@@ -136,7 +138,7 @@ class PlaybackShuffleOrder {
     if (_order.isEmpty) return;
     _revision++;
     _order = const [];
-    _weights = null;
+    _weightedRound = false;
   }
 
   /// 队列追加后扩展排列（enqueue 场景）：
@@ -157,14 +159,6 @@ class PlaybackShuffleOrder {
     )..shuffle(_random);
     _revision++;
     _order = [..._order, ...appended];
-    final weights = _weights;
-    if (weights != null && weights.length == oldLength) {
-      // 新追加的曲目不在本轮证据里：按普通权重进入下一轮。
-      _weights = [
-        ...weights,
-        ...List<double>.filled(newLength - oldLength, 1.0),
-      ];
-    }
   }
 
   /// 当前曲目在排列中的位置；不在排列中返回 -1。
@@ -180,10 +174,6 @@ class PlaybackShuffleOrder {
       for (final value in _order)
         if (value != index) value > index ? value - 1 : value,
     ];
-    final weights = _weights;
-    if (weights != null && index >= 0 && index < weights.length) {
-      _weights = [...weights]..removeAt(index);
-    }
   }
 
   /// 队列移动一项（[from] → [to]）后的排列重映射。
@@ -204,17 +194,6 @@ class PlaybackShuffleOrder {
         else
           value,
     ];
-    final weights = _weights;
-    if (weights != null &&
-        from >= 0 &&
-        from < weights.length &&
-        to >= 0 &&
-        to < weights.length) {
-      final moved = weights[from];
-      final next = [...weights]..removeAt(from);
-      next.insert(to, moved);
-      _weights = next;
-    }
   }
 
   /// 排列中的下一首（不重洗）；到本轮末尾返回 null。
@@ -226,15 +205,16 @@ class PlaybackShuffleOrder {
 
   /// 排列下一首；到达末尾时重洗新一轮并返回新排列的第二首
   ///（当前曲目置首，避免立刻重复）。
-  int next(int currentIndex) {
+  ///
+  /// [weights] 是**当前**证据 / 开关算出的权重（由调用方在轮末传入）：
+  /// 权重不跨轮缓存，关闭智能随机后下一轮立即回到均匀洗牌。
+  int next(int currentIndex, {List<double>? weights}) {
     final position = _order.indexOf(currentIndex);
     if (position >= 0 && position + 1 < _order.length) {
       return _order[position + 1];
     }
     final length = _order.length;
-    // 轮末沿用本轮刷新时的证据：历史更新只在队列装载 / 进入随机时读取，
-    // 不在切换瞬间临时查库。
-    reset(length, startIndex: currentIndex, weights: _weights);
+    reset(length, startIndex: currentIndex, weights: weights);
     if (_order.isEmpty) return -1;
     if (_order.length == 1) return _order.first;
     return _order[1];

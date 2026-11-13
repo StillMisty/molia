@@ -418,15 +418,26 @@ void main() {
       expect(included.remainingAfter(0), [2, 1], reason: '低权重仍可出现在前半段');
     });
 
-    test('轮末重洗沿用同一份权重（下一轮仍偏向普通曲目）', () {
-      final order = PlaybackShuffleOrder(random: _ScriptedRandom([0.9, 0.95]))
-        ..reset(2, startIndex: 0, weights: const [1.0, 0.15]);
-      // 走完当前轮后重洗：当前曲目 1 置首，剩下的 0 是普通曲目。
-      expect(order.next(0), 1);
-      expect(order.next(1), 0, reason: '新一轮仍按权重生成，不丢证据');
+    test('轮末重洗按调用方当前开关：关闭后下一轮立即均匀', () {
+      final order = PlaybackShuffleOrder(random: Random(12))
+        ..reset(4, startIndex: 0, weights: const [1.0, 0.15, 1.0, 1.0]);
+      expect(order.isWeightedRound, isTrue);
+
+      final last = order.indices.last;
+      order.next(last, weights: null);
+      expect(order.isWeightedRound, isFalse, reason: '权重要跨轮重算，不沿用旧证据');
     });
 
-    test('队列编辑重映射权重：移除 / 移动后仍是合法排列', () {
+    test('轮末重洗按调用方当前证据：仍开启时下一轮继续加权', () {
+      final order = PlaybackShuffleOrder(random: Random(13))
+        ..reset(4, startIndex: 0, weights: const [1.0, 0.15, 1.0, 1.0]);
+      final last = order.indices.last;
+      order.next(last, weights: const [1.0, 0.15, 1.0, 1.0]);
+      expect(order.isWeightedRound, isTrue);
+      expect(order.indices.toSet(), {0, 1, 2, 3});
+    });
+
+    test('队列编辑保持排列合法：移除 / 移动后仍是完整排列', () {
       final order = PlaybackShuffleOrder(random: Random(4))
         ..reset(6, startIndex: 0, weights: const [1, 0.15, 1, 0.15, 1, 1]);
       order.removeIndex(2);

@@ -436,7 +436,7 @@ void main() {
     expect(timer.value.mode, SleepTimerMode.off);
   });
 
-  testWidgets('播完当前歌曲：单曲循环（曲目未换、位置回跳）→ 暂停', (tester) async {
+  testWidgets('播完当前歌曲：单曲循环位置回跳按后退 seek 处理，完成事件才暂停', (tester) async {
     final a = _track('a');
     backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
@@ -449,7 +449,10 @@ void main() {
         position: const Duration(seconds: 29),
       ),
     );
-    // 单曲循环重播：曲目没变，位置从曲末回到 0。
+    expect(fades, hasLength(1));
+
+    // 位置回跳不等于播完（后退 seek 也是这个形状）：撤销淡出、恢复音量，
+    // 继续等完成事件。真正的重播由后端完成事件决定。
     backend.emitFrame(
       _snapshot(
         current: a,
@@ -459,7 +462,12 @@ void main() {
       ),
     );
     await tester.pump();
+    expect(fadeCancels, [true]);
+    expect(fired, 0);
+    expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
 
+    backend.emitTrackCompletion(a);
+    await tester.pump();
     expect(fired, 1);
     expect(timer.value.mode, SleepTimerMode.off);
   });

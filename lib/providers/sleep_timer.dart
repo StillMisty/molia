@@ -373,14 +373,8 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     if (_mode == SleepTimerMode.afterCurrentTrack &&
         backwardSeek &&
         _endFadeStarted) {
-      // 回到开头（单曲循环重播）仍是「这一遍结束」；退回曲中才是用户
-      // 后退 seek。两者都表现为位置从曲末回跳，只能按落点区分。
-      if (position < const Duration(seconds: 1)) {
-        _cancelFade(restore: false);
-        _fireNow();
-        return;
-      }
-      // 后退 seek 是对「旧曲末」的否定：撤销淡出，重新等新的曲末。
+      // 后退 seek 是对「旧曲末」的否定：撤销淡出、恢复音量，重新等新的
+      // 曲末；真正的自然播完由完成事件负责，不按落点猜。
       _cancelFade(restore: true);
       if (position > _maxPosition) _maxPosition = position;
       _maybeStartEndFade();

@@ -1038,6 +1038,45 @@ void main() {
       expect(service.queueProjection.next, isNotNull);
     });
 
+    test('开关从下一轮 / 下一次装载生效，当前轮排列不重排', () async {
+      final service = LocalPlaybackService(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+        player: _FakeAudioPlayer(),
+        random: math.Random(21),
+        fadeDuration: Duration.zero,
+        recentTrackIds: () async => {for (var i = 0; i < 12; i++) 'test:a$i'},
+      );
+      addTearDown(service.dispose);
+      await service.setMode(PlayMode.shuffle);
+      await service.playTracks([
+        for (var i = 0; i < 12; i++) _track(index: i),
+      ], 0);
+      await pumpEventQueue();
+      expect(service.shuffleRoundWeighted, isTrue);
+
+      final currentRound = service.queueProjection.upNextIndices;
+      service.setSmartShuffleEnabled(false);
+      expect(service.shuffleRoundWeighted, isTrue, reason: '当前轮不重排');
+      expect(service.queueProjection.upNextIndices, currentRound);
+
+      // 走完这一轮（12 首 = 当前 + 11 首，最后一次从末位重洗）：轮末读到
+      // 关闭状态 → 下一轮均匀。
+      for (var i = 0; i < 12; i++) {
+        await service.skipToNext();
+      }
+      await pumpEventQueue();
+      expect(service.shuffleRoundWeighted, isFalse);
+
+      // 重新开启并装载新队列：下一次队列装载即加权。
+      service.setSmartShuffleEnabled(true);
+      await service.playTracks([
+        for (var i = 0; i < 12; i++) _track(index: i),
+      ], 0);
+      await pumpEventQueue();
+      expect(service.shuffleRoundWeighted, isTrue);
+    });
+
     test('关闭智能随机后不读取证据', () async {
       var calls = 0;
       final service = LocalPlaybackService(
@@ -1186,6 +1225,33 @@ void main() {
       expect(service.isPlaying, isTrue);
       expect(player.calls, isNot(contains('pause')));
       expect(player.volumeCalls.last, closeTo(0.8, 1e-6));
+    });
+
+    test('睡眠淡出取代暂停淡出：不遗留暂停意图，后续播放/暂停按键正常', () async {
+      final (:service, :player) = await start();
+      await service.setVolume(0.8);
+      service.setFadeDuration(const Duration(milliseconds: 200));
+
+      final pause = service.pause();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(service.pauseIntentPending, isTrue);
+
+      // 定时关闭开始 / 撤销淡出会取消暂停淡出：此时暂停已作废，意图必须清掉。
+      service.startSleepFade(const Duration(milliseconds: 600));
+      expect(await pause, isFalse);
+      expect(service.pauseIntentPending, isFalse);
+      service.cancelSleepFade();
+      await Future<void>.delayed(const Duration(milliseconds: 240));
+      expect(service.isPlaying, isTrue);
+
+      // 第一次按键仍是「暂停」，不会被误判成反向淡入。
+      await service.toggle();
+      expect(service.isPlaying, isFalse);
+      expect(player.calls.last, 'pause');
+
+      await service.toggle();
+      await pumpEventQueue();
+      expect(service.isPlaying, isTrue);
     });
 
     test('淡出完成后紧接暂停不跑第二次淡变', () async {
