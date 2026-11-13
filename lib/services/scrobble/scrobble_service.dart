@@ -144,6 +144,7 @@ class ScrobbleService extends ChangeNotifier {
         _statuses[target] = _initialStatus(target);
       }
     }
+    if (!ScrobbleTarget.values.any(_canSend)) _endSession();
     _notify();
   }
 
@@ -283,6 +284,9 @@ class ScrobbleService extends ChangeNotifier {
 
   void onPosition(Duration position) {
     if (!_ready || !_snapshot.isPlaying) return;
+    // 没有可发送目标（关闭 / 未同意 / 待授权）时不推进会话，避免重新同意
+    // 后把此前未同意的播放补发出去。
+    if (!ScrobbleTarget.values.any(_canSend)) return;
     final session = _session;
     if (session == null) return;
     final event = session.onPosition(position);
