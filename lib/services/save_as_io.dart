@@ -13,6 +13,7 @@ import '../data/downloads/download_storage_types.dart'
     show publicDownloadsDirName;
 import '../data/downloads/downloads_publisher.dart';
 import '../data/files/public_downloads_path.dart';
+import '../utils/file_name.dart';
 import 'save_as_types.dart';
 
 /// 系统「下载」的目录名（Android `Environment.DIRECTORY_DOWNLOADS`）。
@@ -282,24 +283,8 @@ class IoSaveAs implements SaveAs {
   }
 
   /// 文件名清洗：去掉路径分隔符 / 平台非法字符，避免把标题写进子目录。
-  String _safeFileName(String name) {
-    final replaced = name
-        .replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), '_')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    if (replaced.isEmpty || replaced == '.' || replaced == '..') {
-      return 'molia_export';
-    }
-    if (replaced.length <= 120) return replaced;
-    // 先留出扩展名，避免超长标题把 `.json` / `.png` 截掉。
-    final extension = p.extension(replaced);
-    final base = p.basenameWithoutExtension(replaced);
-    final budget = 120 - extension.length;
-    final shortened = budget <= 0
-        ? String.fromCharCodes(replaced.runes.take(120)).trim()
-        : '${String.fromCharCodes(base.runes.take(budget)).trim()}$extension';
-    return shortened;
-  }
+  String _safeFileName(String name) =>
+      sanitizeFileName(name, fallback: 'molia_export');
 
   /// 子目录清洗：只允许一层层普通目录，拒绝 `..` / 绝对路径。
   String _safeRelativeDir(String relativeDir) {

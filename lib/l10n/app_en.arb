@@ -646,7 +646,7 @@
   "playlistImportFromFile": "Import from .lxmc file",
   "playlistImportFromLink": "Import from playlist or favorites link",
   "playlistImportChannel": "Platform",
-  "playlistImportEmpty": "Playlist or favorites has no importable tracks",
+  "playlistImportEmpty": "Nothing to import",
   "playlistImportedName": "Imported playlist",
   "discoverSectionTitle": "Discover",
   "discoverLeaderboards": "Charts",
@@ -2852,6 +2852,139 @@
       }
     }
   },
+  "playlistDetails": "Playlist details",
+  "playlistDescription": "Description",
+  "playlistDescriptionHint": "What is this playlist for?",
+  "playlistFolder": "Group",
+  "playlistFolderHint": "Leave empty for no group",
+  "playlistEditDetails": "Edit details",
+  "playlistSaveDetailsFailed": "Couldn't save. The playlist is unchanged.",
+  "playlistCover": "Playlist cover",
+  "playlistCoverChange": "Change cover",
+  "playlistCoverReset": "Remove cover",
+  "playlistCoverUpdated": "Playlist cover updated",
+  "playlistCoverRestored": "Playlist cover removed",
+  "playlistShare": "Share playlist",
+  "playlistShareImage": "Image",
+  "playlistShareImageSubtitle": "Cover mosaic and playlist info",
+  "playlistShareText": "Text",
+  "playlistShareTextSubtitle": "Plain track list",
+  "playlistShareSaveImage": "Save image",
+  "playlistShareCopyText": "Copy text",
+  "playlistShareCopied": "Text copied",
+  "playlistShareGenerating": "Creating image…",
+  "playlistShareFailed": "Couldn't create the image. Try again.",
+  "playlistShareEmpty": "This playlist has no tracks yet",
+  "playlistShareMore": "and {count} more",
+  "@playlistShareMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistExport": "Export playlist",
+  "playlistExportM3u8": "Playlist file (M3U8)",
+  "playlistExportM3u8Subtitle": "Opens in other players too",
+  "playlistExportMolia": "Molia file",
+  "playlistExportMoliaSubtitle": "Keeps full track data; Molia only",
+  "playlistExportMoliaUnavailable": "Unavailable now; enable sync first",
+  "playlistExportSavedWithMissing": "Exported to {path}; {count} files are missing",
+  "@playlistExportSavedWithMissing": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistExportFailed": "Couldn't export",
+  "playlistDownloadSelected": "Download selected",
+  "playlistFolderRename": "Rename group",
+  "playlistFolderNameRequired": "Enter a group name",
+  "playlistFolderNameTooLong": "Group names can have at most 40 characters",
+  "playlistFolderNameInvalid": "Group names can't contain control characters",
+  "playlistFolderDelete": "Delete group",
+  "playlistFolderDeleteConfirm": "Delete group “{name}”? Playlists become ungrouped; nothing is deleted.",
+  "@playlistFolderDeleteConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistFolderRenamed": "Group renamed",
+  "playlistFolderDeleted": "Group deleted",
+  "playlistImport": "Import playlist file",
+  "playlistImportReviewTitle": "Confirm import",
+  "playlistImportResolved": "{count} ready to import",
+  "@playlistImportResolved": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistImportUnresolved": "{count} can't be imported",
+  "@playlistImportUnresolved": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistImportConfirm": "Import {count} tracks",
+  "@playlistImportConfirm": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistImportSkipNote": "{count} unrecognized tracks will be skipped",
+  "@playlistImportSkipNote": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistImportDone": "Imported {added} tracks; skipped {skipped}",
+  "@playlistImportDone": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistImportFailed": "Couldn't import",
+  "playlistImportReasonLocalUnavailable": "File is missing or unreadable",
+  "playlistImportReasonKeyUnresolved": "Not found on this device",
+  "playlistImportReasonOnlineUrl": "Only local files or Molia records are supported",
+  "playlistImportReasonMalformed": "The file has an invalid entry",
+  "playlistImportReasonNoLocation": "No file location",
+  "queueSaveAsPlaylist": "Save as playlist",
+  "queuePlaylistDefaultName": "Current queue",
+  "queueSavedAsPlaylist": "Saved as “{name}”: {added} added, {skipped} skipped",
+  "@queueSavedAsPlaylist": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "added": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "queueSaveFailed": "Couldn't save",
   "backButton": "Back",
   "localRefreshInfo": "Refresh info from file",
   "localTitleUpdated": "Title updated",

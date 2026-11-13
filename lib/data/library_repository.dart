@@ -17,6 +17,7 @@ import 'package:drift/drift.dart';
 
 import '../domain/models/device_sync.dart';
 import '../domain/models/library.dart';
+import '../domain/models/playlist_folders.dart';
 import '../domain/ports/library_store.dart';
 import '../domain/ports/library_sync_store.dart';
 import 'library_write_engine.dart';
@@ -160,7 +161,8 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     final rows = await db
         .customSelect(
           '''
-      SELECT p.id, p.name, p.createdAt, COUNT(t.id) AS trackCount
+      SELECT p.id, p.name, p.createdAt, p.description, p.folder,
+             p.coverKey, p.syncId, COUNT(t.id) AS trackCount
       FROM playlists p
       LEFT JOIN playlist_tracks t ON t.playlistId = p.id
       GROUP BY p.id
@@ -175,6 +177,53 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   @override
   Future<void> renamePlaylist(int id, String name) =>
       _writeEngine.renamePlaylist(id, name);
+
+  @override
+  Future<void> updatePlaylistDetails(
+    int id, {
+    required String name,
+    required String description,
+    required String folder,
+  }) => _writeEngine.updatePlaylistDetails(
+    id,
+    name: name,
+    description: description,
+    folder: folder,
+  );
+
+  @override
+  Future<String> ensurePlaylistSyncId(int id) =>
+      _writeEngine.ensurePlaylistSyncIdById(id);
+
+  @override
+  Future<void> setPlaylistCoverKey(int id, String? coverKey) =>
+      _writeEngine.setPlaylistCoverKey(id, coverKey);
+
+  @override
+  Future<int> renamePlaylistFolder(String from, String to) =>
+      _writeEngine.renamePlaylistFolder(from, to);
+
+  @override
+  Future<int> deletePlaylistFolder(String folder) =>
+      _writeEngine.deletePlaylistFolder(folder);
+
+  @override
+  Future<PlaylistTrack?> findPlaylistTrackByKey(
+    String sourceKey,
+    String songId,
+  ) async {
+    if (sourceKey.isEmpty || songId.isEmpty) return null;
+    final db = _db;
+    final row =
+        await (db.select(db.playlistTracks)
+              ..where(
+                (t) => t.sourceKey.equals(sourceKey) & t.songId.equals(songId),
+              )
+              ..orderBy([(t) => OrderingTerm.asc(t.id)])
+              ..limit(1))
+            .getSingleOrNull();
+    return row == null ? null : _trackFromRow(row);
+  }
 
   @override
   Future<void> deletePlaylist(int id) => _writeEngine.deletePlaylist(id);
@@ -459,6 +508,9 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
           syncId: row.syncId ?? '',
           name: row.name,
           createdAt: row.createdAt,
+          description: row.description,
+          folder: normalizePlaylistFolderName(row.folder),
+          coverKey: row.coverKey,
           version: row.syncVersion,
         ),
     ];
@@ -872,6 +924,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
           skipped++;
           continue;
         }
+        final folder = normalizePlaylistFolderName(record.folder);
         final local = await _playlistRowBySyncId(db, syncId);
         if (local == null) {
           final id = await db
@@ -879,6 +932,9 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
               .insert(
                 PlaylistsCompanion.insert(
                   name: name,
+                  description: Value(record.description),
+                  folder: Value(folder),
+                  coverKey: Value(record.coverKey),
                   createdAt: record.createdAt,
                   syncId: Value(syncId),
                   versionPhysical: Value(record.version.physical),
@@ -901,6 +957,9 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
             )..where((t) => t.id.equals(local.id))).write(
               PlaylistsCompanion(
                 name: Value(name),
+                description: Value(record.description),
+                folder: Value(folder),
+                coverKey: Value(record.coverKey),
                 versionPhysical: Value(record.version.physical),
                 versionCounter: Value(record.version.counter),
                 deviceId: Value(record.version.deviceId),
@@ -1019,6 +1078,9 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   ) =>
       row.name == record.name &&
       row.createdAt == record.createdAt &&
+      row.description == record.description &&
+      row.folder == normalizePlaylistFolderName(record.folder) &&
+      row.coverKey == record.coverKey &&
       (row.syncId ?? '') == syncId;
 
   static bool _trackMatches(
@@ -1069,6 +1131,10 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     id: row.id,
     name: row.name,
     createdAt: row.createdAt,
+    description: row.description,
+    folder: row.folder,
+    coverKey: row.coverKey,
+    syncId: row.syncId,
     trackCount: 0,
     isFavorites: row.name == favoritesPlaylistRowName,
   );
@@ -1077,6 +1143,10 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     id: row['id'] as int? ?? -1,
     name: row['name'] as String? ?? '',
     createdAt: row['createdAt'] as int? ?? 0,
+    description: row['description'] as String? ?? '',
+    folder: row['folder'] as String? ?? '',
+    coverKey: row['coverKey'] as String?,
+    syncId: row['syncId'] as String?,
     trackCount: row['trackCount'] as int? ?? 0,
     isFavorites: row['name'] == favoritesPlaylistRowName,
   );

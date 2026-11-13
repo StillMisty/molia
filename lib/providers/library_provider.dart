@@ -20,6 +20,7 @@ import '../data/library_read_model.dart';
 import '../data/mapping/track_mapper.dart';
 import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/library.dart';
+import '../domain/models/playlist_cover_keys.dart';
 import '../domain/models/track.dart';
 import '../models/play_mode.dart';
 import '../sources/raw_track.dart';
@@ -1252,6 +1253,76 @@ class LibraryProvider extends ChangeNotifier {
       debugPrint('[Library] 重命名列表失败: $e');
       return LibraryMutationOutcome.failed(e);
     }
+  }
+
+  /// 列表详情（名称 / 描述 / 分组）一次写入；失败保留旧值并提示。
+  Future<LibraryMutationOutcome> updatePlaylistDetails(
+    int playlistId, {
+    required String name,
+    required String description,
+    required String folder,
+  }) async {
+    try {
+      await _repository.updatePlaylistDetails(
+        playlistId,
+        name: name,
+        description: description,
+        folder: folder,
+      );
+      return const LibraryMutationOutcome.applied();
+    } catch (e) {
+      debugPrint('[Library] 更新列表详情失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
+  }
+
+  /// 列表封面键：先补齐 syncId，再返回稳定的 `playlist:<syncId>`。
+  Future<String?> ensurePlaylistCoverKey(int playlistId) async {
+    try {
+      final syncId = await _repository.ensurePlaylistSyncId(playlistId);
+      return playlistCoverKeyForSyncId(syncId);
+    } catch (e) {
+      debugPrint('[Library] 补齐列表 syncId 失败: $e');
+      return null;
+    }
+  }
+
+  /// 把列表封面指针写回列表行（设置 / 重置封面后调用）。
+  Future<LibraryMutationOutcome> setPlaylistCoverKey(
+    int playlistId,
+    String? coverKey,
+  ) async {
+    try {
+      await _repository.setPlaylistCoverKey(playlistId, coverKey);
+      return const LibraryMutationOutcome.applied();
+    } catch (e) {
+      debugPrint('[Library] 写入列表封面指针失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
+  }
+
+  /// 分组重命名扇出；返回受影响列表数。
+  Future<int> renamePlaylistFolder(String from, String to) =>
+      _repository.renamePlaylistFolder(from, to);
+
+  /// 删除分组（只解除分组）；返回解除分组数。
+  Future<int> deletePlaylistFolder(String folder) =>
+      _repository.deletePlaylistFolder(folder);
+
+  /// 按曲目键查找本机已知列表行（历史优先，其次库内列表）。
+  ///
+  /// 播放列表文件导入的 `#MOLIA` 解析唯一入口：只查已知记录，不搜索网络、
+  /// 不拿标题猜曲目。
+  Future<PlaylistTrack?> findTrackByKey(String sourceKey, String songId) async {
+    for (final entry in history) {
+      if (entry.sourceKey == sourceKey && entry.songId == songId) {
+        return PlaylistTrack.fromHistoryEntry(
+          entry,
+          addedAt: DateTime.now().millisecondsSinceEpoch,
+        );
+      }
+    }
+    return _repository.findPlaylistTrackByKey(sourceKey, songId);
   }
 
   /// 收藏/取消收藏（当前播放曲目 / 搜索结果 / 列表曲目通用入口）。

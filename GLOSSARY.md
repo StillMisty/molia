@@ -620,6 +620,12 @@
   （历史 / 列表 / 曲目 / 收藏 / 导入）+ 类型化变更事件；调用方不感知存储形状
   （列名 / `sortOrder` / 墓碑 / 保留行名）。实现 `lib/data/library_repository.dart`
   同时兼同步面（见下条）。
+- **Playlist metadata（列表元数据）** — `PlaylistInfo.description / folder /
+  coverKey / syncId`：描述与分组是列表行上的普通字段，分组没有实体；封面字节
+  仍走 `CustomCoverStore`，列表只保存 `playlist:<syncId>` 指针。分享海报布局在
+  `services/poster/playlist_poster_layout.dart`，M3U / PLS 编解码在
+  `services/playlist/playlist_file_codec.dart`，导入解析在
+  `services/playlist/playlist_import_service.dart`；取舍见 ADR-0022。
 - **Library sync store（资料库同步端口）** — `lib/domain/ports/library_sync_store.dart`：
   类型化同步记录出 / 入（`PlaylistSyncRecord` / `PlaylistTrackSyncRecord` /
   `PlayHistorySyncRecord` / `SyncTombstoneRecord`，定义在 `device_sync.dart`）；

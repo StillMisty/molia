@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/library_outcome.dart';
 import '../services/haptics.dart';
+import '../services/library/playlist_folder_prefs.dart';
 import '../theme/m3e_context.dart';
 import 'add_to_playlist_sheet.dart' show showPlaylistNameDialog;
+import 'playlist_folder_dialog.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载弹层而不注册 delegate，
 /// 此时回退到简体中文（与收藏页 / 其它弹层同一约定）。
@@ -27,6 +31,9 @@ class CollectionPickerEntry {
     this.playlistId,
     this.isSmart = false,
     this.isHeader = false,
+    this.folder = '',
+    this.isFolderHeader = false,
+    this.folderCollapsed = false,
   });
 
   /// 顺序持久化键：`favorites` / `history` / `downloads` / `playlist:<id>`。
@@ -51,6 +58,15 @@ class CollectionPickerEntry {
   /// 分组标题行（不可选、不可拖）。
   final bool isHeader;
 
+  /// 所属分组（空串 = 未分组）。
+  final String folder;
+
+  /// 分组标题行（带重命名 / 删除动作）。
+  final bool isFolderHeader;
+
+  /// 分组当前是否收起（设备本地状态；仅 [isFolderHeader] 有意义）。
+  final bool folderCollapsed;
+
   CollectionPickerEntry copyWithName(String name) => CollectionPickerEntry(
     key: key,
     id: id,
@@ -61,6 +77,9 @@ class CollectionPickerEntry {
     playlistId: playlistId,
     isSmart: isSmart,
     isHeader: isHeader,
+    folder: folder,
+    isFolderHeader: isFolderHeader,
+    folderCollapsed: folderCollapsed,
   );
 }
 
@@ -92,6 +111,10 @@ Future<CollectionPickerOutcome?> showCollectionPicker(
   required Future<LibraryMutationOutcome> Function(int playlistId) onDelete,
   required Future<LibraryMutationOutcome> Function(int playlistId, String name)
   onRename,
+  Future<LibraryMutationOutcome> Function(String from, String to)?
+  onFolderRename,
+  Future<LibraryMutationOutcome> Function(String folder)? onFolderDelete,
+  PlaylistFolderCollapseController? folderCollapse,
 }) {
   return M3EBottomSheet.show<CollectionPickerOutcome>(
     context,
@@ -103,6 +126,9 @@ Future<CollectionPickerOutcome?> showCollectionPicker(
       onCreate: onCreate,
       onDelete: onDelete,
       onRename: onRename,
+      onFolderRename: onFolderRename,
+      onFolderDelete: onFolderDelete,
+      folderCollapse: folderCollapse,
     ),
   );
 }
@@ -116,6 +142,9 @@ class _CollectionPickerSheet extends StatefulWidget {
     required this.onDelete,
     required this.onCreate,
     required this.onRename,
+    this.onFolderRename,
+    this.onFolderDelete,
+    this.folderCollapse,
   });
 
   final String title;
@@ -126,6 +155,10 @@ class _CollectionPickerSheet extends StatefulWidget {
   final Future<int> Function(String name) onCreate;
   final Future<LibraryMutationOutcome> Function(int playlistId, String name)
   onRename;
+  final Future<LibraryMutationOutcome> Function(String from, String to)?
+  onFolderRename;
+  final Future<LibraryMutationOutcome> Function(String folder)? onFolderDelete;
+  final PlaylistFolderCollapseController? folderCollapse;
 
   @override
   State<_CollectionPickerSheet> createState() => _CollectionPickerSheetState();
@@ -137,17 +170,70 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
     ...widget.smartEntries,
   ];
 
+  /// 分组收起状态的唯一持有者（注入时与页面 / 侧栏共享）。
+  late final PlaylistFolderCollapseController _collapse =
+      widget.folderCollapse ??
+      PlaylistFolderCollapseController(
+        initiallyCollapsed: {
+          for (final entry in widget.entries)
+            if (entry.isFolderHeader && entry.folderCollapsed) entry.folder,
+        },
+      );
+  late final bool _ownsCollapse = widget.folderCollapse == null;
+
+  @override
+  void initState() {
+    super.initState();
+    _collapse.addListener(_onCollapseChanged);
+    if (_ownsCollapse) unawaited(_collapse.load());
+  }
+
+  @override
+  void dispose() {
+    _collapse.removeListener(_onCollapseChanged);
+    if (_ownsCollapse) _collapse.dispose();
+    super.dispose();
+  }
+
+  void _onCollapseChanged() {
+    if (mounted) setState(() {});
+  }
+
   List<String> get _existingNames => [
     for (final entry in _entries)
       if (entry.playlistId != null) entry.name,
   ];
 
+  bool get _hasFolders => widget.entries.any((entry) => entry.isFolderHeader);
+
   /// 普通合集条目数量（其后是智能列表分组，不参与拖动排序）。
   int get _reorderableCount => widget.entries.length;
 
+  /// 收起的分组隐藏组内列表，分组标题本身仍可见（用于展开）。
+  List<CollectionPickerEntry> get _visibleEntries {
+    if (!_hasFolders) return _entries;
+    final result = <CollectionPickerEntry>[];
+    String? hiddenFolder;
+    for (final entry in _entries) {
+      if (entry.isFolderHeader) {
+        hiddenFolder = _collapse.isCollapsed(entry.folder)
+            ? entry.folder
+            : null;
+        result.add(entry);
+        continue;
+      }
+      if (hiddenFolder != null && entry.folder == hiddenFolder) continue;
+      result.add(entry);
+    }
+    return result;
+  }
+
   void _onReorder(int oldIndex, int newIndex) {
-    if (oldIndex >= _reorderableCount || newIndex >= _reorderableCount) {
-      // 智能列表 / 分组标题不参与排序：把视觉上的移动恢复原状。
+    if (_hasFolders ||
+        oldIndex >= _reorderableCount ||
+        newIndex >= _reorderableCount) {
+      // 分组存在时不允许跨分组拖动；智能列表 / 分组标题不参与排序：
+      // 把视觉上的移动恢复原状。
       setState(() {
         _entries
           ..clear()
@@ -163,6 +249,113 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
       for (var i = 0; i < _reorderableCount; i++) _entries[i].key,
     ]);
   }
+
+  void _toggleFolder(String folder) {
+    unawaited(_collapse.toggle(folder));
+  }
+
+  Future<void> _renameFolder(CollectionPickerEntry header) async {
+    final l10n = _l10n(context);
+    final name = await showPlaylistFolderNameDialog(
+      context,
+      initialValue: header.folder,
+    );
+    if (name == null || !mounted || name == header.folder) return;
+    final rename = widget.onFolderRename;
+    if (rename == null) return;
+    final outcome = await rename(header.folder, name);
+    if (!mounted) return;
+    if (outcome.isFailure) {
+      _showFailure();
+      return;
+    }
+    // 改到已有分组 = 合并：删除旧分组标题，组内列表接到目标分组下。
+    final merging = _entries.any(
+      (item) => item.isFolderHeader && item.folder == name,
+    );
+    setState(() {
+      _entries.removeWhere(
+        (item) =>
+            merging && item.isFolderHeader && item.folder == header.folder,
+      );
+      for (var index = 0; index < _entries.length; index++) {
+        final entry = _entries[index];
+        if (entry.isFolderHeader && entry.folder == header.folder) {
+          _entries[index] = _copyWithFolder(entry, name);
+        } else if (!entry.isFolderHeader && entry.folder == header.folder) {
+          _entries[index] = _copyWithFolder(entry, name);
+        }
+      }
+    });
+    // 重命名后的新名字按展开处理；合并时目标分组也展开。
+    unawaited(_collapse.rename(header.folder, name, merged: merging));
+    if (mounted) {
+      M3ESnackbar.show(context, message: l10n.playlistFolderRenamed);
+    }
+  }
+
+  Future<void> _deleteFolder(CollectionPickerEntry header) async {
+    final l10n = _l10n(context);
+    final confirmed = await M3EDialog.show<bool>(
+      context,
+      dialog: M3EDialog(
+        title: l10n.playlistFolderDelete,
+        content: Text(l10n.playlistFolderDeleteConfirm(header.folder)),
+        actions: [
+          M3EButton.text(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.cancel),
+          ),
+          M3EButton.filled(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l10n.delete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final remove = widget.onFolderDelete;
+    if (remove == null) return;
+    final outcome = await remove(header.folder);
+    if (!mounted) return;
+    if (outcome.isFailure) {
+      _showFailure();
+      return;
+    }
+    setState(() {
+      _entries.removeWhere(
+        (entry) => entry.isFolderHeader && entry.folder == header.folder,
+      );
+      for (var index = 0; index < _entries.length; index++) {
+        final entry = _entries[index];
+        if (!entry.isFolderHeader && entry.folder == header.folder) {
+          _entries[index] = _copyWithFolder(entry, '');
+        }
+      }
+    });
+    unawaited(_collapse.delete(header.folder));
+    if (mounted) {
+      M3ESnackbar.show(context, message: l10n.playlistFolderDeleted);
+    }
+  }
+
+  static CollectionPickerEntry _copyWithFolder(
+    CollectionPickerEntry entry,
+    String folder,
+  ) => CollectionPickerEntry(
+    key: entry.key,
+    id: entry.id,
+    name: entry.name,
+    icon: entry.icon,
+    trackCount: entry.trackCount,
+    selected: entry.selected,
+    playlistId: entry.playlistId,
+    isSmart: entry.isSmart,
+    isHeader: entry.isHeader,
+    folder: folder,
+    isFolderHeader: entry.isFolderHeader,
+    folderCollapsed: entry.folderCollapsed,
+  );
 
   void _showFailure() {
     if (!mounted) return;
@@ -251,6 +444,7 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
+    final visible = _visibleEntries;
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -299,9 +493,95 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
               shrinkWrap: true,
               buildDefaultDragHandles: false,
               onReorderItem: _onReorder,
-              itemCount: _entries.length,
+              itemCount: visible.length,
               itemBuilder: (context, index) {
-                final entry = _entries[index];
+                final entry = visible[index];
+                if (entry.isFolderHeader) {
+                  final collapsed = _collapse.isCollapsed(entry.folder);
+                  return Padding(
+                    key: ValueKey<String>(entry.key),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: M3ECard(
+                            variant: M3ECardVariant.filled,
+                            color: Colors.transparent,
+                            elevation: 0,
+                            borderRadius: BorderRadius.circular(12),
+                            padding: EdgeInsets.zero,
+                            onPressed: () => _toggleFolder(entry.folder),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 6,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    collapsed
+                                        ? Icons.chevron_right_rounded
+                                        : Icons.expand_more_rounded,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      entry.folder,
+                                      style: context.typeScale.labelLarge,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (widget.onFolderRename != null ||
+                            widget.onFolderDelete != null)
+                          M3EMenu.entries(
+                            position: M3EMenuAnchorPosition.bottomEnd,
+                            anchorBuilder: (context, open) => M3EIconButton(
+                              variant: M3EIconButtonVariant.standard,
+                              size: M3EIconButtonSize.sm,
+                              icon: const Icon(Icons.more_vert_rounded),
+                              semanticLabel: l10n.playlistFolder,
+                              onPressed: open,
+                            ),
+                            onSelected: (value) {
+                              if (value == 'rename') {
+                                _renameFolder(entry);
+                              } else if (value == 'delete') {
+                                _deleteFolder(entry);
+                              }
+                            },
+                            entries: [
+                              if (widget.onFolderRename != null)
+                                M3EMenuEntry(
+                                  label: l10n.playlistFolderRename,
+                                  value: 'rename',
+                                  leading: const Icon(
+                                    Icons.edit_rounded,
+                                    size: 20,
+                                  ),
+                                ),
+                              if (widget.onFolderDelete != null)
+                                M3EMenuEntry(
+                                  label: l10n.playlistFolderDelete,
+                                  value: 'delete',
+                                  isDestructive: true,
+                                  leading: const Icon(
+                                    Icons.delete_outline_rounded,
+                                    size: 20,
+                                  ),
+                                ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  );
+                }
                 if (entry.isHeader) {
                   return KeyedSubtree(
                     key: ValueKey<String>(entry.key),
@@ -368,13 +648,14 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                                   ),
                                 ],
                               ),
-                            ReorderableDragStartListener(
-                              index: index,
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 8),
-                                child: Icon(Icons.drag_handle_rounded),
+                            if (!_hasFolders)
+                              ReorderableDragStartListener(
+                                index: index,
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 8),
+                                  child: Icon(Icons.drag_handle_rounded),
+                                ),
                               ),
-                            ),
                           ],
                         ),
                 );

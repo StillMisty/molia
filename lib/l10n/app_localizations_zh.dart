@@ -1327,7 +1327,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get playlistImportChannel => '平台';
 
   @override
-  String get playlistImportEmpty => '歌单 / 收藏夹没有可导入的曲目';
+  String get playlistImportEmpty => '没有可导入的曲目';
 
   @override
   String get playlistImportedName => '导入的歌单';
@@ -4958,6 +4958,198 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get localFileCheckFiles => '检查文件';
+
+  @override
+  String get playlistDetails => '列表详情';
+
+  @override
+  String get playlistDescription => '描述';
+
+  @override
+  String get playlistDescriptionHint => '说说这个列表用来做什么';
+
+  @override
+  String get playlistFolder => '分组';
+
+  @override
+  String get playlistFolderHint => '留空表示不分组';
+
+  @override
+  String get playlistEditDetails => '编辑详情';
+
+  @override
+  String get playlistSaveDetailsFailed => '保存失败，列表没有改动';
+
+  @override
+  String get playlistCover => '列表封面';
+
+  @override
+  String get playlistCoverChange => '更换封面';
+
+  @override
+  String get playlistCoverReset => '移除封面';
+
+  @override
+  String get playlistCoverUpdated => '列表封面已更新';
+
+  @override
+  String get playlistCoverRestored => '已移除列表封面';
+
+  @override
+  String get playlistShare => '分享列表';
+
+  @override
+  String get playlistShareImage => '图片';
+
+  @override
+  String get playlistShareImageSubtitle => '封面拼图 + 列表信息';
+
+  @override
+  String get playlistShareText => '文本';
+
+  @override
+  String get playlistShareTextSubtitle => '纯文字曲目列表';
+
+  @override
+  String get playlistShareSaveImage => '保存图片';
+
+  @override
+  String get playlistShareCopyText => '复制文本';
+
+  @override
+  String get playlistShareCopied => '文本已复制';
+
+  @override
+  String get playlistShareGenerating => '正在生成图片…';
+
+  @override
+  String get playlistShareFailed => '图片生成失败，请重试';
+
+  @override
+  String get playlistShareEmpty => '这个列表还没有曲目';
+
+  @override
+  String playlistShareMore(int count) {
+    return '还有 $count 首';
+  }
+
+  @override
+  String get playlistExport => '导出列表';
+
+  @override
+  String get playlistExportM3u8 => '播放列表文件（M3U8）';
+
+  @override
+  String get playlistExportM3u8Subtitle => '其它播放器也能打开';
+
+  @override
+  String get playlistExportMolia => 'Molia 文件';
+
+  @override
+  String get playlistExportMoliaSubtitle => '保留完整曲目信息，仅 Molia 可读';
+
+  @override
+  String get playlistExportMoliaUnavailable => '当前不可用；先启用同步再导出';
+
+  @override
+  String playlistExportSavedWithMissing(String path, int count) {
+    return '已导出到 $path；有 $count 个文件已不在';
+  }
+
+  @override
+  String get playlistExportFailed => '导出失败';
+
+  @override
+  String get playlistDownloadSelected => '下载所选';
+
+  @override
+  String get playlistFolderRename => '重命名分组';
+
+  @override
+  String get playlistFolderNameRequired => '请输入分组名';
+
+  @override
+  String get playlistFolderNameTooLong => '分组名最多 40 个字符';
+
+  @override
+  String get playlistFolderNameInvalid => '分组名不能包含控制字符';
+
+  @override
+  String get playlistFolderDelete => '删除分组';
+
+  @override
+  String playlistFolderDeleteConfirm(String name) {
+    return '删除分组「$name」？列表会变成未分组，不会被删除。';
+  }
+
+  @override
+  String get playlistFolderRenamed => '分组已重命名';
+
+  @override
+  String get playlistFolderDeleted => '分组已删除';
+
+  @override
+  String get playlistImport => '导入列表文件';
+
+  @override
+  String get playlistImportReviewTitle => '确认导入';
+
+  @override
+  String playlistImportResolved(int count) {
+    return '$count 首可导入';
+  }
+
+  @override
+  String playlistImportUnresolved(int count) {
+    return '$count 首无法导入';
+  }
+
+  @override
+  String playlistImportConfirm(int count) {
+    return '导入 $count 首';
+  }
+
+  @override
+  String playlistImportSkipNote(int count) {
+    return '未识别的 $count 首会被跳过';
+  }
+
+  @override
+  String playlistImportDone(int added, int skipped) {
+    return '已导入 $added 首，跳过 $skipped 首';
+  }
+
+  @override
+  String get playlistImportFailed => '导入失败';
+
+  @override
+  String get playlistImportReasonLocalUnavailable => '文件不在本机或无法读取';
+
+  @override
+  String get playlistImportReasonKeyUnresolved => '本机找不到这首';
+
+  @override
+  String get playlistImportReasonOnlineUrl => '只支持本机文件或 Molia 记录';
+
+  @override
+  String get playlistImportReasonMalformed => '文件内容有误';
+
+  @override
+  String get playlistImportReasonNoLocation => '缺少文件地址';
+
+  @override
+  String get queueSaveAsPlaylist => '存为列表';
+
+  @override
+  String get queuePlaylistDefaultName => '当前队列';
+
+  @override
+  String queueSavedAsPlaylist(String name, int added, int skipped) {
+    return '已存为「$name」，加入 $added 首，跳过 $skipped 首';
+  }
+
+  @override
+  String get queueSaveFailed => '保存失败';
 
   @override
   String get backButton => '返回';

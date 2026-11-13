@@ -133,6 +133,7 @@ class FakeLibraryRepository implements LibraryStore {
       id: id,
       name: name,
       createdAt: DateTime.now().millisecondsSinceEpoch,
+      syncId: name == _favoritesName ? '__favorites__' : 'sync-$id',
       isFavorites: name == _favoritesName,
     );
     _tracks[id] = [];
@@ -166,10 +167,115 @@ class FakeLibraryRepository implements LibraryStore {
       id: playlist.id,
       name: name,
       createdAt: playlist.createdAt,
+      description: playlist.description,
+      folder: playlist.folder,
+      coverKey: playlist.coverKey,
+      syncId: playlist.syncId,
       trackCount: playlist.trackCount,
       isFavorites: playlist.isFavorites,
     );
     _changed(const LibraryChange.playlists());
+  }
+
+  @override
+  Future<void> updatePlaylistDetails(
+    int id, {
+    required String name,
+    required String description,
+    required String folder,
+  }) async {
+    if (failPlaylistWrites) throw StateError('playlist write failed');
+    final playlist = _playlists[id];
+    if (playlist == null) return;
+    _playlists[id] = PlaylistInfo(
+      id: playlist.id,
+      name: name,
+      createdAt: playlist.createdAt,
+      description: description.trim(),
+      folder: folder.trim(),
+      coverKey: playlist.coverKey,
+      syncId: playlist.syncId,
+      trackCount: playlist.trackCount,
+      isFavorites: playlist.isFavorites,
+    );
+    _changed(const LibraryChange.playlists());
+  }
+
+  @override
+  Future<String> ensurePlaylistSyncId(int id) async =>
+      _playlists[id]?.syncId ?? '';
+
+  @override
+  Future<void> setPlaylistCoverKey(int id, String? coverKey) async {
+    if (failPlaylistWrites) throw StateError('playlist write failed');
+    final playlist = _playlists[id];
+    if (playlist == null) return;
+    _playlists[id] = PlaylistInfo(
+      id: playlist.id,
+      name: playlist.name,
+      createdAt: playlist.createdAt,
+      description: playlist.description,
+      folder: playlist.folder,
+      coverKey: coverKey,
+      syncId: playlist.syncId,
+      trackCount: playlist.trackCount,
+      isFavorites: playlist.isFavorites,
+    );
+    _changed(const LibraryChange.playlists());
+  }
+
+  @override
+  Future<int> renamePlaylistFolder(String from, String to) async {
+    if (failPlaylistWrites) throw StateError('playlist write failed');
+    var affected = 0;
+    for (final entry in _playlists.entries.toList()) {
+      if (entry.value.folder != from.trim()) continue;
+      _playlists[entry.key] = _withFolder(entry.value, to.trim());
+      affected++;
+    }
+    if (affected > 0) _changed(const LibraryChange.playlists());
+    return affected;
+  }
+
+  @override
+  Future<int> deletePlaylistFolder(String folder) async {
+    if (failPlaylistWrites) throw StateError('playlist write failed');
+    var affected = 0;
+    for (final entry in _playlists.entries.toList()) {
+      if (entry.value.folder != folder.trim()) continue;
+      _playlists[entry.key] = _withFolder(entry.value, '');
+      affected++;
+    }
+    if (affected > 0) _changed(const LibraryChange.playlists());
+    return affected;
+  }
+
+  PlaylistInfo _withFolder(PlaylistInfo playlist, String folder) =>
+      PlaylistInfo(
+        id: playlist.id,
+        name: playlist.name,
+        createdAt: playlist.createdAt,
+        description: playlist.description,
+        folder: folder,
+        coverKey: playlist.coverKey,
+        syncId: playlist.syncId,
+        trackCount: playlist.trackCount,
+        isFavorites: playlist.isFavorites,
+      );
+
+  @override
+  Future<PlaylistTrack?> findPlaylistTrackByKey(
+    String sourceKey,
+    String songId,
+  ) async {
+    for (final list in _tracks.values) {
+      for (final track in list) {
+        if (track.sourceKey == sourceKey && track.songId == songId) {
+          return track;
+        }
+      }
+    }
+    return null;
   }
 
   @override

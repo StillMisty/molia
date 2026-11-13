@@ -1376,8 +1376,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistImportChannel => 'Platform';
 
   @override
-  String get playlistImportEmpty =>
-      'Playlist or favorites has no importable tracks';
+  String get playlistImportEmpty => 'Nothing to import';
 
   @override
   String get playlistImportedName => 'Imported playlist';
@@ -5177,6 +5176,204 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get localFileCheckFiles => 'Check files';
+
+  @override
+  String get playlistDetails => 'Playlist details';
+
+  @override
+  String get playlistDescription => 'Description';
+
+  @override
+  String get playlistDescriptionHint => 'What is this playlist for?';
+
+  @override
+  String get playlistFolder => 'Group';
+
+  @override
+  String get playlistFolderHint => 'Leave empty for no group';
+
+  @override
+  String get playlistEditDetails => 'Edit details';
+
+  @override
+  String get playlistSaveDetailsFailed =>
+      'Couldn\'t save. The playlist is unchanged.';
+
+  @override
+  String get playlistCover => 'Playlist cover';
+
+  @override
+  String get playlistCoverChange => 'Change cover';
+
+  @override
+  String get playlistCoverReset => 'Remove cover';
+
+  @override
+  String get playlistCoverUpdated => 'Playlist cover updated';
+
+  @override
+  String get playlistCoverRestored => 'Playlist cover removed';
+
+  @override
+  String get playlistShare => 'Share playlist';
+
+  @override
+  String get playlistShareImage => 'Image';
+
+  @override
+  String get playlistShareImageSubtitle => 'Cover mosaic and playlist info';
+
+  @override
+  String get playlistShareText => 'Text';
+
+  @override
+  String get playlistShareTextSubtitle => 'Plain track list';
+
+  @override
+  String get playlistShareSaveImage => 'Save image';
+
+  @override
+  String get playlistShareCopyText => 'Copy text';
+
+  @override
+  String get playlistShareCopied => 'Text copied';
+
+  @override
+  String get playlistShareGenerating => 'Creating image…';
+
+  @override
+  String get playlistShareFailed => 'Couldn\'t create the image. Try again.';
+
+  @override
+  String get playlistShareEmpty => 'This playlist has no tracks yet';
+
+  @override
+  String playlistShareMore(int count) {
+    return 'and $count more';
+  }
+
+  @override
+  String get playlistExport => 'Export playlist';
+
+  @override
+  String get playlistExportM3u8 => 'Playlist file (M3U8)';
+
+  @override
+  String get playlistExportM3u8Subtitle => 'Opens in other players too';
+
+  @override
+  String get playlistExportMolia => 'Molia file';
+
+  @override
+  String get playlistExportMoliaSubtitle => 'Keeps full track data; Molia only';
+
+  @override
+  String get playlistExportMoliaUnavailable =>
+      'Unavailable now; enable sync first';
+
+  @override
+  String playlistExportSavedWithMissing(String path, int count) {
+    return 'Exported to $path; $count files are missing';
+  }
+
+  @override
+  String get playlistExportFailed => 'Couldn\'t export';
+
+  @override
+  String get playlistDownloadSelected => 'Download selected';
+
+  @override
+  String get playlistFolderRename => 'Rename group';
+
+  @override
+  String get playlistFolderNameRequired => 'Enter a group name';
+
+  @override
+  String get playlistFolderNameTooLong =>
+      'Group names can have at most 40 characters';
+
+  @override
+  String get playlistFolderNameInvalid =>
+      'Group names can\'t contain control characters';
+
+  @override
+  String get playlistFolderDelete => 'Delete group';
+
+  @override
+  String playlistFolderDeleteConfirm(String name) {
+    return 'Delete group “$name”? Playlists become ungrouped; nothing is deleted.';
+  }
+
+  @override
+  String get playlistFolderRenamed => 'Group renamed';
+
+  @override
+  String get playlistFolderDeleted => 'Group deleted';
+
+  @override
+  String get playlistImport => 'Import playlist file';
+
+  @override
+  String get playlistImportReviewTitle => 'Confirm import';
+
+  @override
+  String playlistImportResolved(int count) {
+    return '$count ready to import';
+  }
+
+  @override
+  String playlistImportUnresolved(int count) {
+    return '$count can\'t be imported';
+  }
+
+  @override
+  String playlistImportConfirm(int count) {
+    return 'Import $count tracks';
+  }
+
+  @override
+  String playlistImportSkipNote(int count) {
+    return '$count unrecognized tracks will be skipped';
+  }
+
+  @override
+  String playlistImportDone(int added, int skipped) {
+    return 'Imported $added tracks; skipped $skipped';
+  }
+
+  @override
+  String get playlistImportFailed => 'Couldn\'t import';
+
+  @override
+  String get playlistImportReasonLocalUnavailable =>
+      'File is missing or unreadable';
+
+  @override
+  String get playlistImportReasonKeyUnresolved => 'Not found on this device';
+
+  @override
+  String get playlistImportReasonOnlineUrl =>
+      'Only local files or Molia records are supported';
+
+  @override
+  String get playlistImportReasonMalformed => 'The file has an invalid entry';
+
+  @override
+  String get playlistImportReasonNoLocation => 'No file location';
+
+  @override
+  String get queueSaveAsPlaylist => 'Save as playlist';
+
+  @override
+  String get queuePlaylistDefaultName => 'Current queue';
+
+  @override
+  String queueSavedAsPlaylist(String name, int added, int skipped) {
+    return 'Saved as “$name”: $added added, $skipped skipped';
+  }
+
+  @override
+  String get queueSaveFailed => 'Couldn\'t save';
 
   @override
   String get backButton => 'Back';

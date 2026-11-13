@@ -20,6 +20,7 @@ import 'package:path/path.dart' as p;
 import '../../data/downloads/download_storage.dart';
 import '../../domain/models/download.dart';
 import '../../domain/models/track.dart';
+import '../../utils/file_name.dart' as file_name;
 import 'download_settings.dart';
 
 /// 下载目录布局：模板 → 基名 → 去重 → 最终路径 / sidecar 路径。
@@ -270,17 +271,12 @@ class DownloadFileLayout {
     return 'jpg';
   }
 
-  static final RegExp _illegalFileNameChars = RegExp(r'[\\/:*?"<>|\x00-\x1f]');
-  static final RegExp _whitespaceRun = RegExp(r'\s+');
-
   /// 文件系统非法字符替换为 `_`，空白折叠，空名回退 `unknown`，限长 120。
-  static String sanitizeFileName(String name) {
-    final replaced = name.replaceAll(_illegalFileNameChars, '_');
-    final collapsed = replaced.replaceAll(_whitespaceRun, ' ').trim();
-    if (collapsed.isEmpty) return 'unknown';
-    const maxLength = 120;
-    if (collapsed.length <= maxLength) return collapsed;
-    // 按 rune 截断，避免切断代理对。
-    return String.fromCharCodes(collapsed.runes.take(maxLength)).trim();
-  }
+  ///
+  /// 实现委托 [sanitizeFileName]：下载 / 导出 / 海报共用同一份清洗规则。
+  static String sanitizeFileName(String name) => file_name.sanitizeFileName(
+    name,
+    fallback: 'unknown',
+    preserveExtension: false,
+  );
 }

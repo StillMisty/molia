@@ -37,22 +37,35 @@ enum CustomCoverChangeKind {
 
   /// 全局默认封面替换 / 重置。
   defaultCover,
+
+  /// 列表封面替换 / 重置。
+  playlist,
 }
 
 /// 一次自定义封面变化。
 @immutable
 class CustomCoverChange {
-  const CustomCoverChange({required this.kind, this.trackId, this.path});
+  const CustomCoverChange({
+    required this.kind,
+    this.trackId,
+    this.path,
+    this.playlistKey,
+  });
 
   final CustomCoverChangeKind kind;
 
-  /// 单曲封面所属曲目；默认封面变化时为 null。
+  /// 单曲封面所属曲目；默认封面 / 列表封面变化时为 null。
   final TrackId? trackId;
+
+  /// 列表封面键（`playlist:<syncId>`）；仅 [CustomCoverChangeKind.playlist]。
+  final String? playlistKey;
 
   /// 新文件的绝对路径；重置时为 null。
   final String? path;
 
   bool get isDefaultCover => kind == CustomCoverChangeKind.defaultCover;
+
+  bool get isPlaylist => kind == CustomCoverChangeKind.playlist;
 }
 
 /// 索引条目（持久化形状）。
@@ -142,6 +155,7 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
 
   final List<void Function(CustomCoverChange)> _changeListeners = [];
   final Map<String, CustomCoverEntry> _tracks = {};
+  final Map<String, CustomCoverEntry> _playlists = {};
   CustomCoverEntry? _defaultCover;
 
   Future<void>? _loadFuture;
@@ -173,6 +187,13 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
               if (parsed != null) _tracks[entry.key.toString()] = parsed;
             }
           }
+          final playlists = decoded['playlists'];
+          if (playlists is Map) {
+            for (final entry in playlists.entries) {
+              final parsed = CustomCoverEntry.fromJson(entry.value);
+              if (parsed != null) _playlists[entry.key.toString()] = parsed;
+            }
+          }
           _defaultCover = CustomCoverEntry.fromJson(decoded['default']);
         }
       }
@@ -187,6 +208,12 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
     for (final entry in _tracks.entries.toList()) {
       if (!await _fileExists(entry.value.path)) {
         _tracks.remove(entry.key);
+        pruned = true;
+      }
+    }
+    for (final entry in _playlists.entries.toList()) {
+      if (!await _fileExists(entry.value.path)) {
+        _playlists.remove(entry.key);
         pruned = true;
       }
     }
@@ -258,6 +285,18 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
           }
         }
       }
+      final playlists = decoded['playlists'];
+      if (playlists is Map) {
+        for (final entry in playlists.entries) {
+          final item = entry.value;
+          if (item is! Map) continue;
+          final path = await rewrite(item['path']);
+          if (path != null && path != item['path']) {
+            item['path'] = path;
+            changed = true;
+          }
+        }
+      }
       final defaultCover = decoded['default'];
       if (defaultCover is Map) {
         final path = await rewrite(defaultCover['path']);
@@ -306,12 +345,23 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
     return entry?.path;
   }
 
+  /// 列表自定义封面文件路径（未设置为 null）。
+  String? playlistCoverPath(String key) => _playlists[key]?.path;
+
+  /// 列表自定义封面 `file://` 地址（未设置为 null）。
+  String? playlistCoverUrl(String key) {
+    final path = playlistCoverPath(key);
+    return path == null ? null : Uri.file(path).toString();
+  }
+
   /// 规范化封面键 → 自定义封面 `file://` 地址（[resolution.CoverIndex]）。
   ///
   /// 传入键必须已规范化；字符串入口的 `local:` 剥离由 [CoverResolver] 做。
+  /// 列表键（`playlist:<syncId>`）与曲目键共用同一块只读解析面，键空间
+  /// 互不重叠。
   @override
   String? customCoverUrlForKey(String key) {
-    final entry = _tracks[key];
+    final entry = _tracks[key] ?? _playlists[key];
     return entry == null ? null : Uri.file(entry.path).toString();
   }
 
@@ -331,8 +381,15 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
   /// 当前曲目封面索引（键 = 规范化封面键；只读快照）。
   Map<String, CustomCoverEntry> get trackEntries => Map.unmodifiable(_tracks);
 
+  /// 当前列表封面索引（键 = `playlist:<syncId>`；只读快照）。
+  Map<String, CustomCoverEntry> get playlistEntries =>
+      Map.unmodifiable(_playlists);
+
   /// 指定封面键的索引条目（未设置为 null）。
   CustomCoverEntry? trackEntry(String key) => _tracks[key];
+
+  /// 指定列表封面键的索引条目（未设置为 null）。
+  CustomCoverEntry? playlistEntry(String key) => _playlists[key];
 
   /// 全局默认封面索引条目（未设置为 null）。
   CustomCoverEntry? get defaultEntry => _defaultCover;
@@ -341,10 +398,18 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
   Future<Uint8List?> readTrackCover(TrackId id) =>
       _readFile(trackCoverPath(id));
 
-  /// 按封面键读取曲目封面字节（同步适配器 / 下载读取已规范化键）。
+  /// 按封面键读取曲目封面字节（不存在 / 不可读返回 null）。
   @override
   Future<Uint8List?> readTrackCoverByKey(String key) =>
       _readFile(_tracks[key]?.path);
+
+  /// 按任意封面键读取字节（曲目 / 列表；同步适配器按索引键读取）。
+  Future<Uint8List?> readCoverBytesByKey(String key) =>
+      _readFile((_tracks[key] ?? _playlists[key])?.path);
+
+  /// 按列表封面键读取字节（不存在 / 不可读返回 null）。
+  Future<Uint8List?> readPlaylistCover(String key) =>
+      _readFile(_playlists[key]?.path);
 
   /// 读取全局默认封面字节（不存在 / 不可读返回 null）。
   Future<Uint8List?> readDefaultCover() => _readFile(_defaultCover?.path);
@@ -385,6 +450,36 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
 
   /// 恢复默认封面为 Molia 标志（没有自定义默认封面时为空操作）。
   Future<void> resetDefaultCover() => _removeDefaultEntry(local: true);
+
+  /// 保存列表封面（[bytes] 应已由 `CoverImageCodec` 归一化）。
+  ///
+  /// [key] 是稳定封面键（`playlist:<syncId>`），调用方负责先补齐 syncId。
+  Future<void> setPlaylistCover(String key, Uint8List bytes) async {
+    if (key.isEmpty) return;
+    final entry = await _writeEntry(
+      filePrefix: 'playlist_${_shortHash(key)}',
+      bytes: bytes,
+    );
+    await _commitPlaylistEntry(key, entry, local: true);
+  }
+
+  /// 恢复列表封面为空（没有自定义封面时为空操作）。
+  Future<void> resetPlaylistCover(String key) =>
+      _removePlaylistEntry(key, local: true);
+
+  /// 应用远端列表封面（同步 / 备份导入）：写文件 + 索引，不触发本地回调。
+  Future<void> applySyncedPlaylistCover(String key, Uint8List bytes) async {
+    if (key.isEmpty || bytes.isEmpty) return;
+    final entry = await _writeEntry(
+      filePrefix: 'playlist_${_shortHash(key)}',
+      bytes: bytes,
+    );
+    await _commitPlaylistEntry(key, entry, local: false);
+  }
+
+  /// 应用远端列表封面删除（同步 / 备份导入）；不存在时为空操作。
+  Future<void> applySyncedPlaylistDelete(String key) =>
+      _removePlaylistEntry(key, local: false);
 
   /// 应用远端曲目封面（同步 / 备份导入）：写文件 + 索引，不触发本地变更回调。
   Future<void> applySyncedTrackCover(String key, Uint8List bytes) async {
@@ -513,6 +608,55 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
     );
   }
 
+  /// 写入列表封面索引并持久化；失败回滚内存与文件。
+  Future<void> _commitPlaylistEntry(
+    String key,
+    CustomCoverEntry entry, {
+    required bool local,
+  }) async {
+    final old = _playlists[key];
+    _playlists[key] = entry;
+    try {
+      await _persist();
+    } catch (e) {
+      if (old == null) {
+        _playlists.remove(key);
+      } else {
+        _playlists[key] = old;
+      }
+      await _deleteQuietly(entry.path);
+      rethrow;
+    }
+    if (old != null && old.path != entry.path) {
+      await _deleteQuietly(old.path);
+    }
+    _notify(
+      CustomCoverChange(
+        kind: CustomCoverChangeKind.playlist,
+        playlistKey: key,
+        path: entry.path,
+      ),
+      local: local,
+    );
+  }
+
+  /// 删除列表封面索引 / 文件并持久化；失败回滚内存。
+  Future<void> _removePlaylistEntry(String key, {required bool local}) async {
+    final old = _playlists.remove(key);
+    if (old == null) return;
+    try {
+      await _persist();
+    } catch (e) {
+      _playlists[key] = old;
+      rethrow;
+    }
+    await _deleteQuietly(old.path);
+    _notify(
+      CustomCoverChange(kind: CustomCoverChangeKind.playlist, playlistKey: key),
+      local: local,
+    );
+  }
+
   /// 写入默认封面索引并持久化；失败回滚内存与文件。
   Future<void> _commitDefaultEntry(
     CustomCoverEntry entry, {
@@ -615,6 +759,10 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
         'version': 1,
         'tracks': {
           for (final entry in _tracks.entries) entry.key: entry.value.toJson(),
+        },
+        'playlists': {
+          for (final entry in _playlists.entries)
+            entry.key: entry.value.toJson(),
         },
         if (_defaultCover != null) 'default': _defaultCover!.toJson(),
       }),

@@ -2597,7 +2597,7 @@ abstract class AppLocalizations {
   /// No description provided for @playlistImportEmpty.
   ///
   /// In en, this message translates to:
-  /// **'Playlist or favorites has no importable tracks'**
+  /// **'Nothing to import'**
   String get playlistImportEmpty;
 
   /// No description provided for @playlistImportedName.
@@ -9219,6 +9219,354 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Check files'**
   String get localFileCheckFiles;
+
+  /// No description provided for @playlistDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist details'**
+  String get playlistDetails;
+
+  /// No description provided for @playlistDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get playlistDescription;
+
+  /// No description provided for @playlistDescriptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'What is this playlist for?'**
+  String get playlistDescriptionHint;
+
+  /// No description provided for @playlistFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Group'**
+  String get playlistFolder;
+
+  /// No description provided for @playlistFolderHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty for no group'**
+  String get playlistFolderHint;
+
+  /// No description provided for @playlistEditDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit details'**
+  String get playlistEditDetails;
+
+  /// No description provided for @playlistSaveDetailsFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save. The playlist is unchanged.'**
+  String get playlistSaveDetailsFailed;
+
+  /// No description provided for @playlistCover.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist cover'**
+  String get playlistCover;
+
+  /// No description provided for @playlistCoverChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change cover'**
+  String get playlistCoverChange;
+
+  /// No description provided for @playlistCoverReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove cover'**
+  String get playlistCoverReset;
+
+  /// No description provided for @playlistCoverUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist cover updated'**
+  String get playlistCoverUpdated;
+
+  /// No description provided for @playlistCoverRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist cover removed'**
+  String get playlistCoverRestored;
+
+  /// No description provided for @playlistShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Share playlist'**
+  String get playlistShare;
+
+  /// No description provided for @playlistShareImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get playlistShareImage;
+
+  /// No description provided for @playlistShareImageSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover mosaic and playlist info'**
+  String get playlistShareImageSubtitle;
+
+  /// No description provided for @playlistShareText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get playlistShareText;
+
+  /// No description provided for @playlistShareTextSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Plain track list'**
+  String get playlistShareTextSubtitle;
+
+  /// No description provided for @playlistShareSaveImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Save image'**
+  String get playlistShareSaveImage;
+
+  /// No description provided for @playlistShareCopyText.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy text'**
+  String get playlistShareCopyText;
+
+  /// No description provided for @playlistShareCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Text copied'**
+  String get playlistShareCopied;
+
+  /// No description provided for @playlistShareGenerating.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating image…'**
+  String get playlistShareGenerating;
+
+  /// No description provided for @playlistShareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t create the image. Try again.'**
+  String get playlistShareFailed;
+
+  /// No description provided for @playlistShareEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'This playlist has no tracks yet'**
+  String get playlistShareEmpty;
+
+  /// No description provided for @playlistShareMore.
+  ///
+  /// In en, this message translates to:
+  /// **'and {count} more'**
+  String playlistShareMore(int count);
+
+  /// No description provided for @playlistExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export playlist'**
+  String get playlistExport;
+
+  /// No description provided for @playlistExportM3u8.
+  ///
+  /// In en, this message translates to:
+  /// **'Playlist file (M3U8)'**
+  String get playlistExportM3u8;
+
+  /// No description provided for @playlistExportM3u8Subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Opens in other players too'**
+  String get playlistExportM3u8Subtitle;
+
+  /// No description provided for @playlistExportMolia.
+  ///
+  /// In en, this message translates to:
+  /// **'Molia file'**
+  String get playlistExportMolia;
+
+  /// No description provided for @playlistExportMoliaSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keeps full track data; Molia only'**
+  String get playlistExportMoliaSubtitle;
+
+  /// No description provided for @playlistExportMoliaUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable now; enable sync first'**
+  String get playlistExportMoliaUnavailable;
+
+  /// No description provided for @playlistExportSavedWithMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Exported to {path}; {count} files are missing'**
+  String playlistExportSavedWithMissing(String path, int count);
+
+  /// No description provided for @playlistExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t export'**
+  String get playlistExportFailed;
+
+  /// No description provided for @playlistDownloadSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Download selected'**
+  String get playlistDownloadSelected;
+
+  /// No description provided for @playlistFolderRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename group'**
+  String get playlistFolderRename;
+
+  /// No description provided for @playlistFolderNameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a group name'**
+  String get playlistFolderNameRequired;
+
+  /// No description provided for @playlistFolderNameTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Group names can have at most 40 characters'**
+  String get playlistFolderNameTooLong;
+
+  /// No description provided for @playlistFolderNameInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Group names can\'t contain control characters'**
+  String get playlistFolderNameInvalid;
+
+  /// No description provided for @playlistFolderDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete group'**
+  String get playlistFolderDelete;
+
+  /// No description provided for @playlistFolderDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete group “{name}”? Playlists become ungrouped; nothing is deleted.'**
+  String playlistFolderDeleteConfirm(String name);
+
+  /// No description provided for @playlistFolderRenamed.
+  ///
+  /// In en, this message translates to:
+  /// **'Group renamed'**
+  String get playlistFolderRenamed;
+
+  /// No description provided for @playlistFolderDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Group deleted'**
+  String get playlistFolderDeleted;
+
+  /// No description provided for @playlistImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import playlist file'**
+  String get playlistImport;
+
+  /// No description provided for @playlistImportReviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm import'**
+  String get playlistImportReviewTitle;
+
+  /// No description provided for @playlistImportResolved.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} ready to import'**
+  String playlistImportResolved(int count);
+
+  /// No description provided for @playlistImportUnresolved.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} can\'t be imported'**
+  String playlistImportUnresolved(int count);
+
+  /// No description provided for @playlistImportConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Import {count} tracks'**
+  String playlistImportConfirm(int count);
+
+  /// No description provided for @playlistImportSkipNote.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} unrecognized tracks will be skipped'**
+  String playlistImportSkipNote(int count);
+
+  /// No description provided for @playlistImportDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {added} tracks; skipped {skipped}'**
+  String playlistImportDone(int added, int skipped);
+
+  /// No description provided for @playlistImportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t import'**
+  String get playlistImportFailed;
+
+  /// No description provided for @playlistImportReasonLocalUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'File is missing or unreadable'**
+  String get playlistImportReasonLocalUnavailable;
+
+  /// No description provided for @playlistImportReasonKeyUnresolved.
+  ///
+  /// In en, this message translates to:
+  /// **'Not found on this device'**
+  String get playlistImportReasonKeyUnresolved;
+
+  /// No description provided for @playlistImportReasonOnlineUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Only local files or Molia records are supported'**
+  String get playlistImportReasonOnlineUrl;
+
+  /// No description provided for @playlistImportReasonMalformed.
+  ///
+  /// In en, this message translates to:
+  /// **'The file has an invalid entry'**
+  String get playlistImportReasonMalformed;
+
+  /// No description provided for @playlistImportReasonNoLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'No file location'**
+  String get playlistImportReasonNoLocation;
+
+  /// No description provided for @queueSaveAsPlaylist.
+  ///
+  /// In en, this message translates to:
+  /// **'Save as playlist'**
+  String get queueSaveAsPlaylist;
+
+  /// No description provided for @queuePlaylistDefaultName.
+  ///
+  /// In en, this message translates to:
+  /// **'Current queue'**
+  String get queuePlaylistDefaultName;
+
+  /// No description provided for @queueSavedAsPlaylist.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved as “{name}”: {added} added, {skipped} skipped'**
+  String queueSavedAsPlaylist(String name, int added, int skipped);
+
+  /// No description provided for @queueSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save'**
+  String get queueSaveFailed;
 
   /// No description provided for @backButton.
   ///

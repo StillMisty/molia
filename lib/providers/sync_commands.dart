@@ -88,6 +88,12 @@ abstract interface class SyncNearbyCommands {
 abstract interface class SyncBackupCommands {
   Future<String> exportJson({bool includeCredentials = true});
 
+  /// 单个列表的全保真文件（列表 + 曲目 + 封面，不含设置 / 凭证）。
+  Future<String> exportPlaylistJson({
+    required String playlistSyncId,
+    String? coverKey,
+  });
+
   Future<SyncApplyOutcome> importJson(
     String json, {
     bool includeCredentials = true,

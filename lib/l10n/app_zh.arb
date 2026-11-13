@@ -472,7 +472,7 @@
   "playlistImportFromFile": "从 .lxmc 文件导入",
   "playlistImportFromLink": "从歌单 / 收藏夹链接导入",
   "playlistImportChannel": "平台",
-  "playlistImportEmpty": "歌单 / 收藏夹没有可导入的曲目",
+  "playlistImportEmpty": "没有可导入的曲目",
   "playlistImportedName": "导入的歌单",
   "discoverSectionTitle": "发现",
   "discoverLeaderboards": "热榜",
@@ -2456,6 +2456,139 @@
       }
     }
   },
+  "playlistDetails": "列表详情",
+  "playlistDescription": "描述",
+  "playlistDescriptionHint": "说说这个列表用来做什么",
+  "playlistFolder": "分组",
+  "playlistFolderHint": "留空表示不分组",
+  "playlistEditDetails": "编辑详情",
+  "playlistSaveDetailsFailed": "保存失败，列表没有改动",
+  "playlistCover": "列表封面",
+  "playlistCoverChange": "更换封面",
+  "playlistCoverReset": "移除封面",
+  "playlistCoverUpdated": "列表封面已更新",
+  "playlistCoverRestored": "已移除列表封面",
+  "playlistShare": "分享列表",
+  "playlistShareImage": "图片",
+  "playlistShareImageSubtitle": "封面拼图 + 列表信息",
+  "playlistShareText": "文本",
+  "playlistShareTextSubtitle": "纯文字曲目列表",
+  "playlistShareSaveImage": "保存图片",
+  "playlistShareCopyText": "复制文本",
+  "playlistShareCopied": "文本已复制",
+  "playlistShareGenerating": "正在生成图片…",
+  "playlistShareFailed": "图片生成失败，请重试",
+  "playlistShareEmpty": "这个列表还没有曲目",
+  "playlistShareMore": "还有 {count} 首",
+  "@playlistShareMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistExport": "导出列表",
+  "playlistExportM3u8": "播放列表文件（M3U8）",
+  "playlistExportM3u8Subtitle": "其它播放器也能打开",
+  "playlistExportMolia": "Molia 文件",
+  "playlistExportMoliaSubtitle": "保留完整曲目信息，仅 Molia 可读",
+  "playlistExportMoliaUnavailable": "当前不可用；先启用同步再导出",
+  "playlistExportSavedWithMissing": "已导出到 {path}；有 {count} 个文件已不在",
+  "@playlistExportSavedWithMissing": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistExportFailed": "导出失败",
+  "playlistDownloadSelected": "下载所选",
+  "playlistFolderRename": "重命名分组",
+  "playlistFolderNameRequired": "请输入分组名",
+  "playlistFolderNameTooLong": "分组名最多 40 个字符",
+  "playlistFolderNameInvalid": "分组名不能包含控制字符",
+  "playlistFolderDelete": "删除分组",
+  "playlistFolderDeleteConfirm": "删除分组「{name}」？列表会变成未分组，不会被删除。",
+  "@playlistFolderDeleteConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistFolderRenamed": "分组已重命名",
+  "playlistFolderDeleted": "分组已删除",
+  "playlistImport": "导入列表文件",
+  "playlistImportReviewTitle": "确认导入",
+  "playlistImportResolved": "{count} 首可导入",
+  "@playlistImportResolved": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistImportUnresolved": "{count} 首无法导入",
+  "@playlistImportUnresolved": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistImportConfirm": "导入 {count} 首",
+  "@playlistImportConfirm": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistImportSkipNote": "未识别的 {count} 首会被跳过",
+  "@playlistImportSkipNote": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistImportDone": "已导入 {added} 首，跳过 {skipped} 首",
+  "@playlistImportDone": {
+    "placeholders": {
+      "added": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "playlistImportFailed": "导入失败",
+  "playlistImportReasonLocalUnavailable": "文件不在本机或无法读取",
+  "playlistImportReasonKeyUnresolved": "本机找不到这首",
+  "playlistImportReasonOnlineUrl": "只支持本机文件或 Molia 记录",
+  "playlistImportReasonMalformed": "文件内容有误",
+  "playlistImportReasonNoLocation": "缺少文件地址",
+  "queueSaveAsPlaylist": "存为列表",
+  "queuePlaylistDefaultName": "当前队列",
+  "queueSavedAsPlaylist": "已存为「{name}」，加入 {added} 首，跳过 {skipped} 首",
+  "@queueSavedAsPlaylist": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "added": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "queueSaveFailed": "保存失败",
   "backButton": "返回",
   "localRefreshInfo": "从文件刷新信息",
   "localTitleUpdated": "标题已更新",

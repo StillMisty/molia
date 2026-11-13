@@ -73,6 +73,48 @@ class SyncBackup {
     return json;
   }
 
+  /// 导出单个列表的 `.molia.json`（列表记录 + 曲目记录 + 封面记录）。
+  ///
+  /// 外层仍是完整备份 envelope，因此可以被既有备份导入路径读回；导入按
+  /// `syncId` LWW 合并，重复导入不会造出第二个同名列表。文件不含设置、
+  /// 凭证、历史或统计。
+  Future<String> exportPlaylistJson({
+    required String playlistSyncId,
+    String? coverKey,
+  }) async {
+    final records = await _pipeline.collect({
+      SyncCategory.playlists,
+      SyncCategory.playlistTracks,
+      SyncCategory.covers,
+    }, fresh: true);
+    final filtered = <SyncCategory, List<SyncRecord>>{
+      SyncCategory.playlists: [
+        for (final record in records[SyncCategory.playlists] ?? const [])
+          if (record.key == playlistSyncId) record,
+      ],
+      SyncCategory.playlistTracks: [
+        for (final record in records[SyncCategory.playlistTracks] ?? const [])
+          if (record.data?['playlistSyncId'] == playlistSyncId) record,
+      ],
+      SyncCategory.covers: [
+        for (final record in records[SyncCategory.covers] ?? const [])
+          if (coverKey != null && record.key == coverKey) record,
+      ],
+    }..removeWhere((_, value) => value.isEmpty);
+    final json = const JsonEncoder.withIndent('  ').convert({
+      'kind': backupKind,
+      'v': backupVersion,
+      'producedAt': _nowMs(),
+      'envelope': _envelopeFrom(filtered).toJson(),
+    });
+    try {
+      onExported?.call();
+    } catch (e) {
+      _logger.warning('列表备份导出后的缓存释放失败', e);
+    }
+    return json;
+  }
+
   /// 导入完整备份：与本地数据逐键合并（LWW，不做整体覆盖）。
   ///
   /// 先收集本地现状更新登记，保证本地较新的改动不会被旧备份覆盖。
