@@ -2593,5 +2593,71 @@
   "localRefreshInfo": "从文件刷新信息",
   "localTitleUpdated": "标题已更新",
   "localFileRelocated": "文件已重新关联",
-  "localInfoUpdated": "信息已更新"
+  "localInfoUpdated": "信息已更新",
+  "settingsListeningSyncTitle": "听歌同步",
+  "settingsListeningSyncSubtitle": "把正在播放和播放记录发送到 ListenBrainz 或 Last.fm",
+  "listeningSyncTitle": "听歌同步",
+  "listeningSyncIntro": "默认关闭。连接后，只有你在这里开启的服务会收到播放记录。",
+  "listeningSyncMaster": "总开关",
+  "listeningSyncMasterSubtitle": "关闭后停止发送；已排队的记录保留，断开连接会清空",
+  "listeningSyncSentTitle": "会发送",
+  "listeningSyncSent": "歌曲名、歌手、专辑、时长、开始播放的时间，以及你的服务账号。",
+  "listeningSyncNotSent": "不会发送本地文件路径、歌单内容、设备标识或应用设置。",
+  "listeningSyncNetwork": "发送请求时，服务会看到你的网络地址。",
+  "listeningSyncConnect": "连接",
+  "listeningSyncDisconnect": "断开连接",
+  "listeningSyncDisconnectTitle": "断开 {name}？",
+  "listeningSyncDisconnectBody": "会删除本机保存的授权和这个服务待发送的记录。其它设备上的删除取决于同步设置。",
+  "listeningSyncConnectedAs": "已连接：{name}",
+  "listeningSyncDisconnected": "未连接",
+  "listeningSyncNeedsAuth": "需要重新授权",
+  "listeningSyncRetrying": "发送失败，稍后自动重试",
+  "listeningSyncError": "发送失败",
+  "listeningSyncQueued": "待发送 {count} 条",
+  "listeningSyncConsentTitle": "开启 {name} 的听歌同步？",
+  "listeningSyncConsentBody": "开启后会把上面列出的曲目信息和你的服务账号发送给该服务，请求也会让对方看到你的网络地址。你可以随时断开。",
+  "listeningSyncConsentAgree": "同意并开启",
+  "listeningSyncCancel": "取消",
+  "listeningSyncTokenTitle": "输入访问密码",
+  "listeningSyncTokenLabel": "访问密码",
+  "listeningSyncTokenHint": "在 ListenBrainz 的设置页复制",
+  "listeningSyncTokenInvalid": "访问密码无效，请检查后重试",
+  "listeningSyncTokenUnreachable": "暂时连不上 ListenBrainz，请检查网络后重试",
+  "listeningSyncLastFmNotConfigured": "这个版本没有内置 Last.fm 应用密钥，暂时无法连接",
+  "listeningSyncLastFmBegin": "在浏览器中授权",
+  "listeningSyncLastFmWaiting": "在浏览器完成授权后，回到这里确认",
+  "listeningSyncLastFmConfirm": "我已完成授权",
+  "listeningSyncLastFmFailed": "授权没有完成，请重试",
+  "listeningSyncLearnMoreListenBrainz": "了解 ListenBrainz",
+  "listeningSyncLearnMoreLastFm": "了解 Last.fm",
+  "@listeningSyncDisconnectTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@listeningSyncConnectedAs": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@listeningSyncQueued": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@listeningSyncConsentTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "listeningSyncUnavailable": "听歌同步还没有准备好，请稍后再试",
+  "listeningSyncConnected": "已连接"
 }

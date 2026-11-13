@@ -9,6 +9,7 @@ import '../models/play_mode.dart';
 import '../providers/lyrics_display_provider.dart';
 import '../providers/playback_provider.dart';
 import '../providers/sources_provider.dart';
+import '../services/scrobble/scrobble_service.dart';
 import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/update_provider.dart';
@@ -39,6 +40,7 @@ import 'lyrics_display/lyrics_content_settings_page.dart';
 import 'lyrics_display/system_media_lyrics_settings_page.dart';
 import 'play_statistics_page.dart';
 import 'shortcut_settings_page.dart';
+import 'listening_sync_page.dart';
 import 'sources_page.dart';
 import 'sync_settings_page.dart';
 import 'update_settings_page.dart';
@@ -596,6 +598,16 @@ class _SettingsPageState extends State<SettingsPage>
           subtitle: l10n.settingsSourcesItemSubtitle,
           onTap: () => openSettingsSubPage(context, const SourcesPage()),
         ),
+        // 听歌同步：一个入口覆盖 ListenBrainz / Last.fm，默认关闭。
+        if (context.watch<ScrobbleService?>() != null)
+          SettingsNavTile(
+            key: const Key('settingsListeningSyncItem'),
+            icon: Icons.sync_rounded,
+            title: l10n.settingsListeningSyncTitle,
+            subtitle: l10n.settingsListeningSyncSubtitle,
+            onTap: () =>
+                openSettingsSubPage(context, const ListeningSyncPage()),
+          ),
         // AI 推歌：配置与开启入口（模式生效后推荐流出在发现页）。
         SettingsNavTile(
           key: const Key('settingsAiDjItem'),

@@ -261,6 +261,20 @@ const kAiDjConsent = SettingsKey<bool>(
   category: SyncCategory.credentials,
 );
 
+// 凭证：听歌同步（开启 / 同意标记是设备本地决策，不登记、不随同步）
+const kListenBrainzToken = SettingsKey<String>(
+  'listenbrainz_token_v1',
+  '',
+  category: SyncCategory.credentials,
+  store: SettingsValueStore.secure,
+);
+const kLastFmSessionKey = SettingsKey<String>(
+  'lastfm_session_key_v1',
+  '',
+  category: SyncCategory.credentials,
+  store: SettingsValueStore.secure,
+);
+
 /// 全表（顺序即同步收集顺序）：组合根据此构造注册表，扫描测试据此核对键序。
 const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kThemeMode,
@@ -300,4 +314,6 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kAiDjApiKey,
   kAiDjModel,
   kAiDjConsent,
+  kListenBrainzToken,
+  kLastFmSessionKey,
 ];

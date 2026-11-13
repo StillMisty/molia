@@ -17,6 +17,7 @@ import 'catalog_stack.dart';
 import 'desktop_stack.dart';
 import 'library_stack.dart';
 import 'local_data_stack.dart';
+import 'scrobble_stack.dart';
 import 'startup_trace.dart';
 import 'sync_stack.dart';
 import 'update_stack.dart';
@@ -26,6 +27,7 @@ void initAfterFirstFrame({
   required CatalogStack catalog,
   required LocalDataStack local,
   required LibraryStack library,
+  required ScrobbleStack scrobble,
   required DesktopStack desktop,
   required AiStack ai,
   required UpdateStack update,
@@ -42,6 +44,15 @@ void initAfterFirstFrame({
   unawaited(
     ai.djProvider.init().whenComplete(
       () => markStartupStep('sub.ai.init（首帧后）', aiWatch),
+    ),
+  );
+
+  // 听歌同步：偏好 / 凭据 / 发件箱都在首帧后读；失败按「未连接」降级，
+  // 绝不阻断启动。
+  final scrobbleWatch = Stopwatch()..start();
+  unawaited(
+    scrobble.service.init().whenComplete(
+      () => markStartupStep('sub.scrobble.init（首帧后）', scrobbleWatch),
     ),
   );
 

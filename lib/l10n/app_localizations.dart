@@ -9597,6 +9597,234 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Info updated'**
   String get localInfoUpdated;
+
+  /// No description provided for @settingsListeningSyncTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening sync'**
+  String get settingsListeningSyncTitle;
+
+  /// No description provided for @settingsListeningSyncSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send what you play to ListenBrainz or Last.fm'**
+  String get settingsListeningSyncSubtitle;
+
+  /// No description provided for @listeningSyncTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening sync'**
+  String get listeningSyncTitle;
+
+  /// No description provided for @listeningSyncIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Off by default. After connecting, only the services you enable here receive your listening history.'**
+  String get listeningSyncIntro;
+
+  /// No description provided for @listeningSyncMaster.
+  ///
+  /// In en, this message translates to:
+  /// **'Master switch'**
+  String get listeningSyncMaster;
+
+  /// No description provided for @listeningSyncMasterSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Off stops sending; queued plays stay until you disconnect'**
+  String get listeningSyncMasterSubtitle;
+
+  /// No description provided for @listeningSyncSentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What is sent'**
+  String get listeningSyncSentTitle;
+
+  /// No description provided for @listeningSyncSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Track title, artist, album, duration, playback start time, and your account name on the service.'**
+  String get listeningSyncSent;
+
+  /// No description provided for @listeningSyncNotSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Local file paths, playlist contents, device identifiers, and app settings are never sent.'**
+  String get listeningSyncNotSent;
+
+  /// No description provided for @listeningSyncNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'The request necessarily shows your network address to the service.'**
+  String get listeningSyncNetwork;
+
+  /// No description provided for @listeningSyncConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect'**
+  String get listeningSyncConnect;
+
+  /// No description provided for @listeningSyncDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect'**
+  String get listeningSyncDisconnect;
+
+  /// No description provided for @listeningSyncDisconnectTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect {name}?'**
+  String listeningSyncDisconnectTitle(String name);
+
+  /// No description provided for @listeningSyncDisconnectBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This deletes the authorization saved on this device and any plays queued for this service. Other devices follow your sync settings.'**
+  String get listeningSyncDisconnectBody;
+
+  /// No description provided for @listeningSyncConnectedAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected as {name}'**
+  String listeningSyncConnectedAs(String name);
+
+  /// No description provided for @listeningSyncDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected'**
+  String get listeningSyncDisconnected;
+
+  /// No description provided for @listeningSyncNeedsAuth.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs authorization again'**
+  String get listeningSyncNeedsAuth;
+
+  /// No description provided for @listeningSyncRetrying.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending failed; retrying later'**
+  String get listeningSyncRetrying;
+
+  /// No description provided for @listeningSyncError.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending failed'**
+  String get listeningSyncError;
+
+  /// No description provided for @listeningSyncQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} waiting to send'**
+  String listeningSyncQueued(int count);
+
+  /// No description provided for @listeningSyncConsentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on listening sync for {name}?'**
+  String listeningSyncConsentTitle(String name);
+
+  /// No description provided for @listeningSyncConsentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Track details listed above and your account name are sent to this service, which will also see your network address. You can disconnect at any time.'**
+  String get listeningSyncConsentBody;
+
+  /// No description provided for @listeningSyncConsentAgree.
+  ///
+  /// In en, this message translates to:
+  /// **'Agree and turn on'**
+  String get listeningSyncConsentAgree;
+
+  /// No description provided for @listeningSyncCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get listeningSyncCancel;
+
+  /// No description provided for @listeningSyncTokenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter access password'**
+  String get listeningSyncTokenTitle;
+
+  /// No description provided for @listeningSyncTokenLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Access password'**
+  String get listeningSyncTokenLabel;
+
+  /// No description provided for @listeningSyncTokenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy it from your ListenBrainz settings'**
+  String get listeningSyncTokenHint;
+
+  /// No description provided for @listeningSyncTokenInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'That access password did not work. Check it and try again.'**
+  String get listeningSyncTokenInvalid;
+
+  /// No description provided for @listeningSyncTokenUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot reach ListenBrainz right now. Check your network and try again.'**
+  String get listeningSyncTokenUnreachable;
+
+  /// No description provided for @listeningSyncLastFmNotConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'This build has no Last.fm application key, so it cannot connect yet'**
+  String get listeningSyncLastFmNotConfigured;
+
+  /// No description provided for @listeningSyncLastFmBegin.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorize in browser'**
+  String get listeningSyncLastFmBegin;
+
+  /// No description provided for @listeningSyncLastFmWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish in the browser, then confirm here'**
+  String get listeningSyncLastFmWaiting;
+
+  /// No description provided for @listeningSyncLastFmConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'I finished authorizing'**
+  String get listeningSyncLastFmConfirm;
+
+  /// No description provided for @listeningSyncLastFmFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorization did not finish. Try again.'**
+  String get listeningSyncLastFmFailed;
+
+  /// No description provided for @listeningSyncLearnMoreListenBrainz.
+  ///
+  /// In en, this message translates to:
+  /// **'About ListenBrainz'**
+  String get listeningSyncLearnMoreListenBrainz;
+
+  /// No description provided for @listeningSyncLearnMoreLastFm.
+  ///
+  /// In en, this message translates to:
+  /// **'About Last.fm'**
+  String get listeningSyncLearnMoreLastFm;
+
+  /// No description provided for @listeningSyncUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening sync is not ready yet. Try again shortly.'**
+  String get listeningSyncUnavailable;
+
+  /// No description provided for @listeningSyncConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get listeningSyncConnected;
 }
 
 class _AppLocalizationsDelegate

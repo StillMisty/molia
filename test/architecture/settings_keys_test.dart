@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/settings_key.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/services/scrobble/scrobble_preferences.dart';
 
 /// 「一个键一个家」：登记键的名字字面量只准出现在 `settings_keys.dart`。
 ///
@@ -55,6 +56,34 @@ void main() {
           '登记键名只能在 lib/data/settings/settings_keys.dart 声明：\n'
           '${violations.join('\n')}',
     );
+  });
+
+  test('听歌同步的开关 / 同意标记不进登记表（设备本地）', () {
+    final registered = kAllSettingsKeys.map((key) => key.name).toSet();
+    const deviceLocal = [
+      ScrobblePreferences.keyMasterEnabled,
+      ScrobblePreferences.keyListenBrainzEnabled,
+      ScrobblePreferences.keyLastFmEnabled,
+      ScrobblePreferences.keyListenBrainzConsent,
+      ScrobblePreferences.keyLastFmConsent,
+      ScrobblePreferences.keyListenBrainzAccount,
+      ScrobblePreferences.keyLastFmAccount,
+    ];
+    for (final name in deviceLocal) {
+      expect(
+        registered,
+        isNot(contains(name)),
+        reason: '$name 是设备本地决策，不能被同步 / 备份改写',
+      );
+    }
+  });
+
+  test('听歌同步凭证是凭证类别的安全存储键', () {
+    for (final key in [kListenBrainzToken, kLastFmSessionKey]) {
+      expect(kAllSettingsKeys, contains(key));
+      expect(key.category, SyncCategory.credentials);
+      expect(key.store, SettingsValueStore.secure);
+    }
   });
 
   test('登记键名唯一', () {

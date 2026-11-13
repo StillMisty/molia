@@ -5165,4 +5165,129 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get localInfoUpdated => '信息已更新';
+
+  @override
+  String get settingsListeningSyncTitle => '听歌同步';
+
+  @override
+  String get settingsListeningSyncSubtitle =>
+      '把正在播放和播放记录发送到 ListenBrainz 或 Last.fm';
+
+  @override
+  String get listeningSyncTitle => '听歌同步';
+
+  @override
+  String get listeningSyncIntro => '默认关闭。连接后，只有你在这里开启的服务会收到播放记录。';
+
+  @override
+  String get listeningSyncMaster => '总开关';
+
+  @override
+  String get listeningSyncMasterSubtitle => '关闭后停止发送；已排队的记录保留，断开连接会清空';
+
+  @override
+  String get listeningSyncSentTitle => '会发送';
+
+  @override
+  String get listeningSyncSent => '歌曲名、歌手、专辑、时长、开始播放的时间，以及你的服务账号。';
+
+  @override
+  String get listeningSyncNotSent => '不会发送本地文件路径、歌单内容、设备标识或应用设置。';
+
+  @override
+  String get listeningSyncNetwork => '发送请求时，服务会看到你的网络地址。';
+
+  @override
+  String get listeningSyncConnect => '连接';
+
+  @override
+  String get listeningSyncDisconnect => '断开连接';
+
+  @override
+  String listeningSyncDisconnectTitle(String name) {
+    return '断开 $name？';
+  }
+
+  @override
+  String get listeningSyncDisconnectBody =>
+      '会删除本机保存的授权和这个服务待发送的记录。其它设备上的删除取决于同步设置。';
+
+  @override
+  String listeningSyncConnectedAs(String name) {
+    return '已连接：$name';
+  }
+
+  @override
+  String get listeningSyncDisconnected => '未连接';
+
+  @override
+  String get listeningSyncNeedsAuth => '需要重新授权';
+
+  @override
+  String get listeningSyncRetrying => '发送失败，稍后自动重试';
+
+  @override
+  String get listeningSyncError => '发送失败';
+
+  @override
+  String listeningSyncQueued(int count) {
+    return '待发送 $count 条';
+  }
+
+  @override
+  String listeningSyncConsentTitle(String name) {
+    return '开启 $name 的听歌同步？';
+  }
+
+  @override
+  String get listeningSyncConsentBody =>
+      '开启后会把上面列出的曲目信息和你的服务账号发送给该服务，请求也会让对方看到你的网络地址。你可以随时断开。';
+
+  @override
+  String get listeningSyncConsentAgree => '同意并开启';
+
+  @override
+  String get listeningSyncCancel => '取消';
+
+  @override
+  String get listeningSyncTokenTitle => '输入访问密码';
+
+  @override
+  String get listeningSyncTokenLabel => '访问密码';
+
+  @override
+  String get listeningSyncTokenHint => '在 ListenBrainz 的设置页复制';
+
+  @override
+  String get listeningSyncTokenInvalid => '访问密码无效，请检查后重试';
+
+  @override
+  String get listeningSyncTokenUnreachable => '暂时连不上 ListenBrainz，请检查网络后重试';
+
+  @override
+  String get listeningSyncLastFmNotConfigured => '这个版本没有内置 Last.fm 应用密钥，暂时无法连接';
+
+  @override
+  String get listeningSyncLastFmBegin => '在浏览器中授权';
+
+  @override
+  String get listeningSyncLastFmWaiting => '在浏览器完成授权后，回到这里确认';
+
+  @override
+  String get listeningSyncLastFmConfirm => '我已完成授权';
+
+  @override
+  String get listeningSyncLastFmFailed => '授权没有完成，请重试';
+
+  @override
+  String get listeningSyncLearnMoreListenBrainz => '了解 ListenBrainz';
+
+  @override
+  String get listeningSyncLearnMoreLastFm => '了解 Last.fm';
+
+  @override
+  String get listeningSyncUnavailable => '听歌同步还没有准备好，请稍后再试';
+
+  @override
+  String get listeningSyncConnected => '已连接';
 }

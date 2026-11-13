@@ -2989,5 +2989,71 @@
   "localRefreshInfo": "Refresh info from file",
   "localTitleUpdated": "Title updated",
   "localFileRelocated": "File re-linked",
-  "localInfoUpdated": "Info updated"
+  "localInfoUpdated": "Info updated",
+  "settingsListeningSyncTitle": "Listening sync",
+  "settingsListeningSyncSubtitle": "Send what you play to ListenBrainz or Last.fm",
+  "listeningSyncTitle": "Listening sync",
+  "listeningSyncIntro": "Off by default. After connecting, only the services you enable here receive your listening history.",
+  "listeningSyncMaster": "Master switch",
+  "listeningSyncMasterSubtitle": "Off stops sending; queued plays stay until you disconnect",
+  "listeningSyncSentTitle": "What is sent",
+  "listeningSyncSent": "Track title, artist, album, duration, playback start time, and your account name on the service.",
+  "listeningSyncNotSent": "Local file paths, playlist contents, device identifiers, and app settings are never sent.",
+  "listeningSyncNetwork": "The request necessarily shows your network address to the service.",
+  "listeningSyncConnect": "Connect",
+  "listeningSyncDisconnect": "Disconnect",
+  "listeningSyncDisconnectTitle": "Disconnect {name}?",
+  "listeningSyncDisconnectBody": "This deletes the authorization saved on this device and any plays queued for this service. Other devices follow your sync settings.",
+  "listeningSyncConnectedAs": "Connected as {name}",
+  "listeningSyncDisconnected": "Not connected",
+  "listeningSyncNeedsAuth": "Needs authorization again",
+  "listeningSyncRetrying": "Sending failed; retrying later",
+  "listeningSyncError": "Sending failed",
+  "listeningSyncQueued": "{count} waiting to send",
+  "listeningSyncConsentTitle": "Turn on listening sync for {name}?",
+  "listeningSyncConsentBody": "Track details listed above and your account name are sent to this service, which will also see your network address. You can disconnect at any time.",
+  "listeningSyncConsentAgree": "Agree and turn on",
+  "listeningSyncCancel": "Cancel",
+  "listeningSyncTokenTitle": "Enter access password",
+  "listeningSyncTokenLabel": "Access password",
+  "listeningSyncTokenHint": "Copy it from your ListenBrainz settings",
+  "listeningSyncTokenInvalid": "That access password did not work. Check it and try again.",
+  "listeningSyncTokenUnreachable": "Cannot reach ListenBrainz right now. Check your network and try again.",
+  "listeningSyncLastFmNotConfigured": "This build has no Last.fm application key, so it cannot connect yet",
+  "listeningSyncLastFmBegin": "Authorize in browser",
+  "listeningSyncLastFmWaiting": "Finish in the browser, then confirm here",
+  "listeningSyncLastFmConfirm": "I finished authorizing",
+  "listeningSyncLastFmFailed": "Authorization did not finish. Try again.",
+  "listeningSyncLearnMoreListenBrainz": "About ListenBrainz",
+  "listeningSyncLearnMoreLastFm": "About Last.fm",
+  "@listeningSyncDisconnectTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@listeningSyncConnectedAs": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@listeningSyncQueued": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@listeningSyncConsentTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "listeningSyncUnavailable": "Listening sync is not ready yet. Try again shortly.",
+  "listeningSyncConnected": "Connected"
 }
