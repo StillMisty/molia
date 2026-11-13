@@ -37,6 +37,7 @@ import '../theme/animated_scheme.dart';
 import '../theme/app_theme.dart';
 import '../theme/motion_policy.dart';
 import '../utils/responsive.dart';
+import '../widgets/adaptive_layout.dart';
 import '../widgets/cover_fallback.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/global_search_overlay.dart';
@@ -661,8 +662,6 @@ class _MyAppState extends State<MyApp>
 
   @override
   Widget build(BuildContext context) {
-    final shellLayout = context.layoutType(ResponsivePageType.shell);
-    final isLargeScreen = shellLayout.preferTwoPane;
     final l10n = AppLocalizations.of(context)!;
     final visibleDestinations = context
         .watch<NavProvider>()
@@ -688,25 +687,28 @@ class _MyAppState extends State<MyApp>
     // 桌面布局值在这里解析一次（窗口宽 / 平台位），页面与骨架只消费
     // （见 `widgets/desktop_layout.dart`）。
     if (_desktopShell) {
-      return DesktopLayout.scope(
+      return AdaptiveLayoutScope.scope(
         context,
-        child: DesktopShell(
-          chrome: chrome,
-          pageStack: _buildPageStack(),
-          morph: _morph,
-          // 搜索遮罩：入口（品牌区 / Ctrl+F）与「查看全部结果」分别接线。
-          // 后者落在资料库目的地：完整结果（分段 / 分页 / 歌手链接）在那里，
-          // 且共用同一个 SearchProvider 实例。
-          onViewAllResults: _openLibrarySearch,
-          onOpenSearch: _openGlobalSearch,
-          // 全局快捷键：Ctrl+F 打开搜索遮罩、Ctrl+1/2/3 切可见目的地，
-          // DesktopShell 只负责在顶层监听按键，落点由壳层回调决定。
-          searchController: _globalSearch,
-          onSelectDestinationIndex: _selectVisibleDestinationAt,
-          // 队列入口（底栏按钮）与 Esc 的「关闭队列」都要落回播放页右栏，
-          // 由壳层持有控制器后分发。
-          onOpenQueue: _openQueue,
-          onCloseQueuePanel: _closeQueuePanel,
+        child: DesktopLayout.scope(
+          context,
+          child: DesktopShell(
+            chrome: chrome,
+            pageStack: _buildPageStack(),
+            morph: _morph,
+            // 搜索遮罩：入口（品牌区 / Ctrl+F）与「查看全部结果」分别接线。
+            // 后者落在资料库目的地：完整结果（分段 / 分页 / 歌手链接）在那里，
+            // 且共用同一个 SearchProvider 实例。
+            onViewAllResults: _openLibrarySearch,
+            onOpenSearch: _openGlobalSearch,
+            // 全局快捷键：Ctrl+F 打开搜索遮罩、Ctrl+1/2/3 切可见目的地，
+            // DesktopShell 只负责在顶层监听按键，落点由壳层回调决定。
+            searchController: _globalSearch,
+            onSelectDestinationIndex: _selectVisibleDestinationAt,
+            // 队列入口（底栏按钮）与 Esc 的「关闭队列」都要落回播放页右栏，
+            // 由壳层持有控制器后分发。
+            onOpenQueue: _openQueue,
+            onCloseQueuePanel: _closeQueuePanel,
+          ),
         ),
       );
     }
@@ -741,43 +743,48 @@ class _MyAppState extends State<MyApp>
       ),
     );
 
-    return DesktopLayout.scope(
+    final adaptive = AdaptiveLayoutScope.of(context);
+    final useRail = adaptive.usesNavigationRail;
+    return AdaptiveLayoutScope.scope(
       context,
-      child: Scaffold(
-        appBar: appBar,
-        body: Row(
-          children: [
-            if (isLargeScreen)
-              M3ENavigationRail(
-                // 固定 96dp 窄轨（alwaysCollapse）：无展开按钮、不可展开；
-                // 标签常显，替代 Material 侧 hover 才出现的 tooltip。
-                type: M3ENavigationRailType.alwaysCollapse,
-                selectedIndex: selectedIndex,
-                onDestinationSelected: chrome.selectDestinationAt,
-                sections: [
-                  M3ENavigationRailSection(
-                    destinations: chrome.railDestinations(),
-                  ),
-                ],
-              ),
-            Expanded(child: _buildPageStack()),
-          ],
-        ),
-        bottomNavigationBar: isLargeScreen
-            ? null
-            : SafeArea(
-                bottom: false,
-                child: M3ENavigationBar(
-                  // iOS 使用紧凑高度（M3E 最小档 64）。
-                  size: defaultTargetPlatform == TargetPlatform.iOS
-                      ? M3ENavBarSize.small
-                      : M3ENavBarSize.medium,
-                  labelBehavior: M3ENavBarLabelBehavior.alwaysShow,
+      child: DesktopLayout.scope(
+        context,
+        child: Scaffold(
+          appBar: appBar,
+          body: Row(
+            children: [
+              if (useRail)
+                M3ENavigationRail(
+                  // 固定 96dp 窄轨（alwaysCollapse）：无展开按钮、不可展开；
+                  // 标签常显，替代 Material 侧 hover 才出现的 tooltip。
+                  type: M3ENavigationRailType.alwaysCollapse,
                   selectedIndex: selectedIndex,
                   onDestinationSelected: chrome.selectDestinationAt,
-                  destinations: chrome.barDestinations(),
+                  sections: [
+                    M3ENavigationRailSection(
+                      destinations: chrome.railDestinations(),
+                    ),
+                  ],
                 ),
-              ),
+              Expanded(child: _buildPageStack()),
+            ],
+          ),
+          bottomNavigationBar: useRail
+              ? null
+              : SafeArea(
+                  bottom: false,
+                  child: M3ENavigationBar(
+                    // iOS 使用紧凑高度（M3E 最小档 64）。
+                    size: defaultTargetPlatform == TargetPlatform.iOS
+                        ? M3ENavBarSize.small
+                        : M3ENavBarSize.medium,
+                    labelBehavior: M3ENavBarLabelBehavior.alwaysShow,
+                    selectedIndex: selectedIndex,
+                    onDestinationSelected: chrome.selectDestinationAt,
+                    destinations: chrome.barDestinations(),
+                  ),
+                ),
+        ),
       ),
     );
   }

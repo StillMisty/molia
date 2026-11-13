@@ -60,7 +60,8 @@ class DesktopLayout extends InheritedWidget {
 
   /// 页面级桌面增强（窗口宽语义）：桌面平台 + 窗口宽 ≥ [Breakpoints.desktop]。
   ///
-  /// 消费方：设置首屏两列（窄窗回单列）。阈值只维护在这里，页面不自推。
+  /// 结构决策（设置两列 / 分栏 / 宽播放页）已迁到 `AdaptiveLayoutScope`；
+  /// 本字段只保留给「桌面平台特有」的增强，不再作为页面结构的唯一判据。
   bool get masterDetail =>
       isDesktopPlatform && windowWidth >= Breakpoints.desktop;
 

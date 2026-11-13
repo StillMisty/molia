@@ -59,6 +59,7 @@ import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/responsive.dart';
+import '../widgets/adaptive_layout.dart';
 import '../utils/collection_row_query.dart';
 import '../utils/download_failure_label.dart';
 import '../utils/file_name.dart';
@@ -1199,7 +1200,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
       ],
     );
 
-    final twoPane = context.layoutType(ResponsivePageType.browse).preferTwoPane;
+    final twoPane = collectionsUseSplitLayout(
+      AdaptiveLayoutScope.of(context).sizeClass,
+    );
     final body = mode == CollectionMode.songs
         ? listColumn
         : _buildBrowsePage(
@@ -1213,6 +1216,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         ? Row(
             children: [
               SizedBox(
+                key: const Key('collectionSplitView'),
                 width: DesktopLayout.collectionSidePaneWidth,
                 child: _buildCollectionSidePane(
                   context,

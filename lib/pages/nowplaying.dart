@@ -4,7 +4,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 import 'package:molia/services/haptics.dart';
-import 'package:molia/utils/responsive.dart';
+import 'package:molia/widgets/adaptive_layout.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/queue.dart';
 import 'package:molia/widgets/lyrics.dart';
@@ -364,9 +364,9 @@ class _NowPlayingState extends State<NowPlaying>
       _cachedPages = null;
     }
 
-    _cachedIsLargeScreen ??= context
-        .layoutType(ResponsivePageType.shell)
-        .preferTwoPane;
+    _cachedIsLargeScreen ??= usesWideNowPlayingLayout(
+      AdaptiveLayoutScope.of(context).sizeClass,
+    );
     return _cachedIsLargeScreen!;
   }
 
@@ -488,6 +488,7 @@ class _NowPlayingState extends State<NowPlaying>
     required bool shellVisible,
   }) {
     return Scaffold(
+      key: const Key('wideNowPlayingLayout'),
       body: Row(
         children: [
           Expanded(
@@ -670,9 +671,10 @@ class _NowPlayingState extends State<NowPlaying>
       return _buildCollapsedLargeLayout(context, shellVisible: shellVisible);
     }
 
-    // 小屏：播放器高度随展开进度连续插值，
+    // 小屏 / 中屏：播放器高度随展开进度连续插值，
     // 下方是歌词/队列圆点切换行与内容区。
     return Scaffold(
+      key: const Key('singlePaneNowPlaying'),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final double playerMaxHeight = max(

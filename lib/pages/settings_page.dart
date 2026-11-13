@@ -24,9 +24,9 @@ import '../utils/color_hex.dart';
 import '../utils/data_saver_subtitle.dart';
 import '../utils/responsive.dart';
 import '../utils/source_quality_label.dart';
+import '../widgets/adaptive_layout.dart';
 import '../widgets/app_color_picker.dart';
 import '../widgets/cover_picker_sheet.dart';
-import '../widgets/desktop_layout.dart';
 import '../widgets/font_picker_sheet.dart';
 import '../widgets/settings/playback_details_section.dart';
 import '../widgets/settings/settings_section_grid.dart';
@@ -48,7 +48,7 @@ import 'update_settings_page.dart';
 /// 宽屏设置弹层宽度（首屏两列画布上限）。
 ///
 /// 弹层宿主在 `widgets/settings/settings_sheet.dart` 用同一常量封顶弹层宽度；
-/// 两列启用判据由壳层解析的 `DesktopLayout.masterDetail` 给出
+/// 两列启用判据由壳层解析的宽度档位（expanded）给出
 /// （见 desktop_layout.dart）；列宽不随窗口继续变宽，子页是长表单保持单列。
 const double kSettingsSheetDesktopWidth = 880;
 
@@ -108,9 +108,9 @@ class _SettingsPageState extends State<SettingsPage>
     final sources = context.read<SourcesProvider?>();
     final lyricsDisplay = context.watch<LyricsDisplayProvider?>();
     // 两列流式需要比单列舒适行宽（`maxWidth`）更宽的画布：上限取设置弹层
-    // 宽度，两列各占约半宽；单列沿用 `maxWidth` 不变。判据由壳层解析的
-    // DesktopLayout 给出（`masterDetail` 的当前消费方只此一处）。
-    final twoColumn = DesktopLayout.of(context).masterDetail;
+    // 宽度，两列各占约半宽；单列沿用 `maxWidth` 不变。判据只由宽度档位
+    // （expanded）给出，不看桌面平台标记。
+    final twoColumn = AdaptiveLayoutScope.of(context).isExpanded;
 
     return Container(
       padding: ResponsivePadding.horizontal(
