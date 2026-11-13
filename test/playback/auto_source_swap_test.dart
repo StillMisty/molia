@@ -11,6 +11,7 @@ import 'package:molia/playback/playback_commands.dart';
 import 'package:molia/playback/playback_error_recovery.dart';
 import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/diagnostics/failure_ring_buffer.dart';
 import 'package:molia/services/playback_session_store.dart';
 import 'package:molia/services/source_swap/source_swap_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -43,6 +44,27 @@ class _RecordingCoordinator extends PlaybackSessionCoordinator {
   ) {
     replacedUris.add(trackUri);
     return super.replaceQueueTrack(trackUri, newTrack);
+  }
+}
+
+/// 记录失败边界写入次数（去重用例）。
+class _RecordingFailures implements FailureRecorder {
+  final List<DiagnosticFailureRecord> records = [];
+
+  @override
+  void recordFailure({
+    required SourceFailure failure,
+    required String channelKey,
+    required String channelDisplayName,
+  }) {
+    records.add(
+      DiagnosticFailureRecord(
+        at: DateTime(2026, 1, 1),
+        channelKey: channelKey,
+        channelDisplayName: channelDisplayName,
+        kind: failure.kind,
+      ),
+    );
   }
 }
 
@@ -408,6 +430,7 @@ void main() {
     buildRecovery({
       Future<Track?> Function(Track seed, Set<String> exclude)? resolver,
       SourceSwapSettings? swapSettings,
+      FailureRecorder? failures,
       int provenanceCap = 64,
     }) {
       final commands = _RecordingCommands();
@@ -430,6 +453,7 @@ void main() {
         onAutoSourceSwapped: (oldTrack, newTrack) async {
           swapped.add((oldTrack, newTrack));
         },
+        failures: failures,
         provenanceCap: provenanceCap,
       );
       return (
@@ -441,6 +465,40 @@ void main() {
         swapped: swapped,
       );
     }
+
+    test('resolve 失败只由播放边界记录一次', () async {
+      final recorder = _RecordingFailures();
+      final source = FakeMusicSource('fake')
+        ..onResolve = (_, _) => Future.error(networkFailure);
+      final catalog = CatalogService(
+        registry: FakeSourceRegistry({'fake': source}),
+        failures: recorder,
+      );
+      final failing = track('fake', 'a');
+      await expectLater(
+        catalog.resolve(failing),
+        throwsA(isA<SourceFailure>()),
+      );
+      expect(recorder.records, isEmpty, reason: '目录边界不再记录 resolve');
+
+      final h = buildRecovery(failures: recorder);
+      h.box.value = failureSnapshot(failing);
+      h.recovery.onPlaybackError(h.box.value);
+      expect(recorder.records, hasLength(1));
+    });
+
+    test('同一失败重复通知只写入一次最近失败', () {
+      final recorder = _RecordingFailures();
+      final failing = track('fake', 'a');
+      final h = buildRecovery(failures: recorder);
+      h.box.value = failureSnapshot(failing);
+
+      h.recovery.onPlaybackError(h.box.value);
+      h.recovery.onPlaybackError(h.box.value);
+      h.recovery.onPlaybackError(h.box.value);
+
+      expect(recorder.records, hasLength(1));
+    });
 
     test('同一曲目只同源重试一次，切音质后重新允许', () async {
       final failing = track('fake', 'a');

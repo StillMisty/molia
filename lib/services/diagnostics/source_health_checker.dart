@@ -7,8 +7,17 @@ library;
 
 import 'dart:async';
 
+import '../../domain/models/diagnostics.dart';
 import '../../domain/models/failure.dart';
 import '../../domain/models/track.dart';
+
+export '../../domain/models/diagnostics.dart'
+    show
+        HealthChannelResult,
+        HealthFailure,
+        HealthRun,
+        HealthStepResult,
+        HealthStepStatus;
 
 /// 一个可探测渠道（只含展示所需的公开字段）。
 class SourceHealthTarget {
@@ -35,102 +44,6 @@ abstract interface class SourceHealthProbe {
 
   /// 对搜索结果中的一首曲目取一次播放链接；失败抛任意异常。
   Future<void> resolve(SourceHealthTarget target, Track track);
-}
-
-/// 单步（搜索或取链）结果。
-enum HealthStepStatus { ok, empty, failed, skipped }
-
-/// 健康检查失败的类型化投影：只保留 kind / l10nKey / retryable。
-///
-/// 刻意不持有 [SourceFailure.message] 或 cause：结果会进入设置页与诊断包，
-/// 原始异常文本可能带响应正文 / URL。
-class HealthFailure {
-  const HealthFailure({
-    required this.kind,
-    this.l10nKey,
-    this.retryable = false,
-  });
-
-  factory HealthFailure.from(SourceFailure failure) => HealthFailure(
-    kind: failure.kind,
-    l10nKey: failure.l10nKey,
-    retryable: failure.retryable,
-  );
-
-  final FailureKind kind;
-  final String? l10nKey;
-  final bool retryable;
-
-  @override
-  String toString() => 'HealthFailure(${kind.name})';
-}
-
-class HealthStepResult {
-  const HealthStepResult({
-    required this.status,
-    required this.latencyMs,
-    this.failure,
-  });
-
-  final HealthStepStatus status;
-  final int latencyMs;
-  final HealthFailure? failure;
-
-  bool get isOk => status == HealthStepStatus.ok;
-}
-
-/// 单渠道检查结果。
-class HealthChannelResult {
-  const HealthChannelResult({
-    required this.channelKey,
-    required this.channelDisplayName,
-    required this.search,
-    required this.latencyMs,
-    this.resolve,
-  });
-
-  final String channelKey;
-  final String channelDisplayName;
-  final HealthStepResult search;
-  final HealthStepResult? resolve;
-  final int latencyMs;
-
-  /// 用户可读的结论：取链失败优先于搜索空结果。
-  HealthStepStatus get overallStatus {
-    if (search.status == HealthStepStatus.failed) return search.status;
-    final resolve = this.resolve;
-    if (resolve != null && resolve.status == HealthStepStatus.failed) {
-      return resolve.status;
-    }
-    if (search.status == HealthStepStatus.empty) return search.status;
-    return HealthStepStatus.ok;
-  }
-}
-
-/// 一次手动检查（完成或取消）。
-class HealthRun {
-  HealthRun({
-    required this.startedAt,
-    required List<HealthChannelResult> results,
-    this.finishedAt,
-    this.cancelled = false,
-  }) : results = List<HealthChannelResult>.unmodifiable(results);
-
-  final DateTime startedAt;
-  final DateTime? finishedAt;
-  final bool cancelled;
-  final List<HealthChannelResult> results;
-
-  HealthRun copyWith({
-    DateTime? finishedAt,
-    bool? cancelled,
-    List<HealthChannelResult>? results,
-  }) => HealthRun(
-    startedAt: startedAt,
-    finishedAt: finishedAt ?? this.finishedAt,
-    cancelled: cancelled ?? this.cancelled,
-    results: results ?? this.results,
-  );
 }
 
 /// 检查器配置（常量集中，便于测试压短）。

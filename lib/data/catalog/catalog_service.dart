@@ -119,6 +119,9 @@ class CatalogService {
           () => _guardSourceCall(
             track.id.sourceKey,
             () => source.resolve(track, preferredQuality: quality),
+            // 取链失败会经播放链路到达 PlaybackErrorRecovery；那里统一记录，
+            // 避免同一失败在目录与播放两个边界各记一次。
+            recordFailure: false,
           ),
           fields: () => {
             'source': track.id.sourceKey,
@@ -212,17 +215,20 @@ class CatalogService {
   /// 归一化音源调用异常；[SourceFailure] 幂等透传。
   Future<T> _guardSourceCall<T>(
     String sourceKey,
-    Future<T> Function() call,
-  ) async {
+    Future<T> Function() call, {
+    bool recordFailure = true,
+  }) async {
     try {
       return await call();
     } catch (e) {
       final failure = SourceFailure.from(e);
-      _failures?.recordFailure(
-        failure: failure,
-        channelKey: sourceKey,
-        channelDisplayName: _displayNameFor(sourceKey),
-      );
+      if (recordFailure) {
+        _failures?.recordFailure(
+          failure: failure,
+          channelKey: sourceKey,
+          channelDisplayName: _displayNameFor(sourceKey),
+        );
+      }
       throw failure;
     }
   }

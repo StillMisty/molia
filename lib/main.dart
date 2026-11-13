@@ -207,12 +207,6 @@ void main() async {
 
   // ① 音源与目录（设置注册表 → SourceManager → 目录/评论/专辑/歌手）。
   final catalog = buildCatalogStack(failures: diagnostics.failures);
-  // 健康检查探针依赖目录服务：catalog 建好后挂到同一个诊断服务上。
-  diagnostics.service.attachHealth(
-    SourceHealthChecker(
-      probe: CatalogSourceHealthProbe(registry: catalog.sourceRegistry),
-    ),
-  );
   // 主库预热：播放会话首帧前就要读（恢复态可见），提前与本地数据 / 资料库
   // 并行开库。Windows 首次启动的旧库复制 + v1→v2 迁移是一次性成本，单独埋点。
   final dbPrewarmWatch = Stopwatch()..start();
@@ -236,6 +230,18 @@ void main() async {
   ).wait;
   await databasePrewarm;
   _markStartup('本地数据/资料库栈', startup);
+  // 健康检查探针依赖目录服务与省流上限：两者都就绪后挂到同一个诊断服务上。
+  // 偏好音质直接读正常播放同源的 `dataSaver × sourceManager`，不另建配置。
+  diagnostics.service.attachHealth(
+    SourceHealthChecker(
+      probe: CatalogSourceHealthProbe(
+        registry: catalog.sourceRegistry,
+        preferredQuality: () => local.dataSaver.effectiveQuality(
+          catalog.sourceManager.preferredQuality,
+        ),
+      ),
+    ),
+  );
   // ④ 播放链路 + provider + 观察者 + 系统媒体会话。
   final playback = await buildPlaybackStack(
     catalog: catalog,

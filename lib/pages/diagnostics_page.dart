@@ -5,12 +5,10 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/diagnostics.dart';
 import '../domain/models/failure.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/diagnostics_provider.dart';
-import '../services/diagnostics/failure_ring_buffer.dart';
-import '../services/diagnostics/log_file_sink.dart';
-import '../services/diagnostics/source_health_checker.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
 import '../utils/save_as_label.dart';
@@ -41,17 +39,30 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = context.watch<DiagnosticsProvider>();
+    // 每个分区独立监听：健康检查逐条到达时只重建渠道段，不重建整页。
+    final provider = context.read<DiagnosticsProvider>();
     return SettingsSubPage(
       title: l10n.diagnosticsTitle,
       children: [
-        _overview(context, l10n, provider),
+        ListenableBuilder(
+          listenable: provider,
+          builder: (context, _) => _overview(context, l10n, provider),
+        ),
         const SizedBox(height: kSettingsSectionSpacing),
-        _recentIssues(context, l10n, provider),
+        ListenableBuilder(
+          listenable: provider,
+          builder: (context, _) => _recentIssues(context, l10n, provider),
+        ),
         const SizedBox(height: kSettingsSectionSpacing),
-        _channelCheck(context, l10n, provider),
+        ListenableBuilder(
+          listenable: provider,
+          builder: (context, _) => _channelCheck(context, l10n, provider),
+        ),
         const SizedBox(height: kSettingsSectionSpacing),
-        _exportSection(context, l10n, provider),
+        ListenableBuilder(
+          listenable: provider,
+          builder: (context, _) => _exportSection(context, l10n, provider),
+        ),
       ],
     );
   }
@@ -193,8 +204,13 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
                     M3EProgressIndicator.circular(size: 16, strokeWidth: 2),
                     const SizedBox(width: 8),
                   ],
-                  Text(
-                    running ? l10n.diagnosticsChannelCheckRunning : actionLabel,
+                  Semantics(
+                    liveRegion: running,
+                    child: Text(
+                      running
+                          ? l10n.diagnosticsChannelCheckRunning
+                          : actionLabel,
+                    ),
                   ),
                 ],
               ),

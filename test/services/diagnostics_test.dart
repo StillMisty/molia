@@ -14,7 +14,10 @@ import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/services/diagnostics/app_info.dart';
 import 'package:molia/services/diagnostics/diagnostics_bundle.dart';
+import 'package:molia/services/diagnostics/diagnostics_export.dart';
+import 'package:molia/services/diagnostics/diagnostics_service.dart';
 import 'package:molia/services/diagnostics/failure_ring_buffer.dart';
 import 'package:molia/services/diagnostics/log_file_sink.dart';
 import 'package:molia/services/diagnostics/redaction.dart';
@@ -246,6 +249,64 @@ void main() {
         recorder.records.single.toString().contains('fake search failure'),
         isFalse,
       );
+    });
+
+    test('resolve 失败不在目录边界记录（留给播放边界记录一次）', () async {
+      final recorder = _RecordingFailures();
+      final source =
+          FakeMusicSource(
+              'kw',
+              capabilities: const SourceCapabilities(
+                search: true,
+                resolveUrl: true,
+              ),
+            )
+            ..onResolve = (_, _) => Future.error(
+              const SourceFailure(
+                kind: FailureKind.network,
+                message: 'resolve boom',
+              ),
+            );
+      final catalog = CatalogService(
+        registry: FakeSourceRegistry({'kw': source}),
+        failures: recorder,
+      );
+      final track = Track(
+        id: const TrackId('kw', '1'),
+        title: 'Song',
+        origin: TrackOrigin.builtin,
+      );
+      await expectLater(catalog.resolve(track), throwsA(isA<SourceFailure>()));
+      expect(recorder.records, isEmpty);
+    });
+
+    test('健康检查取链使用当前偏好音质', () async {
+      final source = FakeMusicSource(
+        'kw',
+        capabilities: const SourceCapabilities(search: true, resolveUrl: true),
+      )..resolveUrl = 'https://example.test/a.mp3';
+      final probe = CatalogSourceHealthProbe(
+        registry: FakeSourceRegistry({'kw': source}),
+        preferredQuality: () => '128k',
+      );
+      final track = Track(
+        id: const TrackId('kw', '1'),
+        title: 'Song',
+        origin: TrackOrigin.builtin,
+        qualities: const [
+          AudioQuality(type: '320k'),
+          AudioQuality(type: '128k'),
+        ],
+      );
+      await probe.resolve(
+        const SourceHealthTarget(
+          key: 'kw',
+          displayName: '酷我',
+          canResolve: true,
+        ),
+        track,
+      );
+      expect(source.lastResolveQuality?.type, '128k');
     });
 
     test('健康检查目标只含启用且可搜索的渠道', () {
@@ -502,6 +563,68 @@ void main() {
       expect(text, contains('The local log directory could not be read.'));
     });
 
+    test('健康检查段落包含类型化 l10n key', () {
+      final data = DiagnosticsBundleData(
+        generatedAt: DateTime(2026, 11, 14),
+        timezoneOffset: Duration.zero,
+        app: const DiagnosticsAppInfo(),
+        settings: const DiagnosticsSettingsSnapshot(),
+        sources: const DiagnosticsSourcesSnapshot(),
+        failures: const [],
+        healthRuns: [
+          HealthRun(
+            startedAt: DateTime(2026, 11, 14),
+            finishedAt: DateTime(2026, 11, 14, 0, 1),
+            results: const [
+              HealthChannelResult(
+                channelKey: 'bili',
+                channelDisplayName: '哔哩哔哩',
+                search: HealthStepResult(
+                  status: HealthStepStatus.failed,
+                  latencyMs: 12,
+                  failure: HealthFailure(
+                    kind: FailureKind.unauthorized,
+                    l10nKey: 'biliLoginRequired',
+                    retryable: true,
+                  ),
+                ),
+                latencyMs: 12,
+              ),
+            ],
+          ),
+        ],
+      );
+      final text = renderDiagnosticsBundle(data);
+      expect(text, contains('key=biliLoginRequired'));
+      expect(text, contains('retryable'));
+    });
+
+    test('截断边界上被切开的密钥不会留下残片', () {
+      final filler = List.generate(
+        120,
+        (index) => 'old-$index-${'x' * 100}',
+      ).join('\n');
+      final data = DiagnosticsBundleData(
+        generatedAt: DateTime(2026, 11, 14),
+        timezoneOffset: Duration.zero,
+        app: const DiagnosticsAppInfo(),
+        settings: const DiagnosticsSettingsSnapshot(),
+        sources: const DiagnosticsSourcesSnapshot(),
+        failures: const [],
+        healthRuns: const [],
+        logs: [
+          DiagnosticsLogFile(
+            name: 'molia.log',
+            content: '$filler\ntoken=SUPERSECRET-STANDING-ACROSS-BOUNDARY',
+          ),
+        ],
+      );
+      final text = renderDiagnosticsBundle(data, maxBytes: 2600);
+      expect(text, contains('token=[redacted]'));
+      expect(text, isNot(contains('SUPERSECRET')));
+      expect(text, isNot(contains('STANDING-ACROSS-BOUNDARY')));
+    });
+
     test('病态日志集按上限截断并声明省略', () {
       final data = DiagnosticsBundleData(
         generatedAt: DateTime(2026, 11, 14),
@@ -517,6 +640,29 @@ void main() {
       expect(utf8.encode(text).length, lessThanOrEqualTo(2200));
       expect(text, contains('Log section truncated'));
     });
+  });
+
+  test('导出前 flush 文件日志队列', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'molia_diag_export_',
+    );
+    addTearDown(() async {
+      if (await directory.exists()) await directory.delete(recursive: true);
+    });
+    final sink = _FlushRecordingSink(directory: () async => directory);
+    final service = DiagnosticsService(logSink: sink);
+    addTearDown(service.dispose);
+    final exporter = DiagnosticsExporter(
+      service: service,
+      appInfo: DiagnosticsAppInfoGatherer(),
+      settings: () async => const DiagnosticsSettingsSnapshot(),
+      sources: () async => const DiagnosticsSourcesSnapshot(),
+      database: () async => const DiagnosticsDatabaseCounts(schemaVersion: 2),
+      logDirectory: sink.directory,
+      runInIsolate: false,
+    );
+    await exporter.buildBytes();
+    expect(sink.flushed, isTrue);
   });
 
   test('设置快照只读允许表，凭证只报布尔', () async {
@@ -564,6 +710,18 @@ class _RecordingFailures implements FailureRecorder {
         kind: failure.kind,
       ),
     );
+  }
+}
+
+class _FlushRecordingSink extends RotatingFileLogSink {
+  _FlushRecordingSink({required super.directory});
+
+  bool flushed = false;
+
+  @override
+  Future<void> flush() {
+    flushed = true;
+    return super.flush();
   }
 }
 

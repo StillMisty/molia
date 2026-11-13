@@ -95,6 +95,23 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  test('包信息读取失败回退 unknown 并通知', () async {
+    final fallback = DiagnosticsProvider(
+      service: service,
+      builder: _FakeBuilder(),
+      saveAs: saveAs,
+      appInfo: () async => throw StateError('package info unavailable'),
+    );
+    var notified = 0;
+    fallback.addListener(() => notified++);
+    fallback.ensureAppInfo();
+    await pumpEventQueue();
+    expect(fallback.appInfo, isNotNull);
+    expect(fallback.appInfo!.version, 'unknown');
+    expect(notified, greaterThan(0));
+    fallback.dispose();
+  });
+
   testWidgets('概览、空态与唯一导出主操作', (tester) async {
     await pumpPage(tester);
     expect(find.text('问题排查'), findsWidgets);

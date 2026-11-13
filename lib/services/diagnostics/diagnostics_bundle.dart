@@ -7,10 +7,8 @@ library;
 
 import 'dart:convert';
 
-import '../../domain/models/failure.dart';
-import 'failure_ring_buffer.dart';
+import '../../domain/models/diagnostics.dart';
 import 'redaction.dart';
-import 'source_health_checker.dart';
 
 /// 诊断包默认硬上限（20 MB）；日志段超限时保留最新内容并声明省略字节。
 const int defaultDiagnosticsBundleMaxBytes = 20 * 1024 * 1024;
@@ -231,20 +229,21 @@ String renderDiagnosticsBundle(
   _databaseSection(sections, data.database, data.databaseNote);
   sections.writeln();
 
-  final withoutLogs = '$head$sections';
+  final withoutLogs = redactSecrets('$head$sections');
   final logsText = _logsSection(data.logs, data.logsNote);
   var output = '$withoutLogs$logsText';
   if (utf8.encode(output).length > maxBytes) {
     const note =
-        '\n[Log section truncated: only the newest bytes within the size cap '
-        'are kept.]\n';
-    final budget = maxBytes - utf8.encode(withoutLogs).length - note.length;
+        '\n[Log section truncated: only the newest complete lines within the '
+        'size cap are kept.]\n';
+    final budget =
+        maxBytes - utf8.encode(withoutLogs).length - utf8.encode(note).length;
     if (budget <= 0) {
       output =
           '$withoutLogs\n[Log section omitted: the size cap was already '
           'reached by earlier sections.]\n';
     } else {
-      output = '$withoutLogs${_tail(logsText, budget)}$note';
+      output = '$withoutLogs${_trimLogsToBudget(logsText, budget, note)}';
     }
   }
   return normalizePersonalPaths(
@@ -422,13 +421,15 @@ String _logsSection(List<DiagnosticsLogFile> logs, String? note) {
   return buffer.toString();
 }
 
-/// 旧版本日志可能留下超长行；导出时按行截断，避免单行突破脱敏 / 体积限制。
+/// 旧版本日志可能留下超长行；先按行脱敏，再截断超长行，避免把密钥切成
+/// 无法识别的残片。
 String _capLogLines(String content, {int maxLineBytes = 64 * 1024}) {
   final buffer = StringBuffer();
   for (final line in content.split('\n')) {
-    final bytes = utf8.encode(line);
+    final redacted = redactSecrets(line);
+    final bytes = utf8.encode(redacted);
     if (bytes.length <= maxLineBytes) {
-      buffer.writeln(line);
+      buffer.writeln(redacted);
     } else {
       buffer
         ..write(
@@ -440,11 +441,36 @@ String _capLogLines(String content, {int maxLineBytes = 64 * 1024}) {
   return buffer.toString();
 }
 
+/// 按整行保留最新的日志内容；绝不切开一行，避免截断后留下密钥残片。
+String _trimLogsToBudget(String logsText, int budget, String note) {
+  const heading = '## Logs\n\n';
+  final content = logsText.startsWith(heading)
+      ? logsText.substring(heading.length)
+      : logsText;
+  final available = budget - utf8.encode(heading).length;
+  if (available <= 0) return '$heading$note';
+  final kept = <String>[];
+  var used = 0;
+  final lines = content.split('\n');
+  for (var index = lines.length - 1; index >= 0; index--) {
+    final line = lines[index];
+    final bytes = utf8.encode(line).length + 1;
+    if (used + bytes > available) break;
+    kept.add(line);
+    used += bytes;
+  }
+  if (kept.isEmpty) return '$heading$note';
+  return '$heading${kept.reversed.join('\n')}\n$note';
+}
+
 String _stepText(String label, HealthStepResult step) {
   final failure = step.failure;
-  return '$label=${step.status.name}'
-      '${failure == null ? '' : ' (${failure.kind.name})'}'
-      ' ${step.latencyMs}ms';
+  final detail = failure == null
+      ? ''
+      : ' (${failure.kind.name}'
+            '${failure.l10nKey == null ? '' : ', key=${failure.l10nKey}'}'
+            '${failure.retryable ? ', retryable' : ''})';
+  return '$label=${step.status.name}$detail ${step.latencyMs}ms';
 }
 
 String _valueText(Object? value) {
@@ -470,15 +496,3 @@ String _offset(Duration offset) {
 }
 
 String _yesNo(bool value) => value ? 'yes' : 'no';
-
-String _tail(String text, int maxBytes) {
-  final bytes = utf8.encode(text);
-  if (bytes.length <= maxBytes) return text;
-  return utf8.decode(
-    bytes.sublist(bytes.length - maxBytes),
-    allowMalformed: true,
-  );
-}
-
-/// 供 UI 把失败类别映射为本地化文案之外的稳定名称（诊断包用英文）。
-String failureKindName(FailureKind kind) => kind.name;
