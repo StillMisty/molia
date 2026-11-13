@@ -2724,5 +2724,6 @@
         "type": "int"
       }
     }
-  }
+  },
+  "listeningSyncNeedsConsent": "需要重新确认发送内容"
 }

@@ -13,6 +13,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../utils/responsive.dart';
+import 'adaptive_layout.dart';
 import 'm3e_page_route.dart';
 
 /// 打开带内部 Navigator 的页面型弹层。
@@ -200,7 +201,7 @@ class _ModalPageNavigatorShellState extends State<ModalPageNavigatorShell> {
     );
     final themed = Theme(
       data: _innerTransitionTheme(context, sheetRoute),
-      child: navigator,
+      child: AdaptiveLayoutScope.local(child: navigator),
     );
     if (!context.isLargeScreen) {
       return themed;

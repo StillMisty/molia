@@ -6,6 +6,7 @@ import 'package:molia/pages/settings_page.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/widgets/adaptive_layout.dart';
+import 'package:molia/widgets/desktop_layout.dart';
 import 'package:molia/widgets/settings/settings_section_grid.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,6 +27,20 @@ void main() {
       expect(WindowSizeClassResolver.resolve(839), WindowSizeClass.medium);
       expect(WindowSizeClassResolver.resolve(839.9), WindowSizeClass.medium);
       expect(WindowSizeClassResolver.resolve(840), WindowSizeClass.expanded);
+    });
+
+    test('表格列只看内容宽，不看桌面平台标记', () {
+      DesktopLayout layout({required bool desktop, required double width}) =>
+          DesktopLayout(
+            isDesktopPlatform: desktop,
+            windowWidth: width,
+            railWidth: 96,
+            child: const SizedBox.shrink(),
+          );
+      expect(layout(desktop: false, width: 840).tableColumns, isTrue);
+      expect(layout(desktop: true, width: 840).tableColumns, isTrue);
+      expect(layout(desktop: true, width: 720).tableColumns, isFalse);
+      expect(layout(desktop: false, width: 720).tableColumns, isFalse);
     });
 
     test('结构判据只由宽度档位决定', () {
@@ -139,6 +154,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 600));
       expect(tester.takeException(), isNull);
       expect(find.byKey(const Key('wideNowPlayingLayout')), findsOneWidget);
+      expect(
+        find.textContaining('Queue Artist 0'),
+        findsWidgets,
+        reason: '200% 字号下作者行重排而不是隐藏',
+      );
     });
   });
 
@@ -163,7 +183,11 @@ void main() {
       playback.dispose();
     });
 
-    Future<void> pumpSettings(WidgetTester tester, double width) async {
+    Future<void> pumpSettings(
+      WidgetTester tester,
+      double width, {
+      double? localWidth,
+    }) async {
       tester.view.physicalSize = Size(width, 1000);
       tester.view.devicePixelRatio = 1;
       addTearDown(() {
@@ -186,7 +210,19 @@ void main() {
               ...GlobalMaterialLocalizations.delegates,
             ],
             supportedLocales: const [Locale('zh')],
-            home: const Scaffold(body: SettingsPage()),
+            home: Scaffold(
+              body: localWidth == null
+                  ? const SettingsPage()
+                  : Center(
+                      child: SizedBox(
+                        width: localWidth,
+                        height: 900,
+                        child: AdaptiveLayoutScope.local(
+                          child: const SettingsPage(),
+                        ),
+                      ),
+                    ),
+            ),
           ),
         ),
       );
@@ -201,6 +237,20 @@ void main() {
       expect(grid.twoColumn, isFalse);
 
       await pumpSettings(tester, 840);
+      grid = tester.widget<SettingsSectionGrid>(
+        find.byType(SettingsSectionGrid),
+      );
+      expect(grid.twoColumn, isTrue);
+    });
+
+    testWidgets('弹层按自身宽度决定两列，不读整窗宽度', (tester) async {
+      await pumpSettings(tester, 1200, localWidth: 500);
+      var grid = tester.widget<SettingsSectionGrid>(
+        find.byType(SettingsSectionGrid),
+      );
+      expect(grid.twoColumn, isFalse);
+
+      await pumpSettings(tester, 1200, localWidth: 900);
       grid = tester.widget<SettingsSectionGrid>(
         find.byType(SettingsSectionGrid),
       );

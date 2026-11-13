@@ -3120,5 +3120,6 @@
         "type": "int"
       }
     }
-  }
+  },
+  "listeningSyncNeedsConsent": "Confirm what is sent again"
 }

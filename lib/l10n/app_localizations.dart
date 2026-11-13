@@ -10011,6 +10011,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No sign-in is needed, and this guide never goes online.'**
   String get onboardingOptionalNoAccount;
+
+  /// No description provided for @listeningSyncNeedsConsent.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm what is sent again'**
+  String get listeningSyncNeedsConsent;
 }
 
 class _AppLocalizationsDelegate

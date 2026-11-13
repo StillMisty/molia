@@ -5391,4 +5391,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingOptionalNoAccount => '不需要登录，引导过程也不会联网。';
+
+  @override
+  String get listeningSyncNeedsConsent => '需要重新确认发送内容';
 }

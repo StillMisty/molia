@@ -41,6 +41,7 @@ class ScrobbleService extends ChangeNotifier {
          ScrobbleTarget.lastFm: lastFmSink,
        },
        _lastFmConfig = lastFmConfig,
+       _openBrowser = openBrowser ?? ((_) async => false),
        _lastFmAuthBuilder =
            lastFmAuthBuilder ??
            (() => LastFmAuth(
@@ -53,6 +54,7 @@ class ScrobbleService extends ChangeNotifier {
   final ScrobbleOutbox outbox;
   final Map<ScrobbleTarget, ScrobbleSink> _sinks;
   final LastFmApiConfig _lastFmConfig;
+  final Future<bool> Function(Uri uri) _openBrowser;
   final LastFmAuth Function() _lastFmAuthBuilder;
   final DateTime Function() _clock;
 
@@ -83,6 +85,10 @@ class ScrobbleService extends ChangeNotifier {
 
   bool get lastFmConfigured => _lastFmConfig.isConfigured;
 
+  /// 打开外部页面（项目主页 / Last.fm 授权）走组合根注入的浏览器端口，
+  /// 页面不再直接 import url_launcher。
+  Future<bool> openExternal(Uri uri) => _openBrowser(uri);
+
   LastFmAuthStage get lastFmStage => _lastFmAuth?.stage ?? LastFmAuthStage.idle;
 
   Uri? get lastFmAuthorizationUri => _lastFmAuth?.authorizationUri;
@@ -105,9 +111,13 @@ class ScrobbleService extends ChangeNotifier {
       preferences.enabledFor(target) &&
       (_credentials[target] ?? '').isNotEmpty;
 
-  /// 授权失效后停止发送，直到用户重新连接（凭据保留，队列保留）。
+  /// 可发送 = 已开启 + 有凭据 + 已同意当前条款版本 + 未进入待授权。
+  ///
+  /// 同意版本提升后（[kScrobbleConsentVersion] 变化）这里立即变 false：
+  /// 已连接的服务也停止发送，直到用户重新确认。
   bool _canSend(ScrobbleTarget target) =>
       activeFor(target) &&
+      preferences.consentFor(target) &&
       statusOf(target) != ScrobbleTargetStatus.needsAuthorization;
 
   /// 首帧后的启动尾巴：读偏好 / 凭据 / 发件箱，恢复在途状态。
@@ -144,15 +154,19 @@ class ScrobbleService extends ChangeNotifier {
     if ((_credentials[target] ?? '').isEmpty) {
       return ScrobbleTargetStatus.needsAuthorization;
     }
+    if (!preferences.consentFor(target)) {
+      return ScrobbleTargetStatus.needsConsent;
+    }
     return ScrobbleTargetStatus.connected;
   }
 
-  // ---------------------------------------------------------------------
-  // 设置 / 授权
-  // ---------------------------------------------------------------------
-
   Future<void> grantConsent(ScrobbleTarget target) async {
     await preferences.recordConsent(target);
+    if (_statuses[target] == ScrobbleTargetStatus.needsConsent) {
+      _statuses[target] = _initialStatus(target);
+    }
+    _spawnSessionIfNeeded();
+    _schedule();
     _notify();
   }
 
@@ -247,16 +261,19 @@ class ScrobbleService extends ChangeNotifier {
     if (!anyEnabled) {
       await preferences.setMasterEnabled(false);
     }
-    _endSession();
+    // 另一个服务仍在发送时保留会话：否则切歌会重复 now-playing / 丢进度。
+    if (!ScrobbleTarget.values.any(activeFor)) _endSession();
     _notify();
   }
 
   /// 供测试与设置页诊断：当前发件箱条目总数。
   int get queuedTotal => outbox.length;
 
-  // ---------------------------------------------------------------------
-  // 播放观察入口（组合根接线）
-  // ---------------------------------------------------------------------
+  @visibleForTesting
+  bool get hasActiveSession => _session != null;
+
+  @visibleForTesting
+  bool get hasScheduledDelivery => _timer != null;
 
   void onSnapshot(PlaybackSnapshot snapshot) {
     _snapshot = snapshot;
@@ -281,8 +298,9 @@ class ScrobbleService extends ChangeNotifier {
       return;
     }
     if (!snapshot.isPlaying) return;
-    if (!ScrobbleTarget.values.any(activeFor)) {
-      // 没有启用的服务时不建立会话：用户中途开启只从现在开始算。
+    if (!ScrobbleTarget.values.any(_canSend)) {
+      // 没有可发送的服务（关闭 / 未同意 / 待授权）时不建立会话：
+      // 用户中途开启或重新同意只从现在开始算。
       _endSession();
       return;
     }
@@ -368,10 +386,6 @@ class ScrobbleService extends ChangeNotifier {
     if (autoDeliver) unawaited(pumpNow());
   }
 
-  // ---------------------------------------------------------------------
-  // 投递调度
-  // ---------------------------------------------------------------------
-
   /// 检查所有到期的条目并投递；每个服务最多一个在途请求。
   Future<void> pumpNow() async {
     if (!_ready || _disposed) return;
@@ -427,7 +441,14 @@ class ScrobbleService extends ChangeNotifier {
     if (!autoDeliver || !_ready || _disposed) return;
     _timer?.cancel();
     _timer = null;
-    final next = outbox.nextDueAt();
+    final sendable = {
+      for (final target in ScrobbleTarget.values)
+        if (_canSend(target)) target,
+    };
+    // 没有任何可发送目标时不再排计时器：待授权 / 待同意 / 已关闭的条目
+    // 即使仍 due，也不能触发 0 延迟自旋。
+    if (sendable.isEmpty) return;
+    final next = outbox.nextDueAt(targets: sendable);
     if (next == null) return;
     final now = _clock();
     var delay = next.difference(now);

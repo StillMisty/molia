@@ -52,10 +52,15 @@ Future<FakePlaybackFacade> pumpPerfApp(
   required bool desktopShell,
   int favoritesCount = 1000,
   Size size = const Size(1440, 900),
+  bool showOnboarding = false,
+  bool resetPreferences = true,
+  bool waitForHome = true,
 }) async {
-  SharedPreferences.setMockInitialValues({
-    'shell_home_destination': 'favorites',
-  });
+  if (resetPreferences) {
+    SharedPreferences.setMockInitialValues({
+      'shell_home_destination': 'favorites',
+    });
+  }
   await ShortcutSettings.instance.setInAppEnabled(true);
   await ShortcutSettings.instance.setGlobalEnabled(false);
   await ShortcutSettings.instance.resetScope(ShortcutScope.inApp);
@@ -206,16 +211,18 @@ Future<FakePlaybackFacade> pumpPerfApp(
           ...GlobalMaterialLocalizations.delegates,
         ],
         supportedLocales: const [Locale('zh')],
-        home: MyApp(desktopShell: desktopShell),
+        home: MyApp(desktopShell: desktopShell, showOnboarding: showOnboarding),
       ),
     ),
   );
   await tester.pump();
-  await waitForFinder(
-    tester,
-    find.text('Performance Track 0'),
-    reason: '收藏首屏未出现',
-  );
+  if (waitForHome) {
+    await waitForFinder(
+      tester,
+      find.text('Performance Track 0'),
+      reason: '收藏首屏未出现',
+    );
+  }
   return backend;
 }
 

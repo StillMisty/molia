@@ -266,6 +266,12 @@ void main() {
   });
 
   group('CarBrowseTreeBuilder', () {
+    const labels = CarBrowseLabels(
+      queue: '队列',
+      favorites: '收藏',
+      recent: '最近播放',
+      playlists: '歌单',
+    );
     const tracks = [
       CarTrack(stableId: 'kw:1', title: 'One'),
       CarTrack(stableId: 'kw:2', title: 'Two'),
@@ -273,6 +279,7 @@ void main() {
 
     test('空集合也保留四个根', () {
       final roots = CarBrowseTreeBuilder.build(
+        labels: labels,
         queue: const [],
         favorites: const [],
         recent: const [],
@@ -284,11 +291,13 @@ void main() {
         'recent',
         'playlists',
       ]);
+      expect(roots.map((node) => node.title), ['队列', '收藏', '最近播放', '歌单']);
       expect(roots.every((node) => node.children.isEmpty), isTrue);
     });
 
     test('队列叶子映射真实下标，收藏 / 最近 / 歌单动作稳定', () {
       final roots = CarBrowseTreeBuilder.build(
+        labels: labels,
         queue: tracks,
         favorites: [tracks.first],
         recent: [tracks.last],

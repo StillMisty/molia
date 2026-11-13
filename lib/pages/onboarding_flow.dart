@@ -12,11 +12,14 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/source.dart';
+import '../domain/models/source_script.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sources_provider.dart';
 import '../services/data_saver_service.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
+import '../utils/source_quality_label.dart';
+import '../widgets/settings/settings_tiles.dart';
 
 class OnboardingFlow extends StatefulWidget {
   const OnboardingFlow({super.key, required this.onFinished});
@@ -243,7 +246,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     final dataSaver = context.watch<DataSaverService?>();
     final scheme = Theme.of(context).colorScheme;
     final quality = sources?.preferredQuality ?? '320k';
-    const options = ['320k', '192k', '128k'];
+    final options = sources?.qualityOptions ?? const <SourceQualityOption>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -257,18 +260,19 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         const SizedBox(height: 20),
         Text(l10n.onboardingQualityLabel, style: context.typeScale.titleSmall),
         const SizedBox(height: 8),
-        M3ESegmentedButton<String>(
+        SettingsDropdownRow<String>(
           key: const Key('onboardingQuality'),
-          segments: [
+          dropdownKey: const Key('onboardingQualityDropdown'),
+          icon: Icons.high_quality_rounded,
+          title: l10n.onboardingQualityLabel,
+          value: quality,
+          options: [
             for (final option in options)
-              M3ESegment(value: option, label: option.toUpperCase()),
+              (option.value, sourceQualityLabel(l10n, option.value)),
           ],
-          selected: {quality},
-          enabled: sources != null,
-          onSelectionChanged: (selection) {
-            if (selection.isEmpty) return;
-            unawaited(sources!.setPreferredQuality(selection.first));
-          },
+          onChanged: sources == null
+              ? (_) {}
+              : (value) => unawaited(sources.setPreferredQuality(value)),
         ),
         const SizedBox(height: 24),
         Row(

@@ -175,11 +175,22 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key, this.desktopShell});
+  const MyApp({
+    super.key,
+    this.desktopShell,
+    this.showOnboarding = false,
+    this.onboardingStore,
+  });
 
   /// 桌面骨架开关（**测试专用**）：null = 按平台判定（Linux / Windows /
   /// macOS 走桌面骨架），true / false 强制指定。真机永远走平台判定。
   final bool? desktopShell;
+
+  /// 首帧是否渲染首次引导（组合根在 runApp 前读设备本地标记决定）。
+  final bool showOnboarding;
+
+  /// 完成标记写入器（测试注入；生产为默认 prefs 实现）。
+  final OnboardingStore? onboardingStore;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -189,6 +200,9 @@ class _MyAppState extends State<MyApp>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   /// 顶栏 ↔ 播放页共享元素飞行控制器。
   final PlayerMorphController _morph = PlayerMorphController();
+
+  /// 首次引导是否仍在显示：完成 / 跳过后切回正常壳层，不经过路由。
+  late bool _showOnboarding;
 
   /// 顶栏曲目信息区（歌名/作者 + 播放/下一首按钮）的入场进度。
   ///
@@ -314,6 +328,7 @@ class _MyAppState extends State<MyApp>
   @override
   void initState() {
     super.initState();
+    _showOnboarding = widget.showOnboarding;
     WidgetsBinding.instance.addObserver(this);
     _morphAnimation.addListener(_onMorphTick);
     // 启动首页：导航偏好在首帧前已就绪（组合根 await 过 preferencesReady），
@@ -662,8 +677,17 @@ class _MyAppState extends State<MyApp>
     );
   }
 
+  /// 引导完成 / 跳过：先写设备本地标记（失败下次仍会显示），再切回壳层。
+  Future<void> _finishOnboarding() async {
+    await (widget.onboardingStore ?? OnboardingStore()).markCompleted();
+    if (mounted) setState(() => _showOnboarding = false);
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_showOnboarding) {
+      return OnboardingFlow(onFinished: _finishOnboarding);
+    }
     final l10n = AppLocalizations.of(context)!;
     final visibleDestinations = context
         .watch<NavProvider>()
@@ -1246,13 +1270,9 @@ class _MyThemedAppState extends State<MyThemedApp> {
   /// 展示弹层）；提前持有 provider，宿主 context 消失后仍能拒绝排队请求。
   late final SyncProvider _sync;
 
-  /// 首次引导是否仍在显示：完成 / 跳过后切回正常壳层，不再经过路由。
-  late bool _showOnboarding;
-
   @override
   void initState() {
     super.initState();
-    _showOnboarding = widget.showOnboarding;
     _loadSavedLocale();
     // 自定义应用名称（顶栏回退文案）需要重建 MaterialApp.title。
     AppBrandingService.titleNotifier.addListener(_onBrandingChanged);
@@ -1329,12 +1349,6 @@ class _MyThemedAppState extends State<MyThemedApp> {
 
   void _onBrandingChanged() {
     if (mounted) setState(() {});
-  }
-
-  /// 引导完成 / 跳过：先写设备本地标记（失败下次仍会显示），再切回壳层。
-  Future<void> _finishOnboarding() async {
-    await (widget.onboardingStore ?? OnboardingStore()).markCompleted();
-    if (mounted) setState(() => _showOnboarding = false);
   }
 
   @override
@@ -1503,9 +1517,11 @@ class _MyThemedAppState extends State<MyThemedApp> {
                     // DefaultTextStyle（预测返回退场 + 主题重建的断言见
                     // lib/widgets/m3e_page_route.dart）。
                     home: M3ERouteTheme(
-                      builder: (_) => _showOnboarding
-                          ? OnboardingFlow(onFinished: _finishOnboarding)
-                          : MyApp(key: appRootKey),
+                      builder: (_) => MyApp(
+                        key: appRootKey,
+                        showOnboarding: widget.showOnboarding,
+                        onboardingStore: widget.onboardingStore,
+                      ),
                     ),
                   );
                 },

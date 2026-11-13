@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -11,6 +13,7 @@ import 'package:molia/sources/source_manager.dart' hide SourceKind;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/perf_app_harness.dart';
 import '../support/settings_test_support.dart';
 
 class _FakeSources extends SourcesProvider {
@@ -58,6 +61,16 @@ class _FakeDataSaver extends DataSaverService {
   Future<void> setEnabled(bool value) async {
     _enabled = value;
     calls.add(value);
+  }
+}
+
+class _NoNetworkOverrides extends HttpOverrides {
+  int calls = 0;
+
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    calls++;
+    throw StateError('onboarding 不应发起网络请求');
   }
 }
 
@@ -186,8 +199,10 @@ void main() {
     await tester.tap(find.byKey(const Key('onboardingNext')));
     await tester.pump();
 
-    await tester.tap(find.text('192K'));
-    await tester.pump();
+    await tester.tap(find.byKey(const Key('onboardingQualityDropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('192K').last);
+    await tester.pumpAndSettle();
     expect(sources.qualityCalls, ['192k']);
 
     await tester.tap(find.byKey(const Key('onboardingDataSaver')));
@@ -216,6 +231,51 @@ void main() {
         await tester.pump();
       }
     }
+  });
+
+  testWidgets('壳层首次启动 → 跳过 → 下次启动不再出现，且全程零网络', (tester) async {
+    final previous = HttpOverrides.current;
+    final network = _NoNetworkOverrides();
+    HttpOverrides.global = network;
+    addTearDown(() => HttpOverrides.global = previous);
+
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      showOnboarding: true,
+      waitForHome: false,
+    );
+    expect(find.text('音乐留在本机'), findsOneWidget);
+    expect(find.byType(EditableText), findsNothing);
+    expect(network.calls, 0);
+
+    await tester.tap(find.byKey(const Key('onboardingSkip')));
+    await waitForFinder(
+      tester,
+      find.text('Performance Track 0'),
+      reason: '跳过后未进入壳层',
+    );
+    expect(find.text('音乐留在本机'), findsNothing);
+    expect(network.calls, 0);
+    expect(await OnboardingStore().isCompleted(), isTrue);
+
+    HttpOverrides.global = previous;
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      showOnboarding: false,
+      resetPreferences: false,
+      waitForHome: false,
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('音乐留在本机'), findsNothing);
+    expect(
+      find.byType(M3ENavigationBar).evaluate().isNotEmpty ||
+          find.byType(M3ENavigationRail).evaluate().isNotEmpty,
+      isTrue,
+    );
   });
 
   test('完成标记持久化且设备本地', () async {

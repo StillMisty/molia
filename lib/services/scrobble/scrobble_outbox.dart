@@ -235,9 +235,10 @@ class ScrobbleOutbox {
   }
 
   /// 下一次需要唤醒的最早时间（无条目返回 null）。
-  DateTime? nextDueAt() {
+  DateTime? nextDueAt({Set<ScrobbleTarget>? targets}) {
     DateTime? earliest;
     for (final entry in _entries) {
+      if (targets != null && !targets.contains(entry.event.target)) continue;
       final at = entry.nextAttemptAt;
       if (at == null) return _clock();
       if (earliest == null || at.isBefore(earliest)) earliest = at;

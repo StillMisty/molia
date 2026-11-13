@@ -6,6 +6,8 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
+import '../widgets/adaptive_layout.dart';
+import '../widgets/focus_restore.dart';
 import '../widgets/m3e_page_route.dart';
 import '../widgets/page_modal.dart';
 
@@ -404,12 +406,14 @@ class ResponsiveNavigation {
       return _showFullScreen<T>(context: context, child: body, title: title);
     }
 
-    return _showM3ESideSheet<T>(
-      context: context,
-      title: title,
-      child: body,
-      maxWidth: resolvedMaxWidth,
-      barrierDismissible: barrierDismissible,
+    return withFocusRestore(
+      () => _showM3ESideSheet<T>(
+        context: context,
+        title: title,
+        child: body,
+        maxWidth: resolvedMaxWidth,
+        barrierDismissible: barrierDismissible,
+      ),
     );
   }
 
@@ -438,30 +442,33 @@ class ResponsiveNavigation {
     Future<bool> Function()? onDismissRequest,
     M3EBottomSheetTheme Function(M3EBottomSheetTheme)? sheetThemeBuilder,
   }) {
-    if (!context.isLargeScreen) {
-      return _showBottomSheet<T>(
-        context: context,
-        child: child,
-        showCloseButton: false,
-        showDragHandle: showDragHandle,
-        onDismissRequest: onDismissRequest,
-        sheetThemeBuilder: sheetThemeBuilder,
-        pageType: ResponsivePageType.modal,
-      );
-    }
-    return M3EDialog.show<T>(
-      context,
-      dialog: Builder(
-        builder: (context) => PageModalCard(
-          maxWidth: maxWidth,
-          heightFactor: heightFactor,
-          child: child,
+    return withFocusRestore(() {
+      final localChild = AdaptiveLayoutScope.local(child: child);
+      if (!context.isLargeScreen) {
+        return _showBottomSheet<T>(
+          context: context,
+          child: localChild,
+          showCloseButton: false,
+          showDragHandle: showDragHandle,
+          onDismissRequest: onDismissRequest,
+          sheetThemeBuilder: sheetThemeBuilder,
+          pageType: ResponsivePageType.modal,
+        );
+      }
+      return M3EDialog.show<T>(
+        context,
+        dialog: Builder(
+          builder: (context) => PageModalCard(
+            maxWidth: maxWidth,
+            heightFactor: heightFactor,
+            child: localChild,
+          ),
         ),
-      ),
-      barrierDismissible: barrierDismissible,
-      // 页面型弹窗不抢焦点：设置首页 / AI DJ 列表不该一打开就出现焦点环。
-      autofocusFirst: false,
-    );
+        barrierDismissible: barrierDismissible,
+        // 页面型弹窗不抢焦点：设置首页 / AI DJ 列表不该一打开就出现焦点环。
+        autofocusFirst: false,
+      );
+    });
   }
 
   /// 简单弹层（定时关闭 / 来源分享）：窄屏 M3E 底部弹层，宽屏 M3EDialog。
@@ -478,29 +485,32 @@ class ResponsiveNavigation {
     bool showCloseButton = true,
     bool barrierDismissible = true,
   }) {
-    if (context.isLargeScreen) {
-      return M3EDialog.show<T>(
-        context,
-        dialog: Builder(
-          builder: (context) => M3EDialog(
-            title: title,
-            content: child,
-            // 正文自己带左右内边距（与底部弹层共用），避免再叠 24。
-            contentPadding: const EdgeInsets.only(bottom: 8),
+    return withFocusRestore(() {
+      final localChild = AdaptiveLayoutScope.local(child: child);
+      if (context.isLargeScreen) {
+        return M3EDialog.show<T>(
+          context,
+          dialog: Builder(
+            builder: (context) => M3EDialog(
+              title: title,
+              content: localChild,
+              // 正文自己带左右内边距（与底部弹层共用），避免再叠 24。
+              contentPadding: const EdgeInsets.only(bottom: 8),
+            ),
           ),
-        ),
-        barrierDismissible: barrierDismissible,
+          barrierDismissible: barrierDismissible,
+        );
+      }
+      return _showBottomSheet<T>(
+        context: context,
+        child: localChild,
+        title: title,
+        showCloseButton: showCloseButton,
+        // 正文自带滚动：按内容展开（页面型弹层才用 fillHeight），不要撑满整屏。
+        contentLayout: AdaptiveModalContentLayout.wrapContent,
+        pageType: ResponsivePageType.modal,
       );
-    }
-    return _showBottomSheet<T>(
-      context: context,
-      child: child,
-      title: title,
-      showCloseButton: showCloseButton,
-      // 正文自带滚动：按内容展开（页面型弹层才用 fillHeight），不要撑满整屏。
-      contentLayout: AdaptiveModalContentLayout.wrapContent,
-      pageType: ResponsivePageType.modal,
-    );
+    });
   }
 
   static Future<T?> _showFullScreen<T>({
@@ -544,25 +554,27 @@ class ResponsiveNavigation {
       title: title,
       // M3E 弹层不提供 Material 祖先，InkWell 等水波组件会直接崩溃；
       // 透明 Material 只补齐 ink 绘制层，不改变观感。
-      body: Material(
-        type: MaterialType.transparency,
-        child: Builder(
-          builder: (sheetContext) => MediaQuery.removePadding(
-            context: sheetContext,
-            // 包内已按系统栏 inset 给整个弹层留过底部（M3ESafeArea），正文
-            // 再按 MediaQuery 补一次会双重留白。
-            removeBottom: true,
-            child: Padding(
-              // 包内 M3ESafeArea 在键盘弹出时把 bottom 归零（只处理系统栏
-              // inset），这里补键盘高度，输入区不会被键盘压住。
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+      body: AdaptiveLayoutScope.local(
+        child: Material(
+          type: MaterialType.transparency,
+          child: Builder(
+            builder: (sheetContext) => MediaQuery.removePadding(
+              context: sheetContext,
+              // 包内已按系统栏 inset 给整个弹层留过底部（M3ESafeArea），正文
+              // 再按 MediaQuery 补一次会双重留白。
+              removeBottom: true,
+              child: Padding(
+                // 包内 M3ESafeArea 在键盘弹出时把 bottom 归零（只处理系统栏
+                // inset），这里补键盘高度，输入区不会被键盘压住。
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+                ),
+                // 侧边弹层 body 是 Expanded：wrapContent 内容顶部对齐，避免
+                // 拉伸成整屏高。
+                child: contentLayout == AdaptiveModalContentLayout.wrapContent
+                    ? Align(alignment: Alignment.topCenter, child: child)
+                    : child,
               ),
-              // 侧边弹层 body 是 Expanded：wrapContent 内容顶部对齐，避免
-              // 拉伸成整屏高。
-              child: contentLayout == AdaptiveModalContentLayout.wrapContent
-                  ? Align(alignment: Alignment.topCenter, child: child)
-                  : child,
             ),
           ),
         ),

@@ -166,6 +166,9 @@ enum ScrobbleTargetStatus {
   /// 已连接，正在发送或空闲。
   connected,
 
+  /// 同意条款版本已更新，需要重新确认后才会继续发送。
+  needsConsent,
+
   /// 口令失效，需要重新授权。
   needsAuthorization,
 

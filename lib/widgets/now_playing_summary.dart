@@ -179,13 +179,26 @@ class NowPlayingTrackText extends StatelessWidget {
     if (name == null || name.isEmpty) return const NowPlayingAppTitle();
     // 顶栏是固定高度槽：大字号下只保留歌名，作者行让位，避免标题块被裁。
     final double textScale = MediaQuery.textScalerOf(context).scale(1);
-    final bool showArtist =
-        artists != null && artists.isNotEmpty && textScale <= 1.5;
-    // 顶栏工具行只有 48dp 的动作槽：大字号用 bodyMedium（仍是 200%）而不是
-    // titleMedium，否则文本块会超出 M3E 标题槽 4dp。
-    final TextStyle titleStyle = textScale > 1.5
-        ? context.typeScale.bodyMedium.copyWith(height: 1.0)
-        : context.typeScale.titleMedium;
+    // 顶栏工具行只有 48dp 的动作槽：大字号把两行重排成一行「歌名 · 作者」，
+    // 而不是把作者藏掉；两者都保持 200% 字号。
+    if (textScale > 1.5 && artists != null && artists.isNotEmpty) {
+      return Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: name,
+              style: context.typeScale.bodyMedium.copyWith(height: 1.0),
+            ),
+            TextSpan(
+              text: '  ·  $artists',
+              style: context.typeScale.labelSmall,
+            ),
+          ],
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -193,11 +206,11 @@ class NowPlayingTrackText extends StatelessWidget {
       children: [
         Text(
           name,
-          style: titleStyle,
+          style: context.typeScale.titleMedium,
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
         ),
-        if (showArtist)
+        if (artists != null && artists.isNotEmpty)
           Text(
             artists,
             style: context.typeScale.labelSmall,

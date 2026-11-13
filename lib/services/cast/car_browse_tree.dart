@@ -76,6 +76,21 @@ class CarPlayAction {
 
 enum CarPlayActionKind { queueIndex, track, playlistTrack }
 
+/// 根分组文案由调用方注入（Dart l10n / 原生车机共用同一份字符串）。
+class CarBrowseLabels {
+  const CarBrowseLabels({
+    required this.queue,
+    required this.favorites,
+    required this.recent,
+    required this.playlists,
+  });
+
+  final String queue;
+  final String favorites;
+  final String recent;
+  final String playlists;
+}
+
 abstract final class CarBrowseTreeBuilder {
   static const String queueRootId = 'queue';
   static const String favoritesRootId = 'favorites';
@@ -84,6 +99,7 @@ abstract final class CarBrowseTreeBuilder {
 
   /// 构建四个根；空集合也保留根节点（车机显示空分组而不是丢分类）。
   static List<CarBrowseNode> build({
+    required CarBrowseLabels labels,
     required List<CarTrack> queue,
     required List<CarTrack> favorites,
     required List<CarTrack> recent,
@@ -91,7 +107,7 @@ abstract final class CarBrowseTreeBuilder {
   }) => [
     CarBrowseNode(
       id: queueRootId,
-      title: 'Queue',
+      title: labels.queue,
       children: [
         for (var index = 0; index < queue.length; index++)
           CarBrowseNode(
@@ -105,7 +121,7 @@ abstract final class CarBrowseTreeBuilder {
     ),
     CarBrowseNode(
       id: favoritesRootId,
-      title: 'Favorites',
+      title: labels.favorites,
       children: [
         for (final track in favorites)
           CarBrowseNode(
@@ -118,7 +134,7 @@ abstract final class CarBrowseTreeBuilder {
     ),
     CarBrowseNode(
       id: recentRootId,
-      title: 'Recent',
+      title: labels.recent,
       children: [
         for (final track in recent)
           CarBrowseNode(
@@ -131,7 +147,7 @@ abstract final class CarBrowseTreeBuilder {
     ),
     CarBrowseNode(
       id: playlistsRootId,
-      title: 'Playlists',
+      title: labels.playlists,
       children: [
         for (final playlist in playlists)
           CarBrowseNode(

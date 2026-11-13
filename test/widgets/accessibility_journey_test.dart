@@ -1,5 +1,7 @@
 import 'dart:ui' show Tristate;
 
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -12,8 +14,10 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
+import 'package:molia/utils/responsive.dart';
 import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/queue.dart';
+import 'package:molia/widgets/row_actions.dart';
 import 'package:molia/widgets/seek_bar.dart';
 import 'package:molia/widgets/seek_preview.dart';
 import 'package:provider/provider.dart';
@@ -21,6 +25,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/cover_test_support.dart';
 import '../support/fake_library_repository.dart';
+import '../support/perf_app_harness.dart';
 import '../support/fakes.dart';
 import '../support/settings_test_support.dart';
 
@@ -143,6 +148,82 @@ void main() {
       await tester.pump();
       expect(find.byKey(const ValueKey<String>('seekBarFlat')), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('seekBarWavy')), findsNothing);
+    });
+  });
+
+  group('主链路语义', () {
+    testWidgets('播放/暂停状态、封面、收藏与加入列表都可读', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final semantics = tester.ensureSemantics();
+      await pumpPerfApp(
+        tester,
+        desktopShell: false,
+        favoritesCount: 3,
+        size: const Size(900, 900),
+      );
+
+      // 顶栏迷你播放器：正在播放时按钮读「暂停」，点后读「播放」。
+      expect(find.bySemanticsLabel('暂停'), findsOneWidget);
+      await tester.tap(find.bySemanticsLabel('暂停'));
+      await tester.pump();
+      expect(find.bySemanticsLabel('播放'), findsOneWidget);
+
+      // 行尾动作菜单包含「加入列表」。
+      await tester.tap(find.byType(RowActionMenuButton).first);
+      await tester.pumpAndSettle();
+      expect(find.text('加入列表'), findsOneWidget);
+      await tester.tapAt(const Offset(8, 8));
+      await tester.pumpAndSettle();
+
+      // 播放页封面标注打开目标；收藏按钮读当前状态。
+      await tester.tap(find.text('播放').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.bySemanticsLabel('打开播放页：Queue Track 0'), findsOneWidget);
+      expect(find.bySemanticsLabel('收藏'), findsWidgets);
+      semantics.dispose();
+      debugDefaultTargetPlatformOverride = null;
+    });
+  });
+
+  group('弹层焦点', () {
+    testWidgets('关闭后焦点回到打开前的控件', (tester) async {
+      final focusNode = FocusNode(debugLabel: 'sheetTrigger');
+      addTearDown(focusNode.dispose);
+      late BuildContext hostContext;
+      await tester.pumpWidget(
+        _app(
+          Builder(
+            builder: (context) {
+              hostContext = context;
+              return Center(
+                child: Focus(
+                  focusNode: focusNode,
+                  child: const SizedBox(width: 48, height: 48),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      focusNode.requestFocus();
+      await tester.pump();
+      expect(focusNode.hasFocus, isTrue);
+
+      final opened = ResponsiveNavigation.showSimpleModal<void>(
+        context: hostContext,
+        title: '标题',
+        child: const Text('内容'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('内容'), findsOneWidget);
+
+      Navigator.of(hostContext).pop();
+      await tester.pumpAndSettle();
+      await opened;
+      await tester.pump();
+      expect(focusNode.hasFocus, isTrue);
     });
   });
 

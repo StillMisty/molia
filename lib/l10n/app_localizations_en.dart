@@ -5634,4 +5634,7 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get onboardingOptionalNoAccount =>
       'No sign-in is needed, and this guide never goes online.';
+
+  @override
+  String get listeningSyncNeedsConsent => 'Confirm what is sent again';
 }

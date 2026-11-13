@@ -7,12 +7,12 @@ library;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../domain/models/scrobble.dart';
 import '../l10n/app_localizations.dart';
 import '../services/scrobble/scrobble_service.dart';
 import '../theme/m3e_context.dart';
+import '../widgets/empty_state.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
@@ -26,13 +26,24 @@ class ListeningSyncPage extends StatefulWidget {
 class _ListeningSyncPageState extends State<ListeningSyncPage> {
   bool _busy = false;
 
+  /// 服务名的唯一来源：设置行、同意书、断开确认与 Last.fm 对话框共用。
+  String _targetName(ScrobbleTarget target) => switch (target) {
+    ScrobbleTarget.listenBrainz => 'ListenBrainz',
+    ScrobbleTarget.lastFm => 'Last.fm',
+  };
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final service = context.watch<ScrobbleService?>();
     if (l10n == null) return const SizedBox.shrink();
     final children = service == null
-        ? [Text(l10n.listeningSyncUnavailable)]
+        ? [
+            EmptyState(
+              icon: Icons.cloud_off_rounded,
+              message: l10n.listeningSyncUnavailable,
+            ),
+          ]
         : _sections(context, l10n, service);
     return SettingsSubPage(title: l10n.listeningSyncTitle, children: children);
   }
@@ -86,7 +97,6 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
         l10n,
         service,
         target: ScrobbleTarget.listenBrainz,
-        title: 'ListenBrainz',
         icon: Icons.headphones_rounded,
         onConnect: _connectListenBrainz,
         projectUrl: Uri.parse('https://listenbrainz.org'),
@@ -98,7 +108,6 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
         l10n,
         service,
         target: ScrobbleTarget.lastFm,
-        title: 'Last.fm',
         icon: Icons.radio_rounded,
         onConnect: _connectLastFm,
         projectUrl: Uri.parse('https://www.last.fm'),
@@ -138,12 +147,12 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
     AppLocalizations l10n,
     ScrobbleService service, {
     required ScrobbleTarget target,
-    required String title,
     required IconData icon,
     required Future<void> Function(ScrobbleService) onConnect,
     required Uri projectUrl,
     required String learnMore,
   }) {
+    final title = _targetName(target);
     final status = service.statusOf(target);
     final connected =
         service.activeFor(target) || status == ScrobbleTargetStatus.connected;
@@ -154,8 +163,7 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
       footer: Align(
         alignment: Alignment.centerLeft,
         child: M3EButton.text(
-          onPressed: () =>
-              launchUrl(projectUrl, mode: LaunchMode.externalApplication),
+          onPressed: () => service.openExternal(projectUrl),
           child: Text(learnMore),
         ),
       ),
@@ -168,8 +176,7 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
               ? M3EButton.text(
                   onPressed: _busy
                       ? null
-                      : () =>
-                            _disconnect(context, l10n, service, target, title),
+                      : () => _disconnect(context, l10n, service, target),
                   child: Text(l10n.listeningSyncDisconnect),
                 )
               : M3EButton.filled(
@@ -194,6 +201,7 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
         service.accountOf(target).isEmpty
             ? l10n.listeningSyncConnected
             : l10n.listeningSyncConnectedAs(service.accountOf(target)),
+      ScrobbleTargetStatus.needsConsent => l10n.listeningSyncNeedsConsent,
       ScrobbleTargetStatus.needsAuthorization => l10n.listeningSyncNeedsAuth,
       ScrobbleTargetStatus.retrying => l10n.listeningSyncRetrying,
       ScrobbleTargetStatus.error => l10n.listeningSyncError,
@@ -257,9 +265,7 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
   ) async {
     if (service.consentFor(target)) return true;
     final l10n = AppLocalizations.of(context)!;
-    final name = target == ScrobbleTarget.listenBrainz
-        ? 'ListenBrainz'
-        : 'Last.fm';
+    final name = _targetName(target);
     final agreed = await M3EDialog.show<bool>(
       context,
       dialog: M3EDialog(
@@ -335,7 +341,7 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
     final confirmed = await M3EDialog.show<bool>(
       context,
       dialog: M3EDialog(
-        title: 'Last.fm',
+        title: _targetName(ScrobbleTarget.lastFm),
         content: SizedBox(
           width: settingsDialogWidth(context),
           child: Text(l10n.listeningSyncLastFmWaiting),
@@ -362,8 +368,8 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
     AppLocalizations l10n,
     ScrobbleService service,
     ScrobbleTarget target,
-    String name,
   ) async {
+    final name = _targetName(target);
     final confirmed = await M3EDialog.show<bool>(
       context,
       dialog: M3EDialog(

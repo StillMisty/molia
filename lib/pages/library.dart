@@ -12,6 +12,8 @@ import '../utils/scroll_to_top.dart';
 import '../widgets/discover_layout.dart';
 import '../widgets/discover_leaderboards_tab.dart';
 import '../widgets/discover_playlists_tab.dart';
+import '../theme/m3e_context.dart';
+import '../widgets/adaptive_layout.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/library_channel_selector.dart';
 import '../widgets/library_search_tab.dart';
@@ -240,6 +242,12 @@ class _LibraryState extends State<Library> {
     final renderedTab = visibleTabs[selectedIndex];
     // 布局期写入（不触发重建）：重复点击回顶要滚「真正在渲染」的那个列表。
     _renderedTab = renderedTab;
+    // 展开宽度：浏览类 tab（热榜 / 歌单）左侧列表 + 右侧详情；搜索仍是
+    // 单栏（键盘与结果面自己需要整宽）。顶部 tab 栏保留，切到搜索即回到单栏。
+    final splitBrowse =
+        AdaptiveLayoutScope.of(context).isExpanded &&
+        showTabBar &&
+        renderedTab != _LibraryTab.search;
 
     return ResponsivePageContainer(
       pageType: ResponsivePageType.browse,
@@ -260,7 +268,14 @@ class _LibraryState extends State<Library> {
             onSelected: _selectChannel,
           ),
           Expanded(
-            child: showTabBar
+            child: splitBrowse
+                ? _buildBrowseSplit(
+                    context,
+                    l10n,
+                    visibleTabs: visibleTabs,
+                    selectedTab: renderedTab,
+                  )
+                : showTabBar
                 ? M3ETabsView(
                     selectedIndex: selectedIndex,
                     onTabSelected: (index) =>
@@ -277,6 +292,80 @@ class _LibraryState extends State<Library> {
           ),
         ],
       ),
+    );
+  }
+
+  /// 展开宽度的浏览分栏：左栏只列浏览类 tab（热榜 / 歌单），右栏是选中
+  /// 详情；选择只更新右栏，不 push 路由，也不新增导航目的地。
+  Widget _buildBrowseSplit(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required List<_LibraryTab> visibleTabs,
+    required _LibraryTab selectedTab,
+  }) {
+    final browseTabs = [
+      for (final tab in visibleTabs)
+        if (tab != _LibraryTab.search) tab,
+    ];
+    return Row(
+      key: const Key('libraryBrowseSplit'),
+      children: [
+        SizedBox(
+          width: 320,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
+            children: [
+              for (final tab in browseTabs)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: M3ECard(
+                    key: ValueKey<String>('libraryBrowsePane-${tab.name}'),
+                    variant: M3ECardVariant.filled,
+                    color: tab == selectedTab
+                        ? Theme.of(context).colorScheme.primaryContainer
+                        : Theme.of(context).colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                    padding: EdgeInsets.zero,
+                    onPressed: () => setState(() => _tab = tab),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            tab == _LibraryTab.leaderboards
+                                ? Icons.leaderboard_rounded
+                                : Icons.queue_music_rounded,
+                            color: tab == selectedTab
+                                ? Theme.of(context)
+                                      .colorScheme
+                                      .onPrimaryContainer
+                                : Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              tab == _LibraryTab.leaderboards
+                                  ? l10n.libraryTabLeaderboards
+                                  : l10n.libraryTabPlaylists,
+                              style: context.typeScale.titleMedium,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const M3EDivider(axis: M3EDividerAxis.vertical),
+        Expanded(child: _tabContent(selectedTab)),
+      ],
     );
   }
 

@@ -541,6 +541,34 @@ void main() {
       expect(service.credentialFor(ScrobbleTarget.listenBrainz), isEmpty);
     });
 
+    test('同意版本提升后停止发送，重新同意后恢复', () async {
+      await connect();
+      service.onSnapshot(snapshot(current: track()));
+      service.onPosition(const Duration(seconds: 90));
+      await service.pumpNow();
+      expect(listenBrainz.submitted, hasLength(1));
+
+      // 模拟条款版本提升：设备本地记录的同意版本落后于当前常量。
+      await prefs.setInt(ScrobblePreferences.keyListenBrainzConsent, 0);
+      await service.reloadFromPreferences();
+      expect(service.consentFor(ScrobbleTarget.listenBrainz), isFalse);
+      expect(
+        service.statusOf(ScrobbleTarget.listenBrainz),
+        ScrobbleTargetStatus.needsConsent,
+      );
+
+      service.onSnapshot(snapshot(current: track(id: 'kw:2')));
+      service.onPosition(const Duration(seconds: 90));
+      await service.pumpNow();
+      expect(listenBrainz.submitted, hasLength(1), reason: '未重新同意不发送');
+
+      await service.grantConsent(ScrobbleTarget.listenBrainz);
+      service.onSnapshot(snapshot(current: track(id: 'kw:3')));
+      service.onPosition(const Duration(seconds: 90));
+      await service.pumpNow();
+      expect(listenBrainz.submitted, hasLength(2));
+    });
+
     test('日志不包含访问口令', () async {
       final records = <String>[];
       final subscription = Logger.root.onRecord.listen(
@@ -557,6 +585,51 @@ void main() {
       service.onPosition(const Duration(seconds: 90));
       await service.pumpNow();
       expect(records.join('\n'), isNot(contains('super-secret-token')));
+    });
+
+    test('401 后不再排 0 延迟计时器', () async {
+      final auto = ScrobbleService(
+        preferences: ScrobblePreferences(
+          settings: testSettingsRegistry(),
+          prefs: prefs,
+        ),
+        outbox: ScrobbleOutbox(prefs: prefs, clock: () => now),
+        listenBrainzSink: listenBrainz,
+        lastFmSink: lastFm,
+        lastFmConfig: LastFmApiConfig.none,
+        clock: () => now,
+      );
+      addTearDown(auto.dispose);
+      await auto.init();
+      expect(
+        await auto.connectListenBrainz('token'),
+        ScrobbleConnectResult.connected,
+      );
+      listenBrainz.next = const ScrobbleDelivery.unauthorized();
+      auto.onSnapshot(snapshot(current: track()));
+      auto.onPosition(const Duration(seconds: 90));
+      await auto.pumpNow();
+      expect(
+        auto.statusOf(ScrobbleTarget.listenBrainz),
+        ScrobbleTargetStatus.needsAuthorization,
+      );
+      expect(auto.hasScheduledDelivery, isFalse);
+    });
+
+    test('断开一个服务时，另一个仍启用则保留会话', () async {
+      await connect();
+      await prefs.setInt(ScrobblePreferences.keyLastFmConsent, 1);
+      await service.preferences.writeCredential(ScrobbleTarget.lastFm, 'fm');
+      await service.preferences.setEnabled(ScrobbleTarget.lastFm, true);
+      await service.preferences.setMasterEnabled(true);
+      await service.reloadFromPreferences();
+      service.onSnapshot(snapshot(current: track()));
+      expect(service.hasActiveSession, isTrue);
+
+      await service.disconnect(ScrobbleTarget.listenBrainz);
+      expect(service.hasActiveSession, isTrue, reason: 'Last.fm 仍在发送');
+      await service.disconnect(ScrobbleTarget.lastFm);
+      expect(service.hasActiveSession, isFalse);
     });
 
     test('发件箱按服务隔离，一个成功不删除另一个', () async {
