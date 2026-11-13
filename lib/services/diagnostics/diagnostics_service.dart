@@ -7,6 +7,7 @@ library;
 
 import 'dart:async';
 
+import '../../domain/models/diagnostics.dart';
 import '../../domain/models/failure.dart';
 import 'failure_ring_buffer.dart';
 import 'log_file_sink.dart';
@@ -37,8 +38,6 @@ class DiagnosticsService implements FailureRecorder {
   bool get isChecking => _health?.running ?? false;
 
   int get healthTargetCount => _health?.targetCount ?? 0;
-
-  bool get isLogRecording => logSink?.isRecording ?? false;
 
   DiagnosticLogStatus get logStatus =>
       logSink?.status ?? DiagnosticLogStatus.stopped;

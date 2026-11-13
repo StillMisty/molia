@@ -92,6 +92,9 @@ class PlaybackErrorRecovery {
   /// 正在自动换源的曲目 uri（防并发重复触发）。
   final Set<String> _swapping = {};
 
+  /// 上一次已写入最近失败的曲目 + 失败身份；同一错误反复通知只记一次。
+  String? _lastRecordedFailure;
+
   /// 处理一帧失败快照：失效失败曲目的取链缓存，自动重试一次；重试仍失败
   /// （或重试成功后再次失败）→ 尝试自动换源。
   ///
@@ -101,18 +104,27 @@ class PlaybackErrorRecovery {
   void onPlaybackError(PlaybackSnapshot snapshot) {
     final failure = snapshot.error;
     final track = snapshot.current;
-    if (failure == null || track == null) return;
+    if (failure == null || track == null) {
+      _lastRecordedFailure = null;
+      return;
+    }
     if (snapshot.currentIndex < 0) return;
 
     // 失败即失效该曲目的取链缓存（失败本身不入缓存，下次播放重新取链）。
     // 只清这一首：一条过期 URL 不应让同音源其它曲目全部重新取链。
     _catalogService?.invalidateResolveForTrack(track);
-    _failures?.recordFailure(
-      failure: failure,
-      channelKey: track.id.sourceKey,
-      channelDisplayName:
-          _channelDisplayName?.call(track.id.sourceKey) ?? track.id.sourceKey,
-    );
+    final failureKey =
+        '${track.id.uri}|${failure.kind.name}|${failure.l10nKey}|'
+        '${failure.retryable}|${failure.message}';
+    if (failureKey != _lastRecordedFailure) {
+      _lastRecordedFailure = failureKey;
+      _failures?.recordFailure(
+        failure: failure,
+        channelKey: track.id.sourceKey,
+        channelDisplayName:
+            _channelDisplayName?.call(track.id.sourceKey) ?? track.id.sourceKey,
+      );
+    }
 
     final key = track.id.uri;
     if (_retriedTrackKey != key) {

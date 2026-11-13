@@ -8,32 +8,10 @@ library;
 import 'dart:async';
 import 'dart:collection';
 
+import '../../domain/models/diagnostics.dart';
 import '../../domain/models/failure.dart';
 
-/// 一条最近失败记录（不可变快照）。
-class DiagnosticFailureRecord {
-  const DiagnosticFailureRecord({
-    required this.at,
-    required this.channelKey,
-    required this.channelDisplayName,
-    required this.kind,
-    this.l10nKey,
-    this.retryable = false,
-  });
-
-  final DateTime at;
-  final String channelKey;
-
-  /// 记录当时的渠道展示名（渠道改名后历史记录不跟着变）。
-  final String channelDisplayName;
-  final FailureKind kind;
-  final String? l10nKey;
-  final bool retryable;
-
-  @override
-  String toString() =>
-      'DiagnosticFailureRecord(${kind.name}, $channelKey, $at)';
-}
+export '../../domain/models/diagnostics.dart' show DiagnosticFailureRecord;
 
 /// 失败归一化边界的统一记录端口（catalog / 分页详情 / 播放恢复注入）。
 abstract interface class FailureRecorder {
@@ -80,13 +58,6 @@ class FailureRingBuffer implements FailureRecorder {
       _records.removeFirst();
     }
     _changes.add(null);
-  }
-
-  /// 清空（仅测试 / 内存守卫使用）。
-  void clear() {
-    if (_records.isEmpty) return;
-    _records.clear();
-    if (!_changes.isClosed) _changes.add(null);
   }
 
   Future<void> dispose() async {

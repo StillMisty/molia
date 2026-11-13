@@ -1,19 +1,18 @@
 /// 诊断页状态：把服务快照、健康检查与导出动作收成一个 ChangeNotifier。
 ///
-/// 页面关闭后 provider 释放监听，不会在后台继续工作；服务本身由组合根持有，
-/// 失败记录 / 文件日志在页面未打开时照常运行（但不产生额外 UI 工作）。
+/// provider 挂在根 Provider 树、与应用同生命周期；页面关闭不会释放它。
+/// 服务本身由组合根持有，失败记录 / 文件日志在页面未打开时照常运行
+/// （只有 provider 的监听通知存在，没有额外后台任务）。
 library;
 
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../domain/models/diagnostics.dart';
 import '../services/diagnostics/diagnostics_bundle.dart';
 import '../services/diagnostics/diagnostics_export.dart';
 import '../services/diagnostics/diagnostics_service.dart';
-import '../services/diagnostics/failure_ring_buffer.dart';
-import '../services/diagnostics/log_file_sink.dart';
-import '../services/diagnostics/source_health_checker.dart';
 import '../services/save_as.dart';
 
 class DiagnosticsProvider extends ChangeNotifier {
@@ -48,8 +47,6 @@ class DiagnosticsProvider extends ChangeNotifier {
 
   bool get hasCheckableChannels => service.healthTargetCount > 0;
 
-  bool get isLogRecording => service.isLogRecording;
-
   DiagnosticLogStatus get logStatus => service.logStatus;
 
   bool get isExporting => _exporting;
@@ -65,7 +62,11 @@ class DiagnosticsProvider extends ChangeNotifier {
           notifyListeners();
           return value;
         })
-        .catchError((Object _) => const DiagnosticsAppInfo());
+        .catchError((Object _) {
+          appInfo = const DiagnosticsAppInfo();
+          notifyListeners();
+          return appInfo!;
+        });
   }
 
   /// 开始一轮手动检查；冷却中 / 已在跑时返回 false。

@@ -11,9 +11,8 @@ import 'dart:typed_data';
 
 import 'app_info.dart';
 import 'diagnostics_bundle.dart';
+import '../../domain/models/diagnostics.dart';
 import 'diagnostics_service.dart';
-import 'failure_ring_buffer.dart';
-import 'source_health_checker.dart';
 
 typedef DiagnosticsSettingsGatherer =
     Future<DiagnosticsSettingsSnapshot> Function();
@@ -75,35 +74,34 @@ class DiagnosticsExporter implements DiagnosticsBundleBuilder {
     double? screenWidth,
     double? screenHeight,
     double? devicePixelRatio,
-  }) async => Uint8List.fromList(
-    utf8.encode(
-      await buildText(
-        screenWidth: screenWidth,
-        screenHeight: screenHeight,
-        devicePixelRatio: devicePixelRatio,
-      ),
-    ),
-  );
-
-  @override
-  Future<String> buildText({
-    double? screenWidth,
-    double? screenHeight,
-    double? devicePixelRatio,
   }) async {
     final job = await _gather(
       screenWidth: screenWidth,
       screenHeight: screenHeight,
       devicePixelRatio: devicePixelRatio,
     );
-    if (!runInIsolate) return _renderJob(job);
+    if (!runInIsolate) return _renderJobBytes(job);
     try {
-      return await Isolate.run(() => _renderJob(job));
+      return await Isolate.run(() => _renderJobBytes(job));
     } catch (_) {
       // 极少数受限宿主无法起 isolate：回退同步组装，导出仍然可用。
-      return _renderJob(job);
+      return _renderJobBytes(job);
     }
   }
+
+  /// 仅测试 / 调试用；UTF-8 编码也在 isolate 内完成（见 [buildBytes]）。
+  @override
+  Future<String> buildText({
+    double? screenWidth,
+    double? screenHeight,
+    double? devicePixelRatio,
+  }) async => utf8.decode(
+    await buildBytes(
+      screenWidth: screenWidth,
+      screenHeight: screenHeight,
+      devicePixelRatio: devicePixelRatio,
+    ),
+  );
 
   Future<_BundleJob> _gather({
     double? screenWidth,
@@ -137,6 +135,13 @@ class DiagnosticsExporter implements DiagnosticsBundleBuilder {
       databaseSnapshot = await database();
     } catch (_) {
       databaseNote = 'Database counts unavailable.';
+    }
+    // 导出前把队列里的最后一批日志落盘，避免漏掉最近约 1 秒的记录。
+    // flush 自身有界且不抛异常；日志不可用时只影响日志段。
+    try {
+      await service.logSink?.flush();
+    } catch (_) {
+      // 日志不可用不阻塞其余诊断段。
     }
     Directory? logDir;
     try {
@@ -184,6 +189,9 @@ class _BundleJob {
   final String? databaseNote;
   final String? logDirectoryPath;
 }
+
+Uint8List _renderJobBytes(_BundleJob job) =>
+    Uint8List.fromList(utf8.encode(_renderJob(job)));
 
 String _renderJob(_BundleJob job) {
   final logs = <DiagnosticsLogFile>[];

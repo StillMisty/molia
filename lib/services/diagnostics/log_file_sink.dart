@@ -17,10 +17,10 @@ import 'dart:io';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 
+import '../../domain/models/diagnostics.dart';
 import 'redaction.dart';
 
-/// sink 状态（设置页只需区分“正在记录 / 不可用”）。
-enum DiagnosticLogStatus { recording, unavailable, stopped }
+export '../../domain/models/diagnostics.dart' show DiagnosticLogStatus;
 
 /// 文件操作端口：生产用 [IoDiagnosticLogStore]，测试可注入抛异常 / 慢写入实现。
 abstract interface class DiagnosticLogStore {
