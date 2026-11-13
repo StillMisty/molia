@@ -11,10 +11,7 @@ import '../../domain/ports/music_source.dart';
 import '../../services/diagnostics/source_health_checker.dart';
 
 class CatalogSourceHealthProbe implements SourceHealthProbe {
-  CatalogSourceHealthProbe({
-    required SourceRegistry registry,
-    this.keyword = 'love',
-  }) : _registry = registry;
+  CatalogSourceHealthProbe({required this._registry, this.keyword = 'love'});
 
   final SourceRegistry _registry;
   final String keyword;

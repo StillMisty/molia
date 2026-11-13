@@ -83,7 +83,7 @@ class _PendingLine {
 /// 轮转文件日志 sink。
 class RotatingFileLogSink {
   RotatingFileLogSink({
-    required Future<Directory> Function() directory,
+    required this._directory,
     DiagnosticLogStore? store,
     this.maxBytes = 5 * 1024 * 1024,
     this.maxFiles = 3,
@@ -95,7 +95,6 @@ class RotatingFileLogSink {
   }) : assert(maxBytes > 0),
        assert(maxFiles >= 2),
        assert(backlogLimit > 0),
-       _directory = directory,
        _store = store ?? IoDiagnosticLogStore(),
        _now = now ?? DateTime.now;
 

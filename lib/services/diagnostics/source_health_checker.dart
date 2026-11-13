@@ -155,13 +155,11 @@ class SourceHealthConfig {
 /// 顺序、可取消、带冷却的手动渠道检查。
 class SourceHealthChecker {
   SourceHealthChecker({
-    required SourceHealthProbe probe,
-    SourceHealthConfig config = const SourceHealthConfig(),
+    required this._probe,
+    this._config = const SourceHealthConfig(),
     DateTime Function()? now,
     Future<void> Function(Duration)? delay,
-  }) : _probe = probe,
-       _config = config,
-       _now = now ?? DateTime.now,
+  }) : _now = now ?? DateTime.now,
        _delay = delay ?? Future<void>.delayed;
 
   final SourceHealthProbe _probe;

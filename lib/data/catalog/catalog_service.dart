@@ -22,13 +22,12 @@ import '../cache/request_cache.dart';
 class CatalogService {
   CatalogService({
     required this._registry,
-    FailureRecorder? failures,
+    this._failures,
     RequestCache? searchCache,
     Duration searchTtl = const Duration(minutes: 5),
     RequestCache? resolveCache,
     Duration resolveTtl = const Duration(minutes: 10),
-  }) : _failures = failures,
-       _searchCache = searchCache ?? RequestCache(ttl: searchTtl),
+  }) : _searchCache = searchCache ?? RequestCache(ttl: searchTtl),
        _resolveCache = resolveCache ?? RequestCache(ttl: resolveTtl);
 
   final SourceRegistry _registry;

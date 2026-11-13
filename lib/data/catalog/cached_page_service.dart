@@ -24,11 +24,9 @@ class CachedPageService<T, Q> {
     required int maxEntries,
     Duration ttl = const Duration(minutes: 10),
     RequestCache? cache,
-    FailureRecorder? failures,
-    ({String key, String displayName}) Function(Q query)? failureContext,
-  }) : _cache = cache ?? RequestCache(maxEntries: maxEntries, ttl: ttl),
-       _failures = failures,
-       _failureContext = failureContext;
+    this._failures,
+    this._failureContext,
+  }) : _cache = cache ?? RequestCache(maxEntries: maxEntries, ttl: ttl);
 
   final PageFetcher<T, Q> _fetch;
   final String Function(Q query, int page, int limit) _keyOf;

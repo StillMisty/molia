@@ -46,11 +46,10 @@ class DiagnosticsExporter implements DiagnosticsBundleBuilder {
     required this.settings,
     required this.sources,
     required this.database,
-    Future<Directory?> Function()? logDirectory,
+    this._logDirectory,
     DateTime Function()? now,
     this.runInIsolate = true,
-  }) : _logDirectory = logDirectory,
-       _now = now ?? DateTime.now;
+  }) : _now = now ?? DateTime.now;
 
   final DiagnosticsService service;
   final DiagnosticsAppInfoGatherer appInfo;
@@ -231,9 +230,9 @@ String _renderJob(_BundleJob job) {
     logs: logs,
     logsNote: logsNote,
     homeDirectories: [
-      if (Platform.environment['HOME'] case final home?) home,
-      if (Platform.environment['USERPROFILE'] case final home?) home,
-      if (Platform.environment['LOCALAPPDATA'] case final home?) home,
+      ?Platform.environment['HOME'],
+      ?Platform.environment['USERPROFILE'],
+      ?Platform.environment['LOCALAPPDATA'],
     ],
   );
   return renderDiagnosticsBundle(data);

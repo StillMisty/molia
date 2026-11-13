@@ -393,9 +393,7 @@ void _databaseSection(
   } else {
     buffer.writeln('schema version: ${database.schemaVersion}');
     for (final entry in database.counts.entries) {
-      buffer.writeln(
-        '${entry.key}: ${entry.value == null ? 'unavailable' : entry.value}',
-      );
+      buffer.writeln('${entry.key}: ${entry.value ?? 'unavailable'}');
     }
     buffer.writeln(
       'saved playback session: '

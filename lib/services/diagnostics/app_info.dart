@@ -12,11 +12,7 @@ import 'diagnostics_bundle.dart';
 
 /// 包信息 / 平台 / OS / ABI / 语言 / 构建模式 / 更新渠道。
 class DiagnosticsAppInfoGatherer {
-  DiagnosticsAppInfoGatherer({
-    String Function()? updateChannel,
-    bool Function()? updateAutoCheck,
-  }) : _updateChannel = updateChannel,
-       _updateAutoCheck = updateAutoCheck;
+  DiagnosticsAppInfoGatherer({this._updateChannel, this._updateAutoCheck});
 
   final String Function()? _updateChannel;
   final bool Function()? _updateAutoCheck;
