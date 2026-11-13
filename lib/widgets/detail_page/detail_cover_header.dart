@@ -132,7 +132,7 @@ class DetailCoverHeader extends StatelessWidget {
         borderRadius: shape == DetailCoverShape.circle
             ? BorderRadius.circular(_coverSize / 2)
             : BorderRadius.circular(_squareRadius),
-        semanticLabel: l10n.coverLabel,
+        semanticLabel: l10n.openCoverFor(title),
         onPressed: () {
           HapticsService.lightImpact();
           unawaited(

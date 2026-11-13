@@ -123,6 +123,25 @@ void main() {
     });
   });
 
+  group('200% 字号', () {
+    testWidgets('收藏页与播放页在 2.0 倍字号下不溢出', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await pumpPerfApp(
+        tester,
+        desktopShell: false,
+        favoritesCount: 3,
+        size: const Size(900, 900),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('播放').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('wideNowPlayingLayout')), findsOneWidget);
+    });
+  });
+
   group('设置两列', () {
     late ThemeProvider theme;
     late PlaybackProvider playback;

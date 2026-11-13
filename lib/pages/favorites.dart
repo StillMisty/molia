@@ -167,6 +167,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 自行决定高度，大字体下才能容纳完整 hint 与输入行框。
   static const double _headerRowHeight = 56;
 
+  /// 头部行高：随系统字号放大，避免标题 / 副标题在 200% 字号下被裁。
+  static double _headerHeight(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(_headerRowHeight);
+
   /// 头部（标题行 / 搜索行 / 多选栏）垂直留白：三者切换时留白一致；
   /// 搜索行高度本身由 AppSearchBar 决定。
   static const double _headerPaddingTop = 12;
@@ -1702,7 +1706,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         _headerPaddingBottom,
       ),
       child: SizedBox(
-        height: _headerRowHeight,
+        height: _headerHeight(context),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -2370,7 +2374,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         child: IconTheme.merge(
           data: IconThemeData(color: foreground),
           child: SizedBox(
-            height: _headerRowHeight,
+            height: _headerHeight(context),
             child: Row(
               children: [
                 const SizedBox(width: 4),

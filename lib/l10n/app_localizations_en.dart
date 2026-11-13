@@ -5526,4 +5526,34 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get listeningSyncConnected => 'Connected';
+
+  @override
+  String get seekBarLabel => 'Playback position';
+
+  @override
+  String seekBarValue(String current, String total) {
+    return '$current of $total';
+  }
+
+  @override
+  String get seekBarUnavailable => 'Nothing to seek';
+
+  @override
+  String get seekForward => 'Forward 10 seconds';
+
+  @override
+  String get seekBackward => 'Back 10 seconds';
+
+  @override
+  String openCoverFor(String title) {
+    return 'Open cover for $title';
+  }
+
+  @override
+  String openPlayerFor(String title) {
+    return 'Open player for $title';
+  }
+
+  @override
+  String get lyricCurrentLine => 'Current lyric';
 }

@@ -2659,5 +2659,37 @@
     }
   },
   "listeningSyncUnavailable": "听歌同步还没有准备好，请稍后再试",
-  "listeningSyncConnected": "已连接"
+  "listeningSyncConnected": "已连接",
+  "seekBarLabel": "播放进度",
+  "seekBarValue": "{current}，共 {total}",
+  "seekBarUnavailable": "没有可拖动的进度",
+  "seekForward": "快进 10 秒",
+  "seekBackward": "后退 10 秒",
+  "openCoverFor": "查看「{title}」的封面",
+  "openPlayerFor": "打开播放页：{title}",
+  "lyricCurrentLine": "当前歌词",
+  "@seekBarValue": {
+    "placeholders": {
+      "current": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "@openCoverFor": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "@openPlayerFor": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  }
 }

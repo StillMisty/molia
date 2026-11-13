@@ -717,6 +717,7 @@ class _MyAppState extends State<MyApp>
     // 整条顶栏是窗口拖动区（隐藏标题栏后唯一的拖动入口），高度 = 56 工具行
     // + 10 波浪进度，非桌面平台 WindowDragArea 是纯透传。
     final appBar = chrome.appBar(
+      context: context,
       title: WindowDoubleTapMaximize(
         // 双击顶栏标题区（拖动区的非按钮部分）= 最大化 / 还原（桌面肌肉记忆）；
         // 按钮区不参与，避免双击按钮顺带改窗口状态。

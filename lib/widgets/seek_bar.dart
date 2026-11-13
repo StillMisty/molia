@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/app_localizations.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 import '../utils/duration_text.dart';
 import 'seek_preview.dart';
 
@@ -180,7 +182,10 @@ class SeekBar extends StatelessWidget {
                   : null;
               final String label = durationText(valueMs.round()) ?? '0:00';
 
-              final Widget sliderBody = wavy && isPlaying
+              // 减弱动效：波浪是无限装饰动画，直接回落平直滑杆。
+              final bool useWavy =
+                  wavy && isPlaying && !reduceMotionOf(context);
+              final Widget sliderBody = useWavy
                   ? M3ESlider.wavy(
                       value: valueMs,
                       min: 0,
@@ -221,7 +226,56 @@ class SeekBar extends StatelessWidget {
               final String totalLabel = enabled
                   ? (durationText(durationMs) ?? '--:--')
                   : '--:--';
-              return _decorateSlider(context, slider, currentLabel, totalLabel);
+              final l10n =
+                  AppLocalizations.of(context) ??
+                  lookupAppLocalizations(const Locale('zh'));
+              final int stepMs = const Duration(seconds: 10).inMilliseconds;
+              final double increaseMs = (valueMs + stepMs).clamp(0.0, maxMs);
+              final double decreaseMs = (valueMs - stepMs).clamp(0.0, maxMs);
+              final Widget sliderWithKey = KeyedSubtree(
+                key: ValueKey<String>(useWavy ? 'seekBarWavy' : 'seekBarFlat'),
+                child: slider,
+              );
+              return Semantics(
+                container: true,
+                slider: true,
+                // 滑杆自身已有 slider 节点：合成本层，读数 / 动作只出现一次。
+                excludeSemantics: true,
+                label: l10n.seekBarLabel,
+                value: enabled
+                    ? l10n.seekBarValue(currentLabel, totalLabel)
+                    : l10n.seekBarUnavailable,
+                increasedValue: enabled
+                    ? l10n.seekBarValue(
+                        durationText(increaseMs.round()) ?? currentLabel,
+                        totalLabel,
+                      )
+                    : null,
+                decreasedValue: enabled
+                    ? l10n.seekBarValue(
+                        durationText(decreaseMs.round()) ?? currentLabel,
+                        totalLabel,
+                      )
+                    : null,
+                onIncrease: enabled
+                    ? () {
+                        controller.preview(increaseMs);
+                        controller.commit();
+                      }
+                    : null,
+                onDecrease: enabled
+                    ? () {
+                        controller.preview(decreaseMs);
+                        controller.commit();
+                      }
+                    : null,
+                child: _decorateSlider(
+                  context,
+                  sliderWithKey,
+                  currentLabel,
+                  totalLabel,
+                ),
+              );
             },
           );
         },

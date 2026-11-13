@@ -98,7 +98,10 @@ class DesktopShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appBar = chrome.appBar(title: _buildTitleBar(context));
+    final appBar = chrome.appBar(
+      context: context,
+      title: _buildTitleBar(context),
+    );
 
     return DesktopShortcuts(
       onFocusSearch: onOpenSearch,

@@ -992,39 +992,47 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         opacity: lyricsSynced
                             ? (isCurrentLine ? 1.0 : 0.8)
                             : 1.0,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (useKaraoke)
-                              KaraokeLyricText(
-                                key: _lineTextKeys[index],
-                                words: lineWords,
-                                position: playbackProvider.position,
-                                lead: kLyricDisplayLead,
-                                playedColor: theme.colorScheme.primary,
-                                unplayedColor: theme.colorScheme.onSurface,
-                              )
-                            else
-                              Text(
-                                line.text,
-                                key: _lineTextKeys[index],
-                                textAlign: TextAlign.left,
+                        child: Semantics(
+                          // 行是阅读单位：逐字高亮只影响绘画，不做逐词语义；
+                          // 自动滚动不请求焦点，也不把行标成 live region。
+                          container: true,
+                          excludeSemantics: true,
+                          label: line.text,
+                          selected: isCurrentLine,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (useKaraoke)
+                                KaraokeLyricText(
+                                  key: _lineTextKeys[index],
+                                  words: lineWords,
+                                  position: playbackProvider.position,
+                                  lead: kLyricDisplayLead,
+                                  playedColor: theme.colorScheme.primary,
+                                  unplayedColor: theme.colorScheme.onSurface,
+                                )
+                              else
+                                Text(
+                                  line.text,
+                                  key: _lineTextKeys[index],
+                                  textAlign: TextAlign.left,
+                                ),
+                              // 翻译 / 罗马音：空文本不占位；顺序与
+                              // LyricLineTracker 的扩展行拼接一致。逐行渲染，
+                              // 与主行一起滚动；歌词页开关切换时展开 / 收起。
+                              _buildExtendedLines(
+                                showTranslation: showTranslation,
+                                translation: lineTranslation,
+                                showRoma: showRoma,
+                                roma: lineRoma,
+                                style: extendedLineStyle,
+                                // 只有当前行（且页面活跃）做展开 / 收起：
+                                // 否则切换翻译开关时几十行 SizeTransition 同时跑。
+                                animate: active && isCurrentLine,
                               ),
-                            // 翻译 / 罗马音：空文本不占位；顺序与
-                            // LyricLineTracker 的扩展行拼接一致。逐行渲染，
-                            // 与主行一起滚动；歌词页开关切换时展开 / 收起。
-                            _buildExtendedLines(
-                              showTranslation: showTranslation,
-                              translation: lineTranslation,
-                              showRoma: showRoma,
-                              roma: lineRoma,
-                              style: extendedLineStyle,
-                              // 只有当前行（且页面活跃）做展开 / 收起：
-                              // 否则切换翻译开关时几十行 SizeTransition 同时跑。
-                              animate: active && isCurrentLine,
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),

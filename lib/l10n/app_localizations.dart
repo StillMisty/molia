@@ -9825,6 +9825,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connected'**
   String get listeningSyncConnected;
+
+  /// No description provided for @seekBarLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback position'**
+  String get seekBarLabel;
+
+  /// No description provided for @seekBarValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{current} of {total}'**
+  String seekBarValue(String current, String total);
+
+  /// No description provided for @seekBarUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to seek'**
+  String get seekBarUnavailable;
+
+  /// No description provided for @seekForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Forward 10 seconds'**
+  String get seekForward;
+
+  /// No description provided for @seekBackward.
+  ///
+  /// In en, this message translates to:
+  /// **'Back 10 seconds'**
+  String get seekBackward;
+
+  /// No description provided for @openCoverFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Open cover for {title}'**
+  String openCoverFor(String title);
+
+  /// No description provided for @openPlayerFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Open player for {title}'**
+  String openPlayerFor(String title);
+
+  /// No description provided for @lyricCurrentLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Current lyric'**
+  String get lyricCurrentLine;
 }
 
 class _AppLocalizationsDelegate

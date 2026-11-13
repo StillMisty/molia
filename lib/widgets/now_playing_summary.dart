@@ -177,6 +177,15 @@ class NowPlayingTrackText extends StatelessWidget {
     });
     final (name, artists) = info;
     if (name == null || name.isEmpty) return const NowPlayingAppTitle();
+    // 顶栏是固定高度槽：大字号下只保留歌名，作者行让位，避免标题块被裁。
+    final double textScale = MediaQuery.textScalerOf(context).scale(1);
+    final bool showArtist =
+        artists != null && artists.isNotEmpty && textScale <= 1.5;
+    // 顶栏工具行只有 48dp 的动作槽：大字号用 bodyMedium（仍是 200%）而不是
+    // titleMedium，否则文本块会超出 M3E 标题槽 4dp。
+    final TextStyle titleStyle = textScale > 1.5
+        ? context.typeScale.bodyMedium.copyWith(height: 1.0)
+        : context.typeScale.titleMedium;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -184,11 +193,11 @@ class NowPlayingTrackText extends StatelessWidget {
       children: [
         Text(
           name,
-          style: context.typeScale.titleMedium,
+          style: titleStyle,
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
         ),
-        if (artists != null && artists.isNotEmpty)
+        if (showArtist)
           Text(
             artists,
             style: context.typeScale.labelSmall,

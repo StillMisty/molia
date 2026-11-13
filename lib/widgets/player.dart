@@ -390,16 +390,23 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            PlayerCoverDeck(
-              displayTrack: displayTrack,
-              artDimension: metrics.artDimension,
-              stackDimension: metrics.stackWidth,
-              stackHeight: metrics.stackHeight,
-              fullCoverKey: _fullCoverKey,
-              isLargeScreen: widget.isLargeScreen,
-              morph: morph,
-              coverFlightActive: _coverFlightActive,
-              onTrackSwapped: _handleTrackSwapped,
+            Semantics(
+              // 封面不是纯装饰：播放页 / 迷你条点击它进入播放页。
+              image: true,
+              label: displayTrack == null
+                  ? _l10n(context).coverLabel
+                  : _l10n(context).openPlayerFor(displayTrack.title),
+              child: PlayerCoverDeck(
+                displayTrack: displayTrack,
+                artDimension: metrics.artDimension,
+                stackDimension: metrics.stackWidth,
+                stackHeight: metrics.stackHeight,
+                fullCoverKey: _fullCoverKey,
+                isLargeScreen: widget.isLargeScreen,
+                morph: morph,
+                coverFlightActive: _coverFlightActive,
+                onTrackSwapped: _handleTrackSwapped,
+              ),
             ),
             const SizedBox(height: 6),
             Padding(
@@ -857,16 +864,22 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            PlayerCoverDeck(
-              displayTrack: displayTrack,
-              artDimension: metrics.artDimension,
-              stackDimension: metrics.stackWidth,
-              stackHeight: metrics.stackHeight,
-              fullCoverKey: _fullCoverKey,
-              isLargeScreen: widget.isLargeScreen,
-              morph: widget.morph,
-              coverFlightActive: _coverFlightActive,
-              onTrackSwapped: _handleTrackSwapped,
+            Semantics(
+              image: true,
+              label: displayTrack == null
+                  ? _l10n(context).coverLabel
+                  : _l10n(context).openPlayerFor(displayTrack.title),
+              child: PlayerCoverDeck(
+                displayTrack: displayTrack,
+                artDimension: metrics.artDimension,
+                stackDimension: metrics.stackWidth,
+                stackHeight: metrics.stackHeight,
+                fullCoverKey: _fullCoverKey,
+                isLargeScreen: widget.isLargeScreen,
+                morph: widget.morph,
+                coverFlightActive: _coverFlightActive,
+                onTrackSwapped: _handleTrackSwapped,
+              ),
             ),
             const SizedBox(height: spacingBelowArt),
             Padding(

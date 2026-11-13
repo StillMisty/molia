@@ -5290,4 +5290,34 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get listeningSyncConnected => '已连接';
+
+  @override
+  String get seekBarLabel => '播放进度';
+
+  @override
+  String seekBarValue(String current, String total) {
+    return '$current，共 $total';
+  }
+
+  @override
+  String get seekBarUnavailable => '没有可拖动的进度';
+
+  @override
+  String get seekForward => '快进 10 秒';
+
+  @override
+  String get seekBackward => '后退 10 秒';
+
+  @override
+  String openCoverFor(String title) {
+    return '查看「$title」的封面';
+  }
+
+  @override
+  String openPlayerFor(String title) {
+    return '打开播放页：$title';
+  }
+
+  @override
+  String get lyricCurrentLine => '当前歌词';
 }
