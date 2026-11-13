@@ -25,6 +25,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get close => '关闭';
 
   @override
+  String get loading => '正在加载';
+
+  @override
   String playbackFailed(String error) {
     return '播放失败: $error';
   }

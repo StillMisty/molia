@@ -5,6 +5,7 @@
   "lyricsTab": "歌词",
   "cancel": "取消",
   "close": "关闭",
+  "loading": "正在加载",
   "playbackFailed": "播放失败: {error}",
   "searchHint": "搜索歌曲、歌手或歌词",
   "searchIdleHint": "输入关键词搜索歌曲、歌手或歌词",

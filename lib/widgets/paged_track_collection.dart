@@ -143,6 +143,7 @@ class PagedTrackCollectionBody<R> extends StatefulWidget {
     this.emptyIcon = Icons.music_note_rounded,
     this.tableColumns = false,
     this.pinnedTableHeader = false,
+    this.loadingBuilder,
   });
 
   final PagedListState<R> state;
@@ -179,6 +180,12 @@ class PagedTrackCollectionBody<R> extends StatefulWidget {
   /// 表格档是否把列标题钉在视口顶部（发现详情页）。
   final bool pinnedTableHeader;
 
+  /// 首屏加载态；为空时使用详情页统一的居中转圈。
+  ///
+  /// 发现详情页用它换成骨架图（头部封面同时承担 Hero 目标端）；
+  /// 专辑 / 歌手不传，加载态保持原样。
+  final WidgetBuilder? loadingBuilder;
+
   @override
   State<PagedTrackCollectionBody<R>> createState() =>
       _PagedTrackCollectionBodyState<R>();
@@ -199,7 +206,7 @@ class _PagedTrackCollectionBodyState<R>
   Widget build(BuildContext context) {
     final state = widget.state;
     if (state.isLoading) {
-      return const DetailPageLoading();
+      return widget.loadingBuilder?.call(context) ?? const DetailPageLoading();
     }
     if (state.failed) {
       return DetailPageFailure(

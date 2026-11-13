@@ -16,6 +16,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services/haptics.dart';
 import '../app_network_image.dart';
+import '../cover_hero.dart';
 import '../cover_tap_target.dart';
 import '../cover_viewer.dart';
 import 'detail_page_chrome.dart';
@@ -47,6 +48,7 @@ class DetailCoverHeader extends StatelessWidget {
     this.action,
     this.viewerSubtitle,
     this.viewerFileNameBase,
+    this.heroTag,
   });
 
   /// 已解析的封面地址；null / 空串走占位。
@@ -76,10 +78,87 @@ class DetailCoverHeader extends StatelessWidget {
   /// 查看器「保存原图」的文件名基名；缺省与 [viewerSubtitle] 相同。
   final String? viewerFileNameBase;
 
+  /// 非空时封面参与路由共享元素（来源卡片用同一个 tag）。
+  ///
+  /// 专辑 / 歌手入口不传，行为与加入 Hero 之前一致。
+  final Object? heroTag;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = _l10n(context);
+    final coverUrl = this.coverUrl;
+    final hasCover = coverUrl != null && coverUrl.isNotEmpty;
+
+    Widget artwork = DetailCoverArtwork(
+      coverUrl: coverUrl,
+      shape: shape,
+      fallbackIcon: fallbackIcon,
+      heroTag: heroTag,
+    );
+
+    if (hasCover) {
+      final viewerSubtitle = this.viewerSubtitle ?? title;
+      final fileNameBase = viewerFileNameBase ?? viewerSubtitle;
+      artwork = CoverTapTarget(
+        // key 只挂在可点层上：无封面时页面里不应出现这个入口。
+        key: coverKey,
+        size: _coverSize,
+        // 交互层与裁切同形：圆形头像的触控高亮才不会被方形圆角切掉。
+        borderRadius: shape == DetailCoverShape.circle
+            ? BorderRadius.circular(_coverSize / 2)
+            : BorderRadius.circular(_squareRadius),
+        semanticLabel: l10n.openCoverFor(title),
+        onPressed: () {
+          HapticsService.lightImpact();
+          unawaited(
+            showCoverViewer(
+              context,
+              coverUrl: coverUrl,
+              title: l10n.coverLabel,
+              subtitle: viewerSubtitle,
+              fileNameBase: fileNameBase,
+            ),
+          );
+        },
+        child: artwork,
+      );
+    }
+
+    return DetailPageHeroHeader(
+      artwork: artwork,
+      title: title,
+      subtitle: subtitle,
+      description: description,
+      action: action,
+    );
+  }
+}
+
+/// 详情页封面视觉：96dp 方 / 圆 + 占位 + 可选共享元素。
+///
+/// 从 [DetailCoverHeader] 抽出，详情页加载骨架与加载完成后的头部共用同一份
+/// 尺寸 / 占位 / 解码口径；各写一份时 Hero 落位会看到圆角或占位图标跳变。
+class DetailCoverArtwork extends StatelessWidget {
+  const DetailCoverArtwork({
+    super.key,
+    required this.coverUrl,
+    required this.shape,
+    required this.fallbackIcon,
+    this.heroTag,
+  });
+
+  final String? coverUrl;
+  final DetailCoverShape shape;
+
+  /// 无封面 / 加载失败时的占位图标。
+  final IconData fallbackIcon;
+
+  /// 非空时把封面包进路由共享元素（tag 由入口按内容 id 生成）。
+  final Object? heroTag;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final l10n = _l10n(context);
     final coverUrl = this.coverUrl;
     final hasCover = coverUrl != null && coverUrl.isNotEmpty;
     final placeholder = ColoredBox(
@@ -121,41 +200,9 @@ class DetailCoverHeader extends StatelessWidget {
       DetailCoverShape.circle => ClipOval(child: artwork),
     };
 
-    if (hasCover) {
-      final viewerSubtitle = this.viewerSubtitle ?? title;
-      final fileNameBase = viewerFileNameBase ?? viewerSubtitle;
-      artwork = CoverTapTarget(
-        // key 只挂在可点层上：无封面时页面里不应出现这个入口。
-        key: coverKey,
-        size: _coverSize,
-        // 交互层与裁切同形：圆形头像的触控高亮才不会被方形圆角切掉。
-        borderRadius: shape == DetailCoverShape.circle
-            ? BorderRadius.circular(_coverSize / 2)
-            : BorderRadius.circular(_squareRadius),
-        semanticLabel: l10n.openCoverFor(title),
-        onPressed: () {
-          HapticsService.lightImpact();
-          unawaited(
-            showCoverViewer(
-              context,
-              coverUrl: coverUrl,
-              title: l10n.coverLabel,
-              subtitle: viewerSubtitle,
-              fileNameBase: fileNameBase,
-            ),
-          );
-        },
-        child: artwork,
-      );
-    }
-
-    return DetailPageHeroHeader(
-      artwork: artwork,
-      title: title,
-      subtitle: subtitle,
-      description: description,
-      action: action,
-    );
+    final heroTag = this.heroTag;
+    if (heroTag == null) return artwork;
+    return CoverHero(tag: heroTag, child: artwork);
   }
 }
 

@@ -12,6 +12,7 @@ import '../providers/paged_list_controller.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import 'app_search_bar.dart';
+import 'cover_hero.dart';
 import 'discover_layout.dart';
 import 'empty_state.dart';
 import 'library_cover.dart';
@@ -22,6 +23,13 @@ import 'shell_page_visibility.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
+
+/// 歌单封面共享元素 tag。
+///
+/// 带上渠道 key：不同平台可能出现相同歌单 id，仅用 id 会在切换渠道后的
+/// 过渡帧里撞 tag；同一渠道内 id 唯一，详情页复用同一个值。
+String _playlistCoverTag(String channelKey, String playlistId) =>
+    'discover-playlist-cover:$channelKey:$playlistId';
 
 /// 资料页「歌单」tab：平台选择 + 歌单搜索 / 标签筛选 / 歌单列表（分页）。
 class DiscoverPlaylistsTab extends StatefulWidget {
@@ -180,6 +188,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
         builder: (_) => DiscoverTracksPage(
           title: playlist.name,
           coverUrl: playlist.coverUrl,
+          coverHeroTag: _playlistCoverTag(provider.channelKey, playlist.id),
           importable: true,
           loader: (page) => provider.loadPlaylistDetail(playlist.id, page),
         ),
@@ -367,6 +376,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                       state,
                       gutter: gutter,
                       contentWidth: contentWidth,
+                      channelKey: provider.channelKey,
                     ),
                     const SliverToBoxAdapter(
                       child: SizedBox(height: discoverPageBottomPadding),
@@ -431,6 +441,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     PagedListState<DiscoverPlaylist> state, {
     required double gutter,
     required double contentWidth,
+    required String channelKey,
   }) {
     final items = state.items;
     if (state.isLoading && items.isEmpty) {
@@ -528,8 +539,13 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
               mainAxisExtent: discoverPlaylistTileExtentOf(context, tileWidth),
             ),
             itemCount: items.length,
-            itemBuilder: (context, index) =>
-                _playlistGridCard(theme, l10n, items[index], tileWidth),
+            itemBuilder: (context, index) => _playlistGridCard(
+              theme,
+              l10n,
+              items[index],
+              tileWidth,
+              channelKey,
+            ),
           ),
         ),
         ?footer,
@@ -544,7 +560,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
           itemExtent: _playlistCardHeight(context) + 8,
           itemCount: items.length,
           itemBuilder: (context, index) =>
-              _playlistCard(theme, l10n, items[index]),
+              _playlistCard(theme, l10n, items[index], channelKey),
         ),
       ),
       ?footer,
@@ -562,6 +578,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     ThemeData theme,
     AppLocalizations l10n,
     DiscoverPlaylist playlist,
+    String channelKey,
   ) {
     final subtitle = _playlistSubtitle(l10n, playlist);
     return Padding(
@@ -574,7 +591,10 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
           padding: const EdgeInsets.all(8),
           child: Row(
             children: [
-              LibraryCoverThumb(url: playlist.coverUrl, size: 56),
+              CoverHero(
+                tag: _playlistCoverTag(channelKey, playlist.id),
+                child: LibraryCoverThumb(url: playlist.coverUrl, size: 56),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -618,6 +638,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     AppLocalizations l10n,
     DiscoverPlaylist playlist,
     double tileWidth,
+    String channelKey,
   ) {
     final type = context.typeScale;
     final cover = tileWidth - 16;
@@ -633,7 +654,10 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
         children: [
           SizedBox.square(
             dimension: cover,
-            child: LibraryCoverThumb(url: playlist.coverUrl, size: cover),
+            child: CoverHero(
+              tag: _playlistCoverTag(channelKey, playlist.id),
+              child: LibraryCoverThumb(url: playlist.coverUrl, size: cover),
+            ),
           ),
           const SizedBox(height: 8),
           // 固定 2 行标题区 + 1 行副标题区：同行卡片文字基线一致，

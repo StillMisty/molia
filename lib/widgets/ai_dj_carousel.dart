@@ -40,6 +40,7 @@ import 'ai_dj_waiting.dart';
 import 'discover_layout.dart';
 import 'modal_page_navigator.dart';
 import 'playing_indicator.dart';
+import 'skeleton.dart';
 import 'track_artwork.dart';
 
 class AiDjCarousel extends StatefulWidget {
@@ -308,7 +309,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
     );
     return SizedBox(
       height: _placeholderWidth,
-      child: AiDjPulse(
+      child: SkeletonPulse(
         child: ListView(
           scrollDirection: Axis.horizontal,
           physics: const NeverScrollableScrollPhysics(),

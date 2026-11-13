@@ -33,6 +33,7 @@ import '../widgets/ai_dj_waiting.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
+import '../widgets/skeleton.dart';
 import '../widgets/track_row.dart';
 
 class AiDjPage extends StatefulWidget {
@@ -919,7 +920,7 @@ class _GenerationCardState extends State<_GenerationCard> {
         children: [
           Row(
             children: [
-              const AiDjPulse(
+              const SkeletonPulse(
                 child: SizedBox(
                   width: 20,
                   height: 20,
