@@ -31,6 +31,7 @@ import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/ai_dj_page.dart';
 import '../providers/ai_dj_provider.dart';
+import '../providers/playback_provider.dart';
 import '../services/ai/ai_generation_executor.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
@@ -38,6 +39,7 @@ import 'ai_dj_shared.dart';
 import 'ai_dj_waiting.dart';
 import 'discover_layout.dart';
 import 'modal_page_navigator.dart';
+import 'playing_indicator.dart';
 import 'track_artwork.dart';
 
 class AiDjCarousel extends StatefulWidget {
@@ -334,6 +336,81 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
     final scheme = Theme.of(context).colorScheme;
     final type = context.typeScale;
     final desktop = isDesktopPlatform();
+    // 只订阅「当前曲目 + 播放态」，不做逐卡 select：切歌 / 暂停时整条卡片流
+    // 重建一次，非当前卡仍走同一份静态封面，不会各自挂 ticker。
+    final nowPlaying = context
+        .select<PlaybackProvider?, ({String? uri, bool isPlaying})>(
+          (playback) => (
+            uri: playback?.snapshot.current?.id.uri,
+            isPlaying: playback?.snapshot.isPlaying ?? false,
+          ),
+        );
+    final items = <M3ECarouselItem>[];
+    for (var i = 0; i < batch.items.length; i++) {
+      final item = batch.items[i];
+      final isCurrent = item.track.id.uri == nowPlaying.uri;
+      final isPlaying = isCurrent && nowPlaying.isPlaying;
+      items.add(
+        M3ECarouselItem(
+          // 封面 + 原生 title/subtitle 槽位：文字由 carousel 按当前槽位
+          // 渲染，任何宽度下都保留歌名与歌手。
+          image: _carouselCover(
+            context,
+            item,
+            isCurrent: isCurrent,
+            isPlaying: isPlaying,
+          ),
+          title: Text(
+            item.track.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: type.titleSmall.copyWith(
+              color: isCurrent ? scheme.primary : null,
+            ),
+          ),
+          subtitle: _artistOf(item).isEmpty
+              ? null
+              : Text(
+                  _artistOf(item),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: type.bodySmall,
+                ),
+          // 关闭按槽位隐藏标题：歌名与歌手每张卡都要在。
+          applyDynamicTextContentTransform: false,
+          showScrim: const M3ECarouselScrim.gradient(),
+          semanticLabel: _semanticLabel(
+            l10n,
+            item,
+            isCurrent: isCurrent,
+            isPlaying: isPlaying,
+          ),
+          onTap: () {
+            unawaited(provider.playRecommendation(i));
+            // 点中的卡滚到焦点位：拖动/滚轮之后焦点未必在它身上，
+            // 信息区也就跟着焦点落到这首上。
+            unawaited(_controller.animateToItem(i));
+          },
+        ),
+      );
+    }
+    items.add(
+      M3ECarouselItem(
+        image: Container(
+          color: scheme.surfaceContainerHigh,
+          child: Center(
+            child: Icon(
+              Icons.refresh_rounded,
+              size: 34,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        // 只留图标：卡片上不再写「换一批」，读屏名靠语义标签。
+        semanticLabel: l10n.aiDjRefreshBatch,
+        onTap: () => unawaited(provider.refreshRecommendations()),
+      ),
+    );
     final carousel = M3ECarousel(
       key: const Key('aiDjCarousel'),
       controller: _controller,
@@ -346,61 +423,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
         if (!mounted || details.focalIndex == _focalIndex) return;
         setState(() => _focalIndex = details.focalIndex);
       },
-      children: [
-        for (var i = 0; i < batch.items.length; i++)
-          M3ECarouselItem(
-            // 封面 + 原生 title/subtitle 槽位：文字由 carousel 按当前槽位
-            // 渲染，任何宽度下都保留歌名与歌手。
-            image: TrackArtwork(
-              track: batch.items[i].track,
-              fit: BoxFit.cover,
-              // 卡片流以前按原图解码（大封面一次就是数 MB）：这里只给解码
-              // 上界，宽高交给 carousel 槽位，视觉布局不变。
-              memCacheWidth: AiDjCarousel.coverMemCacheWidth(context),
-              fallbackColor: scheme.surfaceContainerHighest,
-              fallbackIconSize: 32,
-            ),
-            title: Text(
-              batch.items[i].track.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: type.titleSmall,
-            ),
-            subtitle: _artistOf(batch.items[i]).isEmpty
-                ? null
-                : Text(
-                    _artistOf(batch.items[i]),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: type.bodySmall,
-                  ),
-            // 关闭按槽位隐藏标题：歌名与歌手每张卡都要在。
-            applyDynamicTextContentTransform: false,
-            showScrim: const M3ECarouselScrim.gradient(),
-            semanticLabel: _semanticLabel(batch.items[i]),
-            onTap: () {
-              unawaited(provider.playRecommendation(i));
-              // 点中的卡滚到焦点位：拖动/滚轮之后焦点未必在它身上，
-              // 信息区也就跟着焦点落到这首上。
-              unawaited(_controller.animateToItem(i));
-            },
-          ),
-        M3ECarouselItem(
-          image: Container(
-            color: scheme.surfaceContainerHigh,
-            child: Center(
-              child: Icon(
-                Icons.refresh_rounded,
-                size: 34,
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          // 只留图标：卡片上不再写「换一批」，读屏名靠语义标签。
-          semanticLabel: l10n.aiDjRefreshBatch,
-          onTap: () => unawaited(provider.refreshRecommendations()),
-        ),
-      ],
+      children: items,
     );
     if (!desktop) return carousel;
     return ScrollConfiguration(
@@ -415,6 +438,39 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
       // 横向滚动视图只吃 `dx`，普通滚轮的 `dy` 到不了它手里：在外面自己接
       // 指针信号，把 dy 攒够一格再翻一张。
       child: Listener(onPointerSignal: _onPointerSignal, child: carousel),
+    );
+  }
+
+  /// 推荐卡封面：当前曲目在右上角叠播放角标。
+  ///
+  /// 角标放在封面层而不是文字层：不挤占歌名 / 歌手槽位，也避开底部
+  /// scrim；非当前卡只返回原封面，不构建任何动画对象。
+  Widget _carouselCover(
+    BuildContext context,
+    ResolvedRecommendation item, {
+    required bool isCurrent,
+    required bool isPlaying,
+  }) {
+    final artwork = TrackArtwork(
+      track: item.track,
+      fit: BoxFit.cover,
+      // 卡片流以前按原图解码（大封面一次就是数 MB）：这里只给解码
+      // 上界，宽高交给 carousel 槽位，视觉布局不变。
+      memCacheWidth: AiDjCarousel.coverMemCacheWidth(context),
+      fallbackColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+      fallbackIconSize: 32,
+    );
+    if (!isCurrent) return artwork;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        artwork,
+        Positioned(
+          top: 8,
+          right: 8,
+          child: AnimatedPlayingBadge(isPlaying: isPlaying),
+        ),
+      ],
     );
   }
 
@@ -538,9 +594,19 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
   static String _artistOf(ResolvedRecommendation item) =>
       item.track.artistLabel;
 
-  String _semanticLabel(ResolvedRecommendation item) {
+  String _semanticLabel(
+    AppLocalizations l10n,
+    ResolvedRecommendation item, {
+    required bool isCurrent,
+    required bool isPlaying,
+  }) {
     final artist = _artistOf(item);
-    return artist.isEmpty ? item.track.title : '${item.track.title} - $artist';
+    final base = artist.isEmpty
+        ? item.track.title
+        : '${item.track.title} - $artist';
+    if (!isCurrent) return base;
+    final state = isPlaying ? l10n.nowPlayingSection : l10n.nowPlayingPaused;
+    return '$base, $state';
   }
 
   void _openPage(BuildContext context) {

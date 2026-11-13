@@ -426,9 +426,10 @@
   `AiDjCarousel` 只展示 active 批次，用 carousel 原生槽位展示歌名/歌手
   （`applyDynamicTextContentTransform: false`）：桌面端鼠标拖拽跟手（松手吸附）、
   滚轮翻卡（自接指针信号把 `dy` 转成步进，横向滚动视图默认只吃 `dx`），点卡
-  滚到焦点位（`M3ECarouselController.animateToItem`）；卡片流下方信息区只显示
-  焦点卡的推荐理由（歌名 / 歌手由卡片槽位承担，不在信息区重复），理由为空 /
-  焦点越界不渲染（`aiDjReasonPanel`）。「查看全部」进 AI 页的弹层不带关闭 X
+  滚到焦点位（`M3ECarouselController.animateToItem`）；当前播放卡封面右上角
+  叠同款均衡器角标（播放中起伏、暂停冻结），标题用 `primary` 强调；卡片流
+  下方信息区只显示焦点卡的推荐理由（歌名 / 歌手由卡片槽位承担，不在信息区
+  重复），理由为空 / 焦点越界不渲染（`aiDjReasonPanel`）。「查看全部」进 AI 页的弹层不带关闭 X
   （`showCloseButton: false`：避免双层 chrome；AI 页首屏在标题栏显示自己的
   关闭按钮，子页用返回键，关闭也可走遮罩 / Esc / 下滑 / 系统返回）。
   功能未启用时整条隐藏；播放页不再有

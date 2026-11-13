@@ -576,6 +576,8 @@ class TrackRow extends StatelessWidget {
             cover: artwork,
             size: surface.coverSize,
             isPlaying: isPlaying,
+            // 只有当前曲目会构建这一层；播放中让角标恢复起伏，暂停自动停。
+            animate: true,
           )
         : artwork;
     if (!surface.showCheckWhenSelected) return cover;

@@ -118,6 +118,7 @@ class AiDjTrackTile extends StatelessWidget {
                       cover: artwork,
                       size: 44,
                       isPlaying: isPlaying,
+                      animate: true,
                     )
                   : artwork;
             },

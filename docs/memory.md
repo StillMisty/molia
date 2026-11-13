@@ -279,7 +279,7 @@ pending / keepAlive，当前展示的封面不受影响。
 | `lib/sources/builtin/**`、`lib/services/covers/cover_backfill_service.dart` | 新增幂等 `clearCache()`：只清已完成结果，不动平台 / 脚本注册表；在途请求的 identity 校验阻止旧结果写回 |
 | `lib/widgets/ai_dj_carousel.dart` | AI 推荐卡封面按 `256 × DPR` 解码，不再按原图；布局仍由 carousel 槽位决定 |
 | `lib/app/tray_dormant_gate.dart` | 改为 `childBuilder`：托盘隐藏期间不构造整棵 `MaterialApp` 配置（原先 child 实参在 build 前已求值） |
-| `lib/widgets/seek_bar.dart`、`app_shell.dart`、`player.dart`、`current_track_cover.dart` | wavy 进度只保留在播放页（显式 `wavy: true`）；顶栏 / 迷你条 / 列表均衡器静态；最小化时 `AppPresenceTickerMode` 静音 ticker（只停动画，不清缓存 / 不改变最小化语义） |
+| `lib/widgets/seek_bar.dart`、`app_shell.dart`、`player.dart`、`current_track_cover.dart`、`playing_indicator.dart` | wavy 进度只保留在播放页（显式 `wavy: true`）；顶栏 / 迷你条静态；当前曲目角标（列表 / AI 页 / 发现页推荐卡）播放时起伏、暂停冻结；最小化 / 托盘隐藏时 `AppPresenceTickerMode` 静音 ticker（只停动画，不清缓存 / 不改变最小化语义） |
 | `lib/data/playback/local_playback_backend.dart`、`queue_projection.dart` | 队列投影按 `(queueRevision, index, mode, playbackOrderRevision, shuffleOrderRevision)` 缓存；位置 tick 不再跑 O(N) 投影与 `upNext` 映射（CPU，不是内存回收） |
 | `lib/managers/artwork_cache.dart` | 封面元数据 `updateOrInsert` 跳过「只有 touched 变化」的整文件重写；淘汰仍按文件 mtime |
 | `lib/services/window/window_bounds_store.dart`、`playback_volume_store.dart`、`nav_provider.dart` | 窗口几何 / 音量 + 静音 / 导航布局各合并成单键 JSON：一次动作的整份 prefs 重写从 4 / 2 / 3 次降为 1 次；旧键保留只读兜底 |
@@ -291,7 +291,7 @@ pending / keepAlive，当前展示的封面不受影响。
 ### 9.2 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：**2601 passed / 11 skipped**（新增：延迟 trim / 暂停 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate、会话 cursor 增量 / fresh 快照 / 最大版本应用 / 本地曲目下标映射、换队列播放器回收、系统退出请求门闩）；
+- `flutter test --no-pub`：**2636 passed / 11 skipped**（新增：延迟 trim / 暂停 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate、会话 cursor 增量 / fresh 快照 / 最大版本应用 / 本地曲目下标映射、换队列播放器回收、系统退出请求门闩）；
 - Windows release（2026-11-11，本机；顶栏关闭键 / 任务栏关闭走同一策略，`SC_CLOSE` 与 runner 转发的 `WM_CLOSE` 都覆盖）：
   - `memory_windows.ps1` 一次完整场景：空闲专用工作集 170.0MB、浏览 234.5MB、关闭前 210.4MB；托盘 +3s **4.1MB**、+15s **3.1MB**（该轮日志出现 `托盘暂停延迟 trim`，是暂停/空闲托盘，不能当作播放态收益）。
   - 另一次确认 `play.start result=ok`、播放中关到托盘：**133–143MB**，90s 内稳定（`cache_path=direct`）；原始反馈的 200MB 在同一构建未复现。

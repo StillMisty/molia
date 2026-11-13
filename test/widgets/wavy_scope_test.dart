@@ -7,6 +7,7 @@ import 'package:molia/app/app_shell.dart' as shell;
 import 'package:molia/app/tray_dormant_gate.dart';
 import 'package:molia/services/app_presence.dart';
 import 'package:molia/widgets/current_track_cover.dart';
+import 'package:molia/widgets/playing_indicator.dart';
 import 'package:molia/widgets/seek_bar.dart';
 import 'package:molia/widgets/seek_preview.dart';
 
@@ -126,6 +127,30 @@ void main() {
     });
   });
 
+  group('AnimatedPlayingBadge', () {
+    Widget badge({required bool isPlaying, bool animate = true}) => host(
+      Center(
+        child: AnimatedPlayingBadge(isPlaying: isPlaying, animate: animate),
+      ),
+    );
+
+    testWidgets('播放中起伏，暂停原地冻结', (tester) async {
+      await tester.pumpWidget(badge(isPlaying: true));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isTrue);
+
+      await tester.pumpWidget(badge(isPlaying: false));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('animate=false 只作静态状态标识', (tester) async {
+      await tester.pumpWidget(badge(isPlaying: true, animate: false));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+  });
+
   group('TrayDormantGate', () {
     testWidgets('托盘隐藏时不构建整棵应用树，恢复后重新构建', (tester) async {
       final presence = AppPresence.instance;
@@ -153,6 +178,34 @@ void main() {
   });
 
   group('AppPresenceTickerMode', () {
+    testWidgets('最小化后播放角标不再调度帧', (tester) async {
+      final presence = AppPresence.instance;
+      presence.markVisible();
+      addTearDown(presence.markVisible);
+
+      await tester.pumpWidget(
+        host(
+          AppPresenceTickerMode(
+            child: Center(child: AnimatedPlayingBadge(isPlaying: true)),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(
+        tester.binding.transientCallbackCount,
+        greaterThan(0),
+        reason: '可见时角标应在跑 ticker',
+      );
+
+      presence.markMinimized();
+      await tester.pump();
+      expect(
+        tester.binding.transientCallbackCount,
+        0,
+        reason: '最小化后 TickerMode 应静音角标，不再调度帧',
+      );
+    });
+
     testWidgets('最小化时静音子树 ticker，恢复可见后重新启用', (tester) async {
       final presence = AppPresence.instance;
       presence.markVisible();

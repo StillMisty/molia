@@ -1,6 +1,9 @@
 import 'dart:math' as math;
 
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+
+import '../theme/motion_policy.dart';
 
 /// 播放中的均衡器角标：3 根圆角竖柱按正弦相位起伏。
 ///
@@ -35,6 +38,115 @@ class PlayingIndicator extends StatelessWidget {
       child: CustomPaint(
         size: Size.square(size),
         painter: _PlayingIndicatorPainter(progress: progress, color: color),
+      ),
+    );
+  }
+}
+
+/// 自带相位控制的播放角标：圆形底 + 三柱均衡器。
+///
+/// 曲目行 / AI 页 / 发现页推荐卡共用这一份：
+/// - [isPlaying] 与 [animate] 同时为真、且未开「减弱动效」时才跑 ticker；
+/// - 暂停时停在当前相位，恢复后从同一相位续跑；
+/// - [TickerMode] 关闭（窗口最小化 / 托盘隐藏）时由 Flutter 静音 ticker，
+///   不额外写后台状态；
+/// - [RepaintBoundary] 隔离 18dp 小区域的重绘。
+class AnimatedPlayingBadge extends StatefulWidget {
+  const AnimatedPlayingBadge({
+    super.key,
+    required this.isPlaying,
+    this.animate = true,
+    this.size = 18,
+    this.backgroundColor,
+    this.color,
+  });
+
+  final bool isPlaying;
+
+  /// 是否允许起伏。默认 true；只作静态状态标识时传 false。
+  final bool animate;
+
+  /// 圆形底直径；三柱绘制槽按 2/3 取，默认 18 → 12。
+  final double size;
+
+  /// 未指定时取主题 `primary` / `onPrimary`。
+  final Color? backgroundColor;
+  final Color? color;
+
+  @override
+  State<AnimatedPlayingBadge> createState() => _AnimatedPlayingBadgeState();
+}
+
+class _AnimatedPlayingBadgeState extends State<AnimatedPlayingBadge>
+    with SingleTickerProviderStateMixin {
+  /// 首次渲染即暂停时的固定相位：三柱高低错落，静止也读得出是均衡器。
+  static const double _idlePhase = 0.25;
+
+  late final AnimationController _controller;
+
+  bool _reduceMotion = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: M3EMotion.extraLong4,
+      value: _idlePhase,
+    );
+    _syncAnimation();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = reduceMotionOf(context);
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(AnimatedPlayingBadge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncAnimation();
+  }
+
+  void _syncAnimation() {
+    if (widget.isPlaying && widget.animate && !_reduceMotion) {
+      if (!_controller.isAnimating) {
+        _controller.repeat();
+      }
+      return;
+    }
+    // 暂停 / 不需要动画 / 减弱动效：停在当前相位，不重置。
+    _controller.stop();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final foreground = widget.color ?? scheme.onPrimary;
+    return ExcludeSemantics(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: widget.backgroundColor ?? scheme.primary,
+          shape: BoxShape.circle,
+        ),
+        child: SizedBox.square(
+          dimension: widget.size,
+          child: Center(
+            child: PlayingIndicator(
+              progress: _controller,
+              color: foreground,
+              size: widget.size * 2 / 3,
+            ),
+          ),
+        ),
       ),
     );
   }
