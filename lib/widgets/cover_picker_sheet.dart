@@ -38,29 +38,36 @@ typedef CoverImageNormalizer = Future<Uint8List> Function(Uint8List bytes);
 
 /// 打开封面选择弹层。
 ///
-/// [trackId] 为空 = 编辑全局默认封面；非空 = 编辑该曲目的自定义封面。
+/// [trackId] 为空且 [playlistCoverKey] 为空 = 编辑全局默认封面；[trackId]
+/// 非空 = 编辑该曲目的自定义封面；[playlistCoverKey] 非空 = 编辑列表封面。
 /// [originalCoverUrl] 仅用于「跟随歌曲」时的预览；[fileNameBase] 是
 /// 「查看原图 → 保存原图」的文件名基名（缺省用弹层标题）。
 Future<void> showCoverPickerSheet(
   BuildContext context, {
   TrackId? trackId,
+  String? playlistCoverKey,
   String? originalCoverUrl,
   String? fileNameBase,
   CoverImagePicker? pickImage,
   CoverImageNormalizer? normalize,
+  Future<void> Function(bool hasCover)? onPlaylistCoverChanged,
 }) {
   final l10n =
       AppLocalizations.of(context) ??
       lookupAppLocalizations(const Locale('zh'));
   return ResponsiveNavigation.showSimpleModal<void>(
     context: context,
-    title: trackId == null ? l10n.coverDefaultTitle : l10n.coverTitle,
+    title: playlistCoverKey != null
+        ? l10n.playlistCover
+        : (trackId == null ? l10n.coverDefaultTitle : l10n.coverTitle),
     child: CoverPickerSheet(
       trackId: trackId,
+      playlistCoverKey: playlistCoverKey,
       originalCoverUrl: originalCoverUrl,
       fileNameBase: fileNameBase,
       pickImage: pickImage,
       normalize: normalize,
+      onPlaylistCoverChanged: onPlaylistCoverChanged,
     ),
   );
 }
@@ -70,17 +77,26 @@ class CoverPickerSheet extends StatefulWidget {
   const CoverPickerSheet({
     super.key,
     this.trackId,
+    this.playlistCoverKey,
     this.originalCoverUrl,
     this.fileNameBase,
     this.pickImage,
     this.normalize,
+    this.onPlaylistCoverChanged,
   });
 
   final TrackId? trackId;
+
+  /// 列表封面键（`playlist:<syncId>`）；非空时使用列表封面目标。
+  final String? playlistCoverKey;
+
   final String? originalCoverUrl;
   final String? fileNameBase;
   final CoverImagePicker? pickImage;
   final CoverImageNormalizer? normalize;
+
+  /// 列表封面设置 / 重置后写回列表行（指针由调用方持久化）。
+  final Future<void> Function(bool hasCover)? onPlaylistCoverChanged;
 
   @override
   State<CoverPickerSheet> createState() => _CoverPickerSheetState();
@@ -97,18 +113,24 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
 
   CoverResolver get _covers => coverResolverOf(context);
 
-  bool get _isDefault => widget.trackId == null;
+  bool get _isPlaylist => widget.playlistCoverKey != null;
+
+  bool get _isDefault => widget.trackId == null && !_isPlaylist;
 
   bool get _hasOriginal =>
-      !_isDefault && (widget.originalCoverUrl ?? '').isNotEmpty;
+      !_isDefault && !_isPlaylist && (widget.originalCoverUrl ?? '').isNotEmpty;
 
-  bool get _hasCustom => _isDefault
+  bool get _hasCustom => _isPlaylist
+      ? _store.playlistEntry(widget.playlistCoverKey!) != null
+      : _isDefault
       ? _covers.defaultCoverUrl != null
       : _covers.realForId(widget.trackId).isCustom;
 
   /// 「查看原图」地址：默认封面模式看默认图；曲目模式只看真实封面
-  /// （自定义 > 原始），没有真实封面时预览里的默认占位不提供原图。
-  String? get _viewerCoverUrl => _isDefault
+  /// （自定义 > 原始），列表模式看列表封面；没有封面时不提供原图。
+  String? get _viewerCoverUrl => _isPlaylist
+      ? _store.playlistCoverUrl(widget.playlistCoverKey!)
+      : _isDefault
       ? _covers.defaultCoverUrl
       : _covers
             .realForId(widget.trackId, originalUrl: widget.originalCoverUrl)
@@ -128,12 +150,19 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
       final normalized = await (widget.normalize ?? CoverImageCodec.normalize)(
         raw,
       );
-      if (widget.trackId == null) {
+      if (_isPlaylist) {
+        await _store.setPlaylistCover(widget.playlistCoverKey!, normalized);
+        await widget.onPlaylistCoverChanged?.call(true);
+      } else if (widget.trackId == null) {
         await _store.setDefaultCover(normalized);
       } else {
         await _store.setTrackCover(widget.trackId!, normalized);
       }
-      _showMessage(_isDefault ? l10n.coverDefaultUpdated : l10n.coverUpdated);
+      _showMessage(
+        _isPlaylist
+            ? l10n.playlistCoverUpdated
+            : (_isDefault ? l10n.coverDefaultUpdated : l10n.coverUpdated),
+      );
     } on CoverImageException {
       _showMessage(l10n.coverUnreadable);
     } catch (_) {
@@ -158,12 +187,19 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
     HapticsService.selectionClick();
     setState(() => _busy = true);
     try {
-      if (widget.trackId == null) {
+      if (_isPlaylist) {
+        await _store.resetPlaylistCover(widget.playlistCoverKey!);
+        await widget.onPlaylistCoverChanged?.call(false);
+      } else if (widget.trackId == null) {
         await _store.resetDefaultCover();
       } else {
         await _store.resetTrackCover(widget.trackId!);
       }
-      _showMessage(_isDefault ? l10n.coverDefaultRestored : l10n.coverRestored);
+      _showMessage(
+        _isPlaylist
+            ? l10n.playlistCoverRestored
+            : (_isDefault ? l10n.coverDefaultRestored : l10n.coverRestored),
+      );
     } catch (_) {
       _showMessage(l10n.coverUpdateFailed);
     } finally {
@@ -181,7 +217,9 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
     final l10n = _l10n(context);
     final m3e = M3ETheme.of(context);
     final scheme = m3e.colorScheme;
-    final subtitle = _isDefault
+    final subtitle = _isPlaylist
+        ? l10n.playlistCover
+        : _isDefault
         ? l10n.coverDefaultSubtitle
         : _hasCustom
         ? l10n.coverCustomized
@@ -203,9 +241,10 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
             child: CoverChangeBuilder(
               builder: (context, _) => TrackArtwork(
                 key: const Key('coverPickerPreview'),
-                // 外层已订阅；默认封面模式没有曲目身份，直接展示默认图。
+                // 外层已订阅；默认封面 / 列表封面没有曲目身份，直接看目标图。
                 listenForChanges: false,
-                trackId: widget.trackId,
+                trackId: _isPlaylist ? null : widget.trackId,
+                coverKey: _isPlaylist ? widget.playlistCoverKey : null,
                 originalUrl: widget.originalCoverUrl,
                 width: 120,
                 height: 120,
@@ -215,6 +254,8 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
                 memCacheWidth: (120 * MediaQuery.of(context).devicePixelRatio)
                     .round(),
                 fallbackIconSize: 48,
+                // 列表封面没有全局默认封面语义：缺图就是中性占位。
+                showDefaultCover: !_isPlaylist,
               ),
             ),
           ),
@@ -252,7 +293,9 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
                             : l10n.coverTitle,
                         fileNameBase:
                             widget.fileNameBase ??
-                            (_isDefault
+                            (_isPlaylist
+                                ? l10n.playlistCover
+                                : _isDefault
                                 ? l10n.coverDefaultTitle
                                 : l10n.coverTitle),
                       ),
@@ -269,7 +312,9 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
               onPressed: _busy ? null : () => unawaited(_reset()),
               icon: const Icon(Icons.restart_alt_rounded),
               label: Text(
-                _isDefault
+                _isPlaylist
+                    ? l10n.playlistCoverReset
+                    : _isDefault
                     ? l10n.coverResetDefault
                     : (_hasOriginal
                           ? l10n.coverResetSong

@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
@@ -11,6 +10,7 @@ import 'package:dio/dio.dart';
 import '../data/http/app_dio.dart';
 import '../managers/artwork_cache.dart';
 import '../models/poster_lyric_line.dart';
+import 'poster/poster_draw.dart' show posterCoverCropRect;
 
 final logger = Logger('molia.lyrics_poster_service');
 
@@ -37,26 +37,12 @@ Rect coverCropSourceRect({
   required double sourceHeight,
   required double targetWidth,
   required double targetHeight,
-}) {
-  if (sourceWidth <= 0 ||
-      sourceHeight <= 0 ||
-      targetWidth <= 0 ||
-      targetHeight <= 0) {
-    return Rect.zero;
-  }
-  final scale = math.max(
-    targetWidth / sourceWidth,
-    targetHeight / sourceHeight,
-  );
-  final cropWidth = targetWidth / scale;
-  final cropHeight = targetHeight / scale;
-  return Rect.fromLTWH(
-    (sourceWidth - cropWidth) / 2,
-    (sourceHeight - cropHeight) / 2,
-    cropWidth,
-    cropHeight,
-  );
-}
+}) => posterCoverCropRect(
+  sourceWidth: sourceWidth,
+  sourceHeight: sourceHeight,
+  targetWidth: targetWidth,
+  targetHeight: targetHeight,
+);
 
 class LyricsPosterService {
   /// [dio] 仅供测试注入；默认复用进程内共享客户端。

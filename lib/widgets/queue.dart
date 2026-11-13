@@ -4,12 +4,15 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../models/play_mode.dart';
+import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
+import 'add_to_playlist_sheet.dart' show showPlaylistNameDialog;
 import 'row_actions.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
@@ -85,6 +88,66 @@ class QueueDisplay extends StatelessWidget {
   /// 「正在播放」小节与队列列表之间的空气：比行距大，避免两段视觉上粘成一段。
   static const double _sectionSpacing = 16;
 
+  /// 队列一键存为列表：新建一个列表，按队列存储顺序批量加入。
+  ///
+  /// 失败（创建成功但批量写入失败）删除刚建的空列表，不在侧栏留下半成品；
+  /// 重复键由存储层跳过，结果只报 added / skipped。
+  static Future<void> _saveQueueAsPlaylist(
+    BuildContext context,
+    List<Track> queue,
+  ) async {
+    final provider = context.read<LibraryProvider?>();
+    if (provider == null || queue.isEmpty) return;
+    final l10n = AppLocalizations.of(context)!;
+    final contextName = context
+        .read<PlaybackProvider?>()
+        ?.snapshot
+        .context
+        ?.name
+        ?.trim();
+    final name = await showPlaylistNameDialog(
+      context,
+      title: l10n.playlistCreate,
+      confirmLabel: l10n.playlistCreateConfirm,
+      existingNames: [for (final item in provider.playlists) item.name],
+      initialValue: (contextName ?? '').isEmpty
+          ? l10n.queuePlaylistDefaultName
+          : contextName!,
+    );
+    if (name == null || !context.mounted) return;
+    final int playlistId;
+    try {
+      playlistId = await provider.createPlaylist(name);
+    } catch (_) {
+      if (context.mounted) {
+        M3ESnackbar.show(context, message: l10n.queueSaveFailed);
+      }
+      return;
+    }
+    try {
+      final addedAt = DateTime.now().millisecondsSinceEpoch;
+      final outcome = await provider.addTracksToPlaylist(playlistId, [
+        for (final track in queue)
+          PlaylistTrack.fromTrack(track, addedAt: addedAt),
+      ]);
+      if (outcome.isFailure) throw outcome.error ?? StateError('add failed');
+      if (!context.mounted) return;
+      M3ESnackbar.show(
+        context,
+        message: l10n.queueSavedAsPlaylist(
+          name,
+          outcome.changed,
+          queue.length - outcome.changed,
+        ),
+      );
+    } catch (_) {
+      await provider.deletePlaylist(playlistId);
+      if (context.mounted) {
+        M3ESnackbar.show(context, message: l10n.queueSaveFailed);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -102,6 +165,7 @@ class QueueDisplay extends StatelessWidget {
             List<int> indices,
             int currentIndex,
             int queueLength,
+            List<Track> queue,
             PlayMode mode,
             bool hasTrack,
           })
@@ -112,6 +176,7 @@ class QueueDisplay extends StatelessWidget {
             indices: snapshot.upNextIndices,
             currentIndex: snapshot.currentIndex,
             queueLength: snapshot.queue.length,
+            queue: snapshot.queue,
             mode: snapshot.mode,
             hasTrack: snapshot.current != null,
           );
@@ -137,6 +202,43 @@ class QueueDisplay extends StatelessWidget {
       child: CustomScrollView(
         controller: controller,
         slivers: [
+          // 队列唯一溢出动作：队列非空时才出现，不占常驻工具栏。
+          if (queueState.queue.isNotEmpty)
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(16, topPadding, 4, 0),
+              sliver: SliverToBoxAdapter(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: M3EMenu.entries(
+                    position: M3EMenuAnchorPosition.bottomEnd,
+                    anchorBuilder: (context, open) => M3EIconButton(
+                      key: const Key('queueOverflow'),
+                      variant: M3EIconButtonVariant.standard,
+                      semanticLabel: l10n.queueSaveAsPlaylist,
+                      icon: const Icon(Icons.more_vert_rounded),
+                      onPressed: open,
+                    ),
+                    onSelected: (value) {
+                      if (value == 'save') {
+                        unawaited(
+                          _saveQueueAsPlaylist(context, queueState.queue),
+                        );
+                      }
+                    },
+                    entries: [
+                      M3EMenuEntry(
+                        label: l10n.queueSaveAsPlaylist,
+                        value: 'save',
+                        leading: const Icon(
+                          Icons.playlist_add_rounded,
+                          size: 20,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           // 「正在播放」小节（无当前曲目时整段不存在）。
           if (current != null)
             SliverPadding(
