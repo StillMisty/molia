@@ -47,6 +47,33 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get searchRecentTitle => '最近搜索';
+
+  @override
+  String get searchRecentClear => '清除';
+
+  @override
+  String get searchRecentCleared => '已清除最近搜索';
+
+  @override
+  String searchHistoryDelete(String query) {
+    return '删除「$query」';
+  }
+
+  @override
+  String get searchSuggestionsLabel => '搜索建议';
+
+  @override
+  String searchSuggestionAction(String query) {
+    return '搜索「$query」';
+  }
+
+  @override
+  String searchDidYouMean(String query) {
+    return '你是不是想找「$query」？';
+  }
+
+  @override
   String copiedToClipboard(String type) {
     return '已复制到剪贴板';
   }
@@ -1852,6 +1879,114 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get statsTitle => '听歌统计';
+
+  @override
+  String get annualReportTitle => '年度听歌报告';
+
+  @override
+  String annualReportEntrySubtitle(int year) {
+    return '回看 $year 的收听';
+  }
+
+  @override
+  String get annualReportEntryAction => '查看报告';
+
+  @override
+  String get annualReportPickYear => '选择年份';
+
+  @override
+  String get annualReportSubtitle => '年度听歌报告';
+
+  @override
+  String get annualReportListenedCaption => '全年收听';
+
+  @override
+  String get annualReportStreakCaption => '天最长连续';
+
+  @override
+  String get annualReportTopTracks => '年度最常听';
+
+  @override
+  String get annualReportTopArtists => '年度常听歌手';
+
+  @override
+  String get annualReportTopAlbums => '年度常听专辑';
+
+  @override
+  String get annualReportPlatforms => '平台分布';
+
+  @override
+  String get annualReportMonthly => '月度趋势';
+
+  @override
+  String annualReportMonthLabel(int month, String duration) {
+    return '$month 月：$duration';
+  }
+
+  @override
+  String get annualReportFirstPlay => '年度第一次播放';
+
+  @override
+  String get annualReportLastPlay => '年度最后一次播放';
+
+  @override
+  String annualReportCoverage(String start, String end) {
+    return '数据范围：$start 至 $end';
+  }
+
+  @override
+  String get annualReportAsOfToday => '截至今天';
+
+  @override
+  String get annualReportRecordingOff => '听歌统计已关闭，报告只包含关闭前的记录';
+
+  @override
+  String get annualReportPartialCoverage => '这一年只记录了部分时段';
+
+  @override
+  String get annualReportEmpty => '这一年还没有听歌记录';
+
+  @override
+  String get annualReportEmptyHint => '换一年看看，或播放几首歌再回来';
+
+  @override
+  String get annualReportSharePoster => '分享海报';
+
+  @override
+  String get annualReportPosterGenerating => '正在生成海报…';
+
+  @override
+  String get annualReportShareFailed => '海报没有生成，再试一次';
+
+  @override
+  String get annualReportSavePlaylist => '存成歌单';
+
+  @override
+  String annualReportPlaylistName(int year) {
+    return '$year 年最常听';
+  }
+
+  @override
+  String annualReportPlaylistAddedTracks(String name, int count) {
+    return '已加入歌单「$name」（$count 首）';
+  }
+
+  @override
+  String get annualReportPlaylistFailed => '没有存成歌单，再试一次';
+
+  @override
+  String get annualReportStatTracks => '听过曲目';
+
+  @override
+  String get annualReportStatArtists => '听过歌手';
+
+  @override
+  String annualReportTopPlatform(String platform) {
+    return '最常使用 $platform';
+  }
+
+  @override
+  String get statsSourceOther => '其它平台';
 
   @override
   String get statsSubtitle => '播放次数、收听时长与热度分布（数据只保存在本机）';

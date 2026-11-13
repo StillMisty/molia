@@ -18,6 +18,34 @@
       }
     }
   },
+  "searchRecentTitle": "最近搜索",
+  "searchRecentClear": "清除",
+  "searchRecentCleared": "已清除最近搜索",
+  "searchHistoryDelete": "删除「{query}」",
+  "@searchHistoryDelete": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "searchSuggestionsLabel": "搜索建议",
+  "searchSuggestionAction": "搜索「{query}」",
+  "@searchSuggestionAction": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "searchDidYouMean": "你是不是想找「{query}」？",
+  "@searchDidYouMean": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
   "copiedToClipboard": "已复制到剪贴板",
   "delete": "删除",
   "lyricsFetching": "正在获取歌词...",
@@ -665,6 +693,89 @@
   "lyricsColorSourceSurface": "表面色",
   "lyricsDesktopColorThemeHint": "「跟随应用主题」随外观设置变化；「跟随封面」按当前歌曲封面取色并实时更新。",
   "statsTitle": "听歌统计",
+  "annualReportTitle": "年度听歌报告",
+  "annualReportEntrySubtitle": "回看 {year} 的收听",
+  "@annualReportEntrySubtitle": {
+    "placeholders": {
+      "year": {
+        "type": "int"
+      }
+    }
+  },
+  "annualReportEntryAction": "查看报告",
+  "annualReportPickYear": "选择年份",
+  "annualReportSubtitle": "年度听歌报告",
+  "annualReportListenedCaption": "全年收听",
+  "annualReportStreakCaption": "天最长连续",
+  "annualReportTopTracks": "年度最常听",
+  "annualReportTopArtists": "年度常听歌手",
+  "annualReportTopAlbums": "年度常听专辑",
+  "annualReportPlatforms": "平台分布",
+  "annualReportMonthly": "月度趋势",
+  "annualReportMonthLabel": "{month} 月：{duration}",
+  "@annualReportMonthLabel": {
+    "placeholders": {
+      "month": {
+        "type": "int"
+      },
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "annualReportFirstPlay": "年度第一次播放",
+  "annualReportLastPlay": "年度最后一次播放",
+  "annualReportCoverage": "数据范围：{start} 至 {end}",
+  "@annualReportCoverage": {
+    "placeholders": {
+      "start": {
+        "type": "String"
+      },
+      "end": {
+        "type": "String"
+      }
+    }
+  },
+  "annualReportAsOfToday": "截至今天",
+  "annualReportRecordingOff": "听歌统计已关闭，报告只包含关闭前的记录",
+  "annualReportPartialCoverage": "这一年只记录了部分时段",
+  "annualReportEmpty": "这一年还没有听歌记录",
+  "annualReportEmptyHint": "换一年看看，或播放几首歌再回来",
+  "annualReportSharePoster": "分享海报",
+  "annualReportPosterGenerating": "正在生成海报…",
+  "annualReportShareFailed": "海报没有生成，再试一次",
+  "annualReportSavePlaylist": "存成歌单",
+  "annualReportPlaylistName": "{year} 年最常听",
+  "@annualReportPlaylistName": {
+    "placeholders": {
+      "year": {
+        "type": "int"
+      }
+    }
+  },
+  "annualReportPlaylistAddedTracks": "已加入歌单「{name}」（{count} 首）",
+  "@annualReportPlaylistAddedTracks": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "annualReportPlaylistFailed": "没有存成歌单，再试一次",
+  "annualReportStatTracks": "听过曲目",
+  "annualReportStatArtists": "听过歌手",
+  "annualReportTopPlatform": "最常使用 {platform}",
+  "@annualReportTopPlatform": {
+    "placeholders": {
+      "platform": {
+        "type": "String"
+      }
+    }
+  },
+  "statsSourceOther": "其它平台",
   "statsSubtitle": "播放次数、收听时长与热度分布（数据只保存在本机）",
   "statsSettingsSubtitle": "播放次数 / 时段热力图 / 导出",
   "statsRecordSwitch": "记录听歌统计",

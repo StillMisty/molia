@@ -41,6 +41,7 @@ import 'services/app_logging.dart';
 import 'services/app_presence.dart';
 import 'services/global_hotkeys.dart';
 import 'services/notification_service.dart';
+import 'services/search_history_store.dart';
 import 'services/shortcut_actions.dart';
 import 'services/system_fonts_service.dart';
 import 'services/window/single_instance.dart';
@@ -243,11 +244,14 @@ void main() async {
   );
   // 搜索 provider 由组合根创建（原先在 Provider 树里懒建）：只为了在创建时
   // 注册托盘期的缓存释放回调；挂树仍是同一个实例（`provider_tree.dart`）。
+  final searchHistoryStore = SearchHistoryStore();
+  await searchHistoryStore.ready();
   final searchProvider = SearchProvider(
     playback.playbackProvider,
     selection: channelSelection,
     catalogService: catalog.catalogService,
     sourceRegistry: catalog.sourceRegistry,
+    historyStore: searchHistoryStore,
   );
   // 系统媒体会话的「收藏」动作：通知点击 ↔ 曲库（与托盘 / 任务栏按钮同一
   // 写入路径）。必须在 provider 建好之后接线（handler 先于它创建）。
@@ -482,6 +486,7 @@ void main() async {
         libraryProvider: libraryProvider,
         channelSelection: channelSelection,
         searchProvider: searchProvider,
+        searchHistoryStore: searchHistoryStore,
         desktop: desktop,
         ai: ai,
         lyrics: lyrics,

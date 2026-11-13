@@ -46,14 +46,18 @@ import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/channel_selection.dart';
+import '../providers/discover_provider.dart';
+import '../providers/search_assist_controller.dart';
 import '../providers/search_provider.dart';
 import '../providers/sources_provider.dart';
 import '../services/escape_claims.dart';
 import '../services/key_claims.dart';
+import '../services/search_history_store.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
 import 'app_search_bar.dart';
 import 'channel_search_bar.dart';
+import 'search_assist_panel.dart';
 import 'search_results_view.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
@@ -315,6 +319,9 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   late final SearchProvider _search;
   late final SearchSession _session;
   late final SearchInputBinding _input;
+  late final SearchAssistController _assist;
+  late final SearchHistoryStore _history;
+  bool _ownsHistory = false;
 
   /// 上一次已播报的内容（关键词 + 文案）：同一条消息不重复播报。
   String? _lastAnnouncement;
@@ -330,8 +337,19 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     // 会话是搜索状态的唯一源：遮罩打开时用绑定器种上当前关键词，
     // 之后资料库改词 / 清空也会立即反映到输入框（不再逐帧补同步）。
     _input = SearchInputBinding(session: _session, controller: _field);
+    final registered = context.read<SearchHistoryStore?>();
+    _history = registered ?? SearchHistoryStore();
+    _ownsHistory = registered == null;
+    _assist = SearchAssistController(
+      search: _search,
+      history: _history,
+      hotKeywords: () =>
+          context.read<DiscoverProvider?>()?.hotSearches ?? const [],
+    );
     _search.addListener(_onSearchChanged);
     _session.preview.addListener(_onPreviewChanged);
+    _assist.addListener(_onAssistChanged);
+    _focusNode.addListener(_onFieldFocus);
     // 打开 / 重新聚焦都全选已有文本：Ctrl+F 后直接输入即替换上次关键词。
     WidgetsBinding.instance.addPostFrameCallback((_) => focusField());
   }
@@ -340,6 +358,10 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   void dispose() {
     _search.removeListener(_onSearchChanged);
     _session.preview.removeListener(_onPreviewChanged);
+    _assist.removeListener(_onAssistChanged);
+    _focusNode.removeListener(_onFieldFocus);
+    _assist.dispose();
+    if (_ownsHistory) _history.dispose();
     _input.dispose();
     _field.dispose();
     _focusNode.dispose();
@@ -404,6 +426,13 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     if (mounted) setState(() {});
   }
 
+  /// 辅助块通知：焦点 / 建议高亮变化只影响搜索条下方这一块。
+  void _onAssistChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onFieldFocus() => _assist.setFocused(_focusNode.hasFocus);
+
   SearchPreviewItem? get _highlightedItem => _session.preview.highlightedItem;
 
   /// 结果数变化时给读屏播报（空词 / 加载中不播报；文案走 l10n）。
@@ -434,6 +463,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   void _openAllResults() {
     if (_closing) return;
     _closing = true;
+    _search.recordCurrentQuery();
     _close();
     widget.onViewAllResults();
   }
@@ -442,14 +472,15 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   void _submitAndOpenAll() {
     if (_closing) return;
     _closing = true;
-    _session.submit(_field.text);
+    _search.submitSearch(_field.text);
     _close();
     widget.onViewAllResults();
   }
 
-  /// 回车：有高亮单曲 → 播放并关闭；歌手 / 无高亮 → 提交并看全部结果。
+  /// 回车：建议高亮优先；否则有高亮单曲 → 播放并关闭；无高亮 → 看全部。
   void _handleEnter() {
     if (_closing || _field.value.composing.isValid) return;
+    if (_assist.selectHighlighted()) return;
     final item = _highlightedItem;
     if (item is SearchPreviewTrack) {
       _playItem(item.row);
@@ -490,14 +521,24 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
       return KeyEventResult.ignored;
     }
     if (!_focusNode.hasFocus) return KeyEventResult.ignored;
+    final suggestionsVisible = _assist.value.showSuggestions;
     if (key == LogicalKeyboardKey.arrowDown) {
-      _session.preview.moveHighlight(1);
+      if (suggestionsVisible) {
+        _assist.moveHighlight(1);
+      } else {
+        _session.preview.moveHighlight(1);
+      }
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowUp) {
-      _session.preview.moveHighlight(-1);
+      if (suggestionsVisible) {
+        _assist.moveHighlight(-1);
+      } else {
+        _session.preview.moveHighlight(-1);
+      }
       return KeyEventResult.handled;
     }
+    if (suggestionsVisible) return KeyEventResult.ignored;
     if (key == LogicalKeyboardKey.pageDown) {
       _session.preview.moveHighlight(5);
       return KeyEventResult.handled;
@@ -574,11 +615,21 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
                       const SizedBox(height: _barPanelGap),
                       ConstrainedBox(
                         constraints: BoxConstraints(maxHeight: maxPanelHeight),
-                        child: _GlobalSearchResults(
-                          session: _session,
-                          onOpenAllResults: _openAllResults,
-                          onPlayItem: _playItem,
-                        ),
+                        child: _assist.value.isVisible
+                            ? SingleChildScrollView(
+                                primary: false,
+                                child: SearchAssistPanel(
+                                  controller: _assist,
+                                  variant: SearchAssistVariant.docked,
+                                ),
+                              )
+                            : _GlobalSearchResults(
+                                session: _session,
+                                correction: _assist.value.correction,
+                                onCorrectionTap: _assist.acceptCorrection,
+                                onOpenAllResults: _openAllResults,
+                                onPlayItem: _playItem,
+                              ),
                       ),
                       if (showHint)
                         Padding(
@@ -616,16 +667,22 @@ class _GlobalSearchResults extends StatelessWidget {
     required this.session,
     required this.onOpenAllResults,
     required this.onPlayItem,
+    this.correction,
+    this.onCorrectionTap,
   });
 
   final SearchSession session;
   final VoidCallback onOpenAllResults;
   final void Function(SearchRow row) onPlayItem;
+  final String? correction;
+  final VoidCallback? onCorrectionTap;
 
   @override
   Widget build(BuildContext context) => SearchResultsView(
     variant: SearchResultsVariant.docked,
     session: session,
+    correction: correction,
+    onCorrectionTap: onCorrectionTap,
     onPlay: onPlayItem,
     onOpenAllResults: onOpenAllResults,
   );

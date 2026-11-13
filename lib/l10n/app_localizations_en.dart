@@ -47,6 +47,33 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get searchRecentTitle => 'Recent searches';
+
+  @override
+  String get searchRecentClear => 'Clear';
+
+  @override
+  String get searchRecentCleared => 'Recent searches cleared';
+
+  @override
+  String searchHistoryDelete(String query) {
+    return 'Remove “$query”';
+  }
+
+  @override
+  String get searchSuggestionsLabel => 'Search suggestions';
+
+  @override
+  String searchSuggestionAction(String query) {
+    return 'Search for “$query”';
+  }
+
+  @override
+  String searchDidYouMean(String query) {
+    return 'Did you mean “$query”?';
+  }
+
+  @override
   String copiedToClipboard(String type) {
     return 'Copied to clipboard';
   }
@@ -1925,6 +1952,118 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get statsTitle => 'Listening Stats';
+
+  @override
+  String get annualReportTitle => 'Yearly listening report';
+
+  @override
+  String annualReportEntrySubtitle(int year) {
+    return 'Your $year in review';
+  }
+
+  @override
+  String get annualReportEntryAction => 'View report';
+
+  @override
+  String get annualReportPickYear => 'Choose year';
+
+  @override
+  String get annualReportSubtitle => 'Yearly listening report';
+
+  @override
+  String get annualReportListenedCaption => 'listened this year';
+
+  @override
+  String get annualReportStreakCaption => 'days in a row';
+
+  @override
+  String get annualReportTopTracks => 'Top tracks';
+
+  @override
+  String get annualReportTopArtists => 'Top artists';
+
+  @override
+  String get annualReportTopAlbums => 'Top albums';
+
+  @override
+  String get annualReportPlatforms => 'Platforms';
+
+  @override
+  String get annualReportMonthly => 'Monthly trend';
+
+  @override
+  String annualReportMonthLabel(int month, String duration) {
+    return 'Month $month: $duration';
+  }
+
+  @override
+  String get annualReportFirstPlay => 'First play of the year';
+
+  @override
+  String get annualReportLastPlay => 'Last play of the year';
+
+  @override
+  String annualReportCoverage(String start, String end) {
+    return 'Data from $start to $end';
+  }
+
+  @override
+  String get annualReportAsOfToday => 'As of today';
+
+  @override
+  String get annualReportRecordingOff =>
+      'Listening history is off, so this report only includes what was recorded before.';
+
+  @override
+  String get annualReportPartialCoverage =>
+      'This year only covers part of the period.';
+
+  @override
+  String get annualReportEmpty => 'No listening in this year';
+
+  @override
+  String get annualReportEmptyHint =>
+      'Try another year, or play a few songs and come back.';
+
+  @override
+  String get annualReportSharePoster => 'Share poster';
+
+  @override
+  String get annualReportPosterGenerating => 'Making your poster…';
+
+  @override
+  String get annualReportShareFailed => 'Couldn\'t make the poster. Try again.';
+
+  @override
+  String get annualReportSavePlaylist => 'Save as playlist';
+
+  @override
+  String annualReportPlaylistName(int year) {
+    return 'Most played in $year';
+  }
+
+  @override
+  String annualReportPlaylistAddedTracks(String name, int count) {
+    return 'Added $count tracks to $name';
+  }
+
+  @override
+  String get annualReportPlaylistFailed =>
+      'Couldn\'t save the playlist. Try again.';
+
+  @override
+  String get annualReportStatTracks => 'Tracks';
+
+  @override
+  String get annualReportStatArtists => 'Artists';
+
+  @override
+  String annualReportTopPlatform(String platform) {
+    return 'Most used: $platform';
+  }
+
+  @override
+  String get statsSourceOther => 'Other platforms';
 
   @override
   String get statsSubtitle =>

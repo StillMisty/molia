@@ -164,6 +164,48 @@ abstract class AppLocalizations {
   /// **'{count} results available'**
   String searchResultsAnnouncement(int count);
 
+  /// No description provided for @searchRecentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent searches'**
+  String get searchRecentTitle;
+
+  /// No description provided for @searchRecentClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get searchRecentClear;
+
+  /// No description provided for @searchRecentCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent searches cleared'**
+  String get searchRecentCleared;
+
+  /// No description provided for @searchHistoryDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove “{query}”'**
+  String searchHistoryDelete(String query);
+
+  /// No description provided for @searchSuggestionsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Search suggestions'**
+  String get searchSuggestionsLabel;
+
+  /// No description provided for @searchSuggestionAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Search for “{query}”'**
+  String searchSuggestionAction(String query);
+
+  /// No description provided for @searchDidYouMean.
+  ///
+  /// In en, this message translates to:
+  /// **'Did you mean “{query}”?'**
+  String searchDidYouMean(String query);
+
   /// No description provided for @copiedToClipboard.
   ///
   /// In en, this message translates to:
@@ -3595,6 +3637,198 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Listening Stats'**
   String get statsTitle;
+
+  /// No description provided for @annualReportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly listening report'**
+  String get annualReportTitle;
+
+  /// No description provided for @annualReportEntrySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your {year} in review'**
+  String annualReportEntrySubtitle(int year);
+
+  /// No description provided for @annualReportEntryAction.
+  ///
+  /// In en, this message translates to:
+  /// **'View report'**
+  String get annualReportEntryAction;
+
+  /// No description provided for @annualReportPickYear.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose year'**
+  String get annualReportPickYear;
+
+  /// No description provided for @annualReportSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly listening report'**
+  String get annualReportSubtitle;
+
+  /// No description provided for @annualReportListenedCaption.
+  ///
+  /// In en, this message translates to:
+  /// **'listened this year'**
+  String get annualReportListenedCaption;
+
+  /// No description provided for @annualReportStreakCaption.
+  ///
+  /// In en, this message translates to:
+  /// **'days in a row'**
+  String get annualReportStreakCaption;
+
+  /// No description provided for @annualReportTopTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Top tracks'**
+  String get annualReportTopTracks;
+
+  /// No description provided for @annualReportTopArtists.
+  ///
+  /// In en, this message translates to:
+  /// **'Top artists'**
+  String get annualReportTopArtists;
+
+  /// No description provided for @annualReportTopAlbums.
+  ///
+  /// In en, this message translates to:
+  /// **'Top albums'**
+  String get annualReportTopAlbums;
+
+  /// No description provided for @annualReportPlatforms.
+  ///
+  /// In en, this message translates to:
+  /// **'Platforms'**
+  String get annualReportPlatforms;
+
+  /// No description provided for @annualReportMonthly.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly trend'**
+  String get annualReportMonthly;
+
+  /// No description provided for @annualReportMonthLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Month {month}: {duration}'**
+  String annualReportMonthLabel(int month, String duration);
+
+  /// No description provided for @annualReportFirstPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'First play of the year'**
+  String get annualReportFirstPlay;
+
+  /// No description provided for @annualReportLastPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Last play of the year'**
+  String get annualReportLastPlay;
+
+  /// No description provided for @annualReportCoverage.
+  ///
+  /// In en, this message translates to:
+  /// **'Data from {start} to {end}'**
+  String annualReportCoverage(String start, String end);
+
+  /// No description provided for @annualReportAsOfToday.
+  ///
+  /// In en, this message translates to:
+  /// **'As of today'**
+  String get annualReportAsOfToday;
+
+  /// No description provided for @annualReportRecordingOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening history is off, so this report only includes what was recorded before.'**
+  String get annualReportRecordingOff;
+
+  /// No description provided for @annualReportPartialCoverage.
+  ///
+  /// In en, this message translates to:
+  /// **'This year only covers part of the period.'**
+  String get annualReportPartialCoverage;
+
+  /// No description provided for @annualReportEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No listening in this year'**
+  String get annualReportEmpty;
+
+  /// No description provided for @annualReportEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Try another year, or play a few songs and come back.'**
+  String get annualReportEmptyHint;
+
+  /// No description provided for @annualReportSharePoster.
+  ///
+  /// In en, this message translates to:
+  /// **'Share poster'**
+  String get annualReportSharePoster;
+
+  /// No description provided for @annualReportPosterGenerating.
+  ///
+  /// In en, this message translates to:
+  /// **'Making your poster…'**
+  String get annualReportPosterGenerating;
+
+  /// No description provided for @annualReportShareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t make the poster. Try again.'**
+  String get annualReportShareFailed;
+
+  /// No description provided for @annualReportSavePlaylist.
+  ///
+  /// In en, this message translates to:
+  /// **'Save as playlist'**
+  String get annualReportSavePlaylist;
+
+  /// No description provided for @annualReportPlaylistName.
+  ///
+  /// In en, this message translates to:
+  /// **'Most played in {year}'**
+  String annualReportPlaylistName(int year);
+
+  /// No description provided for @annualReportPlaylistAddedTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {count} tracks to {name}'**
+  String annualReportPlaylistAddedTracks(String name, int count);
+
+  /// No description provided for @annualReportPlaylistFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the playlist. Try again.'**
+  String get annualReportPlaylistFailed;
+
+  /// No description provided for @annualReportStatTracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Tracks'**
+  String get annualReportStatTracks;
+
+  /// No description provided for @annualReportStatArtists.
+  ///
+  /// In en, this message translates to:
+  /// **'Artists'**
+  String get annualReportStatArtists;
+
+  /// No description provided for @annualReportTopPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'Most used: {platform}'**
+  String annualReportTopPlatform(String platform);
+
+  /// No description provided for @statsSourceOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other platforms'**
+  String get statsSourceOther;
 
   /// No description provided for @statsSubtitle.
   ///

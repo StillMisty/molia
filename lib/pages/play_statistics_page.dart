@@ -21,6 +21,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/annual_report_entry.dart';
 import '../domain/models/play_statistics.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/source_registry.dart';
@@ -36,8 +37,10 @@ import '../utils/responsive.dart';
 import '../utils/save_as_label.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
+import '../widgets/statistics/annual_report_entry_card.dart';
 import '../widgets/statistics/listening_heatmap.dart';
 import '../widgets/track_row.dart';
+import 'annual_report_page.dart';
 
 class PlayStatisticsPage extends StatefulWidget {
   const PlayStatisticsPage({super.key});
@@ -131,6 +134,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       onChanged: (range) => unawaited(provider.setRange(range)),
     );
     final sections = <Widget>[
+      if (provider.snapshot != null) ..._annualEntry(provider.snapshot!.daily),
       rangeRow,
       const SizedBox(height: 16),
       if (provider.isEmpty)
@@ -166,6 +170,27 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: sections,
     );
+  }
+
+  /// 年度报告入口：数据来自本页已有的全量日历 rollup，不额外查询。
+  List<Widget> _annualEntry(List<DayListened> daily) {
+    final entry = AnnualReportEntry.fromDaily(daily, now: DateTime.now());
+    if (!entry.isVisible) return const [];
+    return [
+      AnnualReportEntryCard(
+        entry: entry,
+        onTap: () => unawaited(
+          openSettingsSubPage(
+            context,
+            AnnualReportPage(
+              years: entry.years,
+              featuredYear: entry.featuredYear,
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+    ];
   }
 
   Widget _errorState(AppLocalizations l10n, PlayStatisticsProvider provider) {

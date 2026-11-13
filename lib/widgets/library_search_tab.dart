@@ -1,13 +1,18 @@
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
+import '../providers/discover_provider.dart';
+import '../providers/search_assist_controller.dart';
 import '../providers/search_provider.dart';
+import '../services/search_history_store.dart';
 import 'ai_dj_carousel.dart';
 import 'app_search_bar.dart';
 import 'discover_layout.dart';
 import 'empty_state.dart';
+import 'search_assist_panel.dart';
 import 'search_section.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -30,6 +35,10 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   late final SearchInputBinding _searchInput;
+  late final SearchProvider _searchProvider;
+  late final SearchAssistController _assist;
+  late final SearchHistoryStore _history;
+  bool _ownsHistory = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -37,19 +46,58 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
   @override
   void initState() {
     super.initState();
-    final searchProvider = Provider.of<SearchProvider>(context, listen: false);
+    _searchProvider = Provider.of<SearchProvider>(context, listen: false);
     _searchInput = SearchInputBinding(
-      session: searchProvider.session,
+      session: _searchProvider.session,
       controller: _searchController,
     );
+    final registered = context.read<SearchHistoryStore?>();
+    _history = registered ?? SearchHistoryStore();
+    _ownsHistory = registered == null;
+    _assist = SearchAssistController(
+      search: _searchProvider,
+      history: _history,
+      hotKeywords: () =>
+          context.read<DiscoverProvider?>()?.hotSearches ?? const [],
+    );
+    _searchFocusNode.addListener(_onFocusChanged);
   }
+
+  void _onFocusChanged() => _assist.setFocused(_searchFocusNode.hasFocus);
 
   @override
   void dispose() {
+    _searchFocusNode.removeListener(_onFocusChanged);
+    _assist.dispose();
+    if (_ownsHistory) _history.dispose();
     _searchInput.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  /// 辅助建议可见时接管 ↑↓ / Enter；结果面的键盘模型保持不变。
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (!_assist.value.showSuggestions) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _assist.moveHighlight(1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _assist.moveHighlight(-1);
+      return KeyEventResult.handled;
+    }
+    if ((key == LogicalKeyboardKey.enter ||
+            key == LogicalKeyboardKey.numpadEnter) &&
+        !_searchController.value.composing.isValid) {
+      if (event is KeyRepeatEvent) return KeyEventResult.handled;
+      if (_assist.selectHighlighted()) return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -68,41 +116,53 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
         );
         final gutter = discoverGutterOf(context);
 
-        return Column(
-          children: [
-            Padding(
-              // 搜索栏自己管横向边距：空闲时与内容栏同 gutter，聚焦时
-              // 向两侧弹性展开 4px（保留原有手感），这里只留纵向。
-              padding: const EdgeInsets.only(
-                top: discoverPageTopPadding,
-                bottom: discoverSectionGap,
+        return Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: _handleKey,
+          child: Column(
+            children: [
+              Padding(
+                // 搜索栏自己管横向边距：空闲时与内容栏同 gutter，聚焦时
+                // 向两侧弹性展开 4px（保留原有手感），这里只留纵向。
+                padding: const EdgeInsets.only(
+                  top: discoverPageTopPadding,
+                  bottom: discoverSectionGap,
+                ),
+                child: AppSearchBar(
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  hintText: _l10n(context).searchHint,
+                  constraints: discoverSearchBarConstraints(context),
+                  margin: gutter,
+                  focusedMargin: gutter > 4 ? gutter - 4 : 0,
+                  expandOnFocus: true,
+                  onSubmitted: (value) {
+                    _searchProvider.submitSearch(value);
+                    _searchFocusNode.unfocus();
+                  },
+                ),
               ),
-              child: AppSearchBar(
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                hintText: _l10n(context).searchHint,
-                constraints: discoverSearchBarConstraints(context),
-                margin: gutter,
-                focusedMargin: gutter > 4 ? gutter - 4 : 0,
-                expandOnFocus: true,
-                onSubmitted: (value) {
-                  session.submit(value);
-                  _searchFocusNode.unfocus();
-                },
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: gutter),
+                child: SearchAssistPanel(controller: _assist),
               ),
-            ),
-            // 浏览态：AI 推歌推荐流（搜索激活时让位给结果区）。
-            if (!isSearchActive) const AiDjCarousel(),
-            Expanded(
-              child: RepaintBoundary(
-                child: isSearchActive
-                    ? SearchSection(controller: widget.controller)
-                    : (aiDjEnabled
-                          ? const SizedBox.shrink()
-                          : _buildIdle(context)),
+              // 浏览态：AI 推歌推荐流（搜索激活时让位给结果区）。
+              if (!isSearchActive) const AiDjCarousel(),
+              Expanded(
+                child: RepaintBoundary(
+                  child: isSearchActive
+                      ? SearchSection(
+                          controller: widget.controller,
+                          assist: _assist,
+                        )
+                      : (aiDjEnabled
+                            ? const SizedBox.shrink()
+                            : _buildIdle(context)),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
