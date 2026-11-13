@@ -17,7 +17,8 @@ import 'track_artwork.dart';
 ///
 /// 搜索结果行传入逐名可点的歌手（内置平台曲目带平台内 id 时）；其它入口
 /// 只传整串 [TrackRowModel.artist]，两者互斥（[TrackRowModel.artists] 非空
-/// 即优先）。
+/// 即优先）。链接沿用副标题配色，与收藏页等入口的作者文字视觉一致——可点
+/// 只体现在命中区域与光标，不用另一种颜色把副标题拆成两截。
 class TrackRowArtist {
   final String name;
   final VoidCallback? onTap;
@@ -353,7 +354,6 @@ class TrackRow extends StatelessWidget {
                         type: type,
                         contentColor: contentColor,
                         supportingColor: supportingColor,
-                        scheme: scheme,
                         artistLinks: artistLinks,
                       )
                     // 标题列上限（[TrackRowColumnSpec.titleMaxWidth]）：
@@ -470,11 +470,13 @@ class TrackRow extends StatelessWidget {
   }
 
   /// 双行档副标题：逐名可点歌手优先，否则整串纯文本（空串隐藏副标题）。
+  ///
+  /// 歌手链接与纯文本共用 [supportingColor]：同一行副标题不因是否可点换色，
+  /// 与收藏页等普通曲目行的作者观感一致。
   Widget _buildTwoLineText({
     required M3ETypeScale type,
     required Color contentColor,
     required Color supportingColor,
-    required M3EColorScheme scheme,
     required List<TrackRowArtist>? artistLinks,
   }) {
     return Column(
@@ -491,7 +493,6 @@ class TrackRow extends StatelessWidget {
           _ArtistLinks(
             artists: artistLinks,
             style: type.bodyMedium.copyWith(color: supportingColor),
-            linkStyle: type.bodyMedium.copyWith(color: scheme.primary),
           )
         else if (model.artist.isNotEmpty)
           Text(
@@ -608,15 +609,10 @@ class TrackRow extends StatelessWidget {
 /// stateless 的 `Text.rich` 每次 build 新建识别器会泄漏。重建时先释放上一批
 /// 识别器——手势只在帧间事件循环里派发，build 期释放是安全的。
 class _ArtistLinks extends StatefulWidget {
-  const _ArtistLinks({
-    required this.artists,
-    required this.style,
-    required this.linkStyle,
-  });
+  const _ArtistLinks({required this.artists, required this.style});
 
   final List<TrackRowArtist> artists;
   final TextStyle style;
-  final TextStyle linkStyle;
 
   @override
   State<_ArtistLinks> createState() => _ArtistLinksState();
@@ -646,16 +642,14 @@ class _ArtistLinksState extends State<_ArtistLinks> {
       final artist = widget.artists[index];
       if (index > 0) spans.add(TextSpan(text: '、', style: widget.style));
       final onTap = artist.onTap;
-      if (onTap == null) {
-        spans.add(TextSpan(text: artist.name, style: widget.style));
-        continue;
-      }
-      final recognizer = TapGestureRecognizer()..onTap = onTap;
-      _recognizers.add(recognizer);
+      final recognizer = onTap == null
+          ? null
+          : (TapGestureRecognizer()..onTap = onTap);
+      if (recognizer != null) _recognizers.add(recognizer);
       spans.add(
         TextSpan(
           text: artist.name,
-          style: widget.linkStyle,
+          style: widget.style,
           recognizer: recognizer,
         ),
       );
