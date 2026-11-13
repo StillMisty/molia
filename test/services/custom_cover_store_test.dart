@@ -368,6 +368,39 @@ void main() {
     expect(fresh.trackCoverPath(const TrackId('kw', '1')), isNull);
     expect(fresh.defaultCoverUrl, isNull);
   });
+
+  test('列表封面：稳定键 / 替换新文件 / 重置删条目', () async {
+    const key = 'playlist:s1';
+    await store.setPlaylistCover(key, _bytes(1));
+    final first = store.playlistEntry(key);
+    expect(first, isNotNull);
+    expect(first!.path, endsWith('.jpg'));
+    expect(store.playlistCoverPath(key), first.path);
+    expect(store.customCoverUrlForKey(key), startsWith('file://'));
+    expect(await store.readPlaylistCover(key), _bytes(1));
+    expect(store.trackEntry(key), isNull, reason: '列表键不混进曲目索引');
+
+    final oldPath = first.path;
+    await store.setPlaylistCover(key, _bytes(2));
+    final second = store.playlistEntry(key);
+    expect(second!.path, isNot(oldPath));
+    expect(File(oldPath).existsSync(), isFalse, reason: '替换删旧文件');
+    expect(await store.readPlaylistCover(key), _bytes(2));
+
+    await store.resetPlaylistCover(key);
+    expect(store.playlistEntry(key), isNull);
+    expect(File(second.path).existsSync(), isFalse);
+    expect(store.customCoverUrlForKey(key), isNull);
+  });
+
+  test('列表封面索引随 prefs 持久化，重载仍可解析', () async {
+    const key = 'playlist:persisted';
+    await store.setPlaylistCover(key, _bytes(3));
+    final reloaded = buildStore();
+    await reloaded.load();
+    expect(reloaded.playlistCoverPath(key), isNotNull);
+    expect(await reloaded.readPlaylistCover(key), _bytes(3));
+  });
 }
 
 /// 导入记录读取失败（模拟数据库暂不可用）：清扫不写完成标记。

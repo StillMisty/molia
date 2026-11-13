@@ -33,6 +33,36 @@ abstract interface class LibraryStore {
   Future<PlaylistInfo?> playlistById(int id);
   Future<List<PlaylistInfo>> listPlaylists();
   Future<void> renamePlaylist(int id, String name);
+
+  /// 一次写入列表名称、描述与分组（同一个版本戳；空值即清除）。
+  ///
+  /// 分组只是字符串：改名/删除分组的扇出写路径由
+  /// [renamePlaylistFolder] / [deletePlaylistFolder] 承担。
+  Future<void> updatePlaylistDetails(
+    int id, {
+    required String name,
+    required String description,
+    required String folder,
+  });
+
+  /// 列出列表的稳定 syncId（缺失时就地补齐并记录），列表不存在返回空串。
+  Future<String> ensurePlaylistSyncId(int id);
+
+  /// 设置 / 清除列表封面指针（清除 = null）。
+  Future<void> setPlaylistCoverKey(int id, String? coverKey);
+
+  /// 分组重命名扇出：返回受影响列表数；不存在的分组是 no-op。
+  Future<int> renamePlaylistFolder(String from, String to);
+
+  /// 分组删除 = 只解除分组：返回解除分组数，不删除任何列表或曲目。
+  Future<int> deletePlaylistFolder(String folder);
+
+  /// 按曲目键查库内列表行（导入解析用；找不到返回 null）。
+  Future<PlaylistTrack?> findPlaylistTrackByKey(
+    String sourceKey,
+    String songId,
+  );
+
   Future<void> deletePlaylist(int id);
 
   /// 列表内曲目，保持展示顺序。

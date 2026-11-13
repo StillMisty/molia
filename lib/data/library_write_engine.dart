@@ -455,16 +455,147 @@ class LibraryWriteEngine {
         await _appendJournal(
           db,
           SyncCategory.playlists.name,
-          _playlistSyncRecord(
-            syncId: syncId,
-            name: row.name,
-            createdAt: row.createdAt,
-            version: version,
-          ),
+          _playlistSyncRecordForRow(syncId, row, version),
         );
       }
     });
     notifyChanged(const LibraryChange.playlists());
+  }
+
+  /// 列表详情（名称 / 描述 / 分组）一次写入：一个版本戳、一条同步记录。
+  ///
+  /// 描述与分组在存储层只做 trim；长度上限属于 UI 文案边界，远端写回的
+  /// 更长值不能被数据库拒绝（宽容读取 / 应用）。
+  Future<void> updatePlaylistDetails(
+    int id, {
+    required String name,
+    required String description,
+    required String folder,
+  }) async {
+    await _ensureReady();
+    final db = _db;
+    await db.transaction(() async {
+      final syncId = await _ensurePlaylistSyncId(db, id);
+      final version = _nextVersion();
+      final updated =
+          await (db.update(db.playlists)..where((t) => t.id.equals(id))).write(
+            PlaylistsCompanion(
+              name: Value(name),
+              description: Value(description.trim()),
+              folder: Value(folder.trim()),
+              versionPhysical: Value(version.physical),
+              versionCounter: Value(version.counter),
+              deviceId: Value(version.deviceId),
+            ),
+          );
+      if (updated > 0 && syncId.isNotEmpty) {
+        final row =
+            await (db.select(db.playlists)
+                  ..where((t) => t.id.equals(id))
+                  ..limit(1))
+                .getSingle();
+        await _appendJournal(
+          db,
+          SyncCategory.playlists.name,
+          _playlistSyncRecordForRow(syncId, row, version),
+        );
+      }
+    });
+    notifyChanged(const LibraryChange.playlists());
+  }
+
+  /// 设置 / 清除列表封面指针；首次写入前补齐 syncId（稳定封面键的前提）。
+  Future<void> setPlaylistCoverKey(int id, String? coverKey) async {
+    await _ensureReady();
+    final db = _db;
+    await db.transaction(() async {
+      final syncId = await _ensurePlaylistSyncId(db, id);
+      final version = _nextVersion();
+      final normalized = (coverKey ?? '').trim().isEmpty
+          ? null
+          : coverKey!.trim();
+      final updated =
+          await (db.update(db.playlists)..where((t) => t.id.equals(id))).write(
+            PlaylistsCompanion(
+              coverKey: Value(normalized),
+              versionPhysical: Value(version.physical),
+              versionCounter: Value(version.counter),
+              deviceId: Value(version.deviceId),
+            ),
+          );
+      if (updated > 0 && syncId.isNotEmpty) {
+        final row =
+            await (db.select(db.playlists)
+                  ..where((t) => t.id.equals(id))
+                  ..limit(1))
+                .getSingle();
+        await _appendJournal(
+          db,
+          SyncCategory.playlists.name,
+          _playlistSyncRecordForRow(syncId, row, version),
+        );
+      }
+    });
+    notifyChanged(const LibraryChange.playlists());
+  }
+
+  /// 分组重命名扇出：每个匹配列表各自取新版本、各写一条同步记录。
+  ///
+  /// 返回受影响列表数；`from` 为空 / `from == to` / 分组不存在时 no-op。
+  Future<int> renamePlaylistFolder(String from, String to) async {
+    final source = from.trim();
+    final target = to.trim();
+    if (source.isEmpty || source == target) return 0;
+    return _rewritePlaylistFolder(source, target);
+  }
+
+  /// 分组删除 = 只解除分组（`folder = ''`），不删列表、不删曲目、不删封面。
+  Future<int> deletePlaylistFolder(String folder) {
+    final source = folder.trim();
+    if (source.isEmpty) return Future<int>.value(0);
+    return _rewritePlaylistFolder(source, '');
+  }
+
+  Future<int> _rewritePlaylistFolder(String from, String to) async {
+    await _ensureReady();
+    final db = _db;
+    var affected = 0;
+    await db.transaction(() async {
+      final rows =
+          await (db.select(db.playlists)
+                ..where((t) => t.folder.equals(from))
+                ..orderBy([(t) => OrderingTerm.asc(t.id)]))
+              .get();
+      for (final row in rows) {
+        final syncId = await _ensurePlaylistSyncId(db, row.id);
+        final version = _nextVersion();
+        await (db.update(
+          db.playlists,
+        )..where((t) => t.id.equals(row.id))).write(
+          PlaylistsCompanion(
+            folder: Value(to),
+            versionPhysical: Value(version.physical),
+            versionCounter: Value(version.counter),
+            deviceId: Value(version.deviceId),
+          ),
+        );
+        affected++;
+        if (syncId.isNotEmpty) {
+          final updated =
+              await (db.select(db.playlists)
+                    ..where((t) => t.id.equals(row.id))
+                    ..limit(1))
+                  .getSingle();
+          await _appendJournal(
+            db,
+            SyncCategory.playlists.name,
+            _playlistSyncRecordForRow(syncId, updated, version),
+          );
+        }
+      }
+    });
+    if (affected > 0) notifyChanged(const LibraryChange.playlists());
+    return affected;
   }
 
   Future<void> deletePlaylist(int id) async {
@@ -1288,6 +1419,9 @@ class LibraryWriteEngine {
     required String name,
     required int createdAt,
     required SyncVersion version,
+    String description = '',
+    String folder = '',
+    String? coverKey,
   }) => SyncRecord(
     key: syncId,
     version: version,
@@ -1295,8 +1429,26 @@ class LibraryWriteEngine {
       syncId: syncId,
       name: name,
       createdAt: createdAt,
+      description: description,
+      folder: folder,
+      coverKey: coverKey,
       version: version,
     ).toJson(),
+  );
+
+  /// 列表行 → 同步记录：所有写入路径共用，避免某个入口漏带新字段。
+  SyncRecord _playlistSyncRecordForRow(
+    String syncId,
+    Playlist row,
+    SyncVersion version,
+  ) => _playlistSyncRecord(
+    syncId: syncId,
+    name: row.name,
+    createdAt: row.createdAt,
+    description: row.description,
+    folder: row.folder,
+    coverKey: row.coverKey,
+    version: version,
   );
 
   SyncRecord _trackSyncRecord({
@@ -1379,13 +1531,19 @@ class LibraryWriteEngine {
     await _appendJournal(
       executor,
       SyncCategory.playlists.name,
-      _playlistSyncRecord(
-        syncId: syncId,
-        name: row.name,
-        createdAt: row.createdAt,
-        version: version,
-      ),
+      _playlistSyncRecordForRow(syncId, row, version),
     );
+    return syncId;
+  }
+
+  /// 公开的 syncId 补齐入口（列表封面键 / 导出前使用；与内部同一事务口径）。
+  Future<String> ensurePlaylistSyncIdById(int id) async {
+    await _ensureReady();
+    final db = _db;
+    late String syncId;
+    await db.transaction(() async {
+      syncId = await _ensurePlaylistSyncId(db, id);
+    });
     return syncId;
   }
 

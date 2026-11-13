@@ -442,6 +442,15 @@ class SyncProvider extends ChangeNotifier
   Future<String> exportJson({bool includeCredentials = true}) =>
       _backup.exportBackupJson(includeCredentials: includeCredentials);
 
+  @override
+  Future<String> exportPlaylistJson({
+    required String playlistSyncId,
+    String? coverKey,
+  }) => _backup.exportPlaylistJson(
+    playlistSyncId: playlistSyncId,
+    coverKey: coverKey,
+  );
+
   /// 导入完整备份（与本地数据逐键 LWW 合并）。
   ///
   /// 备份模块不持有 listener：导入落地后由 provider 统一通知 UI。

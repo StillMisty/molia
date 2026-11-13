@@ -809,4 +809,115 @@ void main() {
       '3',
     ], reason: '列表内顺序稳定（追加顺序）');
   });
+
+  test('列表详情：描述 / 分组 / 封面键持久化，清空取新版本', () async {
+    final id = await repository.createPlaylist('通勤');
+    await repository.updatePlaylistDetails(
+      id,
+      name: '通勤',
+      description: '  早上的歌  ',
+      folder: '  Work  ',
+    );
+    var info = await repository.playlistById(id);
+    expect(info!.description, '早上的歌');
+    expect(info.folder, 'Work');
+
+    final before = await repository.syncExportPlaylists();
+    final beforeRow = before.firstWhere((row) => row.syncId == info!.syncId);
+    await repository.setPlaylistCoverKey(id, 'playlist:${info.syncId}');
+    info = await repository.playlistById(id);
+    expect(info!.coverKey, 'playlist:${info.syncId}');
+    final after = await repository.syncExportPlaylists();
+    final afterRow = after.firstWhere((row) => row.syncId == info!.syncId);
+    expect(
+      afterRow.version.isNewerThan(beforeRow.version),
+      isTrue,
+      reason: '封面指针写回取新版本',
+    );
+
+    await repository.updatePlaylistDetails(
+      id,
+      name: '通勤',
+      description: '',
+      folder: '',
+    );
+    await repository.setPlaylistCoverKey(id, null);
+    info = await repository.playlistById(id);
+    expect(info!.description, '');
+    expect(info.folder, '');
+    expect(info.coverKey, isNull);
+    final listed = await repository.listPlaylists();
+    expect(listed.single.description, '');
+  });
+
+  test('分组重命名扇出：匹配行各自取新版本，非匹配不动', () async {
+    final a = await repository.createPlaylist('A');
+    final b = await repository.createPlaylist('B');
+    final c = await repository.createPlaylist('C');
+    for (final id in [a, b]) {
+      await repository.updatePlaylistDetails(
+        id,
+        name: id == a ? 'A' : 'B',
+        description: '',
+        folder: 'Work',
+      );
+    }
+    await repository.updatePlaylistDetails(
+      c,
+      name: 'C',
+      description: '',
+      folder: 'Other',
+    );
+    final before = {
+      for (final row in await repository.syncExportPlaylists())
+        row.syncId: row.version,
+    };
+    final affected = await repository.renamePlaylistFolder('Work', 'Gym');
+    expect(affected, 2);
+    final rows = await repository.listPlaylists();
+    expect(
+      {for (final row in rows) row.name: row.folder},
+      {'A': 'Gym', 'B': 'Gym', 'C': 'Other'},
+    );
+    final after = {
+      for (final row in await repository.syncExportPlaylists())
+        row.syncId: row.version,
+    };
+    final infoA = rows.firstWhere((row) => row.name == 'A');
+    final infoC = rows.firstWhere((row) => row.name == 'C');
+    expect(after[infoA.syncId!]!.isNewerThan(before[infoA.syncId!]!), isTrue);
+    expect(after[infoC.syncId!], before[infoC.syncId!]);
+
+    expect(await repository.renamePlaylistFolder('missing', 'x'), 0);
+    expect(await repository.deletePlaylistFolder('Gym'), 2);
+    expect((await repository.listPlaylists()).length, 3);
+    expect(
+      (await repository.listPlaylists())
+          .where((row) => row.name == 'A' || row.name == 'B')
+          .every((row) => row.folder.isEmpty),
+      isTrue,
+    );
+  });
+
+  test('列表封面键：缺 syncId 时先补齐；收藏行也可读写描述与封面', () async {
+    final id = await repository.createPlaylist('无同步');
+    // 首次封面写回会确保 syncId 存在（新建行本来已有；这里验证返回口径）。
+    await repository.setPlaylistCoverKey(id, null);
+    final info = await repository.playlistById(id);
+    expect(info!.syncId, isNotEmpty);
+    expect(info.effectiveCoverKey, 'playlist:${info.syncId}');
+
+    final favoritesId = await repository.createPlaylist('__favorites__');
+    await repository.updatePlaylistDetails(
+      favoritesId,
+      name: '__favorites__',
+      description: '我的收藏',
+      folder: 'ignored',
+    );
+    await repository.setPlaylistCoverKey(favoritesId, 'playlist:__favorites__');
+    final favorites = await repository.playlistById(favoritesId);
+    expect(favorites!.description, '我的收藏');
+    expect(favorites.coverKey, 'playlist:__favorites__');
+    expect(favorites.isFavorites, isTrue);
+  });
 }

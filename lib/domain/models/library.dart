@@ -86,6 +86,20 @@ class PlaylistInfo {
   final int createdAt;
   final int trackCount;
 
+  /// 列表描述（空串 = 没有描述；UI 限长，存储层保持宽容）。
+  final String description;
+
+  /// 分组名（空串 = 未分组；用户可见文案是「分组」，不是音乐文件夹）。
+  final String folder;
+
+  /// 列表封面键（通常是 `playlist:<syncId>`；null = 没有封面）。
+  final String? coverKey;
+
+  /// 跨设备稳定的列表标识；自增 [id] 只在本机有效。
+  ///
+  /// 封面键与导出需要它；列表新建时即有，历史行由存储层懒补齐。
+  final String? syncId;
+
   /// 是否为默认收藏列表（存储层的保留行名只在实现内；调用方用本概念）。
   final bool isFavorites;
 
@@ -94,8 +108,20 @@ class PlaylistInfo {
     required this.name,
     required this.createdAt,
     this.trackCount = 0,
+    this.description = '',
+    this.folder = '',
+    this.coverKey,
+    this.syncId,
     this.isFavorites = false,
   });
+
+  /// 列表封面键：行内有指针用行内的，否则从稳定 syncId 推导。
+  String? get effectiveCoverKey {
+    final key = coverKey;
+    if (key != null && key.isNotEmpty) return key;
+    final stable = syncId;
+    return stable == null || stable.isEmpty ? null : 'playlist:$stable';
+  }
 
   @override
   String toString() => 'PlaylistInfo($id, $name, $trackCount)';

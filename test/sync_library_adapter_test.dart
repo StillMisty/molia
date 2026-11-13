@@ -1,6 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/molia_database.dart';
+import 'package:molia/data/sync/sync_backup.dart';
+import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/data/sync/adapters/change_detecting_adapter.dart';
 import 'package:molia/data/sync/adapters/playlist_sync_adapter.dart';
 import 'package:molia/data/sync/sync_adapter.dart';
@@ -286,6 +290,169 @@ void main() {
     expect(
       third[SyncCategory.playlists]!.length,
       greaterThan(first[SyncCategory.playlists]!.length),
+    );
+  });
+
+  test('列表详情 A→B / B→A 往返保留描述、分组与封面键', () async {
+    final id = await repoA.createPlaylist('通勤');
+    await repoA.updatePlaylistDetails(
+      id,
+      name: '通勤',
+      description: '早上的歌',
+      folder: 'Work',
+    );
+    final syncId = (await repoA.playlistById(id))!.syncId!;
+    await repoA.setPlaylistCoverKey(id, 'playlist:$syncId');
+
+    await adapterB.apply(await adapterA.exportRecords());
+    var infoB = await repoB.findPlaylistByName('通勤');
+    expect(infoB!.description, '早上的歌');
+    expect(infoB.folder, 'Work');
+    expect(infoB.coverKey, 'playlist:$syncId');
+
+    clock = 2000;
+    await repoB.updatePlaylistDetails(
+      infoB.id,
+      name: '通勤',
+      description: 'B 端描述',
+      folder: 'Commute',
+    );
+    await adapterA.apply(await adapterB.exportRecords());
+    final infoA = await repoA.findPlaylistByName('通勤');
+    expect(infoA!.description, 'B 端描述');
+    expect(infoA.folder, 'Commute');
+  });
+
+  test('旧形状记录（缺新字段）解析为无描述 / 未分组 / 无封面', () async {
+    await repoA.createPlaylist('旧记录');
+    final row = (await repoA.syncExportPlaylists()).firstWhere(
+      (item) => item.name == '旧记录',
+    );
+    final legacy = SyncRecord(
+      key: row.syncId,
+      version: const SyncVersion(physical: 99, deviceId: 'old'),
+      data: {
+        'syncId': row.syncId,
+        'name': '旧记录',
+        'createdAt': 1,
+        'version': const SyncVersion(physical: 99, deviceId: 'old').toJson(),
+      },
+    );
+    final result = await adapterB.apply({
+      SyncCategory.playlists: [legacy],
+    });
+    expect(result.applied, 1);
+    final info = await repoB.findPlaylistByName('旧记录');
+    expect(info!.description, '');
+    expect(info.folder, '');
+    expect(info.coverKey, isNull);
+  });
+
+  test('分组重命名扇出抵达对端并收敛', () async {
+    final a = await repoA.createPlaylist('A');
+    final b = await repoA.createPlaylist('B');
+    for (final id in [a, b]) {
+      await repoA.updatePlaylistDetails(
+        id,
+        name: id == a ? 'A' : 'B',
+        description: '',
+        folder: 'Work',
+      );
+    }
+    await adapterB.apply(await adapterA.exportRecords());
+    clock = 2000;
+    await repoA.renamePlaylistFolder('Work', 'Gym');
+    await adapterB.apply(await adapterA.exportRecords());
+    final rowsB = await repoB.listPlaylists();
+    expect(
+      {for (final row in rowsB) row.name: row.folder},
+      {'A': 'Gym', 'B': 'Gym'},
+    );
+  });
+
+  test('收藏行描述与封面在固定收藏键下往返', () async {
+    await repoA.toggleFavorite(sourceKey: 'wy', songId: 'f1', title: 'F');
+    final favorites = await repoA.findPlaylistByName('__favorites__');
+    await repoA.updatePlaylistDetails(
+      favorites!.id,
+      name: '__favorites__',
+      description: '收藏说明',
+      folder: '',
+    );
+    await repoA.setPlaylistCoverKey(favorites.id, 'playlist:__favorites__');
+    await adapterB.apply(await adapterA.exportRecords());
+    final favoritesB = await repoB.findPlaylistByName('__favorites__');
+    expect(favoritesB!.description, '收藏说明');
+    expect(favoritesB.coverKey, 'playlist:__favorites__');
+  });
+
+  test('.molia.json：只含目标列表与曲目，导入按 syncId 合并不重复', () async {
+    SharedPreferences.setMockInitialValues({});
+    final target = await repoA.createPlaylist('目标');
+    final other = await repoA.createPlaylist('别的');
+    await repoA.updatePlaylistDetails(
+      target,
+      name: '目标',
+      description: '说明',
+      folder: 'Work',
+    );
+    await repoA.addTrackToPlaylist(target, track('t1'));
+    await repoA.addTrackToPlaylist(other, track('other'));
+    final targetRow = (await repoA.syncExportPlaylists()).firstWhere(
+      (row) => row.name == '目标',
+    );
+
+    final stateA = SyncStateStore(
+      preferences: await SharedPreferences.getInstance(),
+      secrets: MemorySyncSecretStore(),
+      clock: () => clock,
+      deviceId: 'devA',
+    );
+    await stateA.init();
+    final backupA = SyncBackup(
+      state: stateA,
+      pipeline: testRecordPipeline(
+        adapters: [_detectingAdapter(repoA)],
+        deviceId: 'devA',
+      ),
+      stamps: stateA.stampIssuer,
+    );
+    final json = await backupA.exportPlaylistJson(
+      playlistSyncId: targetRow.syncId,
+      coverKey: 'playlist:${targetRow.syncId}',
+    );
+    expect(json, contains('目标'));
+    expect(json, contains('"description": "说明"'));
+    expect(json, isNot(contains('别的')));
+    expect(json, isNot(contains('"settings"')));
+
+    final stateB = SyncStateStore(
+      preferences: await SharedPreferences.getInstance(),
+      secrets: MemorySyncSecretStore(),
+      clock: () => clock,
+      deviceId: 'devB',
+    );
+    await stateB.init();
+    final backupB = SyncBackup(
+      state: stateB,
+      pipeline: testRecordPipeline(
+        adapters: [_detectingAdapter(repoB)],
+        deviceId: 'devB',
+      ),
+      stamps: stateB.stampIssuer,
+    );
+    await backupB.importBackupJson(json);
+    final imported = await repoB.findPlaylistByName('目标');
+    expect(imported, isNotNull);
+    final tracksB = await repoB.listPlaylistTracks(imported!.id);
+    expect(tracksB.map((item) => item.songId), ['t1']);
+    expect(await repoB.findPlaylistByName('别的'), isNull);
+
+    await backupB.importBackupJson(json);
+    expect(
+      (await repoB.listPlaylists()).where((row) => row.name == '目标').length,
+      1,
+      reason: '重复导入按 syncId LWW 合并，不造第二个列表',
     );
   });
 }

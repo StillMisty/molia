@@ -7,6 +7,7 @@ import 'package:logging/logging.dart';
 
 import '../../local_identity.dart';
 import '../../../domain/models/device_sync.dart';
+import '../../../domain/models/playlist_folders.dart';
 import '../../../services/covers/custom_cover_store.dart';
 import '../sync_adapter.dart';
 import '../sync_book.dart';
@@ -123,9 +124,10 @@ class CoverSyncAdapter
     if (!ready) return const {};
     final firstAfterEnable = _firstCoversCollectAfterEnable;
     _firstCoversCollectAfterEnable = false;
-    // 索引快照：曲目封面 + 默认封面；键与同步登记一一对应。
+    // 索引快照：曲目封面 + 列表封面 + 默认封面；键与同步登记一一对应。
     final current = <String, CustomCoverEntry>{
       ..._store.trackEntries,
+      ..._store.playlistEntries,
       if (_store.defaultEntry != null)
         SyncRecordKeys.defaultCoverKey: _store.defaultEntry!,
     };
@@ -309,8 +311,11 @@ class CoverSyncAdapter
         continue;
       }
       final isDefault = record.key == SyncRecordKeys.defaultCoverKey;
+      final isPlaylist = isPlaylistCoverKey(record.key);
       final current = isDefault
           ? _store.defaultEntry
+          : isPlaylist
+          ? _store.playlistEntry(record.key)
           : _store.trackEntry(record.key);
       final stamp = _state.coverStamps[record.key];
       final tombstone = _state.coverTombstones[record.key];
@@ -319,6 +324,7 @@ class CoverSyncAdapter
         final outcome = await _applyTombstone(
           record: record,
           isDefault: isDefault,
+          isPlaylist: isPlaylist,
           current: current,
           stamp: stamp,
           tombstone: tombstone,
@@ -369,6 +375,8 @@ class CoverSyncAdapter
       }
       if (isDefault) {
         await _store.applySyncedDefaultCover(decoded.bytes);
+      } else if (isPlaylist) {
+        await _store.applySyncedPlaylistCover(record.key, decoded.bytes);
       } else {
         await _store.applySyncedTrackCover(record.key, decoded.bytes);
       }
@@ -385,6 +393,7 @@ class CoverSyncAdapter
   Future<SyncApplyOutcome> _applyTombstone({
     required SyncRecord record,
     required bool isDefault,
+    required bool isPlaylist,
     required CustomCoverEntry? current,
     required SyncStamp? stamp,
     required SyncStamp? tombstone,
@@ -401,6 +410,8 @@ class CoverSyncAdapter
     if (current != null) {
       if (isDefault) {
         await _store.applySyncedDefaultDelete();
+      } else if (isPlaylist) {
+        await _store.applySyncedPlaylistDelete(record.key);
       } else {
         await _store.applySyncedTrackDelete(record.key);
       }

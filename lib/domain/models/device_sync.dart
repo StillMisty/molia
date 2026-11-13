@@ -1316,6 +1316,9 @@ class PlaylistSyncRecord {
     required this.name,
     required this.createdAt,
     required this.version,
+    this.description = '',
+    this.folder = '',
+    this.coverKey,
   });
 
   final String syncId;
@@ -1323,14 +1326,29 @@ class PlaylistSyncRecord {
   final int createdAt;
   final SyncVersion version;
 
+  /// 列表描述；旧记录缺失时按空串处理。
+  final String description;
+
+  /// 分组名；旧记录缺失时按未分组处理。
+  final String folder;
+
+  /// 列表封面指针（通常是 `playlist:<syncId>`）；旧记录缺失时为空。
+  final String? coverKey;
+
   Map<String, Object?> toJson() => {
     'syncId': syncId,
     'name': name,
     'createdAt': createdAt,
+    'description': description,
+    'folder': folder,
+    'coverKey': coverKey,
     'version': version.toJson(),
   };
 
   /// 宽容解析：缺失 / 类型不符按空值处理（由应用侧按需跳过并计数）。
+  ///
+  /// 旧版本写出的记录只有 name / createdAt；这里把缺失的新字段默认成
+  /// 「没有描述 / 未分组 / 没有封面」，不因字段缺席而拒绝整条记录。
   ///
   /// [version] 以记录信封的版本为准（信封是权威；data 内的版本只用于
   /// 自包含备份文件的解析）。
@@ -1341,9 +1359,15 @@ class PlaylistSyncRecord {
     syncId: data['syncId'] as String? ?? '',
     name: data['name'] as String? ?? '',
     createdAt: (data['createdAt'] as num?)?.toInt() ?? 0,
+    description: data['description'] as String? ?? '',
+    folder: data['folder'] as String? ?? '',
+    coverKey: _nonEmpty(data['coverKey']),
     version:
         version ?? SyncVersion.fromJson(data['version']) ?? SyncVersion.zero,
   );
+
+  static String? _nonEmpty(Object? value) =>
+      value is String && value.isNotEmpty ? value : null;
 }
 
 /// 列表曲目同步记录（合并键 = `playlistSyncId + sourceKey + songId`）。

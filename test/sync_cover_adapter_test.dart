@@ -468,6 +468,40 @@ void main() {
     expect(journal.changes.single.record.key, 'wy:2');
   });
 
+  test('列表封面：导出键与曲目 / 默认并列，远端落地与墓碑同路径', () async {
+    const key = 'playlist:s1';
+    await store.setPlaylistCover(key, jpeg(7));
+    final records = (await adapter.collect())[SyncCategory.covers]!;
+    expect(records.map((record) => record.key), contains(key));
+
+    var localChanges = 0;
+    store.onLocalChange = (_) => localChanges++;
+    final remote = imageRecord(
+      key,
+      jpeg(8),
+      version: const SyncVersion(physical: 5000, deviceId: 'peer'),
+    );
+    final applied = await adapter.apply({
+      SyncCategory.covers: [remote],
+    });
+    expect(applied.applied, 1);
+    expect(store.playlistEntry(key), isNotNull);
+    expect(await store.readPlaylistCover(key), jpeg(8));
+    expect(localChanges, 0, reason: '远端应用不触发本地变更回调');
+
+    final deleted = await adapter.apply({
+      SyncCategory.covers: [
+        SyncRecord.tombstone(
+          key: key,
+          version: const SyncVersion(physical: 6000, deviceId: 'peer'),
+          deletedAt: 6000,
+        ),
+      ],
+    });
+    expect(deleted.applied, 1);
+    expect(store.playlistEntry(key), isNull);
+  });
+
   test('store 未加载时 ready=false，collect 为空', () async {
     final unloaded = CustomCoverStore(
       supportDirectory: () async => tempDir,
