@@ -72,6 +72,7 @@ import '../../domain/models/track.dart';
 import '../../managers/artwork_cache.dart';
 import '../../models/lyrics_result.dart';
 import '../../services/cache_service.dart';
+import '../local/local_write_gate.dart';
 import '../local/music_folder_scanner.dart';
 import '../covers/cover_bytes_downloader.dart';
 import '../covers/cover_resolution.dart';
@@ -127,7 +128,9 @@ class DownloadService extends DownloadManager
     DownloadNotifications? notifications,
     this._preferredQuality,
     int Function()? clock,
-  }) : _storage = storage,
+    LocalWriteGate? writeGate,
+  }) : _writeGate = writeGate ?? LocalWriteGate(),
+       _storage = storage,
        _dio = dio ?? createAppDio(),
        _settings = settings,
        _publisher = publisher ?? const NoopDownloadsPublisher(),
@@ -147,6 +150,7 @@ class DownloadService extends DownloadManager
   }
 
   final CatalogService _catalog;
+  final LocalWriteGate _writeGate;
   final DownloadStorage _storage;
   final Dio _dio;
   final DownloadLyricsResolver? _lyricsResolver;
@@ -963,6 +967,11 @@ class DownloadService extends DownloadManager
   Future<LocalRelocateResult> relocate(
     DownloadedTrack record,
     String newPath,
+  ) => _writeGate.run(() => _relocate(record, newPath));
+
+  Future<LocalRelocateResult> _relocate(
+    DownloadedTrack record,
+    String newPath,
   ) async {
     final path = p.normalize(newPath.trim());
     final extension = p.extension(path).toLowerCase();
@@ -1013,7 +1022,10 @@ class DownloadService extends DownloadManager
   /// 返回 `(导入数, 跳过数)`：路径为空 / 文件不存在 / 非音频后缀 /
   /// 存储不可用计入跳过。
   @override
-  Future<(int, int)> importLocalFiles(Iterable<String> paths) async {
+  Future<(int, int)> importLocalFiles(Iterable<String> paths) =>
+      _writeGate.run(() => _importLocalFiles(paths));
+
+  Future<(int, int)> _importLocalFiles(Iterable<String> paths) async {
     await _ensureReady();
     var imported = 0;
     var skipped = 0;
@@ -1056,10 +1068,10 @@ class DownloadService extends DownloadManager
     String path, {
     required int sizeBytes,
     required int mtimeMs,
-  }) async {
+  }) => _writeGate.run(() async {
     await _ensureReady();
     await _importLocalFile(path, sizeBytes: sizeBytes, mtimeMs: mtimeMs);
-  }
+  });
 
   /// 扫描器端口：已有文件只刷新技术字段（标题等用户可见元数据不动）。
   @override
@@ -1067,7 +1079,7 @@ class DownloadService extends DownloadManager
     DownloadedTrack record, {
     required int sizeBytes,
     required int mtimeMs,
-  }) async {
+  }) => _writeGate.run(() async {
     final path = record.filePath;
     if (path == null || path.isEmpty) return;
     await _recordStore.relocate(
@@ -1076,15 +1088,43 @@ class DownloadService extends DownloadManager
       sizeBytes: sizeBytes,
       mtimeMs: mtimeMs,
     );
-  }
+  });
+
+  /// 扫描器端口：提交一个增量批次（≤200 条），整批排在同一写队列里。
+  @override
+  Future<void> commitBatch(
+    List<LocalScanChange> changes,
+  ) => _writeGate.run(() async {
+    for (final change in changes) {
+      switch (change) {
+        case LocalScanImport(:final path, :final sizeBytes, :final mtimeMs):
+          await _importLocalFile(path, sizeBytes: sizeBytes, mtimeMs: mtimeMs);
+        case LocalScanRefresh(:final record, :final sizeBytes, :final mtimeMs):
+          final path = record.filePath;
+          if (path == null || path.isEmpty) continue;
+          await _recordStore.relocate(
+            record,
+            path: path,
+            sizeBytes: sizeBytes,
+            mtimeMs: mtimeMs,
+          );
+        case LocalScanMissing(:final record):
+          if (!record.hasAudio || record.isMissing) continue;
+          await _recordStore.markMissing(
+            record,
+            missingAt: DateTime.now().millisecondsSinceEpoch,
+          );
+      }
+    }
+  });
 
   /// 扫描器端口：根目录成功枚举后仍找不到的文件标记缺失。
   @override
-  Future<void> markMissing(DownloadedTrack record) async {
+  Future<void> markMissing(DownloadedTrack record) => _writeGate.run(() async {
     if (!record.hasAudio || record.isMissing) return;
     final missingAt = DateTime.now().millisecondsSinceEpoch;
     await _recordStore.markMissing(record, missingAt: missingAt);
-  }
+  });
 
   /// 单文件导入的唯一实现（手动导入 / 扫描共用）。
   ///
@@ -1099,7 +1139,9 @@ class DownloadService extends DownloadManager
         await _storage.readHead(path, kAudioTagReadLimit) ?? Uint8List(0);
     final tags = readAudioTags(head, extension: extension, fileSize: sizeBytes);
     final fallback = splitFileNameMetadata(p.basenameWithoutExtension(path));
-    final existing = _recordStore.records.importedRecordForPath(path);
+    final existing =
+        _recordStore.records.importedRecordForPath(path) ??
+        await _recordStore.findImportedByPath(path);
     final record = _assembler.forLocalImport(
       filePath: path,
       sizeBytes: sizeBytes,

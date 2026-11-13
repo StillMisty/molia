@@ -88,7 +88,7 @@ Future<TagWriteOutcome> rewriteAudioTitle({
 Future<void> _preservePermissions(String source, String target) async {
   // 尽力而为：桌面保留原权限位；失败按当前用户默认权限创建，不阻断编辑。
   try {
-    final mode = File(source).statSync().mode;
+    final mode = (await File(source).stat()).mode;
     await Process.run('chmod', [mode.toRadixString(8), target]);
   } catch (_) {}
 }
@@ -99,10 +99,6 @@ Stream<List<int>> _prepend(Uint8List prefix, Stream<List<int>> rest) async* {
 }
 
 typedef _Prepared = ({Uint8List prefix, int audioStart});
-
-// ---------------------------------------------------------------------------
-// MP3 / ID3v2
-// ---------------------------------------------------------------------------
 
 Future<_Prepared?> _prepareMp3(
   DownloadStorage storage,
@@ -243,10 +239,6 @@ int _synchsafe(List<int> bytes, int offset) =>
     ((bytes[offset + 2] & 0x7F) << 7) |
     (bytes[offset + 3] & 0x7F);
 
-// ---------------------------------------------------------------------------
-// FLAC
-// ---------------------------------------------------------------------------
-
 typedef _FlacBlock = ({int type, Uint8List data});
 
 Future<_Prepared?> _prepareFlac(
@@ -287,7 +279,13 @@ Future<_Prepared?> _prepareFlac(
   final commentIndex = blocks.indexWhere((block) => block.type == 4);
   if (commentIndex < 0) {
     // 没有 Vorbis Comment：在 STREAMINFO 之后插入只含 TITLE 的块。
-    blocks.insert(1, (type: 4, data: _buildVorbisComment(null, title)));
+    blocks.insert(1, (
+      type: 4,
+      data: _buildVorbisComment(
+        vendor: utf8.encode('Molia'),
+        entries: [Uint8List.fromList(utf8.encode('TITLE=$title'))],
+      ),
+    ));
   } else {
     final rewritten = _rewriteVorbisComment(blocks[commentIndex].data, title);
     if (rewritten == null) return null;
@@ -313,66 +311,71 @@ Future<_Prepared?> _prepareFlac(
 
 /// 只改 TITLE 键：保留 vendor、其它键、重复 ARTIST 与顺序。
 ///
+/// 非 TITLE 条目按**原始字节**原样拼回（不做 UTF-8 解码 / 重编码），因此
+/// 非法 UTF-8 的键 / 值也不会被改动；重复 TITLE 保留数量与位置，只替换值。
 /// 解析失败 / 结构异常返回 null（app-only）。
 Uint8List? _rewriteVorbisComment(Uint8List data, String title) {
   try {
-    var offset = 0;
+    if (data.length < 8) return null;
+    var cursor = 0;
     int readUint32() {
       final value =
-          data[offset] |
-          (data[offset + 1] << 8) |
-          (data[offset + 2] << 16) |
-          (data[offset + 3] << 24);
-      offset += 4;
+          data[cursor] |
+          (data[cursor + 1] << 8) |
+          (data[cursor + 2] << 16) |
+          (data[cursor + 3] << 24);
+      cursor += 4;
       return value;
     }
 
-    if (data.length < 8) return null;
     final vendorLength = readUint32();
-    if (vendorLength < 0 || offset + vendorLength + 4 > data.length) {
+    if (vendorLength < 0 || cursor + vendorLength + 4 > data.length) {
       return null;
     }
-    final vendor = data.sublist(offset, offset + vendorLength);
-    offset += vendorLength;
+    final vendor = data.sublist(cursor, cursor + vendorLength);
+    cursor += vendorLength;
     final count = readUint32();
     if (count < 0 || count > 100000) return null;
-    final entries = <String>[];
-    var titleSeen = false;
+    final entries = <Uint8List>[];
     for (var i = 0; i < count; i++) {
       final length = readUint32();
-      if (length < 0 || offset + length > data.length) return null;
-      final raw = utf8.decode(
-        data.sublist(offset, offset + length),
-        allowMalformed: true,
-      );
-      offset += length;
-      final equals = raw.indexOf('=');
-      final key = equals < 0 ? raw : raw.substring(0, equals);
-      if (key.toUpperCase() == 'TITLE') {
-        if (titleSeen) continue; // 多个 TITLE：收敛成一个
-        titleSeen = true;
-        entries.add('TITLE=$title');
-      } else {
-        entries.add(raw);
-      }
+      if (length < 0 || cursor + length > data.length) return null;
+      entries.add(data.sublist(cursor, cursor + length));
+      cursor += length;
     }
-    if (!titleSeen) entries.add('TITLE=$title');
-    return _buildVorbisComment((vendor: vendor, entries: entries), null);
+    final rawTitle = Uint8List.fromList(utf8.encode('TITLE=$title'));
+    var changed = false;
+    for (var i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      final equals = entry.indexOf(0x3D); // '='
+      if (equals <= 0) continue;
+      final key = _asciiKey(entry, equals);
+      if (key == null || key.toUpperCase() != 'TITLE') continue;
+      entries[i] = rawTitle;
+      changed = true;
+    }
+    if (!changed) entries.add(rawTitle);
+    return _buildVorbisComment(vendor: vendor, entries: entries);
   } catch (_) {
     return null;
   }
 }
 
-Uint8List _buildVorbisComment(
-  ({Uint8List vendor, List<String> entries})? existing,
-  String? title,
-) {
-  final vendor = existing?.vendor ?? utf8.encode('Molia');
-  final entries = <List<int>>[
-    for (final entry in existing?.entries ?? const <String>[])
-      utf8.encode(entry),
-    if (title != null) utf8.encode('TITLE=$title'),
-  ];
+/// 严格 ASCII 键解码：非 ASCII（非法 UTF-8 / 二进制键）返回 null，保持原样。
+String? _asciiKey(Uint8List entry, int length) {
+  final units = <int>[];
+  for (var i = 0; i < length; i++) {
+    final byte = entry[i];
+    if (byte > 0x7F) return null;
+    units.add(byte);
+  }
+  return String.fromCharCodes(units);
+}
+
+Uint8List _buildVorbisComment({
+  required List<int> vendor,
+  required List<Uint8List> entries,
+}) {
   final builder = BytesBuilder(copy: false);
   void uint32(int value) {
     builder.add([

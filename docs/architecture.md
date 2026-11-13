@@ -93,6 +93,16 @@
   的 `CachedPageService<T, Q>`：single-flight + LRU + TTL + `SourceFailure` 归一化 +
   前缀失效 / 计数只此一份；三个类型化服务只提供取数函数与 key / 前缀，容量与 TTL
   在各自适配器声明（专辑 / 歌手 64 条 · 10min，评论 96 条 · 5min）。
+- **本地曲库（Local library）**：`lib/services/local/` 是设备本地文件的读取与写入面——
+  `music_folders.dart`（设备本地文件夹配置，去重 / 拒绝嵌套根，不登记设置注册表）、
+  `music_folder_scanner.dart`（递归流式枚举、路径 + mtime + size 增量、取消、缺文件
+  标记；只读文件头，不动用户文件）、`music_folder_watcher.dart`（防抖事件只当触发器，
+  可定位路径只 stat 该路径，溢出回退整树）、`missing_file_probe.dart`（空闲批量
+  探测存在 / 大小，写 `missingAt` / `mtimeMs`）、`local_library_service.dart`
+  （配置 + 扫描 + 监听 + 探测的编排与平台开关）、`local_write_gate.dart`（扫描导入 /
+  手动导入 / 探测共用一条串行写队列）。标题编辑的字节层在
+  `lib/data/downloads/audio_title_editor.dart`（只替换 ID3 `TIT2` / Vorbis `TITLE`，
+  临时文件 + 原子改名）；身份规则见 `lib/data/local_identity.dart` 与 ADR-0021。
 - **Playback**：`PlaybackEngine`（`lib/data/playback/playback_engine.dart`）直接组合
   `LocalPlaybackService`（值变才发快照；播放顺序栈 `PlaybackOrder` 记录实际播放过的
   下标，供快照 `previous`），同一层完成快照映射、`==` 去重、进度拆到独立 `position`

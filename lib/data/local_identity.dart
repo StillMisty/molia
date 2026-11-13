@@ -6,7 +6,10 @@
 /// 也以 `local:` 开头，不能一概当成导入）。
 library;
 
+import 'dart:io';
 import 'dart:math';
+
+import 'package:path/path.dart' as p;
 
 /// 新身份前缀（`file:<uuid v4>`）。
 const String kLocalKeyPrefix = 'file:';
@@ -35,6 +38,17 @@ String? legacyLocalPathOf(String songId) => isLegacyLocalIdentity(songId)
 
 /// 旧导入记录的文件路径对应的旧曲目 id（`local:<path>`）。
 String legacyLocalIdentityOf(String path) => '$_legacyLocalPrefix$path';
+
+/// 路径比较键：平台大小写规则（Windows / macOS 不敏感，Linux / Android
+/// 敏感），只用于比较与去重；存库 / 展示保留用户看到的原始大小写。
+///
+/// macOS 的个例（大小写敏感卷）按不敏感处理，是有意接受的边界。
+String localPathKey(String path) {
+  final normalized = p.normalize(path);
+  return Platform.isWindows || Platform.isMacOS
+      ? normalized.toLowerCase()
+      : normalized;
+}
 
 /// 是否为「设备本地」封面键：新导入身份 `file:<uuid>`，或旧的导入路径键
 /// `local:<path>`。

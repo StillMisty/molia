@@ -18,7 +18,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
@@ -69,13 +69,13 @@ class Playlists extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text()();
 
-  /// 列表描述（#54 列表体验；本 spec 只负责同一次 v3 迁移）。
+  /// 列表描述（列表增强的读写行为由对应模块负责；v3 只保证列存在）。
   TextColumn get description => text().withDefault(const Constant(''))();
 
-  /// 列表封面键（自定义封面索引；#54 拥有读写行为）。
+  /// 列表封面键（自定义封面索引）。
   TextColumn get coverKey => text().nullable()();
 
-  /// 列表分组（用户可见文案是「分组 / Group」，不是音乐文件夹；#54 拥有读写行为）。
+  /// 列表分组（用户可见文案是「分组 / Group」，不是音乐文件夹）。
   TextColumn get folder => text().withDefault(const Constant(''))();
 
   IntColumn get createdAt => integer()();
@@ -400,9 +400,17 @@ const String moliaDatabaseFileName = 'molia_database_v2';
   ],
 )
 class MoliaDatabase extends _$MoliaDatabase {
-  MoliaDatabase(super.e);
+  MoliaDatabase(super.e) : _snapshotPath = _pendingSnapshotPath {
+    _pendingSnapshotPath = null;
+  }
 
   static MoliaDatabase? _instance;
+
+  /// 生产开库时的库文件路径（测试直接用内存执行器时为 null）。
+  ///
+  /// 迁移前做一次 best-effort 快照（库 + WAL），只供人工诊断，不自动恢复。
+  static String? _pendingSnapshotPath;
+  final String? _snapshotPath;
 
   /// 单例懒加载：不在 app 启动时强制打开数据库，首个查询才建连接。
   static MoliaDatabase get instance => _instance ??= MoliaDatabase(_open());
@@ -412,10 +420,11 @@ class MoliaDatabase extends _$MoliaDatabase {
       Future(() async {
         final directory = await _databaseDirectory();
         final tempDirectory = await getTemporaryDirectory();
-        return openAt(
-          File(p.join(directory.path, '$moliaDatabaseFileName.sqlite')),
-          tempDirectory,
+        final file = File(
+          p.join(directory.path, '$moliaDatabaseFileName.sqlite'),
         );
+        _pendingSnapshotPath = file.path;
+        return openAt(file, tempDirectory);
       }),
     );
   }
@@ -495,6 +504,7 @@ class MoliaDatabase extends _$MoliaDatabase {
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
     onUpgrade: (m, from, to) async {
+      await _snapshotBeforeMigration();
       // 整步迁移放在一个事务里：结构变更与身份重写要么一起生效，要么都回滚
       // 留在旧版本（drift 默认不包事务，见 ADR-0005 / ADR-0021）。
       await transaction(() async {
@@ -525,6 +535,33 @@ class MoliaDatabase extends _$MoliaDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  /// 迁移前快照：库文件 + `-wal`（+ `-shm` 可选）。失败只记日志，不阻断。
+  ///
+  /// 旧版本无法打开 v3；快照只是给人工排查 / 手工回退用，不自动恢复。
+  Future<void> _snapshotBeforeMigration() async {
+    final path = _snapshotPath;
+    if (path == null) return;
+    try {
+      final source = File(path);
+      if (!await source.exists()) return;
+      final stamp = DateTime.now()
+          .toIso8601String()
+          .replaceAll(':', '-')
+          .replaceAll('.', '-');
+      final target = '$path.pre-v3-$stamp.bak';
+      await source.copy(target);
+      for (final suffix in const ['-wal', '-shm']) {
+        final sidecar = File('$path$suffix');
+        if (await sidecar.exists()) {
+          await sidecar.copy('$target$suffix');
+        }
+      }
+      debugPrint('[Molia] 迁移前数据库快照：$target');
+    } catch (e) {
+      debugPrint('[Molia] 迁移前数据库快照失败（继续迁移）：$e');
+    }
+  }
 
   @override
   Future<void> close() async {

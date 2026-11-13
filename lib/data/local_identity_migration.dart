@@ -39,7 +39,7 @@ abstract final class LocalIdentityMigration {
     DatabaseConnectionUser db, {
     Random? random,
   }) async {
-    final randomSource = random ?? Random();
+    final randomSource = random ?? Random.secure();
     final mapping = <String, String>{}; // 旧曲目 id（local:<path>）→ 新 key
     final usedKeys = <String>{};
 

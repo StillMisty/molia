@@ -28,6 +28,10 @@ class DownloadRecordStore {
   /// 内存记录表 / 可监听读模型（UI 只订阅它）。
   DownloadRecords get records => _records;
 
+  /// 按路径查导入记录（内存表缺失时回退数据库，避免生成第二个身份）。
+  Future<DownloadedTrack?> findImportedByPath(String path) =>
+      _repository.findByFilePath(path);
+
   /// 启动时把 drift 全表灌进内存表。
   Future<void> load() async {
     _records.replaceAll(await _repository.listAll());

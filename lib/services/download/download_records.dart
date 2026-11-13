@@ -9,6 +9,7 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../../domain/models/download.dart';
+import '../../data/local_identity.dart';
 import '../../domain/models/track.dart';
 
 /// 下载记录的只读视图 + 下载服务专用的写入面。
@@ -73,7 +74,7 @@ class DownloadRecords extends ChangeNotifier {
   DownloadedTrack? recordForTrack(Track track) {
     if (track.id.sourceKey == kLocalSourceKey) {
       final id = track.id.id;
-      if (id.startsWith('file:')) return _records['local:$id'];
+      if (isStableLocalKey(id)) return _records['local:$id'];
       return _records[id] ?? _records['local:$id'];
     }
     return _records['${track.id.sourceKey}:${track.id.id}'];

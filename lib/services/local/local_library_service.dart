@@ -5,6 +5,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -19,16 +20,27 @@ class LocalLibraryService extends ChangeNotifier {
     required this.scanner,
     required this.probe,
     required this.watcher,
-    bool Function()? canWatch,
-  }) : _canWatch = canWatch ?? _defaultCanWatch;
+    bool? canWatch,
+    bool? canScanOnStartup,
+    bool? canAddFolder,
+  }) : _canWatch = canWatch ?? _defaultCanWatch(),
+       _canScanOnStartup = canScanOnStartup ?? _defaultCanWatch(),
+       _canAddFolder = canAddFolder ?? _defaultCanAddFolder();
 
   final MusicFoldersStore folders;
   final MusicFolderScanner scanner;
   final MissingFileProbe probe;
   final MusicFolderWatcher watcher;
-  final bool Function() _canWatch;
+  final bool _canWatch;
+  final bool _canScanOnStartup;
+  final bool _canAddFolder;
 
-  static bool _defaultCanWatch() =>
+  static bool _defaultCanWatch() => _isDesktop;
+
+  static bool _defaultCanAddFolder() =>
+      _isDesktop || defaultTargetPlatform == TargetPlatform.android;
+
+  static bool get _isDesktop =>
       defaultTargetPlatform == TargetPlatform.linux ||
       defaultTargetPlatform == TargetPlatform.windows ||
       defaultTargetPlatform == TargetPlatform.macOS;
@@ -43,7 +55,8 @@ class LocalLibraryService extends ChangeNotifier {
   bool get scanning => _scanning;
   String? get scanningFolderId => _scanningFolderId;
   ScanProgress? get progress => _progress;
-  bool get canWatchFolders => _canWatch();
+  bool get canWatchFolders => _canWatch;
+  bool get canAddFolder => _canAddFolder;
 
   Future<void> init() async {
     if (_initialized) return;
@@ -53,6 +66,7 @@ class LocalLibraryService extends ChangeNotifier {
   }
 
   Future<MusicFolderAddResult> addFolder(String path) async {
+    if (!_canAddFolder) return MusicFolderAddResult.invalid;
     final result = await folders.add(path);
     if (result == MusicFolderAddResult.added) {
       final added = folders.folders.last;
@@ -85,10 +99,34 @@ class LocalLibraryService extends ChangeNotifier {
 
   Future<void> scanAll() => _run(folders.folders);
 
+  /// 监听事件：能定位到路径时只 stat 这些路径；否则整树增量。
+  Future<void> scanEventPaths(Set<String>? paths) async {
+    if (paths == null || paths.isEmpty) {
+      await scanAll();
+      return;
+    }
+    for (final folder in folders.folders) {
+      final root = folder.root.endsWith('/') || folder.root.endsWith('\\')
+          ? folder.root
+          : '${folder.root}${Platform.pathSeparator}';
+      final matched = {
+        for (final path in paths)
+          if (path == folder.root || path.startsWith(root)) path,
+      };
+      if (matched.isEmpty) continue;
+      await scanner.scanPaths(folder.root, matched);
+    }
+  }
+
   /// 启动 idle 尾巴：加载配置 → 顺序扫描 → 监听（失败静默降级）。
   Future<void> startAfterFirstFrame() async {
     await init();
-    await scanAll();
+    // Android / iOS 不在启动时静默扫描；只做一次空闲缺文件探测。
+    if (_canScanOnStartup) {
+      await scanAll();
+    } else {
+      await probe.probeAll();
+    }
     if (canWatchFolders) {
       watcher.start([for (final folder in folders.folders) folder.root]);
     }

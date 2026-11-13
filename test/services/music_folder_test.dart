@@ -6,10 +6,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:molia/data/downloads/downloads_repository.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/services/local/music_folder_scanner.dart';
 import 'package:molia/services/local/music_folder_watcher.dart';
+import 'package:molia/services/download/download_records.dart';
+import 'package:molia/services/download/missing_file_probe.dart';
+import 'package:molia/services/local/local_library_service.dart';
+import 'package:molia/services/local/local_write_gate.dart';
 import 'package:molia/services/local/music_folders.dart';
+
+import '../support/fake_download_storage.dart';
+import '../support/memory_database.dart';
 
 /// 音乐文件夹配置 / 扫描器 / 监听。
 void main() {
@@ -109,10 +117,11 @@ void main() {
       expect(outcome.added, 2);
       expect(outcome.skipped, 4);
       expect(outcome.cancelled, isFalse);
-      expect(target.imports.map((path) => path.split('/').last), [
-        '01.mp3',
-        '02.flac',
-      ]);
+      expect(
+        target.imports.map((path) => path.split('/').last),
+        containsAll(['01.mp3', '02.flac']),
+      );
+      expect(target.imports, hasLength(2));
       expect(
         await File('${root.path}/Album/01.mp3').readAsBytes(),
         before,
@@ -200,15 +209,116 @@ void main() {
     });
 
     test('取消：停止枚举，已提交批次保留', () async {
+      final files = <File>[];
       for (var i = 0; i < 20; i++) {
-        await write('a$i.mp3');
+        files.add(await write('a$i.mp3'));
       }
       final cancellation = ScanCancellation();
-      target.onImport = () => cancellation.cancel();
-      final outcome = await MusicFolderScanner(target: target)
-          .scan(root.path, cancellation: cancellation);
+      var yielded = 0;
+      final outcome = await MusicFolderScanner(
+        target: target,
+        lister: (directory) async* {
+          if (directory.path == root.path) {
+            for (final file in files) {
+              if (yielded++ > 0) cancellation.cancel();
+              yield file;
+            }
+            return;
+          }
+          yield* directory.list();
+        },
+      ).scan(root.path, cancellation: cancellation);
       expect(outcome.cancelled, isTrue);
       expect(outcome.added, 1);
+      expect(target.imports, hasLength(1), reason: '已提交批次保留');
+    });
+
+    test('根目录枚举失败：整轮 unavailable，绝不标记缺失', () async {
+      await write('a.mp3');
+      target.imported = [
+        DownloadedTrack(
+          originSourceKey: kLocalSourceKey,
+          originSongId: 'file:a',
+          title: 'a',
+          filePath: '${root.path}/a.mp3',
+          sizeBytes: 4,
+          imported: true,
+          localKey: 'file:a',
+          downloadedAt: 1,
+        ),
+      ];
+      final outcome = await MusicFolderScanner(
+        target: target,
+        lister: (directory) {
+          if (directory.path == root.path) {
+            throw const FileSystemException('permission denied');
+          }
+          return directory.list();
+        },
+      ).scan(root.path);
+      expect(outcome.unavailable, isTrue);
+      expect(target.missing, isEmpty);
+      expect(target.imports, isEmpty);
+    });
+
+    test('符号链接根：重复扫描不重复导入，删除后能标记缺失', () async {
+      final real = Directory('${root.path}/real')..createSync();
+      await write('real/a.mp3');
+      final link = Link('${root.path}/alias')..createSync(real.path);
+      final scanner = MusicFolderScanner(target: target);
+      await scanner.scan(link.path);
+      expect(target.imports, hasLength(1));
+      expect(target.imports.single, startsWith(link.path));
+      await scanner.scan(link.path);
+      expect(target.imports, hasLength(1), reason: '同一文件不重复导入');
+      await File('${real.path}/a.mp3').delete();
+      await scanner.scan(link.path);
+      expect(target.missing, hasLength(1));
+    });
+
+    test('文件符号链接：保存第一次发现的链接路径，不替换成目标', () async {
+      final real = await write('real.mp3');
+      final alias = Link('${root.path}/alias.mp3')..createSync(real.path);
+      final outcome = await MusicFolderScanner(
+        target: target,
+        lister: (directory) async* {
+          if (directory.path == root.path) {
+            yield alias;
+            yield real;
+            return;
+          }
+          yield* directory.list();
+        },
+      ).scan(root.path);
+      expect(outcome.added, 1);
+      expect(target.imports.single, alias.path);
+    });
+
+    test('大量文件：按 ≤200 条批次提交', () async {
+      for (var i = 0; i < 210; i++) {
+        await write('bulk/$i.mp3', bytes: [i + 1]);
+      }
+      final outcome = await MusicFolderScanner(target: target).scan(root.path);
+      expect(outcome.added, 210);
+      expect(target.imports, hasLength(210));
+      expect(target.batches.every((size) => size <= 200), isTrue);
+      expect(target.batches.fold<int>(0, (sum, size) => sum + size), 210);
+      expect(target.batches.length, greaterThanOrEqualTo(2));
+    });
+
+    test('只扫描指定路径（监听事件）：不遍历整棵树、不标缺失', () async {
+      await write('a.mp3');
+      await write('b.mp3');
+      await MusicFolderScanner(target: target).scan(root.path);
+      target.imports.clear();
+      await File('${root.path}/a.mp3')
+          .setLastModified(DateTime.fromMillisecondsSinceEpoch(3000));
+      await MusicFolderScanner(target: target)
+          .scanPaths(root.path, ['${root.path}/a.mp3']);
+      expect(target.imports, isEmpty);
+      expect(target.refreshes, hasLength(1));
+      expect(target.refreshes.single.$1.filePath, '${root.path}/a.mp3');
+      expect(target.missing, isEmpty);
     });
 
     test('大小写策略可注入：不敏感时同目录同名只导入一次', () async {
@@ -231,6 +341,60 @@ void main() {
     });
   });
 
+  group('LocalWriteGate', () {
+    test('并发任务串行执行，失败不阻断后续任务', () async {
+      final gate = LocalWriteGate();
+      final log = <String>[];
+      final first = gate.run(() async {
+        log.add('a-start');
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        log.add('a-end');
+      });
+      final failing = gate.run(() async {
+        log.add('b');
+        throw StateError('boom');
+      });
+      final last = gate.run(() async => log.add('c'));
+      await expectLater(failing, throwsStateError);
+      await Future.wait([first, last]);
+      expect(log, ['a-start', 'a-end', 'b', 'c']);
+    });
+  });
+
+  group('LocalLibraryService platform rules', () {
+    test('不允许添加文件夹时返回 invalid；启动扫描受平台开关控制', () async {
+      SharedPreferences.setMockInitialValues({});
+      final db = openMemoryDatabase();
+      addTearDown(db.close);
+      final storage = FakeDownloadStorage();
+      final records = DownloadRecords(supported: true, initialized: true);
+      final probe = MissingFileProbe(
+        records: records,
+        repository: DownloadsRepository(databaseProvider: () => db),
+        storage: storage,
+      );
+      final folders = MusicFoldersStore();
+      await folders.load();
+      final target = _FakeTarget();
+      final service = LocalLibraryService(
+        folders: folders,
+        scanner: MusicFolderScanner(target: target),
+        probe: probe,
+        watcher: MusicFolderWatcher(onTrigger: (paths) async {}),
+        canWatch: false,
+        canScanOnStartup: false,
+        canAddFolder: false,
+      );
+      expect(await service.addFolder('/music'), MusicFolderAddResult.invalid);
+      // 手动把配置塞进去（模拟另一台设备同步过来的旧配置），启动仍不扫描。
+      await folders.add('/music');
+      await service.startAfterFirstFrame();
+      expect(target.imports, isEmpty);
+      expect(service.canAddFolder, isFalse);
+      expect(service.canWatchFolders, isFalse);
+    });
+  });
+
   group('MusicFolderWatcher', () {
     test('连续事件防抖成一次触发；stop 后不再触发', () {
       fakeAsync((async) {
@@ -238,7 +402,8 @@ void main() {
         final events = <String>[];
         final watcher = MusicFolderWatcher(
           watch: (root) => controller.stream,
-          onTrigger: () async => events.add('trigger'),
+          onTrigger: (paths) async =>
+              events.add(paths == null ? 'full' : 'path'),
         );
         watcher.start(['/music']);
         controller
@@ -247,12 +412,32 @@ void main() {
         async.elapse(const Duration(seconds: 1));
         expect(events, isEmpty);
         async.elapse(const Duration(seconds: 1));
-        expect(events, ['trigger']);
+        expect(events, ['path']);
 
         watcher.stop();
         controller.add(FileSystemCreateEvent('/music/c.mp3', false));
         async.elapse(const Duration(seconds: 3));
-        expect(events, ['trigger']);
+        expect(events, ['path']);
+        controller.close();
+      });
+    });
+
+    test('事件过多（无法定位）回退整树增量', () {
+      fakeAsync((async) {
+        final controller = StreamController<FileSystemEvent>.broadcast();
+        final events = <String>[];
+        final watcher = MusicFolderWatcher(
+          watch: (root) => controller.stream,
+          onTrigger: (paths) async =>
+              events.add(paths == null ? 'full' : 'path'),
+        );
+        watcher.start(['/music']);
+        for (var i = 0; i < 70; i++) {
+          controller.add(FileSystemCreateEvent('/music/$i.mp3', false));
+        }
+        async.elapse(const Duration(seconds: 3));
+        expect(events, ['full']);
+        watcher.stop();
         controller.close();
       });
     });
@@ -263,6 +448,7 @@ class _FakeTarget implements LocalScanTarget {
   final List<String> imports = [];
   final List<(DownloadedTrack, int, int)> refreshes = [];
   final List<DownloadedTrack> missing = [];
+  final List<int> batches = [];
   List<DownloadedTrack> imported = [];
   void Function()? onImport;
 
@@ -305,5 +491,20 @@ class _FakeTarget implements LocalScanTarget {
   @override
   Future<void> markMissing(DownloadedTrack record) async {
     missing.add(record);
+  }
+
+  @override
+  Future<void> commitBatch(List<LocalScanChange> changes) async {
+    batches.add(changes.length);
+    for (final change in changes) {
+      switch (change) {
+        case LocalScanImport(:final path, :final sizeBytes, :final mtimeMs):
+          await importFile(path, sizeBytes: sizeBytes, mtimeMs: mtimeMs);
+        case LocalScanRefresh(:final record, :final sizeBytes, :final mtimeMs):
+          await refreshFile(record, sizeBytes: sizeBytes, mtimeMs: mtimeMs);
+        case LocalScanMissing(:final record):
+          await markMissing(record);
+      }
+    }
   }
 }

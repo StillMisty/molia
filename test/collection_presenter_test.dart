@@ -53,20 +53,24 @@ void main() {
     playedAt: 1,
   );
 
-  CollectionLocalSong localSong(String id, {bool imported = false}) =>
-      CollectionLocalSong.download(
-        DownloadedTrack(
-          originSourceKey: imported ? kLocalSourceKey : 'wy',
-          originSongId: id,
-          title: imported ? '导入 $id' : '下载 $id',
-          artist: 'Artist $id',
-          album: 'Album $id',
-          durationMs: 180000,
-          filePath: '/downloads/$id.mp3',
-          imported: imported,
-          downloadedAt: 1,
-        ),
-      );
+  CollectionLocalSong localSong(
+    String id, {
+    bool imported = false,
+    bool missing = false,
+  }) => CollectionLocalSong.download(
+    DownloadedTrack(
+      originSourceKey: imported ? kLocalSourceKey : 'wy',
+      originSongId: id,
+      title: imported ? '导入 $id' : '下载 $id',
+      artist: 'Artist $id',
+      album: 'Album $id',
+      durationMs: 180000,
+      filePath: '/downloads/$id.mp3',
+      imported: imported,
+      downloadedAt: 1,
+      missingAt: missing ? 99 : null,
+    ),
+  );
 
   group('合集身份', () {
     test('收藏：落库 id = 收藏列表 id，键 / 列规范为收藏档', () {
@@ -437,6 +441,10 @@ void main() {
       CollectionRowActionKind.deleteLocalSong,
       destructive: true,
     );
+    CollectionRowActionSpec editTitle() =>
+        const CollectionRowActionSpec(CollectionRowActionKind.editLocalTitle);
+    CollectionRowActionSpec locateFile() =>
+        const CollectionRowActionSpec(CollectionRowActionKind.locateLocalFile);
 
     test('曲目行：收藏 / 自建列表 / 本地音源的动作集合', () {
       final presenter = CollectionPresenter();
@@ -509,7 +517,18 @@ void main() {
       );
     });
 
-    test('本地歌曲行：加入列表 + 收藏开关 + 删除', () {
+    test('缺文件行：改标题 + 重新选择文件 + 删除', () {
+      final row = LocalSongCollectionRow(localSong('1', missing: true));
+      expect(
+        presenter().rowActionsFor(
+          row,
+          identityFor(LibraryCollections.downloadsSentinel),
+        ),
+        [add(), toggleFavorite(), editTitle(), locateFile(), deleteLocal()],
+      );
+    });
+
+    test('本地歌曲行：加入列表 + 收藏开关 + 改标题 + 删除', () {
       final row = LocalSongCollectionRow(localSong('1'));
 
       expect(
@@ -517,7 +536,7 @@ void main() {
           row,
           identityFor(LibraryCollections.downloadsSentinel),
         ),
-        [add(), toggleFavorite(), deleteLocal()],
+        [add(), toggleFavorite(), editTitle(), deleteLocal()],
       );
     });
   });

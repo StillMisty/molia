@@ -22,13 +22,19 @@ class MusicFolderWatcher {
   final FolderEventStream _watch;
   final Duration debounce;
 
-  /// 防抖后触发一次增量扫描；扫描在跑时只记一个 pending，不并发第二轮。
-  final Future<void> Function() onTrigger;
+  /// 防抖后触发一次增量扫描；[paths] 为事件里能定位到的文件路径（null =
+  /// 无法定位 / 事件溢出，整树增量）。扫描在跑时只记一个 pending。
+  final Future<void> Function(Set<String>? paths) onTrigger;
 
   final Map<String, StreamSubscription<FileSystemEvent>> _subscriptions = {};
   Timer? _timer;
   bool _running = false;
   bool _pending = false;
+  final Set<String> _pendingPaths = {};
+  bool _overflow = false;
+
+  /// 单次防抖合并的路径上限；超过即按「无法定位」整树增量。
+  static const int _maxPendingPaths = 64;
 
   static Stream<FileSystemEvent> _defaultWatch(String root) =>
       Directory(root).watch(recursive: true);
@@ -39,7 +45,14 @@ class MusicFolderWatcher {
       if (_subscriptions.containsKey(root)) continue;
       try {
         _subscriptions[root] = _watch(root).listen(
-          (_) => _schedule(),
+          (event) {
+            if (_pendingPaths.length < _maxPendingPaths) {
+              _pendingPaths.add(event.path);
+            } else {
+              _overflow = true;
+            }
+            _schedule();
+          },
           onError: (Object error) {
             debugPrint('[Molia] 音乐文件夹监听失败（降级为手动扫描）: $error');
           },
@@ -73,8 +86,13 @@ class MusicFolderWatcher {
       return;
     }
     _running = true;
+    final paths = _overflow || _pendingPaths.isEmpty
+        ? null
+        : Set<String>.of(_pendingPaths);
+    _pendingPaths.clear();
+    _overflow = false;
     try {
-      await onTrigger();
+      await onTrigger(paths);
     } finally {
       _running = false;
       if (_pending) {

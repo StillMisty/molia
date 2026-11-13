@@ -42,7 +42,7 @@ class LocalMetadataService {
 
   /// 会话写队列排空（组合根在播放栈建好后接线：`sessionStore.pendingWrite`）。
   Future<void> Function()? awaitSessionWrites;
-  final void Function(DownloadedTrack record)? onCommitted;
+  void Function(DownloadedTrack record)? onCommitted;
 
   /// 编辑本地曲目标题；[appOnly] 表示用户已选择「只在 Molia 中修改」。
   Future<LocalTitleEditStatus> editTitle(

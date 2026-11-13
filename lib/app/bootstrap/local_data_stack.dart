@@ -32,6 +32,7 @@ import '../../services/download/missing_file_probe.dart';
 import '../../data/local_title_store.dart';
 import '../../services/local/local_library_service.dart';
 import '../../services/local/local_metadata_service.dart';
+import '../../services/local/local_write_gate.dart';
 import '../../services/local/music_folder_scanner.dart';
 import '../../services/local/music_folder_watcher.dart';
 import '../../services/local/music_folders.dart';
@@ -175,6 +176,8 @@ Future<LocalDataStack> buildLocalDataStack({
   // 命中直读、未命中先走本渠道原生、再按名字跨渠道严格兜底；音频命中完整
   // 缓存时直接拷贝，不触网。
   final downloadsRepository = DownloadsRepository();
+  // 扫描导入 / 手动导入 / 缺文件探测共用一条串行写队列。
+  final localWriteGate = LocalWriteGate();
   final downloadService = DownloadService(
     catalog: catalog.catalogService,
     repository: downloadsRepository,
@@ -189,12 +192,14 @@ Future<LocalDataStack> buildLocalDataStack({
     coverResolver: customCovers.resolution,
     preferredQuality: () =>
         dataSaver.effectiveQuality(sourceManager.preferredQuality),
+    writeGate: localWriteGate,
   );
   // 缺文件探测：下载记录就绪后空闲批量执行；扫描 / 手动检查共用同一入口。
   final missingFileProbe = MissingFileProbe(
     records: downloadService.records,
     repository: downloadsRepository,
     storage: downloadStorage,
+    writeGate: localWriteGate,
   );
 
   // 本地曲库：音乐文件夹配置 + 扫描 + 监听 + 缺文件检查（首帧后 idle 启动）。
@@ -204,7 +209,9 @@ Future<LocalDataStack> buildLocalDataStack({
     folders: musicFolders,
     scanner: MusicFolderScanner(target: downloadService),
     probe: missingFileProbe,
-    watcher: MusicFolderWatcher(onTrigger: () => localLibrary.scanAll()),
+    watcher: MusicFolderWatcher(
+      onTrigger: (paths) => localLibrary.scanEventPaths(paths),
+    ),
   );
 
   // 标题编辑：标签文件 + 一处数据库事务（会话 gate 在播放栈建好后接线）。

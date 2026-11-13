@@ -407,6 +407,10 @@ class PlaybackProvider extends ChangeNotifier {
   /// 真实队列与冷启动恢复态会话都由协调者按范围改写并落盘；这里只按命令
   /// 结果的变化域通知 UI，与其它播放命令同一条 `_applyOutcome` 路径。
   /// 未命中不算失败：库内换源与队列跟随解耦（曲目可能不在当前队列）。
+  /// 只更新队列 / 恢复态同 id 曲目的元数据（标题），不重新取链。
+  Future<void> updateTrackMetadata(Track track) =>
+      _session.updateTrackMetadata(track);
+
   Future<bool> replaceQueueTrack(Track oldTrack, Track newTrack) async {
     final outcome = await _session.replaceTrack(oldTrack, newTrack);
     _applyOutcome(outcome);

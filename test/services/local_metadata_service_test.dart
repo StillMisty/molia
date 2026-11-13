@@ -211,6 +211,21 @@ void main() {
     );
   });
 
+  test('提交成功后回调一次（播放快照刷新入口）', () async {
+    final committed = <String>[];
+    final service = LocalMetadataService(
+      storage: storage,
+      store: LocalTitleStore(database: () => db),
+      records: records,
+      onCommitted: (record) => committed.add(record.title),
+    );
+    expect(
+      await service.editTitle(record, '新标题'),
+      LocalTitleEditStatus.written,
+    );
+    expect(committed, ['新标题']);
+  });
+
   test('下载副本：按原音源键更新本地行，不碰在线原曲', () async {
     const copy = DownloadedTrack(
       originSourceKey: 'wy',

@@ -419,6 +419,60 @@ void main() {
       expect(updated.sublist(audioStart), audio);
     });
 
+    test('重复 TITLE 保留数量与顺序；非 UTF-8 条目逐字节不变', () async {
+      final streamInfo = Uint8List.fromList([1, 2, 3, 4]);
+      // 手工构造：vendor + 两个 TITLE + 非法 UTF-8 键的条目 + ARTIST。
+      final builder = BytesBuilder();
+      void uint32(int value) => builder.add([
+        value & 0xFF,
+        (value >> 8) & 0xFF,
+        (value >> 16) & 0xFF,
+        (value >> 24) & 0xFF,
+      ]);
+
+      final vendor = utf8.encode('vendor');
+      uint32(vendor.length);
+      builder.add(vendor);
+      final entries = <List<int>>[
+        utf8.encode('TITLE=旧一'),
+        utf8.encode('ARTIST=歌手'),
+        [0xFF, 0xFE, 0x3D, 0x31], // 非法 UTF-8 键
+        utf8.encode('TITLE=旧二'),
+      ];
+      uint32(entries.length);
+      for (final entry in entries) {
+        uint32(entry.length);
+        builder.add(entry);
+      }
+      final comment = builder.takeBytes();
+      final original = flacFile(
+        blocks: [
+          block(0, streamInfo, last: false),
+          block(4, comment, last: false),
+        ],
+        audio: audio,
+      );
+      storage.files[flacPath] = original;
+      expect(
+        await rewriteAudioTitle(
+          storage: storage,
+          filePath: flacPath,
+          title: '新标题',
+        ),
+        TagWriteOutcome.written,
+      );
+      final updated = Uint8List.fromList(storage.files[flacPath]!);
+      final commentBlock = flacBlocks(updated)[1].data;
+      final text = utf8.decode(commentBlock, allowMalformed: true);
+      expect(text, contains('TITLE=新标题'));
+      expect(text, isNot(contains('TITLE=旧一')));
+      expect(text, isNot(contains('TITLE=旧二')));
+      expect('TITLE='.allMatches(text), hasLength(2), reason: '重复 TITLE 保留');
+      // 非法 UTF-8 条目字节原样保留（从注释块中直接找字节序列）。
+      expect(_containsBytes(commentBlock, [0xFF, 0xFE, 0x3D, 0x31]), isTrue);
+      expect(String.fromCharCodes(_titleValues(commentBlock)), contains('AR'));
+    });
+
     test('没有 Vorbis Comment：在 STREAMINFO 后插入只含 TITLE 的块', () async {
       final streamInfo = Uint8List.fromList([1, 2, 3, 4]);
       final original = flacFile(
@@ -458,6 +512,45 @@ void main() {
       expect(storage.files[flacPath], broken);
     });
   });
+}
+
+bool _containsBytes(List<int> haystack, List<int> needle) {
+  for (var i = 0; i + needle.length <= haystack.length; i++) {
+    var match = true;
+    for (var j = 0; j < needle.length; j++) {
+      if (haystack[i + j] != needle[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+  }
+  return false;
+}
+
+List<int> _titleValues(List<int> comment) {
+  var cursor = 0;
+  int readUint32() {
+    final value =
+        comment[cursor] |
+        (comment[cursor + 1] << 8) |
+        (comment[cursor + 2] << 16) |
+        (comment[cursor + 3] << 24);
+    cursor += 4;
+    return value;
+  }
+
+  final vendorLength = readUint32();
+  cursor += vendorLength;
+  final count = readUint32();
+  final values = <int>[];
+  for (var i = 0; i < count; i++) {
+    final length = readUint32();
+    final entry = comment.sublist(cursor, cursor + length);
+    cursor += length;
+    values.addAll(entry);
+  }
+  return values;
 }
 
 class _FailingWriteStorage extends FakeDownloadStorage {

@@ -2063,6 +2063,22 @@ void main() {
       );
     });
 
+    test('并发导入同一路径：串行写队列只产生一条记录', () async {
+      storage.directories.add('/music');
+      storage.files['/music/a.mp3'] = [1, 2, 3, 4];
+      final service = makeService();
+      await service.init();
+      final results = await Future.wait([
+        service.importLocalFiles(['/music/a.mp3']),
+        service.importLocalFiles(['/music/a.mp3']),
+      ]);
+      expect(results.map((result) => result.$1), [1, 1]);
+      expect(service.records.downloads, hasLength(1));
+      final record = service.records.downloads.single;
+      expect(record.localKey, startsWith('file:'));
+      expect(await repository.listImported(), hasLength(1));
+    });
+
     test('删除导入只删记录，文件保留', () async {
       storage.directories.add('/music');
       storage.files['/music/a.mp3'] = [1, 2, 3, 4];

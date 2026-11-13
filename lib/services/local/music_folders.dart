@@ -5,11 +5,12 @@
 library;
 
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../data/local_identity.dart';
 
 /// 一次扫描的结果摘要（只用于设置页一行文案，不暴露路径列表）。
 class MusicFolderScanSummary {
@@ -209,12 +210,5 @@ class MusicFoldersStore extends ChangeNotifier {
     );
   }
 
-  /// Windows / macOS 大小写不敏感（不探测单卷设置，按平台规则）；Linux /
-  /// Android 大小写敏感。只用于比较，存储保留用户看到的原始大小写。
-  String _pathKey(String path) {
-    final normalized = p.normalize(path);
-    return Platform.isWindows || Platform.isMacOS
-        ? normalized.toLowerCase()
-        : normalized;
-  }
+  String _pathKey(String path) => localPathKey(path);
 }

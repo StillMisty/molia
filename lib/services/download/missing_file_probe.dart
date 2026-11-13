@@ -12,6 +12,7 @@ import '../../data/downloads/download_storage.dart';
 import '../../data/downloads/downloads_repository.dart';
 import '../../domain/models/download.dart';
 import '../download/download_records.dart';
+import '../local/local_write_gate.dart';
 
 /// 一轮探测结果。
 class MissingProbeResult {
@@ -26,14 +27,17 @@ class MissingFileProbe {
     required this.records,
     required this.repository,
     required this.storage,
+    LocalWriteGate? writeGate,
     DateTime Function()? clock,
     this.batchSize = 200,
     this.concurrency = 4,
-  }) : _clock = clock ?? DateTime.now;
+  }) : _clock = clock ?? DateTime.now,
+       _writeGate = writeGate ?? LocalWriteGate();
 
   final DownloadRecords records;
   final DownloadsRepository repository;
   final DownloadStorage storage;
+  final LocalWriteGate _writeGate;
   final DateTime Function() _clock;
   final int batchSize;
   final int concurrency;
@@ -45,6 +49,10 @@ class MissingFileProbe {
   ///
   /// 已在运行时不并发启动第二次（扫描 / 启动 / 手动共用一个串行入口）。
   Future<MissingProbeResult> probeAll({
+    void Function(int checked)? onProgress,
+  }) => _writeGate.run(() => _probeAll(onProgress: onProgress));
+
+  Future<MissingProbeResult> _probeAll({
     void Function(int checked)? onProgress,
   }) async {
     if (_running) return const MissingProbeResult(checked: 0, changed: 0);

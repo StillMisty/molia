@@ -38,6 +38,9 @@ abstract interface class PlaybackFacade {
   /// 随机模式下本轮排列不变，追加项在本轮结束后纳入新一轮洗牌。
   Future<void> enqueueTracks(List<Track> tracks);
 
+  /// 只更新队列中同 id 曲目的元数据（标题等）：不重新取链、不打断播放。
+  Future<void> updateQueueTrackMetadata(String trackUri, Track track);
+
   /// 移动队列中的一项；返回是否真的改变（越界 / 当前曲目 / 随机模式 false）。
   Future<bool> moveQueueIndex(int from, int to);
 
