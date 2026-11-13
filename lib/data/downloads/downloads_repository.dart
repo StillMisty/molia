@@ -51,6 +51,30 @@ class DownloadsRepository {
     return row == null ? null : _fromRow(row);
   }
 
+  /// 按本地文件路径查找导入记录（同路径重复导入复用 `localKey` 的依据）。
+  ///
+  /// 只匹配导入行：下载副本的 `filePath` 在下载目录里，不会被用户重复导入。
+  Future<DownloadedTrack?> findByFilePath(String filePath) async {
+    final row =
+        await (_db.select(_db.downloads)
+              ..where(
+                (t) => t.imported.equals(true) & t.filePath.equals(filePath),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+    return row == null ? null : _fromRow(row);
+  }
+
+  /// 全部导入记录（封面键清扫与扫描器使用）。
+  Future<List<DownloadedTrack>> listImported() async {
+    final rows =
+        await (_db.select(_db.downloads)
+              ..where((t) => t.imported.equals(true))
+              ..orderBy([(t) => OrderingTerm.asc(t.id)]))
+            .get();
+    return [for (final row in rows) _fromRow(row)];
+  }
+
   /// 插入下载记录（同原曲唯一键冲突时整体替换）。
   Future<void> insert(DownloadedTrack track) async {
     await _db
@@ -72,6 +96,9 @@ class DownloadsRepository {
             coverPath: Value(track.coverPath),
             publicUri: Value(track.publicUri),
             imported: Value(track.imported),
+            localKey: Value(track.localKey),
+            mtimeMs: Value(track.mtimeMs),
+            missingAt: Value(track.missingAt),
             downloadedAt: track.downloadedAt,
           ),
           mode: InsertMode.insertOrReplace,
@@ -111,6 +138,9 @@ class DownloadsRepository {
     coverPath: row.coverPath,
     publicUri: row.publicUri,
     imported: row.imported,
+    localKey: row.localKey,
+    mtimeMs: row.mtimeMs,
+    missingAt: row.missingAt,
     downloadedAt: row.downloadedAt,
   );
 

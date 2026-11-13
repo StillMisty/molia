@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:molia/data/local_identity.dart';
 import 'package:molia/data/sync/adapters/cover_sync_adapter.dart';
 import 'package:molia/data/sync/sync_journal.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
@@ -108,6 +109,37 @@ void main() {
     final again = (await adapter.collect())[SyncCategory.covers]!;
     expect(again.single.version, record.version);
     expect(journal.changes, hasLength(1));
+  });
+
+  test('导入曲目封面（file: / 旧 local: 路径）不进入 covers 类别', () async {
+    await store.setTrackCover(
+      const TrackId('local', 'file:dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+      jpeg(1),
+    );
+    await store.setTrackCover(
+      TrackId('local', legacyLocalIdentityOf('/music/imported.mp3')),
+      jpeg(2),
+    );
+    await store.setTrackCover(trackId, jpeg(3));
+
+    final records = (await adapter.collect())[SyncCategory.covers]!;
+    expect(records.map((record) => record.key), ['wy:1']);
+
+    // 远端旧记录 / 异常记录里的本地键同样不落地。
+    final outcome = await adapter.apply({
+      SyncCategory.covers: [
+        imageRecord(
+          'file:dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          jpeg(4),
+          version: const SyncVersion(physical: 9000),
+        ),
+      ],
+    });
+    expect(outcome.applied, 0);
+    expect(
+      store.trackEntry('file:dddddddd-dddd-4ddd-8ddd-dddddddddddd')!.hash,
+      isNot(sha256.convert(jpeg(4)).toString()),
+    );
   });
 
   test('releaseCaches：清空 base64 缓存，下一次 collect 重新读文件', () async {

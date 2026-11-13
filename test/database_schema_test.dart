@@ -84,6 +84,9 @@ void main() {
         'coverPath|TEXT|0|null|0',
         'publicUri|TEXT|0|null|0',
         'imported|INTEGER|1|0|0',
+        'localKey|TEXT|0|null|0',
+        'mtimeMs|INTEGER|0|null|0',
+        'missingAt|INTEGER|0|null|0',
         'downloadedAt|INTEGER|1|null|0',
       ],
       'play_history': [
@@ -103,6 +106,9 @@ void main() {
       'playlists': [
         'id|INTEGER|0|null|1',
         'name|TEXT|1|null|0',
+        "description|TEXT|1|''|0",
+        'coverKey|TEXT|0|null|0',
+        "folder|TEXT|1|''|0",
         'createdAt|INTEGER|1|null|0',
         'syncId|TEXT|0|null|0',
         'versionPhysical|INTEGER|1|0|0',
@@ -214,6 +220,9 @@ void main() {
       {for (final row in rows) row['name']: row['sql']},
       {
         'idx_downloads_downloadedAt': 'CREATE INDEX idx_downloads_downloadedAt ON downloads (downloadedAt)',
+        'idx_downloads_localKey':
+            'CREATE UNIQUE INDEX idx_downloads_localKey '
+            'ON downloads (localKey) WHERE localKey IS NOT NULL',
         'idx_play_history_playedAt':
             'CREATE INDEX idx_play_history_playedAt ON play_history (playedAt)',
         'idx_playlists_syncId':

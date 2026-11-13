@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/local_music_source.dart';
+import 'package:molia/data/catalog/local_path_resolver.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/track.dart';
@@ -94,5 +95,29 @@ void main() {
       ),
       isNull,
     );
+  });
+
+  test('稳定身份经注入端口解析当前路径，payload 旧路径只作回退', () async {
+    final resolver = LocalPathResolver();
+    resolver.attach((track) async => '/new/location/song.mp3');
+    final probed = <String>[];
+    final source = LocalMusicSource(
+      fileExists: (path) async {
+        probed.add(path);
+        return true;
+      },
+      pathResolver: resolver,
+    );
+
+    final stream = await source.resolve(
+      makeTrack({'path': '/old/location/song.mp3'}),
+    );
+    expect(stream.uri, Uri.file('/new/location/song.mp3'));
+    expect(probed, ['/new/location/song.mp3']);
+
+    // 没有记录（重定位前 / 记录已删）时回退 payload 路径。
+    resolver.attach((track) async => null);
+    await source.resolve(makeTrack({'path': '/old/location/song.mp3'}));
+    expect(probed.last, '/old/location/song.mp3');
   });
 }

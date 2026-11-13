@@ -55,9 +55,12 @@ void initAfterFirstFrame({
   );
   final downloadWatch = Stopwatch()..start();
   unawaited(
-    local.downloadService.init().whenComplete(
-      () => markStartupStep('sub.downloadService.init（首帧后）', downloadWatch),
-    ),
+    local.downloadService
+        .init()
+        .then((_) => local.localCoverSweep.sweepIfNeeded())
+        .whenComplete(
+          () => markStartupStep('sub.downloadService.init（首帧后）', downloadWatch),
+        ),
   );
   unawaited(() async {
     // 半成品清扫只可能清理本进程启动前的残留；放在首帧后不影响下载语义。

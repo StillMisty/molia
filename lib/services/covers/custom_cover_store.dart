@@ -417,6 +417,47 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
   /// 应用远端默认封面删除（同步 / 备份导入）。
   Future<void> applySyncedDefaultDelete() => _removeDefaultEntry(local: false);
 
+  /// 本地身份迁移：批量把旧封面键改写成新键（文件 / 哈希 / 更新时间不变）。
+  ///
+  /// 只移动索引键；新键已有用户封面时保留新键、旧键按孤儿留下（不覆盖用户
+  /// 选择）。一次持久化、一次 revision 自增；失败回滚内存并上抛。导入封面
+  /// 不再进入同步，因此这里不触发本地变更回调（不标脏 covers 类别）。
+  Future<int> migrateTrackCoverKeys(Map<String, String> renames) async {
+    final moves = <String, String>{};
+    for (final entry in renames.entries) {
+      final oldKey = entry.key;
+      final newKey = entry.value;
+      if (oldKey == newKey) continue;
+      if (!_tracks.containsKey(oldKey)) continue;
+      if (_tracks.containsKey(newKey)) continue;
+      moves[oldKey] = newKey;
+    }
+    if (moves.isEmpty) return 0;
+    final previous = <String, CustomCoverEntry?>{
+      for (final oldKey in moves.keys) oldKey: _tracks[oldKey],
+      for (final newKey in moves.values) newKey: _tracks[newKey],
+    };
+    for (final move in moves.entries) {
+      final entry = _tracks.remove(move.key);
+      if (entry != null) _tracks[move.value] = entry;
+    }
+    try {
+      await _persist();
+    } catch (e) {
+      for (final entry in previous.entries) {
+        final value = entry.value;
+        if (value == null) {
+          _tracks.remove(entry.key);
+        } else {
+          _tracks[entry.key] = value;
+        }
+      }
+      rethrow;
+    }
+    revision.value++;
+    return moves.length;
+  }
+
   /// 写入曲目索引并持久化；失败回滚内存与文件。
   Future<void> _commitTrackEntry(
     String key,

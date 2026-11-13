@@ -4,7 +4,10 @@
 ///
 /// `schemaVersion = 1` 是 fresh 基线（库文件名见 [moliaDatabaseFileName]，
 /// 不迁移历史数据）；`2` 新增播放会话两表并保留 v1 数据（见
-/// docs/adr/0005-drift-migration.md、docs/adr/0017-playback-session-sql.md）。
+/// docs/adr/0005-drift-migration.md、docs/adr/0017-playback-session-sql.md）；
+/// `3` 是其后的共享一次迁移：导入文件稳定 id（`downloads.localKey`）
+/// + 扫描 / 缺文件字段 + 列表描述 / 封面 / 分组列（见
+/// docs/adr/0021-local-library-identity.md）。
 ///
 /// 文件复制 / 目录迁移收在 [appDataDirectory] 旁边的 helper 里（带 `dart:io`），
 /// 本文件仍只做库声明、路径选择与连接配置；测试可用内存库
@@ -22,6 +25,7 @@ import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
 import '../domain/models/device_sync.dart';
 import 'files/app_data_directory.dart';
+import 'local_identity_migration.dart';
 import 'molia_database.steps.dart';
 
 part 'molia_database.g.dart';
@@ -64,6 +68,16 @@ class Playlists extends Table {
 
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text()();
+
+  /// 列表描述（#54 列表体验；本 spec 只负责同一次 v3 迁移）。
+  TextColumn get description => text().withDefault(const Constant(''))();
+
+  /// 列表封面键（自定义封面索引；#54 拥有读写行为）。
+  TextColumn get coverKey => text().nullable()();
+
+  /// 列表分组（用户可见文案是「分组 / Group」，不是音乐文件夹；#54 拥有读写行为）。
+  TextColumn get folder => text().withDefault(const Constant(''))();
+
   IntColumn get createdAt => integer()();
   TextColumn get syncId => text().nullable()();
   IntColumn get versionPhysical => integer().withDefault(const Constant(0))();
@@ -205,9 +219,18 @@ class SyncJournalStates extends Table {
 /// 经平台通道一并回收。
 ///
 /// `imported` = 本地导入（就地引用用户自己文件）：`originSourceKey = 'local'`、
-/// `originSongId` = 文件绝对路径；删除记录只移除行，不删原文件。
+/// `originSongId` = 稳定本地 id（`localKey`，见下）；删除记录只移除行，不删原文件。
+///
+/// 本地导入的 `localKey`（`file:<uuid>`）是**设备本地稳定身份**：路径只存在
+/// `filePath`，移动 / 重定位不改身份；`originSongId` 镜像它只为沿用
+/// `(originSourceKey, originSongId)` 唯一约束与既有查询形状。下载副本
+/// （`imported = false`）的 `localKey` 恒为 null——它本来就不依赖路径。
 @DataClassName('DownloadRow')
 @TableIndex(name: 'idx_downloads_downloadedAt', columns: {#downloadedAt})
+@TableIndex.sql(
+  'CREATE UNIQUE INDEX idx_downloads_localKey ON downloads (localKey) '
+  'WHERE localKey IS NOT NULL',
+)
 class Downloads extends Table {
   @override
   String get tableName => 'downloads';
@@ -232,6 +255,16 @@ class Downloads extends Table {
   TextColumn get publicUri => text().nullable()();
   // 本地导入（就地引用）：删除只移除记录、不动原文件。
   BoolColumn get imported => boolean().withDefault(const Constant(false))();
+
+  /// 本地导入的稳定身份（`file:<uuid>`；下载副本为 null）。
+  TextColumn get localKey => text().nullable()();
+
+  /// 文件修改时间（毫秒；扫描增量判定用，null = 尚未探测）。
+  IntColumn get mtimeMs => integer().nullable()();
+
+  /// 确认文件不见的时间（毫秒；null = 可用）。只表示最近一次成功探测的结果。
+  IntColumn get missingAt => integer().nullable()();
+
   IntColumn get downloadedAt => integer()();
 
   @override
@@ -450,22 +483,43 @@ class MoliaDatabase extends _$MoliaDatabase {
     }
   }
 
-  /// 当前 schema 版本：`1` 为 fresh 基线，`2` 新增播放会话两表。
+  /// 当前 schema 版本：`1` 为 fresh 基线，`2` 新增播放会话两表，`3` 是本地
+  /// 曲库 / 列表增强共享的迁移（见 [LocalIdentityMigration]）。
   ///
   /// 后续结构变更必须写增量迁移：提版本号 → `dart run drift_dev make-migrations`
   /// 生成 schema 快照 → 用 `stepByStep` 写迁移并保留数据（见 ADR-0005）。
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) => m.createAll(),
-    onUpgrade: stepByStep(
-      from1To2: (m, schema) async {
-        await m.createTable(schema.playbackSessionPayloads);
-        await m.createTable(schema.playbackSessionCursors);
-      },
-    ),
+    onUpgrade: (m, from, to) async {
+      // 整步迁移放在一个事务里：结构变更与身份重写要么一起生效，要么都回滚
+      // 留在旧版本（drift 默认不包事务，见 ADR-0005 / ADR-0021）。
+      await transaction(() async {
+        await stepByStep(
+          from1To2: (m, schema) async {
+            await m.createTable(schema.playbackSessionPayloads);
+            await m.createTable(schema.playbackSessionCursors);
+          },
+          from2To3: (m, schema) async {
+            await m.addColumn(schema.playlists, schema.playlists.description);
+            await m.addColumn(schema.playlists, schema.playlists.coverKey);
+            await m.addColumn(schema.playlists, schema.playlists.folder);
+            await m.addColumn(schema.downloads, schema.downloads.mtimeMs);
+            await m.addColumn(schema.downloads, schema.downloads.missingAt);
+            await m.addColumn(schema.downloads, schema.downloads.localKey);
+            // 本地身份重写与结构变更同一事务：失败即整体回滚回 v2。
+            await LocalIdentityMigration.rewrite(this);
+            await customStatement(
+              'CREATE UNIQUE INDEX IF NOT EXISTS idx_downloads_localKey '
+              'ON downloads (localKey) WHERE localKey IS NOT NULL',
+            );
+          },
+        )(m, from, to);
+      });
+    },
     beforeOpen: (details) async {
       // SQLite 外键默认关闭，这里显式开启（列表删除级联依赖它）。
       await customStatement('PRAGMA foreign_keys = ON');

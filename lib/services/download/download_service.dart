@@ -65,6 +65,7 @@ import '../../data/downloads/downloads_publisher.dart';
 import '../../data/downloads/downloads_repository.dart';
 import '../../data/downloads/local_lyrics.dart';
 import '../../data/http/app_dio.dart';
+import '../../data/local_identity.dart';
 import '../../domain/models/download.dart';
 import '../../domain/models/failure.dart';
 import '../../domain/models/track.dart';
@@ -962,9 +963,10 @@ class DownloadService extends DownloadManager implements DownloadMaintenance {
 
   /// 导入本地音频文件（就地引用：不复制、不移动，删除记录不动原文件）。
   ///
-  /// 记录的原音源键 = `local:<绝对路径>`（同路径重复导入幂等：刷新元数据并
-  /// 按导入时间置顶）；标题/歌手/专辑读文件标签（mp3 / flac，见
-  /// `audio_tag_reader.dart`），其余格式按 `歌手 - 歌名` 文件名兜底。
+  /// 记录使用稳定本地身份 `localKey = file:<uuid>`（`originSongId` 镜像它），
+  /// 同路径重复导入复用已有 `localKey`（幂等，收藏 / 列表引用不变）；标题 /
+  /// 歌手 / 专辑读文件标签（mp3 / flac，见 `audio_tag_reader.dart`），其余
+  /// 格式按 `歌手 - 歌名` 文件名兜底。
   ///
   /// 返回 `(导入数, 跳过数)`：路径为空 / 文件不存在 / 非音频后缀 /
   /// 存储不可用计入跳过。
@@ -993,6 +995,7 @@ class DownloadService extends DownloadManager implements DownloadMaintenance {
           await _storage.readHead(path, kAudioTagReadLimit) ?? Uint8List(0);
       final tags = readAudioTags(head, extension: extension, fileSize: size);
       final fallback = splitFileNameMetadata(p.basenameWithoutExtension(path));
+      final existing = _recordStore.records.importedRecordForPath(path);
       final record = _assembler.forLocalImport(
         filePath: path,
         sizeBytes: size,
@@ -1000,6 +1003,9 @@ class DownloadService extends DownloadManager implements DownloadMaintenance {
         artist: tags.artist ?? fallback.artist,
         album: tags.album ?? '',
         durationMs: tags.durationMs,
+        // 同路径重复导入必须复用旧身份，否则收藏 / 列表会变成失效引用。
+        localKey: existing?.localKey ?? newLocalKey(),
+        mtimeMs: await _storage.fileMtime(path),
       );
       await _recordStore.save(record);
       imported++;

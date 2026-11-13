@@ -69,6 +69,9 @@ class DownloadRecordAssembler {
 
   /// 本地导入：就地引用用户文件（`imported`），只有文件元数据——没有网络
   /// 快照（raw 空、音质空），封面 / 分项 / 公共副本都为空。
+  ///
+  /// [localKey] 是稳定身份（`file:<uuid>`）：同一路径重复导入时调用方复用
+  /// 旧值；`originSongId` 镜像它，记录键因此稳定为 `local:<localKey>`。
   DownloadedTrack forLocalImport({
     required String filePath,
     required int sizeBytes,
@@ -76,9 +79,11 @@ class DownloadRecordAssembler {
     required String artist,
     required String album,
     int? durationMs,
+    String? localKey,
+    int? mtimeMs,
   }) => (_RecordDraft(
     originSourceKey: kLocalSourceKey,
-    originSongId: filePath,
+    originSongId: localKey ?? filePath,
     title: title,
     artist: artist,
     album: album,
@@ -86,6 +91,8 @@ class DownloadRecordAssembler {
     filePath: filePath,
     sizeBytes: sizeBytes,
     imported: true,
+    localKey: localKey,
+    mtimeMs: mtimeMs,
     downloadedAt: _clock(),
   )).build();
 
@@ -117,6 +124,8 @@ class _RecordDraft {
     this.coverPath,
     this.publicUri,
     this.imported = false,
+    this.localKey,
+    this.mtimeMs,
     required this.downloadedAt,
   });
 
@@ -151,6 +160,8 @@ class _RecordDraft {
     coverPath: record.coverPath,
     publicUri: record.publicUri,
     imported: record.imported,
+    localKey: record.localKey,
+    mtimeMs: record.mtimeMs,
     downloadedAt: record.downloadedAt,
   );
 
@@ -169,6 +180,8 @@ class _RecordDraft {
   String? coverPath;
   String? publicUri;
   bool imported;
+  String? localKey;
+  int? mtimeMs;
   int downloadedAt;
 
   DownloadedTrack build() => DownloadedTrack(
@@ -187,6 +200,8 @@ class _RecordDraft {
     coverPath: coverPath,
     publicUri: publicUri,
     imported: imported,
+    localKey: localKey,
+    mtimeMs: mtimeMs,
     downloadedAt: downloadedAt,
   );
 }

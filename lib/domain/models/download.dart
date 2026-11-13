@@ -66,8 +66,20 @@ class DownloadedTrack {
 
   /// 本地导入（就地引用）：`filePath` 指向用户自己的文件，不复制副本，
   /// 删除记录时**不删除原文件**；`originSourceKey` 固定 `local`、
-  /// `originSongId` 为文件绝对路径（同路径重复导入幂等）。
+  /// `originSongId` 为稳定本地 id（[localKey]，`file:<uuid>`）。
   final bool imported;
+
+  /// 本地导入的稳定身份（`file:<uuid>`；下载副本为 null）。
+  ///
+  /// 路径只属于 [filePath]，移动 / 重定位不改身份；收藏 / 列表 / 历史 /
+  /// 会话 / 统计 / 自定义封面都引用它。
+  final String? localKey;
+
+  /// 文件修改时间（毫秒；扫描增量判定用，null = 尚未探测）。
+  final int? mtimeMs;
+
+  /// 确认文件不见的时间（毫秒；null = 可用）。
+  final int? missingAt;
 
   final int downloadedAt;
 
@@ -87,6 +99,9 @@ class DownloadedTrack {
     this.coverPath,
     this.publicUri,
     this.imported = false,
+    this.localKey,
+    this.mtimeMs,
+    this.missingAt,
     required this.downloadedAt,
   });
 
@@ -106,10 +121,63 @@ class DownloadedTrack {
   bool get hasPublicCopy => publicUri != null && publicUri!.isNotEmpty;
 
   /// 下载记录键 = 原音源曲目键（`downloads` 表唯一约束同构）。
+  ///
+  /// 导入记录的键是 `local:<localKey>`（唯一约束仍按 `originSongId` 走），
+  /// 但**领域身份**是 [localSongId] 返回的 `localKey`——两者刻意不同。
   String get key => '$originSourceKey:$originSongId';
 
-  /// 本地曲目的 `TrackId.id`：保留原音源键，避免不同平台同 id 相撞。
-  String get localSongId => key;
+  /// 本地曲目的 `TrackId.id`。
+  ///
+  /// 导入 = 稳定 `localKey`（`file:<uuid>`）；下载副本沿用原音源键
+  /// （`<原音源>:<原曲目id>`，带一层 `local:` 前缀），两者都不含路径。
+  String get localSongId {
+    final stable = localKey;
+    if (imported && stable != null && stable.isNotEmpty) return stable;
+    return key;
+  }
+
+  /// 是否确认文件不见（缺文件状态）。
+  bool get isMissing => missingAt != null;
+
+  /// 复制并替换可变字段（重定位 / 扫描 / 探测 / 改标题）。
+  DownloadedTrack copyWith({
+    String? originSongId,
+    String? title,
+    String? artist,
+    String? album,
+    String? coverUrl,
+    int? durationMs,
+    String? quality,
+    String? filePath,
+    int? sizeBytes,
+    String? lyricPath,
+    String? coverPath,
+    String? publicUri,
+    String? localKey,
+    int? mtimeMs,
+    int? missingAt,
+    bool clearMissingAt = false,
+  }) => DownloadedTrack(
+    originSourceKey: originSourceKey,
+    originSongId: originSongId ?? this.originSongId,
+    title: title ?? this.title,
+    artist: artist ?? this.artist,
+    album: album ?? this.album,
+    coverUrl: coverUrl ?? this.coverUrl,
+    durationMs: durationMs ?? this.durationMs,
+    raw: raw,
+    quality: quality ?? this.quality,
+    filePath: filePath ?? this.filePath,
+    sizeBytes: sizeBytes ?? this.sizeBytes,
+    lyricPath: lyricPath ?? this.lyricPath,
+    coverPath: coverPath ?? this.coverPath,
+    publicUri: publicUri ?? this.publicUri,
+    imported: imported,
+    localKey: localKey ?? this.localKey,
+    mtimeMs: mtimeMs ?? this.mtimeMs,
+    missingAt: clearMissingAt ? null : (missingAt ?? this.missingAt),
+    downloadedAt: downloadedAt,
+  );
 
   /// 本地曲目 payload（含路径的 raw；UI 禁读，只走音源链路）。
   Map<String, dynamic> get localPayload => {

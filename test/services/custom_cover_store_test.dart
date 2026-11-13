@@ -4,7 +4,14 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:molia/data/downloads/downloads_repository.dart';
+import 'package:molia/data/local_identity.dart';
+import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/services/local_cover_identity_sweep.dart';
+
+import '../support/memory_database.dart';
+
 import 'package:molia/services/covers/custom_cover_store.dart';
 
 Uint8List _bytes(int seed) => Uint8List.fromList([seed, seed, seed]);
@@ -304,6 +311,55 @@ void main() {
     expect(prefs.getString(CustomCoverStore.prefsKey), rewritten);
   });
 
+  test('身份迁移：旧导入封面键改写为 localKey，文件 / 哈希 / 时间不变', () async {
+    final db = openMemoryDatabase();
+    addTearDown(db.close);
+    final repository = DownloadsRepository(databaseProvider: () => db);
+    const localKey = 'file:cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const path = '/music/cover-a.mp3';
+    await repository.insert(
+      const DownloadedTrack(
+        originSourceKey: kLocalSourceKey,
+        originSongId: localKey,
+        title: 'Cover A',
+        filePath: path,
+        sizeBytes: 10,
+        imported: true,
+        localKey: localKey,
+        downloadedAt: 1,
+      ),
+    );
+    final legacyKey = legacyLocalIdentityOf(path);
+    await store.setTrackCover(TrackId(kLocalSourceKey, legacyKey), _bytes(1));
+    final before = store.trackEntry(legacyKey)!;
+    final revisionBefore = store.revision.value;
+
+    final prefs = await SharedPreferences.getInstance();
+    final sweep = LocalCoverIdentitySweep(covers: store, downloads: repository);
+    await sweep.sweepIfNeeded();
+
+    expect(store.trackEntry(legacyKey), isNull);
+    final after = store.trackEntry(localKey)!;
+    expect(after.path, before.path, reason: '只改索引键，封面文件不动');
+    expect(after.hash, before.hash);
+    expect(after.updatedAt, before.updatedAt);
+    expect(store.revision.value, revisionBefore + 1);
+    expect(prefs.getBool(LocalCoverIdentitySweep.prefsMarkerKey), isTrue);
+
+    // 已写完成标记：重复执行不改写、不再自增 revision。
+    await sweep.sweepIfNeeded();
+    expect(store.revision.value, revisionBefore + 1);
+    expect(store.trackEntry(localKey)!.path, before.path);
+  });
+
+  test('身份迁移失败：不写完成标记，孤儿键保持原样', () async {
+    final repository = _FailingImportsRepository();
+    final prefs = await SharedPreferences.getInstance();
+    final sweep = LocalCoverIdentitySweep(covers: store, downloads: repository);
+    await sweep.sweepIfNeeded();
+    expect(prefs.getBool(LocalCoverIdentitySweep.prefsMarkerKey), isNull);
+  });
+
   test('损坏索引：按空索引启动，不抛异常', () async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(CustomCoverStore.prefsKey, '{not json');
@@ -312,4 +368,12 @@ void main() {
     expect(fresh.trackCoverPath(const TrackId('kw', '1')), isNull);
     expect(fresh.defaultCoverUrl, isNull);
   });
+}
+
+/// 导入记录读取失败（模拟数据库暂不可用）：清扫不写完成标记。
+class _FailingImportsRepository extends DownloadsRepository {
+  @override
+  Future<List<DownloadedTrack>> listImported() async {
+    throw StateError('database unavailable');
+  }
 }

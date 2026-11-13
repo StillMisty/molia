@@ -732,6 +732,39 @@ class $PlaylistsTable extends Playlists
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _coverKeyMeta = const VerificationMeta(
+    'coverKey',
+  );
+  @override
+  late final GeneratedColumn<String> coverKey = GeneratedColumn<String>(
+    'coverKey',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _folderMeta = const VerificationMeta('folder');
+  @override
+  late final GeneratedColumn<String> folder = GeneratedColumn<String>(
+    'folder',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -792,6 +825,9 @@ class $PlaylistsTable extends Playlists
   List<GeneratedColumn> get $columns => [
     id,
     name,
+    description,
+    coverKey,
+    folder,
     createdAt,
     syncId,
     versionPhysical,
@@ -820,6 +856,27 @@ class $PlaylistsTable extends Playlists
       );
     } else if (isInserting) {
       context.missing(_nameMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('coverKey')) {
+      context.handle(
+        _coverKeyMeta,
+        coverKey.isAcceptableOrUnknown(data['coverKey']!, _coverKeyMeta),
+      );
+    }
+    if (data.containsKey('folder')) {
+      context.handle(
+        _folderMeta,
+        folder.isAcceptableOrUnknown(data['folder']!, _folderMeta),
+      );
     }
     if (data.containsKey('createdAt')) {
       context.handle(
@@ -876,6 +933,18 @@ class $PlaylistsTable extends Playlists
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      )!,
+      coverKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}coverKey'],
+      ),
+      folder: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}folder'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}createdAt'],
@@ -908,6 +977,15 @@ class $PlaylistsTable extends Playlists
 class Playlist extends DataClass implements Insertable<Playlist> {
   final int id;
   final String name;
+
+  /// 列表描述（#54 列表体验；本 spec 只负责同一次 v3 迁移）。
+  final String description;
+
+  /// 列表封面键（自定义封面索引；#54 拥有读写行为）。
+  final String? coverKey;
+
+  /// 列表分组（用户可见文案是「分组 / Group」，不是音乐文件夹；#54 拥有读写行为）。
+  final String folder;
   final int createdAt;
   final String? syncId;
   final int versionPhysical;
@@ -916,6 +994,9 @@ class Playlist extends DataClass implements Insertable<Playlist> {
   const Playlist({
     required this.id,
     required this.name,
+    required this.description,
+    this.coverKey,
+    required this.folder,
     required this.createdAt,
     this.syncId,
     required this.versionPhysical,
@@ -927,6 +1008,11 @@ class Playlist extends DataClass implements Insertable<Playlist> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
+    map['description'] = Variable<String>(description);
+    if (!nullToAbsent || coverKey != null) {
+      map['coverKey'] = Variable<String>(coverKey);
+    }
+    map['folder'] = Variable<String>(folder);
     map['createdAt'] = Variable<int>(createdAt);
     if (!nullToAbsent || syncId != null) {
       map['syncId'] = Variable<String>(syncId);
@@ -941,6 +1027,11 @@ class Playlist extends DataClass implements Insertable<Playlist> {
     return PlaylistsCompanion(
       id: Value(id),
       name: Value(name),
+      description: Value(description),
+      coverKey: coverKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(coverKey),
+      folder: Value(folder),
       createdAt: Value(createdAt),
       syncId: syncId == null && nullToAbsent
           ? const Value.absent()
@@ -959,6 +1050,9 @@ class Playlist extends DataClass implements Insertable<Playlist> {
     return Playlist(
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
+      description: serializer.fromJson<String>(json['description']),
+      coverKey: serializer.fromJson<String?>(json['coverKey']),
+      folder: serializer.fromJson<String>(json['folder']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       syncId: serializer.fromJson<String?>(json['syncId']),
       versionPhysical: serializer.fromJson<int>(json['versionPhysical']),
@@ -972,6 +1066,9 @@ class Playlist extends DataClass implements Insertable<Playlist> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
+      'description': serializer.toJson<String>(description),
+      'coverKey': serializer.toJson<String?>(coverKey),
+      'folder': serializer.toJson<String>(folder),
       'createdAt': serializer.toJson<int>(createdAt),
       'syncId': serializer.toJson<String?>(syncId),
       'versionPhysical': serializer.toJson<int>(versionPhysical),
@@ -983,6 +1080,9 @@ class Playlist extends DataClass implements Insertable<Playlist> {
   Playlist copyWith({
     int? id,
     String? name,
+    String? description,
+    Value<String?> coverKey = const Value.absent(),
+    String? folder,
     int? createdAt,
     Value<String?> syncId = const Value.absent(),
     int? versionPhysical,
@@ -991,6 +1091,9 @@ class Playlist extends DataClass implements Insertable<Playlist> {
   }) => Playlist(
     id: id ?? this.id,
     name: name ?? this.name,
+    description: description ?? this.description,
+    coverKey: coverKey.present ? coverKey.value : this.coverKey,
+    folder: folder ?? this.folder,
     createdAt: createdAt ?? this.createdAt,
     syncId: syncId.present ? syncId.value : this.syncId,
     versionPhysical: versionPhysical ?? this.versionPhysical,
@@ -1001,6 +1104,11 @@ class Playlist extends DataClass implements Insertable<Playlist> {
     return Playlist(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      coverKey: data.coverKey.present ? data.coverKey.value : this.coverKey,
+      folder: data.folder.present ? data.folder.value : this.folder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       syncId: data.syncId.present ? data.syncId.value : this.syncId,
       versionPhysical: data.versionPhysical.present
@@ -1018,6 +1126,9 @@ class Playlist extends DataClass implements Insertable<Playlist> {
     return (StringBuffer('Playlist(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('coverKey: $coverKey, ')
+          ..write('folder: $folder, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncId: $syncId, ')
           ..write('versionPhysical: $versionPhysical, ')
@@ -1031,6 +1142,9 @@ class Playlist extends DataClass implements Insertable<Playlist> {
   int get hashCode => Object.hash(
     id,
     name,
+    description,
+    coverKey,
+    folder,
     createdAt,
     syncId,
     versionPhysical,
@@ -1043,6 +1157,9 @@ class Playlist extends DataClass implements Insertable<Playlist> {
       (other is Playlist &&
           other.id == this.id &&
           other.name == this.name &&
+          other.description == this.description &&
+          other.coverKey == this.coverKey &&
+          other.folder == this.folder &&
           other.createdAt == this.createdAt &&
           other.syncId == this.syncId &&
           other.versionPhysical == this.versionPhysical &&
@@ -1053,6 +1170,9 @@ class Playlist extends DataClass implements Insertable<Playlist> {
 class PlaylistsCompanion extends UpdateCompanion<Playlist> {
   final Value<int> id;
   final Value<String> name;
+  final Value<String> description;
+  final Value<String?> coverKey;
+  final Value<String> folder;
   final Value<int> createdAt;
   final Value<String?> syncId;
   final Value<int> versionPhysical;
@@ -1061,6 +1181,9 @@ class PlaylistsCompanion extends UpdateCompanion<Playlist> {
   const PlaylistsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.description = const Value.absent(),
+    this.coverKey = const Value.absent(),
+    this.folder = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncId = const Value.absent(),
     this.versionPhysical = const Value.absent(),
@@ -1070,6 +1193,9 @@ class PlaylistsCompanion extends UpdateCompanion<Playlist> {
   PlaylistsCompanion.insert({
     this.id = const Value.absent(),
     required String name,
+    this.description = const Value.absent(),
+    this.coverKey = const Value.absent(),
+    this.folder = const Value.absent(),
     required int createdAt,
     this.syncId = const Value.absent(),
     this.versionPhysical = const Value.absent(),
@@ -1080,6 +1206,9 @@ class PlaylistsCompanion extends UpdateCompanion<Playlist> {
   static Insertable<Playlist> custom({
     Expression<int>? id,
     Expression<String>? name,
+    Expression<String>? description,
+    Expression<String>? coverKey,
+    Expression<String>? folder,
     Expression<int>? createdAt,
     Expression<String>? syncId,
     Expression<int>? versionPhysical,
@@ -1089,6 +1218,9 @@ class PlaylistsCompanion extends UpdateCompanion<Playlist> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
+      if (description != null) 'description': description,
+      if (coverKey != null) 'coverKey': coverKey,
+      if (folder != null) 'folder': folder,
       if (createdAt != null) 'createdAt': createdAt,
       if (syncId != null) 'syncId': syncId,
       if (versionPhysical != null) 'versionPhysical': versionPhysical,
@@ -1100,6 +1232,9 @@ class PlaylistsCompanion extends UpdateCompanion<Playlist> {
   PlaylistsCompanion copyWith({
     Value<int>? id,
     Value<String>? name,
+    Value<String>? description,
+    Value<String?>? coverKey,
+    Value<String>? folder,
     Value<int>? createdAt,
     Value<String?>? syncId,
     Value<int>? versionPhysical,
@@ -1109,6 +1244,9 @@ class PlaylistsCompanion extends UpdateCompanion<Playlist> {
     return PlaylistsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
+      description: description ?? this.description,
+      coverKey: coverKey ?? this.coverKey,
+      folder: folder ?? this.folder,
       createdAt: createdAt ?? this.createdAt,
       syncId: syncId ?? this.syncId,
       versionPhysical: versionPhysical ?? this.versionPhysical,
@@ -1125,6 +1263,15 @@ class PlaylistsCompanion extends UpdateCompanion<Playlist> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (coverKey.present) {
+      map['coverKey'] = Variable<String>(coverKey.value);
+    }
+    if (folder.present) {
+      map['folder'] = Variable<String>(folder.value);
     }
     if (createdAt.present) {
       map['createdAt'] = Variable<int>(createdAt.value);
@@ -1149,6 +1296,9 @@ class PlaylistsCompanion extends UpdateCompanion<Playlist> {
     return (StringBuffer('PlaylistsCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('coverKey: $coverKey, ')
+          ..write('folder: $folder, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncId: $syncId, ')
           ..write('versionPhysical: $versionPhysical, ')
@@ -5020,6 +5170,39 @@ class $DownloadsTable extends Downloads
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _localKeyMeta = const VerificationMeta(
+    'localKey',
+  );
+  @override
+  late final GeneratedColumn<String> localKey = GeneratedColumn<String>(
+    'localKey',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _mtimeMsMeta = const VerificationMeta(
+    'mtimeMs',
+  );
+  @override
+  late final GeneratedColumn<int> mtimeMs = GeneratedColumn<int>(
+    'mtimeMs',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _missingAtMeta = const VerificationMeta(
+    'missingAt',
+  );
+  @override
+  late final GeneratedColumn<int> missingAt = GeneratedColumn<int>(
+    'missingAt',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _downloadedAtMeta = const VerificationMeta(
     'downloadedAt',
   );
@@ -5049,6 +5232,9 @@ class $DownloadsTable extends Downloads
     coverPath,
     publicUri,
     imported,
+    localKey,
+    mtimeMs,
+    missingAt,
     downloadedAt,
   ];
   @override
@@ -5168,6 +5354,24 @@ class $DownloadsTable extends Downloads
         imported.isAcceptableOrUnknown(data['imported']!, _importedMeta),
       );
     }
+    if (data.containsKey('localKey')) {
+      context.handle(
+        _localKeyMeta,
+        localKey.isAcceptableOrUnknown(data['localKey']!, _localKeyMeta),
+      );
+    }
+    if (data.containsKey('mtimeMs')) {
+      context.handle(
+        _mtimeMsMeta,
+        mtimeMs.isAcceptableOrUnknown(data['mtimeMs']!, _mtimeMsMeta),
+      );
+    }
+    if (data.containsKey('missingAt')) {
+      context.handle(
+        _missingAtMeta,
+        missingAt.isAcceptableOrUnknown(data['missingAt']!, _missingAtMeta),
+      );
+    }
     if (data.containsKey('downloadedAt')) {
       context.handle(
         _downloadedAtMeta,
@@ -5252,6 +5456,18 @@ class $DownloadsTable extends Downloads
         DriftSqlType.bool,
         data['${effectivePrefix}imported'],
       )!,
+      localKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}localKey'],
+      ),
+      mtimeMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}mtimeMs'],
+      ),
+      missingAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}missingAt'],
+      ),
       downloadedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}downloadedAt'],
@@ -5282,6 +5498,15 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
   final String? coverPath;
   final String? publicUri;
   final bool imported;
+
+  /// 本地导入的稳定身份（`file:<uuid>`；下载副本为 null）。
+  final String? localKey;
+
+  /// 文件修改时间（毫秒；扫描增量判定用，null = 尚未探测）。
+  final int? mtimeMs;
+
+  /// 确认文件不见的时间（毫秒；null = 可用）。只表示最近一次成功探测的结果。
+  final int? missingAt;
   final int downloadedAt;
   const DownloadRow({
     required this.id,
@@ -5300,6 +5525,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
     this.coverPath,
     this.publicUri,
     required this.imported,
+    this.localKey,
+    this.mtimeMs,
+    this.missingAt,
     required this.downloadedAt,
   });
   @override
@@ -5333,6 +5561,15 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       map['publicUri'] = Variable<String>(publicUri);
     }
     map['imported'] = Variable<bool>(imported);
+    if (!nullToAbsent || localKey != null) {
+      map['localKey'] = Variable<String>(localKey);
+    }
+    if (!nullToAbsent || mtimeMs != null) {
+      map['mtimeMs'] = Variable<int>(mtimeMs);
+    }
+    if (!nullToAbsent || missingAt != null) {
+      map['missingAt'] = Variable<int>(missingAt);
+    }
     map['downloadedAt'] = Variable<int>(downloadedAt);
     return map;
   }
@@ -5367,6 +5604,15 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
           ? const Value.absent()
           : Value(publicUri),
       imported: Value(imported),
+      localKey: localKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(localKey),
+      mtimeMs: mtimeMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mtimeMs),
+      missingAt: missingAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(missingAt),
       downloadedAt: Value(downloadedAt),
     );
   }
@@ -5393,6 +5639,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       coverPath: serializer.fromJson<String?>(json['coverPath']),
       publicUri: serializer.fromJson<String?>(json['publicUri']),
       imported: serializer.fromJson<bool>(json['imported']),
+      localKey: serializer.fromJson<String?>(json['localKey']),
+      mtimeMs: serializer.fromJson<int?>(json['mtimeMs']),
+      missingAt: serializer.fromJson<int?>(json['missingAt']),
       downloadedAt: serializer.fromJson<int>(json['downloadedAt']),
     );
   }
@@ -5416,6 +5665,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       'coverPath': serializer.toJson<String?>(coverPath),
       'publicUri': serializer.toJson<String?>(publicUri),
       'imported': serializer.toJson<bool>(imported),
+      'localKey': serializer.toJson<String?>(localKey),
+      'mtimeMs': serializer.toJson<int?>(mtimeMs),
+      'missingAt': serializer.toJson<int?>(missingAt),
       'downloadedAt': serializer.toJson<int>(downloadedAt),
     };
   }
@@ -5437,6 +5689,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
     Value<String?> coverPath = const Value.absent(),
     Value<String?> publicUri = const Value.absent(),
     bool? imported,
+    Value<String?> localKey = const Value.absent(),
+    Value<int?> mtimeMs = const Value.absent(),
+    Value<int?> missingAt = const Value.absent(),
     int? downloadedAt,
   }) => DownloadRow(
     id: id ?? this.id,
@@ -5455,6 +5710,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
     coverPath: coverPath.present ? coverPath.value : this.coverPath,
     publicUri: publicUri.present ? publicUri.value : this.publicUri,
     imported: imported ?? this.imported,
+    localKey: localKey.present ? localKey.value : this.localKey,
+    mtimeMs: mtimeMs.present ? mtimeMs.value : this.mtimeMs,
+    missingAt: missingAt.present ? missingAt.value : this.missingAt,
     downloadedAt: downloadedAt ?? this.downloadedAt,
   );
   DownloadRow copyWithCompanion(DownloadsCompanion data) {
@@ -5481,6 +5739,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       coverPath: data.coverPath.present ? data.coverPath.value : this.coverPath,
       publicUri: data.publicUri.present ? data.publicUri.value : this.publicUri,
       imported: data.imported.present ? data.imported.value : this.imported,
+      localKey: data.localKey.present ? data.localKey.value : this.localKey,
+      mtimeMs: data.mtimeMs.present ? data.mtimeMs.value : this.mtimeMs,
+      missingAt: data.missingAt.present ? data.missingAt.value : this.missingAt,
       downloadedAt: data.downloadedAt.present
           ? data.downloadedAt.value
           : this.downloadedAt,
@@ -5506,6 +5767,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
           ..write('coverPath: $coverPath, ')
           ..write('publicUri: $publicUri, ')
           ..write('imported: $imported, ')
+          ..write('localKey: $localKey, ')
+          ..write('mtimeMs: $mtimeMs, ')
+          ..write('missingAt: $missingAt, ')
           ..write('downloadedAt: $downloadedAt')
           ..write(')'))
         .toString();
@@ -5529,6 +5793,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
     coverPath,
     publicUri,
     imported,
+    localKey,
+    mtimeMs,
+    missingAt,
     downloadedAt,
   );
   @override
@@ -5551,6 +5818,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
           other.coverPath == this.coverPath &&
           other.publicUri == this.publicUri &&
           other.imported == this.imported &&
+          other.localKey == this.localKey &&
+          other.mtimeMs == this.mtimeMs &&
+          other.missingAt == this.missingAt &&
           other.downloadedAt == this.downloadedAt);
 }
 
@@ -5571,6 +5841,9 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
   final Value<String?> coverPath;
   final Value<String?> publicUri;
   final Value<bool> imported;
+  final Value<String?> localKey;
+  final Value<int?> mtimeMs;
+  final Value<int?> missingAt;
   final Value<int> downloadedAt;
   const DownloadsCompanion({
     this.id = const Value.absent(),
@@ -5589,6 +5862,9 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     this.coverPath = const Value.absent(),
     this.publicUri = const Value.absent(),
     this.imported = const Value.absent(),
+    this.localKey = const Value.absent(),
+    this.mtimeMs = const Value.absent(),
+    this.missingAt = const Value.absent(),
     this.downloadedAt = const Value.absent(),
   });
   DownloadsCompanion.insert({
@@ -5608,6 +5884,9 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     this.coverPath = const Value.absent(),
     this.publicUri = const Value.absent(),
     this.imported = const Value.absent(),
+    this.localKey = const Value.absent(),
+    this.mtimeMs = const Value.absent(),
+    this.missingAt = const Value.absent(),
     required int downloadedAt,
   }) : originSourceKey = Value(originSourceKey),
        originSongId = Value(originSongId),
@@ -5630,6 +5909,9 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     Expression<String>? coverPath,
     Expression<String>? publicUri,
     Expression<bool>? imported,
+    Expression<String>? localKey,
+    Expression<int>? mtimeMs,
+    Expression<int>? missingAt,
     Expression<int>? downloadedAt,
   }) {
     return RawValuesInsertable({
@@ -5649,6 +5931,9 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
       if (coverPath != null) 'coverPath': coverPath,
       if (publicUri != null) 'publicUri': publicUri,
       if (imported != null) 'imported': imported,
+      if (localKey != null) 'localKey': localKey,
+      if (mtimeMs != null) 'mtimeMs': mtimeMs,
+      if (missingAt != null) 'missingAt': missingAt,
       if (downloadedAt != null) 'downloadedAt': downloadedAt,
     });
   }
@@ -5670,6 +5955,9 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     Value<String?>? coverPath,
     Value<String?>? publicUri,
     Value<bool>? imported,
+    Value<String?>? localKey,
+    Value<int?>? mtimeMs,
+    Value<int?>? missingAt,
     Value<int>? downloadedAt,
   }) {
     return DownloadsCompanion(
@@ -5689,6 +5977,9 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
       coverPath: coverPath ?? this.coverPath,
       publicUri: publicUri ?? this.publicUri,
       imported: imported ?? this.imported,
+      localKey: localKey ?? this.localKey,
+      mtimeMs: mtimeMs ?? this.mtimeMs,
+      missingAt: missingAt ?? this.missingAt,
       downloadedAt: downloadedAt ?? this.downloadedAt,
     );
   }
@@ -5744,6 +6035,15 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     if (imported.present) {
       map['imported'] = Variable<bool>(imported.value);
     }
+    if (localKey.present) {
+      map['localKey'] = Variable<String>(localKey.value);
+    }
+    if (mtimeMs.present) {
+      map['mtimeMs'] = Variable<int>(mtimeMs.value);
+    }
+    if (missingAt.present) {
+      map['missingAt'] = Variable<int>(missingAt.value);
+    }
     if (downloadedAt.present) {
       map['downloadedAt'] = Variable<int>(downloadedAt.value);
     }
@@ -5769,6 +6069,9 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
           ..write('coverPath: $coverPath, ')
           ..write('publicUri: $publicUri, ')
           ..write('imported: $imported, ')
+          ..write('localKey: $localKey, ')
+          ..write('mtimeMs: $mtimeMs, ')
+          ..write('missingAt: $missingAt, ')
           ..write('downloadedAt: $downloadedAt')
           ..write(')'))
         .toString();
@@ -6387,6 +6690,10 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
     'idx_downloads_downloadedAt',
     'CREATE INDEX idx_downloads_downloadedAt ON downloads (downloadedAt)',
   );
+  late final Index idxDownloadsLocalKey = Index(
+    'idx_downloads_localKey',
+    'CREATE UNIQUE INDEX idx_downloads_localKey ON downloads (localKey) WHERE localKey IS NOT NULL',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6413,6 +6720,7 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
     idxPlayEventsEndedAt,
     idxPlayEventsSyncKey,
     idxDownloadsDownloadedAt,
+    idxDownloadsLocalKey,
   ];
 }
 
@@ -6767,6 +7075,9 @@ typedef $$PlayHistoryTableProcessedTableManager =
 typedef $$PlaylistsTableCreateCompanionBuilder = PlaylistsCompanion Function({
   Value<int> id,
   required String name,
+  Value<String> description,
+  Value<String?> coverKey,
+  Value<String> folder,
   required int createdAt,
   Value<String?> syncId,
   Value<int> versionPhysical,
@@ -6776,6 +7087,9 @@ typedef $$PlaylistsTableCreateCompanionBuilder = PlaylistsCompanion Function({
 typedef $$PlaylistsTableUpdateCompanionBuilder = PlaylistsCompanion Function({
   Value<int> id,
   Value<String> name,
+  Value<String> description,
+  Value<String?> coverKey,
+  Value<String> folder,
   Value<int> createdAt,
   Value<String?> syncId,
   Value<int> versionPhysical,
@@ -6799,6 +7113,21 @@ class $$PlaylistsTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get coverKey => $composableBuilder(
+    column: $table.coverKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get folder => $composableBuilder(
+    column: $table.folder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6847,6 +7176,21 @@ class $$PlaylistsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get coverKey => $composableBuilder(
+    column: $table.coverKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get folder => $composableBuilder(
+    column: $table.folder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -6887,6 +7231,17 @@ class $$PlaylistsTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get coverKey =>
+      $composableBuilder(column: $table.coverKey, builder: (column) => column);
+
+  GeneratedColumn<String> get folder =>
+      $composableBuilder(column: $table.folder, builder: (column) => column);
 
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -6941,6 +7296,9 @@ class $$PlaylistsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
+                Value<String> description = const Value.absent(),
+                Value<String?> coverKey = const Value.absent(),
+                Value<String> folder = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<String?> syncId = const Value.absent(),
                 Value<int> versionPhysical = const Value.absent(),
@@ -6949,6 +7307,9 @@ class $$PlaylistsTableTableManager
               }) => PlaylistsCompanion(
                 id: id,
                 name: name,
+                description: description,
+                coverKey: coverKey,
+                folder: folder,
                 createdAt: createdAt,
                 syncId: syncId,
                 versionPhysical: versionPhysical,
@@ -6959,6 +7320,9 @@ class $$PlaylistsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required String name,
+                Value<String> description = const Value.absent(),
+                Value<String?> coverKey = const Value.absent(),
+                Value<String> folder = const Value.absent(),
                 required int createdAt,
                 Value<String?> syncId = const Value.absent(),
                 Value<int> versionPhysical = const Value.absent(),
@@ -6967,6 +7331,9 @@ class $$PlaylistsTableTableManager
               }) => PlaylistsCompanion.insert(
                 id: id,
                 name: name,
+                description: description,
+                coverKey: coverKey,
+                folder: folder,
                 createdAt: createdAt,
                 syncId: syncId,
                 versionPhysical: versionPhysical,
@@ -9162,6 +9529,9 @@ typedef $$DownloadsTableCreateCompanionBuilder = DownloadsCompanion Function({
   Value<String?> coverPath,
   Value<String?> publicUri,
   Value<bool> imported,
+  Value<String?> localKey,
+  Value<int?> mtimeMs,
+  Value<int?> missingAt,
   required int downloadedAt,
 });
 typedef $$DownloadsTableUpdateCompanionBuilder = DownloadsCompanion Function({
@@ -9181,6 +9551,9 @@ typedef $$DownloadsTableUpdateCompanionBuilder = DownloadsCompanion Function({
   Value<String?> coverPath,
   Value<String?> publicUri,
   Value<bool> imported,
+  Value<String?> localKey,
+  Value<int?> mtimeMs,
+  Value<int?> missingAt,
   Value<int> downloadedAt,
 });
 
@@ -9270,6 +9643,21 @@ class $$DownloadsTableFilterComposer
 
   ColumnFilters<bool> get imported => $composableBuilder(
     column: $table.imported,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localKey => $composableBuilder(
+    column: $table.localKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get mtimeMs => $composableBuilder(
+    column: $table.mtimeMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get missingAt => $composableBuilder(
+    column: $table.missingAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9368,6 +9756,21 @@ class $$DownloadsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get localKey => $composableBuilder(
+    column: $table.localKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get mtimeMs => $composableBuilder(
+    column: $table.mtimeMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get missingAt => $composableBuilder(
+    column: $table.missingAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get downloadedAt => $composableBuilder(
     column: $table.downloadedAt,
     builder: (column) => ColumnOrderings(column),
@@ -9437,6 +9840,15 @@ class $$DownloadsTableAnnotationComposer
   GeneratedColumn<bool> get imported =>
       $composableBuilder(column: $table.imported, builder: (column) => column);
 
+  GeneratedColumn<String> get localKey =>
+      $composableBuilder(column: $table.localKey, builder: (column) => column);
+
+  GeneratedColumn<int> get mtimeMs =>
+      $composableBuilder(column: $table.mtimeMs, builder: (column) => column);
+
+  GeneratedColumn<int> get missingAt =>
+      $composableBuilder(column: $table.missingAt, builder: (column) => column);
+
   GeneratedColumn<int> get downloadedAt => $composableBuilder(
     column: $table.downloadedAt,
     builder: (column) => column,
@@ -9490,6 +9902,9 @@ class $$DownloadsTableTableManager
                 Value<String?> coverPath = const Value.absent(),
                 Value<String?> publicUri = const Value.absent(),
                 Value<bool> imported = const Value.absent(),
+                Value<String?> localKey = const Value.absent(),
+                Value<int?> mtimeMs = const Value.absent(),
+                Value<int?> missingAt = const Value.absent(),
                 Value<int> downloadedAt = const Value.absent(),
               }) => DownloadsCompanion(
                 id: id,
@@ -9508,6 +9923,9 @@ class $$DownloadsTableTableManager
                 coverPath: coverPath,
                 publicUri: publicUri,
                 imported: imported,
+                localKey: localKey,
+                mtimeMs: mtimeMs,
+                missingAt: missingAt,
                 downloadedAt: downloadedAt,
               ),
           createCompanionCallback:
@@ -9528,6 +9946,9 @@ class $$DownloadsTableTableManager
                 Value<String?> coverPath = const Value.absent(),
                 Value<String?> publicUri = const Value.absent(),
                 Value<bool> imported = const Value.absent(),
+                Value<String?> localKey = const Value.absent(),
+                Value<int?> mtimeMs = const Value.absent(),
+                Value<int?> missingAt = const Value.absent(),
                 required int downloadedAt,
               }) => DownloadsCompanion.insert(
                 id: id,
@@ -9546,6 +9967,9 @@ class $$DownloadsTableTableManager
                 coverPath: coverPath,
                 publicUri: publicUri,
                 imported: imported,
+                localKey: localKey,
+                mtimeMs: mtimeMs,
+                missingAt: missingAt,
                 downloadedAt: downloadedAt,
               ),
           withReferenceMapper: (p0) => p0
