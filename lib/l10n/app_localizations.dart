@@ -8355,6 +8355,294 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Bilibili'**
   String get providerBilibili;
+
+  /// No description provided for @settingsTroubleshootingSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Troubleshooting'**
+  String get settingsTroubleshootingSection;
+
+  /// No description provided for @diagnosticsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Troubleshooting'**
+  String get diagnosticsTitle;
+
+  /// No description provided for @diagnosticsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export run records and device details to help with playback or source problems'**
+  String get diagnosticsSubtitle;
+
+  /// No description provided for @diagnosticsOverviewSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Overview'**
+  String get diagnosticsOverviewSection;
+
+  /// No description provided for @diagnosticsAppVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'App version'**
+  String get diagnosticsAppVersion;
+
+  /// No description provided for @diagnosticsVersionValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{version} (build {build})'**
+  String diagnosticsVersionValue(String version, String build);
+
+  /// No description provided for @diagnosticsPlatform.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get diagnosticsPlatform;
+
+  /// No description provided for @diagnosticsPlatformValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{platform} · {os}'**
+  String diagnosticsPlatformValue(String platform, String os);
+
+  /// No description provided for @diagnosticsLogStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Local run records'**
+  String get diagnosticsLogStatus;
+
+  /// No description provided for @diagnosticsLogRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Being recorded'**
+  String get diagnosticsLogRecording;
+
+  /// No description provided for @diagnosticsLogUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Records unavailable'**
+  String get diagnosticsLogUnavailable;
+
+  /// No description provided for @diagnosticsLogStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped'**
+  String get diagnosticsLogStopped;
+
+  /// No description provided for @diagnosticsRecentIssuesSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent issues'**
+  String get diagnosticsRecentIssuesSection;
+
+  /// No description provided for @diagnosticsRecentIssuesEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No issues recorded yet'**
+  String get diagnosticsRecentIssuesEmpty;
+
+  /// No description provided for @diagnosticsRecentIssuesEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'When something goes wrong, the channel and reason will appear here.'**
+  String get diagnosticsRecentIssuesEmptyHint;
+
+  /// No description provided for @diagnosticsChannelCheckSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel check'**
+  String get diagnosticsChannelCheckSection;
+
+  /// No description provided for @diagnosticsChannelCheckHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Only enabled searchable channels are checked; playback is not affected.'**
+  String get diagnosticsChannelCheckHint;
+
+  /// No description provided for @diagnosticsChannelCheckStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Check channels'**
+  String get diagnosticsChannelCheckStart;
+
+  /// No description provided for @diagnosticsChannelCheckStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get diagnosticsChannelCheckStop;
+
+  /// No description provided for @diagnosticsChannelCheckRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking…'**
+  String get diagnosticsChannelCheckRunning;
+
+  /// No description provided for @diagnosticsChannelCheckEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No check yet'**
+  String get diagnosticsChannelCheckEmpty;
+
+  /// No description provided for @diagnosticsChannelCheckEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Results for each channel will appear here after a check.'**
+  String get diagnosticsChannelCheckEmptyHint;
+
+  /// No description provided for @diagnosticsChannelCheckNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No channels to check'**
+  String get diagnosticsChannelCheckNone;
+
+  /// No description provided for @diagnosticsChannelCheckNoneHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable a searchable source first.'**
+  String get diagnosticsChannelCheckNoneHint;
+
+  /// No description provided for @diagnosticsChannelStatusOk.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get diagnosticsChannelStatusOk;
+
+  /// No description provided for @diagnosticsChannelStatusEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No results'**
+  String get diagnosticsChannelStatusEmpty;
+
+  /// No description provided for @diagnosticsChannelStatusCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped'**
+  String get diagnosticsChannelStatusCancelled;
+
+  /// No description provided for @diagnosticsChannelSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get diagnosticsChannelSearch;
+
+  /// No description provided for @diagnosticsChannelResolve.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback link'**
+  String get diagnosticsChannelResolve;
+
+  /// No description provided for @diagnosticsLatencyMs.
+  ///
+  /// In en, this message translates to:
+  /// **'{ms} ms'**
+  String diagnosticsLatencyMs(int ms);
+
+  /// No description provided for @diagnosticsCheckedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Last checked: {time}'**
+  String diagnosticsCheckedAt(String time);
+
+  /// No description provided for @diagnosticsExportAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Export diagnostics'**
+  String get diagnosticsExportAction;
+
+  /// No description provided for @diagnosticsExportPrivacy.
+  ///
+  /// In en, this message translates to:
+  /// **'The file stays on this device and is not uploaded automatically.'**
+  String get diagnosticsExportPrivacy;
+
+  /// No description provided for @diagnosticsExportWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Open and review it before sharing; it may contain song titles and local paths.'**
+  String get diagnosticsExportWarning;
+
+  /// No description provided for @diagnosticsExporting.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing…'**
+  String get diagnosticsExporting;
+
+  /// No description provided for @diagnosticsFailureNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Network problem'**
+  String get diagnosticsFailureNetwork;
+
+  /// No description provided for @diagnosticsFailureTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Timed out'**
+  String get diagnosticsFailureTimeout;
+
+  /// No description provided for @diagnosticsFailureUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Not supported by this channel'**
+  String get diagnosticsFailureUnsupported;
+
+  /// No description provided for @diagnosticsFailureNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing found'**
+  String get diagnosticsFailureNotFound;
+
+  /// No description provided for @diagnosticsFailureUnauthorized.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign-in required'**
+  String get diagnosticsFailureUnauthorized;
+
+  /// No description provided for @diagnosticsFailureRateLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many requests'**
+  String get diagnosticsFailureRateLimited;
+
+  /// No description provided for @diagnosticsFailureScript.
+  ///
+  /// In en, this message translates to:
+  /// **'Source script error'**
+  String get diagnosticsFailureScript;
+
+  /// No description provided for @diagnosticsFailureEngineRestarting.
+  ///
+  /// In en, this message translates to:
+  /// **'Source is restarting'**
+  String get diagnosticsFailureEngineRestarting;
+
+  /// No description provided for @diagnosticsFailureCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get diagnosticsFailureCancelled;
+
+  /// No description provided for @diagnosticsFailurePlayback.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback failed'**
+  String get diagnosticsFailurePlayback;
+
+  /// No description provided for @diagnosticsFailureUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown reason'**
+  String get diagnosticsFailureUnknown;
+
+  /// No description provided for @diagnosticsLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading…'**
+  String get diagnosticsLoading;
+
+  /// No description provided for @diagnosticsExportSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Export'**
+  String get diagnosticsExportSection;
 }
 
 class _AppLocalizationsDelegate

@@ -4691,4 +4691,163 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get providerBilibili => 'Bilibili';
+
+  @override
+  String get settingsTroubleshootingSection => 'Troubleshooting';
+
+  @override
+  String get diagnosticsTitle => 'Troubleshooting';
+
+  @override
+  String get diagnosticsSubtitle =>
+      'Export run records and device details to help with playback or source problems';
+
+  @override
+  String get diagnosticsOverviewSection => 'Overview';
+
+  @override
+  String get diagnosticsAppVersion => 'App version';
+
+  @override
+  String diagnosticsVersionValue(String version, String build) {
+    return '$version (build $build)';
+  }
+
+  @override
+  String get diagnosticsPlatform => 'System';
+
+  @override
+  String diagnosticsPlatformValue(String platform, String os) {
+    return '$platform · $os';
+  }
+
+  @override
+  String get diagnosticsLogStatus => 'Local run records';
+
+  @override
+  String get diagnosticsLogRecording => 'Being recorded';
+
+  @override
+  String get diagnosticsLogUnavailable => 'Records unavailable';
+
+  @override
+  String get diagnosticsLogStopped => 'Stopped';
+
+  @override
+  String get diagnosticsRecentIssuesSection => 'Recent issues';
+
+  @override
+  String get diagnosticsRecentIssuesEmpty => 'No issues recorded yet';
+
+  @override
+  String get diagnosticsRecentIssuesEmptyHint =>
+      'When something goes wrong, the channel and reason will appear here.';
+
+  @override
+  String get diagnosticsChannelCheckSection => 'Channel check';
+
+  @override
+  String get diagnosticsChannelCheckHint =>
+      'Only enabled searchable channels are checked; playback is not affected.';
+
+  @override
+  String get diagnosticsChannelCheckStart => 'Check channels';
+
+  @override
+  String get diagnosticsChannelCheckStop => 'Stop';
+
+  @override
+  String get diagnosticsChannelCheckRunning => 'Checking…';
+
+  @override
+  String get diagnosticsChannelCheckEmpty => 'No check yet';
+
+  @override
+  String get diagnosticsChannelCheckEmptyHint =>
+      'Results for each channel will appear here after a check.';
+
+  @override
+  String get diagnosticsChannelCheckNone => 'No channels to check';
+
+  @override
+  String get diagnosticsChannelCheckNoneHint =>
+      'Enable a searchable source first.';
+
+  @override
+  String get diagnosticsChannelStatusOk => 'OK';
+
+  @override
+  String get diagnosticsChannelStatusEmpty => 'No results';
+
+  @override
+  String get diagnosticsChannelStatusCancelled => 'Stopped';
+
+  @override
+  String get diagnosticsChannelSearch => 'Search';
+
+  @override
+  String get diagnosticsChannelResolve => 'Playback link';
+
+  @override
+  String diagnosticsLatencyMs(int ms) {
+    return '$ms ms';
+  }
+
+  @override
+  String diagnosticsCheckedAt(String time) {
+    return 'Last checked: $time';
+  }
+
+  @override
+  String get diagnosticsExportAction => 'Export diagnostics';
+
+  @override
+  String get diagnosticsExportPrivacy =>
+      'The file stays on this device and is not uploaded automatically.';
+
+  @override
+  String get diagnosticsExportWarning =>
+      'Open and review it before sharing; it may contain song titles and local paths.';
+
+  @override
+  String get diagnosticsExporting => 'Preparing…';
+
+  @override
+  String get diagnosticsFailureNetwork => 'Network problem';
+
+  @override
+  String get diagnosticsFailureTimeout => 'Timed out';
+
+  @override
+  String get diagnosticsFailureUnsupported => 'Not supported by this channel';
+
+  @override
+  String get diagnosticsFailureNotFound => 'Nothing found';
+
+  @override
+  String get diagnosticsFailureUnauthorized => 'Sign-in required';
+
+  @override
+  String get diagnosticsFailureRateLimited => 'Too many requests';
+
+  @override
+  String get diagnosticsFailureScript => 'Source script error';
+
+  @override
+  String get diagnosticsFailureEngineRestarting => 'Source is restarting';
+
+  @override
+  String get diagnosticsFailureCancelled => 'Cancelled';
+
+  @override
+  String get diagnosticsFailurePlayback => 'Playback failed';
+
+  @override
+  String get diagnosticsFailureUnknown => 'Unknown reason';
+
+  @override
+  String get diagnosticsLoading => 'Loading…';
+
+  @override
+  String get diagnosticsExportSection => 'Export';
 }

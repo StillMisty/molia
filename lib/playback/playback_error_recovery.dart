@@ -17,6 +17,7 @@ import '../data/catalog/catalog_service.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
+import '../services/diagnostics/failure_ring_buffer.dart';
 import '../services/source_swap/source_swap_settings.dart';
 import 'playback_commands.dart';
 
@@ -53,6 +54,8 @@ class PlaybackErrorRecovery {
     this._autoSwapSettings,
     this._autoSwapResolver,
     this._onAutoSourceSwapped,
+    this._failures,
+    this._channelDisplayName,
     this.provenanceCap = 64,
   });
 
@@ -71,6 +74,10 @@ class PlaybackErrorRecovery {
 
   /// 自动换源成功后的本地数据钩子（自定义封面跟随）。
   final AutoSourceSwapTrackHook? _onAutoSourceSwapped;
+
+  /// 最近失败记录（类型化，不含 message / 响应正文）。
+  final FailureRecorder? _failures;
+  final String Function(String sourceKey)? _channelDisplayName;
 
   /// provenance 的条目上限：每个曲目一条已尝试来源集合，防止长期泄漏。
   final int provenanceCap;
@@ -100,6 +107,12 @@ class PlaybackErrorRecovery {
     // 失败即失效该曲目的取链缓存（失败本身不入缓存，下次播放重新取链）。
     // 只清这一首：一条过期 URL 不应让同音源其它曲目全部重新取链。
     _catalogService?.invalidateResolveForTrack(track);
+    _failures?.recordFailure(
+      failure: failure,
+      channelKey: track.id.sourceKey,
+      channelDisplayName:
+          _channelDisplayName?.call(track.id.sourceKey) ?? track.id.sourceKey,
+    );
 
     final key = track.id.uri;
     if (_retriedTrackKey != key) {

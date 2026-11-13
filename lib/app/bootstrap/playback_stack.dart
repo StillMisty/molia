@@ -24,6 +24,7 @@ import '../../playback/playback_session_coordinator.dart';
 import '../../providers/playback_provider.dart';
 import '../../providers/sleep_timer.dart';
 import '../../services/audio_focus_settings.dart';
+import '../../services/diagnostics/failure_ring_buffer.dart';
 import '../../services/playback_observer.dart';
 import '../../services/playback_session_store.dart';
 import '../app_shell.dart';
@@ -81,6 +82,7 @@ Future<PlaybackStack> buildPlaybackStack({
   MediaSessionFactory? mediaSessionFactory,
   PlaybackFacade? facade,
   PlaybackPowerPolicy? powerPolicy,
+  FailureRecorder? failures,
 }) async {
   final sourceManager = catalog.sourceManager;
   final dataSaver = local.dataSaver;
@@ -187,6 +189,7 @@ Future<PlaybackStack> buildPlaybackStack({
         .autoSourceSwapService
         .findMatch(track, excludeSourceKeys: excludeSourceKeys),
     onAutoSourceSwapped: covers.carryOver,
+    failures: failures,
   );
   playbackObserver.attach();
 

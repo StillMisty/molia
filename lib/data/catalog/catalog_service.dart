@@ -9,6 +9,7 @@ import '../../domain/models/failure.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/music_source.dart';
 import '../../domain/ports/source_registry.dart';
+import '../../services/diagnostics/failure_ring_buffer.dart';
 import '../cache/request_cache.dart';
 
 /// 目录服务：聚合 [SourceRegistry] 与请求缓存，是 providers 的唯一搜索入口。
@@ -21,14 +22,17 @@ import '../cache/request_cache.dart';
 class CatalogService {
   CatalogService({
     required this._registry,
+    FailureRecorder? failures,
     RequestCache? searchCache,
     Duration searchTtl = const Duration(minutes: 5),
     RequestCache? resolveCache,
     Duration resolveTtl = const Duration(minutes: 10),
-  }) : _searchCache = searchCache ?? RequestCache(ttl: searchTtl),
+  }) : _failures = failures,
+       _searchCache = searchCache ?? RequestCache(ttl: searchTtl),
        _resolveCache = resolveCache ?? RequestCache(ttl: resolveTtl);
 
   final SourceRegistry _registry;
+  final FailureRecorder? _failures;
   final RequestCache _searchCache;
   final RequestCache _resolveCache;
 
@@ -51,7 +55,7 @@ class CatalogService {
         key,
         () => DataPathTrace.async(
           'search.source',
-          () => _guardSourceCall(() => source.search(query)),
+          () => _guardSourceCall(sourceKey, () => source.search(query)),
           fields: () => {'source': sourceKey, 'page': query.page},
         ),
       ),
@@ -76,7 +80,7 @@ class CatalogService {
     final key = artistSearchCacheKey(sourceKey, query);
     return _searchCache.getOrCreate<SearchResult<ArtistSummary>>(
       key,
-      () => _guardSourceCall(() => source.searchArtists(query)),
+      () => _guardSourceCall(sourceKey, () => source.searchArtists(query)),
     );
   }
 
@@ -92,7 +96,7 @@ class CatalogService {
     final key = lyricSearchCacheKey(sourceKey, query);
     return _searchCache.getOrCreate<SearchResult<LyricHit>>(
       key,
-      () => _guardSourceCall(() => source.searchLyrics(query)),
+      () => _guardSourceCall(sourceKey, () => source.searchLyrics(query)),
     );
   }
 
@@ -114,6 +118,7 @@ class CatalogService {
         () => DataPathTrace.async(
           'resolve.source',
           () => _guardSourceCall(
+            track.id.sourceKey,
             () => source.resolve(track, preferredQuality: quality),
           ),
           fields: () => {
@@ -206,12 +211,28 @@ class CatalogService {
       _resolveCache.countPrefix(resolveCacheKeyPrefix(track));
 
   /// 归一化音源调用异常；[SourceFailure] 幂等透传。
-  Future<T> _guardSourceCall<T>(Future<T> Function() call) async {
+  Future<T> _guardSourceCall<T>(
+    String sourceKey,
+    Future<T> Function() call,
+  ) async {
     try {
       return await call();
     } catch (e) {
-      throw SourceFailure.from(e);
+      final failure = SourceFailure.from(e);
+      _failures?.recordFailure(
+        failure: failure,
+        channelKey: sourceKey,
+        channelDisplayName: _displayNameFor(sourceKey),
+      );
+      throw failure;
     }
+  }
+
+  String _displayNameFor(String sourceKey) {
+    for (final descriptor in _registry.descriptors) {
+      if (descriptor.key == sourceKey) return descriptor.displayName;
+    }
+    return sourceKey;
   }
 
   /// 稳定 JSON：递归排序 Map 键（List 保持顺序），非 JSON 值降级为字符串。

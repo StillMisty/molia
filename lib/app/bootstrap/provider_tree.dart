@@ -16,6 +16,7 @@ import '../../domain/ports/source_registry.dart';
 import '../../managers/artwork_cache.dart';
 import '../../providers/channel_selection.dart';
 import '../../providers/comments_provider.dart';
+import '../../providers/diagnostics_provider.dart';
 import '../../providers/discover_provider.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
@@ -30,6 +31,8 @@ import '../../services/cache_service.dart';
 import '../../services/covers/custom_cover_store.dart';
 import '../../services/download/download_intent.dart';
 import '../../services/download/download_maintenance.dart';
+import '../../services/diagnostics/diagnostics_export.dart';
+import '../../services/diagnostics/diagnostics_service.dart';
 import '../../services/download/download_manager.dart';
 import '../../services/download/download_records.dart';
 import '../../services/notification_service.dart';
@@ -63,6 +66,8 @@ List<SingleChildWidget> buildAppProviders({
   required LyricsDisplayStack display,
   required SyncStack sync,
   required UpdateStack update,
+  required DiagnosticsService diagnosticsService,
+  required DiagnosticsExporter diagnosticsExporter,
   required NotificationService notifications,
 }) {
   final sourceManager = catalog.sourceManager;
@@ -75,6 +80,15 @@ List<SingleChildWidget> buildAppProviders({
   final saveAs = createSaveAs(customRoot: () => local.downloadSettings.saveDir);
   return [
     Provider<SaveAs>.value(value: saveAs),
+    // 问题排查页：服务由组合根持有；provider 只在这里暴露快照与导出动作。
+    ChangeNotifierProvider(
+      create: (_) => DiagnosticsProvider(
+        service: diagnosticsService,
+        builder: diagnosticsExporter,
+        saveAs: saveAs,
+        appInfo: diagnosticsExporter.appInfo.load,
+      ),
+    ),
     ChangeNotifierProvider.value(value: sourceManager),
     // 音源管理 UI 门面：订阅同一个 SourceManager，生命周期与其一致
     // （不负责 dispose manager）。

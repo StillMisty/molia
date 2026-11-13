@@ -4492,4 +4492,156 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get providerBilibili => '哔哩哔哩';
+
+  @override
+  String get settingsTroubleshootingSection => '问题排查';
+
+  @override
+  String get diagnosticsTitle => '问题排查';
+
+  @override
+  String get diagnosticsSubtitle => '导出运行记录与设备信息，便于定位播放或音源问题';
+
+  @override
+  String get diagnosticsOverviewSection => '概览';
+
+  @override
+  String get diagnosticsAppVersion => '应用版本';
+
+  @override
+  String diagnosticsVersionValue(String version, String build) {
+    return '$version（构建 $build）';
+  }
+
+  @override
+  String get diagnosticsPlatform => '系统';
+
+  @override
+  String diagnosticsPlatformValue(String platform, String os) {
+    return '$platform · $os';
+  }
+
+  @override
+  String get diagnosticsLogStatus => '本地运行记录';
+
+  @override
+  String get diagnosticsLogRecording => '正在记录';
+
+  @override
+  String get diagnosticsLogUnavailable => '记录不可用';
+
+  @override
+  String get diagnosticsLogStopped => '已停止';
+
+  @override
+  String get diagnosticsRecentIssuesSection => '最近问题';
+
+  @override
+  String get diagnosticsRecentIssuesEmpty => '还没有记录到问题';
+
+  @override
+  String get diagnosticsRecentIssuesEmptyHint => '出现问题时会在这里记下渠道与原因。';
+
+  @override
+  String get diagnosticsChannelCheckSection => '渠道检查';
+
+  @override
+  String get diagnosticsChannelCheckHint => '只检查已启用且可搜索的渠道，不影响播放。';
+
+  @override
+  String get diagnosticsChannelCheckStart => '检查渠道';
+
+  @override
+  String get diagnosticsChannelCheckStop => '停止检查';
+
+  @override
+  String get diagnosticsChannelCheckRunning => '正在检查…';
+
+  @override
+  String get diagnosticsChannelCheckEmpty => '还没有检查记录';
+
+  @override
+  String get diagnosticsChannelCheckEmptyHint => '检查后这里会显示每个渠道的结果。';
+
+  @override
+  String get diagnosticsChannelCheckNone => '没有可检查的渠道';
+
+  @override
+  String get diagnosticsChannelCheckNoneHint => '先启用一个可搜索的音源。';
+
+  @override
+  String get diagnosticsChannelStatusOk => '正常';
+
+  @override
+  String get diagnosticsChannelStatusEmpty => '没有结果';
+
+  @override
+  String get diagnosticsChannelStatusCancelled => '已停止';
+
+  @override
+  String get diagnosticsChannelSearch => '搜索';
+
+  @override
+  String get diagnosticsChannelResolve => '播放链接';
+
+  @override
+  String diagnosticsLatencyMs(int ms) {
+    return '$ms 毫秒';
+  }
+
+  @override
+  String diagnosticsCheckedAt(String time) {
+    return '最近检查：$time';
+  }
+
+  @override
+  String get diagnosticsExportAction => '导出诊断文件';
+
+  @override
+  String get diagnosticsExportPrivacy => '文件只保存在本机，不会自动上传。';
+
+  @override
+  String get diagnosticsExportWarning => '分享前请先打开检查；文件可能包含歌名和本地路径。';
+
+  @override
+  String get diagnosticsExporting => '正在准备…';
+
+  @override
+  String get diagnosticsFailureNetwork => '网络问题';
+
+  @override
+  String get diagnosticsFailureTimeout => '等待超时';
+
+  @override
+  String get diagnosticsFailureUnsupported => '渠道不支持';
+
+  @override
+  String get diagnosticsFailureNotFound => '没有找到内容';
+
+  @override
+  String get diagnosticsFailureUnauthorized => '需要登录';
+
+  @override
+  String get diagnosticsFailureRateLimited => '请求太频繁';
+
+  @override
+  String get diagnosticsFailureScript => '音源脚本出错';
+
+  @override
+  String get diagnosticsFailureEngineRestarting => '音源正在重启';
+
+  @override
+  String get diagnosticsFailureCancelled => '已取消';
+
+  @override
+  String get diagnosticsFailurePlayback => '播放失败';
+
+  @override
+  String get diagnosticsFailureUnknown => '未知原因';
+
+  @override
+  String get diagnosticsLoading => '读取中…';
+
+  @override
+  String get diagnosticsExportSection => '导出';
 }

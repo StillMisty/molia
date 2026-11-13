@@ -2556,5 +2556,87 @@
   "biliAccountLogoutFailed": "Sign-out failed. Try again.",
   "biliAccountPrivacyHint": "Sign-in info is kept in secure storage. If sync is on, it is encrypted and synced to paired devices. It is only used to read Bilibili captions.",
   "biliAccountQrSemantics": "Bilibili sign-in QR code",
-  "providerBilibili": "Bilibili"
+  "providerBilibili": "Bilibili",
+  "settingsTroubleshootingSection": "Troubleshooting",
+  "diagnosticsTitle": "Troubleshooting",
+  "diagnosticsSubtitle": "Export run records and device details to help with playback or source problems",
+  "diagnosticsOverviewSection": "Overview",
+  "diagnosticsAppVersion": "App version",
+  "diagnosticsVersionValue": "{version} (build {build})",
+  "diagnosticsPlatform": "System",
+  "diagnosticsPlatformValue": "{platform} · {os}",
+  "diagnosticsLogStatus": "Local run records",
+  "diagnosticsLogRecording": "Being recorded",
+  "diagnosticsLogUnavailable": "Records unavailable",
+  "diagnosticsLogStopped": "Stopped",
+  "diagnosticsRecentIssuesSection": "Recent issues",
+  "diagnosticsRecentIssuesEmpty": "No issues recorded yet",
+  "diagnosticsRecentIssuesEmptyHint": "When something goes wrong, the channel and reason will appear here.",
+  "diagnosticsChannelCheckSection": "Channel check",
+  "diagnosticsChannelCheckHint": "Only enabled searchable channels are checked; playback is not affected.",
+  "diagnosticsChannelCheckStart": "Check channels",
+  "diagnosticsChannelCheckStop": "Stop",
+  "diagnosticsChannelCheckRunning": "Checking…",
+  "diagnosticsChannelCheckEmpty": "No check yet",
+  "diagnosticsChannelCheckEmptyHint": "Results for each channel will appear here after a check.",
+  "diagnosticsChannelCheckNone": "No channels to check",
+  "diagnosticsChannelCheckNoneHint": "Enable a searchable source first.",
+  "diagnosticsChannelStatusOk": "OK",
+  "diagnosticsChannelStatusEmpty": "No results",
+  "diagnosticsChannelStatusCancelled": "Stopped",
+  "diagnosticsChannelSearch": "Search",
+  "diagnosticsChannelResolve": "Playback link",
+  "diagnosticsLatencyMs": "{ms} ms",
+  "diagnosticsCheckedAt": "Last checked: {time}",
+  "diagnosticsExportAction": "Export diagnostics",
+  "diagnosticsExportPrivacy": "The file stays on this device and is not uploaded automatically.",
+  "diagnosticsExportWarning": "Open and review it before sharing; it may contain song titles and local paths.",
+  "diagnosticsExporting": "Preparing…",
+  "diagnosticsFailureNetwork": "Network problem",
+  "diagnosticsFailureTimeout": "Timed out",
+  "diagnosticsFailureUnsupported": "Not supported by this channel",
+  "diagnosticsFailureNotFound": "Nothing found",
+  "diagnosticsFailureUnauthorized": "Sign-in required",
+  "diagnosticsFailureRateLimited": "Too many requests",
+  "diagnosticsFailureScript": "Source script error",
+  "diagnosticsFailureEngineRestarting": "Source is restarting",
+  "diagnosticsFailureCancelled": "Cancelled",
+  "diagnosticsFailurePlayback": "Playback failed",
+  "diagnosticsFailureUnknown": "Unknown reason",
+  "@diagnosticsVersionValue": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      },
+      "build": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsPlatformValue": {
+    "placeholders": {
+      "platform": {
+        "type": "String"
+      },
+      "os": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsLatencyMs": {
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsCheckedAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "diagnosticsLoading": "Loading…",
+  "diagnosticsExportSection": "Export"
 }
