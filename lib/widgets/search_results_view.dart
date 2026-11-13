@@ -60,6 +60,8 @@ class SearchResultsView extends StatefulWidget {
     this.onOpenArtist,
     this.onOpenAllResults,
     this.controller,
+    this.correction,
+    this.onCorrectionTap,
   }) : assert(
          variant != SearchResultsVariant.page || onOpenArtist != null,
          '页面版式需要 onOpenArtist（歌手行与行内歌手链接的导航出口）',
@@ -88,6 +90,12 @@ class SearchResultsView extends StatefulWidget {
 
   /// 页面版式的滚动控制器（宿主注入：底栏重复点击回顶）；为空时自建。
   final ScrollController? controller;
+
+  /// 零结果纠错候选（只在成功的单曲零结果时由宿主传入）。
+  final String? correction;
+
+  /// 点击纠错候选：按候选重新搜索（绝不自动改写输入）。
+  final VoidCallback? onCorrectionTap;
 
   @override
   State<SearchResultsView> createState() => _SearchResultsViewState();
@@ -406,6 +414,13 @@ class _SearchResultsViewState extends State<SearchResultsView> {
                 ),
               ),
             ],
+            if (widget.correction != null) ...[
+              const SizedBox(height: 8),
+              M3EButton.text(
+                onPressed: widget.onCorrectionTap,
+                child: Text(l10n.searchDidYouMean(widget.correction!)),
+              ),
+            ],
           ],
         ),
       ),
@@ -588,6 +603,13 @@ class _SearchResultsViewState extends State<SearchResultsView> {
                 style: context.typeScale.bodySmall.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
+              ),
+            ],
+            if (widget.correction != null) ...[
+              const SizedBox(height: 4),
+              M3EButton.text(
+                onPressed: widget.onCorrectionTap,
+                child: Text(l10n.searchDidYouMean(widget.correction!)),
               ),
             ],
           ],

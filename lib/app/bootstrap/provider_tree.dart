@@ -15,6 +15,7 @@ import '../../data/play_statistics_repository.dart';
 import '../../domain/ports/source_registry.dart';
 import '../../managers/artwork_cache.dart';
 import '../../providers/channel_selection.dart';
+import '../../providers/annual_report_provider.dart';
 import '../../providers/comments_provider.dart';
 import '../../providers/discover_provider.dart';
 import '../../providers/library_provider.dart';
@@ -35,6 +36,7 @@ import '../../services/download/download_records.dart';
 import '../../services/notification_service.dart';
 import '../../services/play_statistics_service.dart';
 import '../../services/save_as.dart';
+import '../../services/search_history_store.dart';
 import '../../services/shortcut_settings.dart';
 import '../../services/track_local_data_service.dart';
 import 'ai_stack.dart';
@@ -57,6 +59,7 @@ List<SingleChildWidget> buildAppProviders({
   required LibraryProvider libraryProvider,
   required ChannelSelection channelSelection,
   required SearchProvider searchProvider,
+  required SearchHistoryStore searchHistoryStore,
   required DesktopStack desktop,
   required AiStack ai,
   required LyricsStack lyrics,
@@ -105,6 +108,8 @@ List<SingleChildWidget> buildAppProviders({
     ChangeNotifierProvider.value(value: channelSelection),
     // 搜索：组合根创建（托盘内存守卫按生命周期注册释放回调），这里只挂树。
     ChangeNotifierProvider.value(value: searchProvider),
+    // 搜索历史：设备本地、按渠道隔离；不登记同步设置，也不参与备份。
+    ChangeNotifierProvider<SearchHistoryStore>.value(value: searchHistoryStore),
     // 资料库（收藏/历史/列表）：顶层创建（AI 推歌读取收藏作为反馈）。
     ChangeNotifierProvider.value(value: libraryProvider),
     // 自定义封面（每曲 + 默认）：歌曲信息页 / 设置页 / 封面选择弹层读取。
@@ -135,6 +140,13 @@ List<SingleChildWidget> buildAppProviders({
     ChangeNotifierProvider(
       create: (_) =>
           PlayStatisticsProvider(repository: library.playStatisticsRepository),
+    ),
+    // 年度报告：页面打开时才订阅统计变更；年份 / 默认年份由入口注入。
+    ChangeNotifierProvider(
+      create: (_) => AnnualReportProvider(
+        repository: library.playStatisticsRepository,
+        recordingEnabled: library.playStatisticsService.enabledNotifier,
+      ),
     ),
     // 发现页：热榜 / 歌单 / 热搜；播放与收藏复用上面两个 provider。
     // 渠道由 ChannelSelection 唯一持有，发现内容只订阅它，不再向搜索同步。

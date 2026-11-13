@@ -32,6 +32,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
+import '../domain/models/annual_report.dart';
 import '../domain/models/play_statistics.dart';
 import 'molia_database.dart';
 import 'stats_payload_codec.dart';
@@ -213,11 +214,23 @@ class PlayStatisticsRepository {
     _notifyChanged();
   }
 
+  /// 范围过滤的公共 SQL 片段（`startedAt` 左闭右开；别名固定 `e`）。
+  static String _rangeClause(int? since, int? until) {
+    final conditions = <String>[
+      if (since != null) 'e.startedAt >= ?',
+      if (until != null) 'e.startedAt < ?',
+    ];
+    return conditions.isEmpty ? '' : ' AND ${conditions.join(' AND ')}';
+  }
+
+  static List<Variable> _rangeVariables(int? since, int? until) => [
+    if (since != null) Variable.withInt(since),
+    if (until != null) Variable.withInt(until),
+  ];
+
   /// 范围内汇总；[since]（epoch ms）为 null 表示全部历史。
-  Future<PlayStatisticsSummary> summary({int? since}) async {
-    final row = await _db
-        .customSelect(
-          '''
+  Future<PlayStatisticsSummary> summary({int? since, int? until}) async {
+    final row = await _db.customSelect('''
       SELECT
         SUM(CASE WHEN $_countablePredicate THEN 1 ELSE 0 END) AS playCount,
         SUM(CASE WHEN $_countablePredicate AND ($_qualifiedPredicate)
@@ -231,11 +244,8 @@ class PlayStatisticsRepository {
             THEN 1 ELSE 0 END) AS skippedUnqualifiedCount
       FROM play_events e
       JOIN play_tracks pt ON pt.id = e.trackId
-      WHERE endedAt IS NOT NULL${since != null ? ' AND startedAt >= ?' : ''}
-    ''',
-          variables: [if (since != null) Variable.withInt(since)],
-        )
-        .getSingle();
+      WHERE endedAt IS NOT NULL${_rangeClause(since, until)}
+    ''', variables: _rangeVariables(since, until)).getSingle();
     final data = row.data;
     final playCount = _intOf(data['playCount']);
     final completed = _intOf(data['completedCount']);
@@ -294,6 +304,7 @@ class PlayStatisticsRepository {
   /// Top 曲目（有效播放次数排序；只出现至少一次有效播放的曲目）。
   Future<List<PlayStatTrackEntry>> topTracks({
     int? since,
+    int? until,
     int limit = 10,
   }) async {
     final rows = await _db
@@ -315,14 +326,14 @@ class PlayStatisticsRepository {
         MAX(startedAt) AS lastPlayedAt
       FROM play_events e
       JOIN play_tracks pt ON pt.id = e.trackId
-      WHERE $_countablePredicate${since != null ? ' AND startedAt >= ?' : ''}
+      WHERE $_countablePredicate${_rangeClause(since, until)}
       GROUP BY e.trackId
       HAVING playCount > 0
       ORDER BY playCount DESC, listenedMs DESC, lastPlayedAt DESC
       LIMIT ?
     ''',
           variables: [
-            if (since != null) Variable.withInt(since),
+            ..._rangeVariables(since, until),
             Variable.withInt(limit),
           ],
         )
@@ -352,11 +363,10 @@ class PlayStatisticsRepository {
   /// 排序——同一原始串拆出的歌手各得一份该组的计数 / 时长。
   Future<List<PlayStatArtistEntry>> topArtists({
     int? since,
+    int? until,
     int limit = 10,
   }) async {
-    final rows = await _db
-        .customSelect(
-          '''
+    final rows = await _db.customSelect('''
       SELECT
         pt.artist AS artist,
         SUM(CASE WHEN ($_qualifiedPredicate) THEN 1 ELSE 0 END) AS playCount,
@@ -364,13 +374,10 @@ class PlayStatisticsRepository {
             AS listenedMs
       FROM play_events e
       JOIN play_tracks pt ON pt.id = e.trackId
-      WHERE $_countablePredicate${since != null ? ' AND e.startedAt >= ?' : ''}
+      WHERE $_countablePredicate${_rangeClause(since, until)}
       GROUP BY pt.artist
       HAVING playCount > 0
-    ''',
-          variables: [if (since != null) Variable.withInt(since)],
-        )
-        .get();
+    ''', variables: _rangeVariables(since, until)).get();
     final counts = <String, int>{};
     final listened = <String, int>{};
     for (final row in rows) {
@@ -400,9 +407,133 @@ class PlayStatisticsRepository {
     return entries.take(limit).toList();
   }
 
+  /// Top 专辑（非空专辑名；按有效播放次数排序）。
+  Future<List<PlayStatAlbumEntry>> topAlbums({
+    int? since,
+    int? until,
+    int limit = 5,
+  }) async {
+    final rows = await _db
+        .customSelect(
+          '''
+      SELECT
+        pt.album AS album,
+        SUM(CASE WHEN ($_qualifiedPredicate) THEN 1 ELSE 0 END) AS playCount,
+        COALESCE(SUM(CASE WHEN ($_qualifiedPredicate) THEN e.listenedMs ELSE 0 END), 0)
+            AS listenedMs
+      FROM play_events e
+      JOIN play_tracks pt ON pt.id = e.trackId
+      WHERE $_countablePredicate${_rangeClause(since, until)}
+            AND TRIM(COALESCE(pt.album, '')) <> ''
+      GROUP BY pt.album
+      HAVING playCount > 0
+      ORDER BY playCount DESC, listenedMs DESC, album ASC
+      LIMIT ?
+    ''',
+          variables: [
+            ..._rangeVariables(since, until),
+            Variable.withInt(limit),
+          ],
+        )
+        .get();
+    return [
+      for (final row in rows)
+        PlayStatAlbumEntry(
+          album: row.data['album'] as String? ?? '',
+          playCount: _intOf(row.data['playCount']),
+          listenedMs: _intOf(row.data['listenedMs']),
+        ),
+    ];
+  }
+
+  /// 年内至少一次有效播放的歌手名数量（沿用既有 artist 串拆分规则）。
+  Future<int> distinctArtistCount({int? since, int? until}) async {
+    final rows = await _db.customSelect('''
+      SELECT pt.artist AS artist
+      FROM play_events e
+      JOIN play_tracks pt ON pt.id = e.trackId
+      WHERE $_countablePredicate${_rangeClause(since, until)}
+            AND ($_qualifiedPredicate)
+      GROUP BY pt.artist
+    ''', variables: _rangeVariables(since, until)).get();
+    final names = <String>{};
+    for (final row in rows) {
+      names.addAll(splitArtistNames(row.data['artist'] as String? ?? ''));
+    }
+    return names.length;
+  }
+
+  /// 窗口内第一次 / 最后一次可统计播放（按 `startedAt` 取边界）。
+  Future<AnnualPlayMoment?> firstCountablePlay({int? since, int? until}) =>
+      _edgePlay(since: since, until: until, ascending: true);
+
+  Future<AnnualPlayMoment?> lastCountablePlay({int? since, int? until}) =>
+      _edgePlay(since: since, until: until, ascending: false);
+
+  Future<AnnualPlayMoment?> _edgePlay({
+    required int? since,
+    required int? until,
+    required bool ascending,
+  }) async {
+    final row = await _db.customSelect('''
+      SELECT pt.title AS title, pt.artist AS artist, e.startedAt AS startedAt
+      FROM play_events e
+      JOIN play_tracks pt ON pt.id = e.trackId
+      WHERE $_countablePredicate${_rangeClause(since, until)}
+      ORDER BY e.startedAt ${ascending ? 'ASC' : 'DESC'}, e.id ${ascending ? 'ASC' : 'DESC'}
+      LIMIT 1
+    ''', variables: _rangeVariables(since, until)).getSingleOrNull();
+    if (row == null) return null;
+    return AnnualPlayMoment(
+      title: row.data['title'] as String? ?? '',
+      artist: row.data['artist'] as String? ?? '',
+      startedAt: _intOf(row.data['startedAt']),
+    );
+  }
+
+  /// 年度报告的一次性聚合（只读既有表；不加载导出明细）。
+  Future<AnnualStatisticsSnapshot> annualSnapshot({
+    required int since,
+    required int until,
+    int topTrackLimit = 50,
+  }) async {
+    final (
+      summaryResult,
+      trackResult,
+      artistResult,
+      albumResult,
+      sourceResult,
+      dayResult,
+      artistCount,
+      firstResult,
+      lastResult,
+    ) = await (
+      summary(since: since, until: until),
+      topTracks(since: since, until: until, limit: topTrackLimit),
+      topArtists(since: since, until: until, limit: 5),
+      topAlbums(since: since, until: until, limit: 5),
+      sourceDistribution(since: since, until: until),
+      listenedByDay(since: since, until: until),
+      distinctArtistCount(since: since, until: until),
+      firstCountablePlay(since: since, until: until),
+      lastCountablePlay(since: since, until: until),
+    ).wait;
+    return AnnualStatisticsSnapshot(
+      summary: summaryResult,
+      topTracks: trackResult,
+      topArtists: artistResult,
+      topAlbums: albumResult,
+      sources: sourceResult,
+      daily: dayResult,
+      uniqueArtistCount: artistCount,
+      firstPlay: firstResult,
+      lastPlay: lastResult,
+    );
+  }
+
   /// 按日收听（本地时区，升序；只含非 error 事件）。
-  Future<List<DayListened>> listenedByDay({int? since}) async {
-    final rows = await _statsRows(since);
+  Future<List<DayListened>> listenedByDay({int? since, int? until}) async {
+    final rows = await _statsRows(since, until);
     final listened = <DateTime, int>{};
     final counts = <DateTime, int>{};
     for (final row in rows) {
@@ -472,23 +603,21 @@ class PlayStatisticsRepository {
   }
 
   /// 来源分布（`sourceKey` 维度，按时长降序）。
-  Future<List<SourceListened>> sourceDistribution({int? since}) async {
-    final rows = await _db
-        .customSelect(
-          '''
+  Future<List<SourceListened>> sourceDistribution({
+    int? since,
+    int? until,
+  }) async {
+    final rows = await _db.customSelect('''
       SELECT
         pt.sourceKey AS sourceKey,
         COALESCE(SUM(listenedMs), 0) AS listenedMs,
         SUM(CASE WHEN ($_qualifiedPredicate) THEN 1 ELSE 0 END) AS playCount
       FROM play_events e
       JOIN play_tracks pt ON pt.id = e.trackId
-      WHERE $_countablePredicate${since != null ? ' AND startedAt >= ?' : ''}
+      WHERE $_countablePredicate${_rangeClause(since, until)}
       GROUP BY pt.sourceKey
       ORDER BY listenedMs DESC, playCount DESC
-    ''',
-          variables: [if (since != null) Variable.withInt(since)],
-        )
-        .get();
+    ''', variables: _rangeVariables(since, until)).get();
     return [
       for (final row in rows)
         SourceListened(
@@ -682,15 +811,15 @@ class PlayStatisticsRepository {
     return DateTime(local.year, local.month, local.day);
   }
 
-  Future<List<_StatRow>> _statsRows(int? since) async {
+  Future<List<_StatRow>> _statsRows(int? since, [int? until]) async {
     final rows = await _db
         .customSelect(
           'SELECT e.startedAt AS startedAt, e.listenedMs AS listenedMs, '
           'pt.durationMs AS durationMs FROM play_events e '
           'JOIN play_tracks pt ON pt.id = e.trackId '
-          'WHERE $_countablePredicate${since != null ? ' AND e.startedAt >= ?' : ''} '
+          'WHERE $_countablePredicate${_rangeClause(since, until)} '
           'ORDER BY e.startedAt ASC',
-          variables: [if (since != null) Variable.withInt(since)],
+          variables: _rangeVariables(since, until),
         )
         .get();
     return [

@@ -25,6 +25,34 @@
       }
     }
   },
+  "searchRecentTitle": "Recent searches",
+  "searchRecentClear": "Clear",
+  "searchRecentCleared": "Recent searches cleared",
+  "searchHistoryDelete": "Remove “{query}”",
+  "@searchHistoryDelete": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "searchSuggestionsLabel": "Search suggestions",
+  "searchSuggestionAction": "Search for “{query}”",
+  "@searchSuggestionAction": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "searchDidYouMean": "Did you mean “{query}”?",
+  "@searchDidYouMean": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
   "copiedToClipboard": "Copied to clipboard",
   "@copiedToClipboard": {
     "placeholders": {
@@ -915,6 +943,89 @@
   "lyricsColorSourceSurface": "Surface",
   "lyricsDesktopColorThemeHint": "“Follow app theme” changes with the appearance settings; “Follow artwork” picks colors from the current song and updates live.",
   "statsTitle": "Listening Stats",
+  "annualReportTitle": "Yearly listening report",
+  "annualReportEntrySubtitle": "Your {year} in review",
+  "@annualReportEntrySubtitle": {
+    "placeholders": {
+      "year": {
+        "type": "int"
+      }
+    }
+  },
+  "annualReportEntryAction": "View report",
+  "annualReportPickYear": "Choose year",
+  "annualReportSubtitle": "Yearly listening report",
+  "annualReportListenedCaption": "listened this year",
+  "annualReportStreakCaption": "days in a row",
+  "annualReportTopTracks": "Top tracks",
+  "annualReportTopArtists": "Top artists",
+  "annualReportTopAlbums": "Top albums",
+  "annualReportPlatforms": "Platforms",
+  "annualReportMonthly": "Monthly trend",
+  "annualReportMonthLabel": "Month {month}: {duration}",
+  "@annualReportMonthLabel": {
+    "placeholders": {
+      "month": {
+        "type": "int"
+      },
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "annualReportFirstPlay": "First play of the year",
+  "annualReportLastPlay": "Last play of the year",
+  "annualReportCoverage": "Data from {start} to {end}",
+  "@annualReportCoverage": {
+    "placeholders": {
+      "start": {
+        "type": "String"
+      },
+      "end": {
+        "type": "String"
+      }
+    }
+  },
+  "annualReportAsOfToday": "As of today",
+  "annualReportRecordingOff": "Listening history is off, so this report only includes what was recorded before.",
+  "annualReportPartialCoverage": "This year only covers part of the period.",
+  "annualReportEmpty": "No listening in this year",
+  "annualReportEmptyHint": "Try another year, or play a few songs and come back.",
+  "annualReportSharePoster": "Share poster",
+  "annualReportPosterGenerating": "Making your poster…",
+  "annualReportShareFailed": "Couldn't make the poster. Try again.",
+  "annualReportSavePlaylist": "Save as playlist",
+  "annualReportPlaylistName": "Most played in {year}",
+  "@annualReportPlaylistName": {
+    "placeholders": {
+      "year": {
+        "type": "int"
+      }
+    }
+  },
+  "annualReportPlaylistAddedTracks": "Added {count} tracks to {name}",
+  "@annualReportPlaylistAddedTracks": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "annualReportPlaylistFailed": "Couldn't save the playlist. Try again.",
+  "annualReportStatTracks": "Tracks",
+  "annualReportStatArtists": "Artists",
+  "annualReportTopPlatform": "Most used: {platform}",
+  "@annualReportTopPlatform": {
+    "placeholders": {
+      "platform": {
+        "type": "String"
+      }
+    }
+  },
+  "statsSourceOther": "Other platforms",
   "statsSubtitle": "Play counts, listening time, and activity heatmaps (stored on this device only)",
   "statsSettingsSubtitle": "Plays / activity heatmaps / export",
   "statsRecordSwitch": "Record listening stats",
