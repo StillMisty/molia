@@ -5018,4 +5018,95 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagnosticsExportSection => 'Export';
+
+  @override
+  String get musicFoldersTitle => 'Music folders';
+
+  @override
+  String get musicFoldersSubtitle =>
+      'Adds audio from these folders. Files stay where they are.';
+
+  @override
+  String get musicFoldersAdd => 'Add folder';
+
+  @override
+  String get musicFoldersEmptyTitle => 'No folders yet';
+
+  @override
+  String get musicFoldersEmptyBody =>
+      'Add a folder and Molia will find the audio inside';
+
+  @override
+  String musicFoldersScanning(int count) {
+    return 'Scanning · $count files checked';
+  }
+
+  @override
+  String get musicFoldersCancelScan => 'Stop scanning';
+
+  @override
+  String musicFoldersSummary(int added, int updated, int skipped) {
+    return 'Added $added, updated $updated, skipped $skipped';
+  }
+
+  @override
+  String get musicFoldersUnavailable =>
+      'This folder isn\'t available right now';
+
+  @override
+  String get musicFoldersCancelled => 'Scanning stopped';
+
+  @override
+  String get musicFoldersRescan => 'Rescan';
+
+  @override
+  String get musicFoldersRemove => 'Remove';
+
+  @override
+  String get musicFoldersAdded => 'Folder added';
+
+  @override
+  String get musicFoldersDuplicate => 'This folder is already added';
+
+  @override
+  String get musicFoldersNested => 'Pick the parent folder instead';
+
+  @override
+  String get musicFoldersInvalid => 'This location can\'t be added';
+
+  @override
+  String get musicFoldersAndroidNote =>
+      'Android may only allow part of this folder. If it can\'t be read, import files instead.';
+
+  @override
+  String get musicFoldersCheckFiles => 'Check files';
+
+  @override
+  String get musicFoldersChecking => 'Checking…';
+
+  @override
+  String get localFileMissing =>
+      'The file is missing. It may have been deleted.';
+
+  @override
+  String get localFileLocate => 'Locate file';
+
+  @override
+  String get localTitleEdit => 'Edit title';
+
+  @override
+  String get localTitleNote =>
+      'Only the title changes. Other tags stay as they are.';
+
+  @override
+  String get localTitleMoliaOnly => 'Change in Molia only';
+
+  @override
+  String get localTitleMoliaOnlyNote => 'Doesn\'t change the file';
+
+  @override
+  String get localTitleInvalid => 'Title can\'t be empty';
+
+  @override
+  String get localTitleFailed => 'Didn\'t change. Try again.';
 }

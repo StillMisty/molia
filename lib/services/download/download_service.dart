@@ -959,6 +959,7 @@ class DownloadService extends DownloadManager
   ///
   /// 导入保留 `localKey` 与全部引用；下载副本保留原音源键。文件不存在 /
   /// 后缀不在音频集合内 / 记录没有音频时返回对应结果，不改任何状态。
+  @override
   Future<LocalRelocateResult> relocate(
     DownloadedTrack record,
     String newPath,

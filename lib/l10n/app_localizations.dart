@@ -8931,6 +8931,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Export'**
   String get diagnosticsExportSection;
+
+  /// No description provided for @musicFoldersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Music folders'**
+  String get musicFoldersTitle;
+
+  /// No description provided for @musicFoldersSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Adds audio from these folders. Files stay where they are.'**
+  String get musicFoldersSubtitle;
+
+  /// No description provided for @musicFoldersAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add folder'**
+  String get musicFoldersAdd;
+
+  /// No description provided for @musicFoldersEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No folders yet'**
+  String get musicFoldersEmptyTitle;
+
+  /// No description provided for @musicFoldersEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a folder and Molia will find the audio inside'**
+  String get musicFoldersEmptyBody;
+
+  /// No description provided for @musicFoldersScanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning · {count} files checked'**
+  String musicFoldersScanning(int count);
+
+  /// No description provided for @musicFoldersCancelScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop scanning'**
+  String get musicFoldersCancelScan;
+
+  /// No description provided for @musicFoldersSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {added}, updated {updated}, skipped {skipped}'**
+  String musicFoldersSummary(int added, int updated, int skipped);
+
+  /// No description provided for @musicFoldersUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This folder isn\'t available right now'**
+  String get musicFoldersUnavailable;
+
+  /// No description provided for @musicFoldersCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning stopped'**
+  String get musicFoldersCancelled;
+
+  /// No description provided for @musicFoldersRescan.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescan'**
+  String get musicFoldersRescan;
+
+  /// No description provided for @musicFoldersRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get musicFoldersRemove;
+
+  /// No description provided for @musicFoldersAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder added'**
+  String get musicFoldersAdded;
+
+  /// No description provided for @musicFoldersDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'This folder is already added'**
+  String get musicFoldersDuplicate;
+
+  /// No description provided for @musicFoldersNested.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick the parent folder instead'**
+  String get musicFoldersNested;
+
+  /// No description provided for @musicFoldersInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'This location can\'t be added'**
+  String get musicFoldersInvalid;
+
+  /// No description provided for @musicFoldersAndroidNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Android may only allow part of this folder. If it can\'t be read, import files instead.'**
+  String get musicFoldersAndroidNote;
+
+  /// No description provided for @musicFoldersCheckFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Check files'**
+  String get musicFoldersCheckFiles;
+
+  /// No description provided for @musicFoldersChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking…'**
+  String get musicFoldersChecking;
+
+  /// No description provided for @localFileMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is missing. It may have been deleted.'**
+  String get localFileMissing;
+
+  /// No description provided for @localFileLocate.
+  ///
+  /// In en, this message translates to:
+  /// **'Locate file'**
+  String get localFileLocate;
+
+  /// No description provided for @localTitleEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit title'**
+  String get localTitleEdit;
+
+  /// No description provided for @localTitleNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the title changes. Other tags stay as they are.'**
+  String get localTitleNote;
+
+  /// No description provided for @localTitleMoliaOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Change in Molia only'**
+  String get localTitleMoliaOnly;
+
+  /// No description provided for @localTitleMoliaOnlyNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Doesn\'t change the file'**
+  String get localTitleMoliaOnlyNote;
+
+  /// No description provided for @localTitleInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Title can\'t be empty'**
+  String get localTitleInvalid;
+
+  /// No description provided for @localTitleFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Didn\'t change. Try again.'**
+  String get localTitleFailed;
 }
 
 class _AppLocalizationsDelegate

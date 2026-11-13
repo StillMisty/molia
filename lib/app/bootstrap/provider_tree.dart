@@ -36,6 +36,8 @@ import '../../services/diagnostics/diagnostics_export.dart';
 import '../../services/diagnostics/diagnostics_service.dart';
 import '../../services/download/download_manager.dart';
 import '../../services/download/download_records.dart';
+import '../../services/local/local_library_service.dart';
+import '../../services/local/local_metadata_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/play_statistics_service.dart';
 import '../../services/save_as.dart';
@@ -209,6 +211,12 @@ List<SingleChildWidget> buildAppProviders({
     Provider<DownloadMaintenance>.value(value: downloadService),
     // 下载设置：保存位置 / 文件名格式 / 标签嵌入（设置页读写）。
     ChangeNotifierProvider.value(value: local.downloadSettings),
+    // 本地曲库：音乐文件夹配置 / 扫描进度 / 缺文件检查（设置页与本地歌曲）。
+    ChangeNotifierProvider<LocalLibraryService>.value(
+      value: local.localLibrary,
+    ),
+    // 标题编辑：本地歌曲行菜单（标签文件 + 一处数据库事务）。
+    Provider<LocalMetadataService>.value(value: local.localMetadata),
     Provider<NotificationService>.value(value: notifications),
     // 省流模式：设置页读写开关/音质上限；取链与封面网关已在上方接线。
     ChangeNotifierProvider.value(value: local.dataSaver),

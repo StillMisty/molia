@@ -4806,4 +4806,89 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagnosticsExportSection => '导出';
+
+  @override
+  String get musicFoldersTitle => '音乐文件夹';
+
+  @override
+  String get musicFoldersSubtitle => '自动收录文件夹里的音频，不会移动文件';
+
+  @override
+  String get musicFoldersAdd => '添加文件夹';
+
+  @override
+  String get musicFoldersEmptyTitle => '还没有添加文件夹';
+
+  @override
+  String get musicFoldersEmptyBody => '添加一个文件夹，Molia 会找出里面的音频';
+
+  @override
+  String musicFoldersScanning(int count) {
+    return '正在扫描 · 已处理 $count 个文件';
+  }
+
+  @override
+  String get musicFoldersCancelScan => '取消扫描';
+
+  @override
+  String musicFoldersSummary(int added, int updated, int skipped) {
+    return '新增 $added 首，更新 $updated 首，跳过 $skipped 个';
+  }
+
+  @override
+  String get musicFoldersUnavailable => '暂时读不到这个文件夹';
+
+  @override
+  String get musicFoldersCancelled => '扫描已取消';
+
+  @override
+  String get musicFoldersRescan => '重新扫描';
+
+  @override
+  String get musicFoldersRemove => '移除';
+
+  @override
+  String get musicFoldersAdded => '已添加文件夹';
+
+  @override
+  String get musicFoldersDuplicate => '这个文件夹已经添加过了';
+
+  @override
+  String get musicFoldersNested => '请选择上层文件夹';
+
+  @override
+  String get musicFoldersInvalid => '这个位置不能添加';
+
+  @override
+  String get musicFoldersAndroidNote => '系统可能只允许读取部分文件夹；读不到时可以逐个导入文件';
+
+  @override
+  String get musicFoldersCheckFiles => '检查文件';
+
+  @override
+  String get musicFoldersChecking => '正在检查…';
+
+  @override
+  String get localFileMissing => '本地文件不存在，可能已被删除';
+
+  @override
+  String get localFileLocate => '重新选择文件';
+
+  @override
+  String get localTitleEdit => '修改标题';
+
+  @override
+  String get localTitleNote => '只改标题，其它标签保持不变';
+
+  @override
+  String get localTitleMoliaOnly => '只在 Molia 中修改';
+
+  @override
+  String get localTitleMoliaOnlyNote => '不改文件';
+
+  @override
+  String get localTitleInvalid => '标题不能为空';
+
+  @override
+  String get localTitleFailed => '没有改成，请再试一次';
 }

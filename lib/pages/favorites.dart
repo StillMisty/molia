@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:file_picker/file_picker.dart';
+
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -23,6 +25,8 @@ import '../pages/source_swap_page.dart';
 import '../services/cache_service.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_records.dart';
+import '../services/download/download_service.dart' show LocalRelocateResult;
+import '../services/local/local_metadata_service.dart';
 import '../services/escape_claims.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
@@ -45,6 +49,7 @@ import '../widgets/link_import_dialog.dart';
 import '../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 import '../widgets/row_actions.dart';
+import '../widgets/settings/settings_tiles.dart';
 import '../widgets/shell_page_visibility.dart';
 import '../widgets/shell_reselect.dart';
 import '../widgets/track_row.dart';
@@ -1412,7 +1417,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
       builder: (rowContext, actions) => CollectionTrackRow(
         row: TrackRowModel(
           title: row.title,
-          artist: row.artist,
+          artist: switch (row) {
+            LocalSongCollectionRow(:final song) when song.isMissing =>
+              row.artist.isEmpty
+                  ? l10n.localFileMissing
+                  : '${row.artist} · ${l10n.localFileMissing}',
+            _ => row.artist,
+          },
           coverUrl: row.artworkUrl,
           album: row.album,
           // 播放时间 = 毫秒时间戳的紧凑文案（与同步日志同一格式）。
@@ -1491,6 +1502,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final commands = _actions.rowCommands(view, row);
     final swap = commands.swap;
     final localSong = commands.localSong;
+    final localRecord = row is LocalSongCollectionRow ? row.song.record : null;
     return CollectionRowActionWiring(
       onCopy: commands.copy,
       onSwap: swap == null
@@ -1509,6 +1521,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
       onDeleteLocalSong: localSong == null
           ? null
           : () => _deleteLocalSong(localSong),
+      onEditLocalTitle: localRecord == null
+          ? null
+          : () => _editLocalTitle(localRecord),
+      onLocateLocalFile: localRecord?.isMissing == true
+          ? () => _locateLocalFile(localRecord!)
+          : null,
       isFavorite: commands.isFavorite,
       localSongCached: commands.localSongCached,
       localSongImported: commands.localSongImported,
@@ -1523,6 +1541,118 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final confirmed = await _confirmDeleteLocalSongs([song]);
     if (confirmed != true || !mounted) return;
     _reportLocalDelete(await actions.deleteLocalSongs([song]));
+  }
+
+  /// 只改标题：先尝试写文件标签；格式不支持 / 失败 / 文件不见时再让用户
+  /// 选择「只在 Molia 中修改」。
+  Future<void> _editLocalTitle(DownloadedTrack record) async {
+    final l10n = AppLocalizations.of(context)!;
+    final notifications = context.read<NotificationService?>();
+    final service = context.read<LocalMetadataService?>();
+    if (service == null) return;
+    final controller = TextEditingController(text: record.title);
+    final title = await M3EDialog.show<String>(
+      context,
+      dialog: M3EDialog(
+        title: l10n.localTitleEdit,
+        content: SizedBox(
+          width: settingsDialogWidth(context),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              M3ETextField(
+                controller: controller,
+                autofocus: true,
+                maxLength: 200,
+                label: l10n.localTitleEdit,
+              ),
+              const SizedBox(height: kSettingsSmallSpacing),
+              Text(
+                l10n.localTitleNote,
+                style: context.typeScale.bodySmall.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          M3EButton.text(
+            onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+            child: Text(l10n.cancelButton),
+          ),
+          M3EButton.text(
+            onPressed: () =>
+                Navigator.of(context, rootNavigator: true).pop(controller.text),
+            child: Text(l10n.save),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (title == null || !mounted) return;
+    var status = await service.editTitle(record, title);
+    if (status == LocalTitleEditStatus.invalidTitle) {
+      notifications?.showSnackBar(l10n.localTitleInvalid);
+      return;
+    }
+    if (status == LocalTitleEditStatus.appOnlyRequired && mounted) {
+      final appOnly = await M3EDialog.show<bool>(
+        context,
+        dialog: M3EDialog(
+          title: l10n.localTitleMoliaOnly,
+          content: SizedBox(
+            width: settingsDialogWidth(context),
+            child: Text(l10n.localTitleMoliaOnlyNote),
+          ),
+          actions: [
+            M3EButton.text(
+              onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+              child: Text(l10n.cancelButton),
+            ),
+            M3EButton.text(
+              onPressed: () =>
+                  Navigator.of(context, rootNavigator: true).pop(true),
+              child: Text(l10n.localTitleMoliaOnly),
+            ),
+          ],
+        ),
+      );
+      if (appOnly != true || !mounted) return;
+      status = await service.editTitle(record, title, appOnly: true);
+    }
+    if (!mounted) return;
+    if (status == LocalTitleEditStatus.written) {
+      notifications?.showSnackBar(l10n.save);
+    } else if (status == LocalTitleEditStatus.failed) {
+      notifications?.showErrorSnackBar(l10n.localTitleFailed);
+    }
+  }
+
+  /// 重定位：选一个可读音频文件，身份 / 引用保持不变。
+  Future<void> _locateLocalFile(DownloadedTrack record) async {
+    final l10n = AppLocalizations.of(context)!;
+    final notifications = context.read<NotificationService?>();
+    final manager = context.read<DownloadManager>();
+    String? path;
+    try {
+      final files = await FilePicker.pickFiles(type: FileType.audio);
+      path = files.singleOrNull?.path;
+    } catch (_) {
+      path = null;
+    }
+    if (path == null || path.isEmpty) return;
+    final result = await manager.relocate(record, path);
+    if (!mounted) return;
+    switch (result) {
+      case LocalRelocateResult.relocated:
+        notifications?.showSnackBar(l10n.save);
+      case LocalRelocateResult.unsupportedFormat:
+        notifications?.showErrorSnackBar(l10n.localFileMissing);
+      case LocalRelocateResult.fileMissing:
+        notifications?.showErrorSnackBar(l10n.localFileMissing);
+    }
   }
 
   Widget _buildEmptyState(

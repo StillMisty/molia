@@ -202,6 +202,8 @@ enum CollectionRowActionKind {
   toggleFavorite,
   deleteHistoryEntry,
   deleteLocalSong,
+  editLocalTitle,
+  locateLocalFile,
 }
 
 /// 一条行动作的声明（不含图标 / 文案 / 回调）。
@@ -426,11 +428,20 @@ class CollectionPresenter {
             destructive: true,
           ),
         ];
-      case LocalSongCollectionRow():
-        return const [
-          CollectionRowActionSpec(CollectionRowActionKind.addToPlaylist),
-          CollectionRowActionSpec(CollectionRowActionKind.toggleFavorite),
-          CollectionRowActionSpec(
+      case LocalSongCollectionRow(:final song):
+        final record = song.record;
+        return [
+          const CollectionRowActionSpec(CollectionRowActionKind.addToPlaylist),
+          const CollectionRowActionSpec(CollectionRowActionKind.toggleFavorite),
+          if (record != null)
+            const CollectionRowActionSpec(
+              CollectionRowActionKind.editLocalTitle,
+            ),
+          if (record?.isMissing == true)
+            const CollectionRowActionSpec(
+              CollectionRowActionKind.locateLocalFile,
+            ),
+          const CollectionRowActionSpec(
             CollectionRowActionKind.deleteLocalSong,
             destructive: true,
           ),

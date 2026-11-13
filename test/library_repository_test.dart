@@ -777,4 +777,36 @@ void main() {
     ]))[SyncCategory.playlists];
     expect(second, isNot(first));
   });
+
+  test('loadBrowseTracks：一次读取收藏 + 所有列表曲目，顺序稳定', () async {
+    final favoritesId = await repository.createPlaylist('__favorites__');
+    final first = await repository.createPlaylist('列表一');
+    final second = await repository.createPlaylist('列表二');
+    PlaylistTrack row(int playlistId, String id, {int sortOrder = 0}) =>
+        PlaylistTrack(
+          playlistId: playlistId,
+          sourceKey: 'wy',
+          songId: id,
+          title: 'Song $id',
+          artist: 'Artist',
+          album: '',
+          raw: const {},
+          addedAt: 1,
+          sortOrder: sortOrder,
+        );
+    await repository.addTracksToPlaylist(favoritesId, [row(favoritesId, '1')]);
+    await repository.addTracksToPlaylist(first, [
+      row(first, '2', sortOrder: 1),
+      row(first, '3', sortOrder: 0),
+    ]);
+    await repository.addTracksToPlaylist(second, [row(second, '4')]);
+
+    final data = await repository.loadBrowseTracks();
+    expect(data.favorites.map((track) => track.songId), ['1']);
+    expect(data.playlists.map((playlist) => playlist.id), [first, second]);
+    expect(data.playlists.first.tracks.map((track) => track.songId), [
+      '2',
+      '3',
+    ], reason: '列表内顺序稳定（追加顺序）');
+  });
 }

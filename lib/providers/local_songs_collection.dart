@@ -273,6 +273,9 @@ class CollectionLocalSong {
   /// 是否本地导入（就地引用）。
   bool get isImported => record?.imported ?? false;
 
+  /// 确认文件不见（仅下载 / 导入行）。
+  bool get isMissing => record?.isMissing ?? false;
+
   /// 稳定行 key。
   String get key => record?.key ?? '${history!.sourceKey}:${history!.songId}';
 
