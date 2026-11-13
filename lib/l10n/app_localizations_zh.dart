@@ -5320,4 +5320,75 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lyricCurrentLine => '当前歌词';
+
+  @override
+  String get onboardingSkip => '跳过';
+
+  @override
+  String get onboardingNext => '下一步';
+
+  @override
+  String get onboardingStart => '开始使用';
+
+  @override
+  String get onboardingBack => '上一步';
+
+  @override
+  String onboardingStep(int current, int total) {
+    return '第 $current 步，共 $total 步';
+  }
+
+  @override
+  String get onboardingPrivacyTitle => '音乐留在本机';
+
+  @override
+  String get onboardingPrivacyBody => '下载和导入的歌曲只保存在这台设备。同步是可选项，默认关闭。';
+
+  @override
+  String get onboardingPrivacyScriptsTitle => '第三方音源脚本';
+
+  @override
+  String get onboardingPrivacyScriptsBody => '脚本会在本机运行代码，可能访问网络。请只导入你信任的来源。';
+
+  @override
+  String get onboardingChannelsTitle => '选择音源渠道';
+
+  @override
+  String get onboardingChannelsBody => '所有渠道默认开启；随时可以在设置里调整。';
+
+  @override
+  String get onboardingChannelsPreparing => '正在准备渠道…';
+
+  @override
+  String get onboardingQualityTitle => '音质与省流';
+
+  @override
+  String get onboardingQualityBody => '选择默认音质。省流模式只在移动数据下降低音质。';
+
+  @override
+  String get onboardingQualityLabel => '默认音质';
+
+  @override
+  String get onboardingDataSaver => '省流模式';
+
+  @override
+  String get onboardingDataSaverHint => '仅在移动数据下生效';
+
+  @override
+  String get onboardingOptionalTitle => '可选功能';
+
+  @override
+  String get onboardingOptionalSync => '跨设备同步';
+
+  @override
+  String get onboardingOptionalSyncBody => '默认关闭。开启后，歌单、设置和密钥会在你的设备之间加密传输。';
+
+  @override
+  String get onboardingOptionalAi => 'AI 推歌';
+
+  @override
+  String get onboardingOptionalAiBody => '默认关闭。需要你自己的 AI 服务密钥，推荐内容才会发送给该服务。';
+
+  @override
+  String get onboardingOptionalNoAccount => '不需要登录，引导过程也不会联网。';
 }

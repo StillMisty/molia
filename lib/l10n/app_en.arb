@@ -3087,5 +3087,38 @@
         "type": "String"
       }
     }
+  },
+  "onboardingSkip": "Skip",
+  "onboardingNext": "Next",
+  "onboardingStart": "Start using Molia",
+  "onboardingBack": "Back",
+  "onboardingStep": "Step {current} of {total}",
+  "onboardingPrivacyTitle": "Your music stays here",
+  "onboardingPrivacyBody": "Downloaded and imported songs stay on this device. Sync is optional and off by default.",
+  "onboardingPrivacyScriptsTitle": "Third-party source scripts",
+  "onboardingPrivacyScriptsBody": "Scripts run code on this device and may access the network. Only import sources you trust.",
+  "onboardingChannelsTitle": "Choose sources",
+  "onboardingChannelsBody": "All channels are on by default. You can change them in Settings anytime.",
+  "onboardingChannelsPreparing": "Preparing channels…",
+  "onboardingQualityTitle": "Quality and data saver",
+  "onboardingQualityBody": "Pick a default quality. Data saver lowers quality only on mobile data.",
+  "onboardingQualityLabel": "Default quality",
+  "onboardingDataSaver": "Data saver",
+  "onboardingDataSaverHint": "Applies on mobile data only",
+  "onboardingOptionalTitle": "Optional features",
+  "onboardingOptionalSync": "Cross-device sync",
+  "onboardingOptionalSyncBody": "Off by default. When on, playlists, settings, and keys are encrypted between your devices.",
+  "onboardingOptionalAi": "AI recommendations",
+  "onboardingOptionalAiBody": "Off by default. Your own AI service key is required before anything is sent.",
+  "onboardingOptionalNoAccount": "No sign-in is needed, and this guide never goes online.",
+  "@onboardingStep": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
   }
 }

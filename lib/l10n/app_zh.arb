@@ -2691,5 +2691,38 @@
         "type": "String"
       }
     }
+  },
+  "onboardingSkip": "跳过",
+  "onboardingNext": "下一步",
+  "onboardingStart": "开始使用",
+  "onboardingBack": "上一步",
+  "onboardingStep": "第 {current} 步，共 {total} 步",
+  "onboardingPrivacyTitle": "音乐留在本机",
+  "onboardingPrivacyBody": "下载和导入的歌曲只保存在这台设备。同步是可选项，默认关闭。",
+  "onboardingPrivacyScriptsTitle": "第三方音源脚本",
+  "onboardingPrivacyScriptsBody": "脚本会在本机运行代码，可能访问网络。请只导入你信任的来源。",
+  "onboardingChannelsTitle": "选择音源渠道",
+  "onboardingChannelsBody": "所有渠道默认开启；随时可以在设置里调整。",
+  "onboardingChannelsPreparing": "正在准备渠道…",
+  "onboardingQualityTitle": "音质与省流",
+  "onboardingQualityBody": "选择默认音质。省流模式只在移动数据下降低音质。",
+  "onboardingQualityLabel": "默认音质",
+  "onboardingDataSaver": "省流模式",
+  "onboardingDataSaverHint": "仅在移动数据下生效",
+  "onboardingOptionalTitle": "可选功能",
+  "onboardingOptionalSync": "跨设备同步",
+  "onboardingOptionalSyncBody": "默认关闭。开启后，歌单、设置和密钥会在你的设备之间加密传输。",
+  "onboardingOptionalAi": "AI 推歌",
+  "onboardingOptionalAiBody": "默认关闭。需要你自己的 AI 服务密钥，推荐内容才会发送给该服务。",
+  "onboardingOptionalNoAccount": "不需要登录，引导过程也不会联网。",
+  "@onboardingStep": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
   }
 }

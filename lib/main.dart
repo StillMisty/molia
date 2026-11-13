@@ -22,6 +22,7 @@ import 'app/bootstrap/playback_stack.dart';
 import 'app/bootstrap/post_frame_init.dart';
 import 'app/bootstrap/provider_tree.dart';
 import 'app/bootstrap/scrobble_stack.dart';
+import 'services/onboarding_store.dart';
 import 'app/bootstrap/startup_trace.dart';
 import 'app/bootstrap/sync_stack.dart';
 import 'app/bootstrap/update_stack.dart';
@@ -571,6 +572,9 @@ void main() async {
     onDetach: () => unawaited(diagnostics.service.dispose()),
   );
 
+  // 首次引导标记：在 runApp 前读一次，首帧要么是引导、要么是正常壳层，
+  // 不会先闪一下首页。读失败按「未完成」处理。
+  final onboardingCompleted = await OnboardingStore().isCompleted();
   runApp(
     MultiProvider(
       providers: buildAppProviders(
@@ -596,6 +600,7 @@ void main() async {
       child: MyThemedApp(
         // 用户交互 → 同步调度器续期活跃窗口（最近交互判定）。
         onUserInteraction: sync.provider.notifyInteraction,
+        showOnboarding: !onboardingCompleted,
       ),
     ),
   );

@@ -9873,6 +9873,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Current lyric'**
   String get lyricCurrentLine;
+
+  /// No description provided for @onboardingSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get onboardingSkip;
+
+  /// No description provided for @onboardingNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get onboardingNext;
+
+  /// No description provided for @onboardingStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start using Molia'**
+  String get onboardingStart;
+
+  /// No description provided for @onboardingBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get onboardingBack;
+
+  /// No description provided for @onboardingStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {current} of {total}'**
+  String onboardingStep(int current, int total);
+
+  /// No description provided for @onboardingPrivacyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your music stays here'**
+  String get onboardingPrivacyTitle;
+
+  /// No description provided for @onboardingPrivacyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded and imported songs stay on this device. Sync is optional and off by default.'**
+  String get onboardingPrivacyBody;
+
+  /// No description provided for @onboardingPrivacyScriptsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Third-party source scripts'**
+  String get onboardingPrivacyScriptsTitle;
+
+  /// No description provided for @onboardingPrivacyScriptsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Scripts run code on this device and may access the network. Only import sources you trust.'**
+  String get onboardingPrivacyScriptsBody;
+
+  /// No description provided for @onboardingChannelsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose sources'**
+  String get onboardingChannelsTitle;
+
+  /// No description provided for @onboardingChannelsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'All channels are on by default. You can change them in Settings anytime.'**
+  String get onboardingChannelsBody;
+
+  /// No description provided for @onboardingChannelsPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing channels…'**
+  String get onboardingChannelsPreparing;
+
+  /// No description provided for @onboardingQualityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Quality and data saver'**
+  String get onboardingQualityTitle;
+
+  /// No description provided for @onboardingQualityBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a default quality. Data saver lowers quality only on mobile data.'**
+  String get onboardingQualityBody;
+
+  /// No description provided for @onboardingQualityLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Default quality'**
+  String get onboardingQualityLabel;
+
+  /// No description provided for @onboardingDataSaver.
+  ///
+  /// In en, this message translates to:
+  /// **'Data saver'**
+  String get onboardingDataSaver;
+
+  /// No description provided for @onboardingDataSaverHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies on mobile data only'**
+  String get onboardingDataSaverHint;
+
+  /// No description provided for @onboardingOptionalTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional features'**
+  String get onboardingOptionalTitle;
+
+  /// No description provided for @onboardingOptionalSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Cross-device sync'**
+  String get onboardingOptionalSync;
+
+  /// No description provided for @onboardingOptionalSyncBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Off by default. When on, playlists, settings, and keys are encrypted between your devices.'**
+  String get onboardingOptionalSyncBody;
+
+  /// No description provided for @onboardingOptionalAi.
+  ///
+  /// In en, this message translates to:
+  /// **'AI recommendations'**
+  String get onboardingOptionalAi;
+
+  /// No description provided for @onboardingOptionalAiBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Off by default. Your own AI service key is required before anything is sent.'**
+  String get onboardingOptionalAiBody;
+
+  /// No description provided for @onboardingOptionalNoAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'No sign-in is needed, and this guide never goes online.'**
+  String get onboardingOptionalNoAccount;
 }
 
 class _AppLocalizationsDelegate

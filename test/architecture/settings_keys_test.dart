@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/settings_key.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/services/onboarding_store.dart';
 import 'package:molia/services/scrobble/scrobble_preferences.dart';
 
 /// 「一个键一个家」：登记键的名字字面量只准出现在 `settings_keys.dart`。
@@ -76,6 +77,14 @@ void main() {
         reason: '$name 是设备本地决策，不能被同步 / 备份改写',
       );
     }
+  });
+
+  test('首次引导完成标记不进登记表（设备本地）', () {
+    expect(
+      kAllSettingsKeys.map((key) => key.name),
+      isNot(contains(kOnboardingCompletedV1)),
+      reason: '同步 / 备份不能替用户跳过或重新触发引导',
+    );
   });
 
   test('听歌同步凭证是凭证类别的安全存储键', () {

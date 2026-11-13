@@ -5556,4 +5556,82 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricCurrentLine => 'Current lyric';
+
+  @override
+  String get onboardingSkip => 'Skip';
+
+  @override
+  String get onboardingNext => 'Next';
+
+  @override
+  String get onboardingStart => 'Start using Molia';
+
+  @override
+  String get onboardingBack => 'Back';
+
+  @override
+  String onboardingStep(int current, int total) {
+    return 'Step $current of $total';
+  }
+
+  @override
+  String get onboardingPrivacyTitle => 'Your music stays here';
+
+  @override
+  String get onboardingPrivacyBody =>
+      'Downloaded and imported songs stay on this device. Sync is optional and off by default.';
+
+  @override
+  String get onboardingPrivacyScriptsTitle => 'Third-party source scripts';
+
+  @override
+  String get onboardingPrivacyScriptsBody =>
+      'Scripts run code on this device and may access the network. Only import sources you trust.';
+
+  @override
+  String get onboardingChannelsTitle => 'Choose sources';
+
+  @override
+  String get onboardingChannelsBody =>
+      'All channels are on by default. You can change them in Settings anytime.';
+
+  @override
+  String get onboardingChannelsPreparing => 'Preparing channels…';
+
+  @override
+  String get onboardingQualityTitle => 'Quality and data saver';
+
+  @override
+  String get onboardingQualityBody =>
+      'Pick a default quality. Data saver lowers quality only on mobile data.';
+
+  @override
+  String get onboardingQualityLabel => 'Default quality';
+
+  @override
+  String get onboardingDataSaver => 'Data saver';
+
+  @override
+  String get onboardingDataSaverHint => 'Applies on mobile data only';
+
+  @override
+  String get onboardingOptionalTitle => 'Optional features';
+
+  @override
+  String get onboardingOptionalSync => 'Cross-device sync';
+
+  @override
+  String get onboardingOptionalSyncBody =>
+      'Off by default. When on, playlists, settings, and keys are encrypted between your devices.';
+
+  @override
+  String get onboardingOptionalAi => 'AI recommendations';
+
+  @override
+  String get onboardingOptionalAiBody =>
+      'Off by default. Your own AI service key is required before anything is sent.';
+
+  @override
+  String get onboardingOptionalNoAccount =>
+      'No sign-in is needed, and this guide never goes online.';
 }

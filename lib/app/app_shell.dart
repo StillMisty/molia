@@ -22,6 +22,7 @@ import '../l10n/app_localizations.dart';
 import '../pages/favorites.dart';
 import '../pages/library.dart';
 import '../pages/nowplaying.dart';
+import '../pages/onboarding_flow.dart';
 import '../pages/sync_nearby_pairing_dialogs.dart';
 import '../pages/sync_notices.dart';
 import '../providers/nav_provider.dart';
@@ -31,6 +32,7 @@ import '../providers/theme_provider.dart';
 import '../services/app_branding_service.dart';
 import '../services/haptics.dart';
 import '../services/language_service.dart';
+import '../services/onboarding_store.dart';
 import '../services/system_fonts_service.dart';
 import '../services/window/window_chrome.dart';
 import '../theme/animated_scheme.dart';
@@ -1207,10 +1209,21 @@ class IncomingPairingQueue {
 }
 
 class MyThemedApp extends StatefulWidget {
-  const MyThemedApp({super.key, this.onUserInteraction});
+  const MyThemedApp({
+    super.key,
+    this.onUserInteraction,
+    this.showOnboarding = false,
+    this.onboardingStore,
+  });
 
   /// 用户交互回调（组合根接同步调度器：续期「最近交互」的活跃窗口）。
   final VoidCallback? onUserInteraction;
+
+  /// 首帧是否渲染首次引导（组合根在 runApp 前读设备本地标记决定）。
+  final bool showOnboarding;
+
+  /// 完成标记写入器（测试注入；生产为默认 prefs 实现）。
+  final OnboardingStore? onboardingStore;
 
   @override
   State<MyThemedApp> createState() => _MyThemedAppState();
@@ -1233,9 +1246,13 @@ class _MyThemedAppState extends State<MyThemedApp> {
   /// 展示弹层）；提前持有 provider，宿主 context 消失后仍能拒绝排队请求。
   late final SyncProvider _sync;
 
+  /// 首次引导是否仍在显示：完成 / 跳过后切回正常壳层，不再经过路由。
+  late bool _showOnboarding;
+
   @override
   void initState() {
     super.initState();
+    _showOnboarding = widget.showOnboarding;
     _loadSavedLocale();
     // 自定义应用名称（顶栏回退文案）需要重建 MaterialApp.title。
     AppBrandingService.titleNotifier.addListener(_onBrandingChanged);
@@ -1312,6 +1329,12 @@ class _MyThemedAppState extends State<MyThemedApp> {
 
   void _onBrandingChanged() {
     if (mounted) setState(() {});
+  }
+
+  /// 引导完成 / 跳过：先写设备本地标记（失败下次仍会显示），再切回壳层。
+  Future<void> _finishOnboarding() async {
+    await (widget.onboardingStore ?? OnboardingStore()).markCompleted();
+    if (mounted) setState(() => _showOnboarding = false);
   }
 
   @override
@@ -1479,7 +1502,11 @@ class _MyThemedAppState extends State<MyThemedApp> {
                     // 显式包一层路由级 M3E 主题，页面才不依赖 App 级
                     // DefaultTextStyle（预测返回退场 + 主题重建的断言见
                     // lib/widgets/m3e_page_route.dart）。
-                    home: M3ERouteTheme(builder: (_) => MyApp(key: appRootKey)),
+                    home: M3ERouteTheme(
+                      builder: (_) => _showOnboarding
+                          ? OnboardingFlow(onFinished: _finishOnboarding)
+                          : MyApp(key: appRootKey),
+                    ),
                   );
                 },
               ),
