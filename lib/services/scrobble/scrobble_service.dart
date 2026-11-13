@@ -105,6 +105,11 @@ class ScrobbleService extends ChangeNotifier {
       preferences.enabledFor(target) &&
       (_credentials[target] ?? '').isNotEmpty;
 
+  /// 授权失效后停止发送，直到用户重新连接（凭据保留，队列保留）。
+  bool _canSend(ScrobbleTarget target) =>
+      activeFor(target) &&
+      statusOf(target) != ScrobbleTargetStatus.needsAuthorization;
+
   /// 首帧后的启动尾巴：读偏好 / 凭据 / 发件箱，恢复在途状态。
   Future<void> init() async {
     await preferences.init();
@@ -153,6 +158,7 @@ class ScrobbleService extends ChangeNotifier {
 
   Future<void> setMasterEnabled(bool value) async {
     await preferences.setMasterEnabled(value);
+    if (!value) _endSession();
     _schedule();
     _notify();
   }
@@ -241,6 +247,7 @@ class ScrobbleService extends ChangeNotifier {
     if (!anyEnabled) {
       await preferences.setMasterEnabled(false);
     }
+    _endSession();
     _notify();
   }
 
@@ -325,7 +332,7 @@ class ScrobbleService extends ChangeNotifier {
   void _emitNowPlaying(ScrobbleSession session) {
     final event = session.nowPlayingEvent();
     for (final target in ScrobbleTarget.values) {
-      if (!activeFor(target)) continue;
+      if (!_canSend(target)) continue;
       final sink = _sinks[target]!;
       unawaited(_deliverNowPlaying(target, sink, event.listen));
     }
@@ -350,7 +357,7 @@ class ScrobbleService extends ChangeNotifier {
 
   void _enqueueForActiveTargets(ScrobbleEvent base) {
     for (final target in ScrobbleTarget.values) {
-      if (!activeFor(target)) continue;
+      if (!_canSend(target)) continue;
       final event = base.copyWith(
         id: '${base.id}-${target.name}',
         target: target,
@@ -370,7 +377,7 @@ class ScrobbleService extends ChangeNotifier {
     if (!_ready || _disposed) return;
     final deliveries = <Future<void>>[];
     for (final target in ScrobbleTarget.values) {
-      if (!activeFor(target) || _inFlight.contains(target)) continue;
+      if (!_canSend(target) || _inFlight.contains(target)) continue;
       final due = outbox.due(target);
       if (due.isEmpty) continue;
       final entry = due.first;

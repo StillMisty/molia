@@ -496,7 +496,10 @@ void main() {
         service.statusOf(ScrobbleTarget.listenBrainz),
         ScrobbleTargetStatus.needsAuthorization,
       );
-      // 授权失败后服务不再被视为可发送。
+      // 授权失败后停止发送，但保留凭据与排队事件，等用户重新连接。
+      final submitted = listenBrainz.submitted.length;
+      await service.pumpNow();
+      expect(listenBrainz.submitted.length, submitted);
       expect(service.activeFor(ScrobbleTarget.listenBrainz), isTrue);
     });
 
