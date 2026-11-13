@@ -2035,6 +2035,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get annualReportShareFailed => 'Couldn\'t make the poster. Try again.';
 
   @override
+  String get annualReportLoadFailed => 'Couldn\'t load the report';
+
+  @override
   String get annualReportSavePlaylist => 'Save as playlist';
 
   @override

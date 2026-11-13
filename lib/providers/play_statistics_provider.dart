@@ -54,6 +54,12 @@ class PlayStatisticsProvider extends ChangeNotifier {
   /// 聚合快照（汇总 / 榜单 / 日历 / 作息热力图 / 来源分布一次取回）。
   ListeningStatisticsSnapshot? get snapshot => _snapshot;
 
+  /// 全量历史的按日 rollup（**不受范围切换影响**）。
+  ///
+  /// 日历热力图与年度报告入口共用这一份；范围只作用于汇总 / 榜单 /
+  /// 作息热力图，年度可用年份不能跟着 30 天窗口消失。
+  List<DayListened> get allHistoryDaily => _snapshot?.daily ?? const [];
+
   /// 范围内没有任何已收尾事件（加载完成的前提下）。
   bool get isEmpty =>
       _loaded && !_loading && (_snapshot?.summary.playCount ?? 0) == 0;

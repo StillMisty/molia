@@ -706,7 +706,7 @@
   "annualReportPickYear": "选择年份",
   "annualReportSubtitle": "年度听歌报告",
   "annualReportListenedCaption": "全年收听",
-  "annualReportStreakCaption": "天最长连续",
+  "annualReportStreakCaption": "最长连续天数",
   "annualReportTopTracks": "年度最常听",
   "annualReportTopArtists": "年度常听歌手",
   "annualReportTopAlbums": "年度常听专辑",
@@ -744,6 +744,7 @@
   "annualReportSharePoster": "分享海报",
   "annualReportPosterGenerating": "正在生成海报…",
   "annualReportShareFailed": "海报没有生成，再试一次",
+  "annualReportLoadFailed": "报告没有加载出来",
   "annualReportSavePlaylist": "存成歌单",
   "annualReportPlaylistName": "{year} 年最常听",
   "@annualReportPlaylistName": {

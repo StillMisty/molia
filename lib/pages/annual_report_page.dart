@@ -31,6 +31,7 @@ import '../services/system_fonts_service.dart';
 import '../theme/m3e_context.dart';
 import '../theme/poster_palette.dart';
 import '../theme/scheme_builder.dart';
+import '../utils/listened_duration.dart';
 import '../utils/responsive.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/settings/settings_subpage.dart';
@@ -149,7 +150,7 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
           children: [
             const Icon(Icons.error_outline_rounded, size: 40),
             const SizedBox(height: 12),
-            Text(l10n.annualReportShareFailed),
+            Text(l10n.annualReportLoadFailed),
             const SizedBox(height: 12),
             M3EButton.filled(
               onPressed: () => unawaited(provider.refresh()),
@@ -253,7 +254,7 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            _formatListened(l10n, report.totalListenedMs),
+            formatListenedDuration(l10n, report.totalListenedMs),
             style: context.typeScale.headlineMedium.copyWith(
               color: scheme.onPrimaryContainer,
               fontWeight: FontWeight.w700,
@@ -386,7 +387,7 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
               trackId: TrackId(tracks[index].sourceKey, tracks[index].songId),
               trailingText:
                   '${l10n.statsPlaysCount(tracks[index].playCount)} · '
-                  '${_formatListened(l10n, tracks[index].listenedMs)}',
+                  '${formatListenedDuration(l10n, tracks[index].listenedMs)}',
             ),
             position: calculateCardPosition(index, tracks.length),
             onTap: () => unawaited(_playTopTracks(report, index)),
@@ -536,7 +537,10 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  _formatListened(l10n, report.platforms[index].listenedMs),
+                  formatListenedDuration(
+                    l10n,
+                    report.platforms[index].listenedMs,
+                  ),
                   style: context.typeScale.labelSmall.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -574,12 +578,17 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
                   child: Semantics(
                     label: l10n.annualReportMonthLabel(
                       month + 1,
-                      _formatListened(l10n, report.monthlyListenedMs[month]),
+                      formatListenedDuration(
+                        l10n,
+                        report.monthlyListenedMs[month],
+                      ),
                     ),
                     child: Align(
                       alignment: Alignment.bottomCenter,
                       child: FractionallySizedBox(
-                        heightFactor: maxValue <= 0
+                        heightFactor:
+                            maxValue <= 0 ||
+                                report.monthlyListenedMs[month] <= 0
                             ? 0
                             : (report.monthlyListenedMs[month] / maxValue)
                                   .clamp(0.02, 1),
@@ -656,9 +665,7 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
           (report.asOfToday || report.notice != AnnualReportNotice.none))
         l10n.annualReportCoverage(
           localizations.formatMediumDate(report.coverageStart!),
-          report.asOfToday
-              ? l10n.annualReportAsOfToday
-              : localizations.formatMediumDate(report.coverageEnd!),
+          localizations.formatMediumDate(report.coverageEnd!),
         ),
     ];
     if (lines.isEmpty) return const SizedBox.shrink();
@@ -781,8 +788,12 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
     final notifications = context.read<NotificationService?>();
     final appScheme = Theme.of(context).colorScheme;
     final textStyle = context.typeScale.bodyMedium;
+    // 海报数据只依赖当前同步状态：在第一个 await 之前取齐，避免异步返回后
+    // 再读已可能失效的 BuildContext / Theme。
+    final posterData = _posterData(l10n, report);
     try {
       final saved = await PosterColorStore.load();
+      if (!mounted) return;
       final scheme = switch (saved.source) {
         PosterColorSource.appTheme || PosterColorSource.artwork => appScheme,
         PosterColorSource.custom => buildColorScheme(
@@ -791,6 +802,7 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
         ),
       };
       final override = await PosterFontStore.load();
+      if (!mounted) return;
       final font = switch (override) {
         null => (
           family: textStyle.fontFamily,
@@ -803,13 +815,15 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
         final family => (family: family, fallback: null),
       };
       final bytes = await AnnualPosterService().render(
-        data: _posterData(l10n, report),
+        data: posterData,
         palette: PosterPalette.fromScheme(scheme),
         fontFamily: font.family,
         fontFamilyFallback: font.fallback,
         watermarkText: l10n.appName,
       );
+      if (!mounted) return;
       final directory = await getTemporaryDirectory();
+      if (!mounted) return;
       final file = File('${directory.path}/annual_report_${report.year}.png');
       await file.writeAsBytes(Uint8List.fromList(bytes), flush: true);
       await SharePlus.instance.share(
@@ -831,7 +845,7 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
     return AnnualPosterData(
       yearLabel: '${report.year}',
       subtitle: l10n.annualReportSubtitle,
-      listenedLabel: _formatListened(l10n, report.totalListenedMs),
+      listenedLabel: formatListenedDuration(l10n, report.totalListenedMs),
       listenedCaption: l10n.annualReportListenedCaption,
       playsLabel: '${report.qualifiedPlayCount}',
       playsCaption: l10n.statsPlays,
@@ -952,13 +966,4 @@ class _MomentTile extends StatelessWidget {
       ),
     );
   }
-}
-
-/// 收听时长文案（与统计页同一档：秒 / 分钟 / 小时·分）。
-String _formatListened(AppLocalizations l10n, int listenedMs) {
-  final totalSeconds = listenedMs ~/ 1000;
-  if (totalSeconds < 60) return l10n.statsDurationSeconds(totalSeconds);
-  final minutes = totalSeconds ~/ 60;
-  if (minutes < 60) return l10n.statsDurationMinutes(minutes);
-  return l10n.statsDurationHours(minutes ~/ 60, minutes % 60);
 }

@@ -89,6 +89,8 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('存成歌单'), findsOneWidget);
+    expect(find.textContaining('至 截至今天'), findsNothing);
+    expect(find.textContaining('数据范围：'), findsOneWidget);
   });
 
   testWidgets('空年份：诚实空态，隐藏分享与歌单', (tester) async {

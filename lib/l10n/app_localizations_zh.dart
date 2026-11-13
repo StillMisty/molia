@@ -1901,7 +1901,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get annualReportListenedCaption => '全年收听';
 
   @override
-  String get annualReportStreakCaption => '天最长连续';
+  String get annualReportStreakCaption => '最长连续天数';
 
   @override
   String get annualReportTopTracks => '年度最常听';
@@ -1957,6 +1957,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get annualReportShareFailed => '海报没有生成，再试一次';
+
+  @override
+  String get annualReportLoadFailed => '报告没有加载出来';
 
   @override
   String get annualReportSavePlaylist => '存成歌单';
