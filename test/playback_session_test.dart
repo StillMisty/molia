@@ -1,13 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:molia/data/playback/playback_engine.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_module.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/domain/models/playback.dart';
+import 'package:molia/domain/models/playback_feel.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/models/play_mode.dart';
+import 'package:molia/playback/local_playback_service.dart';
+import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/providers/sleep_timer.dart';
+import 'package:molia/services/playback_feel_store.dart';
 import 'package:molia/services/playback_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -63,6 +70,92 @@ class _LoadingFacade extends FakePlaybackFacade {
     );
     final gate = this.gate;
     if (gate != null) await gate.future;
+  }
+}
+
+/// 最简播放器：真实 `LocalPlaybackService` 的淡变 / 暂停链路测试用。
+///
+/// 只实现服务用到的接口，不触碰 just_audio 平台通道；音量写入忽略，但
+/// 播放/暂停状态照常广播，让引擎发布快照。
+class _FadePlayer extends AudioPlayer {
+  final StreamController<PlayerState> _states =
+      StreamController<PlayerState>.broadcast();
+  final StreamController<Duration> _positions =
+      StreamController<Duration>.broadcast();
+  final StreamController<PlayerException> _errors =
+      StreamController<PlayerException>.broadcast();
+
+  bool _playing = false;
+  ProcessingState _processingState = ProcessingState.idle;
+  Duration _position = Duration.zero;
+
+  @override
+  bool get playing => _playing;
+
+  @override
+  ProcessingState get processingState => _processingState;
+
+  @override
+  Duration get position => _position;
+
+  @override
+  Duration? get duration => const Duration(seconds: 30);
+
+  @override
+  Stream<PlayerState> get playerStateStream => _states.stream;
+
+  @override
+  Stream<Duration> get positionStream => _positions.stream;
+
+  @override
+  Stream<PlayerException> get errorStream => _errors.stream;
+
+  @override
+  Future<Duration?> setAudioSource(
+    AudioSource audioSource, {
+    bool preload = true,
+    int? initialIndex,
+    Duration? initialPosition,
+  }) async {
+    _processingState = ProcessingState.ready;
+    return duration;
+  }
+
+  @override
+  Future<void> play() async {
+    if (_playing) return;
+    _playing = true;
+    _states.add(PlayerState(true, _processingState));
+  }
+
+  @override
+  Future<void> pause() async {
+    if (!_playing) return;
+    _playing = false;
+    _states.add(PlayerState(false, _processingState));
+  }
+
+  @override
+  Future<void> seek(Duration? position, {int? index}) async {
+    _position = position ?? Duration.zero;
+    _positions.add(_position);
+  }
+
+  @override
+  Future<void> setVolume(double volume) async {}
+
+  @override
+  Future<void> stop() async {
+    _playing = false;
+    _processingState = ProcessingState.idle;
+    _states.add(PlayerState(false, _processingState));
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _states.close();
+    await _positions.close();
+    await _errors.close();
   }
 }
 
@@ -332,6 +425,68 @@ void main() {
     expect(request.shuffleIndices, restoredOrder);
     expect(request.shuffleIndices, contains(request.startIndex));
     expect(backend.snapshot.value.mode, PlayMode.shuffle);
+  });
+
+  test('恢复态随机 + 证据：展示顺序与交给播放的顺序一致', () async {
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [for (var i = 0; i < 12; i++) _track('t$i')],
+        index: 4,
+        mode: PlayMode.shuffle,
+      ),
+    );
+
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(
+      facade: backend,
+      recentTrackIds: () async => {for (var i = 0; i < 12; i++) 'fake:t$i'},
+    );
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+
+    final restored = provider.snapshot;
+    final restoredOrder = [restored.currentIndex, ...restored.upNextIndices];
+    expect(restoredOrder, hasLength(12));
+    expect(restoredOrder.toSet(), {for (var i = 0; i < 12; i++) i});
+    expect(restoredOrder.first, 4, reason: '当前曲目仍置首');
+
+    await provider.skipToNext();
+    expect(backend.lastRequest?.shuffleIndices, restoredOrder);
+  });
+
+  test('恢复态智能随机关闭：有证据也生成均匀轮次', () async {
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [for (var i = 0; i < 12; i++) _track('t$i')],
+        index: 0,
+        mode: PlayMode.shuffle,
+      ),
+    );
+    // 设备本地已保存「智能随机」关闭；必须早于恢复态装载读取。
+    await PlaybackFeelStore().save(
+      fade: PlaybackFadePreset.ms200,
+      smartShuffle: false,
+    );
+
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(
+      facade: backend,
+      recentTrackIds: () async => {for (var i = 0; i < 12; i++) 'fake:t$i'},
+    );
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+
+    expect(provider.smartShuffleEnabled, isFalse);
+    expect(
+      provider.restoredRoundWeighted,
+      isFalse,
+      reason: '开关关闭时恢复态也不能生成加权轮次',
+    );
+
+    final restored = provider.snapshot;
+    final restoredOrder = [restored.currentIndex, ...restored.upNextIndices];
+    await provider.skipToNext();
+    expect(backend.lastRequest?.shuffleIndices, restoredOrder);
   });
 
   test('重启后恢复态仍可调整播放模式，恢复播放沿用所选模式', () async {
@@ -642,6 +797,91 @@ void main() {
     expect(session!.tracks, hasLength(2));
     expect(session.index, 0);
     expect(session.tracks[0].payload['songmid'], 'mid_a');
+  });
+
+  /// 真实淡变链路（服务 + 引擎 + 协调者）的最小装配。
+  Future<
+    ({
+      LocalPlaybackService service,
+      PlaybackEngine engine,
+      PlaybackSessionCoordinator session,
+      _RecordingSessionStore store,
+    })
+  >
+  buildFadeChain() async {
+    final player = _FadePlayer();
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async =>
+          PlayableStream(Uri.parse('file:///tmp/molia-session-fade.mp3')),
+      player: player,
+      fadeDuration: const Duration(milliseconds: 120),
+    );
+    addTearDown(service.dispose);
+    final engine = PlaybackEngine(service: service);
+    addTearDown(engine.dispose);
+    final store = _RecordingSessionStore();
+    final session = buildTestSessionCoordinator(
+      facade: engine,
+      sessionStore: store,
+      settings: SettingsRegistry(keys: kAllSettingsKeys),
+    );
+    addTearDown(session.dispose);
+
+    await engine.playTracks(
+      PlaybackRequest(tracks: [_track('a')], startIndex: 0),
+    );
+    await Future<void>.delayed(Duration.zero);
+    await session.pendingWrite;
+    await session.seekToPosition(const Duration(seconds: 7));
+    await session.pendingWrite;
+    store.saves.clear();
+    return (service: service, engine: engine, session: session, store: store);
+  }
+
+  test('淡变后暂停：会话只提交一次，冷启动恢复为暂停态', () async {
+    final chain = await buildFadeChain();
+
+    await chain.session.pause();
+    await chain.session.pendingWrite;
+
+    expect(chain.store.saves, hasLength(1), reason: '淡出结束后的暂停只落盘一次');
+    expect(chain.store.saves.single.position, const Duration(seconds: 7));
+
+    final restored = buildTestSessionCoordinator(
+      facade: FakePlaybackFacade(),
+      settings: SettingsRegistry(keys: kAllSettingsKeys),
+    );
+    addTearDown(restored.dispose);
+    expect(await restored.load(), isTrue);
+    expect(restored.displaySnapshot.current?.title, 'Title a');
+    expect(restored.displaySnapshot.isPlaying, isFalse);
+    expect(restored.position.value, const Duration(seconds: 7));
+  });
+
+  test('淡变进行中不写会话、不改快照、不推进度', () async {
+    final chain = await buildFadeChain();
+    final snapshotBefore = chain.engine.snapshot.value;
+    final positionBefore = chain.engine.position.value;
+    var snapshotNotifies = 0;
+    var positionNotifies = 0;
+    void onSnapshot() => snapshotNotifies++;
+    void onPosition() => positionNotifies++;
+    chain.engine.snapshot.addListener(onSnapshot);
+    chain.engine.position.addListener(onPosition);
+    addTearDown(() {
+      chain.engine.snapshot.removeListener(onSnapshot);
+      chain.engine.position.removeListener(onPosition);
+    });
+
+    chain.engine.startSleepFade(const Duration(seconds: 1));
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+
+    expect(chain.store.saves, isEmpty);
+    expect(chain.engine.snapshot.value, snapshotBefore);
+    expect(chain.engine.position.value, positionBefore);
+    expect(snapshotNotifies, 0);
+    expect(positionNotifies, 0);
+    chain.engine.cancelSleepFade();
   });
 
   test('定时关闭到点：经命令面暂停并在返回前提交会话', () async {

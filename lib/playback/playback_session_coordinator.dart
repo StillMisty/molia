@@ -220,6 +220,10 @@ class PlaybackSessionCoordinator
       _restoredSession?.current != null &&
       _facade.snapshot.value.current == null;
 
+  /// 恢复态本轮洗牌是否按权重生成（测试 / 诊断用）。
+  bool get restoredRoundWeighted =>
+      _restoredShuffleOrder?.isWeightedRound ?? false;
+
   /// 启动时是否恢复上次播放（设置页开关）。
   bool get restoreSessionEnabled => _restoreSessionEnabled;
 

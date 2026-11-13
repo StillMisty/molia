@@ -388,6 +388,8 @@ PlaybackSessionCoordinator buildTestSessionCoordinator({
   PlaybackSessionStore? sessionStore,
   PlaybackObserver? observer,
   PlaybackPowerPolicy? powerPolicy,
+  Future<Set<String>> Function()? recentTrackIds,
+  bool Function()? smartShuffleEnabled,
 }) {
   return PlaybackSessionCoordinator(
     facade: facade,
@@ -395,6 +397,8 @@ PlaybackSessionCoordinator buildTestSessionCoordinator({
     settings: settings ?? SettingsRegistry(keys: kAllSettingsKeys),
     onRestoredTrack: observer?.showRestoredTrack,
     powerPolicy: powerPolicy,
+    recentTrackIds: recentTrackIds,
+    smartShuffleEnabled: smartShuffleEnabled,
   );
 }
 
@@ -408,6 +412,8 @@ PlaybackProvider buildTestPlaybackProvider({
   Future<String?> Function(Track track)? artworkResolver,
   Duration volumePersistDebounce = const Duration(milliseconds: 400),
   PlaybackFeelStore? feelStore,
+  Future<Set<String>> Function()? recentTrackIds,
+  bool Function()? smartShuffleEnabled,
 }) {
   final playbackFacade = facade ?? FakePlaybackFacade();
   // 设置注册表一处实例：provider 的重载钩子与协调者的读取同源（组合根口径）。
@@ -417,13 +423,19 @@ PlaybackProvider buildTestPlaybackProvider({
     libraryRepository: libraryRepository,
     artworkResolver: artworkResolver,
   );
+  // 与组合根一致：智能随机开关读 provider 的当前值（provider 在本函数末尾
+  // 构造，协调者的 load 在异步读库之后才真正用到这个闭包）。
+  late final PlaybackProvider provider;
   final session = buildTestSessionCoordinator(
     facade: playbackFacade,
     sessionStore: sessionStore,
     settings: registry,
     observer: observer,
+    recentTrackIds: recentTrackIds,
+    smartShuffleEnabled:
+        smartShuffleEnabled ?? () => provider.smartShuffleEnabled,
   );
-  final provider = PlaybackProvider(
+  provider = PlaybackProvider(
     facade: playbackFacade,
     messenger: messenger ?? FakeMessenger(),
     catalogService: catalogService,

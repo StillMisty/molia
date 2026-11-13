@@ -237,6 +237,9 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 洗牌排列的内容版本：快照投影缓存键的一部分（轮末重洗也会自增）。
   int get shuffleOrderRevision => _shuffleOrder.revision;
 
+  /// 当前这一轮是否按「少放最近听过的」权重生成（测试 / 诊断用）。
+  bool get shuffleRoundWeighted => _shuffleOrder.isWeightedRound;
+
   /// 已播放顺序（最近一首在后，栈顶供 previous 弹出）；存队列下标，
   /// 队列仅在 `playTracks` 时整体替换并同步清空。
   final PlaybackOrder _order = PlaybackOrder();
@@ -1413,6 +1416,9 @@ class LocalPlaybackService extends ChangeNotifier {
   }
 
   /// 智能随机开关：只影响下一次生成轮次（进行中的排列不重排）。
+  ///
+  /// 轮末重洗时由 [_commitNextIndex] 重新计算当前权重，因此关闭后下一轮
+  /// 立即回到均匀洗牌，不需要等重新装载队列。
   void setSmartShuffleEnabled(bool enabled) {
     _smartShuffleEnabled = enabled;
   }
@@ -1518,6 +1524,7 @@ class LocalPlaybackService extends ChangeNotifier {
   Future<bool> _prepareFadeIn() async {
     _cancelActiveRamp();
     _sleepFadeActive = false;
+    _pauseIntentPending = false;
     final base = _baseVolume;
     if (base <= 0 || _fadeDuration < kMinimumAudibleFade) {
       _envelope = 1.0;
@@ -1534,6 +1541,7 @@ class LocalPlaybackService extends ChangeNotifier {
   Future<void> _resetEnvelopeForSource() async {
     _cancelActiveRamp();
     _sleepFadeActive = false;
+    _pauseIntentPending = false;
     _envelope = 1.0;
     await _enqueueVolumeWrite(_baseVolume);
   }
@@ -1541,6 +1549,9 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 定时关闭的专用淡出：只降音量，不暂停（暂停由命令面单独下发）。
   void startSleepFade(Duration duration) {
     if (_playerDisposed || _baseVolume <= 0) return;
+    // 定时淡出会取代在途的暂停淡出：清掉暂停意图，否则下一次播放键会被
+    // 误判成「反向淡入」。
+    _pauseIntentPending = false;
     _sleepFadeActive = true;
     unawaited(
       _runEnvelope(
@@ -1556,6 +1567,8 @@ class LocalPlaybackService extends ChangeNotifier {
   void cancelSleepFade({bool restore = true}) {
     if (!_sleepFadeActive) return;
     _sleepFadeActive = false;
+    // 撤销淡出同样是「取代暂停意图」：后续播放键必须按正常播放态判断。
+    _pauseIntentPending = false;
     _cancelActiveRamp();
     if (restore) {
       // 定时取消 / 后退 seek：把音量还给用户，但不打断正在播放的曲目。
@@ -1646,6 +1659,8 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 系统媒体「停止」与用户停止都属于可感知的动作：先按用户淡变时长收声，
   /// 再真正 stop。被新的播放意图抢走时（快速播放）以最新意图为准，不再停。
   Future<void> stop({bool clear = true}) async {
+    // 停止是独立意图：在途的暂停淡出 / 睡眠淡出都由本次停止接管。
+    _pauseIntentPending = false;
     final shouldFade =
         !_playerDisposed &&
         _player.playing &&
@@ -1707,7 +1722,8 @@ class LocalPlaybackService extends ChangeNotifier {
     if (_mode == PlayMode.shuffle) {
       if (_queue.length == 1) return _currentIndex;
       _ensureShuffleOrder();
-      return _shuffleOrder.next(_currentIndex);
+      // 轮末重洗必须用「当前」开关与证据：权重不在排列里跨轮缓存。
+      return _shuffleOrder.next(_currentIndex, weights: _shuffleWeights());
     }
     return nextQueueIndex(
           _currentIndex,
@@ -1893,6 +1909,7 @@ class LocalPlaybackService extends ChangeNotifier {
     // 退出不走淡变：包络立即取消，有界收尾不能被 200ms 音量循环拖住。
     _cancelActiveRamp();
     _sleepFadeActive = false;
+    _pauseIntentPending = false;
     // 退出路径不经过 dispose：在途预取 / 后台缓存写入都在这里收掉，避免
     // 进程退出时留下 `.predl` 半成品。
     _nextTrackPreloader?.cancelAll();
@@ -1915,6 +1932,7 @@ class LocalPlaybackService extends ChangeNotifier {
     _playRequestId++;
     _cancelActiveRamp();
     _sleepFadeActive = false;
+    _pauseIntentPending = false;
     _stopAfterCurrentTrack = false;
     _powerPolicy.removeListener(_syncPositionSampling);
     _stopPositionSampleTimer();
