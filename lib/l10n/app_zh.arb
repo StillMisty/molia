@@ -2420,5 +2420,43 @@
         "type": "int"
       }
     }
-  }
+  },
+  "collectionModeSongs": "歌曲",
+  "collectionModeAlbums": "专辑",
+  "collectionModeArtists": "歌手",
+  "unknownAlbum": "未知专辑",
+  "smartListsSection": "智能列表",
+  "smartRecentlyAdded": "最近添加",
+  "smartRecentlyPlayed": "最近播放",
+  "smartMostPlayed": "最常播放",
+  "smartNeverPlayed": "从未播放",
+  "smartLocalOnly": "仅本地",
+  "smartDownloaded": "已下载",
+  "smartMissingFiles": "文件不见",
+  "smartMetricPlayCount": "按播放次数",
+  "smartMetricListeningTime": "按收听时长",
+  "smartEmpty": "这里还没有歌曲",
+  "browseEmptyTitle": "这里还没有专辑或歌手",
+  "browseEmptyBody": "收藏、列表和本地歌曲里的内容会出现在这里",
+  "browseSearchEmpty": "没有匹配的专辑或歌手",
+  "browseSelectHint": "选择一个专辑或歌手",
+  "duplicateVersions": "{count} 个版本",
+  "duplicateShowAll": "显示全部版本",
+  "missingFilesCount": "{count} 个文件不见",
+  "localFileCheckFiles": "检查文件",
+  "@duplicateVersions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@missingFilesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backButton": "返回"
 }

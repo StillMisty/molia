@@ -5109,4 +5109,81 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get localTitleFailed => 'Didn\'t change. Try again.';
+
+  @override
+  String get collectionModeSongs => 'Songs';
+
+  @override
+  String get collectionModeAlbums => 'Albums';
+
+  @override
+  String get collectionModeArtists => 'Artists';
+
+  @override
+  String get unknownAlbum => 'Unknown album';
+
+  @override
+  String get smartListsSection => 'Smart lists';
+
+  @override
+  String get smartRecentlyAdded => 'Recently added';
+
+  @override
+  String get smartRecentlyPlayed => 'Recently played';
+
+  @override
+  String get smartMostPlayed => 'Most played';
+
+  @override
+  String get smartNeverPlayed => 'Never played';
+
+  @override
+  String get smartLocalOnly => 'Local only';
+
+  @override
+  String get smartDownloaded => 'Downloaded';
+
+  @override
+  String get smartMissingFiles => 'Missing files';
+
+  @override
+  String get smartMetricPlayCount => 'By plays';
+
+  @override
+  String get smartMetricListeningTime => 'By listening time';
+
+  @override
+  String get smartEmpty => 'No songs here yet';
+
+  @override
+  String get browseEmptyTitle => 'No albums or artists yet';
+
+  @override
+  String get browseEmptyBody =>
+      'Music from favorites, playlists and local files shows up here';
+
+  @override
+  String get browseSearchEmpty => 'No matching albums or artists';
+
+  @override
+  String get browseSelectHint => 'Pick an album or artist';
+
+  @override
+  String duplicateVersions(int count) {
+    return '$count versions';
+  }
+
+  @override
+  String get duplicateShowAll => 'Show all versions';
+
+  @override
+  String missingFilesCount(int count) {
+    return '$count missing files';
+  }
+
+  @override
+  String get localFileCheckFiles => 'Check files';
+
+  @override
+  String get backButton => 'Back';
 }

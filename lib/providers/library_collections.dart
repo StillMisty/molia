@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/models/library.dart';
+import '../domain/models/smart_lists.dart';
 
 /// 合集（收藏 / 播放历史 / 下载记录 / 自建列表）的哨兵、顺序、选择与
 /// 滚动位置策略。
@@ -25,6 +26,23 @@ class LibraryCollections {
 
   /// 下载记录伪合集哨兵（同上；数据来自 `DownloadRecords`，不落列表表）。
   static const int downloadsSentinel = -4;
+
+  /// 智能列表哨兵起点（-5 起，按 [SmartListIds.all] 顺序；不落列表表）。
+  static const int _smartSentinelBase = -5;
+
+  static int smartSentinelFor(String id) {
+    final index = SmartListIds.all.indexOf(id);
+    return index < 0 ? _smartSentinelBase : _smartSentinelBase - index;
+  }
+
+  static String? smartIdFor(int sentinel) {
+    if (sentinel > _smartSentinelBase) return null;
+    final index = _smartSentinelBase - sentinel;
+    if (index < 0 || index >= SmartListIds.all.length) return null;
+    return SmartListIds.all[index];
+  }
+
+  static bool isSmartSentinel(int id) => smartIdFor(id) != null;
 
   static const String orderKey = 'favorites_collection_order';
   static const String favoritesOrderKey = 'favorites';
@@ -61,6 +79,7 @@ class LibraryCollections {
   }) {
     if (selected == historySentinel) return historySentinel;
     if (selected == downloadsSentinel) return downloadsSentinel;
+    if (isSmartSentinel(selected)) return selected;
     if (selected != unset && selected != favoritesSentinel) {
       if (playlists.any((playlist) => playlist.id == selected)) return selected;
     } else if (selected == favoritesSentinel) {

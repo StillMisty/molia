@@ -5,6 +5,8 @@
 /// （PlaybackProvider / LibraryProvider / SearchProvider …），顺序不能随意调整。
 library;
 
+import 'dart:async';
+
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 
@@ -19,7 +21,9 @@ import '../../providers/annual_report_provider.dart';
 import '../../providers/comments_provider.dart';
 import '../../providers/diagnostics_provider.dart';
 import '../../providers/discover_provider.dart';
+import '../../providers/collection_mode.dart';
 import '../../providers/library_provider.dart';
+import '../../providers/local_library_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../providers/play_statistics_provider.dart';
 import '../../providers/search_provider.dart';
@@ -80,6 +84,14 @@ List<SingleChildWidget> buildAppProviders({
   final catalogService = catalog.catalogService;
   final playbackProvider = playback.playbackProvider;
   final downloadService = local.downloadService;
+  final localLibraryProvider = LocalLibraryProvider(
+    repository: library.libraryRepository,
+    downloads: downloadService.records,
+    library: libraryProvider,
+    statistics: library.playStatisticsRepository,
+  );
+  final collectionMode = CollectionModeStore();
+  unawaited(collectionMode.load());
   // “另存目录”服务：下载设置里的桌面自选目录同时作用于导出；未设置时用
   // 各平台公共下载目录。页面经 Provider 读取，测试注入 fake。
   final saveAs = createSaveAs(customRoot: () => local.downloadSettings.saveDir);
@@ -128,6 +140,12 @@ List<SingleChildWidget> buildAppProviders({
     ChangeNotifierProvider<SearchHistoryStore>.value(value: searchHistoryStore),
     // 资料库（收藏/历史/列表）：顶层创建（AI 推歌读取收藏作为反馈）。
     ChangeNotifierProvider.value(value: libraryProvider),
+    // 曲库浏览 / 智能列表：聚合读取缓存（设备本地，不同步）。
+    ChangeNotifierProvider<LocalLibraryProvider>.value(
+      value: localLibraryProvider,
+    ),
+    // 歌曲 / 专辑 / 歌手模式：设备本地 UI 状态。
+    ChangeNotifierProvider<CollectionModeStore>.value(value: collectionMode),
     // 自定义封面（每曲 + 默认）：歌曲信息页 / 设置页 / 封面选择弹层读取。
     Provider<CustomCoverStore>.value(value: local.customCovers),
     // 换源：跨音源搜索 + 原位替换 + 队列跟随（收藏页 / 播放页入口）。

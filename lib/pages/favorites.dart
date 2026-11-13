@@ -13,13 +13,17 @@ import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/collection_actions.dart';
+import '../providers/collection_mode.dart';
 import '../providers/collection_presenter.dart';
 import '../providers/collection_session.dart';
 import '../providers/discover_provider.dart';
 import '../providers/library_collections.dart';
 import '../providers/library_outcome.dart';
 import '../providers/library_provider.dart';
+import '../providers/local_library_provider.dart';
 import '../providers/local_songs_collection.dart';
+import '../domain/models/library_browse.dart';
+import '../domain/models/smart_lists.dart';
 import '../providers/lyrics_provider.dart';
 import '../pages/source_swap_page.dart';
 import '../services/cache_service.dart';
@@ -39,9 +43,11 @@ import '../utils/scroll_to_top.dart';
 import '../utils/sync_format.dart';
 import '../widgets/app_search_bar.dart';
 import '../widgets/collection_handoff.dart';
+import '../widgets/collection_mode_switch.dart';
 import '../widgets/collection_picker.dart';
 import '../widgets/collection_scroll_bookkeeping.dart';
 import '../widgets/collection_track_list.dart';
+import '../widgets/library_browse_view.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/icon_swap.dart';
@@ -68,6 +74,27 @@ TrackRowColumnSpec _columnSpec(CollectionColumnLayout layout) =>
       CollectionColumnLayout.history => TrackRowColumnSpec.history,
       CollectionColumnLayout.standard => TrackRowColumnSpec.standard,
     };
+
+/// 智能列表展示名（弹层与合集标题共用）。
+Map<String, String> _smartListNames(AppLocalizations l10n) => {
+  SmartListIds.recentlyAdded: l10n.smartRecentlyAdded,
+  SmartListIds.recentlyPlayed: l10n.smartRecentlyPlayed,
+  SmartListIds.mostPlayed: l10n.smartMostPlayed,
+  SmartListIds.neverPlayed: l10n.smartNeverPlayed,
+  SmartListIds.localOnly: l10n.smartLocalOnly,
+  SmartListIds.downloaded: l10n.smartDownloaded,
+  SmartListIds.missingFiles: l10n.smartMissingFiles,
+};
+
+IconData _smartListIcon(String id) => switch (id) {
+  SmartListIds.recentlyAdded => Icons.new_releases_rounded,
+  SmartListIds.recentlyPlayed => Icons.history_rounded,
+  SmartListIds.mostPlayed => Icons.trending_up_rounded,
+  SmartListIds.neverPlayed => Icons.music_off_rounded,
+  SmartListIds.localOnly => Icons.folder_special_rounded,
+  SmartListIds.downloaded => Icons.download_done_rounded,
+  _ => Icons.report_gmailerrorred_rounded,
+};
 
 /// 「收藏」页：默认收藏（♥）与已导入/自建列表、播放历史、本地歌曲的
 /// 统一管理入口。
@@ -450,7 +477,30 @@ class _FavoritesPageState extends State<FavoritesPage> {
       final entry = available.remove(key);
       if (entry != null) ordered.add(entry);
     }
-    return ordered;
+    final localLibrary = context.read<LocalLibraryProvider?>();
+    final smartNames = _smartListNames(l10n);
+    return [
+      ...ordered,
+      CollectionPickerEntry(
+        key: 'smart:header',
+        id: LibraryCollections.unset,
+        name: l10n.smartListsSection,
+        icon: Icons.auto_awesome_rounded,
+        trackCount: 0,
+        selected: false,
+        isHeader: true,
+      ),
+      for (final id in SmartListIds.all)
+        CollectionPickerEntry(
+          key: id,
+          id: LibraryCollections.smartSentinelFor(id),
+          name: smartNames[id] ?? id,
+          icon: _smartListIcon(id),
+          trackCount: localLibrary?.smartRows[id]?.length ?? 0,
+          selected: selected == LibraryCollections.smartSentinelFor(id),
+          isSmart: true,
+        ),
+    ];
   }
 
   /// 打开合集切换弹层：点行切换、新建/重命名/删除、导入收藏、
@@ -813,7 +863,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
           favorites: l10n.favoritesPlaylistName,
           history: l10n.libraryHistory,
           localSongs: l10n.libraryLocalSongs,
+          smartLists: _smartListNames(l10n),
         ),
+        smartRows:
+            context.watch<LocalLibraryProvider?>()?.smartRows ?? const {},
         query: _searchController.text,
         downloads: _downloadsSnapshot,
         cacheRevision: _cacheService?.revision.value ?? -1,
@@ -821,6 +874,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
     final view = sessionView.view;
     final reorderActive = sessionView.reorderActive;
+    final mode =
+        context.watch<CollectionModeStore?>()?.mode ?? CollectionMode.songs;
+    final localLibrary = context.watch<LocalLibraryProvider?>();
+    final browseIndex = localLibrary?.snapshot?.index;
 
     // 合集切换只有标题行弹层一个入口：条目不额外解析一份，弹层打开时按
     // 当下 provider 状态现算。
@@ -842,6 +899,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           ),
           selection: _buildSelectionBar(context, l10n, view),
         ),
+        _buildModeSwitch(context, l10n, mode),
         Expanded(
           child: sessionView.isLoading
               ? const Center(child: M3ELoadingIndicator())
@@ -852,6 +910,35 @@ class _FavoritesPageState extends State<FavoritesPage> {
       ],
     );
 
+    final twoPane = context.layoutType(ResponsivePageType.browse).preferTwoPane;
+    final body = mode == CollectionMode.songs
+        ? listColumn
+        : _buildBrowsePage(
+            context,
+            l10n,
+            mode: mode,
+            index: browseIndex,
+            twoPane: twoPane,
+          );
+    final content = twoPane && mode == CollectionMode.songs
+        ? Row(
+            children: [
+              SizedBox(
+                width: 280,
+                child: _buildCollectionSidePane(
+                  context,
+                  l10n,
+                  provider,
+                  playlists,
+                  favoritesId,
+                  view.selectedId,
+                ),
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(child: body),
+            ],
+          )
+        : body;
     return PopScope(
       canPop: !_selecting && !_session.searching && !reorderActive,
       onPopInvokedWithResult: (didPop, _) {
@@ -869,7 +956,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       child: ResponsivePageContainer(
         pageType: ResponsivePageType.browse,
         alignment: Alignment.topCenter,
-        child: listColumn,
+        child: content,
       ),
     );
   }
@@ -895,6 +982,202 @@ class _FavoritesPageState extends State<FavoritesPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildModeSwitch(
+    BuildContext context,
+    AppLocalizations l10n,
+    CollectionMode mode,
+  ) {
+    final horizontalPadding = context
+        .layoutType(ResponsivePageType.browse)
+        .horizontalPadding;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 0, horizontalPadding, 8),
+      child: CollectionModeSwitch(
+        mode: mode,
+        onChanged: (next) {
+          unawaited(context.read<CollectionModeStore?>()?.setMode(next));
+        },
+      ),
+    );
+  }
+
+  /// 展开宽度的 Songs 左栏：合集清单（收藏 / 历史 / 本地 / 智能 / 列表）。
+  Widget _buildCollectionSidePane(
+    BuildContext context,
+    AppLocalizations l10n,
+    LibraryProvider provider,
+    List<PlaylistInfo> playlists,
+    int? favoritesId,
+    int selectedId,
+  ) {
+    final entries = _collectionEntries(
+      l10n,
+      provider,
+      playlists,
+      favoritesId,
+      selectedId,
+      _downloadRecords,
+    );
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: entries.length,
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        if (entry.isHeader) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Text(
+              entry.name,
+              style: context.typeScale.labelMedium.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          );
+        }
+        return M3EListItem(
+          leading: Icon(entry.icon),
+          headline: entry.name,
+          trailingText: entry.isSmart ? null : '${entry.trackCount}',
+          selected: entry.selected,
+          onTap: () => _selectCollection(entry.id),
+        );
+      },
+    );
+  }
+
+  Widget _buildBrowsePage(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required CollectionMode mode,
+    required LibraryBrowseIndex? index,
+    required bool twoPane,
+  }) {
+    final query = _searchController.text;
+    final albums = index?.albums ?? const <AlbumGroup>[];
+    final artists = index?.artists ?? const <ArtistGroup>[];
+    final groups = mode == CollectionMode.albums
+        ? [
+            for (final album in albums)
+              LibraryBrowseGroup(
+                key: album.sortKey,
+                title: album.album.isEmpty ? l10n.unknownAlbum : album.album,
+                subtitle: album.primaryArtist,
+                coverUrl: _firstCover(album.tracks),
+                tracks: album.tracks,
+              ),
+          ]
+        : [
+            for (final artist in artists)
+              LibraryBrowseGroup(
+                key: artist.sortKey,
+                title: artist.artist.isEmpty
+                    ? l10n.unknownArtist
+                    : artist.artist,
+                subtitle: '',
+                icon: Icons.person_rounded,
+                tracks: artist.tracks,
+              ),
+          ];
+    return Column(
+      children: [
+        _buildModeSwitch(context, l10n, mode),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            context.layoutType(ResponsivePageType.browse).horizontalPadding,
+            0,
+            context.layoutType(ResponsivePageType.browse).horizontalPadding,
+            8,
+          ),
+          child: AppSearchBar(
+            controller: _searchController,
+            focusNode: _searchFocus,
+            hintText: l10n.favoritesSearchHint,
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+        Expanded(
+          child: LibraryBrowseView(
+            groups: groups,
+            modeName: mode.name,
+            query: query,
+            emptyTitle: l10n.browseEmptyTitle,
+            emptyBody: l10n.browseEmptyBody,
+            searchEmpty: l10n.browseSearchEmpty,
+            selectHint: l10n.browseSelectHint,
+            resetSignature:
+                '${mode.name}|${_searchController.text}|${_session.sort.name}',
+            twoPane: twoPane,
+            isFavorite: (track) => context.read<LibraryProvider>().isFavorite(
+              track.sourceKey,
+              track.songId,
+            ),
+            onPlay: (group, tracks, {bool shuffle = false}) => _playBrowse(
+              tracks,
+              contextName: group.subtitle.isEmpty
+                  ? group.title
+                  : '${group.title} · ${group.subtitle}',
+              shuffle: shuffle,
+            ),
+            onPlayTrack: (track) =>
+                _playBrowse([track], contextName: track.title),
+            onAdd: _addBrowseToLibrary,
+            onToggleFavorite: (track) async {
+              await _actions.toggleFavorite([
+                TrackCollectionRow(track.toPlaylistTrack(addedAt: 0)),
+              ]);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  String? _firstCover(List<BrowseTrack> tracks) {
+    for (final track in tracks) {
+      final url = track.coverUrl;
+      if (url != null && url.isNotEmpty) return url;
+    }
+    return null;
+  }
+
+  Future<void> _playBrowse(
+    List<BrowseTrack> tracks, {
+    required String contextName,
+    bool shuffle = false,
+    int startIndex = 0,
+  }) async {
+    if (tracks.isEmpty) return;
+    final library = context.read<LibraryProvider>();
+    final handoff = TrackHandoffCollectionHandoff(
+      context,
+      random: widget.shuffleRandom,
+    );
+    await handoff.play(
+      [
+        for (final track in tracks)
+          library.trackFromPlaylistTrack(
+            track.toPlaylistTrack(addedAt: 0, playlistId: 0),
+          ),
+      ],
+      startIndex: startIndex.clamp(0, tracks.length - 1),
+      shuffle: shuffle,
+      contextName: contextName,
+    );
+  }
+
+  Future<void> _addBrowseToLibrary(List<BrowseTrack> tracks) async {
+    if (tracks.isEmpty) return;
+    final handoff = TrackHandoffCollectionHandoff(context);
+    await handoff.addToLibrary(
+      [
+        for (final track in tracks)
+          track.toPlaylistTrack(addedAt: 0, playlistId: 0),
+      ],
+      includeFavorites: true,
+      includeHistory: false,
     );
   }
 
@@ -997,6 +1280,34 @@ class _FavoritesPageState extends State<FavoritesPage> {
               ),
             ),
             const SizedBox(width: 8),
+            if (view.isSmartList &&
+                view.identity.smartListId == SmartListIds.mostPlayed)
+              Builder(
+                builder: (context) {
+                  final local = context.watch<LocalLibraryProvider?>();
+                  final byTime =
+                      local?.mostPlayedMetric == SmartListMetric.listeningTime;
+                  return M3EIconButton(
+                    key: const Key('mostPlayedMetricSwitch'),
+                    variant: M3EIconButtonVariant.standard,
+                    semanticLabel: byTime
+                        ? l10n.smartMetricListeningTime
+                        : l10n.smartMetricPlayCount,
+                    icon: Icon(
+                      byTime
+                          ? Icons.schedule_rounded
+                          : Icons.format_list_numbered_rounded,
+                    ),
+                    onPressed: local == null
+                        ? null
+                        : () => local.setMostPlayedMetric(
+                            byTime
+                                ? SmartListMetric.playCount
+                                : SmartListMetric.listeningTime,
+                          ),
+                  );
+                },
+              ),
             M3EIconButton(
               variant: M3EIconButtonVariant.standard,
               semanticLabel: l10n.shufflePlay,
@@ -1445,7 +1756,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
               )
             : cachedTrailing,
         position: calculateCardPosition(index, view.visibleCount),
-        onTap: reorderActive ? null : () => _onRowTap(view, index),
+        onTap: reorderActive || _missingSmartRow(view, row)
+            ? null
+            : () => _onRowTap(view, index),
         onTapWithModifiers: (reorderActive || !isDesktopPlatform())
             ? null
             : (ctrl, shift) => _onRowTap(view, index, ctrl: ctrl, shift: shift),
@@ -1471,11 +1784,20 @@ class _FavoritesPageState extends State<FavoritesPage> {
       specs: _session.rowActionsFor(row, view),
       wiring: _actionWiring(context, view, row),
     );
+    // 智能列表行只保留播放 / 收藏 / 加入列表（文件不见再加定位 / 移除），
+    // 不追加下载 / 评论等在线动作。
+    if (view.isSmartList) return primary;
     return mergeRowActions(
       primary,
       trackCommonActions(context, _domainTrackOf(row)),
     );
   }
+
+  bool _missingSmartRow(CollectionView view, CollectionRow row) =>
+      view.isSmartList &&
+      view.identity.smartListId == SmartListIds.missingFiles &&
+      row is LocalSongCollectionRow &&
+      row.song.isMissing;
 
   /// 合集行 → 领域曲目（公共动作的能力位 / 平台 id 需要领域形状）。
   ///
@@ -1665,14 +1987,18 @@ class _FavoritesPageState extends State<FavoritesPage> {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: EmptyState(
-          icon: view.isHistory
+          icon: view.isSmartList
+              ? Icons.auto_awesome_rounded
+              : view.isHistory
               ? Icons.history_rounded
               : view.isLocalSongs
               ? Icons.library_music_rounded
               : view.isFavorites
               ? Icons.favorite_border_rounded
               : Icons.queue_music_rounded,
-          message: view.isHistory
+          message: view.isSmartList
+              ? l10n.smartEmpty
+              : view.isHistory
               ? l10n.historyEmpty
               : view.isLocalSongs
               ? l10n.localSongsEmpty

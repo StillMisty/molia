@@ -2816,5 +2816,43 @@
         "type": "int"
       }
     }
-  }
+  },
+  "collectionModeSongs": "Songs",
+  "collectionModeAlbums": "Albums",
+  "collectionModeArtists": "Artists",
+  "unknownAlbum": "Unknown album",
+  "smartListsSection": "Smart lists",
+  "smartRecentlyAdded": "Recently added",
+  "smartRecentlyPlayed": "Recently played",
+  "smartMostPlayed": "Most played",
+  "smartNeverPlayed": "Never played",
+  "smartLocalOnly": "Local only",
+  "smartDownloaded": "Downloaded",
+  "smartMissingFiles": "Missing files",
+  "smartMetricPlayCount": "By plays",
+  "smartMetricListeningTime": "By listening time",
+  "smartEmpty": "No songs here yet",
+  "browseEmptyTitle": "No albums or artists yet",
+  "browseEmptyBody": "Music from favorites, playlists and local files shows up here",
+  "browseSearchEmpty": "No matching albums or artists",
+  "browseSelectHint": "Pick an album or artist",
+  "duplicateVersions": "{count} versions",
+  "duplicateShowAll": "Show all versions",
+  "missingFilesCount": "{count} missing files",
+  "localFileCheckFiles": "Check files",
+  "@duplicateVersions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@missingFilesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backButton": "Back"
 }

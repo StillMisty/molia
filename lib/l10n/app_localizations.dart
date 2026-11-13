@@ -9093,6 +9093,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Didn\'t change. Try again.'**
   String get localTitleFailed;
+
+  /// No description provided for @collectionModeSongs.
+  ///
+  /// In en, this message translates to:
+  /// **'Songs'**
+  String get collectionModeSongs;
+
+  /// No description provided for @collectionModeAlbums.
+  ///
+  /// In en, this message translates to:
+  /// **'Albums'**
+  String get collectionModeAlbums;
+
+  /// No description provided for @collectionModeArtists.
+  ///
+  /// In en, this message translates to:
+  /// **'Artists'**
+  String get collectionModeArtists;
+
+  /// No description provided for @unknownAlbum.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown album'**
+  String get unknownAlbum;
+
+  /// No description provided for @smartListsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Smart lists'**
+  String get smartListsSection;
+
+  /// No description provided for @smartRecentlyAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Recently added'**
+  String get smartRecentlyAdded;
+
+  /// No description provided for @smartRecentlyPlayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Recently played'**
+  String get smartRecentlyPlayed;
+
+  /// No description provided for @smartMostPlayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Most played'**
+  String get smartMostPlayed;
+
+  /// No description provided for @smartNeverPlayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Never played'**
+  String get smartNeverPlayed;
+
+  /// No description provided for @smartLocalOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Local only'**
+  String get smartLocalOnly;
+
+  /// No description provided for @smartDownloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded'**
+  String get smartDownloaded;
+
+  /// No description provided for @smartMissingFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing files'**
+  String get smartMissingFiles;
+
+  /// No description provided for @smartMetricPlayCount.
+  ///
+  /// In en, this message translates to:
+  /// **'By plays'**
+  String get smartMetricPlayCount;
+
+  /// No description provided for @smartMetricListeningTime.
+  ///
+  /// In en, this message translates to:
+  /// **'By listening time'**
+  String get smartMetricListeningTime;
+
+  /// No description provided for @smartEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No songs here yet'**
+  String get smartEmpty;
+
+  /// No description provided for @browseEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No albums or artists yet'**
+  String get browseEmptyTitle;
+
+  /// No description provided for @browseEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Music from favorites, playlists and local files shows up here'**
+  String get browseEmptyBody;
+
+  /// No description provided for @browseSearchEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching albums or artists'**
+  String get browseSearchEmpty;
+
+  /// No description provided for @browseSelectHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick an album or artist'**
+  String get browseSelectHint;
+
+  /// No description provided for @duplicateVersions.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} versions'**
+  String duplicateVersions(int count);
+
+  /// No description provided for @duplicateShowAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all versions'**
+  String get duplicateShowAll;
+
+  /// No description provided for @missingFilesCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} missing files'**
+  String missingFilesCount(int count);
+
+  /// No description provided for @localFileCheckFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Check files'**
+  String get localFileCheckFiles;
+
+  /// No description provided for @backButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get backButton;
 }
 
 class _AppLocalizationsDelegate

@@ -4891,4 +4891,80 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get localTitleFailed => '没有改成，请再试一次';
+
+  @override
+  String get collectionModeSongs => '歌曲';
+
+  @override
+  String get collectionModeAlbums => '专辑';
+
+  @override
+  String get collectionModeArtists => '歌手';
+
+  @override
+  String get unknownAlbum => '未知专辑';
+
+  @override
+  String get smartListsSection => '智能列表';
+
+  @override
+  String get smartRecentlyAdded => '最近添加';
+
+  @override
+  String get smartRecentlyPlayed => '最近播放';
+
+  @override
+  String get smartMostPlayed => '最常播放';
+
+  @override
+  String get smartNeverPlayed => '从未播放';
+
+  @override
+  String get smartLocalOnly => '仅本地';
+
+  @override
+  String get smartDownloaded => '已下载';
+
+  @override
+  String get smartMissingFiles => '文件不见';
+
+  @override
+  String get smartMetricPlayCount => '按播放次数';
+
+  @override
+  String get smartMetricListeningTime => '按收听时长';
+
+  @override
+  String get smartEmpty => '这里还没有歌曲';
+
+  @override
+  String get browseEmptyTitle => '这里还没有专辑或歌手';
+
+  @override
+  String get browseEmptyBody => '收藏、列表和本地歌曲里的内容会出现在这里';
+
+  @override
+  String get browseSearchEmpty => '没有匹配的专辑或歌手';
+
+  @override
+  String get browseSelectHint => '选择一个专辑或歌手';
+
+  @override
+  String duplicateVersions(int count) {
+    return '$count 个版本';
+  }
+
+  @override
+  String get duplicateShowAll => '显示全部版本';
+
+  @override
+  String missingFilesCount(int count) {
+    return '$count 个文件不见';
+  }
+
+  @override
+  String get localFileCheckFiles => '检查文件';
+
+  @override
+  String get backButton => '返回';
 }
