@@ -50,7 +50,6 @@ class DiscoverTracksSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    final theme = Theme.of(context);
     final cardList = M3ETheme.of(context).listTheme.cardList;
     final rowExtent =
         TrackRow.extentOf(context, tableColumns: tableColumns) + cardList.gap;
@@ -67,14 +66,14 @@ class DiscoverTracksSkeleton extends StatelessWidget {
             // 加载态不需要回弹 / 下拉；大字号下仍可滚动，不会溢出。
             physics: const ClampingScrollPhysics(),
             slivers: [
-              SliverToBoxAdapter(child: _header(context, theme)),
+              SliverToBoxAdapter(child: _header(context)),
               SliverPadding(
                 padding: EdgeInsets.symmetric(horizontal: horizontal),
                 sliver: SliverFixedExtentList.builder(
                   itemExtent: rowExtent,
                   itemCount: _rowCount,
                   itemBuilder: (context, index) =>
-                      _row(context, theme, gap: cardList.gap),
+                      SkeletonRow(gap: cardList.gap),
                 ),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
@@ -85,7 +84,7 @@ class DiscoverTracksSkeleton extends StatelessWidget {
     );
   }
 
-  Widget _header(BuildContext context, ThemeData theme) {
+  Widget _header(BuildContext context) {
     final type = context.typeScale;
     final horizontal = detailPageHorizontalPadding(context);
     final subtitleLine = scaledLineHeightOf(context, type.bodySmall);
@@ -111,20 +110,20 @@ class DiscoverTracksSkeleton extends StatelessWidget {
                       style: type.titleLarge,
                     ),
                     const SizedBox(height: 6),
-                    _bar(theme, widthFactor: 0.62, height: subtitleLine),
+                    SkeletonBlock(widthFactor: 0.62, height: subtitleLine),
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          _bar(theme, widthFactor: 0.96, height: descriptionLine),
+          SkeletonBlock(widthFactor: 0.96, height: descriptionLine),
           const SizedBox(height: 6),
-          _bar(theme, widthFactor: 0.72, height: descriptionLine),
+          SkeletonBlock(widthFactor: 0.72, height: descriptionLine),
           const SizedBox(height: 12),
           // 「播放全部」分裂按钮的占位：高度按 M3E 按钮常见行高，加载完成
           // 后按钮在同一位置出现，列表不会整体上移。
-          _bar(theme, width: 132, height: 40, radius: 20),
+          const SkeletonBlock(width: 132, height: 40, radius: 20),
         ],
       ),
     );
@@ -143,69 +142,6 @@ class DiscoverTracksSkeleton extends StatelessWidget {
       future: future,
       initialData: coverUrl,
       builder: (context, snapshot) => artwork(snapshot.data ?? coverUrl),
-    );
-  }
-
-  Widget _row(BuildContext context, ThemeData theme, {required double gap}) {
-    final type = context.typeScale;
-    return Padding(
-      padding: EdgeInsets.only(bottom: gap),
-      child: Row(
-        children: [
-          Container(
-            width: TrackRow.defaultCoverSize,
-            height: TrackRow.defaultCoverSize,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _bar(
-                  theme,
-                  widthFactor: 0.55,
-                  height: scaledLineHeightOf(context, type.bodyLarge),
-                ),
-                const SizedBox(height: 4),
-                _bar(
-                  theme,
-                  widthFactor: 0.35,
-                  height: scaledLineHeightOf(context, type.bodyMedium),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 骨架块：宽度缺省铺满可用宽；[widthFactor] 用于不等长文字行。
-  Widget _bar(
-    ThemeData theme, {
-    required double height,
-    double? width,
-    double? widthFactor,
-    double radius = 8,
-  }) {
-    final block = Container(
-      width: width ?? double.infinity,
-      height: height,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(radius),
-      ),
-    );
-    if (widthFactor == null) return block;
-    return FractionallySizedBox(
-      alignment: Alignment.centerLeft,
-      widthFactor: widthFactor,
-      child: block,
     );
   }
 }

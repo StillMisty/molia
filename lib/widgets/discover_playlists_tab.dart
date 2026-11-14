@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -20,6 +21,7 @@ import 'm3e_page_route.dart';
 import 'paged_list_auto_load.dart';
 import 'row_extent.dart';
 import 'shell_page_visibility.dart';
+import 'skeleton.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
@@ -159,6 +161,12 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     _paged.reset();
     await _paged.loadFirstPage();
   }
+
+  /// 下拉刷新：不清空列表，避免刷新期间闪回骨架 / 空态。
+  ///
+  /// [PagedListController.loadFirstPage] 成功时整页替换现有项，失败时回到首屏
+  /// 失败态；它自身在 `isLoading` 时会早退（重复下拉不会叠加请求）。
+  Future<void> _refresh() => Future.wait([_loadTags(), _paged.loadFirstPage()]);
 
   void _selectTag(String tagId) {
     if (_selectedTag == tagId) return;
@@ -340,68 +348,75 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
               controller: _scrollController,
               thumbVisibility: true,
               interactive: true,
-              child: PagedListAutoLoad(
-                hasMore: state.hasMore,
-                failed: state.failed,
-                isLoadingMore: state.isLoadingMore,
-                loadMoreFailed: state.loadMoreFailed,
-                onLoadMore: () => unawaited(_paged.loadMore()),
-                child: CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.only(
-                          top: discoverPageTopPadding,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: EdgeInsets.symmetric(horizontal: gutter),
-                              child: AppSearchBar(
-                                controller: _searchController,
-                                focusNode: _searchFocusNode,
-                                hintText: l10n.discoverPlaylistSearchHint,
-                                // 搜索栏铺满内容栏，不再居中在默认 720 里。
-                                constraints: discoverSearchBarConstraints(
-                                  context,
+              // 刷新指示器放在滚动条之内：滚动通知从 CustomScrollView 经
+              // PagedListAutoLoad 冒泡到它；滚动条轨道仍按视口全高绘制。
+              child: M3ERefreshIndicator(
+                onRefresh: _refresh,
+                child: PagedListAutoLoad(
+                  hasMore: state.hasMore,
+                  failed: state.failed,
+                  isLoadingMore: state.isLoadingMore,
+                  loadMoreFailed: state.loadMoreFailed,
+                  onLoadMore: () => unawaited(_paged.loadMore()),
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.only(
+                            top: discoverPageTopPadding,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: gutter,
                                 ),
-                                // 空输入时右侧是「打开歌单」，输入后同一位置
-                                // 换成清除键（AppSearchBar 保证互斥）。
-                                trailingWhenEmpty: M3EIconButton(
-                                  key: const Key('discoverOpenPlaylist'),
-                                  variant: M3EIconButtonVariant.standard,
-                                  semanticLabel: l10n.discoverOpenPlaylist,
-                                  icon: const Icon(Icons.link_rounded),
-                                  onPressed: _openLinkDialog,
+                                child: AppSearchBar(
+                                  controller: _searchController,
+                                  focusNode: _searchFocusNode,
+                                  hintText: l10n.discoverPlaylistSearchHint,
+                                  // 搜索栏铺满内容栏，不再居中在默认 720 里。
+                                  constraints: discoverSearchBarConstraints(
+                                    context,
+                                  ),
+                                  // 空输入时右侧是「打开歌单」，输入后同一位置
+                                  // 换成清除键（AppSearchBar 保证互斥）。
+                                  trailingWhenEmpty: M3EIconButton(
+                                    key: const Key('discoverOpenPlaylist'),
+                                    variant: M3EIconButtonVariant.standard,
+                                    semanticLabel: l10n.discoverOpenPlaylist,
+                                    icon: const Icon(Icons.link_rounded),
+                                    onPressed: _openLinkDialog,
+                                  ),
+                                  onChanged: (value) {
+                                    // 提交式搜索：仅当清空（清除键或手动删空）时回到全部歌单。
+                                    if (value.trim().isEmpty) _clearSearch();
+                                  },
+                                  onSubmitted: _submitSearch,
                                 ),
-                                onChanged: (value) {
-                                  // 提交式搜索：仅当清空（清除键或手动删空）时回到全部歌单。
-                                  if (value.trim().isEmpty) _clearSearch();
-                                },
-                                onSubmitted: _submitSearch,
                               ),
-                            ),
-                            const SizedBox(height: discoverSectionGap),
-                            _buildTagRow(l10n, gutter),
-                            const SizedBox(height: discoverSectionGap),
-                          ],
+                              const SizedBox(height: discoverSectionGap),
+                              _buildTagRow(l10n, gutter),
+                              const SizedBox(height: discoverSectionGap),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    ..._buildPlaylistSlivers(
-                      l10n,
-                      theme,
-                      state,
-                      gutter: gutter,
-                      contentWidth: contentWidth,
-                      channelKey: provider.channelKey,
-                    ),
-                    const SliverToBoxAdapter(
-                      child: SizedBox(height: discoverPageBottomPadding),
-                    ),
-                  ],
+                      ..._buildPlaylistSlivers(
+                        l10n,
+                        theme,
+                        state,
+                        gutter: gutter,
+                        contentWidth: contentWidth,
+                        channelKey: provider.channelKey,
+                      ),
+                      const SliverToBoxAdapter(
+                        child: SizedBox(height: discoverPageBottomPadding),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -477,6 +492,78 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     return _selectedTag;
   }
 
+  /// 歌单网格的列数 / 间距 / 卡片高度。
+  ///
+  /// 首屏骨架与真实网格必须共用同一份计算：分两处写时，数据到达的瞬间列宽、
+  /// 行高会跳一下。断点数字仍只在 `discover_layout.dart` 维护，这里只做
+  /// 「内容宽 → 每列宽 / SliverGrid 参数」的换算。
+  ({SliverGridDelegateWithFixedCrossAxisCount delegate, double tileWidth})
+  _playlistGridMetrics(double contentWidth) {
+    final columns = discoverPlaylistColumns(contentWidth);
+    final tileWidth =
+        (contentWidth - discoverGridGap * (columns - 1)) / columns;
+    return (
+      delegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: columns,
+        crossAxisSpacing: discoverGridGap,
+        mainAxisSpacing: discoverGridGap,
+        mainAxisExtent: discoverPlaylistTileExtentOf(context, tileWidth),
+      ),
+      tileWidth: tileWidth,
+    );
+  }
+
+  /// 首屏骨架：与真实版式一一对应（宽屏网格 / 窄屏竖列表），列数、间距与卡片
+  /// 高度都取同一份计算，加载完成后卡片位置不跳变。
+  ///
+  /// 窄屏必须走列表骨架：真实版式在 `contentWidth < 600` 时是 56 封面竖列表，
+  /// 用网格骨架会在数据到达的瞬间从「两列网格」跳成「单列列表」。
+  List<Widget> _buildPlaylistSkeletonSlivers(
+    AppLocalizations l10n,
+    double contentWidth, {
+    required double gutter,
+  }) {
+    final Widget skeleton;
+    if (discoverUsesPlaylistGrid(contentWidth)) {
+      final metrics = _playlistGridMetrics(contentWidth);
+      final columns = metrics.delegate.crossAxisCount;
+      skeleton = SliverPadding(
+        padding: EdgeInsets.symmetric(horizontal: gutter),
+        // 3 行（最多 8 项）足够铺满常见视口。
+        sliver: SliverGrid.builder(
+          key: const Key('discoverPlaylistSkeleton'),
+          gridDelegate: metrics.delegate,
+          itemCount: math.min(columns * 3, 8),
+          itemBuilder: (context, index) =>
+              SkeletonGridTile(coverSize: metrics.tileWidth - 16),
+        ),
+      );
+    } else {
+      skeleton = SliverPadding(
+        padding: EdgeInsets.symmetric(horizontal: gutter),
+        sliver: SliverFixedExtentList.builder(
+          key: const Key('discoverPlaylistSkeletonList'),
+          // 与真实列表同一条表达式：卡片高 + 8dp 卡片间距。
+          itemExtent: _playlistCardHeight(context) + 8,
+          itemCount: 8,
+          itemBuilder: (context, index) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Center(child: SkeletonRow(gap: 0, coverSize: 56)),
+          ),
+        ),
+      );
+    }
+    return [
+      SliverSemantics(
+        container: true,
+        label: l10n.loading,
+        // 骨架块没有文字内容：读屏只播报「正在加载」，不逐块读占位盒。
+        excludeSemantics: true,
+        sliver: SliverSkeletonPulse(sliver: skeleton),
+      ),
+    ];
+  }
+
   List<Widget> _buildPlaylistSlivers(
     AppLocalizations l10n,
     ThemeData theme,
@@ -487,14 +574,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
   }) {
     final items = state.items;
     if (state.isLoading && items.isEmpty) {
-      return const [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: M3ELoadingIndicator()),
-          ),
-        ),
-      ];
+      return _buildPlaylistSkeletonSlivers(l10n, contentWidth, gutter: gutter);
     }
     if (state.failed) {
       return [
@@ -566,26 +646,19 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
           )
         : null;
     if (grid) {
-      final columns = discoverPlaylistColumns(contentWidth);
-      final tileWidth =
-          (contentWidth - discoverGridGap * (columns - 1)) / columns;
+      final metrics = _playlistGridMetrics(contentWidth);
       return [
         SliverPadding(
           padding: EdgeInsets.symmetric(horizontal: gutter),
           sliver: SliverGrid.builder(
             key: const Key('discoverPlaylistGrid'),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              crossAxisSpacing: discoverGridGap,
-              mainAxisSpacing: discoverGridGap,
-              mainAxisExtent: discoverPlaylistTileExtentOf(context, tileWidth),
-            ),
+            gridDelegate: metrics.delegate,
             itemCount: items.length,
             itemBuilder: (context, index) => _playlistGridCard(
               theme,
               l10n,
               items[index],
-              tileWidth,
+              metrics.tileWidth,
               channelKey,
             ),
           ),
