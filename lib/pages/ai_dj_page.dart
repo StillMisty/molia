@@ -33,7 +33,6 @@ import '../widgets/ai_dj_waiting.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
-import '../widgets/skeleton.dart';
 import '../widgets/track_row.dart';
 
 class AiDjPage extends StatefulWidget {
@@ -417,7 +416,9 @@ class _AiDjPageState extends State<AiDjPage> {
             isPlaying: playback.snapshot.isPlaying,
           ),
         );
-    final busy = provider.isBusy;
+    // 播放类动作只挡队列操作；显式生成进行中旧列表仍可播放 / 入队。
+    final queueBusy = provider.queueBusy;
+    final canReplace = !provider.isBusy && !provider.hasReplacing;
 
     return [
       const SizedBox(height: _sectionGap),
@@ -436,13 +437,15 @@ class _AiDjPageState extends State<AiDjPage> {
           children: [
             M3EButton.filled(
               key: const Key('aiDjPlayAllButton'),
-              onPressed: busy ? null : () => unawaited(provider.startRadio()),
+              onPressed: queueBusy
+                  ? null
+                  : () => unawaited(provider.startRadio()),
               icon: const Icon(Icons.play_arrow_rounded),
               label: Text(l10n.aiDjPlayAll),
             ),
             M3EButton.tonal(
               key: const Key('aiDjEnqueueAllButton'),
-              onPressed: busy ? null : _enqueueAll,
+              onPressed: queueBusy ? null : _enqueueAll,
               icon: const Icon(Icons.playlist_add_rounded),
               label: Text(l10n.aiDjEnqueueAll),
             ),
@@ -450,23 +453,22 @@ class _AiDjPageState extends State<AiDjPage> {
         ),
       ],
       const SizedBox(height: 12),
-      // 进度分片只重建这张卡，不带走整页列表。
+      // 进度分片只重建这条进度带，不带走整页列表。
       ValueListenableBuilder<AiGenerationState>(
         valueListenable: provider.generationState,
         builder: (context, generation, _) {
           final progress = generation.progress;
           if (progress == null) return const SizedBox.shrink();
-          return _GenerationCard(
+          return _GenerationStrip(
             progress: progress,
-            targetCount: provider.preferences.batchSize,
             onCancel: provider.cancelGeneration,
           );
         },
       ),
-      if (provider.progress != null && items.isEmpty) ...[
-        const SizedBox(height: 12),
-        AiDjPulsingSkeleton(rows: 6),
-      ] else if (batch == null || items.isEmpty)
+      // 生成中且没有旧列表：进度带已经说明正在生成，不再回落成引导卡。
+      if (provider.progress != null && items.isEmpty)
+        const SizedBox.shrink()
+      else if (batch == null || items.isEmpty)
         _emptyRecommendations(l10n, provider)
       else ...[
         for (var i = 0; i < items.length; i++) ...[
@@ -477,7 +479,8 @@ class _AiDjPageState extends State<AiDjPage> {
             item: items[i],
             isCurrent: items[i].track.id.uri == nowPlaying.uri,
             isPlaying: nowPlaying.isPlaying,
-            busy: busy,
+            busy: queueBusy,
+            canReplace: canReplace,
             replacing: provider.isReplacing(items[i].track.id.uri),
             onPlay: () => unawaited(provider.playRecommendation(i)),
             onReplace: () => unawaited(provider.replaceRecommendation(i)),
@@ -888,108 +891,47 @@ class _AiDjPageState extends State<AiDjPage> {
   }
 }
 
-/// 显式生成状态卡：阶段 + 等待秒数 + 解析进度 + 停止。
+/// 显式生成进度带：单行阶段文案 + 细进度条 + 停止。
 ///
-/// 静默自动补歌永远不实例化本组件（provider 不设置 progress）。
-class _GenerationCard extends StatefulWidget {
-  const _GenerationCard({
-    required this.progress,
-    required this.targetCount,
-    required this.onCancel,
-  });
+/// 只保留一件「正在生成」的说明：不再叠 spinner、阶段步进、等待秒数与
+/// 骨架行。静默自动补歌永远不实例化本组件（provider 不设置 progress）。
+class _GenerationStrip extends StatelessWidget {
+  const _GenerationStrip({required this.progress, required this.onCancel});
 
   final AiDjProgress progress;
-  final int targetCount;
   final VoidCallback onCancel;
-
-  @override
-  State<_GenerationCard> createState() => _GenerationCardState();
-}
-
-class _GenerationCardState extends State<_GenerationCard> {
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final seconds = DateTime.now()
-        .difference(widget.progress.startedAt)
-        .inSeconds;
-    final progress = widget.progress;
-    final title = aiDjProgressTitle(l10n, progress);
-    final subtitle = aiDjProgressSubtitle(
-      l10n,
-      progress,
-      fallbackTargetCount: widget.targetCount,
-      seconds: seconds,
-    );
-    return M3ECard(
-      key: const Key('aiDjGenerationCard'),
-      variant: M3ECardVariant.filled,
-      color: scheme.surfaceContainerHigh,
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final title = aiDjPhaseText(l10n, progress);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
         children: [
-          Row(
-            children: [
-              const SkeletonPulse(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: M3ELoadingIndicator(),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: context.typeScale.titleSmall),
+                const SizedBox(height: 6),
+                AiDjThinProgress(
+                  value: progress.fraction,
+                  semanticLabel: l10n.aiDjGenerationStatus,
+                  semanticValue: progress.fraction == null
+                      ? null
+                      : '${progress.done}/${progress.total}',
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: context.typeScale.titleSmall),
-                    const SizedBox(height: 4),
-                    AiDjPhaseSteps(progress: progress),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: context.typeScale.bodySmall.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              M3EIconButton(
-                key: const Key('aiDjCancelGenerationButton'),
-                variant: M3EIconButtonVariant.standard,
-                icon: const Icon(Icons.stop_rounded),
-                semanticLabel: l10n.aiDjCancelGeneration,
-                onPressed: widget.onCancel,
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-          AiDjThinProgress(
-            value: progress.fraction,
-            semanticLabel: title,
-            semanticValue: progress.fraction == null
-                ? null
-                : '${progress.done}/${progress.total}',
+          const SizedBox(width: 8),
+          M3EIconButton(
+            key: const Key('aiDjCancelGenerationButton'),
+            variant: M3EIconButtonVariant.standard,
+            icon: const Icon(Icons.stop_rounded),
+            semanticLabel: l10n.aiDjCancelGeneration,
+            onPressed: onCancel,
           ),
         ],
       ),

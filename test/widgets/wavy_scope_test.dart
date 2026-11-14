@@ -151,6 +151,30 @@ void main() {
     });
   });
 
+  group('AnimatedPlayingIndicator 内联三柱', () {
+    Widget indicator({required bool isPlaying, bool animate = true}) => host(
+      Center(
+        child: AnimatedPlayingIndicator(isPlaying: isPlaying, animate: animate),
+      ),
+    );
+
+    testWidgets('播放中起伏，暂停原地冻结', (tester) async {
+      await tester.pumpWidget(indicator(isPlaying: true));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isTrue);
+
+      await tester.pumpWidget(indicator(isPlaying: false));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('animate=false 只作静态状态标识', (tester) async {
+      await tester.pumpWidget(indicator(isPlaying: true, animate: false));
+      await tester.pump();
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+  });
+
   group('TrayDormantGate', () {
     testWidgets('托盘隐藏时不构建整棵应用树，恢复后重新构建', (tester) async {
       final presence = AppPresence.instance;

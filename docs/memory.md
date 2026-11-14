@@ -279,7 +279,7 @@ pending / keepAlive，当前展示的封面不受影响。
 | `lib/sources/builtin/**`、`lib/services/covers/cover_backfill_service.dart` | 新增幂等 `clearCache()`：只清已完成结果，不动平台 / 脚本注册表；在途请求的 identity 校验阻止旧结果写回 |
 | `lib/widgets/ai_dj_carousel.dart` | AI 推荐卡封面按 `256 × DPR` 解码，不再按原图；布局仍由 carousel 槽位决定 |
 | `lib/app/tray_dormant_gate.dart` | 改为 `childBuilder`：托盘隐藏期间不构造整棵 `MaterialApp` 配置（原先 child 实参在 build 前已求值） |
-| `lib/widgets/seek_bar.dart`、`app_shell.dart`、`player.dart`、`current_track_cover.dart`、`playing_indicator.dart` | wavy 进度只保留在播放页（显式 `wavy: true`）；顶栏 / 迷你条静态；当前曲目角标（列表 / AI 页 / 发现页推荐卡）播放时起伏、暂停冻结；最小化 / 托盘隐藏时 `AppPresenceTickerMode` 静音 ticker（只停动画，不清缓存 / 不改变最小化语义） |
+| `lib/widgets/seek_bar.dart`、`app_shell.dart`、`player.dart`、`current_track_cover.dart`、`playing_indicator.dart` | wavy 进度只保留在播放页（显式 `wavy: true`）；顶栏 / 迷你条静态；当前曲目角徽（列表 / AI 页封面）播放时起伏、暂停冻结，发现页推荐卡改用 `AnimatedPlayingIndicator` 内联在歌名行（不随卡片槽位缩放）；最小化 / 托盘隐藏时 `AppPresenceTickerMode` 静音 ticker（只停动画，不清缓存 / 不改变最小化语义） |
 | `lib/data/playback/playback_engine.dart`、`lib/playback/queue_projection.dart` | 队列投影按 `(queueRevision, index, mode, playbackOrderRevision, shuffleOrderRevision)` 缓存；位置 tick 不再跑 O(N) 投影与 `upNext` 映射（CPU，不是内存回收） |
 | `lib/managers/artwork_cache.dart` | 封面元数据 `updateOrInsert` 跳过「只有 touched 变化」的整文件重写；淘汰仍按文件 mtime |
 | `lib/services/window/window_bounds_store.dart`、`playback_volume_store.dart`、`nav_provider.dart` | 窗口几何 / 音量 + 静音 / 导航布局各合并成单键 JSON：一次动作的整份 prefs 重写从 4 / 2 / 3 次降为 1 次；旧键保留只读兜底 |

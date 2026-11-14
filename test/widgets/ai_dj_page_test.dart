@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -10,6 +12,8 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/ai/ai_recommendation_store.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
+import 'package:molia/widgets/ai_dj_track_tile.dart';
+import 'package:molia/widgets/ai_dj_waiting.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -199,5 +203,129 @@ void main() {
     expect(find.text(l10n.aiDjRefreshBatch), findsOneWidget);
     expect(find.text(l10n.aiDjFeedBatch), findsOneWidget);
     expect(find.text(l10n.aiDjHistoryTitle), findsOneWidget);
+  });
+
+  testWidgets('生成中旧列表仍可点播，且只留一条进度带', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final backend = FakePlaybackFacade();
+    final playback = buildTestPlaybackProvider(facade: backend);
+    await playback.preferencesReady;
+    final library = LibraryProvider(
+      repository: FakeLibraryRepository(),
+      playbackProvider: playback,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    final settings = testSettingsRegistry(
+      preferences: prefs,
+      secrets: MemorySettingsSecretStore(),
+    );
+    await AiSettingsStore(settings: settings).saveConfig(
+      const LlmConfig(
+        baseUrl: 'https://api.example.com/v1',
+        apiKey: 'sk-test',
+        model: 'm',
+      ),
+    );
+    final generator = FakeAiDjGenerator(batchFactory: _batch);
+    final ai = AiDjProvider(
+      playbackProvider: playback,
+      libraryProvider: library,
+      recommendationService: generator,
+      settingsStore: AiSettingsStore(settings: settings),
+      recommendationStore: AiRecommendationStore(
+        preferences: prefs,
+        directoryProvider: () async => null,
+      ),
+    );
+    await ai.init();
+    await ai.grantConsent();
+    await ai.setEnabled(true);
+    expect(ai.recommendations?.items, hasLength(3));
+    addTearDown(() {
+      ai.dispose();
+      library.dispose();
+      playback.dispose();
+    });
+
+    // 第二批挂起：页面停在「生成中 + 旧列表还在」。
+    final gate = Completer<void>();
+    generator
+      ..gate = gate
+      ..emitProgress = true;
+    final generating = ai.refreshRecommendations();
+
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          coverStoreProvider(),
+          ChangeNotifierProvider<AiDjProvider>.value(value: ai),
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          ChangeNotifierProvider<LibraryProvider>.value(value: library),
+        ],
+        child: M3EMaterialApp(
+          data: M3EThemeData.fromMaterial(ThemeData.light()),
+          theme: ThemeData.light(),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          home: const AiDjPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 进度只留一条：没有骨架行、等待秒数或阶段步进。
+    expect(find.byType(AiDjThinProgress), findsOneWidget);
+    expect(find.byKey(const Key('aiDjPulsingSkeleton')), findsNothing);
+    expect(find.textContaining('已等待'), findsNothing);
+    expect(find.textContaining('正在找歌'), findsOneWidget);
+
+    final tiles = tester.widgetList<AiDjTrackTile>(find.byType(AiDjTrackTile));
+    expect(tiles, hasLength(3));
+    for (final tile in tiles) {
+      expect(tile.busy, isFalse, reason: '生成不是队列操作，不应整行禁用');
+      expect(tile.canReplace, isFalse, reason: '换一首与显式生成互斥');
+    }
+
+    // 生成中点击旧列表仍能起播。
+    await tester.tap(find.text('Song 0'));
+    await tester.pump();
+    expect(ai.status, AiDjStatus.playing);
+    expect(backend.lastRequest?.startIndex, 0);
+
+    gate.complete();
+    await generating;
+    await tester.pump();
+  });
+
+  testWidgets('细进度条带无障碍语义', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      M3EMaterialApp(
+        data: M3EThemeData.fromMaterial(ThemeData.light()),
+        theme: ThemeData.light(),
+        home: const Scaffold(
+          body: AiDjThinProgress(
+            value: 0.5,
+            semanticLabel: '推荐生成进度',
+            semanticValue: '8/24',
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final node = tester.getSemantics(find.byType(AiDjThinProgress));
+    expect(node.label, '推荐生成进度');
+    expect(node.value, '8/24');
+    semantics.dispose();
   });
 }

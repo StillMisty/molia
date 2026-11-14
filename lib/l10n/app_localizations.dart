@@ -4916,12 +4916,6 @@ abstract class AppLocalizations {
   /// **'Generating recommendations'**
   String get aiDjGenerationStatus;
 
-  /// No description provided for @aiDjGeneratingCount.
-  ///
-  /// In en, this message translates to:
-  /// **'Picking {count} songs'**
-  String aiDjGeneratingCount(int count);
-
   /// No description provided for @aiDjPhaseProfile.
   ///
   /// In en, this message translates to:
@@ -4934,35 +4928,11 @@ abstract class AppLocalizations {
   /// **'AI is picking songs'**
   String get aiDjPhaseModel;
 
-  /// No description provided for @aiDjPhaseResolvingShort.
-  ///
-  /// In en, this message translates to:
-  /// **'Finding songs'**
-  String get aiDjPhaseResolvingShort;
-
   /// No description provided for @aiDjPhaseResolving.
   ///
   /// In en, this message translates to:
   /// **'Finding songs {done}/{total}'**
   String aiDjPhaseResolving(int done, int total);
-
-  /// No description provided for @aiDjWaitingSeconds.
-  ///
-  /// In en, this message translates to:
-  /// **'Waiting {seconds}s'**
-  String aiDjWaitingSeconds(int seconds);
-
-  /// No description provided for @aiDjResolvingTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Finding songs'**
-  String get aiDjResolvingTitle;
-
-  /// No description provided for @aiDjProgressFound.
-  ///
-  /// In en, this message translates to:
-  /// **'Found {count}'**
-  String aiDjProgressFound(int count);
 
   /// No description provided for @aiDjCancelGeneration.
   ///

@@ -285,6 +285,79 @@ void main() {
     expect(backend.lastEnqueued, isNull);
   });
 
+  test('显式生成中仍可从旧列表起播', () async {
+    await enableWithList();
+    final oldId = provider.recommendations!.id;
+    final gate = Completer<void>();
+    generator
+      ..gate = gate
+      ..emitProgress = true
+      ..batchFactory = () => _batch(10, 3);
+
+    final generating = provider.refreshRecommendations();
+    await pumpEventQueue();
+    expect(provider.isBusy, isTrue);
+    expect(provider.progress, isNotNull);
+
+    await provider.startRadio(fromIndex: 1);
+
+    expect(backend.lastRequest?.startIndex, 1);
+    expect(provider.status, AiDjStatus.playing);
+    expect(provider.recommendations!.id, oldId, reason: '新批次完成前 active 不变');
+
+    gate.complete();
+    await generating;
+    expect(provider.recommendations!.id, isNot(oldId));
+    expect(provider.status, AiDjStatus.playing, reason: '生成完成不强切正在播放的队列');
+  });
+
+  test('显式生成中仍可把旧列表加入队列', () async {
+    await enableWithList();
+    final gate = Completer<void>();
+    generator
+      ..gate = gate
+      ..emitProgress = true
+      ..batchFactory = () => _batch(10, 3);
+
+    final generating = provider.refreshRecommendations();
+    await pumpEventQueue();
+    expect(provider.isBusy, isTrue);
+
+    await provider.enqueueRecommendations();
+
+    expect(backend.lastEnqueued?.map((t) => t.id.id).toList(), ['0', '1', '2']);
+
+    gate.complete();
+    await generating;
+    expect(provider.isBusy, isFalse);
+  });
+
+  test('显式生成中仍可播放历史批次', () async {
+    await enableWithList();
+    final firstId = provider.recommendations!.id;
+    generator.batchFactory = () => _batch(10, 3);
+    await provider.refreshRecommendations();
+    expect(provider.recommendations!.id, isNot(firstId));
+
+    final gate = Completer<void>();
+    generator
+      ..gate = gate
+      ..emitProgress = true
+      ..batchFactory = () => _batch(20, 3);
+    final generating = provider.refreshRecommendations();
+    await pumpEventQueue();
+    expect(provider.isBusy, isTrue);
+
+    await provider.playHistoryBatch(firstId);
+
+    expect(backend.lastRequest?.tracks.first.id.id, '0');
+    expect(provider.activeBatchId, firstId);
+    expect(provider.status, AiDjStatus.playing);
+
+    gate.complete();
+    await generating;
+  });
+
   test('自动补歌：静默追加队列 + 写历史，不切换 active、不设置进度', () async {
     generator.batchFactory = () => _batch(0, 20);
     await enableWithList(count: 20);

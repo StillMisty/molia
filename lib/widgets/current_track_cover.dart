@@ -5,7 +5,8 @@ import 'playing_indicator.dart';
 /// 当前曲目封面：封面右下角叠播放状态角标。
 ///
 /// 播放中默认是三柱均衡器**静态相位**；只有调用方显式传 [animate] 才起伏
-/// （曲目行 / AI 页会传 true；发现页推荐卡直接用 [AnimatedPlayingBadge]）。
+/// （曲目行 / AI 页会传 true；发现页推荐卡改用 `AnimatedPlayingIndicator`
+/// 内联在歌名行，不再往封面角落叠角徽）。
 /// 暂停时角标停在当前相位，减弱动效或 [TickerMode] 关闭时不跑 ticker。
 ///
 /// 封面内容由调用方给出（曲目行走 [TrackArtwork]）；这里只负责角标与固定

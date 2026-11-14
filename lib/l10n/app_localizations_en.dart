@@ -2693,35 +2693,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjGenerationStatus => 'Generating recommendations';
 
   @override
-  String aiDjGeneratingCount(int count) {
-    return 'Picking $count songs';
-  }
-
-  @override
   String get aiDjPhaseProfile => 'Reading your taste';
 
   @override
   String get aiDjPhaseModel => 'AI is picking songs';
 
   @override
-  String get aiDjPhaseResolvingShort => 'Finding songs';
-
-  @override
   String aiDjPhaseResolving(int done, int total) {
     return 'Finding songs $done/$total';
-  }
-
-  @override
-  String aiDjWaitingSeconds(int seconds) {
-    return 'Waiting ${seconds}s';
-  }
-
-  @override
-  String get aiDjResolvingTitle => 'Finding songs';
-
-  @override
-  String aiDjProgressFound(int count) {
-    return 'Found $count';
   }
 
   @override

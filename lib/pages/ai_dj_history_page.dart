@@ -170,12 +170,12 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
       M3EButtonGroupAction(
         icon: const Icon(Icons.play_arrow_rounded),
         label: Text(l10n.aiDjHistoryPlay),
-        enabled: !provider.isBusy,
+        enabled: !provider.queueBusy,
       ),
       M3EButtonGroupAction(
         icon: const Icon(Icons.playlist_add_rounded),
         label: Text(l10n.aiDjHistoryEnqueue),
-        enabled: !provider.isBusy,
+        enabled: !provider.queueBusy,
       ),
       if (!active)
         M3EButtonGroupAction(
@@ -299,10 +299,10 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
             else if (batch != null)
               for (final item in batch.items) ...[
                 M3ETappable(
-                  onTap: provider.isBusy
+                  onTap: provider.queueBusy
                       ? null
                       : () => unawaited(provider.playHistoryBatch(entry.id)),
-                  enabled: !provider.isBusy,
+                  enabled: !provider.queueBusy,
                   mouseCursor: SystemMouseCursors.click,
                   semanticButton: true,
                   builder: (BuildContext context, M3EInteractionState state) =>

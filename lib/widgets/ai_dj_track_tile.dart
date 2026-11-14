@@ -39,6 +39,7 @@ class AiDjTrackTile extends StatelessWidget {
     this.isCurrent = false,
     this.isPlaying = false,
     this.busy = false,
+    this.canReplace = true,
     this.replacing = false,
   });
 
@@ -66,8 +67,12 @@ class AiDjTrackTile extends StatelessWidget {
   /// 当前曲目是否正在播放（仅 [isCurrent] 为真时有效）。
   final bool isPlaying;
 
-  /// 生成中：行内操作禁用。
+  /// 队列操作（起播 / 入队）进行中：整行与操作菜单暂时禁用。
   final bool busy;
+
+  /// 是否提供「换一首」：生成中 / 另一次换一首在途时，这条动作真会冲突，
+  /// 干脆不构造；其余动作（收藏 / 不感兴趣 / 多来点这种）不受生成影响。
+  final bool canReplace;
 
   /// 该行正在「换一首」：只在本行显示小进度。
   final bool replacing;
@@ -86,6 +91,7 @@ class AiDjTrackTile extends StatelessWidget {
     final actions = _aiDjActionMenu(
       context,
       item: item,
+      canReplace: canReplace,
       onReplace: onReplace,
       onNotInterested: onNotInterested,
       onMoreLikeThis: onMoreLikeThis,
@@ -215,6 +221,7 @@ class AiDjTrackTile extends StatelessWidget {
 List<RowAction> _aiDjActionMenu(
   BuildContext context, {
   required ResolvedRecommendation item,
+  required bool canReplace,
   required VoidCallback onReplace,
   required VoidCallback onNotInterested,
   required VoidCallback onMoreLikeThis,
@@ -244,11 +251,12 @@ List<RowAction> _aiDjActionMenu(
         ),
       ),
     ),
-    RowAction(
-      icon: Icons.refresh_rounded,
-      label: l10n.aiDjReplaceItem,
-      onPressed: onReplace,
-    ),
+    if (canReplace)
+      RowAction(
+        icon: Icons.refresh_rounded,
+        label: l10n.aiDjReplaceItem,
+        onPressed: onReplace,
+      ),
     RowAction(
       icon: Icons.auto_awesome_rounded,
       label: l10n.aiDjMoreLikeThis,

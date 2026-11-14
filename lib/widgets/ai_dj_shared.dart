@@ -158,7 +158,7 @@ String aiDjOriginText(AppLocalizations l10n, AiDjOrigin origin) =>
       AiDjOrigin.manualFeed => l10n.aiDjOriginManualFeed,
     };
 
-/// 显式生成阶段文案（静默补歌不进入该 UI）。
+/// 显式生成阶段文案（静默补歌不进入该 UI）：进度的唯一单行说明。
 String aiDjPhaseText(AppLocalizations l10n, AiDjProgress progress) =>
     switch (progress.phase) {
       AiDjPhase.profile => l10n.aiDjPhaseProfile,
@@ -168,37 +168,6 @@ String aiDjPhaseText(AppLocalizations l10n, AiDjProgress progress) =>
         progress.total,
       ),
     };
-
-/// 生成卡标题：找歌阶段单独说，避免「重新找一次」也显示成完整生成。
-String aiDjProgressTitle(AppLocalizations l10n, AiDjProgress progress) =>
-    switch (progress.phase) {
-      AiDjPhase.profile || AiDjPhase.model => l10n.aiDjGenerationStatus,
-      AiDjPhase.resolving => l10n.aiDjResolvingTitle,
-    };
-
-/// 生成卡副标题：只放状态和数字，不加额外解释。
-String aiDjProgressSubtitle(
-  AppLocalizations l10n,
-  AiDjProgress progress, {
-  required int fallbackTargetCount,
-  required int seconds,
-}) {
-  final target = progress.targetCount > 0
-      ? progress.targetCount
-      : fallbackTargetCount;
-  final waiting = l10n.aiDjWaitingSeconds(seconds);
-  return switch (progress.phase) {
-    AiDjPhase.profile => [
-      l10n.aiDjGeneratingCount(target),
-      waiting,
-    ].join(' · '),
-    AiDjPhase.model => [l10n.aiDjPhaseModel, waiting].join(' · '),
-    AiDjPhase.resolving => [
-      if (progress.resolved > 0) l10n.aiDjProgressFound(progress.resolved),
-      waiting,
-    ].join(' · '),
-  };
-}
 
 /// 偏好 token → 文案（未知值原样展示，避免空白）。
 String aiDjStyleLabel(AppLocalizations l10n, String token) => switch (token) {

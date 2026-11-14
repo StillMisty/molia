@@ -1154,17 +1154,8 @@
   },
   "aiDjAutoFeedResume": "恢复自动补歌",
   "aiDjGenerationStatus": "正在生成推荐",
-  "aiDjGeneratingCount": "正在挑选 {count} 首",
-  "@aiDjGeneratingCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "aiDjPhaseProfile": "整理听歌偏好",
   "aiDjPhaseModel": "AI 正在选歌",
-  "aiDjPhaseResolvingShort": "本地找歌",
   "aiDjPhaseResolving": "正在找歌 {done}/{total}",
   "@aiDjPhaseResolving": {
     "placeholders": {
@@ -1172,23 +1163,6 @@
         "type": "int"
       },
       "total": {
-        "type": "int"
-      }
-    }
-  },
-  "aiDjWaitingSeconds": "已等待 {seconds} 秒",
-  "@aiDjWaitingSeconds": {
-    "placeholders": {
-      "seconds": {
-        "type": "int"
-      }
-    }
-  },
-  "aiDjResolvingTitle": "正在本地找歌",
-  "aiDjProgressFound": "已找到 {count} 首",
-  "@aiDjProgressFound": {
-    "placeholders": {
-      "count": {
         "type": "int"
       }
     }

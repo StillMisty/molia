@@ -71,7 +71,7 @@ class RowActionMenuButton extends StatelessWidget {
   /// 紧凑锚点（与其它行内动作并排时用）。
   final bool compact;
 
-  /// 锚点是否可用（生成中等时刻禁用；入口保留可见，不做显隐切换）。
+  /// 锚点是否可用（队列操作等时刻禁用；入口保留可见，不做显隐切换）。
   final bool enabled;
 
   @override

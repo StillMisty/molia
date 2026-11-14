@@ -11,8 +11,9 @@ import '../theme/motion_policy.dart';
 /// 的播放状态；用 `AnimatedIcon` / 位移动画拼图标会让每一帧都重建组件树。
 /// 自绘只把 [progress] 交给 painter，动画值变化只重绘这个 12dp 小区域。
 ///
-/// 为什么包 [RepaintBoundary]：角标位于曲目行封面上，父级会因播放进度、
-/// 列表滚动等频繁重建；边界把重绘隔离在角标内，不带着封面和整行一起提交。
+/// 为什么包 [RepaintBoundary]：角徽在曲目行封面上、裸三柱在推荐卡文字行里，
+/// 父级都会因播放进度、列表滚动等频繁重建；边界把重绘隔离在指示器内，
+/// 不带着封面和整行一起提交。
 ///
 /// 为什么是 3 柱：12dp 槽里 2 根看起来像闪烁、不够「播放中」，4 根在圆角
 /// 笔帽下会互相粘连；3 根刚好能读出相位差，又保留柱间空隙。
@@ -43,21 +44,20 @@ class PlayingIndicator extends StatelessWidget {
   }
 }
 
-/// 自带相位控制的播放角标：圆形底 + 三柱均衡器。
+/// 自带相位控制的裸三柱均衡器（无圆形底），用于文字行内联状态。
 ///
-/// 曲目行 / AI 页 / 发现页推荐卡共用这一份：
 /// - [isPlaying] 与 [animate] 同时为真、且未开「减弱动效」时才跑 ticker；
 /// - 暂停时停在当前相位，恢复后从同一相位续跑；
 /// - [TickerMode] 关闭（窗口最小化 / 托盘隐藏）时由 Flutter 静音 ticker，
-///   不额外写后台状态；
-/// - [RepaintBoundary] 隔离 18dp 小区域的重绘。
-class AnimatedPlayingBadge extends StatefulWidget {
-  const AnimatedPlayingBadge({
+///   不额外写后台状态。
+///
+/// 放在歌名 / 歌手的文字行里时不会遮挡封面，也不随卡片槽位一起缩放。
+class AnimatedPlayingIndicator extends StatefulWidget {
+  const AnimatedPlayingIndicator({
     super.key,
     required this.isPlaying,
     this.animate = true,
-    this.size = 18,
-    this.backgroundColor,
+    this.size = 12,
     this.color,
   });
 
@@ -66,18 +66,18 @@ class AnimatedPlayingBadge extends StatefulWidget {
   /// 是否允许起伏。默认 true；只作静态状态标识时传 false。
   final bool animate;
 
-  /// 圆形底直径；三柱绘制槽按 2/3 取，默认 18 → 12。
+  /// 方形绘制槽边长；默认与标题字号同档。
   final double size;
 
-  /// 未指定时取主题 `primary` / `onPrimary`。
-  final Color? backgroundColor;
+  /// 未指定时取主题 `primary`。
   final Color? color;
 
   @override
-  State<AnimatedPlayingBadge> createState() => _AnimatedPlayingBadgeState();
+  State<AnimatedPlayingIndicator> createState() =>
+      _AnimatedPlayingIndicatorState();
 }
 
-class _AnimatedPlayingBadgeState extends State<AnimatedPlayingBadge>
+class _AnimatedPlayingIndicatorState extends State<AnimatedPlayingIndicator>
     with SingleTickerProviderStateMixin {
   /// 首次渲染即暂停时的固定相位：三柱高低错落，静止也读得出是均衡器。
   static const double _idlePhase = 0.25;
@@ -105,7 +105,7 @@ class _AnimatedPlayingBadgeState extends State<AnimatedPlayingBadge>
   }
 
   @override
-  void didUpdateWidget(AnimatedPlayingBadge oldWidget) {
+  void didUpdateWidget(AnimatedPlayingIndicator oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncAnimation();
   }
@@ -130,21 +130,64 @@ class _AnimatedPlayingBadgeState extends State<AnimatedPlayingBadge>
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final foreground = widget.color ?? scheme.onPrimary;
     return ExcludeSemantics(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: widget.backgroundColor ?? scheme.primary,
-          shape: BoxShape.circle,
+      child: SizedBox.square(
+        dimension: widget.size,
+        child: Center(
+          child: PlayingIndicator(
+            progress: _controller,
+            color: widget.color ?? scheme.primary,
+            size: widget.size,
+          ),
         ),
-        child: SizedBox.square(
-          dimension: widget.size,
-          child: Center(
-            child: PlayingIndicator(
-              progress: _controller,
-              color: foreground,
-              size: widget.size * 2 / 3,
-            ),
+      ),
+    );
+  }
+}
+
+/// 当前曲目的封面角徽：圆形底 + 三柱均衡器。
+///
+/// 只留给封面上的状态位（曲目行 / AI 页列表）；发现页推荐卡的播放态
+/// 改用 [AnimatedPlayingIndicator] 内联在歌名行，避免角徽压在封面角落。
+/// - [RepaintBoundary] 隔离小区域的重绘（见 [PlayingIndicator]）。
+class AnimatedPlayingBadge extends StatelessWidget {
+  const AnimatedPlayingBadge({
+    super.key,
+    required this.isPlaying,
+    this.animate = true,
+    this.size = 18,
+    this.backgroundColor,
+    this.color,
+  });
+
+  final bool isPlaying;
+
+  /// 是否允许起伏。默认 true；只作静态状态标识时传 false。
+  final bool animate;
+
+  /// 圆形底直径；三柱绘制槽按 2/3 取，默认 18 → 12。
+  final double size;
+
+  /// 未指定时取主题 `primary` / `onPrimary`。
+  final Color? backgroundColor;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: backgroundColor ?? scheme.primary,
+        shape: BoxShape.circle,
+      ),
+      child: SizedBox.square(
+        dimension: size,
+        child: Center(
+          child: AnimatedPlayingIndicator(
+            isPlaying: isPlaying,
+            animate: animate,
+            size: size * 2 / 3,
+            color: color ?? scheme.onPrimary,
           ),
         ),
       ),

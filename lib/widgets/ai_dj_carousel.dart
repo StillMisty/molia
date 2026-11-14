@@ -8,6 +8,8 @@
 ///   避免与发现页的竖向滚动手势互抢；
 /// - 点卡即从该首起播、AI 接管队列（`playRecommendation`），并把该卡滚到
 ///   焦点位：拖动/滚轮之后焦点未必在点中的卡上，滚过去信息区才落到这首；
+/// - 当前播放卡不叠封面角徽：播放态内联在歌名行（三柱起伏 + 主色标题），
+///   不遮封面、不贴相邻卡，也不跟 carousel 槽位一起缩放；
 /// - 卡片流下方是推荐理由信息区：只显示焦点卡（carousel 最大槽位）的理由；
 ///   理由为空或焦点越界（「换一批」卡、
 ///   换批后的过期索引）时整区不渲染——留一个空块比不显示更突兀；
@@ -56,6 +58,51 @@ class AiDjCarousel extends StatefulWidget {
 
   @override
   State<AiDjCarousel> createState() => _AiDjCarouselState();
+}
+
+/// 推荐卡歌名行：当前播放卡在歌名前内联三柱均衡器。
+///
+/// 播放态不放在封面角上：contained carousel 的卡片会随槽位缩放，角徽会
+/// 跟着忽大忽小，又贴着卡片圆角与相邻卡缝隙；放进文字行后状态更安静，
+/// 也不会挡住封面。暂停时三柱停在当前相位（由 [AnimatedPlayingIndicator]
+/// 处理），非当前卡只渲染普通歌名。
+class AiDjCarouselTitle extends StatelessWidget {
+  const AiDjCarouselTitle({
+    super.key,
+    required this.title,
+    required this.isCurrent,
+    required this.isPlaying,
+  });
+
+  final String title;
+  final bool isCurrent;
+  final bool isPlaying;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Text(
+      title,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: context.typeScale.titleSmall.copyWith(
+        color: isCurrent ? scheme.primary : null,
+      ),
+    );
+    if (!isCurrent) return text;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedPlayingIndicator(
+          isPlaying: isPlaying,
+          size: 12,
+          color: scheme.primary,
+        ),
+        const SizedBox(width: 6),
+        text,
+      ],
+    );
+  }
 }
 
 class _AiDjCarouselState extends State<AiDjCarousel> {
@@ -138,17 +185,14 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
                           style: context.typeScale.titleSmall,
                         ),
                         const SizedBox(height: 2),
-                        ValueListenableBuilder<AiGenerationState>(
-                          valueListenable: provider.generationState,
-                          builder: (context, _, _) => Text(
-                            _subtitleText(l10n, provider),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: context.typeScale.bodySmall.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
+                        Text(
+                          _subtitleText(l10n, provider),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.typeScale.bodySmall.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -163,33 +207,35 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
               ),
             ),
             const SizedBox(height: 8),
-            // 细进度条只订阅生成状态：进度分片不再重建卡片流。
-            ValueListenableBuilder<AiGenerationState>(
-              valueListenable: provider.generationState,
-              builder: (context, generation, _) {
-                final progress = generation.progress;
-                if (progress == null) {
-                  return const SizedBox.shrink();
-                }
-                return Column(
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: discoverGutterOf(context),
+            // 已有列表时只留一条细进度条（生成里也照常浏览 / 播放旧卡）；
+            // 列表为空时只显示下方骨架，不再叠加进度条。
+            if (hasCards)
+              ValueListenableBuilder<AiGenerationState>(
+                valueListenable: provider.generationState,
+                builder: (context, generation, _) {
+                  final progress = generation.progress;
+                  if (progress == null) {
+                    return const SizedBox.shrink();
+                  }
+                  return Column(
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: discoverGutterOf(context),
+                        ),
+                        child: AiDjThinProgress(
+                          value: progress.fraction,
+                          semanticLabel: l10n.aiDjGenerationStatus,
+                          semanticValue: progress.fraction == null
+                              ? null
+                              : '${progress.done}/${progress.total}',
+                        ),
                       ),
-                      child: AiDjThinProgress(
-                        value: progress.fraction,
-                        semanticLabel: aiDjProgressTitle(l10n, progress),
-                        semanticValue: progress.fraction == null
-                            ? null
-                            : '${progress.done}/${progress.total}',
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                  ],
-                );
-              },
-            ),
+                      const SizedBox(height: 6),
+                    ],
+                  );
+                },
+              ),
             _body(context, l10n, provider),
             if (hasCards) _reasonPanel(context, list),
             const SizedBox(height: 8),
@@ -199,15 +245,11 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
     );
   }
 
+  /// 分区副标题：只留播放状态与上次更新。
+  ///
+  /// 生成进度不在这里重复：进度条 / 骨架已经占住同一件事。
   String _subtitleText(AppLocalizations l10n, AiDjProvider provider) {
     final list = provider.recommendations;
-    final progress = provider.progress;
-    if (progress != null) {
-      return [
-        aiDjPhaseText(l10n, progress),
-        if (provider.status == AiDjStatus.playing) l10n.aiDjStatusPlaying,
-      ].join(' · ');
-    }
     final parts = <String>[
       if (provider.status == AiDjStatus.playing) l10n.aiDjStatusPlaying,
       if (list != null)
@@ -354,19 +396,11 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
         M3ECarouselItem(
           // 封面 + 原生 title/subtitle 槽位：文字由 carousel 按当前槽位
           // 渲染，任何宽度下都保留歌名与歌手。
-          image: _carouselCover(
-            context,
-            item,
+          image: _carouselCover(context, item),
+          title: AiDjCarouselTitle(
+            title: item.track.title,
             isCurrent: isCurrent,
             isPlaying: isPlaying,
-          ),
-          title: Text(
-            item.track.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: type.titleSmall.copyWith(
-              color: isCurrent ? scheme.primary : null,
-            ),
           ),
           subtitle: _artistOf(item).isEmpty
               ? null
@@ -441,17 +475,12 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
     );
   }
 
-  /// 推荐卡封面：当前曲目在右上角叠播放角标。
+  /// 推荐卡封面（只渲染图片）：播放态由歌名行的 [AiDjCarouselTitle] 表达。
   ///
-  /// 角标放在封面层而不是文字层：不挤占歌名 / 歌手槽位，也避开底部
-  /// scrim；非当前卡只返回原封面，不构建任何动画对象。
-  Widget _carouselCover(
-    BuildContext context,
-    ResolvedRecommendation item, {
-    required bool isCurrent,
-    required bool isPlaying,
-  }) {
-    final artwork = TrackArtwork(
+  /// 不在封面右上角叠角徽：角标会贴着卡片圆角 / 相邻卡缝隙，还要跟着
+  /// carousel 槽位一起缩放；放进文字行后不遮封面，也不会忽大忽小。
+  Widget _carouselCover(BuildContext context, ResolvedRecommendation item) {
+    return TrackArtwork(
       track: item.track,
       fit: BoxFit.cover,
       // 卡片流只给解码上界（原图一次就是数 MB），宽高交给 carousel 槽位，
@@ -459,18 +488,6 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
       memCacheWidth: AiDjCarousel.coverMemCacheWidth(context),
       fallbackColor: Theme.of(context).colorScheme.surfaceContainerHighest,
       fallbackIconSize: 32,
-    );
-    if (!isCurrent) return artwork;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        artwork,
-        Positioned(
-          top: 8,
-          right: 8,
-          child: AnimatedPlayingBadge(isPlaying: isPlaying),
-        ),
-      ],
     );
   }
 

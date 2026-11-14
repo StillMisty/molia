@@ -1425,17 +1425,8 @@
   },
   "aiDjAutoFeedResume": "Resume auto-fill",
   "aiDjGenerationStatus": "Generating recommendations",
-  "aiDjGeneratingCount": "Picking {count} songs",
-  "@aiDjGeneratingCount": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "aiDjPhaseProfile": "Reading your taste",
   "aiDjPhaseModel": "AI is picking songs",
-  "aiDjPhaseResolvingShort": "Finding songs",
   "aiDjPhaseResolving": "Finding songs {done}/{total}",
   "@aiDjPhaseResolving": {
     "placeholders": {
@@ -1443,23 +1434,6 @@
         "type": "int"
       },
       "total": {
-        "type": "int"
-      }
-    }
-  },
-  "aiDjWaitingSeconds": "Waiting {seconds}s",
-  "@aiDjWaitingSeconds": {
-    "placeholders": {
-      "seconds": {
-        "type": "int"
-      }
-    }
-  },
-  "aiDjResolvingTitle": "Finding songs",
-  "aiDjProgressFound": "Found {count}",
-  "@aiDjProgressFound": {
-    "placeholders": {
-      "count": {
         "type": "int"
       }
     }

@@ -120,6 +120,14 @@ class AiDjProvider extends ChangeNotifier {
   /// 显式操作进行中（生成 / 加入队列 / 重找未解析）。
   bool get isBusy => _generation.isBusy || _radio.queueBusy;
 
+  /// 队列操作（起播 / 入队 / 历史播放）是否在途。
+  ///
+  /// 播放类动作只受它限制：显式生成是后台行为，旧列表仍可播放 / 入队。
+  bool get queueBusy => _radio.queueBusy;
+
+  /// 是否有单曲「换一首」在途（行内进度，不占显式忙碌位）。
+  bool get hasReplacing => _generation.replacingUri != null;
+
   /// 生成状态（独立 ValueListenable）：进度分片只通知它，不触发聚合通知。
   ValueListenable<AiGenerationState> get generationState => _generation.state;
 
@@ -396,8 +404,10 @@ class AiDjProvider extends ChangeNotifier {
   void cancelGeneration() => _generation.cancelExplicit();
 
   /// 开始推歌（电台）：用当前推荐替换当前队列并从 [fromIndex] 起播。
+  ///
+  /// 只挡队列操作：显式生成进行中仍可从旧列表起播 / 跳转。
   Future<void> startRadio({int fromIndex = 0}) async {
-    if (isBusy) return;
+    if (_radio.queueBusy) return;
     if (recommendations == null) {
       await ensureRecommendations();
     }
@@ -443,7 +453,7 @@ class AiDjProvider extends ChangeNotifier {
   /// 「全部加入队列」：把当前推荐里还没入队的曲目追加到队尾（不打断播放）。
   Future<void> enqueueRecommendations() async {
     final batch = recommendations;
-    if (batch == null || batch.items.isEmpty || isBusy) return;
+    if (batch == null || batch.items.isEmpty || _radio.queueBusy) return;
     final missing = _radio.missingFromQueue(batch.items);
     if (missing.isEmpty) return;
     _radio.beginQueueOperation();
@@ -601,7 +611,7 @@ class AiDjProvider extends ChangeNotifier {
   /// 功能关闭时按普通队列播放（不启动自动补歌）。
   Future<void> playHistoryBatch(String id) async {
     final batch = await loadHistoryBatch(id);
-    if (batch == null || batch.items.isEmpty || isBusy) return;
+    if (batch == null || batch.items.isEmpty || _radio.queueBusy) return;
     _radio.clearStoppedByUser();
     _feedback.clearUndo();
     await _history.setActive(id);
@@ -633,7 +643,7 @@ class AiDjProvider extends ChangeNotifier {
   /// 历史「加入队列」：只追加未入队曲目，不切换 active。
   Future<void> enqueueHistoryBatch(String id) async {
     final batch = await loadHistoryBatch(id);
-    if (batch == null || isBusy) return;
+    if (batch == null || _radio.queueBusy) return;
     final missing = _radio.missingFromQueue(batch.items);
     if (missing.isEmpty) return;
     _radio.beginQueueOperation();

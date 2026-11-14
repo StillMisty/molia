@@ -2591,35 +2591,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjGenerationStatus => '正在生成推荐';
 
   @override
-  String aiDjGeneratingCount(int count) {
-    return '正在挑选 $count 首';
-  }
-
-  @override
   String get aiDjPhaseProfile => '整理听歌偏好';
 
   @override
   String get aiDjPhaseModel => 'AI 正在选歌';
 
   @override
-  String get aiDjPhaseResolvingShort => '本地找歌';
-
-  @override
   String aiDjPhaseResolving(int done, int total) {
     return '正在找歌 $done/$total';
-  }
-
-  @override
-  String aiDjWaitingSeconds(int seconds) {
-    return '已等待 $seconds 秒';
-  }
-
-  @override
-  String get aiDjResolvingTitle => '正在本地找歌';
-
-  @override
-  String aiDjProgressFound(int count) {
-    return '已找到 $count 首';
   }
 
   @override
