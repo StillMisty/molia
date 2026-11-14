@@ -5,6 +5,7 @@ import 'package:molia/domain/models/ai_dj.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/ai_dj_provider.dart';
+import 'package:molia/providers/ai_radio_session.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/ai/ai_recommendation_store.dart';
@@ -263,6 +264,92 @@ void main() {
     expect(backend.lastRequest?.context?.name, kAiDjContextName);
     expect(provider.queuedCount, 2);
     expect(provider.recommendations?.items, hasLength(3));
+  });
+
+  test('接管意图：起播与历史播放走同一状态序列', () async {
+    await enableWithList();
+    final batchId = provider.activeBatchId!;
+
+    final radio = <(AiDjStatus, bool)>[];
+    void recordRadio() => radio.add((provider.status, provider.queueBusy));
+    provider.addListener(recordRadio);
+    await provider.startRadio();
+    provider.removeListener(recordRadio);
+
+    final history = <(AiDjStatus, bool)>[];
+    void recordHistory() => history.add((provider.status, provider.queueBusy));
+    provider.addListener(recordHistory);
+    await provider.playHistoryBatch(batchId);
+    provider.removeListener(recordHistory);
+
+    const expected = [
+      (AiDjStatus.preparing, true),
+      (AiDjStatus.playing, false),
+    ];
+    expect(radio, expected);
+    expect(history, expected);
+  });
+
+  test('会话接管：夹取起点、清停止标记并重置本轮反馈', () async {
+    final facade = FakePlaybackFacade();
+    final playback = buildTestPlaybackProvider(facade: facade);
+    await playback.preferencesReady;
+    final library = LibraryProvider(
+      repository: FakeLibraryRepository(),
+      playbackProvider: playback,
+    );
+    var roundResets = 0;
+    final session = AiRadioSession(
+      playbackProvider: playback,
+      libraryProvider: library,
+      onSkip: (_) {},
+      onRoundReset: () => roundResets++,
+    );
+    addTearDown(() {
+      library.dispose();
+      playback.dispose();
+    });
+
+    session.markStoppedByUser();
+    final transition = session.takeOver(
+      AiRadioTakeOver(
+        items: _batch(0, 3).items,
+        startIndex: 99,
+        contextName: kAiDjContextName,
+      ),
+    );
+
+    expect(session.stoppedByUser, isFalse);
+    expect(session.queueBusy, isTrue);
+    expect(session.status, AiDjStatus.preparing);
+    await transition;
+
+    expect(roundResets, 1);
+    expect(session.queueBusy, isFalse);
+    expect(session.status, AiDjStatus.playing);
+    expect(facade.lastRequest?.startIndex, 2);
+    expect(facade.lastRequest?.context?.name, kAiDjContextName);
+  });
+
+  test('接管失败：状态 error、释放互斥位并把错误交给门面', () async {
+    await enableWithList();
+    final batchId = provider.activeBatchId!;
+    backend.playError = StateError('boom');
+
+    final transition = provider.startRadio();
+    expect(provider.status, AiDjStatus.preparing);
+    expect(provider.queueBusy, isTrue);
+    await transition;
+
+    expect(provider.status, AiDjStatus.error);
+    expect(provider.queueBusy, isFalse);
+    expect(provider.lastError, isNotNull);
+
+    // 历史批次走同一意图：失败同样落 error 并释放互斥位。
+    await provider.playHistoryBatch(batchId);
+    expect(provider.status, AiDjStatus.error);
+    expect(provider.queueBusy, isFalse);
+    expect(provider.lastError, isNotNull);
   });
 
   test('enqueueRecommendations：只追加未入队曲目，不重复追加', () async {
