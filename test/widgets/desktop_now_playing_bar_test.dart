@@ -6,7 +6,6 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/playback_provider.dart';
-import 'package:molia/widgets/playback_transport.dart';
 import 'package:molia/widgets/player_morph.dart';
 import 'package:molia/widgets/volume_control.dart';
 import 'package:provider/provider.dart';
@@ -66,10 +65,18 @@ void main() {
 
     final bar = find.byType(DesktopNowPlayingBar);
     expect(bar, findsOneWidget);
-    expect(
-      find.descendant(of: bar, matching: find.byType(PlaybackModeButton)),
-      findsNothing,
-    );
+    for (final icon in const [
+      Icons.shuffle_rounded,
+      Icons.repeat_rounded,
+      Icons.repeat_one_rounded,
+      Icons.playlist_play_rounded,
+    ]) {
+      expect(
+        find.descendant(of: bar, matching: find.byIcon(icon)),
+        findsNothing,
+        reason: '底栏不再有播放模式按钮（$icon）',
+      );
+    }
     expect(
       find.descendant(of: bar, matching: find.byType(VolumeControl)),
       findsOneWidget,

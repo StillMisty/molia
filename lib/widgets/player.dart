@@ -937,7 +937,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             child: Align(
               alignment: Alignment.centerRight,
               child: Padding(
-                // 与进度排的播放模式同一内边距：两排右缘对齐。
+                // 与进度排右侧「更多」同一内边距：两排右缘对齐。
                 padding: const EdgeInsets.only(right: _controlsRowPadding),
                 child: VolumeControl(
                   buttonKey: Player.volumeButtonKey,

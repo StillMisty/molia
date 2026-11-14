@@ -7,7 +7,6 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
-import 'package:molia/widgets/playback_transport.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -84,7 +83,15 @@ void main() {
     await tester.pumpWidget(host(const Player()));
     await tester.pump();
 
-    expect(find.byType(PlaybackModeButton), findsNothing);
+    // 播放模式不再常显：进度排里只有「更多」这一个菜单入口。
+    for (final icon in const [
+      Icons.shuffle_rounded,
+      Icons.repeat_rounded,
+      Icons.repeat_one_rounded,
+      Icons.playlist_play_rounded,
+    ]) {
+      expect(find.byIcon(icon), findsNothing, reason: '$icon 不应常显');
+    }
     expect(find.byKey(const Key('playerMoreButton')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('playerMoreButton')));
