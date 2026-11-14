@@ -52,6 +52,12 @@ PATH_ALLOWLIST = {
     "assets/fonts/": "文中举例的未来字体目录",
     "ios/Podfile": "文中说明仓库里没有 Podfile",
     "macos/Podfile": "文中说明仓库里没有 Podfile",
+    # 下列路径是 .gitignore 里的生成物 / 本机配置：本机跑过构建就有，CI 的 clean
+    # checkout 没有。不豁免会让 push 后的 CI 在第一步就失败（本地却看不出来）。
+    "android/key.properties": "本机签名配置，不入库",
+    "android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java":
+        "Flutter 生成的插件注册文件，不入库",
+    "linux/flutter/ephemeral/": "Flutter 生成的临时目录，不入库（结尾 / 表示整个目录）",
     "lib/arm64-v8a/libmpv.so": "APK 内路径，不是仓库路径",
     "lib/just_audio_media_kit.dart": "文中假设的 dependency_overrides 文件",
     "lib/media_kit_libs_audio.dart": "文中假设的 dependency_overrides 文件",
@@ -96,6 +102,17 @@ def strip_code_fences(text: str) -> str:
     return re.sub(r"```.*?```", "", text, flags=re.DOTALL)
 
 
+def allowlisted(token: str) -> bool:
+    """路径白名单：精确匹配，或以 `/` 结尾的目录前缀。"""
+    if token in PATH_ALLOWLIST:
+        return True
+    return any(
+        allowed.endswith("/")
+        and (token == allowed.rstrip("/") or token.startswith(allowed))
+        for allowed in PATH_ALLOWLIST
+    )
+
+
 def check_paths(files: list[Path]) -> list[str]:
     errors: list[str] = []
     for path in files:
@@ -114,7 +131,7 @@ def check_paths(files: list[Path]) -> list[str]:
                 continue
             if "://" in token or "..." in token:
                 continue
-            if token in PATH_ALLOWLIST:
+            if allowlisted(token):
                 continue
             # `docs/adr/0003` 这种只写编号、不写 .md 的引用按前缀解析。
             adr_ref = re.fullmatch(r"docs/adr/(\d{4})", token)
