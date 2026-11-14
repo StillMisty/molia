@@ -7,12 +7,10 @@ import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
-import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/track.dart';
 import '../models/lyric_line.dart';
 import 'lyrics_scroll_policy.dart';
 import '../models/play_mode.dart';
-import '../pages/lyrics_display/lyrics_content_settings_page.dart';
 import '../pages/source_swap_page.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/playback_provider.dart';
@@ -23,10 +21,39 @@ import '../services/notification_service.dart';
 import '../theme/motion_policy.dart';
 import '../utils/responsive.dart';
 import 'lyric_karaoke_text.dart';
+import 'lyrics_display_settings_action.dart';
 import 'lyrics_selection_page.dart';
 import 'lyrics_source_search_view.dart';
 import 'playback_selectors.dart';
 import 'shell_page_visibility.dart';
+
+/// 歌词页 FAB 的固定动作序列（顺序即展示顺序）。
+///
+/// 前四项恒定：换源 / 复制歌词 / 歌词海报 / 显示设置。用户手动滚动后
+/// 「居中当前行」只能追加在末尾——固定项不因歌词有无、是否本地曲目而增删，
+/// 菜单位置才不会随状态跳来跳去。
+enum LyricsQuickAction {
+  swapSource,
+  copyLyrics,
+  poster,
+  displaySettings,
+  centerCurrentLine,
+}
+
+/// 按状态计算 FAB 动作：前四项恒定，「居中当前行」只作为第五项追加。
+List<LyricsQuickAction> lyricsQuickActionOrder({
+  required bool hasLyrics,
+  required bool synced,
+  required bool autoScroll,
+}) {
+  return [
+    LyricsQuickAction.swapSource,
+    LyricsQuickAction.copyLyrics,
+    LyricsQuickAction.poster,
+    LyricsQuickAction.displaySettings,
+    if (hasLyrics && synced && !autoScroll) LyricsQuickAction.centerCurrentLine,
+  ];
+}
 
 class LyricsWidget extends StatefulWidget {
   const LyricsWidget({
@@ -393,81 +420,72 @@ class _LyricsWidgetState extends State<LyricsWidget>
     });
   }
 
-  /// FAB menu 项（歌词域操作）：换歌词 / 复制模式 / 歌词海报 /
-  /// 居中跟随（条件）；无歌词时 = 换歌词 + 歌词显示设置。
+  /// FAB menu 项（歌词域操作）：换源 / 复制歌词 / 歌词海报 / 显示设置
+  /// 四项固定顺序；手动滚动暂停跟随时末尾追加「居中当前行」。
   ///
   /// 文案统一取「动作 + 对象」的短名（3–6 字）：胶囊宽度随文案生长 + 右缘对齐，
   /// 长短悬殊时一眼就能看出参差，所以海报入口用「歌词海报」而不是整句说明。
   ///
-  /// `M3EFabMenu` 要求 2–6 项且不支持 disabled：条件项只能增删，因此无歌词
-  /// 时用「显示设置」凑下限，而不是展示禁用项。
+  /// `M3EFabMenu` 要求 2–6 项：固定四项已满足下限，条件项只追加不替换，
+  /// 菜单的前四项在任何状态下都不变。
   List<M3EFabMenuItem> _buildQuickActions(AppLocalizations l10n) {
     final bool hasLyrics = _session.lines.isNotEmpty;
-    // 本地下载曲目：文件是持久副本，不提供「换源」入口（自动换源也已跳过）。
-    // 用 listen:false 读取：本方法在 PositionLineIndexBuilder 的 build 内被
-    // 调用，context.select 在该阶段会触发 provider 断言；曲目变化时外层
-    // Selector（按 track uri）会重建整个歌词内容，取值仍是最新。
-    final isLocalTrack =
-        Provider.of<PlaybackProvider>(
-          context,
-          listen: false,
-        ).snapshot.current?.id.sourceKey ==
-        kLocalSourceKey;
-    return <M3EFabMenuItem>[
-      // 换歌词：歌词页的快捷入口（信息页歌词来源行是数据面入口）。
-      if (!isLocalTrack)
-        M3EFabMenuItem(
-          icon: const Icon(Icons.swap_horiz_rounded),
-          label: l10n.lyricsSwapAction,
-          onPressed: () => unawaited(_showSourceSwapPage()),
-        ),
-      M3EFabMenuItem(
-        icon: Icon(
-          _isCopyLyricsMode
-              ? Icons.playlist_play_rounded
-              : Icons.edit_note_rounded,
-        ),
-        label: _isCopyLyricsMode
-            ? l10n.lyricsCopyModeExit
-            : l10n.lyricsCopyModeAction,
-        onPressed: () {
-          HapticsService.lightImpact();
-          _toggleCopyLyricsMode();
-        },
-      ),
-      if (hasLyrics)
-        M3EFabMenuItem(
-          icon: const Icon(Icons.checklist_rounded),
-          label: l10n.lyricsPosterAction,
-          onPressed: () => unawaited(_showLyricsSelectionPage()),
-        ),
-      // 居中/恢复跟随：仅「手动滚动暂停 + 有同步歌词」时入列。
-      if (hasLyrics && !_autoScroll && _session.isSynced)
-        M3EFabMenuItem(
-          icon: const Icon(Icons.vertical_align_center_rounded),
-          label: l10n.centerCurrentLine,
-          onPressed: _centerCurrentLine,
-        ),
-      // 无歌词：歌词显示设置（与「换歌词」一起满足 2 项下限）。
-      if (!hasLyrics)
-        M3EFabMenuItem(
-          icon: const Icon(Icons.tune_rounded),
-          label: l10n.lyricsDisplaySettingsAction,
-          onPressed: () => unawaited(_showLyricsDisplaySettings()),
-        ),
+    return [
+      for (final action in lyricsQuickActionOrder(
+        hasLyrics: hasLyrics,
+        synced: _session.isSynced,
+        autoScroll: _autoScroll,
+      ))
+        _quickActionItem(action, l10n),
     ];
   }
 
-  /// 歌词显示设置（歌词页 + 输出共享项）：无歌词时的 FAB menu 入口。
-  Future<void> _showLyricsDisplaySettings() {
-    final l10n = AppLocalizations.of(context)!;
-    return ResponsiveNavigation.showSecondaryPage<void>(
-      context: context,
-      title: l10n.lyricsContentTitle,
-      body: const LyricsContentSettingsPage(embedded: true),
-      preferredMode: SecondaryPageMode.sideSheet,
-      maxWidth: 520,
-    );
+  M3EFabMenuItem _quickActionItem(
+    LyricsQuickAction action,
+    AppLocalizations l10n,
+  ) {
+    switch (action) {
+      case LyricsQuickAction.swapSource:
+        // 换源：歌词页的快捷入口（信息页歌词来源行是数据面入口）。
+        return M3EFabMenuItem(
+          icon: const Icon(Icons.swap_horiz_rounded),
+          label: l10n.lyricsSwapAction,
+          onPressed: () => unawaited(_showSourceSwapPage()),
+        );
+      case LyricsQuickAction.copyLyrics:
+        return M3EFabMenuItem(
+          icon: Icon(
+            _isCopyLyricsMode
+                ? Icons.playlist_play_rounded
+                : Icons.edit_note_rounded,
+          ),
+          label: _isCopyLyricsMode
+              ? l10n.lyricsCopyModeExit
+              : l10n.lyricsCopyModeAction,
+          onPressed: () {
+            HapticsService.lightImpact();
+            _toggleCopyLyricsMode();
+          },
+        );
+      case LyricsQuickAction.poster:
+        return M3EFabMenuItem(
+          icon: const Icon(Icons.checklist_rounded),
+          label: l10n.lyricsPosterAction,
+          onPressed: () => unawaited(_showLyricsSelectionPage()),
+        );
+      case LyricsQuickAction.displaySettings:
+        return M3EFabMenuItem(
+          icon: const Icon(Icons.tune_rounded),
+          label: l10n.lyricsDisplaySettingsAction,
+          onPressed: () => unawaited(showLyricsDisplaySettings(context)),
+        );
+      case LyricsQuickAction.centerCurrentLine:
+        return M3EFabMenuItem(
+          icon: const Icon(Icons.vertical_align_center_rounded),
+          label: l10n.centerCurrentLine,
+          onPressed: _centerCurrentLine,
+        );
+    }
   }
 
   /// 滚到当前行：把主行文本块的顶边锚定在 [_anchorFraction] 处。
