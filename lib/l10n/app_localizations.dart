@@ -1445,7 +1445,7 @@ abstract class AppLocalizations {
   /// No description provided for @providerNetease.
   ///
   /// In en, this message translates to:
-  /// **'NetEase Cloud Music'**
+  /// **'NetEase Music'**
   String get providerNetease;
 
   /// No description provided for @providerKugou.

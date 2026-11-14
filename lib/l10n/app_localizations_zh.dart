@@ -713,7 +713,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get providerLRCLIB => 'LRCLIB';
 
   @override
-  String get providerNetease => '网易云音乐';
+  String get providerNetease => '网易音乐';
 
   @override
   String get providerKugou => '酷狗音乐';

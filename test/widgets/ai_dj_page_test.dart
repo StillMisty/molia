@@ -38,7 +38,7 @@ AiDjBatch _batch() => AiDjBatch(
       ResolvedRecommendation(
         source: AiRecommendation(title: 'Song $i', artist: 'Artist'),
         track: _track(i),
-        sourceName: '网易云音乐',
+        sourceName: '网易音乐',
       ),
   ],
   generatedAt: DateTime.now(),

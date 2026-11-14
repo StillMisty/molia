@@ -233,7 +233,13 @@ List<SingleChildWidget> buildAppProviders({
     ),
     // 下载文件维护面：目录展示 / 半成品清扫 / 孤儿回收 / 补发布。与命令面
     // 分开注册，页面不需要为看目录而拿到整个下载服务。
-    Provider<DownloadMaintenance>.value(value: downloadService),
+    //
+    // 这里用 InheritedProvider.value 而不是 Provider.value：DownloadService
+    // 同时是 ChangeNotifier，Provider 的 debug 校验会按运行时值把它当成
+    // Listenable 并抛异常（runApp 之前就中断，Linux / Android debug 全黑屏）。
+    // 消费方只 read 这个窄接口、不需要随 DownloadService 通知重建，所以
+    // 跳过该误报，而不是把整个 DownloadService 暴露给页面。
+    InheritedProvider<DownloadMaintenance>.value(value: downloadService),
     // 下载设置：保存位置 / 文件名格式 / 标签嵌入（设置页读写）。
     ChangeNotifierProvider.value(value: local.downloadSettings),
     // 本地曲库：音乐文件夹配置 / 扫描进度 / 缺文件检查（设置页与本地歌曲）。

@@ -33,7 +33,7 @@ AiDjBatch _batch(
           duration: const Duration(seconds: 100),
           origin: TrackOrigin.builtin,
         ),
-        sourceName: '网易云音乐',
+        sourceName: '网易音乐',
       ),
   ],
   generatedAt: generatedAt ?? _now,

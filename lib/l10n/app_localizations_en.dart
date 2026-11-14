@@ -739,7 +739,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get providerLRCLIB => 'LRCLIB';
 
   @override
-  String get providerNetease => 'NetEase Cloud Music';
+  String get providerNetease => 'NetEase Music';
 
   @override
   String get providerKugou => 'Kugou Music';
