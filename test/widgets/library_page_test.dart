@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -87,13 +88,15 @@ class _FakeSources extends SourcesProvider {
   String get preferredQuality => '320k';
 }
 
-/// 两个可搜索渠道：搜索 tab 常显，顶部渠道下拉必须始终只有一个。
+/// 两个可搜索渠道：搜索 tab 常显，顶部渠道选择必须始终只有一个。
+///
+/// 名称刻意含 5 个汉字：窄屏下曾因下拉弹层继承触发框宽度只剩「前两个字」。
 class _SearchSources extends _FakeSources {
   @override
   List<SourceDescriptor> get channels => const [
     SourceDescriptor(
       key: 'kw',
-      displayName: '酷我音乐',
+      displayName: '网易云音乐',
       kind: SourceKind.builtin,
       discoverable: true,
       capabilities: SourceCapabilities(search: true),
@@ -101,6 +104,12 @@ class _SearchSources extends _FakeSources {
     SourceDescriptor(
       key: 'tx',
       displayName: 'QQ音乐',
+      kind: SourceKind.builtin,
+      capabilities: SourceCapabilities(search: true),
+    ),
+    SourceDescriptor(
+      key: 'bili',
+      displayName: '哔哩哔哩',
       kind: SourceKind.builtin,
       capabilities: SourceCapabilities(search: true),
     ),
@@ -270,7 +279,7 @@ void main() {
         ),
       );
 
-      expect(find.byKey(ChannelSearchBar.channelDropdownKey), findsNothing);
+      expect(find.byKey(ChannelSearchBar.channelPickerKey), findsNothing);
       expect(find.byType(M3ESearchBar), findsNothing);
       expect(find.byType(EditableText), findsOneWidget);
       expect(
@@ -290,14 +299,14 @@ void main() {
       expect(focusNode.hasFocus, isTrue);
     });
 
-    testWidgets('搜索 tab：顶部渠道下拉常显，条内不重复，tab 宽度不跳', (tester) async {
+    testWidgets('搜索 tab：顶部渠道选择常显，条内不重复，tab 宽度不跳', (tester) async {
       final searchSources = _SearchSources();
       addTearDown(searchSources.dispose);
       await pump(tester, 900, sourcesOverride: searchSources);
 
       // 默认就是搜索 tab：顶部下拉在，搜索条内没有第二个渠道控件。
       expect(find.byType(LibraryChannelSelector), findsOneWidget);
-      expect(find.byKey(ChannelSearchBar.channelDropdownKey), findsNothing);
+      expect(find.byKey(ChannelSearchBar.channelPickerKey), findsNothing);
       expect(find.byType(M3ESearchBar), findsNothing);
 
       final selectorRect = tester.getRect(find.byType(LibraryChannelSelector));
@@ -311,7 +320,61 @@ void main() {
       await tester.tap(tabIcon(Icons.search_rounded));
       await tester.pumpAndSettle();
       expect(find.byType(LibraryChannelSelector), findsOneWidget);
-      expect(find.byKey(ChannelSearchBar.channelDropdownKey), findsNothing);
+      expect(find.byKey(ChannelSearchBar.channelPickerKey), findsNothing);
+    });
+
+    testWidgets('窄屏：渠道名在触发框与菜单里都完整显示', (tester) async {
+      final searchSources = _SearchSources();
+      addTearDown(searchSources.dispose);
+      await pump(tester, 360, sourcesOverride: searchSources);
+
+      final trigger = find.byKey(LibraryChannelSelector.triggerKey);
+      expect(trigger, findsOneWidget);
+
+      final triggerText = find.descendant(
+        of: trigger,
+        matching: find.text('网易云音乐'),
+      );
+      expect(
+        tester.renderObject<RenderParagraph>(triggerText).didExceedMaxLines,
+        isFalse,
+        reason: '触发框不能再只剩「前两个字 + 省略号」',
+      );
+
+      await tester.tap(trigger);
+      await tester.pumpAndSettle();
+
+      for (final name in ['网易云音乐', '哔哩哔哩', 'QQ音乐']) {
+        final itemText = find.descendant(
+          of: find.byType(M3EMenuItem),
+          matching: find.text(name),
+        );
+        expect(itemText, findsOneWidget, reason: '$name 应出现在渠道菜单里');
+        expect(
+          tester.renderObject<RenderParagraph>(itemText).didExceedMaxLines,
+          isFalse,
+          reason: '$name 在菜单里应完整显示',
+        );
+      }
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(M3EMenuItem),
+          matching: find.text('哔哩哔哩'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final selectedText = find.descendant(
+        of: find.byKey(LibraryChannelSelector.triggerKey),
+        matching: find.text('哔哩哔哩'),
+      );
+      expect(selectedText, findsOneWidget);
+      expect(
+        tester.renderObject<RenderParagraph>(selectedText).didExceedMaxLines,
+        isFalse,
+        reason: '切换后的渠道名也要完整显示',
+      );
     });
 
     testWidgets('重复点击资料库：切回搜索 tab 并聚焦搜索框', (tester) async {

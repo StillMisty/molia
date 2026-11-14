@@ -10,7 +10,7 @@
 /// 只有位置与尺寸有意义——遮罩打开时实测它的矩形，把搜索条与结果面板摆在
 /// 同一位置（route 挂在根导航器上、坐标是整窗口径，所以顶栏高度不用写死在这里）。
 ///
-/// 搜索条是 [ChannelSearchBar]：左侧渠道下拉（与发现页同一个当前渠道）、
+/// 搜索条是 [ChannelSearchBar]：左侧渠道选择（与发现页同一个当前渠道）、
 /// 中间细分割线、右侧输入 + 清除键；选择渠道会同时切发现内容与搜索，并把
 /// 焦点还给输入框。当前渠道不支持搜索时，面板显示专用空态，下拉仍可切换。
 ///
@@ -374,7 +374,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     );
   }
 
-  /// 渠道下拉选择：发现内容与搜索一起切，然后把焦点还给输入框。
+  /// 渠道选择：发现内容与搜索一起切，然后把焦点还给输入框。
   void _selectChannel(String key) {
     context.read<ChannelSelection>().select(key);
     final textLength = _field.text.length;
