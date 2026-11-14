@@ -25,6 +25,14 @@ description: 新增、修改或精简 Molia 测试（test/**、integration_test/
 3. 小而散的测试文件（< ~120 行）并入同模块文件：`flutter test` 的装载开销与文件数成正比
    （每文件约 2s，与文件大小无关）。
 
+## 截图与视觉断言
+
+- 不要在 `testWidgets` 里用 `RenderRepaintBoundary.toImage` /
+  `tester.binding.takeScreenshot`：本仓实测会卡到测试超时（一次 236s）。
+  视觉基线用 `matchesGoldenFile`；组件预览用 `flutter-add-widget-preview`；
+  实机截图走 `molia-device-debug` 的 Android / Linux 流程。
+- 临时截图 / 诊断测试放 `test/tmp_*.dart`，必须带 timeout，用完删除，不提交。
+
 ## 迭代与验证
 
 - 迭代中只跑改动范围：`flutter test --no-pub test/catalog`；

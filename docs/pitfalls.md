@@ -132,12 +132,16 @@
     Android 上必挂；桌面因窗口宽、卡片不换行、目标常在已构建范围内而不暴露。
     集成测试滚动一律走 `integration_test/lx_engine_integration_test.dart` 的 `scrollTo`
     助手（fling 版）或 `ensureVisible`，不要用 `scrollUntilVisible`。
-25. **M3E 分段按钮与下拉菜单的两个暗坑**（设置页行组件已收口）：
+25. **M3E 分段按钮与下拉菜单的三个暗坑**（设置页行组件已收口）：
     `M3ESegmentedButton` 内部是 `Stack + Positioned.fill + Row(mainAxisSize.min)`，
     放松约束的父级（`Align` / `Row` 尾位）会塌成零宽并溢出，必须给显式/紧约束宽度
     （用 `SettingsChoiceRow`）。
     `M3EDropdownMenu` 单选必须设 `fieldStyle.hintText`，否则未选中时显示包内英文兜底
     `Select`（用 `SettingsDropdownRow`，它统一填标题提示）。
+    它的弹层宽度固定等于字段宽度（包内 `SizedBox(width: renderBox.size.width)`），
+    item 还默认给右侧打勾预留 24dp；窄屏上长渠道名会只剩「前两个字 + 省略号」。
+    要完整名称：字段宽按最长名实测、item 不预留槽（选中行才显示勾），或换
+    M3EMenu / 底部弹层；只改 itemBuilder 不够。
 26. **新 worktree 的 Android 构建先对齐前置条件**：`android/gradle/`、`android/key.properties`、
     `*.jks` 与 `.dart_tool/hooks_runner/` 都被 .gitignore 排除。新 worktree 里先跑
     `tool/agent/worktree_prepare.sh <worktree-dir> [branch]`，它会补 Gradle wrapper
