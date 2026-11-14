@@ -1,10 +1,10 @@
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../pages/diagnostics_page.dart';
 import '../../pages/update_settings_page.dart';
 import '../../providers/update_provider.dart';
+import 'settings_section_availability.dart';
 import 'settings_tiles.dart';
 
 /// 设置首屏「关于与更新」卡：版本与更新入口 + 问题排查。
@@ -12,12 +12,14 @@ import 'settings_tiles.dart';
 /// 更新是低频的「检查 / 下载 / 安装」，问题排查是求助入口；两者都不参与
 /// 日常播放配置，因此从「通用」卡拆出，放在首屏末位。
 class AboutSettingsSection extends StatelessWidget {
-  const AboutSettingsSection({super.key});
+  const AboutSettingsSection({super.key, required this.availability});
+
+  final SettingsSectionAvailability availability;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final update = context.watch<UpdateProvider?>();
+    final update = availability.update;
     return SettingsSectionCard(
       title: l10n.settingsUpdateTitle,
       children: [

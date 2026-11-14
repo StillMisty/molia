@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -8,6 +7,7 @@ import '../../pages/download_settings_page.dart';
 import '../../pages/downloads_manage_page.dart';
 import '../../pages/music_folders_page.dart';
 import '../../services/library/library_add_settings.dart';
+import 'settings_section_availability.dart';
 import 'settings_tiles.dart';
 
 /// 设置首屏「曲库与存储」卡：新歌加入位置、本地文件夹与下载 / 缓存。
@@ -15,13 +15,18 @@ import 'settings_tiles.dart';
 /// 这些行都围绕「歌从哪里来、存在哪里」：加入位置是曲库行为，文件夹是本地
 /// 导入，下载与缓存是占用治理。文件夹、下载与缓存是设备本地键，卡底一句
 /// 说明；加入位置跟人走，不在此列。
+///
+/// 可选服务与平台能力是否具备由 [SettingsSectionAvailability] 判定；加入位置
+/// 的值仍由本行的 `Selector` 订阅，写入归 [LibraryAddSettings]（跟人走），
+/// 卡片不碰存储。
 class LibraryStorageSection extends StatelessWidget {
-  const LibraryStorageSection({super.key});
+  const LibraryStorageSection({super.key, required this.availability});
+
+  final SettingsSectionAvailability availability;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final libraryAddSettings = context.watch<LibraryAddSettings?>();
     return SettingsSectionCard(
       title: l10n.settingsLibraryStorageTitle,
       footer: SettingsSectionHint(
@@ -29,7 +34,7 @@ class LibraryStorageSection extends StatelessWidget {
       ),
       children: [
         // 加入收藏 / 列表的位置：新曲目放开头还是末尾（默认开头）。
-        if (libraryAddSettings != null)
+        if (availability.hasLibraryAdd)
           Selector<LibraryAddSettings, LibraryAddPosition>(
             selector: (context, settings) => settings.position,
             builder: (context, position, _) =>
@@ -49,11 +54,11 @@ class LibraryStorageSection extends StatelessWidget {
                       l10n.settingsLibraryAddPositionBottom,
                     ),
                   ],
-                  onChanged: libraryAddSettings.setPosition,
+                  onChanged: availability.libraryAdd!.setPosition,
                 ),
           ),
         // 音乐文件夹：扫描目录、进度 / 摘要与手动重扫（iOS 不展示）。
-        if (defaultTargetPlatform != TargetPlatform.iOS)
+        if (availability.musicFoldersRowVisible)
           SettingsNavTile(
             key: const Key('settingsMusicFoldersItem'),
             icon: Icons.folder_copy_rounded,

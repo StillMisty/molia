@@ -1175,6 +1175,11 @@
   越界访问在 debug 断言、release 抛错。组合根是唯一构造注册表的地方，模块
   构造参数是 `SettingsAccess` / `SettingsScope`，不再各建私有注册表；模块初始
   默认值取自 `SettingsKey.defaultValue`，不在字段里复制字面量。
+- **Settings section availability（设置卡可用性快照）** — `lib/widgets/settings/settings_section_availability.dart::SettingsSectionAvailability`：
+  九张设置卡共用的不可变快照：可选子系统是否已挂载（同步 / 统计 / 听歌同步 /
+  更新 / 省流 / 换源 / 歌词显示…）与平台能力（iOS 文件夹、桌面音频焦点、托盘、
+  歌词输出能力）一次解析成「这一行可见吗」。它只回答有没有，不持有值订阅
+  （值仍由行内 `Selector` / `ValueListenable` 订阅）；可无 widget 树构造与断言。
 - **Credentials database（本机凭据库）** — `lib/data/credentials/credentials_database.dart`：
   `molia_credentials_v1.sqlite` 的 drift 库（`key` / `value` / `updatedAt`）。
   所有 `SettingsValueStore.secure` 键（B 站 Cookie、AI Key、scrobble Token、

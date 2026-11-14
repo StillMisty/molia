@@ -1,14 +1,12 @@
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../pages/backup_restore_page.dart';
 import '../../pages/play_statistics_page.dart';
 import '../../pages/sync_settings_page.dart';
-import '../../providers/sync_provider.dart';
-import '../../services/play_statistics_service.dart';
+import 'settings_section_availability.dart';
 import 'settings_tiles.dart';
 
 /// 设置首屏「数据与备份」卡：听歌统计、备份与恢复、跨设备同步。
@@ -17,15 +15,16 @@ import 'settings_tiles.dart';
 /// 发到别的设备。导出 / 导入 / 收藏迁移下沉到「备份与恢复」子页，低频且带
 /// 破坏性的动作不再与日常入口混排。
 class DataBackupSection extends StatelessWidget {
-  const DataBackupSection({super.key});
+  const DataBackupSection({super.key, required this.availability});
+
+  final SettingsSectionAvailability availability;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     // 完整备份只经同步引擎的适配器收集/合并；引擎未挂载（测试）时导出 /
     // 导入按失败处理（没有可回退的旧数据源），入口仍然可见。
-    final syncProvider = context.watch<SyncProvider?>();
-    final statistics = context.watch<PlayStatisticsService?>();
+    final statistics = availability.statistics;
     return SettingsSectionCard(
       title: l10n.settingsDataBackupTitle,
       children: [
@@ -60,7 +59,7 @@ class DataBackupSection extends StatelessWidget {
           subtitle: l10n.settingsBackupRestoreSubtitle,
           onTap: () => openSettingsSubPage(context, const BackupRestorePage()),
         ),
-        if (syncProvider != null)
+        if (availability.hasSync)
           SettingsNavTile(
             key: const Key('settingsSyncItem'),
             icon: Icons.sync_rounded,

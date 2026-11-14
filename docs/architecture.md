@@ -1713,7 +1713,10 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   音源与在线服务 / 曲库与存储 / 数据与备份 / 通用 / 桌面〔仅桌面〕/
   关于与更新），不设纯目录子页；同一域只在一张卡，卡内按「常用 → 少用、
   开关 → 入口」排序，低频长表单下沉子页（底部导航拖拽列表、备份与恢复）
-  （分组与排序口径见 ADR-0027）；
+  （分组与排序口径见 ADR-0027）；各卡的可选子系统与平台能力（同步 / 统计 /
+  歌词输出 / 托盘…）由
+  `lib/widgets/settings/settings_section_availability.dart::SettingsSectionAvailability`
+  一次解析成不可变快照，卡片只读行可见性，值订阅仍留在行内；
   分组标题 + 分段卡片行：行表面统一走共享的
   `lib/widgets/card_list_surface.dart`
   （`CardListSurface`：静止内 4dp / 首末外侧 16dp、hover 12dp、press 16dp，
