@@ -524,7 +524,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               // 预览画布用应用表面；文字颜色跟随「取色来源」解析出的方案，
               // 与悬浮窗实际下发一致。
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: M3EShapes.radiusMedium,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,

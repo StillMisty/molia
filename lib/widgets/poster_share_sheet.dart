@@ -290,7 +290,7 @@ class _PosterShareSheetState extends State<PosterShareSheet> {
         child: AspectRatio(
           aspectRatio: 3 / 4,
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: M3EShapes.radiusMedium,
             child: Image.memory(
               bytes,
               key: const Key('posterSharePreview'),

@@ -151,7 +151,7 @@ class _DotIndicatorState extends State<_DotIndicator>
           width: 8 + 10 * t,
           height: 8,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: M3EShapes.radiusExtraSmall,
             color: Color.lerp(widget.inactiveColor, widget.activeColor, t),
           ),
         );

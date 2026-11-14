@@ -345,7 +345,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
       height: _placeholderWidth,
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: M3EShapes.radiusExtraLarge,
       ),
     );
     return SizedBox(

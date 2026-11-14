@@ -586,7 +586,7 @@ class HeatmapLegend extends StatelessWidget {
             height: cellSize,
             decoration: BoxDecoration(
               color: heatmapLevelColor(scheme, level),
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: M3EShapes.radiusExtraSmall,
             ),
           ),
         ],

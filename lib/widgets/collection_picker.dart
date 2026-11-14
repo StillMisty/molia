@@ -563,7 +563,7 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                             variant: M3ECardVariant.filled,
                             color: Colors.transparent,
                             elevation: 0,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: M3EShapes.radiusMedium,
                             padding: EdgeInsets.zero,
                             onPressed: () => _toggleFolder(entry.folder),
                             child: Padding(
@@ -645,7 +645,7 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                       variant: M3ECardVariant.filled,
                       color: Colors.transparent,
                       elevation: 0,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: M3EShapes.radiusMedium,
                       padding: EdgeInsets.zero,
                       onPressed: _toggleSmartGroup,
                       child: Padding(

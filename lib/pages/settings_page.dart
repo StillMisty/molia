@@ -315,7 +315,7 @@ class _SettingsPageState extends State<SettingsPage>
                       // 只显示全局默认封面（没有曲目身份）；外层已订阅。
                       listenForChanges: false,
                       size: 40,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: M3EShapes.radiusMedium,
                       memCacheWidth:
                           (40 * MediaQuery.of(context).devicePixelRatio)
                               .round(),

@@ -114,7 +114,9 @@ class ChannelPicker extends StatelessWidget {
                 foregroundColor: scheme.onSurface,
                 border: BorderSide(color: scheme.outlineVariant),
                 focusedBorder: BorderSide(color: scheme.outline),
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: const BorderRadius.all(
+                  Radius.circular(M3EShapes.full),
+                ),
                 margin: EdgeInsets.zero,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -159,7 +161,7 @@ class ChannelPicker extends StatelessWidget {
         variant: M3ECardVariant.filled,
         color: background,
         elevation: 0,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: M3EShapes.radiusMedium,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         width: double.infinity,
         onPressed: item.disabled ? null : onTap,

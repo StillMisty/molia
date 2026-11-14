@@ -488,7 +488,7 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
                 ),
                 Expanded(
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: M3EShapes.radiusExtraSmall,
                     child: SizedBox(
                       height: 8,
                       child: ColoredBox(
@@ -567,7 +567,7 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
                           decoration: BoxDecoration(
                             color: scheme.primary,
                             borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(4),
+                              top: Radius.circular(M3EShapes.extraSmall),
                             ),
                           ),
                         ),

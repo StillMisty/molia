@@ -1499,7 +1499,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
                 variant: M3ECardVariant.filled,
                 color: Colors.transparent,
                 elevation: 0,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: M3EShapes.radiusMedium,
                 padding: EdgeInsets.zero,
                 onPressed: () {
                   HapticsService.lightImpact();
@@ -1947,7 +1947,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
                       height: 38,
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: M3EShapes.radiusExtraSmall,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -2107,7 +2107,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
         color: selectionTheme.contextualBackground(m3e.colorScheme),
         // 选中栏只在多选时出现：圆底 + 一条低对比分隔线把它与列表分开，
         // 不抢标题行的层级，也不用阴影（M3E 列表表面本来就没有阴影）。
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+        borderRadius: const BorderRadius.vertical(
+          bottom: Radius.circular(M3EShapes.large),
+        ),
         border: Border(
           bottom: BorderSide(color: foreground.withValues(alpha: 0.12)),
         ),

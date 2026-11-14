@@ -291,7 +291,7 @@ class _QuotedComment extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: M3EShapes.radiusSmall,
       ),
       child: Text.rich(
         TextSpan(

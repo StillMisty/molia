@@ -184,7 +184,7 @@ class _AiDjPromptDialogState extends State<_AiDjPromptDialog> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: M3EShapes.radiusMedium,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

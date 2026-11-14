@@ -115,12 +115,14 @@ class ChannelSearchBar extends StatelessWidget {
         final hasText = controller.text.isNotEmpty;
         return M3EFocusRing(
           focused: M3EFocusRing.shouldShow(focusNode, context),
-          radius: BorderRadius.circular(999),
+          radius: const BorderRadius.all(Radius.circular(M3EShapes.full)),
           child: M3ECard(
             variant: M3ECardVariant.filled,
             color: barTheme.backgroundColor(m3e.colorScheme),
             elevation: 0,
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: const BorderRadius.all(
+              Radius.circular(M3EShapes.full),
+            ),
             padding: EdgeInsets.zero,
             focusable: false,
             showFocusRing: false,

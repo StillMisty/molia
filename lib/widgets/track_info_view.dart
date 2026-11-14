@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -273,7 +274,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                         // 外层 CoverChangeBuilder 已经订阅，避免双监听。
                         listenForChanges: false,
                         size: 32,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: M3EShapes.radiusSmall,
                         memCacheWidth:
                             (32 * MediaQuery.of(context).devicePixelRatio)
                                 .round(),

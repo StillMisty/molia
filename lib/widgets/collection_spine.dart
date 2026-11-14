@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 合集标题前的「书脊」细条：没有自定义封面时的统一前导。
@@ -18,7 +19,7 @@ class CollectionSpine extends StatelessWidget {
       height: height,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.primary,
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: M3EShapes.radiusExtraSmall,
       ),
     );
   }

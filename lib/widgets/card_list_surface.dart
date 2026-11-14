@@ -5,7 +5,7 @@ import 'package:motor/motor.dart';
 /// hover 行形状：M3E 规范 `ItemHoveredContainerExpressiveShape` = shape
 /// medium（12dp）；press / focus / 选中是 shape large（16dp，取主题
 /// `M3EListItemTheme.selectedRadius`）。
-const BorderRadius _hoverRadius = BorderRadius.all(Radius.circular(12));
+const BorderRadius _hoverRadius = M3EShapes.radiusMedium;
 
 /// M3E 分段列表的卡片行表面（形状规范 + expressive 弹簧 morph）。
 ///

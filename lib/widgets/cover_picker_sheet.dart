@@ -250,7 +250,7 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
                 height: 120,
                 // 方形预览按 cover 裁切；原图查看走 cover_viewer 的 contain。
                 fit: BoxFit.cover,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: M3EShapes.radiusLarge,
                 memCacheWidth: (120 * MediaQuery.of(context).devicePixelRatio)
                     .round(),
                 fallbackIconSize: 48,

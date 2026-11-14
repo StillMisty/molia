@@ -522,14 +522,14 @@ class TrackRow extends StatelessWidget {
     );
   }
 
-  /// 无封面行的前导图标位：与封面同尺寸、同 10dp 圆角。
+  /// 无封面行的前导图标位：与封面同尺寸、同一套圆角 token。
   Widget _buildPlaceholderIcon(M3EColorScheme scheme, IconData icon) {
     return Container(
       width: surface.coverSize,
       height: surface.coverSize,
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: M3EShapes.radiusMedium,
       ),
       child: Icon(
         icon,
@@ -563,7 +563,7 @@ class TrackRow extends StatelessWidget {
             coverKey: model.effectiveCoverKey,
             originalUrl: model.coverUrl,
             size: surface.coverSize,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: M3EShapes.radiusMedium,
             memCacheWidth:
                 (surface.coverSize * MediaQuery.of(context).devicePixelRatio)
                     .round(),

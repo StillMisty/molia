@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'app_network_image.dart';
@@ -18,7 +19,7 @@ class LibraryCoverThumb extends StatelessWidget {
       url: url,
       width: size,
       height: size,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: M3EShapes.radiusMedium,
       memCacheWidth: (size * MediaQuery.of(context).devicePixelRatio).round(),
       fallbackColor: Theme.of(context).colorScheme.surfaceContainerHighest,
       fallbackIconSize: size * 0.5,

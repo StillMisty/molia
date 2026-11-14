@@ -51,7 +51,7 @@ class DetailPageTrackHeader extends StatelessWidget {
           TrackArtwork(
             track: track,
             size: 40,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: M3EShapes.radiusMedium,
             // 列表头像按 40dp 容器解码，避免把整张原图留在内存里。
             memCacheWidth: (40 * MediaQuery.devicePixelRatioOf(context))
                 .round(),

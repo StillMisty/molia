@@ -5,6 +5,7 @@
 /// `MediaQuery.disableAnimations` / `reduceMotion`（减弱动效时静态显示）。
 library;
 
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/motion_policy.dart';
@@ -75,7 +76,7 @@ class _AiDjThinProgressState extends State<AiDjThinProgress>
     final fraction = (widget.value ?? 0).clamp(0.0, 1.0);
     final disabled = reduceMotionOf(context);
     final bar = ClipRRect(
-      borderRadius: BorderRadius.circular(2),
+      borderRadius: M3EShapes.radiusExtraSmall,
       child: SizedBox(
         height: 3,
         child: Stack(

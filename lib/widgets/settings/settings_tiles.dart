@@ -983,7 +983,7 @@ class SettingsColorSwatch extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: M3EShapes.radiusSmall,
         border: Border.all(
           color: M3ETheme.of(context).colorScheme.outlineVariant,
         ),
@@ -1056,7 +1056,7 @@ class SettingsTileIcon extends StatelessWidget {
         color:
             containerColor ??
             (isDestructive ? scheme.errorContainer : scheme.secondaryContainer),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: M3EShapes.radiusMedium,
       ),
       child: Icon(
         icon,

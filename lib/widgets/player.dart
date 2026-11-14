@@ -750,7 +750,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                 height: 3,
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: M3EShapes.radiusExtraSmall,
                 ),
               ),
             );

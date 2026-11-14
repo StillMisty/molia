@@ -160,7 +160,7 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
                 leading: item.icon != null
                     ? Icon(item.icon)
                     : ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: M3EShapes.radiusSmall,
                         child: AppNetworkImage(
                           url: item.coverUrl,
                           width: 44,

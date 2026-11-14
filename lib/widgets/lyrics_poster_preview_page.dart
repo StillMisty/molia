@@ -505,7 +505,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         originalUrl: widget.albumCoverUrl,
         width: 28,
         height: 28,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: M3EShapes.radiusSmall,
         memCacheWidth: (28 * MediaQuery.of(context).devicePixelRatio).round(),
         fallbackIconSize: 16,
       ),
@@ -656,7 +656,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         alignment: Alignment.center,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: M3EShapes.radiusMedium,
             child: Image.memory(
               bytes,
               cacheWidth: _previewCacheWidth,
@@ -682,7 +682,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surface.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: M3EShapes.radiusMedium,
                 ),
                 child: const Center(
                   child: M3EProgressIndicator.circular(

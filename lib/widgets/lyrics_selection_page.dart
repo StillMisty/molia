@@ -328,7 +328,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               color: scheme.surfaceContainerHigh,
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: M3EShapes.radiusLarge,
                             ),
                             child: Row(
                               children: [
@@ -338,7 +338,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                                   originalUrl: coverUrl,
                                   width: 72,
                                   height: 72,
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: M3EShapes.radiusMedium,
                                   memCacheWidth:
                                       (72 *
                                               MediaQuery.of(context)
@@ -579,14 +579,18 @@ class _LyricTile extends StatelessWidget {
 
     BorderRadius borderRadius;
     if (isSelected) {
+      // 分组内首末行留「内角」小圆角，其余角走 M3E shape medium：
+      // 圆角值只从 token 取，避免同一列表出现 12/4 两套裸数字。
+      final Radius groupEdge = const Radius.circular(M3EShapes.medium);
+      final Radius groupInner = const Radius.circular(M3EShapes.extraSmall);
       borderRadius = BorderRadius.only(
-        topLeft: Radius.circular(isFirstInGroup ? 12 : 4),
-        topRight: Radius.circular(isFirstInGroup ? 12 : 4),
-        bottomLeft: Radius.circular(isLastInGroup ? 12 : 4),
-        bottomRight: Radius.circular(isLastInGroup ? 12 : 4),
+        topLeft: isFirstInGroup ? groupEdge : groupInner,
+        topRight: isFirstInGroup ? groupEdge : groupInner,
+        bottomLeft: isLastInGroup ? groupEdge : groupInner,
+        bottomRight: isLastInGroup ? groupEdge : groupInner,
       );
     } else {
-      borderRadius = BorderRadius.circular(12);
+      borderRadius = M3EShapes.radiusMedium;
     }
 
     // 角色契约：选中行底色 secondaryContainer、前景 onSecondaryContainer；

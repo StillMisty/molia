@@ -242,7 +242,7 @@ class _LeaderboardCoverState extends State<_LeaderboardCover> {
             width: size,
             height: size,
             fit: BoxFit.cover,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: M3EShapes.radiusMedium,
             memCacheWidth: (size * MediaQuery.devicePixelRatioOf(context))
                 .round(),
             placeholder: placeholder,
@@ -270,7 +270,7 @@ class _LeaderboardCoverState extends State<_LeaderboardCover> {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: M3EShapes.radiusMedium,
       ),
       child: Center(
         child: Icon(Icons.leaderboard_rounded, color: foreground, size: 24),

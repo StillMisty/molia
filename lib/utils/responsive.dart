@@ -668,7 +668,7 @@ class ResponsiveNavigation {
               height: 4,
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: M3EShapes.radiusExtraSmall,
               ),
             ),
           ),
