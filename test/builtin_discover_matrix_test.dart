@@ -1034,10 +1034,13 @@ void main() {
       final ok = _Stub({
         'playlist/catalogue': jsonEncode({
           'code': 200,
+          // 真实响应里 sub[].category 是数字，categories 的 key 是字符串：
+          // 解析必须归一，否则每个分类都取不到标签（弹层只剩「全部」）。
           'sub': [
-            {'category': 0, 'name': '语种'},
+            {'category': 0, 'name': '华语'},
+            {'category': '1', 'name': '流行'},
           ],
-          'categories': {'0': '语种'},
+          'categories': {'0': '语种', '1': '风格'},
         }),
         'playlist/hottags': jsonEncode({
           'code': 200,
@@ -1050,7 +1053,9 @@ void main() {
       });
       ok.install();
       final tags = await source.tags();
-      expect(tags.categories.single.name, '语种');
+      expect(tags.categories.map((category) => category.name), ['语种', '风格']);
+      expect(tags.categories.first.tags.single.name, '华语');
+      expect(tags.categories.last.tags.single.name, '流行');
       expect(tags.hotTags.single.name, '热门');
 
       final bad = _Stub({

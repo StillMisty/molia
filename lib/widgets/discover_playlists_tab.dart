@@ -236,6 +236,10 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
 
   Future<void> _showAllTags() async {
     final l10n = _l10n(context);
+    // 空分类只会留下一个没有标签的标题（平台数据不完整时常见），不展示。
+    final categories = _tagCategories
+        .where((category) => category.tags.isNotEmpty)
+        .toList(growable: false);
     final selected = await M3EBottomSheet.show<String>(
       context,
       builder: (sheetContext) => SafeArea(
@@ -270,7 +274,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 children: [
-                  for (final category in _tagCategories) ...[
+                  for (final category in categories) ...[
                     Padding(
                       padding: const EdgeInsets.only(top: 8, bottom: 4),
                       child: Text(
@@ -363,8 +367,15 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                                 constraints: discoverSearchBarConstraints(
                                   context,
                                 ),
-                                // 搜索栏尾部保持干净：「打开歌单」不是搜索
-                                // 动作，收进下方标签行的溢出菜单。
+                                // 空输入时右侧是「打开歌单」，输入后同一位置
+                                // 换成清除键（AppSearchBar 保证互斥）。
+                                trailingWhenEmpty: M3EIconButton(
+                                  key: const Key('discoverOpenPlaylist'),
+                                  variant: M3EIconButtonVariant.standard,
+                                  semanticLabel: l10n.discoverOpenPlaylist,
+                                  icon: const Icon(Icons.link_rounded),
+                                  onPressed: _openLinkDialog,
+                                ),
                                 onChanged: (value) {
                                   // 提交式搜索：仅当清空（清除键或手动删空）时回到全部歌单。
                                   if (value.trim().isEmpty) _clearSearch();
@@ -400,73 +411,70 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     );
   }
 
-  /// 标签行：一个「标签」筛选 chip + 热门标签 + 行尾「打开歌单」溢出。
+  /// 标签行：一个当前筛选 chip + 热门标签。
   ///
-  /// 「全部 / 全部标签」合并成一个入口：清空筛选也是标签弹层里的「全部」，
-  /// chip 不随筛选状态增减；「打开歌单」在行末尾，搜索栏只负责搜索。
-  /// 热门标签为空时仍保留筛选 chip 与溢出，入口不消失。
+  /// 空筛选时 chip 显示「标签」；选中后换成标签名并带 X，点 X 一键清空、
+  /// 点 chip 本体打开分类弹层换标签。热门里跳过已选中的标签，避免同屏出现
+  /// 两个选中态。没有任何可选标签时整行隐藏：搜索栏已承载「打开歌单」，
+  /// 留一个只能弹出「全部」的入口没有意义。
   Widget _buildTagRow(AppLocalizations l10n, double gutter) {
+    final hasCategories = _tagCategories.any((c) => c.tags.isNotEmpty);
+    if (_selectedTag.isEmpty && _hotTags.isEmpty && !hasCategories) {
+      return const SizedBox.shrink();
+    }
+    final selectedName = _selectedTagName;
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: gutter),
-      child: Row(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: M3EChipGroup(
-                groupLabel: l10n.discoverHotTags,
-                child: Row(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: M3EChip(
-                        key: const Key('discoverTagFilter'),
-                        type: M3EChipType.filter,
-                        label: l10n.discoverTags,
-                        leading: const Icon(Icons.category_rounded, size: 18),
-                        selected: _selectedTag.isNotEmpty,
-                        onPressed: _showAllTags,
-                      ),
-                    ),
-                    for (final tag in _hotTags)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: M3EChip(
-                          type: M3EChipType.filter,
-                          label: tag.name,
-                          selected: _selectedTag == tag.id,
-                          onPressed: () => _selectTag(tag.id),
-                        ),
-                      ),
-                  ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: M3EChipGroup(
+          groupLabel: l10n.discoverHotTags,
+          child: Row(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: M3EChip(
+                  key: const Key('discoverTagFilter'),
+                  type: M3EChipType.filter,
+                  label: selectedName ?? l10n.discoverTags,
+                  leading: selectedName == null
+                      ? const Icon(Icons.category_rounded, size: 18)
+                      : null,
+                  selected: _selectedTag.isNotEmpty,
+                  onPressed: _showAllTags,
+                  onDeleted: _selectedTag.isEmpty ? null : () => _selectTag(''),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          M3EMenu.entries(
-            position: M3EMenuAnchorPosition.bottomEnd,
-            anchorBuilder: (context, open) => M3EIconButton(
-              key: const Key('discoverPlaylistsOverflow'),
-              variant: M3EIconButtonVariant.standard,
-              semanticLabel: l10n.discoverOpenPlaylist,
-              icon: const Icon(Icons.more_vert_rounded),
-              onPressed: open,
-            ),
-            onSelected: (value) {
-              if (value == 'openPlaylist') unawaited(_openLinkDialog());
-            },
-            entries: [
-              M3EMenuEntry(
-                label: l10n.discoverOpenPlaylist,
-                value: 'openPlaylist',
-                leading: const Icon(Icons.link_rounded, size: 20),
-              ),
+              for (final tag in _hotTags)
+                if (tag.id != _selectedTag)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: M3EChip(
+                      type: M3EChipType.filter,
+                      label: tag.name,
+                      selected: false,
+                      onPressed: () => _selectTag(tag.id),
+                    ),
+                  ),
             ],
           ),
-        ],
+        ),
       ),
     );
+  }
+
+  /// 当前筛选的展示名：热门或分类里查 id → name，标签未加载时回退 id。
+  String? get _selectedTagName {
+    if (_selectedTag.isEmpty) return null;
+    for (final tag in _hotTags) {
+      if (tag.id == _selectedTag) return tag.name;
+    }
+    for (final category in _tagCategories) {
+      for (final tag in category.tags) {
+        if (tag.id == _selectedTag) return tag.name;
+      }
+    }
+    return _selectedTag;
   }
 
   List<Widget> _buildPlaylistSlivers(

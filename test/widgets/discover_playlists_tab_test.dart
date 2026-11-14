@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:molia/domain/models/discover.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/channel_selection.dart';
 import 'package:molia/providers/discover_provider.dart';
@@ -15,8 +16,8 @@ import '../support/fake_discover_api.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
 
-/// 发现 › 歌单：搜索栏不再挂「打开歌单」，「全部 / 全部标签」合并成一个
-/// 「标签」入口（清空筛选在弹层里的「全部」）。
+/// 发现 › 歌单：打开歌单在搜索栏尾部，有文本时让位给清除键；标签行首 chip
+/// 展示当前筛选并可一键清空，空分类不渲染标题。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -82,18 +83,86 @@ void main() {
     );
   }
 
-  testWidgets('打开歌单移出搜索栏，收进标签行溢出', (tester) async {
+  testWidgets('搜索栏尾部：空输入打开歌单，有文本换成清除键', (tester) async {
+    await tester.pumpWidget(host());
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('discoverOpenPlaylist')), findsOneWidget);
+    expect(find.byIcon(Icons.close_rounded), findsNothing);
+
+    await tester.enterText(find.byType(M3ESearchBar), '华语');
+    await tester.pump();
+    expect(find.byKey(const Key('discoverOpenPlaylist')), findsNothing);
+    expect(find.byIcon(Icons.close_rounded), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('discoverOpenPlaylist')), findsOneWidget);
+    expect(find.byIcon(Icons.close_rounded), findsNothing);
+  });
+
+  testWidgets('选中标签显性化并可一键清除', (tester) async {
     final l10n = lookupAppLocalizations(const Locale('zh'));
     await tester.pumpWidget(host());
     await tester.pumpAndSettle();
 
-    // 搜索栏尾部不再有链接图标。
-    expect(find.byIcon(Icons.link_rounded), findsNothing);
-    expect(find.byKey(const Key('discoverPlaylistsOverflow')), findsOneWidget);
+    expect(find.text(l10n.discoverTags), findsOneWidget);
+    expect(find.text('华语'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('discoverPlaylistsOverflow')));
+    await tester.tap(find.text('华语'));
     await tester.pumpAndSettle();
-    expect(find.text(l10n.discoverOpenPlaylist), findsOneWidget);
+
+    // 行首 chip 换成当前标签名，热门行不再重复同一个标签。
+    final chip = find.byKey(const Key('discoverTagFilter'));
+    expect(find.text(l10n.discoverTags), findsNothing);
+    expect(find.text('华语'), findsOneWidget);
+    expect(
+      find.descendant(of: chip, matching: find.text('华语')),
+      findsOneWidget,
+    );
+
+    final remove = find.descendant(
+      of: chip,
+      matching: find.byIcon(M3EIcons.close),
+    );
+    expect(remove, findsOneWidget);
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+
+    expect(find.text(l10n.discoverTags), findsOneWidget);
+    expect(find.text('华语'), findsOneWidget);
+    expect(find.byIcon(M3EIcons.close), findsNothing);
+  });
+
+  testWidgets('标签弹层不渲染空分类', (tester) async {
+    source.tagsOverride = const DiscoverTags(
+      hotTags: [],
+      categories: [
+        DiscoverTagCategory(name: '语种', tags: []),
+        DiscoverTagCategory(
+          name: '风格',
+          tags: [DiscoverTag(id: '流行', name: '流行')],
+        ),
+      ],
+    );
+    await tester.pumpWidget(host());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('discoverTagFilter')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('discoverAllTagsChip')), findsOneWidget);
+    expect(find.text('语种'), findsNothing);
+    expect(find.text('风格'), findsOneWidget);
+    expect(find.text('流行'), findsOneWidget);
+  });
+
+  testWidgets('没有任何标签时隐藏标签行', (tester) async {
+    source.tagsOverride = const DiscoverTags();
+    await tester.pumpWidget(host());
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('discoverTagFilter')), findsNothing);
   });
 
   testWidgets('全部 / 全部标签合并为一个标签 chip', (tester) async {

@@ -92,19 +92,26 @@ class WySongList {
     required List<dynamic> sub,
     required Map<dynamic, dynamic> categories,
   }) {
-    final subList = <dynamic, List<DiscoverTag>>{};
+    // `categories` 的 key 在 JSON 里是字符串（"0"），而 `sub[].category`
+    // 是数字（0）；subList 与查表两端都先转字符串，否则每个分类都取不到标签，
+    // 弹层只剩空标题。
+    final subList = <String, List<DiscoverTag>>{};
     for (final item in sub) {
       if (item is! Map) continue;
-      final category = item['category'];
+      final category = item['category']?.toString();
+      if (category == null) continue;
       final name = (item['name'] ?? '').toString();
+      if (name.isEmpty) continue;
       (subList[category] ??= []).add(DiscoverTag(id: name, name: name));
     }
     final list = <DiscoverTagCategory>[];
     for (final key in categories.keys) {
+      final tags = subList[key.toString()] ?? const <DiscoverTag>[];
+      if (tags.isEmpty) continue;
       list.add(
         DiscoverTagCategory(
           name: (categories[key] ?? key).toString(),
-          tags: subList[key] ?? const [],
+          tags: tags,
         ),
       );
     }

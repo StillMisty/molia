@@ -31,6 +31,7 @@ class AppSearchBar extends StatefulWidget {
     this.onSubmitted,
     this.onEscape,
     this.trailing = const <Widget>[],
+    this.trailingWhenEmpty,
     this.leading,
     this.autofocus = false,
     this.enabled = true,
@@ -61,6 +62,12 @@ class AppSearchBar extends StatefulWidget {
 
   /// 清除键右侧的额外尾部动作（如歌词搜索的加载指示），最多两个。
   final List<Widget> trailing;
+
+  /// 输入为空时占据清除键位置的尾部动作（如发现页「打开歌单」）。
+  ///
+  /// 有文本后同一位置由清除键接管，二者互斥；不受 [enabled] 影响——它不是
+  /// 输入操作，输入框忙碌时仍可打开。
+  final Widget? trailingWhenEmpty;
 
   /// 覆盖默认的 leading 搜索图标（如收藏页单胶囊布局放返回键）。
   final Widget? leading;
@@ -149,9 +156,13 @@ class _AppSearchBarState extends State<AppSearchBar> {
       onSubmitted: widget.onSubmitted,
       onEscape: widget.onEscape,
       trailing: <Widget>[
+        // 空输入时尾部动作与清除键共用同一个位置：有文本后尾部动作让位，
+        // 两者不会同时出现。
+        if (widget.controller.text.isEmpty)
+          ?widget.trailingWhenEmpty
         // 禁用输入框时清除键也必须消失：否则点了 X 仍会改文本并触发
         // onChanged，绕过调用方的忙碌锁。
-        if (widget.enabled && widget.controller.text.isNotEmpty)
+        else if (widget.enabled)
           M3EIconButton(
             variant: M3EIconButtonVariant.standard,
             icon: const Icon(Icons.close_rounded),

@@ -94,9 +94,14 @@ class FakeDiscoverSource implements DiscoverSource {
     return Future.value(leaderboardCoverUrl);
   }
 
+  /// 标签覆盖：为空时用默认的单热门 + 单分类（空分类等用例按需替换）。
+  DiscoverTags? tagsOverride;
+
   @override
   Future<DiscoverTags> tags() {
     tagCalls++;
+    final override = tagsOverride;
+    if (override != null) return _guard(override);
     return _guard(
       const DiscoverTags(
         hotTags: [DiscoverTag(id: '华语', name: '华语')],
