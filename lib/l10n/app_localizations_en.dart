@@ -590,10 +590,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noLyricsToSelect => 'No lyrics available to select';
 
   @override
-  String get posterLyricsLimitExceeded =>
-      'Maximum 10 lines of lyrics can be selected for poster generation';
-
-  @override
   String get tapToSelectLyrics => 'Tap lyric line to select';
 
   @override

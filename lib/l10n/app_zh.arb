@@ -234,7 +234,6 @@
   "selectedLyricsCopied": "已复制 {count} 行歌词",
   "posterGenerationFailed": "生成海报失败: {error}",
   "noLyricsToSelect": "没有可选择的歌词",
-  "posterLyricsLimitExceeded": "最多只能选择10行歌词生成海报",
   "tapToSelectLyrics": "轻点歌词行以选中",
   "nowPlayingLabel": "播放",
   "libraryLabel": "发现",

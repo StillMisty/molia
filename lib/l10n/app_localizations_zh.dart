@@ -571,9 +571,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noLyricsToSelect => '没有可选择的歌词';
 
   @override
-  String get posterLyricsLimitExceeded => '最多只能选择10行歌词生成海报';
-
-  @override
   String get tapToSelectLyrics => '轻点歌词行以选中';
 
   @override

@@ -272,7 +272,6 @@
     }
   },
   "noLyricsToSelect": "No lyrics available to select",
-  "posterLyricsLimitExceeded": "Maximum 10 lines of lyrics can be selected for poster generation",
   "tapToSelectLyrics": "Tap lyric line to select",
   "nowPlayingLabel": "Playing",
   "libraryLabel": "Discover",

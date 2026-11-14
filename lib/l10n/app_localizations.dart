@@ -1166,12 +1166,6 @@ abstract class AppLocalizations {
   /// **'No lyrics available to select'**
   String get noLyricsToSelect;
 
-  /// No description provided for @posterLyricsLimitExceeded.
-  ///
-  /// In en, this message translates to:
-  /// **'Maximum 10 lines of lyrics can be selected for poster generation'**
-  String get posterLyricsLimitExceeded;
-
   /// No description provided for @tapToSelectLyrics.
   ///
   /// In en, this message translates to:
