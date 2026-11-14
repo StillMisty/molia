@@ -1177,9 +1177,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sortTooltip => 'Sort';
 
   @override
-  String get moreActions => 'More actions';
-
-  @override
   String get trackActionsTooltip => 'Track actions';
 
   @override

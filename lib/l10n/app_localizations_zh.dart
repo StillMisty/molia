@@ -1134,9 +1134,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sortTooltip => '排序';
 
   @override
-  String get moreActions => '更多操作';
-
-  @override
   String get trackActionsTooltip => '曲目操作';
 
   @override

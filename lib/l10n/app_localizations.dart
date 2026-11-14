@@ -2216,12 +2216,6 @@ abstract class AppLocalizations {
   /// **'Sort'**
   String get sortTooltip;
 
-  /// No description provided for @moreActions.
-  ///
-  /// In en, this message translates to:
-  /// **'More actions'**
-  String get moreActions;
-
   /// No description provided for @trackActionsTooltip.
   ///
   /// In en, this message translates to:
