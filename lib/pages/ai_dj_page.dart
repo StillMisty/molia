@@ -142,12 +142,51 @@ class _AiDjPageState extends State<AiDjPage> {
               onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
             ),
       actions: [
-        M3EIconButton(
-          key: const Key('aiDjHistoryButton'),
-          variant: M3EIconButtonVariant.standard,
-          icon: const Icon(Icons.history_rounded),
-          semanticLabel: l10n.aiDjHistoryTitle,
-          onPressed: () => _openPage(const AiDjHistoryPage()),
+        // 低频动作（换一批 / 补一批 / 历史）收进同一个溢出菜单：顶栏只留
+        // 一个入口，页内主操作留给「播放全部」。
+        Consumer<AiDjProvider>(
+          builder: (context, provider, _) {
+            final radioActive = provider.status == AiDjStatus.playing;
+            return M3EMenu(
+              position: M3EMenuAnchorPosition.bottomEnd,
+              anchorBuilder: (context, open) => M3EIconButton(
+                key: const Key('aiDjMoreButton'),
+                variant: M3EIconButtonVariant.standard,
+                icon: const Icon(Icons.more_vert_rounded),
+                semanticLabel: l10n.moreActions,
+                onPressed: open,
+              ),
+              onSelected: (value) {
+                switch (value) {
+                  case 'refresh':
+                    unawaited(provider.refreshRecommendations());
+                  case 'feed':
+                    unawaited(_feedBatch());
+                  case 'history':
+                    _openPage(const AiDjHistoryPage());
+                }
+              },
+              children: [
+                M3EMenuEntry(
+                  label: l10n.aiDjRefreshBatch,
+                  value: 'refresh',
+                  enabled: !provider.isBusy,
+                  leading: const Icon(Icons.refresh_rounded, size: 20),
+                ),
+                M3EMenuEntry(
+                  label: l10n.aiDjFeedBatch,
+                  value: 'feed',
+                  enabled: radioActive && !provider.isBusy,
+                  leading: const Icon(Icons.queue_music_rounded, size: 20),
+                ),
+                M3EMenuEntry(
+                  label: l10n.aiDjHistoryTitle,
+                  value: 'history',
+                  leading: const Icon(Icons.history_rounded, size: 20),
+                ),
+              ],
+            );
+          },
         ),
       ],
       body: Consumer<AiDjProvider>(
@@ -377,7 +416,6 @@ class _AiDjPageState extends State<AiDjPage> {
           ),
         );
     final busy = provider.isBusy;
-    final radioActive = provider.status == AiDjStatus.playing;
 
     return [
       const SizedBox(height: _sectionGap),
@@ -386,28 +424,6 @@ class _AiDjPageState extends State<AiDjPage> {
         caption: batch == null
             ? null
             : l10n.aiDjLastUpdated(aiDjUpdatedText(l10n, batch.generatedAt)),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (radioActive)
-              M3EIconButton(
-                key: const Key('aiDjFeedBatchButton'),
-                variant: M3EIconButtonVariant.standard,
-                icon: const Icon(Icons.queue_music_rounded),
-                semanticLabel: l10n.aiDjFeedBatch,
-                onPressed: busy ? null : _feedBatch,
-              ),
-            M3EIconButton(
-              key: const Key('aiDjRefreshBatchButton'),
-              variant: M3EIconButtonVariant.standard,
-              icon: const Icon(Icons.refresh_rounded),
-              semanticLabel: l10n.aiDjRefreshBatch,
-              onPressed: busy
-                  ? null
-                  : () => unawaited(provider.refreshRecommendations()),
-            ),
-          ],
-        ),
       ),
       if (items.isNotEmpty) ...[
         const SizedBox(height: 8),

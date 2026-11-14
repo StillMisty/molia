@@ -430,6 +430,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playModeSingleRepeat => 'Single repeat';
 
   @override
+  String get playModeTitle => 'Play mode';
+
+  @override
   String get settingsHapticsTitle => 'Vibration feedback';
 
   @override
@@ -1454,6 +1457,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get discoverAllTags => 'All tags';
+
+  @override
+  String get discoverTags => 'Tags';
 
   @override
   String get discoverLoadFailed => 'Failed to load';
@@ -4356,10 +4362,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsDisplaySettingsAction => 'Lyrics display settings';
 
   @override
-  String get lyricsSwapAction => 'Change lyrics';
+  String get lyricsSwapAction => 'Change source';
 
   @override
-  String get lyricsCopyModeAction => 'Copy lyrics mode';
+  String get lyricsCopyModeAction => 'Copy lyrics';
 
   @override
   String get lyricsCopyModeExit => 'Exit copy mode';

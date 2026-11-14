@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui' show lerpDouble;
 
@@ -8,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../models/play_mode.dart';
 import '../providers/playback_provider.dart';
 import '../theme/m3e_context.dart';
 import '../utils/playback_cover_decode.dart';
@@ -15,10 +17,12 @@ import '../utils/responsive.dart';
 import 'app_network_image.dart';
 import 'cover_appearance.dart';
 import 'cover_deck_metrics.dart';
+import 'lyrics_display_settings_action.dart';
 import 'now_playing_summary.dart';
 import 'playback_transport.dart';
 import 'player_cover_deck.dart';
 import 'player_morph.dart';
+import 'queue_playlist_action.dart';
 import 'seek_bar.dart';
 import 'track_artwork.dart';
 import 'volume_control.dart';
@@ -551,11 +555,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
   }
 
-  /// 进度排：收藏（左）+ 可拖动波浪进度（中）+ 播放模式（右）。
+  /// 进度排：收藏（左）+ 可拖动波浪进度（中）+ 「更多」（右）。
   ///
   /// 拖动期间本地预览、松手才提交 seek；控制器生命周期与低频快照订阅都在
   /// `PlaybackSeekBar` 内，这里只决定版式与时间标签档位。波浪只在这一处
   /// （播放页主场）开启，底栏 / 迷你条默认平直，避免全局 60fps 装饰动画。
+  ///
+  /// 播放模式不再常显：它连同「存为列表 / 歌词显示设置」收进「更多」，
+  /// 进度排只保留收藏、进度与一个菜单入口（见 ADR-0023 的版式意图）。
   Widget _buildSeekBar() {
     return Padding(
       // 纵向不留内边距：上方 2dp 由外层排布给（小屏 / 大屏两套版式都是
@@ -576,8 +583,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             ),
           ),
           const SizedBox(width: 4),
-          // 与收藏同一套简单图标按钮；模式图标 / 标签由共享模块唯一映射。
-          const PlaybackModeButton(visualSize: Size(44, 44)),
+          const _PlayerMoreButton(),
         ],
       ),
     );
@@ -931,7 +937,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             child: Align(
               alignment: Alignment.centerRight,
               child: Padding(
-                // 与进度排的播放模式同一内边距：两排右缘对齐。
+                // 与进度排右侧「更多」同一内边距：两排右缘对齐。
                 padding: const EdgeInsets.only(right: _controlsRowPadding),
                 child: VolumeControl(
                   buttonKey: Player.volumeButtonKey,
@@ -942,6 +948,79 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 播放页进度排的「更多」入口：播放模式 / 存为列表 / 歌词显示设置。
+///
+/// 为什么不常显播放模式：播放页进度排的主线是「收藏 + 进度」，模式是会话
+/// 偏好、低频动作；把它与队列级 / 歌词域动作合并成一个菜单，右侧只留一个
+/// 视觉重量相同的入口，进度条能拿到更多宽度。
+class _PlayerMoreButton extends StatelessWidget {
+  const _PlayerMoreButton();
+
+  /// 稳定 Key：测试与「更多」入口定位（进度排里唯一的菜单按钮）。
+  static const Key buttonKey = Key('playerMoreButton');
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = _l10n(context);
+    final mode = context.select<PlaybackProvider, PlayMode>(
+      (provider) => provider.currentMode,
+    );
+    final hasQueue = context.select<PlaybackProvider, bool>(
+      (provider) => provider.snapshot.queue.isNotEmpty,
+    );
+    final playback = context.read<PlaybackProvider>();
+
+    return M3EMenu(
+      position: M3EMenuAnchorPosition.bottomEnd,
+      anchorBuilder: (context, open) => M3EIconButton(
+        key: buttonKey,
+        variant: M3EIconButtonVariant.standard,
+        visualSize: const Size(44, 44),
+        icon: const Icon(Icons.more_vert_rounded),
+        semanticLabel: l10n.moreActions,
+        onPressed: open,
+      ),
+      onSelected: (value) {
+        switch (value) {
+          case final PlayMode next:
+            unawaited(playback.setPlayMode(next));
+          case 'saveQueue':
+            unawaited(saveQueueAsPlaylist(context, playback.snapshot.queue));
+          case 'lyricsDisplay':
+            unawaited(showLyricsDisplaySettings(context));
+        }
+      },
+      children: [
+        // 模式做成子菜单：四个模式平铺会把主菜单撑长，且当前模式需要可见。
+        M3EMenuSubmenu(
+          label: l10n.playModeTitle,
+          leading: Icon(mode.transportIcon, size: 20),
+          children: [
+            for (final item in PlayMode.values)
+              M3EMenuSelectable(
+                label: item.transportLabel(l10n),
+                value: item,
+                selected: item == mode,
+                leading: Icon(item.transportIcon, size: 20),
+              ),
+          ],
+        ),
+        M3EMenuEntry(
+          label: l10n.queueSaveAsPlaylist,
+          value: 'saveQueue',
+          enabled: hasQueue,
+          leading: const Icon(Icons.playlist_add_rounded, size: 20),
+        ),
+        M3EMenuEntry(
+          label: l10n.lyricsDisplaySettingsAction,
+          value: 'lyricsDisplay',
+          leading: const Icon(Icons.tune_rounded, size: 20),
+        ),
+      ],
     );
   }
 }
