@@ -182,7 +182,15 @@ class AiDjProvider extends ChangeNotifier {
   /// 列表项是否已在播放队列（页面标记「队列中」）。
   bool isQueued(String uri) => _radio.isQueued(uri);
 
-  Future<void> init() async {
+  Future<void>? _initFuture;
+
+  /// 读配置 / 偏好 / 历史；幂等（页面按需触发，不再放在应用启动路径）。
+  ///
+  /// 配置走安全存储（Android Keystore / 桌面 keyring）：无钥匙串环境里
+  /// libsecret 会直接终止进程，因此只在用户真正打开 AI 页面时调用。
+  Future<void> init() => _initFuture ??= _init();
+
+  Future<void> _init() async {
     // 配置 / 确认 / 开关 / 偏好 / 反馈记忆互不依赖：并行读。其中配置走安全
     // 存储（Android Keystore / 桌面 keyring），串行会把多次冷读叠加到启动尾巴。
     // 历史索引 / active 批次也不依赖设置：同样并行起步，最后再统一接状态。

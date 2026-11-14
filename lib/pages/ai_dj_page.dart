@@ -65,6 +65,8 @@ class _AiDjPageState extends State<AiDjPage> {
   void initState() {
     super.initState();
     _provider = context.read<AiDjProvider>();
+    // 配置在安全存储里：只在本页打开时读，启动路径不碰钥匙串。
+    unawaited(_provider.init());
     final config = _provider.config;
     if (config == null) {
       // 首次配置：默认预填第一个内置预设（DeepSeek），只需粘 API Key。

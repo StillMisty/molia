@@ -1,7 +1,8 @@
 /// 听歌同步栈：偏好 / 发件箱 / 两个协议适配器 / 观察者服务。
 ///
 /// 凭证键走设置注册表（凭证类别），设备本地开关留在
-/// [ScrobblePreferences]；服务在首帧后 `init()`，在此之前完全惰性。
+/// [ScrobblePreferences]；服务在听歌同步页打开时 `init()`（幂等），
+/// 在此之前完全惰性，启动路径不读安全存储。
 library;
 
 import 'package:url_launcher/url_launcher.dart';

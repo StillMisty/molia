@@ -633,10 +633,11 @@
   **没有独立总开关：传输开关就是总闸**，任一开启即启用同步，两路都关 =
   引擎轮次 / 入站接收 / 调度器一并停摆（新 key `sync_state_v2` 缺失即全新
   安装：旧状态不读，升级后 transports 为空、同步保持关闭，需重新开启并
-  配对）。设备身份 `deviceId` 独立持久化在 `sync_device_id_v2`（prefs 小键 +
-  安全存储备份），`sync_state_v2` 损坏时恢复旧身份而不是重新生成（否则重启 /
-  换 IP 后对端会多出一台新设备）。口令在初始化即生成（信任根，不依赖任何开关），
-  首次开启同步不再弹口令窗（附近设备配对确认后由协议交给对端）。**首次连通
+  配对）。设备身份 `deviceId` 独立持久化在 `sync_device_id_v2`（只走 prefs
+  小键，启动路径不碰安全存储），`sync_state_v2` 损坏时从小键恢复旧身份而不是
+  重新生成（否则重启 / 换 IP 后对端会多出一台新设备）。口令在用户真正开启
+  传输 / 配对时按需生成（信任根），首次开启同步不弹口令窗（附近设备配对确认
+  后由协议交给对端）。**首次连通
   双方各弹一次提示**：某设备第一次真正交换过数据（`lastPullAt` /
   `lastPushAt`，入站推送同样计）时引擎发一次性事件（`peerConnectedNotices`，
   已提示的 deviceId 持久化在 `notifiedPeers`，重启不重发；设备从本机移除时
@@ -936,9 +937,10 @@
 - **开关与凭证**：`scrobble_preferences.dart` 把总开关 / 单服务开关 / 同意版本留在设备本地
   SharedPreferences（不登记同步）；`kListenBrainzToken` / `kLastFmSessionKey` 是 secure 凭证键，
   随凭证同步（ADR-0016）；断开连接清空该服务凭证与队列；
-- **组合根与入口**：`lib/app/bootstrap/scrobble_stack.dart` 在首帧后初始化（`sub.scrobble.init`），
-  `SettingsModule` 挂两个凭证键并在远端应用后重读；设置 › 内容与来源的「听歌同步」页
-  （`lib/pages/listening_sync_page.dart`）负责同意、连接与断开。
+- **组合根与入口**：`lib/app/bootstrap/scrobble_stack.dart` 只做纯构造；
+  服务在「听歌同步」页打开时 `init()`（幂等），启动路径不读安全存储。
+  `SettingsModule` 挂两个凭证键并在远端应用后重读；设置 › 内容与来源的
+  「听歌同步」页（lib/pages/listening_sync_page.dart）负责同意、连接与断开。
 
 ### 资料库（library）
 

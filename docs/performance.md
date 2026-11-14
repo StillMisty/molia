@@ -146,9 +146,10 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
 ### 5.2 同步栈初始化后移（≈ −38ms）
 
 `buildSyncStack` 里 `await syncProvider.init()` + `await scheduler.start()` 移到
-首帧之后（新的 `startSync`，由 `post_frame_init.dart` 调用）。这两步要开安全存储
-（Android Keystore 冷读更贵）**和跑电量/网络探针**（`SyncScheduler.refreshEnvironment`），
-都不参与首帧内容；同步设置页在首帧后才可能被打开，状态面看不到差别。
+首帧之后（新的 `startSync`，由 `post_frame_init.dart` 调用）。调度器要跑
+**电量 / 网络探针**（`SyncScheduler.refreshEnvironment`），不参与首帧内容；
+同步设置页在首帧后才可能被打开，状态面看不到差别。同步启动路径不读写安全存储
+（无钥匙串环境里的 libsecret 原生异常会直接终止进程）。
 失败仍不阻断启动（口径不变，见 `docs/pitfalls.md` #31）。
 
 ### 5.3 更新栈后移（≈ −14ms）

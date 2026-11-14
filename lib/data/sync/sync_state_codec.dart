@@ -199,7 +199,7 @@ class SyncPersistedState {
        peers = List.unmodifiable(peers),
        lanEndpoints = List.unmodifiable(lanEndpoints);
 
-  /// 设备身份的状态内副本（独立 prefs 键 / 安全存储才是损坏时的恢复来源）。
+  /// 设备身份的状态内副本（独立 prefs 小键才是损坏时的恢复来源）。
   final String deviceId;
 
   final String deviceName;

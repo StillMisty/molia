@@ -1,10 +1,10 @@
 /// 首帧之后的启动尾巴：桌面外壳（托盘 + 任务栏按钮）落地 + 更新准备/自动检查
 /// + 音源初始化与同步启动（两者互不依赖，并行推进）+ 首轮同步。
 ///
-/// 为什么留到首帧：托盘图标资源此时可读；更新读包信息/偏好、同步引擎读安全
-/// 存储口令、调度器电量/网络探针都不参与首帧内容（见各自 start 的注释）；
-/// 音源脚本加载与更新检查同理；同步传输启动要过局域网权限门（Android 系统
-/// 对话框）并绑套接字，早于首帧会让窗口等一个用户看不见的对话框。
+/// 为什么留到首帧：托盘图标资源此时可读；更新读包信息/偏好、调度器电量/
+/// 网络探针都不参与首帧内容（见各自 start 的注释）；音源脚本加载与更新检查
+/// 同理；同步传输启动要过局域网权限门（Android 系统对话框）并绑套接字，
+/// 早于首帧会让窗口等一个用户看不见的对话框。启动路径不读写安全存储。
 library;
 
 import 'dart:async';
@@ -12,12 +12,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../services/cache_service.dart';
-import 'ai_stack.dart';
 import 'catalog_stack.dart';
 import 'desktop_stack.dart';
 import 'library_stack.dart';
 import 'local_data_stack.dart';
-import 'scrobble_stack.dart';
 import 'startup_trace.dart';
 import 'sync_stack.dart';
 import 'update_stack.dart';
@@ -27,9 +25,7 @@ void initAfterFirstFrame({
   required CatalogStack catalog,
   required LocalDataStack local,
   required LibraryStack library,
-  required ScrobbleStack scrobble,
   required DesktopStack desktop,
-  required AiStack ai,
   required UpdateStack update,
   required SyncStack sync,
 }) {
@@ -37,24 +33,8 @@ void initAfterFirstFrame({
   // 关键路径。宿主探测预热：关闭策略首次触发时直接读缓存结果（并留下启动日志）。
   desktop.initDesktopSurfaces();
 
-  // AI 配置从安全存储读，推荐历史索引 / active 批次也要解析一次 JSON；都不
-  // 参与首帧内容。放在这里而不是 `buildAiStack`：避免和首帧前的窗口 / 播放
-  // 装配抢平台通道（Android 首个平台通道的等待只该落在首帧必需项上）。
-  final aiWatch = Stopwatch()..start();
-  unawaited(
-    ai.djProvider.init().whenComplete(
-      () => markStartupStep('sub.ai.init（首帧后）', aiWatch),
-    ),
-  );
-
-  // 听歌同步：偏好 / 凭据 / 发件箱都在首帧后读；失败按「未连接」降级，
-  // 绝不阻断启动。
-  final scrobbleWatch = Stopwatch()..start();
-  unawaited(
-    scrobble.service.init().whenComplete(
-      () => markStartupStep('sub.scrobble.init（首帧后）', scrobbleWatch),
-    ),
-  );
+  // AI / 听歌同步的配置与凭据都在安全存储里：启动路径不读，页面打开时
+  // 各自按需 init（无钥匙串桌面 / 容器里 libsecret 会直接终止进程）。
 
   // 首帧后的本地数据尾巴：省流网络探测 / 下载记录加载 / 音频缓存维护。
   // 这几项都要过平台通道或磁盘，继续留在 runApp 前会把首帧整体推后。
@@ -79,10 +59,6 @@ void initAfterFirstFrame({
     await CacheService.instance.cleanupAudioPartials();
   }());
 
-  // 同步身份的安全存储备份：正常启动 prefs 已一致时是空操作；首装的
-  // Keystore 写入放在首帧后（读取仍留在 init，身份恢复需要）。
-  unawaited(library.syncState.backupDeviceId());
-
   // 资料库启动尾巴：全库最大戳种子 → 统计收尾/裁剪
   // （`startLibraryAfterFirstFrame` 内部会等种子完成再跑统计维护）。
   startLibraryAfterFirstFrame(library);
@@ -104,7 +80,7 @@ void initAfterFirstFrame({
     ),
   );
 
-  // 同步：引擎 init（安全存储读口令）+ 调度器启动（电量/网络探针）→ 音源
+  // 同步：引擎 init + 调度器启动（电量/网络探针）→ 音源
   // 初始化（音源仓库就绪后脚本适配器才能工作）→ 传输先起（状态面立刻可见）、
   // 再跑首轮；首轮同样受调度器等级约束：省电 / 移动数据暂停时不跑，
   // 移动数据下只同步小类别。
