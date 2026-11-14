@@ -1,15 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/catalog.dart';
-import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/models/source.dart' show SourceCapabilities;
+import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/search/search_assist.dart';
 import 'package:molia/providers/channel_selection.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_assist_controller.dart';
 import 'package:molia/providers/search_provider.dart';
-import 'package:molia/services/search_history_store.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_music_source.dart';
 import '../support/fakes.dart';
@@ -39,16 +37,11 @@ void main() {
   late FakeMusicSource tx;
   late FakeSourceRegistry registry;
   late ChannelSelection selection;
-  late SearchHistoryStore history;
   late SearchProvider provider;
   late SearchAssistController assist;
   late PlaybackProvider playback;
 
-  setUp(() async {
-    SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
-    history = SearchHistoryStore(preferences: prefs);
-    await history.ready();
+  setUp(() {
     kw =
         FakeMusicSource(
             'kw',
@@ -88,12 +81,12 @@ void main() {
       selection: selection,
       catalogService: CatalogService(registry: registry),
       sourceRegistry: registry,
-      historyStore: history,
     );
     assist = SearchAssistController(
       search: provider,
-      history: history,
-      hotKeywords: () => const ['晴天', '稻香', '夜曲'],
+      hotKeywords: () => provider.activeSourceKey == 'tx'
+          ? const ['QQ 热词']
+          : const ['晴天', '稻香', '夜曲', '晴天之歌'],
     );
     assist.setFocused(true);
   });
@@ -103,31 +96,30 @@ void main() {
     provider.dispose();
     playback.dispose();
     selection.dispose();
-    history.dispose();
   });
 
-  test('空词聚焦显示历史芯片；失焦后隐藏', () async {
-    await history.record('kw', '晴天');
+  test('空词聚焦显示热搜芯片；失焦后隐藏', () async {
     assist.setFocused(false);
     await Future<void>.delayed(const Duration(milliseconds: 5));
     expect(assist.value.showChips, isFalse);
     assist.setFocused(true);
     expect(assist.value.showChips, isTrue);
-    expect(assist.value.chips.recent, ['晴天']);
+    expect(assist.value.chips.hot, ['晴天', '稻香', '夜曲', '晴天之歌']);
   });
 
-  test('输入与防抖不记录；显式提交才记录', () async {
-    await history.record('kw', '旧词');
-    provider.updateSearchQuery('晴天');
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(history.entriesFor('kw'), ['旧词'], reason: '输入不写历史');
+  test('输入关键词用热搜做建议；清空回到热搜芯片', () async {
+    provider.updateSearchQuery('晴');
+    expect(assist.value.showSuggestions, isTrue);
+    expect(
+      assist.value.suggestions.map((suggestion) => suggestion.text),
+      contains('晴天'),
+    );
 
-    provider.submitSearch('晴天');
-    await _waitUntil(() => !provider.isSearchBusy);
-    expect(history.entriesFor('kw').first, '晴天');
+    provider.clearSearch();
+    expect(assist.value.showChips, isTrue);
   });
 
-  test('选中建议立即搜索并记录，高亮随建议变化重置', () async {
+  test('选中建议立即搜索，高亮随建议变化重置', () async {
     provider.updateSearchQuery('晴');
     expect(assist.value.showSuggestions, isTrue);
     expect(assist.value.suggestions, isNotEmpty);
@@ -139,35 +131,19 @@ void main() {
     provider.updateSearchQuery('晴x');
     expect(assist.value.highlightedIndex, -1);
 
-    assist.selectSuggestion(
-      const SearchSuggestion(text: '晴天', source: SearchSuggestionSource.hot),
-    );
+    assist.selectSuggestion(const SearchSuggestion(text: '晴天'));
     await _waitUntil(() => !provider.isSearchBusy);
-    expect(history.entriesFor('kw').first, '晴天');
     expect(provider.songResults.items.single.title, 'Title 晴天');
   });
 
-  test('删除 / 清空历史不发起搜索', () async {
-    await history.record('kw', '晴天');
-    assist.setFocused(true);
-    final calls = kw.searchCalls;
-    assist.deleteHistory('晴天');
-    assist.clearHistory();
-    expect(kw.searchCalls, calls);
-    expect(history.entriesFor('kw'), isEmpty);
-  });
-
-  test('切换渠道后看到另一渠道的历史', () async {
-    await history.record('kw', '酷我词');
-    await history.record('tx', 'QQ 词');
-    expect(assist.value.chips.recent, ['酷我词']);
+  test('切换渠道后热搜芯片跟着渠道刷新', () async {
+    expect(assist.value.chips.hot.first, '晴天');
     selection.select('tx');
     await Future<void>.delayed(const Duration(milliseconds: 5));
-    expect(assist.value.chips.recent, ['QQ 词']);
+    expect(assist.value.chips.hot, ['QQ 热词']);
   });
 
   test('纠错只在成功的单曲零结果时出现', () async {
-    await history.record('kw', '晴天之歌');
     provider.submitSearch('晴天之夜');
     expect(assist.value.correction, isNull, reason: '加载中不提示');
     await _waitUntil(() => !provider.isSearchBusy);

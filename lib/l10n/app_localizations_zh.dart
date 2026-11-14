@@ -50,20 +50,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get searchRecentTitle => '最近搜索';
-
-  @override
-  String get searchRecentClear => '清除';
-
-  @override
-  String get searchRecentCleared => '已清除最近搜索';
-
-  @override
-  String searchHistoryDelete(String query) {
-    return '删除「$query」';
-  }
-
-  @override
   String get searchSuggestionsLabel => '搜索建议';
 
   @override

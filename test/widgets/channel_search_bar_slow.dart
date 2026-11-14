@@ -96,7 +96,7 @@ void main() {
       findsNothing,
       reason: '不再嵌套 AppSearchBar',
     );
-    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(EditableText), findsOneWidget);
     expect(
       find.descendant(
         of: find.byType(ChannelSearchBar),
@@ -107,7 +107,7 @@ void main() {
     );
     expect(
       tester.getRect(dropdown).right,
-      lessThanOrEqualTo(tester.getRect(find.byType(TextField)).left),
+      lessThanOrEqualTo(tester.getRect(find.byType(EditableText)).left),
     );
   });
 
@@ -185,7 +185,7 @@ void main() {
       tester,
       channels: [channel('kw', '酷我音乐'), channel('tx', 'QQ音乐')],
     );
-    await tester.enterText(find.byType(TextField), 'hello');
+    await tester.enterText(find.byType(EditableText), 'hello');
     await tester.pump();
     expect(handles.controller.text, 'hello');
 

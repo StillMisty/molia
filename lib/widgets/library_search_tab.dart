@@ -7,7 +7,6 @@ import '../providers/ai_dj_provider.dart';
 import '../providers/discover_provider.dart';
 import '../providers/search_assist_controller.dart';
 import '../providers/search_provider.dart';
-import '../services/search_history_store.dart';
 import 'ai_dj_carousel.dart';
 import 'channel_search_bar.dart';
 import 'discover_layout.dart';
@@ -60,8 +59,6 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
     );
     _assist = SearchAssistController(
       search: _searchProvider,
-      // 仓库生命周期归组合根（Provider 树），宿主只消费。
-      history: context.read<SearchHistoryStore>(),
       hotKeywords: () =>
           context.read<DiscoverProvider?>()?.hotSearches ?? const [],
     );

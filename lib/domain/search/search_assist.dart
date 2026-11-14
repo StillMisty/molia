@@ -1,54 +1,42 @@
-/// 搜索辅助的纯逻辑：建议排序与零结果纠错。
+/// 搜索辅助的纯逻辑：热搜建议排序与零结果纠错。
 ///
-/// 不依赖 Flutter / provider / 网络 / 日志：输入是用户输入、按渠道隔离的本地
-/// 历史与已缓存的热搜词，输出是确定性的候选列表。宿主只负责把结果渲染成
-/// chips / 行，并显式提交用户选中的一项；本模块从不改写输入。
+/// 不依赖 Flutter / provider / 网络 / 日志：输入是用户输入与已缓存的热搜词，
+/// 输出是确定性的候选列表。宿主只负责把结果渲染成 chips / 行，并显式提交
+/// 用户选中的一项；本模块从不改写输入。
 library;
-
-/// 建议来源：本地历史优先于平台热搜词（同层级排序用）。
-enum SearchSuggestionSource { history, hot }
 
 /// 一条搜索建议。
 class SearchSuggestion {
-  const SearchSuggestion({required this.text, required this.source});
+  const SearchSuggestion({required this.text});
 
   /// 建议文本（保留来源里的原始大小写）。
   final String text;
 
-  final SearchSuggestionSource source;
-
   @override
   bool operator ==(Object other) =>
-      other is SearchSuggestion && other.text == text && other.source == source;
+      other is SearchSuggestion && other.text == text;
 
   @override
-  int get hashCode => Object.hash(text, source);
+  int get hashCode => text.hashCode;
 
   @override
-  String toString() => 'SearchSuggestion(${source.name}: $text)';
+  String toString() => 'SearchSuggestion($text)';
 }
 
-/// 空关键词时的芯片分组：最近搜索 + 热搜词，各自最多显示几条。
+/// 空关键词时的热搜芯片：最多显示 6 条。
 class SearchAssistChips {
-  const SearchAssistChips({required this.recent, required this.hot});
+  const SearchAssistChips({required this.hot});
 
-  static const SearchAssistChips empty = SearchAssistChips(recent: [], hot: []);
+  static const SearchAssistChips empty = SearchAssistChips(hot: []);
 
-  /// 最近搜索（最多 4 条；热搜词不存在时最多 6 条）。
-  final List<String> recent;
-
-  /// 热搜词（最多 2 条；历史不存在时最多 6 条）。
+  /// 热搜词。
   final List<String> hot;
 
-  bool get isEmpty => recent.isEmpty && hot.isEmpty;
+  bool get isEmpty => hot.isEmpty;
 }
 
 /// 建议列表上限：面板永远不超过 6 行。
 const int kSearchAssistMaxItems = 6;
-
-/// 空关键词芯片上限：历史最多 4 条 + 热搜词最多 2 条。
-const int kSearchAssistMaxRecentChips = 4;
-const int kSearchAssistMaxHotChips = 2;
 
 /// 小写 + 去首尾空白 + 合并连续空白（中文不受影响）。
 String normalizeSearchAssistText(String value) =>
@@ -61,56 +49,25 @@ int _tierOf(String candidate, String query) {
   return -1;
 }
 
-/// 空关键词芯片：两个来源都在时 `4 + 2`，只剩一个来源时最多填满 6 条。
-SearchAssistChips buildSearchAssistChips({
-  required List<String> history,
-  required List<String> hotKeywords,
-}) {
-  final recent = <String>[];
+/// 空关键词芯片：热搜词去重后最多 6 条。
+SearchAssistChips buildSearchAssistChips({required List<String> hotKeywords}) {
   final hot = <String>[];
   final seen = <String>{};
-  void add(String value, List<String> target) {
-    final normalized = normalizeSearchAssistText(value);
-    if (normalized.isEmpty || !seen.add(normalized)) return;
-    target.add(value.trim());
-  }
-
-  if (history.isEmpty) {
-    for (final value in hotKeywords) {
-      if (hot.length >= kSearchAssistMaxItems) break;
-      add(value, hot);
-    }
-    return SearchAssistChips(recent: const [], hot: List.unmodifiable(hot));
-  }
-  if (hotKeywords.isEmpty) {
-    for (final value in history) {
-      if (recent.length >= kSearchAssistMaxItems) break;
-      add(value, recent);
-    }
-    return SearchAssistChips(recent: List.unmodifiable(recent), hot: const []);
-  }
-  for (final value in history) {
-    if (recent.length >= kSearchAssistMaxRecentChips) break;
-    add(value, recent);
-  }
   for (final value in hotKeywords) {
-    if (hot.length >= kSearchAssistMaxHotChips) break;
-    // 历史已经展示的同词不再进热搜行（历史优先）。
-    add(value, hot);
+    if (hot.length >= kSearchAssistMaxItems) break;
+    final normalized = normalizeSearchAssistText(value);
+    if (normalized.isEmpty || !seen.add(normalized)) continue;
+    hot.add(value.trim());
   }
-  return SearchAssistChips(
-    recent: List.unmodifiable(recent),
-    hot: List.unmodifiable(hot),
-  );
+  return SearchAssistChips(hot: List.unmodifiable(hot));
 }
 
-/// 输入过程中的建议：精确 → 前缀 → 包含；同层级历史优先于热搜词。
+/// 输入过程中的建议：精确 → 前缀 → 包含。
 ///
-/// 返回最多 [limit] 条（默认 6），去重按规范化文本（保留历史条目的写法）。
-/// 同步、无网络、无日志、无 Flutter 依赖。
+/// 返回最多 [limit] 条（默认 6），去重按规范化文本。同步、无网络、无日志、
+/// 无 Flutter 依赖。
 List<SearchSuggestion> rankSearchSuggestions({
   required String query,
-  required List<String> history,
   required List<String> hotKeywords,
   int limit = kSearchAssistMaxItems,
 }) {
@@ -118,35 +75,22 @@ List<SearchSuggestion> rankSearchSuggestions({
   if (normalizedQuery.isEmpty || limit <= 0) return const [];
 
   final seen = <String>{};
-  final ranked =
-      <({SearchSuggestion suggestion, int tier, int priority, int order})>[];
-  void collect(
-    List<String> values,
-    SearchSuggestionSource source,
-    int priority,
-  ) {
-    for (var index = 0; index < values.length; index++) {
-      final raw = values[index];
-      final normalized = normalizeSearchAssistText(raw);
-      if (normalized.isEmpty || !seen.add(normalized)) continue;
-      final tier = _tierOf(normalized, normalizedQuery);
-      if (tier < 0) continue;
-      ranked.add((
-        suggestion: SearchSuggestion(text: raw.trim(), source: source),
-        tier: tier,
-        priority: priority,
-        order: index,
-      ));
-    }
+  final ranked = <({SearchSuggestion suggestion, int tier, int order})>[];
+  for (var index = 0; index < hotKeywords.length; index++) {
+    final raw = hotKeywords[index];
+    final normalized = normalizeSearchAssistText(raw);
+    if (normalized.isEmpty || !seen.add(normalized)) continue;
+    final tier = _tierOf(normalized, normalizedQuery);
+    if (tier < 0) continue;
+    ranked.add((
+      suggestion: SearchSuggestion(text: raw.trim()),
+      tier: tier,
+      order: index,
+    ));
   }
-
-  collect(history, SearchSuggestionSource.history, 0);
-  collect(hotKeywords, SearchSuggestionSource.hot, 1);
   ranked.sort((a, b) {
     final byTier = a.tier.compareTo(b.tier);
     if (byTier != 0) return byTier;
-    final byPriority = a.priority.compareTo(b.priority);
-    if (byPriority != 0) return byPriority;
     return a.order.compareTo(b.order);
   });
   return List.unmodifiable([
@@ -202,11 +146,10 @@ int _min3(int a, int b, int c) {
 /// 零结果纠错：只返回一个候选，绝不自动改写输入。
 ///
 /// 预算：查询 ≤4 个码点时允许 1 次编辑，否则 2 次；候选与查询等长差超过预算、
-/// 距离超过较长串长度的 40%、以及单字符查询都不采用。并列按
-/// 来源（历史优先）→ 距离 → 来源顺序 → 候选长度 → 码元顺序确定。
+/// 距离超过较长串长度的 40%、以及单字符查询都不采用。并列按距离 → 来源顺序
+/// → 候选长度 → 码元顺序确定。
 String? rankTypoCorrection({
   required String query,
-  required List<String> history,
   required List<String> hotKeywords,
 }) {
   final normalizedQuery = normalizeSearchAssistText(query);
@@ -215,41 +158,33 @@ String? rankTypoCorrection({
   final budget = queryRunes <= 4 ? 1 : 2;
 
   final seen = <String>{};
-  final candidates =
-      <({String text, int distance, int priority, int order, int runes})>[];
-  void collect(List<String> values, int priority) {
-    for (var index = 0; index < values.length; index++) {
-      final raw = values[index].trim();
-      final normalized = normalizeSearchAssistText(raw);
-      if (normalized.isEmpty || normalized == normalizedQuery) continue;
-      if (!seen.add(normalized)) continue;
-      final candidateRunes = normalized.runes.length;
-      if ((candidateRunes - queryRunes).abs() > budget) continue;
-      final distance = boundedDamerauLevenshtein(
-        normalizedQuery,
-        normalized,
-        maxDistance: budget,
-      );
-      if (distance == null) continue;
-      final longer = candidateRunes > queryRunes ? candidateRunes : queryRunes;
-      // 40% 是「看起来像同一个词」的上限；整数比较避免浮点误差。
-      if (distance * 10 > longer * 4) continue;
-      candidates.add((
-        text: raw,
-        distance: distance,
-        priority: priority,
-        order: index,
-        runes: candidateRunes,
-      ));
-    }
+  final candidates = <({String text, int distance, int order, int runes})>[];
+  for (var index = 0; index < hotKeywords.length; index++) {
+    final raw = hotKeywords[index].trim();
+    final normalized = normalizeSearchAssistText(raw);
+    if (normalized.isEmpty || normalized == normalizedQuery) continue;
+    if (!seen.add(normalized)) continue;
+    final candidateRunes = normalized.runes.length;
+    if ((candidateRunes - queryRunes).abs() > budget) continue;
+    final distance = boundedDamerauLevenshtein(
+      normalizedQuery,
+      normalized,
+      maxDistance: budget,
+    );
+    if (distance == null) continue;
+    final longer = candidateRunes > queryRunes ? candidateRunes : queryRunes;
+    // 40% 是「看起来像同一个词」的上限；整数比较避免浮点误差。
+    if (distance * 10 > longer * 4) continue;
+    candidates.add((
+      text: raw,
+      distance: distance,
+      order: index,
+      runes: candidateRunes,
+    ));
   }
 
-  collect(history, 0);
-  collect(hotKeywords, 1);
   if (candidates.isEmpty) return null;
   candidates.sort((a, b) {
-    final byPriority = a.priority.compareTo(b.priority);
-    if (byPriority != 0) return byPriority;
     final byDistance = a.distance.compareTo(b.distance);
     if (byDistance != 0) return byDistance;
     final byOrder = a.order.compareTo(b.order);

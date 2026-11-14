@@ -584,13 +584,10 @@
   （缓存 key `search:{source}:artist|lyric:...`，与单曲共用 5min 缓存实例）路由。
 - **Search assist（搜索辅助）** — `lib/domain/search/search_assist.dart` +
   `lib/providers/search_assist_controller.dart` + `lib/widgets/search_assist_panel.dart`：
-  Ctrl+F 与资料库搜索 tab 共用的建议 / 历史 surface。历史由组合根注册的
-  `SearchHistoryStore`（`lib/services/search_history_store.dart`）持有：设备本地、
-  按渠道隔离、每渠道最多 20 条，不登记同步设置、不进完整备份、日志不写查询文本。
-  空词聚焦显示最近搜索（≤4）+ 热搜（≤2）芯片，输入时从历史 + 发现页缓存热搜词
-  生成 ≤6 条精确 / 前缀 / 包含建议；零结果纠错只对成功的单曲搜索给出一个
-  bounded Damerau-Levenshtein 候选，绝不自动改写输入。只有显式提交记录历史，
-  输入防抖不记录，聚焦 / 输入不发网络请求。
+  Ctrl+F 与资料库搜索 tab 共用的建议 surface。不保存任何搜索历史；空词聚焦显示
+  发现页缓存的热搜芯片（≤6），输入时从热搜词生成 ≤6 条精确 / 前缀 / 包含建议；
+  零结果纠错只对成功的单曲搜索给出一个 bounded Damerau-Levenshtein 候选，绝不
+  自动改写输入。聚焦 / 输入 / 提交都不发网络请求（热搜只读缓存）。
 - **Annual listening report（年度听歌报告）** — 统计页内的只读年度视图：
   `lib/domain/models/annual_report.dart` 负责窗口 / 月度 / 平台 / 连续天数 /
   覆盖与纠错聚合，`AnnualReportProvider` 调度年份与统计变更，报告页是设置子页

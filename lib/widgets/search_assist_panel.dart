@@ -1,4 +1,4 @@
-/// 搜索辅助的唯一呈现模块：最近搜索 / 热搜 chips + 输入建议列表。
+/// 搜索辅助的唯一呈现模块：热搜 chips + 输入建议列表。
 ///
 /// 两个宿主（桌面 Ctrl+F 遮罩与资料库搜索 tab）只传各自的版式差异；可见性
 /// （聚焦、空词、首屏是否已返回）由 [SearchAssistController] 判定。面板最多
@@ -7,12 +7,10 @@ library;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../domain/search/search_assist.dart';
 import '../providers/search_assist_controller.dart';
-import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -81,68 +79,17 @@ class SearchAssistPanel extends StatelessWidget {
   Widget _chips(BuildContext context, SearchAssistViewModel value) {
     final l10n = _l10n(context);
     final scheme = Theme.of(context).colorScheme;
-    final sections = <Widget>[];
-    if (value.chips.recent.isNotEmpty) {
-      sections.add(
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                l10n.searchRecentTitle,
-                style: context.typeScale.labelLarge.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            M3EButton.text(
-              onPressed: () {
-                controller.clearHistory();
-                context.read<NotificationService?>()?.showSuccessSnackBar(
-                  l10n.searchRecentCleared,
-                );
-              },
-              child: Text(l10n.searchRecentClear),
-            ),
-          ],
-        ),
-      );
-      sections.add(const SizedBox(height: 8));
-      sections.add(
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final query in value.chips.recent)
-              Semantics(
-                label: l10n.searchHistoryDelete(query),
-                child: M3EChip(
-                  label: query,
-                  type: M3EChipType.input,
-                  onPressed: () => controller.selectSuggestion(
-                    SearchSuggestion(
-                      text: query,
-                      source: SearchSuggestionSource.history,
-                    ),
-                  ),
-                  onDeleted: () => controller.deleteHistory(query),
-                ),
-              ),
-          ],
-        ),
-      );
-    }
-    if (value.chips.hot.isNotEmpty) {
-      if (sections.isNotEmpty) sections.add(const SizedBox(height: 12));
-      sections.add(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         Text(
           l10n.discoverHotSearches,
           style: context.typeScale.labelLarge.copyWith(
             color: scheme.onSurfaceVariant,
           ),
         ),
-      );
-      sections.add(const SizedBox(height: 8));
-      sections.add(
+        const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -151,21 +98,12 @@ class SearchAssistPanel extends StatelessWidget {
               M3EChip(
                 label: query,
                 type: M3EChipType.assist,
-                onPressed: () => controller.selectSuggestion(
-                  SearchSuggestion(
-                    text: query,
-                    source: SearchSuggestionSource.hot,
-                  ),
-                ),
+                onPressed: () =>
+                    controller.selectSuggestion(SearchSuggestion(text: query)),
               ),
           ],
         ),
-      );
-    }
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: sections,
+      ],
     );
   }
 
@@ -192,10 +130,7 @@ class SearchAssistPanel extends StatelessWidget {
                   ),
                   headline: value.suggestions[index].text,
                   leading: Icon(
-                    value.suggestions[index].source ==
-                            SearchSuggestionSource.history
-                        ? Icons.history_rounded
-                        : Icons.local_fire_department_rounded,
+                    Icons.local_fire_department_rounded,
                     size: 20,
                     color: scheme.onSurfaceVariant,
                   ),

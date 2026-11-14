@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -106,6 +105,8 @@ class ChannelSearchBar extends StatelessWidget {
     final m3e = M3ETheme.of(context);
     final barTheme = m3e.searchBarTheme;
     final chipScheme = m3e.colorScheme;
+    final cursorColor = barTheme.cursorColor(chipScheme);
+    final selectionColor = barTheme.selectionColor(chipScheme);
     final layout = appSearchBarLayoutFor(context, null);
     final selectorWidth = math.min(
       148.0,
@@ -202,14 +203,19 @@ class ChannelSearchBar extends StatelessWidget {
                         ),
                       ),
                     ),
+                  if (!showChip)
+                    SizedBox(
+                      width: 48,
+                      child: Icon(
+                        Icons.search_rounded,
+                        color: chipScheme.onSurface,
+                      ),
+                    ),
                   Expanded(
                     child: Padding(
-                      // 有 chip 时与 chip 隔 4；无 chip 时左缘留 16，与胶囊
-                      // 内其它内容同一呼吸。
-                      padding: EdgeInsets.only(
-                        left: showChip ? 4 : 16,
-                        right: 4,
-                      ),
+                      // 有 chip 时与 chip 隔 4；无 chip 时左侧是搜索图标，
+                      // 图标槽自身已留出内缩，这里只补 4dp 文字间距。
+                      padding: const EdgeInsets.only(left: 4, right: 4),
                       child: _ChannelSearchField(
                         controller: controller,
                         focusNode: focusNode,
@@ -218,6 +224,8 @@ class ChannelSearchBar extends StatelessWidget {
                         enabled: enabled,
                         inputStyle: layout.inputStyle,
                         hintStyle: layout.hintStyle,
+                        cursorColor: cursorColor,
+                        selectionColor: selectionColor,
                         onChanged: onChanged,
                         onSubmitted: onSubmitted,
                         onEscape: onEscape,
@@ -250,7 +258,13 @@ class ChannelSearchBar extends StatelessWidget {
   }
 }
 
-/// 组合条内部的裸输入：无边框、无第二层胶囊，与 M3E 搜索栏共用字号与行高。
+/// 组合条内部的裸输入：复用 M3E 搜索栏自己的输入组件。
+///
+/// 为什么不再用裸 [TextField]：`InputDecoration.collapsed` 会把 hint 交给
+/// `InputDecorator` 的默认排版（默认字号 / 行高与传入的 `hintStyle` 不一致），
+/// 胶囊高度固定后 hint 会偏离垂直中心；[M3ESearchBarInput] 用 Stack +
+/// `Align(centerStart)` 直接排 hint / EditableText，和 Ctrl+F、歌单搜索条
+/// 保持同一套垂直居中口径。
 class _ChannelSearchField extends StatelessWidget {
   const _ChannelSearchField({
     required this.controller,
@@ -258,6 +272,8 @@ class _ChannelSearchField extends StatelessWidget {
     required this.hintText,
     required this.inputStyle,
     required this.hintStyle,
+    required this.cursorColor,
+    required this.selectionColor,
     required this.autofocus,
     required this.enabled,
     this.onChanged,
@@ -270,6 +286,8 @@ class _ChannelSearchField extends StatelessWidget {
   final String hintText;
   final TextStyle inputStyle;
   final TextStyle hintStyle;
+  final Color cursorColor;
+  final Color selectionColor;
   final bool autofocus;
   final bool enabled;
   final ValueChanged<String>? onChanged;
@@ -278,47 +296,21 @@ class _ChannelSearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final m3e = M3ETheme.of(context);
-    final barTheme = m3e.searchBarTheme;
-    final scheme = m3e.colorScheme;
-    final cursorColor = barTheme.cursorColor(scheme);
-
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.escape &&
-            onEscape != null) {
-          onEscape!();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: TextSelectionTheme(
-        data: TextSelectionThemeData(
-          cursorColor: cursorColor,
-          selectionColor: barTheme.selectionColor(scheme),
-          selectionHandleColor: cursorColor,
-        ),
-        child: TextField(
-          controller: controller,
-          focusNode: focusNode,
-          autofocus: autofocus,
-          enabled: enabled,
-          maxLines: 1,
-          textAlignVertical: TextAlignVertical.center,
-          style: inputStyle,
-          cursorColor: cursorColor,
-          textInputAction: TextInputAction.search,
-          decoration: InputDecoration.collapsed(
-            hintText: hintText,
-            hintStyle: hintStyle,
-          ),
-          onChanged: onChanged,
-          onSubmitted: onSubmitted,
-        ),
-      ),
+    return M3ESearchBarInput(
+      controller: controller,
+      focusNode: focusNode,
+      hintText: hintText,
+      enabled: enabled,
+      readOnly: false,
+      autoFocus: autofocus,
+      textStyle: inputStyle,
+      hintStyle: hintStyle,
+      cursorColor: cursorColor,
+      selectionColor: selectionColor,
+      textInputAction: TextInputAction.search,
+      onChanged: onChanged,
+      onSubmitted: onSubmitted,
+      onEscape: onEscape,
     );
   }
 }

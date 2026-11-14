@@ -26,7 +26,6 @@ import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/escape_claims.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_service.dart';
-import 'package:molia/services/search_history_store.dart';
 import 'package:molia/services/shortcut_bindings.dart';
 import 'package:molia/services/shortcut_settings.dart';
 import 'package:molia/sources/source_manager.dart';
@@ -148,8 +147,6 @@ Future<FakePlaybackFacade> pumpPerfApp(
     sourceRegistry: registry,
   );
   addTearDown(search.dispose);
-  final searchHistory = SearchHistoryStore();
-  addTearDown(searchHistory.dispose);
   final lyrics = LyricsProvider(service: LyricsService(providers: const []));
   addTearDown(lyrics.dispose);
   final lyricsDisplay = LyricsDisplaySettings(settings: testSettingsRegistry());
@@ -196,7 +193,6 @@ Future<FakePlaybackFacade> pumpPerfApp(
         ChangeNotifierProvider<ChannelSelection>.value(value: selection),
         ChangeNotifierProvider<DiscoverProvider>.value(value: discover),
         ChangeNotifierProvider<SearchProvider>.value(value: search),
-        ChangeNotifierProvider<SearchHistoryStore>.value(value: searchHistory),
         ChangeNotifierProvider<LyricsProvider>.value(value: lyrics),
         ChangeNotifierProvider<LyricsDisplaySettings>.value(
           value: lyricsDisplay,

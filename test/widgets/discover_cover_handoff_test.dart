@@ -124,6 +124,11 @@ void main() {
 
     expect(find.byKey(const Key('discoverTracksSkeleton')), findsOneWidget);
     expect(heroWithTag(tag), findsOneWidget, reason: '骨架头部必须承担 Hero 目标端');
+    expect(
+      tester.widget<Hero>(heroWithTag(tag)).transitionOnUserGestures,
+      isTrue,
+      reason: 'Android 预测返回属于 user gesture，未开启则回退不飞封面',
+    );
 
     loader.complete(
       const DiscoverDetail(
@@ -149,12 +154,17 @@ void main() {
         )
         .single;
     expect(sourceHero.tag.toString(), contains('wy'));
+    expect(sourceHero.transitionOnUserGestures, isTrue);
 
     await tester.tap(find.text('测试歌单'));
     await tester.pumpAndSettle();
 
     expect(find.byType(DiscoverTracksPage), findsOneWidget);
     expect(heroWithTag(sourceHero.tag), findsOneWidget);
+    expect(
+      tester.widget<Hero>(heroWithTag(sourceHero.tag)).transitionOnUserGestures,
+      isTrue,
+    );
   });
 
   testWidgets('榜单磁贴与详情页使用同一个封面 Hero 标签', (tester) async {
@@ -174,11 +184,16 @@ void main() {
               hero.tag.toString().startsWith('discover-leaderboard-cover:'),
         )
         .single;
+    expect(sourceHero.transitionOnUserGestures, isTrue);
 
     await tester.tap(find.text('热歌榜'));
     await tester.pumpAndSettle();
 
     expect(find.byType(DiscoverTracksPage), findsOneWidget);
     expect(heroWithTag(sourceHero.tag), findsOneWidget);
+    expect(
+      tester.widget<Hero>(heroWithTag(sourceHero.tag)).transitionOnUserGestures,
+      isTrue,
+    );
   });
 }

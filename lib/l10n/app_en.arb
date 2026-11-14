@@ -26,17 +26,6 @@
       }
     }
   },
-  "searchRecentTitle": "Recent searches",
-  "searchRecentClear": "Clear",
-  "searchRecentCleared": "Recent searches cleared",
-  "searchHistoryDelete": "Remove “{query}”",
-  "@searchHistoryDelete": {
-    "placeholders": {
-      "query": {
-        "type": "String"
-      }
-    }
-  },
   "searchSuggestionsLabel": "Search suggestions",
   "searchSuggestionAction": "Search for “{query}”",
   "@searchSuggestionAction": {

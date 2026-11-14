@@ -11,7 +11,6 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
-import 'package:molia/services/search_history_store.dart';
 import 'package:molia/sources/builtin/discover_source.dart';
 import 'package:molia/sources/source_manager.dart' hide SourceKind;
 import 'package:molia/widgets/adaptive_layout.dart';
@@ -117,7 +116,6 @@ void main() {
   late PlaybackProvider playback;
   late LibraryProvider library;
   late SearchProvider search;
-  late SearchHistoryStore history;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -132,14 +130,7 @@ void main() {
       libraryRepository: repo,
     );
     library = LibraryProvider(repository: repo, playbackProvider: playback);
-    history = SearchHistoryStore(
-      preferences: await SharedPreferences.getInstance(),
-    );
-    search = SearchProvider(
-      playback,
-      selection: selection,
-      historyStore: history,
-    );
+    search = SearchProvider(playback, selection: selection);
     discover = DiscoverProvider(
       playbackProvider: playback,
       libraryProvider: library,
@@ -152,7 +143,6 @@ void main() {
     discover.dispose();
     library.dispose();
     search.dispose();
-    history.dispose();
     playback.dispose();
     selection.dispose();
     sources.dispose();
@@ -181,7 +171,6 @@ void main() {
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(value: library),
           ChangeNotifierProvider<SearchProvider>.value(value: search),
-          ChangeNotifierProvider<SearchHistoryStore>.value(value: history),
         ],
         child: M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
@@ -202,36 +191,43 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('expanded 浏览 tab 出左栏，选择只更新右栏', (tester) async {
+  testWidgets('expanded 浏览 tab 仍用顶部 tab，不再有侧栏', (tester) async {
     await pump(tester, 900);
-    expect(find.byKey(const Key('libraryBrowseSplit')), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('libraryBrowsePane-leaderboards')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('libraryBrowseSplit')), findsNothing);
+    expect(find.byType(M3ETabs), findsOneWidget);
     expect(find.text('飙升榜'), findsOneWidget);
 
     await tester.tap(
-      find.byKey(const ValueKey<String>('libraryBrowsePane-playlists')),
+      find.descendant(
+        of: find.byType(M3ETabs),
+        matching: find.byIcon(Icons.queue_music_rounded),
+      ),
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('libraryBrowseSplit')), findsOneWidget);
     expect(find.text('飙升榜'), findsNothing);
-    expect(
-      find.byKey(const ValueKey<String>('libraryBrowsePane-playlists')),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('medium 保持单栏', (tester) async {
-    await pump(tester, 700);
     expect(find.byKey(const Key('libraryBrowseSplit')), findsNothing);
-    expect(find.text('飙升榜'), findsOneWidget);
   });
 
   group('搜索入口', () {
     Finder tabIcon(IconData icon) =>
         find.descendant(of: find.byType(M3ETabs), matching: find.byIcon(icon));
+
+    testWidgets('搜索条 hint 与胶囊垂直居中', (tester) async {
+      final searchSources = _SearchSources();
+      addTearDown(searchSources.dispose);
+      await pump(tester, 900, sourcesOverride: searchSources);
+
+      final hint = find.text('搜索歌曲、歌手或歌词');
+      expect(hint, findsOneWidget);
+      final bar = find.ancestor(of: hint, matching: find.byType(M3ECard)).first;
+      final barRect = tester.getRect(bar);
+      final hintRect = tester.getRect(hint);
+      expect(
+        (hintRect.center.dy - barRect.center.dy).abs(),
+        lessThanOrEqualTo(1.0),
+        reason: 'hint 必须在搜索胶囊内垂直居中',
+      );
+    });
 
     testWidgets('无 chip 搜索条：多渠道也不渲染条内下拉，清除键保留焦点', (tester) async {
       final controller = TextEditingController();
@@ -276,9 +272,17 @@ void main() {
 
       expect(find.byKey(ChannelSearchBar.channelDropdownKey), findsNothing);
       expect(find.byType(M3ESearchBar), findsNothing);
-      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byType(EditableText), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(ChannelSearchBar),
+          matching: find.byIcon(Icons.search_rounded),
+        ),
+        findsOneWidget,
+        reason: '资料库搜索条保留搜索图标',
+      );
 
-      await tester.enterText(find.byType(TextField), '晴天');
+      await tester.enterText(find.byType(EditableText), '晴天');
       await tester.pump();
       await tester.tap(find.byIcon(Icons.close_rounded));
       await tester.pump();
@@ -324,13 +328,13 @@ void main() {
 
       await tester.tap(tabIcon(Icons.leaderboard_rounded));
       await tester.pumpAndSettle();
-      expect(find.byType(TextField), findsNothing);
+      expect(find.byType(EditableText), findsNothing);
 
       reselect.trigger();
       await tester.pumpAndSettle();
 
-      final field = tester.widget<TextField>(find.byType(TextField));
-      expect(field.focusNode?.hasFocus, isTrue);
+      final field = tester.widget<EditableText>(find.byType(EditableText));
+      expect(field.focusNode.hasFocus, isTrue);
     });
 
     testWidgets('重复点击资料库：没有搜索 tab 时保持原语义（不聚焦）', (tester) async {
@@ -339,11 +343,11 @@ void main() {
       await pump(tester, 900, reselect: reselect);
 
       // 当前渠道不可搜索：搜索 tab 隐藏，仍停在浏览 tab。
-      expect(find.byType(TextField), findsNothing);
+      expect(find.byType(EditableText), findsNothing);
       reselect.trigger();
       await tester.pumpAndSettle();
-      expect(find.byType(TextField), findsNothing);
-      expect(find.byKey(const Key('libraryBrowseSplit')), findsOneWidget);
+      expect(find.byType(EditableText), findsNothing);
+      expect(find.text('飙升榜'), findsOneWidget);
     });
   });
 }

@@ -52,7 +52,6 @@ import '../providers/search_provider.dart';
 import '../providers/sources_provider.dart';
 import '../services/escape_claims.dart';
 import '../services/key_claims.dart';
-import '../services/search_history_store.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
 import 'app_search_bar.dart';
@@ -337,8 +336,6 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     _input = SearchInputBinding(session: _session, controller: _field);
     _assist = SearchAssistController(
       search: _search,
-      // 仓库生命周期归组合根（Provider 树），宿主只消费。
-      history: context.read<SearchHistoryStore>(),
       hotKeywords: () =>
           context.read<DiscoverProvider?>()?.hotSearches ?? const [],
     );
@@ -458,7 +455,6 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   void _openAllResults() {
     if (_closing) return;
     _closing = true;
-    _search.recordCurrentQuery();
     _close();
     widget.onViewAllResults();
   }

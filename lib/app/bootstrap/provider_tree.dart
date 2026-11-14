@@ -47,7 +47,6 @@ import '../../services/notification_service.dart';
 import '../../services/play_statistics_service.dart';
 import '../../services/scrobble/scrobble_service.dart';
 import '../../services/save_as.dart';
-import '../../services/search_history_store.dart';
 import '../../services/shortcut_settings.dart';
 import '../../services/track_local_data_service.dart';
 import 'ai_stack.dart';
@@ -71,7 +70,6 @@ List<SingleChildWidget> buildAppProviders({
   required LibraryProvider libraryProvider,
   required ChannelSelection channelSelection,
   required SearchProvider searchProvider,
-  required SearchHistoryStore searchHistoryStore,
   required DesktopStack desktop,
   required AiStack ai,
   required LyricsStack lyrics,
@@ -141,8 +139,6 @@ List<SingleChildWidget> buildAppProviders({
     ChangeNotifierProvider.value(value: channelSelection),
     // 搜索：组合根创建（托盘内存守卫按生命周期注册释放回调），这里只挂树。
     ChangeNotifierProvider.value(value: searchProvider),
-    // 搜索历史：设备本地、按渠道隔离；不登记同步设置，也不参与备份。
-    ChangeNotifierProvider<SearchHistoryStore>.value(value: searchHistoryStore),
     // 资料库（收藏/历史/列表）：顶层创建（AI 推歌读取收藏作为反馈）。
     ChangeNotifierProvider.value(value: libraryProvider),
     // 曲库浏览 / 智能列表：聚合读取缓存（设备本地，不同步）。

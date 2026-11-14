@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import '../app/perf/data_path_trace.dart';
@@ -8,7 +6,6 @@ import '../domain/models/artist.dart';
 import '../domain/models/catalog.dart' show SearchKind, SearchQuery;
 import '../domain/models/source.dart' show SourceDescriptor;
 import '../domain/ports/source_registry.dart';
-import '../services/search_history_store.dart';
 import 'channel_selection.dart';
 import 'paged_list_controller.dart';
 import 'playback_provider.dart';
@@ -37,9 +34,6 @@ class SearchProvider extends ChangeNotifier {
   /// 搜索入口：带 single-flight + LRU + TTL 的目录服务（可为 null：无音源）。
   final CatalogService? _catalogService;
 
-  /// 按渠道隔离的设备本地搜索历史（可为 null：独立测试 / 性能场景）。
-  final SearchHistoryStore? _history;
-
   /// 搜索会话：关键词、类型、结果控制器、预览与渠道反应都在这里。
   late final SearchSession session;
 
@@ -50,8 +44,7 @@ class SearchProvider extends ChangeNotifier {
     required ChannelSelection selection,
     this._catalogService,
     SourceRegistry? sourceRegistry,
-    SearchHistoryStore? historyStore,
-  }) : _history = historyStore {
+  }) {
     session = SearchSession(
       selection: selection,
       sourceRegistry: sourceRegistry,
@@ -129,23 +122,11 @@ class SearchProvider extends ChangeNotifier {
 
   void updateSearchQuery(String query) => session.updateQuery(query);
 
-  /// 提交搜索（不走防抖，立即发起），并记录一次用户确认的查询。
+  /// 提交搜索（不走防抖，立即发起）。
   ///
-  /// 唯一的记录入口：输入过程中的防抖搜索只经 [updateSearchQuery]，永远不写
-  /// 历史；建议 / 纠错 / 回车都复用本命令。
+  /// 建议 / 纠错 / 回车都复用本命令。
   void submitSearch(String query) {
-    final keyword = query.trim();
-    if (keyword.isNotEmpty) {
-      unawaited(_history?.record(activeSourceKey, keyword));
-    }
     session.submit(query);
-  }
-
-  /// 记录当前关键词（「查看全部结果」等确认动作；不重复发起搜索）。
-  void recordCurrentQuery() {
-    final keyword = searchQuery.trim();
-    if (keyword.isEmpty) return;
-    unawaited(_history?.record(activeSourceKey, keyword));
   }
 
   void clearSearch() => session.clear();
@@ -162,7 +143,6 @@ class SearchProvider extends ChangeNotifier {
     // 行不属于当前渠道（旧结果）时不播，避免用错渠道的队列。
     if (items.isEmpty || row.id.sourceKey != activeSourceKey) return;
     final index = items.indexWhere((entry) => entry.id == row.id);
-    recordCurrentQuery();
     _playbackProvider.playDomainTracks(
       [for (final entry in items) entry.track],
       index < 0 ? 0 : index,

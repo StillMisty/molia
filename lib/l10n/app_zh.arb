@@ -19,17 +19,6 @@
       }
     }
   },
-  "searchRecentTitle": "最近搜索",
-  "searchRecentClear": "清除",
-  "searchRecentCleared": "已清除最近搜索",
-  "searchHistoryDelete": "删除「{query}」",
-  "@searchHistoryDelete": {
-    "placeholders": {
-      "query": {
-        "type": "String"
-      }
-    }
-  },
   "searchSuggestionsLabel": "搜索建议",
   "searchSuggestionAction": "搜索「{query}」",
   "@searchSuggestionAction": {

@@ -50,20 +50,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get searchRecentTitle => 'Recent searches';
-
-  @override
-  String get searchRecentClear => 'Clear';
-
-  @override
-  String get searchRecentCleared => 'Recent searches cleared';
-
-  @override
-  String searchHistoryDelete(String query) {
-    return 'Remove “$query”';
-  }
-
-  @override
   String get searchSuggestionsLabel => 'Search suggestions';
 
   @override

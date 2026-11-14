@@ -170,30 +170,6 @@ abstract class AppLocalizations {
   /// **'{count} results available'**
   String searchResultsAnnouncement(int count);
 
-  /// No description provided for @searchRecentTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Recent searches'**
-  String get searchRecentTitle;
-
-  /// No description provided for @searchRecentClear.
-  ///
-  /// In en, this message translates to:
-  /// **'Clear'**
-  String get searchRecentClear;
-
-  /// No description provided for @searchRecentCleared.
-  ///
-  /// In en, this message translates to:
-  /// **'Recent searches cleared'**
-  String get searchRecentCleared;
-
-  /// No description provided for @searchHistoryDelete.
-  ///
-  /// In en, this message translates to:
-  /// **'Remove “{query}”'**
-  String searchHistoryDelete(String query);
-
   /// No description provided for @searchSuggestionsLabel.
   ///
   /// In en, this message translates to:
