@@ -52,7 +52,7 @@ Molia 是一个用 Flutter 写的音乐播放器：内置 QQ 音乐、网易云�
 
 <p align="center">
   <img src="docs/images/library.webp" width="250" alt="播放历史">
-  <img src="docs/images/settings.webp" width="250" alt="设置：内容与来源">
+  <img src="docs/images/settings.webp" width="250" alt="设置：音源与在线服务">
 </p>
 
 ### 资料库

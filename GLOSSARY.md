@@ -760,7 +760,7 @@
   （live 由协调者转发 facade 并返回前提交会话，恢复态 / 未命中 no-op——自动换源
   只由真实播放失败触发，不改保存的恢复会话）；provenance（每个曲目的已尝试来源）
   保证级联每源至多一次、有界（上限 64 条）；开关 `SourceSwapSettings`（默认开，
-  设置 › 播放）。本地文件与 cancelled / unsupported 失败不换源。
+  设置 › 音源与在线服务）。本地文件与 cancelled / unsupported 失败不换源。
 
 ## 听歌统计
 - **Listening statistics snapshot（统计快照）** — `ListeningStatisticsSnapshot`：
@@ -1377,4 +1377,4 @@
 - **Download queue（下载队列）** — `DownloadQueue`（`lib/services/download/download_queue.dart`）：下载任务全局严格串行 FIFO 的唯一实现（单 worker，`scheduleMicrotask` 启动）。`enqueue` 同步进等待列表（批量一次入队全部）；同 key 已有排队 / 运行任务返回同一 future，失败 / 取消再入队则替换；`cancelQueued` 撤排队任务，运行中由服务取消 dio `CancelToken`；失败音频保留、分项失败自动移除，重试会新建不带批量位置的任务。**不持久化、无跨重启恢复**，重启只保留既有 `.part` 清扫。
 - **Download journal（下载提交日志）** — `lib/services/download/download_journal.dart`：文件型 write-ahead journal，只覆盖「音频 `.part` 写完 → rename → DB 落库」这段提交窗口。位置是应用支持目录 `download_journal/`（`DownloadStorage.journalRoot()`），与下载根 / 公共目录解耦；marker 为 `<md5(key)>.json`，`.tmp` + rename 原子写；写入失败会在 rename 前中止下载，不把没有恢复保障的文件落成最终文件。音频 `.part` 写完后、rename 前写 pending `DownloadedTrack`，最终落库后删除；启动时 `init` 在 `.part` 清扫前恢复：文件存在则补库，已有音频记录或文件不存在则删 marker（仅歌词 / 封面的分项记录不算已落库），补库失败保留 marker 下次再试。它**不是队列持久化**：排队 / 失败任务与并发语义完全不变，重启仍清空。
 - **Download progress channel（下载进度通道）** — 下载进度的消费面：`DownloadTask`（UI，100ms 合并）与系统通知 presenter（逐分块上报、500ms 节流）两条独立通道；`DownloadService` 仍是 `ChangeNotifier`，但只通知记录 / 能力 / 初始化变化，不再转发进度。旧 `progressForTrack` 作为 `taskForTrack(track)?.progress` 的兼容入口保留。
-- **Download management page（下载管理页）** — `lib/pages/downloads_manage_page.dart`（设置 › 数据与存储）：任务区只展示运行 / 等待 / 失败（等待超 20 首折叠），任务区订阅 `taskChanges`、每行订阅自己的任务；失败区可单条重试 / 移除与全部重试；**不展示已完成列表**（已完成在收藏 › 本地歌曲）。批量下载只入队不锁页；文件维护（`.part` 清扫 / 孤儿回收 / Android 补发布）经 `DownloadMaintenance` 单独 busy；孤儿扫描只认应用格式（音频 / `.lrc` / 封面图片），确认弹层展示数量与文件名；省流生效时下载前先确认。
+- **Download management page（下载管理页）** — `lib/pages/downloads_manage_page.dart`（设置 › 曲库与存储）：任务区只展示运行 / 等待 / 失败（等待超 20 首折叠），任务区订阅 `taskChanges`、每行订阅自己的任务；失败区可单条重试 / 移除与全部重试；**不展示已完成列表**（已完成在收藏 › 本地歌曲）。批量下载只入队不锁页；文件维护（`.part` 清扫 / 孤儿回收 / Android 补发布）经 `DownloadMaintenance` 单独 busy；孤儿扫描只认应用格式（音频 / `.lrc` / 封面图片），确认弹层展示数量与文件名；省流生效时下载前先确认。

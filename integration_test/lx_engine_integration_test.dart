@@ -230,7 +230,7 @@ void main() {
     expect(find.textContaining('集成测试源'), findsWidgets);
     expect(find.textContaining('音源管理'), findsWidgets);
 
-    // 默认音质入口在设置 › 播放；这里验证 manager 的读写闭环，
+    // 默认音质入口在设置 › 音源与在线服务；这里验证 manager 的读写闭环，
     // UI 交互由 settings_page_test 覆盖。
     await manager.setPreferredQuality('128k');
     await settle(tester);

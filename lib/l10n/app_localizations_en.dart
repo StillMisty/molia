@@ -119,6 +119,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAppearanceTitle => 'Appearance';
 
   @override
+  String get settingsNetworkSourcesTitle => 'Sources & online services';
+
+  @override
+  String get settingsLibraryStorageTitle => 'Library & storage';
+
+  @override
+  String get settingsLibraryStorageDeviceLocalHint =>
+      'Local folders, downloads and cache stay on this device and are not synced.';
+
+  @override
+  String get settingsDataBackupTitle => 'Data & backup';
+
+  @override
+  String get settingsGeneralTitle => 'General';
+
+  @override
   String get settingsThemeMode => 'Theme mode';
 
   @override
@@ -287,7 +303,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPlaybackDetailsDeviceLocalHint =>
-      'Playback details stay on this device and are not synced.';
+      'Fade and shuffle preferences stay on this device and are not synced.';
 
   @override
   String get settingsFadeTitle => 'Fade in and out';
@@ -387,13 +403,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Import LX Music source scripts to search more platforms';
 
   @override
-  String get settingsContentSection => 'Content & sources';
-
-  @override
   String get settingsLyricsSection => 'Lyrics';
 
   @override
   String get settingsBottomNavTitle => 'Bottom navigation';
+
+  @override
+  String get settingsBottomNavSubtitle => 'Order and visibility';
 
   @override
   String get settingsBottomNavHint =>
@@ -440,11 +456,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'Light vibration on taps such as navigation and playback';
 
   @override
-  String get settingsGeneralAboutTitle => 'General & about';
-
-  @override
   String get settingsGeneralDeviceLocalHint =>
-      'Tray, window and vibration settings stay on this device and are not synced.';
+      'Vibration settings stay on this device and are not synced.';
 
   @override
   String get settingsAutoSaveHint => 'Changes take effect immediately';
@@ -453,14 +466,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsMoreActions => 'More actions';
 
   @override
-  String get dataManagementTitle => 'Data & storage';
-
-  @override
   String get exportDataTitle => 'Export data';
 
   @override
   String get exportDataSubtitle =>
       'Full backup: playlists, sources, settings, stats, history, sign-in info and keys (keep the file safe)';
+
+  @override
+  String get settingsBackupRestoreTitle => 'Backup & restore';
+
+  @override
+  String get settingsBackupRestoreSubtitle =>
+      'Export, import and favorites migration';
 
   @override
   String get importDataTitle => 'Import data';
@@ -4705,6 +4722,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDesktopSection => 'Desktop';
+
+  @override
+  String get settingsDesktopDeviceLocalHint =>
+      'Tray and window settings stay on this device and are not synced.';
 
   @override
   String get settingsCloseToTray => 'Minimize to tray on close';

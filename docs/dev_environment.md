@@ -21,7 +21,7 @@ PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解�
   选目录」都靠 `macos/Runner/*.entitlements`；缺 `network.client` 的表现是搜索 /
   播放静默失败。自定义保存目录在进程重启后可能失去沙盒授权（未做 security-scoped
   bookmark），默认下载目录不受影响（见 `docs/pitfalls.md` #89）。
-- **托盘 = 菜单栏图标**：关闭窗口默认隐藏到菜单栏（`设置 › 通用 › 桌面` 可改成直接
+- **托盘 = 菜单栏图标**：关闭窗口默认隐藏到菜单栏（`设置 › 桌面` 可改成直接
   退出）；点 Dock 图标会经窗口通道恢复窗口。
 - **更新走手动**：macOS 没有应用内安装，发布产物是 `-unsigned.zip`；本机调试用
   `flutter run -d macos`，不需要签名证书。
