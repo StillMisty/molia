@@ -16,8 +16,7 @@ import 'settings_tiles.dart';
 /// 设置首屏「通用」卡：启动页 / 底部导航 / 语言 / 震动 / 应用名称。
 ///
 /// 桌面托盘、窗口与快捷键在「桌面」卡（仅桌面出现），更新与问题排查在
-/// 「关于与更新」卡；本卡只放平台无关的通用偏好。震动是设备本地键，卡底
-/// 给一句说明。
+/// 「关于与更新」卡；本卡只放平台无关的通用偏好。
 class GeneralSettingsSection extends StatefulWidget {
   const GeneralSettingsSection({super.key, required this.availability});
 
@@ -66,7 +65,6 @@ class _GeneralSettingsSectionState extends State<GeneralSettingsSection> {
 
     return SettingsSectionCard(
       title: l10n.settingsGeneralTitle,
-      footer: SettingsSectionHint(text: l10n.settingsGeneralDeviceLocalHint),
       children: [
         // 行序按改动频率：启动页（常改）→ 底栏 → 震动 → 语言 → 应用名称。
         if (nav != null) ...[

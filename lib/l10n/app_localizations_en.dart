@@ -111,10 +111,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLibraryStorageTitle => 'Library & storage';
 
   @override
-  String get settingsLibraryStorageDeviceLocalHint =>
-      'Local folders, downloads and cache stay on this device and are not synced.';
-
-  @override
   String get settingsDataBackupTitle => 'Data & backup';
 
   @override
@@ -288,10 +284,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPlaybackDetailsTitle => 'Playback details';
 
   @override
-  String get settingsPlaybackDetailsDeviceLocalHint =>
-      'Fade and shuffle preferences stay on this device and are not synced.';
-
-  @override
   String get settingsFadeTitle => 'Fade in and out';
 
   @override
@@ -440,10 +432,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsHapticsSubtitle =>
       'Light vibration on taps such as navigation and playback';
-
-  @override
-  String get settingsGeneralDeviceLocalHint =>
-      'Vibration settings stay on this device and are not synced.';
 
   @override
   String get settingsAutoSaveHint => 'Changes take effect immediately';
@@ -4690,10 +4678,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDesktopSection => 'Desktop';
-
-  @override
-  String get settingsDesktopDeviceLocalHint =>
-      'Tray and window settings stay on this device and are not synced.';
 
   @override
   String get settingsCloseToTray => 'Minimize to tray on close';

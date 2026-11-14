@@ -186,14 +186,6 @@ void main() {
     expect(find.byKey(const Key('settingsDiagnosticsItem')), findsOneWidget);
   });
 
-  testWidgets('设备本地设置在各自的卡底有一句说明', (tester) async {
-    await pumpSettings(tester);
-    expect(find.text('淡入淡出与随机偏好只保存在本机，不随跨设备同步。'), findsOneWidget);
-    expect(find.text('震动反馈只保存在本机，不随跨设备同步。'), findsOneWidget);
-    expect(find.text('托盘与窗口设置只保存在本机，不随跨设备同步。'), findsOneWidget);
-    expect(find.text('本地文件夹、下载与缓存只保存在本机，不随跨设备同步。'), findsOneWidget);
-  });
-
   testWidgets('底部导航入口打开独立子页，拖拽列表不再占首屏', (tester) async {
     await pumpSettings(tester);
 

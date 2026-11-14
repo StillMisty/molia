@@ -139,9 +139,9 @@ class SettingsSectionAvailability {
   /// 托盘与窗口行：平台有托盘且有偏好实例（Linux 精简桌面可能没有托盘）。
   bool get trayRowsVisible => _traySupported && tray != null;
 
-  /// Linux 桌面卡底的托盘说明：只在真有托盘的平台提示。
-  bool get trayLinuxHintVisible =>
-      _traySupported && _platform == TargetPlatform.linux;
+  /// Linux 桌面卡底的托盘说明：托盘扩展是操作前提，Linux 上即使当前没有
+  /// 托盘能力也提示（用户需要先装扩展）。
+  bool get trayLinuxHintVisible => _platform == TargetPlatform.linux;
 
   LyricsOutputCapability _lyricsCapability(String outputId) =>
       lyricsDisplay?.capabilityOf(outputId) ??

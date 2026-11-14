@@ -341,8 +341,7 @@ class _SettingsPageState extends State<SettingsPage>
   /// 少放最近听过的。
   ///
   /// 音质、自动换源与省流属于「音源与在线服务」，加入位置属于「曲库与
-  /// 存储」：同一类事情只在一张卡里出现。淡入淡出与随机偏好是设备本地值，
-  /// 卡底只说明这两项不随同步。
+  /// 存储」：同一类事情只在一张卡里出现。
   Widget _playbackSection(
     BuildContext context,
     AppLocalizations l10n, {
@@ -350,9 +349,6 @@ class _SettingsPageState extends State<SettingsPage>
   }) {
     return SettingsSectionCard(
       title: l10n.settingsPlaybackTitle,
-      footer: SettingsSectionHint(
-        text: l10n.settingsPlaybackDetailsDeviceLocalHint,
-      ),
       children: [
         Selector<PlaybackProvider, PlayMode>(
           selector: (context, provider) => provider.defaultPlayMode,
