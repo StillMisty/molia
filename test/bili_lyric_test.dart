@@ -122,7 +122,7 @@ void main() {
     session.bindReady(gate.future);
     final pending = biliLyric.fetch(const {'bvid': 'BV1xx411c7mD'});
     await pumpEventQueue();
-    expect(options, isEmpty, reason: '安全存储读完前不应发请求');
+    expect(options, isEmpty, reason: '凭据库读完前不应发请求');
 
     login();
     gate.complete();

@@ -186,19 +186,15 @@
     窗口按钮，按钮本身不发起原生调用；macOS 保留原生红绿灯）；除
     `ensureInitialized()`（仅 `main()` 与集成测试调用）外，任何构建期/测试期路径
     都不得调用窗口原生 API，否则在无桌面窗口 / 无原生库的测试环境会抛错。
-31. **Linux 无系统钥匙串时 `flutter_secure_storage` 会抛异常，读取必须容错**：
-    WSLg / 容器 / 无 keyring 的最小桌面没有 `org.freedesktop.secrets`，
-    libsecret 抛 `PlatformException(Libsecret error, ... is not activatable)`。
-    `SyncProvider.init()`（`runApp` 之前）读同步口令时会直接撞上：
-    未捕获 → `main()` 在 `runApp` 前终止 → **窗口已由原生 runner 显示、
-    但没有首帧，表现为永久黑窗（进程还活着）**。现在的契约：
-    `SecureSettingsSecretStore.read` 把读取失败降级为「未设置」（返回 null +
-    只记一次日志），`main.dart` 再兜一层包住 `syncProvider.init()`。
-    新增任何「读安全存储」的路径都要遵守这条：可选子系统的故障不能阻断启动；
-    写入/删除仍保持抛出（用户主动操作要知道失败）。
-    启动期的**隐式写入**（`SyncProvider.init` 首次生成口令）是例外：写入失败
-    在这里按「未设置」降级并继续（口令改为初始化即生成后，无钥匙串机器不再
-    等到用户点开关才发现写不进去），用户主动重置口令时照旧抛给调用方。
+31. **Linux 无系统钥匙串不再阻断启动（2026-11-14 起凭据走本机数据库）**：
+    历史回归：WSLg / 容器 / 无 keyring 的桌面没有 `org.freedesktop.secrets`，
+    `flutter_secure_storage` 的原生 libsecret 会抛 C++ 异常并直接终止进程
+    （Dart try/catch 兜不住），表现为窗口已显示但没有首帧。
+    现在所有凭证统一存本机凭据库 `molia_credentials_v1.sqlite`（明文 SQLite，
+    见 ADR-0016 修订），不再依赖系统钥匙串；`SettingsSecretStore.read` 仍把
+    读取失败降级为「未设置」，可选子系统的故障不能阻断启动。代价是凭据明文
+    落盘；写入 / 删除失败仍抛给用户主动操作。旧钥匙串凭据不自动迁移，升级后
+    需要重新登录 / 填写 Key / 设置同步口令。
 32. **`build/linux/x64/debug/bundle` 可能是 `flutter test` 的产物，不是应用**：
     跑过 `flutter test integration_test/... -d linux` 之后，该目录里的可执行文件
     入口是测试 listener（VM Service `rootLib` 是 `flutter_test_listener.dart`），

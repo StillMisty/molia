@@ -4712,7 +4712,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get biliAccountPrivacyHint =>
-      '登录信息保存在系统安全存储；开启同步后会加密同步到已配对的设备。仅用于读取 B 站字幕。';
+      '登录信息保存在本机凭据库；开启同步后会加密同步到已配对的设备。仅用于读取 B 站字幕。';
 
   @override
   String get biliAccountQrSemantics => '哔哩哔哩登录二维码';

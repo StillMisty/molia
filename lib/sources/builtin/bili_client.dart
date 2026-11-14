@@ -148,7 +148,7 @@ class BiliClient {
     Map<String, Object?>? query,
     int retries,
   ) async {
-    // 账号请求同样等初始化完成：否则冷启动首个字幕 / 资料请求会在安全存储
+    // 账号请求同样等初始化完成：否则冷启动首个字幕 / 资料请求会在凭据库
     // 读完前读到空 Cookie，误走匿名路径。
     await session.ready;
     final cookie = session.cookieHeader;

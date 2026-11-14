@@ -25,7 +25,7 @@
    发现页「今日推荐」区（查看全部）+ 设置；**不再有播放页 AI 徽标**。
 2. **形态**：内置在线 LLM，OpenAI-compatible Chat Completions 协议
    （Base URL / API Key / 模型可配，预设 DeepSeek / OpenAI / 自定义）。
-   **不提供内置 Key 与服务端中转**；Key 存 `flutter_secure_storage`。
+   **不提供内置 Key 与服务端中转**；Key 存本机凭据库（明文 SQLite，见 ADR-0016 修订）。
    Web 平台隐藏入口（CORS 与密钥安全）。
 3. **数据边界**：上行「聚合画像 + 已听清单最近 100 首」（2026-11-05 起最近
    播放与已听清单合并去重；本地去重仍读最近 500 首，上限集中在

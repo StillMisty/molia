@@ -70,9 +70,9 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
   不会把窗口弹到 WSLg；只有显式 `--window` 才用当前真实显示。手动跑时也要
   `env -u WAYLAND_DISPLAY GDK_BACKEND=x11`，只 unset `DISPLAY` 不够。
 - **WSL / 容器要私有 D-Bus**：`perf.sh data/cpu linux` 已自动套
-  `dbus-run-session`。没有 keyring / NetworkManager 时，系统会话总线会让
-  同步初始化（安全存储 / 电量网络探针）卡 40s+，症状是 `scenario.source`
-  迟迟不出现、搜索看起来超时。
+  `dbus-run-session`。没有 NetworkManager 时，系统会话总线会让电量 / 网络
+  探针卡 40s+，症状是 `scenario.source` 迟迟不出现、搜索看起来超时。
+  （2026-11-14 起凭据走本机数据库，不再有 keyring 等待。）
 - **Android data/cpu 用 release 包**：需要 `adb root`（release 包不可
   `run-as`）；首次安装后 `perf.sh` 会先启动一次应用创建私有数据目录，再注入
   mock 音源。直接手跑 `seed.sh mock-source` 前也要先启动应用一次。
@@ -148,9 +148,9 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
 `buildSyncStack` 里 `await syncProvider.init()` + `await scheduler.start()` 移到
 首帧之后（新的 `startSync`，由 `post_frame_init.dart` 调用）。调度器要跑
 **电量 / 网络探针**（`SyncScheduler.refreshEnvironment`），不参与首帧内容；
-同步设置页在首帧后才可能被打开，状态面看不到差别。同步启动路径不读写安全存储
-（无钥匙串环境里的 libsecret 原生异常会直接终止进程）。
-失败仍不阻断启动（口径不变，见 `docs/pitfalls.md` #31）。
+同步设置页在首帧后才可能被打开，状态面看不到差别。凭据已迁到本机数据库，
+启动路径不再依赖系统钥匙串。失败仍不阻断启动（口径不变，见
+`docs/pitfalls.md` #31）。
 
 ### 5.3 更新栈后移（≈ −14ms）
 
@@ -340,7 +340,8 @@ bundle-only tar.gz。下表同机实测（Linux x64 / Flutter 3.47.9）；MB 为
   第三方插件 / 原生库，`--strip-unneeded` 共 −897,880 B（−0.90MB；tar.gz
   约 −0.19MB）。大头：`libcnativeapi.so` −641,216 B、`libsqlite3.so`
   −98,160 B、`libquickjs_c_bridge_plugin.so` −72,824 B、
-  `libflutter_secure_storage_linux_plugin.so` −52,184 B。`libapp.so` 与
+  `libflutter_secure_storage_linux_plugin.so` −52,184 B（该依赖已于
+  2026-11-14 移除，后续包体不再包含它）。`libapp.so` 与
   `libflutter_linux_gtk.so` 明确跳过；脚本用 `file` / `ldd` 校验剥离前后
   依赖集合不变，重复执行 0 字节变化（幂等）。
 - **clean 与脏构建不是 CI 收益**：`build/flutter_assets` 是本地 debug /

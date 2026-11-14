@@ -8,7 +8,7 @@ import 'dart:convert';
 
 import '../support/settings_test_support.dart';
 
-/// 内存密钥存储替身（不触碰 flutter_secure_storage 平台通道）。
+/// 内存密钥存储替身（不触碰生产凭据库）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

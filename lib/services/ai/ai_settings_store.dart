@@ -1,7 +1,7 @@
 /// AI 推歌配置存储：LLM 连接信息（secure 盒）+ 确认 / 开关 / 缓存偏好。
 ///
-/// - Base URL / API Key / 模型走 secure 盒（生产 = `flutter_secure_storage`，
-///   桌面端依赖系统 keyring），随凭证类别加密同步；
+/// - Base URL / API Key / 模型走凭证存储（生产 = 本机凭据库，明文 SQLite），
+///   随凭证类别加密同步；
 /// - 确认标记 / 功能开关 / 推荐偏好 / 反馈记忆走普通 prefs（跟人走）；
 /// - 读取失败/缺项一律降级为「未配置」，不抛异常（页面据此引导）。
 library;
@@ -19,7 +19,7 @@ class AiSettingsStore {
 
   /// 读取配置；缺项/读取失败返回 null（调用方引导填写）。
   ///
-  /// 三个键互不依赖：并行读，避免安全存储在 Android Keystore / 桌面 keyring
+  /// 三个键互不依赖：并行读，避免凭据库 I/O
   /// 上的多次串行等待叠加到启动尾巴。
   Future<LlmConfig?> readConfig() async {
     try {

@@ -8,7 +8,7 @@ import 'package:molia/domain/models/device_sync.dart';
 
 /// 同步戳账本：发号器单调性 / 吸收、登记与墓碑、基线与编解码往返。
 ///
-/// 账本是纯内存模块：这里直接构造实例，不经过 SharedPreferences 与安全存储。
+/// 账本是纯内存模块：这里直接构造实例，不经过 SharedPreferences 与凭据库。
 void main() {
   late int now;
   late int changes;

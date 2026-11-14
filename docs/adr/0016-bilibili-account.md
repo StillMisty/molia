@@ -28,7 +28,8 @@ ADR-0014 把 B 站收进内置平台时，把 CC 字幕作为「同源歌词」�
    - 兼容两代成功格式：旧版 `data.url` query 里的 Cookie，以及 2026-08 后的
      crossDomain ticket + `Set-Cookie`（必要时手动跟跳逐跳采集）。
 2. **凭据是凭证类别的设置键** `kBiliAccountCookie`：
-   - `SyncCategory.credentials` + `SettingsValueStore.secure`；
+   - `SyncCategory.credentials` + `SettingsValueStore.secure`（该枚举表示
+     「凭据存储」，生产实现是本机凭据库，见文末修订）；
    - 凭证类别默认开启 → **开启跨设备同步后默认同步**（快照 AES-256-GCM 加密）；
    - 完整备份默认导出全部类别与凭证（B 站登录、AI Key、any-listen token），
      换机恢复后与备份时一致；`includeCredentials: false` 只作为显式排除凭证的逃生口；
@@ -65,7 +66,7 @@ ADR-0014 把 B 站收进内置平台时，把 CC 字幕作为「同源歌词」�
   （歌单 / 历史 / 设置 / 音源 / 统计 / 会话 / 封面）与全部凭证；窗口位置、
   缓存策略、字体等设备相关设置与本地缓存文件不在 JSON 备份内。
 - 登录态失效（nav `-101`）时清掉同步凭据，其它设备随后同步退出。
-- 二维码 URL / qrcode_key / Cookie 不写日志；安全存储读取失败按未登录处理。
+- 二维码 URL / qrcode_key / Cookie 不写日志；凭据库读取失败按未登录处理。
 - 依赖新增 `qr_flutter`（纯 Dart，二维码渲染；无原生代码）。
 
 ## 替代方案
@@ -79,3 +80,11 @@ ADR-0014 把 B 站收进内置平台时，把 CC 字幕作为「同源歌词」�
 
 - 2026-10-30：二维码渲染从 `qr_flutter` 换成直接依赖 `qr`（`QrCodeView`
   自绘方形码点），去掉只在这一处使用的包装层。
+- **2026-11-14：凭据从系统安全存储迁移到本机凭据库。** 所有凭证键（B 站
+  Cookie、AI Key、scrobble Token、同步口令、WebDAV 密码）统一存
+  `molia_credentials_v1.sqlite`（明文 SQLite，应用数据目录）。原因：无
+  keyring 的 Linux / 容器里 libsecret 抛的是原生 C++ 异常，Dart 层兜不住，
+  会直接终止进程。代价是明文本地落盘；同步载荷仍由同步口令加密，但口令
+  本身也只在本机凭据库中。旧的钥匙串凭据不自动迁移，升级后需要重新登录 /
+  填写 Key / 重新设置口令。启动路径因此可以安全读取 B 站凭据，字幕链路不再
+  依赖「先打开账号页」。

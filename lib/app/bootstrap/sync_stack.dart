@@ -153,7 +153,7 @@ Future<SyncStack> buildSyncStack({
   // 传输启动前先过门；权限被拒时手动地址也无效（网关级阻断）。
   final lanPermission = LocalNetworkPermission.production();
   // 控制面在传输之后才建（它要持有传输列表），但配对写口令必须走控制面
-  // （缓存与安全存储一起更新）。这里先声明、用惰性闭包接线；真正的调用都
+  // （缓存与凭据库一起更新）。这里先声明、用惰性闭包接线；真正的调用都
   // 发生在启动之后，不会读到未赋值的槽位。
   late final SyncControlPlane syncControlPlane;
   // 本机局域网事实的唯一实例：传输 / 发现 / 配对都读这一份，组合根不再把
@@ -305,7 +305,7 @@ Future<SyncStack> buildSyncStack({
     peerSightings: syncEngine.peerSightings,
   );
   // 局域网一键配对：与局域网传输同生命周期。前台 + 非省电
-  // 才应答探测 / 弹接受窗；口令写入必须经控制面（缓存与安全存储一起更新）。
+  // 才应答探测 / 弹接受窗；口令写入必须经控制面（缓存与凭据库一起更新）。
   final pairing = LanPairingService(
     runtime: lanRuntime,
     canPrompt: () =>
@@ -376,7 +376,7 @@ Future<SyncStack> buildSyncStack({
   // 这里兜一层初始化异常（日志 + 继续，同步页表现为未配置）。
   //
   // 引擎 init 与调度器启动都后移到首帧之后（见 [startSync]）：启动路径
-  // 不读写安全存储（无钥匙串环境里 libsecret 会直接终止进程），调度器
+  // 不读写凭据库，调度器
   // 还要跑电量 / 网络探针（sync_scheduler 的 refreshEnvironment），都不
   // 参与首帧内容。
   //
@@ -397,7 +397,7 @@ Future<SyncStack> buildSyncStack({
 ///
 /// 组合根在 `post_frame_init.dart` 调用：调度器要跑电量 / 网络探针
 /// （桌面 release 中位数 ~38ms），而同步状态面（设置页开关 / 口令）
-/// 在首帧后才有机会被看到。启动路径不读写安全存储。失败不阻断启动
+/// 在首帧后才有机会被看到。失败不阻断启动
 /// （见 docs/pitfalls.md #31）。
 Future<void> startSync(SyncStack sync) async {
   try {

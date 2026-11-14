@@ -31,7 +31,7 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
   @override
   void initState() {
     super.initState();
-    // 凭据在安全存储里：只在本页打开时读，启动路径不碰钥匙串。
+    // 凭据在本机凭据库：首帧后已读；本页打开时再补一次（幂等）。
     unawaited(context.read<ScrobbleService?>()?.init());
   }
 

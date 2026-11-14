@@ -47,7 +47,7 @@ class _AiDjPageState extends State<AiDjPage> {
   /// 分区间距（分区标题之间）。
   static const double _sectionGap = 24;
 
-  /// 配置文本落盘防抖：逐字写安全存储既慢又没有必要。
+  /// 配置文本落盘防抖：逐字写凭据库既慢又没有必要。
   static const Duration _configSaveDelay = Duration(milliseconds: 400);
 
   late final AiDjProvider _provider;
@@ -65,7 +65,7 @@ class _AiDjPageState extends State<AiDjPage> {
   void initState() {
     super.initState();
     _provider = context.read<AiDjProvider>();
-    // 配置在安全存储里：只在本页打开时读，启动路径不碰钥匙串。
+    // 配置在本机凭据库：首帧后已读；本页打开时再补一次（幂等）。
     unawaited(_provider.init());
     final config = _provider.config;
     if (config == null) {

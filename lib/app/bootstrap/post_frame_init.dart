@@ -4,7 +4,7 @@
 /// 为什么留到首帧：托盘图标资源此时可读；更新读包信息/偏好、调度器电量/
 /// 网络探针都不参与首帧内容（见各自 start 的注释）；音源脚本加载与更新检查
 /// 同理；同步传输启动要过局域网权限门（Android 系统对话框）并绑套接字，
-/// 早于首帧会让窗口等一个用户看不见的对话框。启动路径不读写安全存储。
+/// 早于首帧会让窗口等一个用户看不见的对话框。
 library;
 
 import 'dart:async';
@@ -12,10 +12,12 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../services/cache_service.dart';
+import 'ai_stack.dart';
 import 'catalog_stack.dart';
 import 'desktop_stack.dart';
 import 'library_stack.dart';
 import 'local_data_stack.dart';
+import 'scrobble_stack.dart';
 import 'startup_trace.dart';
 import 'sync_stack.dart';
 import 'update_stack.dart';
@@ -25,7 +27,9 @@ void initAfterFirstFrame({
   required CatalogStack catalog,
   required LocalDataStack local,
   required LibraryStack library,
+  required ScrobbleStack scrobble,
   required DesktopStack desktop,
+  required AiStack ai,
   required UpdateStack update,
   required SyncStack sync,
 }) {
@@ -33,13 +37,20 @@ void initAfterFirstFrame({
   // 关键路径。宿主探测预热：关闭策略首次触发时直接读缓存结果（并留下启动日志）。
   desktop.initDesktopSurfaces();
 
-  // AI / 听歌同步的配置与凭据都在安全存储里：启动路径不读，页面打开时
-  // 各自按需 init（无钥匙串桌面 / 容器里 libsecret 会直接终止进程）。
-  //
-  // B 站账号：只有 prefs 提示「登录过」时才补读安全存储。登录用户的字幕
-  // 链路（`BiliSession.ready` / `isLoggedIn`）在首帧后即恢复；从未登录过的
-  // 环境不碰钥匙串。
-  unawaited(catalog.biliAccount.initIfStored());
+  // AI 配置 / 听歌同步凭据都在本机凭据库（明文 SQLite）：首帧后读；
+  // 页面直接打开时也会再调一次（幂等）。
+  final aiWatch = Stopwatch()..start();
+  unawaited(
+    ai.djProvider.init().whenComplete(
+      () => markStartupStep('sub.ai.init（首帧后）', aiWatch),
+    ),
+  );
+  final scrobbleWatch = Stopwatch()..start();
+  unawaited(
+    scrobble.service.init().whenComplete(
+      () => markStartupStep('sub.scrobble.init（首帧后）', scrobbleWatch),
+    ),
+  );
 
   // 首帧后的本地数据尾巴：省流网络探测 / 下载记录加载 / 音频缓存维护。
   // 这几项都要过平台通道或磁盘，继续留在 runApp 前会把首帧整体推后。
@@ -91,7 +102,7 @@ void initAfterFirstFrame({
   // 移动数据下只同步小类别。
   //
   // 音源初始化只依赖本地脚本仓库，不依赖同步身份 / 口令：搜索与播放入口
-  // 要尽快可用，不能被安全存储 / 电池 / 网络探针串在后面。同步仍等戳种子，
+  // 要尽快可用，不能被凭据库 / 电池 / 网络探针串在后面。同步仍等戳种子，
   // 传输 / 首轮在音源与同步都就绪后起。
   unawaited(() async {
     final sourceWatch = Stopwatch()..start();

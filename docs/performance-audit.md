@@ -552,13 +552,14 @@ Linux profile、`mobile-mini-expand`、3 轮中位数：
   Android 模拟器 build p95 **3.5–6.3ms**，无稳定回归。
 - **AI 初始化从首帧前移到首帧后**，并把安全存储 / 偏好 / 历史读取并行化：
   Android `sub.ai.init` **207 → 158ms**（−49ms），Linux 129 → 102ms。
-  > 2026-11-14 后续：AI / 听歌同步改为页面打开时初始化，启动路径不再读写
-  > 安全存储；`sub.ai.init` / `sub.scrobble.init` 首帧后埋点已移除。
+  > 2026-11-14 后续：凭据从系统安全存储迁到本机 SQLite，AI / 听歌同步仍在
+  > 首帧后初始化；keyring 等待与 `flutter_secure_storage` 插件不再存在。
 - **音源初始化不再等待同步初始化**：音源脚本与搜索 / 播放入口只依赖本地
   脚本仓库；同步仍等戳种子，传输 / 首轮在两边就绪后起。Android
   `sub.sourceManager.init` 105ms、`sub.sync.start` 181ms，互不阻塞。
 - Linux 无头首搜的 ~250ms 根因是**系统会话总线缺 keyring / NetworkManager**：
-  `startSync` 的安全存储 / 探针在系统总线上等 40s+，搜索请求被拖住。`perf.sh`
+  `startSync` 的 keyring / 探针在系统总线上等 40s+，搜索请求被拖住
+  （2026-11-14 起凭据走本机数据库，keyring 部分已消失）。`perf.sh`
   改为私有 `dbus-run-session` 后，同机 `search.source` **0.45ms**、搜索端到端
   **630ms**；这不是产品 Dart 回归。首播仍有 ~243ms 的 resolve 尾巴（首次
   起播 / 引擎预热），与搜索无关。

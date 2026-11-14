@@ -87,7 +87,7 @@ void main() {
     );
   });
 
-  test('听歌同步凭证是凭证类别的安全存储键', () {
+  test('听歌同步凭证是凭证类别的凭据键', () {
     for (final key in [kListenBrainzToken, kLastFmSessionKey]) {
       expect(kAllSettingsKeys, contains(key));
       expect(key.category, SyncCategory.credentials);

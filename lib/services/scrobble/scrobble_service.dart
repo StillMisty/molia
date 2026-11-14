@@ -124,8 +124,7 @@ class ScrobbleService extends ChangeNotifier {
 
   /// 读偏好 / 凭据 / 发件箱，恢复在途状态；幂等。
   ///
-  /// 凭据走安全存储：只在用户打开听歌同步页面时调用，不放在应用启动路径
-  /// （无钥匙串桌面 / 容器里 libsecret 会直接终止进程）。
+  /// 凭据走本机凭据库：首帧后 / 打开听歌同步页时读，失败按未连接降级。
   Future<void> init() => _initFuture ??= _init();
 
   Future<void> _init() async {

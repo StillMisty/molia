@@ -401,7 +401,7 @@ void main() {
     expect(notifications, 1);
   });
 
-  test('WebDAV 密码读写走安全存储', () async {
+  test('WebDAV 密码读写走凭据库', () async {
     expect(await control.readWebdavPassword(), isNull);
     await control.writeWebdavPassword('dav-secret');
     expect(await control.readWebdavPassword(), 'dav-secret');

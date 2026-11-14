@@ -1,4 +1,6 @@
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/credentials/credentials_database.dart';
 import 'package:molia/data/settings/settings_secret_store.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
@@ -10,8 +12,8 @@ import 'package:shared_preferences_platform_interface/shared_preferences_platfor
 
 import 'support/sync_test_support.dart';
 
-/// 同步本地存储测试面：状态存储（蜂窝策略持久化 / 活动记录上限）与安全存储
-/// 读取容错。
+/// 同步本地存储测试面：状态存储（蜂窝策略持久化 / 活动记录上限）与凭据库
+/// 读写。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -50,7 +52,7 @@ void main() {
     await recovered.init();
     expect(recovered.deviceId, id);
 
-    // 状态 JSON 与小键都丢：只能生成新身份（启动路径不碰安全存储）。
+    // 状态 JSON 与小键都丢：只能生成新身份（启动路径不碰凭据库）。
     await prefs.remove(SyncStateStore.stateKey);
     await prefs.remove(SyncStateStore.deviceIdKey);
     final regenerated = SyncStateStore(
@@ -838,27 +840,23 @@ void main() {
     expect(store.lanEndpoints.single.deviceId, 'ok');
   });
 
-  // 安全存储读取容错（回归：WSLg / 容器等无系统钥匙串的环境里 libsecret
-  // 抛异常，未捕获会打断 `main()` 的 `runApp` 之前部分，桌面端表现为
-  // 「窗口已显示但没有首帧」的永久黑窗，见 pitfalls #31）。
-  const store = SecureSettingsSecretStore();
+  test('凭据库：写入 / 覆盖 / 删除；同步状态按需读取口令', () async {
+    final db = CredentialsDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final store = DatabaseSettingsSecretStore(database: db);
 
-  test('读取失败降级为「未设置」：返回 null，不抛异常', () async {
-    // 单测环境没有 libsecret 平台实现：修复前这里会抛 MissingPluginException。
     expect(await store.read('sync_passphrase_v2'), isNull);
-  });
+    await store.write('sync_passphrase_v2', 'one');
+    expect(await store.read('sync_passphrase_v2'), 'one');
+    await store.write('sync_passphrase_v2', 'two');
+    expect(await store.read('sync_passphrase_v2'), 'two');
 
-  test('写入仍然抛出：用户主动操作要知道没存进去', () async {
-    await expectLater(
-      store.write('sync_passphrase_v2', 'secret'),
-      throwsA(isA<Exception>()),
-    );
-  });
-
-  test('SyncStateStore.readPassphrase 在无钥匙串时同样返回 null', () async {
     final state = SyncStateStore(secrets: store, deviceId: 'test-device');
-    expect(await state.readPassphrase(), isNull);
+    expect(await state.readPassphrase(), 'two');
     expect(await state.readWebdavPassword(), isNull);
+
+    await store.delete('sync_passphrase_v2');
+    expect(await store.read('sync_passphrase_v2'), isNull);
   });
 }
 

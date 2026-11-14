@@ -9,7 +9,7 @@ import 'track.dart';
 
 /// LLM 连接配置（OpenAI-compatible Chat Completions 协议）。
 ///
-/// `apiKey` 只写安全存储、不进日志/导出；`baseUrl` 允许带或不带
+/// `apiKey` 只写凭据库、不进日志/导出；`baseUrl` 允许带或不带
 /// `/v1` 后缀（请求地址归一在 `LlmClient.chatCompletionsUri`）。
 class LlmConfig {
   final String baseUrl;

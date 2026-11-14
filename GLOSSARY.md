@@ -21,7 +21,7 @@
 - **Builtin search runner（内置检索 runner）** — `lib/sources/builtin/builtin_search_runner.dart`：内置平台搜索的执行骨架（`runBuiltinSearch`）与策略的唯一实现——重试预算、分页推断、失败归一；五个音乐平台走它，平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。B 站搜索走 **Bili client**（会话 / WBI / ADR-0014 的 any-failure 刷新），与 runner 共用 `SourceSearchResult` 的 empty / failed 语义。结果语义分界：**平台返回空** = 正常结果（tracks 空、failure 空）；**业务拒绝 / 传输失败** = `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常，UI 收口前只读 tracks）。内置平台「可搜索」判定唯一来源是 **Source profile**（channels 候选 / 能力位 / 搜索路由共用）。
 - **Bilibili source（B 站音源 `bili`）** — `lib/sources/builtin/bili_*.dart`：第七个内置渠道（展示名「哔哩哔哩」，默认启用）。`bili_api.dart` 维护匿名会话：`/x/frontend/finger/spi` 取 buvid3/4、`nav` 取 WBI 密钥（1 小时缓存 + single-flight）；`bili_client.dart` 是请求生命周期的唯一实现（WBI 签名、匿名 vs 会话头、业务码口径、风控刷新；搜索按 ADR-0014 任何失败刷新一次）。能力：全站视频搜索、原生取链（分 P cid → WBI playurl → dash 音频 192k/128k/64k）、CC/AI 字幕歌词（**需 B 站扫码登录**，见 ADR-0016）、视频评论、UP 主页、B 站音乐榜 / 热搜、公开收藏夹导入。边界：无专辑、无按歌词搜歌、无 Molia 账号系统、无大会员高音质、不浏览 / 搜索歌单、私密收藏夹不可导入（见 ADR-0014 / ADR-0016）。
 - **Qishui source（汽水音乐 `qs`）** — `lib/sources/builtin/qs_*.dart` + `channel/qs_channel.dart`：汽水音乐渠道（展示名「汽水音乐」）。匿名端点分三类：PC 接口（`/luna/search/{track,artist,playlist}`、`/luna/pc/comments`、`/luna/playlist/detail`，`LunaPC` UA + 完整设备参数）、App 接口（`POST /luna/discover/mix`）、分享页 SSR（`www.qishui.com/share/{track,album,artist,playlist}` 的 `_ROUTER_DATA`，专辑 / 歌手 / 歌单详情只走这里）。能力：搜索、歌手搜索与热门作品页、专辑、评论（平台只有一个序；「热门」按本页点赞排序）、KRC 逐字歌词、封面、推荐歌单 / 分类 / 歌单搜索详情。**取链由 LX 脚本提供**：匿名接口对会员曲目只给 30 秒试听流，渠道声明里没有 `resolve`；没有匿名榜单目录、热搜词与按歌词搜歌。平台会概率性返回 `200` + 空 body，`QsApi` 按重试预算重试，正常空结果（`extra.empty_search`）仍是「平台返回空」。
-- **Bili account（B 站账号）** — `BiliAccountService`（`lib/services/bili_account_service.dart`）+ `BiliQrLogin`（`lib/sources/builtin/bili_login.dart`）+ **Bili session** `BiliSession`（`lib/sources/builtin/bili_session.dart`）：官方扫码登录，Cookie 存 `kBiliAccountCookie`（凭证类别 + secure 盒，**默认随跨设备同步；完整备份默认包含全部凭证**；退出登录的清空也会同步）。`BiliSession` 是 Cookie / 账号 / 就绪 Future 的唯一持有者；账号服务只保留 UI 状态（登录态 / 过期 / 持久化标记）并通过同一会话读写，`BiliClient` / `BiliLyric` 接受注入的会话（默认 `BiliSession.shared`）；账号请求与字幕取词都先 await `ready` 再读 Cookie，过期标记也由会话持有。只用于 B 站字幕（`/x/player/wbi/v2` + `accountSession`）与账号资料（nav + `account`）；播放直链、搜索、评论、字幕 CDN 保持匿名。登录成功清 `bili:` 原生取词缓存并强刷当前 B 站歌词；手动选择的歌词不被覆盖。启动路径不读安全存储：`bili_cookie_present_v1` prefs 提示为 true 时首帧后补一次 `init()`（登录用户的字幕照常可用），从未登录过的环境保持匿名，账号页 / 登录动作再显式 `init()`。
+- **Bili account（B 站账号）** — `BiliAccountService`（`lib/services/bili_account_service.dart`）+ `BiliQrLogin`（`lib/sources/builtin/bili_login.dart`）+ **Bili session** `BiliSession`（`lib/sources/builtin/bili_session.dart`）：官方扫码登录，Cookie 存 `kBiliAccountCookie`（凭证类别 + 本机凭据库，**默认随跨设备同步；完整备份默认包含全部凭证**；退出登录的清空也会同步）。`BiliSession` 是 Cookie / 账号 / 就绪 Future 的唯一持有者；账号服务只保留 UI 状态（登录态 / 过期 / 持久化标记）并通过同一会话读写，`BiliClient` / `BiliLyric` 接受注入的会话（默认 `BiliSession.shared`）；账号请求与字幕取词都先 await `ready` 再读 Cookie，过期标记也由会话持有。只用于 B 站字幕（`/x/player/wbi/v2` + `accountSession`）与账号资料（nav + `account`）；播放直链、搜索、评论、字幕 CDN 保持匿名。登录成功清 `bili:` 原生取词缓存并强刷当前 B 站歌词；手动选择的歌词不被覆盖。凭据存本机凭据库（明文 SQLite，见 ADR-0016 修订），启动时读取；读取失败按匿名会话降级，不阻断播放。
 - **Bili client（B 站请求客户端）** — `lib/sources/builtin/bili_client.dart`：B 站端点请求生命周期的唯一实现——URL / WBI 签名 / 匿名 vs 会话头 / 账号 Cookie（仅 `account` / `accountSession` 两种鉴权口径，播放 / 搜索 / 评论绝不带，Cookie 来自注入的 `BiliSession`）/ 业务码口径（`standard` / `favorites` / `none`）/ 刷新口径（`riskOnly` 默认，仅风控刷新；搜索与 UP 搜索 `anyFailure`，任何失败刷新一次）/ 空响应与非 JSON 归一为 `SourceFailure`。`BiliApi` 仍是匿名访问会话（buvid + WBI 密钥，类型 `BiliAnonSession`）的唯一来源；业务文件只拼参数与解析 `data`，不再各自判断 code / 带 Cookie / 刷新。
 - **Bilibili raw id（B 站取链 id）** — `bvid`（`BV...`）优先、`aid`（av 号）兜底：`raw_track.dart` 的通用 id 优先级把 `bvid` 放在最前，`_platformIdFields['bili'] = ['bvid','aid','id']`，且不登记 `_canonicalIdFields['bili']`（B 站不靠 LX 脚本取链）。raw 原样保留 `cid`（首个分 P，取链与字幕共用）与 `source:'bili'`；`bvid` / `aid` 都缺失的条目不可播放（收藏夹里的番剧 / 课程在映射时过滤）。
 - **LX engine bridge（LX 引擎桥）** — `lib/sources/lx/lx_engine_native.dart`：脚本 isolate 与宿主的唯一通道。投递用 JSInvokable 值直投（`__lxDeliver` / `__lxSetup`，不再把消息拼成 JS 源码 evaluate）；HTTP 响应只下行原文 `raw`，`body` 由 prelude 在 JS 侧还原；任务泵按活动状态自适应（有在途 25ms / 空闲 250ms）；调用超时先探活（`ping`/`pong`，有在途 HTTP 时按脚本声明的超时延长预算），只有无应答才重启——单请求超时抛 `LxEngineTimeoutException` 只失败该请求，`LxEngineSupervisor` 对连续超时熔断（默认 3 次 → `failed` + `failureReason`，成功一次清零）。
@@ -902,7 +902,7 @@
   失败项折叠展示；推荐结果 100% 来自已启用音源。
 - **LLM config（AI 服务配置）** — `lib/services/ai/ai_settings_store.dart`：
   Base URL / API Key / 模型（OpenAI-compatible，预设 DeepSeek/OpenAI/自定义）；
-  Key 只写 `flutter_secure_storage`、不进日志。
+  Key 只写本机凭据库、不进日志。
 - **Queue enqueue（队列追加）** — `PlaybackFacade/Backend/Service.enqueueTracks` +
   `PlaybackProvider.enqueueDomainTracks`：顺序模式追加队尾；洗牌模式经
   `PlaybackShuffleOrder.extend` 扩展排列（当前轮老歌在前，轮末重洗覆盖全队列）。
@@ -930,7 +930,7 @@
   结论」，不读写设置、不重试、不排队；令牌只出现在鉴权头或协议参数里，不进日志。
 - **Scrobble preferences（开关与凭证）** — `lib/services/scrobble/scrobble_preferences.dart`：总开关 /
   单服务开关 / 同意版本是设备本地 SharedPreferences，不登记同步——另一台设备同步凭证也不能
-  悄悄开始上报；访问口令与会话密钥是凭证类别，走 secure 盒并随凭证同步（ADR-0016）。断开连接
+  悄悄开始上报；访问口令与会话密钥是凭证类别，走本机凭据库并随凭证同步（ADR-0016）。断开连接
   会清空该服务的凭证与队列。
 
 ## 跨设备同步
@@ -1157,6 +1157,16 @@
   越界访问在 debug 断言、release 抛错。组合根是唯一构造注册表的地方，模块
   构造参数是 `SettingsAccess` / `SettingsScope`，不再各建私有注册表；模块初始
   默认值取自 `SettingsKey.defaultValue`，不在字段里复制字面量。
+- **Credentials database（本机凭据库）** — `lib/data/credentials/credentials_database.dart`：
+  `molia_credentials_v1.sqlite` 的 drift 库（`key` / `value` / `updatedAt`）。
+  所有 `SettingsValueStore.secure` 键（B 站 Cookie、AI Key、scrobble Token、
+  同步口令、WebDAV 密码）都落在这里，明文 SQLite，独立于资料库 schema；
+  首个读写才懒打开。取舍见 ADR-0016 修订：不再依赖系统钥匙串，代价是
+  本机明文。
+- **Credentials secret store（凭据存储实现）** — `lib/data/settings/settings_secret_store.dart`
+  的 `DatabaseSettingsSecretStore`：`SettingsSecretStore` 的生产实现，读写
+  上述凭据库；读取失败按「未设置」降级（可选子系统不阻断启动），写入 /
+  删除失败仍抛出。测试注入内存库或 `MemorySettingsSecretStore`。
 - **Sync round report（一轮同步报告）** — `SyncRoundReport`：一轮的**可观察**产物。
   五态结论 `ok / noChanges / noPeers / partial / failed`（「没发现对端」与
   「没有变化」必须分开）+ 每传输明细
@@ -1178,8 +1188,7 @@
 - **Device identity（设备身份）** — `sync_device_id_v2`：独立的 prefs 小键，
   用来标识「本机是哪台设备」（版本戳 / 探测 / 附近设备配对 / WebDAV 文件名）。
   **不跟着 `sync_state_v2` 一起重生成**：大状态损坏时从小键恢复，避免手机重启
-  或换 IP 后被对端当成一台新设备。启动路径不碰安全存储（无钥匙串环境里的
-  libsecret 原生异常会直接终止进程），设备身份不做安全存储备份。
+  或换 IP 后被对端当成一台新设备。设备身份只走 prefs 小键，不做凭据库备份。
 - **Sync peer roster（同步名册）** — `SyncPeerState`：每台对端的最近接触观测
   （名称 / 传输 / 最后拉取·推送 / 时钟偏移 / 落后条数 / 最近失败），持久化在
   `sync_state_v2`，UI 在同步设置页首屏的「设备」区呈现（名册内联）；
@@ -1229,7 +1238,7 @@
   码不一致必须拒绝。确认码不经过口令，也不作为后续认证凭据。
 - **Sync group（同步组）** — 持有同一同步口令的设备集合。**接受配对请求 =
   加入同步组 = 对方获得本机同步口令**，能解密全部同步数据（含音源脚本与 API
-  Key 等密钥），接受弹窗必须明示；口令只进安全存储，不进日志 / 错误详情 /
+  Key 等密钥），接受弹窗必须明示；口令只进本机凭据库，不进日志 / 错误详情 /
   分析事件。已配对的设备继续走 `MSD/1` 发现与 `MSY/3` 载荷协议；旧
   `molia-pair:*` / 二维码 / 粘贴配对码已删除，不识别、不迁移、不兼容。
 - **首次连通提示（peer connected notice）** — 某设备第一次真正交换过数据

@@ -5,6 +5,8 @@
 /// 设置注册表的「模块自绑 reload」也在这里完成装配。
 library;
 
+import 'dart:async';
+
 import '../../data/catalog/album_service.dart';
 import '../../data/catalog/artist_service.dart';
 import '../../data/catalog/catalog_service.dart';
@@ -87,9 +89,9 @@ CatalogStack buildCatalogStack({FailureRecorder? failures}) {
     ),
   );
   biliAccount = BiliAccountService(settings: biliSettings);
-  // 凭据在安全存储里，装配路径不读：B 站账号页 / 登录动作会显式 init；
-  // 首帧后只在 prefs 提示「登录过」时补读一次（见 post_frame_init），
-  // 从未登录过的环境保持匿名，不碰钥匙串。
+  // 凭据在本机凭据库（明文 SQLite）：启动即可懒读，登录用户的字幕链路
+  // 不依赖「先打开账号页」；读取失败按匿名会话降级。
+  unawaited(biliAccount.init());
 
   // 音源管理器的按键作用域：any-listen 连接 3 键 + 渠道偏好 3 键。两组
   // 重载路径不同（连接配置回读 / 渠道偏好整表重读），但同属一个挂载点。

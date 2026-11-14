@@ -8743,7 +8743,7 @@ abstract class AppLocalizations {
   /// No description provided for @biliAccountPrivacyHint.
   ///
   /// In en, this message translates to:
-  /// **'Sign-in info is kept in secure storage. If sync is on, it is encrypted and synced to paired devices. It is only used to read Bilibili captions.'**
+  /// **'Sign-in info is kept in the local credential database. If sync is on, it is encrypted and synced to paired devices. It is only used to read Bilibili captions.'**
   String get biliAccountPrivacyHint;
 
   /// No description provided for @biliAccountQrSemantics.
