@@ -1326,6 +1326,19 @@ provider 不再持有第二份 key；
 壳层可见 && 当前 tab），隐藏时 `PositionLineIndexBuilder(enabled: false)` 不订阅
 position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一次当前行。
 
+### 歌词页视图会话（lyrics view session）
+
+- **模块**：`lib/widgets/lyrics_view_session.dart`（`LyricsViewSession` 状态机 +
+  `LyricsViewHost` 播放事实接口 + `LyricsViewScheduler` 定时注入）、
+  `lyrics.dart`（渲染 + 会话宿主：行 key / 逐字渲染 / 布局 / `ScrollController`
+  测量与换源、选择页导航）。
+- **归属**：自动跟随、手动滚动后的 350ms 抑制窗口与 3s 恢复（复制模式 / 未同步 /
+  空歌词不恢复）、目标行未布局的按帧重试（上限 8 帧）、快捷操作栏手动 3s 可见、
+  复制模式与播放模式保存 / 恢复、隐藏页的滚动门控都在会话里；滚动几何仍是
+  `lyrics_scroll_policy` 纯函数，组件只测量与执行。
+- **通知**：只发离散迁移（跟随 / 复制模式 / 操作栏 / 可滚性）；逐帧进度与抑制
+  窗口结束不通知。宿主注入 `LyricsViewScheduler`，测试手动推进时长，不真实等待。
+
 ### 播放页封面堆叠（cover deck）
 
 - **模块**：`lib/widgets/player_cover_deck.dart`（组件 + 横滑手势 + 会话的效果宿主）、

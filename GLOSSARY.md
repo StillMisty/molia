@@ -406,6 +406,13 @@
   （页面是否挂载都加载；空结果允许一次自动重试），页面只渲染状态、不触发取词。
   UI 不再各自构造 `LyricsService` 或直接写 `LyricsCache`；**歌词页不维护加载镜像**
   （`lyrics.dart` 只读会话状态，页面只保留滚动 / 行 key 簿记）。
+- **Lyrics view session（歌词页视图会话）** — `lib/widgets/lyrics_view_session.dart`：
+  歌词页「跟随 / 操作栏 / 复制模式 / 可见性」的唯一状态机——自动跟随与 350ms
+  抑制窗口、手动滚动后 3s 恢复（复制模式 / 未同步 / 空歌词不恢复）、目标行未布局
+  的按帧重试（上限 8）、快捷操作栏手动 3s 可见、复制模式保存 / 恢复播放模式；
+  播放事实与滚动几何经 `LyricsViewHost` 注入（`lyrics.dart` 是唯一生产宿主），
+  定时窗口经 `LyricsViewScheduler` 注入。`lyrics.dart` 只保留行 key / 逐字渲染 /
+  布局 / 控制器测量与换源、选择页导航。
 - **Lyrics scroll policy（歌词滚动策略）** — `lib/widgets/lyrics_scroll_policy.dart`：
   纯函数（对齐比例 / 尾部留白 / 目标偏移夹取 / 死区）；组件只测量（ScrollController /
   MediaQuery）与执行（jumpTo / animateTo），策略数学脱离 widget pump 可单测。
