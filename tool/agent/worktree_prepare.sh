@@ -78,7 +78,7 @@ done
 (( copied_signing )) ||
   log "警告：源工作区没有 android/key.properties 或 *.jks；release 构建仍会缺签名"
 
-# Gradle wrapper（工作流要求 Gradle 9.9.0；不要让它按 SDK 模板生成旧版本）。
+# Gradle wrapper（版本见 AGENTS.md「工具链」与 gradle-wrapper.properties；不要让它按 SDK 模板生成旧版本）。
 if [[ -d "$source_dir/android/gradle" && ! -d "$target/android/gradle" ]]; then
   cp -a "$source_dir/android/gradle" "$target/android/"
   log "已复制 android/gradle wrapper"

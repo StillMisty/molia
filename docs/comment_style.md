@@ -8,7 +8,7 @@
 - 注释写「为什么」：设计意图、不变量、协议约定、边界条件、性能取舍、算法来历；
 - 不写只复述代码的注释；注释以中文为主，公共 API 用 `///` 文档注释；
 - 指向仍存在的文档 / ADR / 章节的引用是有效指针，保留
-  （如 `docs/pitfalls.md #20`、`docs/architecture.md §2.1`、ADR-0001）。
+  （如 `docs/pitfalls.md #20`、`docs/architecture.md §2`、ADR-0001）。
 
 ## 2. 噪音注释（发现即清理）
 

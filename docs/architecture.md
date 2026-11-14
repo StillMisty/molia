@@ -914,6 +914,24 @@
   `PlayStatisticsRepository` 只依赖 writer，不再 import 同步 wire 模型或自己
   拼同步列（列名 / 版本列 / 增量日志形状都收在 store）。
 
+### 听歌同步（scrobble）
+
+- **纯规则**：`lib/domain/scrobble/scrobble_rules.dart` 决定「发不发、发什么」——标题 / 歌手非空且
+  时长 ≥ 30s 才可上报；阈值 = min(50% × 时长, 4 分钟)；会话只由曲目开始播放建立，暂停 / 恢复 /
+  向后拖动不重置或新建会话，因此同一遍播放最多一条 scrobble；
+- **观察者服务**：`lib/services/scrobble/scrobble_service.dart` 只消费播放快照与 position，永不阻塞
+  播放；每服务同时最多一个在途请求，失败交给发件箱；
+- **协议适配器**：`lib/domain/ports/scrobble_sink.dart` + `listenbrainz_sink.dart` / `lastfm_sink.dart`
+  只负责发送与结论，不读写设置、不重试、不排队；`scrobble_http.dart` 统一超时与错误归一；
+- **发件箱**：`lib/services/scrobble/scrobble_outbox.dart` 按服务隔离、有界、持久，只存事件与重试
+  状态（不存令牌），429 优先 `Retry-After`；进程被杀时最多重发一条；
+- **开关与凭证**：`scrobble_preferences.dart` 把总开关 / 单服务开关 / 同意版本留在设备本地
+  SharedPreferences（不登记同步）；`kListenBrainzToken` / `kLastFmSessionKey` 是 secure 凭证键，
+  随凭证同步（ADR-0016）；断开连接清空该服务凭证与队列；
+- **组合根与入口**：`lib/app/bootstrap/scrobble_stack.dart` 在首帧后初始化（`sub.scrobble.init`），
+  `SettingsModule` 挂两个凭证键并在远端应用后重读；设置 › 内容与来源的「听歌同步」页
+  （`lib/pages/listening_sync_page.dart`）负责同意、连接与断开。
+
 ### 资料库（library）
 
 `lib/domain/ports/library_store.dart`（UI 面）与 `library_sync_store.dart`
@@ -1796,7 +1814,9 @@ flutter build apk --release --split-per-abi --split-debug-info=build/symbols --o
 ## 8. 后续
 
 - any-listen 真实协议（WS IPC）接入（当前为 HTTP 占位端点，抽象已就绪）；
+- 投屏 / Android Auto 保持在范围外（ADR-0025）；恢复前先补真实设备与单会话方案验证；
 - 真机验证：Android 17 通知/耳机键、iOS 18+ 后台播放；歌词显示的模拟器交互与通知栏验证、
   A2DP 车载字段映射（见 `docs/lyrics_display.md` §9）；
-- 桌面歌词平台输出等 Flutter windowing stable（同上 §11）；M3E 组件目视复核（弹层观感/间距）；
+- 桌面歌词平台输出等 Flutter windowing stable（见 `docs/lyrics_display.md` §9）；
+  M3E 组件目视复核（弹层观感/间距）；
 - 发布前：release 体积与签名检查。

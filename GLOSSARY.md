@@ -182,9 +182,10 @@
   时间标签档位。
 - **Playback transport（播放传输语义）** — `lib/widgets/playback_transport.dart`：
   四个播放控制面（播放页迷你 / 播放页桌面排 / 桌面底栏 / 壳层顶栏）共用的控制
-  语义。`PlaybackPlayPauseButton` / `PlaybackPreviousButton` / `PlaybackNextButton` /
-  `PlaybackModeButton` 统一 `hasTrack` 启用判据、图标与语义标签、触感与 provider
-  命令；宿主只保留按钮变体（tonal / standard）、尺寸与布局。`PlaybackSeekBar`
+  语义。`PlaybackPlayPauseButton` / `PlaybackPreviousButton` / `PlaybackNextButton`
+  统一 `hasTrack` 启用判据、图标与语义标签、触感与 provider 命令，模式按钮的
+  图标与语义标签走 `PlayModeTransportPresentation`；宿主只保留按钮变体
+  （tonal / standard）、尺寸与布局。`PlaybackSeekBar`
   持有 `SeekPreviewController` 生命周期与低频 `Selector`，宿主只选时间标签档位。
   无曲目时播放 / 切歌禁用；模式仍可切换（先选模式再起播）。
 
@@ -235,8 +236,7 @@
   效果面意图接口，决定「怎么做」——控制器编排、post-frame 调度、播放命令与父级
   联动（`startSettle` / `land` / `settleCommit` / `crossfadeCorrection` / `hardReset`
   / `adoptSteadySlots` / `requestSkip` / `notifySwapped` / `armTimeout` …）。
-  测试用记录型假宿主（`test/player_cover_session_test.dart`），会话时机因此可脱离
-  widget 树断言。
+  测试可注入记录型假宿主，会话时机因此能脱离 widget 树断言。
 - **Swap phase（会话阶段）** — `idle`（稳态）→ `preview`（拖动跟手）→
   `committed`（提交等待对账）→ `settling`（即时切歌完成中）/ `correcting`
   （对账不匹配校正）/ `returning`（松手回弹中，预览目标保持到落位）；
@@ -907,6 +907,25 @@
   改保存的会话并重新发布快照（会话内洗牌排列同步移除 / 扩展，避免 upNextIndices
   指到已移除曲目或漏掉追加曲目）。
 
+## 听歌同步（scrobble）
+
+- **Scrobble rules（上报规则）** — `lib/domain/scrobble/scrobble_rules.dart`：纯 Dart 的资格与阈值
+  唯一实现——有标题 / 歌手且时长 ≥ 30s 才可上报；阈值 = min(50% × 时长, 4 分钟)；会话身份只由
+  「曲目开始播放」决定，暂停 / 恢复 / 向后拖动都不新建会话，同一会话最多一条 scrobble。
+- **Scrobble service（听歌同步服务）** — `lib/services/scrobble/scrobble_service.dart`：纯观察者，
+  把播放快照 / position 转成 now-playing 与 scrobble 事件；永不阻塞播放，每个服务同时最多一个
+  在途请求，失败交给发件箱退避重试；日志不含口令、会话密钥、签名或请求正文。
+- **Scrobble outbox（发件箱）** — `lib/services/scrobble/scrobble_outbox.dart`：按服务隔离的有界
+  持久队列（事件与重试状态，不存令牌），429 优先用 `Retry-After`；进程被杀时最多重发一条，
+  协议侧按时间戳去重。
+- **Scrobble sink（协议适配器）** — `lib/domain/ports/scrobble_sink.dart` +
+  `lib/services/scrobble/listenbrainz_sink.dart` / `lastfm_sink.dart`：只负责「发一条事件并报告
+  结论」，不读写设置、不重试、不排队；令牌只出现在鉴权头或协议参数里，不进日志。
+- **Scrobble preferences（开关与凭证）** — `lib/services/scrobble/scrobble_preferences.dart`：总开关 /
+  单服务开关 / 同意版本是设备本地 SharedPreferences，不登记同步——另一台设备同步凭证也不能
+  悄悄开始上报；访问口令与会话密钥是凭证类别，走 secure 盒并随凭证同步（ADR-0016）。断开连接
+  会清空该服务的凭证与队列。
+
 ## 跨设备同步
 
 - **Sync envelope（同步快照）** — `lib/domain/models/device_sync.dart`：
@@ -1322,7 +1341,7 @@
 - **Music folders（音乐文件夹）** — `lib/services/local/music_folders.dart`：设备本地目录配置（稳定 id / 根路径 / 添加时间 / 最近扫描摘要）；去重、拒绝嵌套根、移除只停扫描不碰文件。用户可见文案是「音乐文件夹 / Music folder」，与列表「分组 / Group」严格区分；不登记设置注册表、不参与同步。
 - **Music folder scanner（音乐文件夹扫描器）** — `lib/services/local/music_folder_scanner.dart`：递归流式枚举、按 `路径 + mtime + size` 增量、取消、跳过原因分类与缺文件标记；只读文件头，不复制 / 移动 / 删除用户文件。扫描目标以 `LocalScanChange` 批次提交（≤200 条）。
 - **Music folder watcher（音乐文件夹监听）** — `lib/services/local/music_folder_watcher.dart`：`Directory.watch` 只是防抖后的重扫触发器；能定位路径时只重查该路径，事件过多 / 无法定位时回退整树增量；监听失败静默降级为启动 / 手动扫描。
-- **Missing file probe（缺文件探测）** — `lib/services/local/missing_file_probe.dart`：空闲批量检查本地音频是否存在，写 `downloads.missingAt` / `mtimeMs`；根目录不可用时不标记；与扫描 / 导入共用 `local_write_gate.dart` 的串行写队列。
+- **Missing file probe（缺文件探测）** — `lib/services/download/missing_file_probe.dart`：空闲批量检查本地音频是否存在，写 `downloads.missingAt` / `mtimeMs`；根目录不可用时不标记；与扫描 / 导入共用 `local_write_gate.dart` 的串行写队列。
 - **Local library service（本地曲库编排）** — `lib/services/local/local_library_service.dart`：音乐文件夹配置 + 扫描 + 监听 + 缺文件检查的 UI 入口；平台开关（桌面启动扫描 / Android 仅手动 / iOS 不提供目录）。
 - **Audio title editor（只改标题的标签编辑器）** — `lib/data/downloads/audio_title_editor.dart`：MP3 ID3v2.3/2.4 只替换 `TIT2`、FLAC 只替换 Vorbis `TITLE`，其它帧 / 块与音频字节原样保留；临时文件 + 原子改名，失败原文件不变。
 - **Local path resolver（本地路径解析端口）** — `lib/data/catalog/local_path_resolver.dart`：稳定身份 → 当前文件路径的窄回调，组合根在下载记录就绪后接线；`local` 音源只消费它（没有记录时回退 payload `path`），重定位 / 扫描只改一条记录。

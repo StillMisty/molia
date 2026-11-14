@@ -260,6 +260,7 @@ grep -F 'libmpv-android-audio-build' <build log>
 - Flutter 3.47.7 stable（framework revision `abaf9c5237`）；`android/app/build.gradle`：AGP 9.4.1 /
   compileSdk 37 / NDK 30.0.16248370 / `minifyEnabled true` / `shrinkResources true` /
   `packaging.jniLibs.useLegacyPackaging = true`（.so 以压缩形式入包，这正是上表"压缩后"数字成立的原因）。
+  这一行是测量时的环境快照，不是当前工具链；当前版本见 `AGENTS.md`「工具链」。
 - 依赖版本：`just_audio_media_kit` 2.1.0、`media_kit` 1.2.6、`media_kit_libs_linux` 1.2.1、
   `media_kit_libs_windows_audio` 1.0.9；实验组新增 `media_kit_libs_audio` 1.0.7
   （→ `media_kit_libs_android_audio` 1.3.8）。

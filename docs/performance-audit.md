@@ -1,4 +1,14 @@
-# 全链路性能体检（2026-10-22）
+# 全链路性能体检归档
+
+> 本文件按时间保存各轮全链路体检（启动 / 帧 / 数据链路 / CPU / IO / 内存 / 体积）
+> 的数字与结论。当前启动基线与跑法以 `docs/performance.md` 为准，桌面内存以
+> `docs/memory.md` 为准；这里只保留“当时测到了什么、为什么这样改”。
+>
+> 轮次：
+> - 2026-10-22 首轮：Linux / Windows / Android 模拟器
+> - 2026-11-07 复测：Linux（Xvfb 无头）/ Android 模拟器（Windows 未测）
+
+## 2026-10-22 首轮：全链路性能体检
 
 > 目标：在同一个可复现口径下拿到启动、帧、交互、内存与体积的基线，按数据排序
 > 再修，不重复已否证的方向（见 `docs/performance.md`、`docs/memory.md`）。
@@ -8,7 +18,7 @@
 > （x86_64，headless，软件渲染）。Windows 是桌面运行时主口径；Android 只做
 > 相对比较。
 
-## 1. 结论（先看这里）
+### 1. 结论（先看这里）
 
 - 启动没有回归：Linux release 首帧中位 **191ms**（`docs/performance.md`
   基线 207ms），Windows 应用内首帧中位 **298ms**、进程起→窗口可见
@@ -31,9 +41,9 @@
   起播大头是 `setAudioSource`（不是取链）；CPU 在 WSLg / 模拟器上由呈现层
   主导，Dart 侧没有可修热点，真实 GPU / 真机数据仍待补。
 
-## 2. 测量方法
+### 2. 测量方法
 
-### 2.1 启动
+#### 2.1 启动
 
 ```bash
 tool/agent/startup.sh --runs 5                 # Linux release 冷启动
@@ -46,7 +56,7 @@ Windows 由 `tool/agent/startup_windows.ps1` 完成：结束旧进程 →
 「进程起 → 窗口可见」→ 从 `molia.startup: 首帧：Nms` 取应用内首帧。
 每轮独立进程；中位数对 Defender / 文件系统热缓存不敏感。
 
-### 2.2 帧
+#### 2.2 帧
 
 新增 opt-in 埋点 `lib/app/perf/frame_stats.dart`：
 
@@ -87,7 +97,7 @@ powershell -File tool/agent/scroll_windows.ps1 -Steps 80
 脚本启动前会把 `favorites_scroll_offsets` 清零（否则第二轮从上次底部开始，
 帧数据不可比）；跑之前先备份 `shared_preferences.json`。
 
-### 2.3 内存
+#### 2.3 内存
 
 ```bash
 tool/agent/memory.sh --interval 2 --timeout 120          # Linux
@@ -106,7 +116,7 @@ Windows 构建前提：Flutter 3.47.7 Windows zip + VS BuildTools 2022（Windows
 `build\windows\x64\mpv-dev-x86_64-20230924-git-652a1dd.7z` 并核对
 MD5 `cd738e16e2a19626d7cfa48801524f8c`。
 
-### 2.4 体积
+#### 2.4 体积
 
 ```bash
 tool/agent/perf.sh size android
@@ -115,9 +125,9 @@ tool/agent/perf.sh size linux
 
 Windows 直接量 `build\windows\x64\runner\Release` 目录。
 
-## 3. 基线
+### 3. 基线
 
-### 3.1 启动
+#### 3.1 启动
 
 | 口径 | 中位 | 最小–最大 |
 | --- | ---: | ---: |
@@ -130,7 +140,7 @@ Windows 直接量 `build\windows\x64\runner\Release` 目录。
 Android 这轮与 Windows 构建 / Gradle 同时跑，宿主负载偏高；
 `sub.mediaSession.activate` 占 589ms，是首个平台通道而非 Dart 侧逻辑。
 
-### 3.2 Windows 真实窗口帧（release）
+#### 3.2 Windows 真实窗口帧（release）
 
 收藏列表 1000+ 首，滚轮 40 步 × 6s。`work = build + raster` 才是掉帧口径；
 `totalSpan` 包含 vsync 等待与流水线延迟：
@@ -147,7 +157,7 @@ work >16.7ms**；`totalSpan` 的 20ms+ 是帧请求到呈现的延迟（约 1% �
 播放页预取是否已经灌满缓存、以及滚动经过多少新封面），基本落在默认
 100MB 上限内；`frames-post-scroll.png` 里仍可见少量灰色占位。
 
-### 3.2.1 帧时间线归因（Windows profile trace）
+#### 3.2.1 帧时间线归因（Windows profile trace）
 
 用 `flutter run --profile -d windows --trace-to-file=...` 抓同一场景，
 解析 Perfetto trace 后：
@@ -161,7 +171,7 @@ work >16.7ms**；`totalSpan` 的 20ms+ 是帧请求到呈现的延迟（约 1% �
 - 因此 `totalSpan` 的 p99 是**等待 vsync / 流水线**的延迟，不是
   build/raster 卡顿；继续压缩 UI 构建不会改善这个 p99。
 
-### 3.2.2 integration_test（build 可信，raster 不可用）
+#### 3.2.2 integration_test（build 可信，raster 不可用）
 
 | 平台 / 场景 | frames | build p50 | build p95 | build p99 | total p95 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -175,7 +185,7 @@ work >16.7ms**；`totalSpan` 的 20ms+ 是帧请求到呈现的延迟（约 1% �
 两端的 `raster` 在 `flutter drive` 下都恒为 0，不能用这组数据判断光栅
 耗时；Android 是模拟器软件渲染，绝对值仍只做相对比较。
 
-### 3.3 已落地的低风险修复：图片解码尺寸
+#### 3.3 已落地的低风险修复：图片解码尺寸
 
 `AppNetworkImage` 的两条路径之前没有统一的缩略解码口径：
 
@@ -190,7 +200,7 @@ work >16.7ms**；`totalSpan` 的 20ms+ 是帧请求到呈现的延迟（约 1% �
 这不会改变显示内容，收益主要在解码 CPU 与图片内存；Windows 同口径复测
 （多轮）没有帧回退：work p95 2.5–2.6ms、p99 3.0–3.7ms、jank 0。
 
-### 3.3.1 播放封面有界解码（2026-10-23）
+#### 3.3.1 播放封面有界解码（2026-10-23）
 
 §3.3 只统一了列表缩略图路径；播放链路本身仍按封面源尺寸解码：顶栏 /
 迷你条 / 播放页三封面 / 飞行副本 / 当前+邻位预取为了共享元素飞行同步出帧，
@@ -233,7 +243,7 @@ A/B（Xvfb 1440×900 / DPR 1 → 解码 600px；10 张 2000×2000 本地封面�
 Xvfb 软件光栅的帧耗时不用于结论，只对比图片缓存。Windows 150% 缩放下
 解码边长为 900px（单张 3.09MB），量级相同；未改变任何展示尺寸或图片内容。
 
-### 3.3.2 数据路径第一批（2026-10-23）
+#### 3.3.2 数据路径第一批（2026-10-23）
 
 §5 指出搜索 / 取链 / 取词 / DB 写入还没有独立时延矩阵。本轮先收敛其中
 **可确定复现的高频重载**，不宣称绝对时延收益：
@@ -259,7 +269,7 @@ Xvfb 软件光栅的帧耗时不用于结论，只对比图片缓存。Windows 1
 验证：`flutter analyze --no-pub` 无问题；`flutter test --no-pub` 全量通过。
 查询次数由测试断言钉住；绝对耗时待同口径 release 采样后补充。
 
-### 3.3.3 IO 扫描与大文件解码（2026-10-23）
+#### 3.3.3 IO 扫描与大文件解码（2026-10-23）
 
 同一轮把两处会直接阻塞 UI isolate 的纯 IO / CPU 工作移出主线程：
 
@@ -276,7 +286,7 @@ Xvfb 软件光栅的帧耗时不用于结论，只对比图片缓存。Windows 1
 验证：相关 cache / `.lxmc` / 仓库测试通过；`flutter analyze --no-pub` 无问题；
 全量 `flutter test --no-pub` 通过。
 
-### 3.3.4 AI 推歌与歌词缓存（2026-10-23）
+#### 3.3.4 AI 推歌与歌词缓存（2026-10-23）
 
 - **资料画像**：`LibraryStore.listPlaylistTracks` 增加可选 `limit` 并下推到
   Drift；收藏只读前 100 首、最多 10 个自建歌单各读前 20 首且并发执行，
@@ -295,7 +305,7 @@ Xvfb 软件光栅的帧耗时不用于结论，只对比图片缓存。Windows 1
 
 验证：AI / 歌词 / 全量测试通过；`flutter analyze --no-pub` 无问题。
 
-### 3.3.5 数据链路与 CPU（2026-10-24）
+#### 3.3.5 数据链路与 CPU（2026-10-24）
 
 补上 §5 缺的「搜索 / 起播 / 取词 / DB」端到端口径，并新增按线程 CPU 采样。
 mock LX 脚本把网络压到 1–3ms，因此这组数字测的是**装配 / 播放链路 / Dart
@@ -351,9 +361,9 @@ mock LX 脚本把网络压到 1–3ms，因此这组数字测的是**装配 / �
 - **Android 首帧 565–572ms 里的 `sub.mediaSession.activate` 33–491ms**
   与同轮 `dataSaver/downloadSettings` / `syncState.init` 的 450ms 级尖峰
   同源：仍是「首个平台通道」在并行任务间落点，不是媒体会话本身。把它
-  后移只会换一个阶段承担，勿重试（延续 §7.1 结论）。
+  后移只会换一个阶段承担，勿重试（延续 `docs/performance.md` §7.1 的结论）。
 
-### 3.3.6 播放页共享封面飞行（2026-10-28，结构优化，待真机复测）
+#### 3.3.6 播放页共享封面飞行（2026-10-28，结构优化，待真机复测）
 
 Android release 用户反馈「顶栏 ⇄ 播放页封面飞行一卡一卡」；同一轮修复了
 页中心隐藏时序（进入首帧 / 离开飞行期间都应收起）与连切接管。本轮只做
@@ -384,7 +394,7 @@ Android release 用户反馈「顶栏 ⇄ 播放页封面飞行一卡一卡」�
 帧数；确认阴影降级是否足够，若仍不够再评估缓存阴影层 / 更低成本画法，
 并保证端点外观与真身一致。
 
-### 3.3.7 常驻缓存释放 / 播放器稳定子树 / 起播预取所有权（2026-10-28）
+#### 3.3.7 常驻缓存释放 / 播放器稳定子树 / 起播预取所有权（2026-10-28）
 
 本轮按「Linux release + Linux profile（三个场景各 3 轮）+ 500 首收藏的
 debug 内存探针」做 A/B；没有可信的 Android 真机 raster 数据，不把
@@ -458,7 +468,7 @@ Linux profile、`mobile-mini-expand`、3 轮中位数：
 播放器预打开 / 双播放器预加载，不能把「预取命中」当成起播收益；保留本改动
 的理由只能是「避免切歌时重复下载」，不是延迟。
 
-### 3.4 内存（Windows，本机实测）
+#### 3.4 内存（Windows，本机实测）
 
 | 状态 | 专用工作集 | 提交 |
 | --- | ---: | ---: |
@@ -472,7 +482,7 @@ Linux profile、`mobile-mini-expand`、3 轮中位数：
 `RSS=0.3MB, imageCache=0.0MB/16MB`），与 `docs/memory.md` 的 4.8–6.6MB
 量级一致。提交大小不随托盘 trim 下降，仍是引擎 / Dart 堆 / libmpv。
 
-### 3.5 体积
+#### 3.5 体积
 
 | 产物 | 大小 |
 | --- | ---: |
@@ -482,7 +492,7 @@ Linux profile、`mobile-mini-expand`、3 轮中位数：
 | Windows `Release` 目录 | 58MB（其中 `data/` 18MB） |
 | Linux release bundle | 40MB |
 
-## 4. 问题清单（按证据排序）
+### 4. 问题清单（按证据排序）
 
 1. **滚动没有掉帧，只有呈现延迟**：work p95 2.5–2.6ms、p99 3.0–3.7ms、
    jank 0；`totalSpan` p99 20.9–23.4ms 来自 vsync / 流水线等待，
@@ -500,7 +510,7 @@ Linux profile、`mobile-mini-expand`、3 轮中位数：
 5. **提交大小高于工作集**：托盘 trim 只降工作集，符合 `docs/memory.md`
    的已知结论；要不要做 Phase 3 取决于后续内存预算，不在本轮先动。
 
-## 5. 未覆盖 / 下一步
+### 5. 未覆盖 / 下一步
 
 - 图片缓存波动已由 §3.3.1 收口：播放链路统一 600 逻辑像素上限 × DPR 解码，
   取色只留 100px 采样图；同 fixture 从 91.6MB 降到 16.7MB；
@@ -524,3 +534,226 @@ Linux profile、`mobile-mini-expand`、3 轮中位数：
   阴影降级是否足够；
 - 真机 Android / iOS 仍需设备侧采样（模拟器的首个平台通道等待会掩盖
   Dart 侧收益）。
+
+## 2026-11-07 复测：全链路性能复测
+
+> 范围：Linux 桌面（Xvfb 无头，按本轮要求不弹 WSLg 窗口）+ Android 模拟器
+> `molia_api37`。Windows 本轮未测（用户指定范围）。
+>
+> 基线/方法沿用首轮（2026-10-22，见上文）；本节只记录本轮数字、
+> 改动与未结论项。原始日志在 `/tmp/opencode/molia/`（文末列出目录名）。
+
+### 1. 结论
+
+- **没有启动 / 帧 / 数据链路回归**：Linux release 首帧中位 **160ms**
+  （2026-10 基线 191–207ms）；Android release 首帧中位 **526 → 496ms**
+  （改动前后，噪声内小幅改善），Activity TotalTime 1441–1551ms。
+- Linux Xvfb 无头下滚动 / 切页 / 切歌 build p95 **1.0–2.8ms**、jank 0；
+  Android 模拟器 build p95 **3.5–6.3ms**，无稳定回归。
+- **AI 初始化从首帧前移到首帧后**，并把安全存储 / 偏好 / 历史读取并行化：
+  Android `sub.ai.init` **207 → 158ms**（−49ms），Linux 129 → 102ms。
+- **音源初始化不再等待同步初始化**：音源脚本与搜索 / 播放入口只依赖本地
+  脚本仓库；同步仍等戳种子，传输 / 首轮在两边就绪后起。Android
+  `sub.sourceManager.init` 105ms、`sub.sync.start` 181ms，互不阻塞。
+- Linux 无头首搜的 ~250ms 根因是**系统会话总线缺 keyring / NetworkManager**：
+  `startSync` 的安全存储 / 探针在系统总线上等 40s+，搜索请求被拖住。`perf.sh`
+  改为私有 `dbus-run-session` 后，同机 `search.source` **0.45ms**、搜索端到端
+  **630ms**；这不是产品 Dart 回归。首播仍有 ~243ms 的 resolve 尾巴（首次
+  起播 / 引擎预热），与搜索无关。
+- Android 模拟器 `mobile-nowplaying-leave-return` 出现 build jank
+  （p99 17.32ms、jank16=2、worst 97.66ms），但同场景第二个窗口恢复干净；
+  没有真机 raster，仍不外推。
+
+### 2. 测量口径
+
+```bash
+# Linux：默认无头，禁止弹 WSLg 窗口（脚本内部已套 Xvfb / 私有 D-Bus）
+tool/agent/startup.sh --runs 5
+tool/agent/perf.sh frames linux
+tool/agent/perf.sh data linux
+tool/agent/perf.sh cpu linux
+
+# Android：模拟器 headless
+tool/agent/startup.sh android --runs 5
+tool/agent/perf.sh frames android
+tool/agent/perf.sh data android
+```
+
+- `perf.sh` 的隔离 `PERF_HOME` 会复用上一次的窗口几何；本轮第一次 CPU 采样
+  读到 **3492×3012** 的持久 bounds，Xvfb 软件光栅直接把平台线程拉到 98%。
+  已在 `tool/agent/perf.sh::prepare_perf_home` 每次固定为 1440×900，避免
+  后续体检被污染；这不是应用回归。
+- Android release 包不能 `run-as`，`perf.sh data android` 需要先
+  `adb root`；首次安装还要先启动一次应用创建私有数据目录，再注入 mock 音源。
+
+### 3. 启动
+
+#### 3.1 Linux release（Xvfb，5 次冷启动）
+
+| 阶段 | 中位 | 最小–最大 |
+| --- | ---: | ---: |
+| 首帧 | **160ms** | 156–233ms（首轮 233ms 为构建后首次冷读） |
+| 窗口就绪 | 19ms | 19–21ms |
+| 本地数据/资料库栈 | 70ms | 69–145ms |
+| 播放栈（含媒体会话） | 79ms | 78–154ms |
+| 主题/歌词显示 | 81ms | 81–156ms |
+| 首帧后：`sub.db.maxVersion` | 66ms | 62–69ms |
+| 首帧后：`sub.ai.init` | 102ms | 94–106ms |
+| 首帧后：`sub.downloadService.init` | 126ms | 116–132ms |
+| 首帧后：`sub.dataSaver.monitor` | 185ms | 171–198ms |
+| 首帧后：`sub.startupWallpaper` | 251ms | 241–269ms |
+
+首帧与 2026-10 的 191–207ms 基线相比下降，主要是当轮机器/缓存差异；
+没有新增首帧前工作。
+
+#### 3.2 Android release（模拟器，5 次冷启动）
+
+| 阶段 | 改动前中位 | 改动后中位 | 改动后范围 |
+| --- | ---: | ---: | ---: |
+| 首帧 | 526ms | **496ms** | 427–515ms |
+| `Activity TotalTime` | 1441ms | 1447–1551ms | 1454–2116ms |
+| `sub.db.prewarm` | 454ms | 418ms | 346–440ms |
+| `sub.syncState.init` | 334ms | 8ms | 3–432ms |
+| `sub.mediaSession.activate` | 24ms | 28ms | 24–31ms |
+| 首帧后：`sub.ai.init` | 207ms | **158ms** | 140–178ms |
+| 首帧后：`sub.sourceManager.init` | — | 105ms | 97–127ms |
+| 首帧后：`sub.sync.start` | 202ms | 181ms | 172–205ms |
+| 首帧后：`sub.stats.maintenance` | — | 96ms | 32–105ms |
+| 首帧后：`sub.update.start/check` | 178ms | 157ms | 149–186ms |
+
+`sub.syncState.init` 的 8ms 中位与 334ms 基线不能直接比较：Android 的
+「首个平台通道 ~400ms」这次落在 `lyricsPrefsCleanup`（两轮 432/408ms），
+首帧中位仍在噪声内。首帧后各任务并行收尾，全部在 ~240ms 内结束。
+
+### 4. 帧
+
+#### 4.1 Linux profile（`flutter drive`，raster 在桌面上恒 0）
+
+| 场景 | frames | build p50 | build p95 | build p99 | jank16/33 | worst |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 收藏滚动 | 89 | 1.92 | 2.80 | 3.29 | 0 / 0 | 5.49 |
+| 切资料库 | 51 | 0.76 | 2.20 | 7.21 | 0 / 0 | 9.35 |
+| 连续切歌 | 136 | 0.56 | 1.05 | 6.93 | 0 / 0 | 8.81 |
+| 进播放页 | 62 | 0.87 | 1.67 | 6.20 | 0 / 0 | 6.85 |
+| 播放页 ⇄ 收藏 ×3 | 48 | 1.13 | 1.98 | 4.13 | 0 / 0 | 4.36 |
+| 迷你条展开 / 收起（控制器驱动） | 21 | 1.20 | 3.47 | 3.87 | 0 / 0 | 5.69 |
+
+与 2026-10 的 Linux build p95（2.14 / 2.07 / 0.98 / 1.81ms）同量级，
+没有发现需要继续压的 UI 工作量。
+
+#### 4.2 Android emulator profile
+
+| 场景 | frames | build p50 | build p95 | build p99 | jank16/33 | worst |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 收藏滚动 | 82 | 2.03 | 4.02 | 6.36 | 0 / 0 | 7.03 |
+| 切资料库 | 43 | 0.92 | 3.91 | 9.01 | 0 / 0 | 9.47 |
+| 连续切歌 | 133 | 0.80 | 3.47 | 10.26 | 0 / 0 | 11.79 |
+| 进播放页 | 63 | 1.13 | 3.79 | 4.65 | 0 / 0 | 6.40 |
+| 播放页 ⇄ 收藏 ×3（首窗） | 123 | 1.06 | 6.31 | 17.32 | **2 / 1** | **97.66** |
+| 播放页 ⇄ 收藏 ×3（次窗） | 62 | 1.06 | 3.47 | 9.07 | 0 / 0 | 9.32 |
+
+- 首窗的 97.66ms 最差帧没有稳定复现（次窗干净），且 `flutter drive` 下
+  `raster` 恒 0，不能据此断言真机掉帧；维持 2026-10 §3.3.6 的「待真机
+  raster 复测」结论。
+- `mobile-mini-expand` 场景本轮在模拟器失败：下拉 420 后播放器高度仍为
+  394.8（期望 72），没有产生该场景的完整帧数据。属于测试手势/时序问题，
+  已改为直接驱动播放页的 `SingleMotionController`（Linux 已通过，21 帧），
+  Android 真机/模拟器未复跑。
+
+### 5. 数据链路（mock 音源）
+
+| 口径 | Linux headless（修复后） | Android emulator |
+| --- | ---: | ---: |
+| 搜索端到端 | 630ms（修复前 599–798ms） | 372ms |
+| ├ 防抖 | 374ms（修复前 351–387ms） | 321ms |
+| ├ 音源搜索 | **0.45ms**（修复前 239–258ms） | 2.06ms |
+| 起播 queue→首声 | 752ms（修复前 786–1251ms） | 507ms |
+| ├ resolve | 243ms | 110ms |
+| ├ setAudioSource | 509ms | 396ms |
+| 歌词（缓存命中） | 8ms | 82ms |
+| 歌词缓存写 | — | 134–142ms |
+
+Linux 修复前的 239–258ms 音源搜索已在 §7 的私有 D-Bus 修复后消失；630ms
+里主要是 374ms 防抖 + 243ms 首播 resolve 尾巴。Xvfb 首屏软件光栅仍会放大
+帧 / 起播时延，但不影响“搜索请求本身”的结论。Android 搜索（372ms）与
+2026-10 的 325–449ms 同量级，起播总时长 507ms 也在模拟器抖动内
+（2026-10：363–416ms）。Android 最终复跑（`perf-android-data-20261107-214537`）
+在已有音频缓存时 `cache_path=file`，起播 93ms、搜索 305ms；上表 507ms 是首次
+`caching` 口径，不能把 93ms 当成冷起播收益。
+
+### 6. CPU / IO
+
+Linux release（Xvfb，1440×900）：
+
+| 状态 | 总占用 | 平台/GTK | Dart UI + IO + worker |
+| --- | ---: | ---: | ---: |
+| 空闲（首帧后 8s） | 4.0% | 2.87% | 0.87% |
+| 播放中 8s | 91.7% | 89.00% | 2.75% |
+
+播放中的平台线程仍是 Xvfb 呈现拷贝，Dart 侧没有可修热点（与 2026-10
+结论一致）。启动 + 数据场景期间 prefs 只写 **2 次**（1.2KB），WAL
+648KB；没有发现高频整文件重写回归。
+
+### 7. 本轮改动
+
+1. `lib/app/bootstrap/ai_stack.dart` / `post_frame_init.dart`：
+   `AiDjProvider.init()` 从首帧前移到首帧后，避免 AI 安全存储 / 历史批次
+   和首帧前的窗口 / 播放装配抢平台通道；新增 `sub.ai.init（首帧后）` 埋点。
+2. `lib/providers/ai_dj_provider.dart` / `services/ai/ai_settings_store.dart`：
+   配置 / 确认 / 开关 / 偏好 / 反馈记忆 / 历史索引并行读；安全存储的三个
+   键也并行。Android `sub.ai.init` 207→158ms，Linux 129→102ms。
+3. `lib/app/bootstrap/post_frame_init.dart`：
+   音源初始化与同步初始化并行（音源不再等安全存储 / 电池 / 网络探针），
+   传输与首轮同步在两边就绪后起；新增
+   `sub.sourceManager.init` / `sub.sync.start` / `sub.update.start/check` 埋点。
+4. `lib/app/bootstrap/library_stack.dart`：新增 `sub.stats.maintenance`
+   首帧后埋点，便于确认统计收尾 / 裁剪不回到首帧路径。
+5. `tool/agent/perf.sh`：`prepare_perf_home` 每次把隔离 HOME 的窗口 bounds
+   固定为 1440×900，避免 Xvfb 复用大窗口导致 CPU / 帧数据失真。
+6. `tool/agent/_common.sh` + `perf.sh` / `startup.sh` / `test.sh`：统一
+   `linux_display_prefix`；`perf.sh` 默认无条件 Xvfb，新增 `--window` 切真实
+   显示；`kill_app` 用 `pkill -x`，避免误杀调用脚本的 shell。
+7. `tool/agent/perf.sh`：Linux `data` / `cpu` 自动套私有 `dbus-run-session`，
+   并在缺失 `scenario.done` / `scenario.play.done` 时非零退出；`--no-build`
+   可复用已有 release 产物。
+8. `tool/agent/perf.sh` + `seed.sh`：Android `data/cpu` 先检查 `adb root`，
+   首次安装先启动应用创建私有目录再 seed；`seed.sh` 遇到空 / 损坏
+   `lx_sources.json` 回退为空脚本表，不再抛 Python traceback。
+9. `integration_test/perf_flows_test.dart`：`mobile-mini-expand` 改为直接驱动
+   播放页的 `SingleMotionController` 并轮询高度，避免测试坐标落在滚动区 /
+   slider pan 上导致场景无效。
+
+### 8. 验证
+
+- `flutter analyze --no-pub`：0 error / 0 warning；
+- `flutter test --no-pub`：2526 passed / 11 skipped；
+- `tool/agent/test.sh linux`：通过；`perf_flows_test.dart` 单跑通过；
+- `tool/agent/perf.sh frames linux`：通过，`mobile-mini-expand` 产出 21 帧；
+- `tool/agent/perf.sh data linux`：默认无头 + 私有 D-Bus，`scenario.done`
+  正常，`search.source` 0.45ms；
+- Android release 启动 A/B：5 次冷启动（上方 §3.2）；
+- Linux 数据 / 帧 / CPU：Xvfb 无头，原始结果目录：
+  - `startup-linux-20261107-205809`（最终）
+  - `startup-linux-20261107-192133`（改动前）
+  - `perf-linux-20261107-213741`（最终帧）
+  - `perf-linux-data-20261107-212648`（最终数据）
+  - `perf-linux-cpu-20261107-195111`
+  - `startup-android-20261107-200007` / `-205326`
+  - `perf-android-20261107-201336`
+  - `perf-android-data-20261107-203847`
+  - `perf-android-data-20261107-214537`（preflight 修复后复跑）
+
+### 9. 未覆盖 / 下一步
+
+- **真实 Android 设备**：`mobile-nowplaying-leave-return` 的 raster；
+  `mobile-mini-expand` 已改为控制器驱动，不再被手势时序阻塞。
+- **Windows**：本轮按用户要求跳过；恢复范围后补 `startup windows` /
+  `frames windows --real`。
+- **托盘内存 / 提交大小**：本轮没有做 Linux 托盘往返（Xvfb 无托盘宿主），
+  Windows 实机数据仍以 `docs/memory.md` 为准。
+- **2026-11-11 资源收口**：托盘缓存释放第二批 / 延迟 trim / wavy 收口 /
+  prefs 与 WAL 写入合并 / 同步 journal 会话 cursor 增量，见 `docs/memory.md` §9；
+  Linux 集成 5 passed / 1 skipped，Windows 实机与大队列 journal 字节 A/B 仍未覆盖。
+- **Linux 无头数据链路**：首搜 250ms 的根因是系统会话总线缺 keyring /
+  NetworkManager，已由 `perf.sh` 的私有 `dbus-run-session` 修复；首播仍有
+  ~243ms resolve 尾巴，等真实 GPU / 真机再决定是否做播放器预打开。

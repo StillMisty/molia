@@ -3,7 +3,9 @@
 ## Git hooks（提交前自动格式化）
 
 首次克隆后执行一次 `tool/agent/hooks.sh`（等价于 `git config core.hooksPath .githooks`）。
-`.githooks/pre-commit` 只格式化本次已暂存、且没有未暂存改动的 `*.dart` 文件；同一路径存在
+`.githooks/pre-commit` 只格式化本次已暂存、且没有未暂存改动的 `*.dart` 文件；提交涉及
+`*.md` 或版本文件时还会跑 `tool/agent/check_docs.py`（文档引用 / 工具链一致性，失败阻塞，
+`SKIP_DOCS_CHECK=1` 可跳过）。同一路径存在
 未暂存改动时会跳过并提示，避免把工作区内容一起 stage。找不到 `dart`（例如 GUI Git 客户端的
 PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解释器。
 
@@ -64,7 +66,7 @@ tool/agent/app.sh reload   # 热重载；restart = 热重启（无 TTY 走 --pid
 tool/agent/app.sh status   # pid / 设备 / VM Service / 日志路径
 tool/agent/shot.sh [name]  # 截图 → /tmp/opencode/molia/shots/*.png（供 agent 直接读图）
 tool/agent/ui.sh layout|tap|swipe|text|key|launch|force-stop
-tool/agent/seed.sh android favorites|history|session|mock-source|status|clear|restore
+tool/agent/seed.sh android favorites|covers|history|session|lang|mock-source|status|clear|restore
                            # 数据注入：收藏 / 最近播放 / 恢复会话 / mock 音源（见下）
 tool/agent/test.sh android # 集成测试（官方 flutter test 路径；自动构建/安装 debug APK，跑完卸载）
 tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）

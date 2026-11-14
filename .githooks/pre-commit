@@ -8,6 +8,21 @@
 # 启用：tool/agent/hooks.sh（等价于 git config core.hooksPath .githooks）
 set -euo pipefail
 
+# 文档 / 工具链一致性：只在本次提交涉及文档或版本文件时跑。
+# 纯 Python、秒级；失败阻塞提交（SKIP_DOCS_CHECK=1 可跳过）。
+if [[ "${SKIP_DOCS_CHECK:-0}" != "1" ]] && \
+   git diff --cached --name-only --diff-filter=ACMR | grep -Eq \
+     '(\.md$|(^|/)pubspec\.yaml$|(^|/)build\.gradle$|gradle-wrapper\.properties$|(^|/)settings\.gradle$|\.github/workflows/.*\.ya?ml$)'; then
+  if command -v python3 >/dev/null 2>&1; then
+    if ! python3 tool/agent/check_docs.py; then
+      printf 'pre-commit: 文档 / 工具链检查失败，修正后重试（SKIP_DOCS_CHECK=1 可跳过）\n' >&2
+      exit 1
+    fi
+  else
+    printf 'pre-commit: 未找到 python3，跳过文档 / 工具链检查\n' >&2
+  fi
+fi
+
 dart_bin="${DART_BIN:-dart}"
 if ! command -v "$dart_bin" >/dev/null 2>&1; then
   printf 'pre-commit: 未找到 dart，跳过自动格式化（可设 DART_BIN）\n' >&2

@@ -152,13 +152,15 @@ lib/playback/
   - Linux 桌面：`sudo pacman -S --needed base-devel ninja cmake clang pkgconf gtk3 mesa-utils`
     - 本地播放依赖 libmpv：`sudo pacman -S --needed mpv`（media_kit 后端需要）
     - **中文字体**：`sudo pacman -S --needed wqy-microhei`（App 不内置 CJK 字体；否则中文显示方块）
-  - Android（用户态安装）：先用官方脚本装 Android CLI，再
-    `android sdk install platform-tools platforms/android-37.2 build-tools/37.0.0 ndk/30.0.16248370`，
+  - Android（用户态安装）：先用官方脚本装 Android CLI，再按 `AGENTS.md`「工具链」的
+    compileSdk / build-tools / NDK 版本执行
+    `android sdk install platform-tools platforms/android-<compileSdk> build-tools/<build-tools> ndk/<ndk>`，
     然后 `flutter config --android-sdk "$HOME/Android/Sdk"`
-  - 工程工具链：Gradle 9.9.1 + AGP 9.5.1 + Kotlin 2.4.21 + JDK 27（Flutter 3.50.0 stable），
-    `compileSdk = 37.2`（targetSdk 37）、`minSdk = 35`、build-tools 37.0.0、NDK r30、
-    Java/Kotlin 字节码 target 26（Kotlin 2.4.x JvmTarget 上限）
-  - 注意：`minSdk = 35` 意味着 Android 15 及以上设备可安装此构建
+  - 工程工具链的版本（Flutter / Dart / JDK / Gradle / AGP / Kotlin / compileSdk / targetSdk /
+    minSdk / build-tools / NDK）只维护在 `AGENTS.md`「工具链」一节，这里不再复列；
+    `android/app/build.gradle` 与 CI 工作流以那一行为准。
+  - Java/Kotlin 字节码 target 26（Kotlin 2.4.x JvmTarget 上限）
+  - 注意：`minSdk` 的取值决定可安装的最低 Android 版本（值见 `AGENTS.md`）
   - JS 运行时为 quickjs_engine（QuickJS-NG），Linux / Android 原生库由包自身 CMake 从源码
     编译（Linux bundle 实测含 `libquickjs_c_bridge_plugin.so`，需 `linux/CMakeLists.txt`
     末端一处导出宏补丁，见 pitfalls #1）

@@ -4,8 +4,9 @@
 > 上采样（release / 冷启动 / 5 次取中位），「首帧」那行即用户可感总时长
 > （`main.dart` 的 `molia.startup` 埋点，release 也输出）。
 >
-> 采样脚本：`tool/agent/startup.sh`（见 §3）。最近一次全表复测：2026-10-18（Linux）；
-> Windows 基线：2026-10-21（§4.1）。
+> 采样脚本：`tool/agent/startup.sh`（见 §3）。启动全表基线：2026-10-18（Linux）；
+> Windows 基线：2026-10-21（§4.1）。全链路体检与后续复测归档见
+> `docs/performance-audit.md`（最新一轮 2026-11-07）。
 
 ---
 
@@ -81,7 +82,7 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
 - **隔离 HOME 的窗口 bounds**：`perf.sh` 每次固定 1440×900；复用大窗口会让
   Xvfb 软件光栅把 CPU / 帧数据拉满，实测出现过 98% 平台线程。
 
-## 4. 结果（中位数，ms）
+## 4. 结果（中位数，ms；2026-10-18 Linux）
 
 | 阶段 | 基线 | 依赖升级后 | 并行化 + 后移后 | 撤掉预热实验后（现状） |
 | --- | ---: | ---: | ---: | ---: |
@@ -305,12 +306,11 @@ Linux 本机 microbenchmark（非端到端启动采样，绝对值只用于比�
 - **Windows / 真机**：Windows 已用 CI `windows-dev` + 重定向 stdout 采样（§4.1）；
   仍需覆盖不同机器 / Defender 冷扫描等环境。Android 只有模拟器，真机数据待补。
 
-## 9. 运行时体检（2026-10）
+## 9. 运行时体检归档
 
-启动之外的帧、交互、数据链路、CPU、内存与体积基线见
-`docs/performance-audit-2026-10.md`；2026-11 的 Linux（Xvfb 无头）+ Android
-模拟器复测见 `docs/performance-audit-2026-11.md`。复测入口为
-`tool/agent/perf.sh`（`frames` / `memory` / `size` / `startup` / `data` /
+启动之外的帧、交互、数据链路、CPU、内存与体积基线，以及各轮复测（2026-10-22 首轮、
+2026-11-07 复测）统一见 `docs/performance-audit.md`；桌面内存见 `docs/memory.md`。
+复测入口为 `tool/agent/perf.sh`（`frames` / `memory` / `size` / `startup` / `data` /
 `cpu`），Windows 真实窗口帧用 `tool/agent/perf.sh frames windows --real`。
 
 ## 10. Linux 打包体积（2026-11）

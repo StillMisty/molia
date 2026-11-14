@@ -2,14 +2,16 @@
 
 **Molia** 是 Flutter 音乐播放器：LX 音源脚本 + 六平台内置搜索/发现（五个音乐平台 +
 哔哩哔哩）、本地与网络播放
-（桌面 media_kit/libmpv）、歌词（含桌面歌词与海报）、省流模式、AI 推歌（可选）、跨设备同步
-（WebDAV / 局域网，可选）。目前处于内部快速迭代状态，明确不兼容任何历史数据与协议。
+（桌面 media_kit/libmpv）、歌词（含桌面歌词与海报）、省流模式、听歌同步（可选）、
+AI 推歌（可选）、跨设备同步（WebDAV / 局域网，可选）。目前处于内部快速迭代状态，
+明确不兼容任何历史数据与协议。
 完整术语与能力地图见 `GLOSSARY.md`。
 
 ## 工具链
 
 Flutter / Dart 3.50.0 / 3.14.0；JDK 27+；Gradle 9.9.1 / AGP 9.5.1 / Kotlin 2.4.21；
-compileSdk 37.2 / targetSdk 37，minSdk 35；build-tools 37.0.0；NDK 30.0.16248370。这里是版本来源，改 CI / 发布工作流前先改本行。
+compileSdk 37.2 / targetSdk 37，minSdk 35；build-tools 37.0.0；NDK 30.0.16248370。
+这里是版本来源；其它文档与技能只引用本节、不复列版本号，改 CI / 发布工作流前先改本行。
 最低支持：iOS 18 / macOS 12（Xcode；macOS 走 just_audio 原生 AVPlayer，不需要 libmpv）。
 
 ## 常用命令
@@ -19,16 +21,17 @@ flutter analyze --no-pub   # 必须 0 error / 0 warning
 flutter test --no-pub      # 全量（默认集，本机 <30s）；单文件：flutter test test/lx_core_test.dart --no-pub
 tool/agent/test.sh linux   # 端到端（真实引擎 + 设置页 + 窗口/托盘，不含播放）；Xvfb 无窗口，桌面看门狗勿删
 tool/agent/test.sh android # 同一套跑模拟器（先 emu.sh start）；--window / --timeout 见脚本
-tool/agent/seed.sh android|linux <cmd>   # 数据注入：favorites/covers/history/session/mock-source/status/clear/restore
+tool/agent/seed.sh android|linux <cmd>   # 数据注入：favorites/covers/history/session/lang/mock-source/status/clear/restore
 tool/agent/startup.sh                    # 启动耗时采样（release 冷启动 N 次取中位；基线与结论见 docs/performance.md）
 tool/agent/perf.sh                       # 全链路体检：frames / startup / data / cpu / memory / size（最新基线与跑法见 docs/performance.md）
 tool/agent/cpu.sh                        # 按线程 CPU 采样（平台 / Dart UI / raster / IO / 音频；被 perf.sh cpu 调用）
 tool/agent/memory.sh                     # 托盘内存采样（RSS 曲线 + molia.memory 转换日志；见 docs/memory.md）
 tool/agent/io.sh                         # 磁盘写入采样（prefs mtime 计数 + DB/WAL 大小 + /proc IO 差分）
 tool/agent/memory.ps1                    # Windows 托盘内存采样（专用工作集 / 提交大小；见 docs/memory.md）
-tool/agent/hooks.sh                      # 启用 .githooks/pre-commit：提交前自动格式化暂存 Dart 文件
+tool/agent/hooks.sh                      # 启用 .githooks/pre-commit：格式化暂存 Dart + 文档/工具链检查
 tool/agent/worktree_prepare.sh <dir> [branch]  # 新 worktree：分支 / 签名 / Gradle / hooks 缓存
 python3 tool/agent/apk_size.py --check <apk>   # APK 分组体积与 native 库约束（无需 unzip）
+python3 tool/agent/check_docs.py               # 文档引用 / 工具链一致性（CI 与 pre-commit 自动跑）
 ```
 
 生成物（改对应源码后必跑，产物提交进仓库）：
@@ -92,11 +95,15 @@ sources/playback。
   （不被 `flutter test` 单独发现）。每个测试文件都有独立的 engine/kernel 装载开销（~1s，
   与文件大小无关），拆得越碎全量越慢；
 - Git：功能分支（主分支 `main`），提交 `type(scope): 描述`；密钥不进仓库。
+  并行会话用独立 worktree（`tool/agent/worktree_prepare.sh`）；主工作树可能同时有其它会话的
+  改动，提交前按自己的路径核对 `git diff --stat`。
 
 ## 领域文档与技能
 
+- 文档地图与单一来源约定见 `docs/README.md`；改 / 删文档前先查指向；
 - Issues 与规格走 GitHub issues（`gh` CLI，`docs/agents/issue-tracker.md`）；标签见
   `docs/agents/triage-labels.md`；术语与决策见 `GLOSSARY.md` + `docs/adr/`（`docs/agents/domain.md`）；
 - 包体积 / 内存 / worktree / seed / APK 明细的完整口径与踩坑见
   `.agents/skills/molia-perf-tooling/SKILL.md`；
-- `.agents/skills/` 为第三方内容勿手改；更新走 `npx skills update` + `dart run skills@ get --all`。
+- `skills-lock.json` 管理的 `dart-*` / `flutter-*` 等第三方技能勿手改；`molia-*` 为本仓技能，
+  随 `AGENTS.md` 与 docs 一起维护。

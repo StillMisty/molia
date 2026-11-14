@@ -1,8 +1,8 @@
 # 歌词显示扩展规格（桌面歌词 / 通知栏·锁屏歌词 / 蓝牙歌词）
 
-> 状态：**已实施（Android v1）**。实现映射见 §12；模拟器 / 真机待验证项见 §8。
+> 状态：**已实施（Android v1）**。实现映射见 §12；仍待模拟器 / 真机验证的项见 §7 未勾选项。
 > 关联：GitHub issue #1（spec：歌词显示扩展）。桌面平台歌词输出在 v1 仅预留抽象，
-> 待 Flutter 官方多窗口 API 稳定后实现（§11）。
+> 待 Flutter 官方多窗口 API 稳定后实现（见 FR-7 与 §9 风险 1）。
 
 ## 1. 背景与目标
 
@@ -16,7 +16,7 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 
 **v1 非目标**：
 
-- Linux / Windows 桌面歌词（等待 Flutter 官方 windowing API 进入 stable 后实现，见 §11）；
+- Linux / Windows 桌面歌词（等待 Flutter 官方 windowing API 进入 stable 后实现，见 §9 风险 1）；
 - 第三方状态栏模块（Lyricon / 墨·状态栏歌词）对接——用户已确认不做；
 - iOS 的歌词输出（入口隐藏，全部 no-op）；
 - 逐字歌词渲染（yrc / lxlyric 数据存在；应用内歌词页与应用**桌面歌词**
@@ -58,7 +58,7 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
    - 曲目原生路径（`source_manager.fetchLyric`：脚本 `lyric` action / any-listen / 内置平台）：
      v2 起优先于名字搜索，逐字数据随 `lxlyric` 承载。
 3. `LyricsState` 新增 `translationLines` / `romaLines`（按时间戳对齐到主行）。
-4. `LyricsCacheData` 持久化翻译 / 罗马音，**兼容旧缓存**（缺字段 = 无）。
+4. `LyricCacheData` 持久化翻译 / 罗马音，**兼容旧缓存**（缺字段 = 无）。
 5. 对齐规则：翻译行按 `parseLyrics` 解析（共用时间契约正则），以毫秒时间戳为键；
    主行取同时间戳的翻译（多条合并）；无匹配则该行翻译为空。V1 不做近似匹配。
 6. 应用内歌词页：每行主文本下方渲染翻译 / 罗马音（空文本不占位），由「歌词页」独立
@@ -180,7 +180,7 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
   与锁屏第二行即显示歌词。
   - 依据：平台 SystemUI 媒体控件第二行读 `METADATA_KEY_ARTIST`；`displaySubtitle`
     虽是 `MediaMetadata` 文档定义的第二行字段，但 AOSP 实现并不消费。
-- 字段、格式、是否含翻译、暂停行为可配置（见 §6）。
+- 字段、格式、是否含翻译、暂停行为可配置（见 §5.7）。
 - 纯播放器原则不破坏：歌名、歌手等基础信息永远保留；歌词只覆盖所选字段。
 
 ### FR-5 蓝牙（车载）歌词
@@ -238,10 +238,10 @@ LyricsProvider ── lines / translation ───┤
                             ├─ LyricLineTracker（纯逻辑）
                             ├─ 输出调度：行变化 / 播放态变化才下发
                             │    ├─ DesktopLyricsOutput ── Android MethodChannel → 悬浮窗
-                            │    │      （桌面平台 stub：capability=unsupported，TODO §11）
+                            │    │      （桌面平台 stub：capability=unsupported，见 §9 风险 1）
                             │    ├─ MediaLyricOutput（通知/锁屏 profile）
                             │    └─ BluetoothLyricOutput（蓝牙 profile）
-                            │           └─ 均经 MediaLyricComposer → LocalAudioHandler.setLyricOverride
+                            │           └─ 均经 MediaLyricComposer → LocalAudioHandler.setLyricMetadataOverride
                             └─ AudioRouteMonitor（A2DP 状态，Android）
 ```
 
@@ -315,8 +315,8 @@ abstract class LyricsOutput {
 | 暂停 / 无歌词 | `pauseBehavior = keep / title / clear`（clear = 恢复原始元数据，不写该字段）。 |
 | 去重 | 合成结果变化时才更新 `MediaItem`（复用 handler 现有去重思想）。 |
 
-`LocalAudioHandler` 增加 `setLyricOverride(LyricMetadataOverride?)`：保存覆盖值，
-`_syncFromService` / `_toMediaItem` 合成时应用；原始字段始终来自 `SourceTrack`。
+`LocalAudioHandler` 增加 `setLyricMetadataOverride(LyricMetadataOverride?)`：保存覆盖值，
+`_metadataFor` 合成时应用；原始字段始终来自 `SourceTrack`。
 
 ### 5.5 Android 悬浮窗实现
 
@@ -443,30 +443,30 @@ abstract class LyricsOutput {
 
 ### Phase 1：核心（纯 Dart）
 
-- [ ] `LyricProvider` 结构化返回 + 网易云 / QQ 翻译透传 + LRCLib 留空
-- [ ] `LyricsState` / `LyricsCacheData` 增字段 + 旧缓存兼容
-- [ ] `LyricLineTracker`（对齐 / 偏移 / 未同步 / upcoming）
-- [ ] `LyricsDisplaySettings`（JSON 持久化 + 默认值合并）
-- [ ] `LyricsOutput` 抽象 + `LyricsDisplayProvider` 骨架（调度、去重、能力状态）
-- [ ] 单测全绿；`flutter analyze` 0 error / 0 warning；架构扫描通过
+- [x] `LyricProvider` 结构化返回 + 网易云 / QQ 翻译透传 + LRCLib 留空
+- [x] `LyricsState` / `LyricCacheData` 增字段 + 旧缓存兼容
+- [x] `LyricLineTracker`（对齐 / 偏移 / 未同步 / upcoming）
+- [x] `LyricsDisplaySettings`（JSON 持久化 + 默认值合并）
+- [x] `LyricsOutput` 抽象 + `LyricsDisplayProvider` 骨架（调度、去重、能力状态）
+- [x] 单测全绿；`flutter analyze` 0 error / 0 warning；架构扫描通过
 
 **DoD**：无 UI、无原生改动；播放页现有歌词行为不回归。
 
 ### Phase 2：Android 悬浮窗
 
-- [ ] Kotlin 窗口 / 视图 / 通道 / 权限 / 息屏冻结
-- [ ] 样式与交互（对齐 §4 FR-3 与 §5.7 配置）
-- [ ] 设置子页（桌面歌词分组 + 预览卡片）+ l10n
+- [x] Kotlin 窗口 / 视图 / 通道 / 权限 / 息屏冻结
+- [x] 样式与交互（对齐 §4 FR-3 与 §5.7 配置）
+- [x] 设置子页（桌面歌词分组 + 预览卡片）+ l10n
 - [ ] 模拟器截图验证：显示、拖动、锁定、控制条、权限拒绝/撤销、横竖屏
 
 **DoD**：模拟器全流程可用；输出入口按平台能力隐藏。
 
 ### Phase 3：通知/锁屏 + 蓝牙
 
-- [ ] `MediaLyricComposer` + `LocalAudioHandler.setLyricOverride`（叠加现有去重）
-- [ ] `AudioRouteMonitor`（A2DP）+ 蓝牙门控 / 回退 / 还原
-- [ ] 设置子页两个分组 + A2DP 状态展示
-- [ ] 单测：合成规则、优先级、门控、暂停回退
+- [x] `MediaLyricComposer` + `LocalAudioHandler.setLyricMetadataOverride`（叠加现有去重）
+- [x] `AudioRouteMonitor`（A2DP）+ 蓝牙门控 / 回退 / 还原
+- [x] 设置子页两个分组 + A2DP 状态展示
+- [x] 单测：合成规则、优先级、门控、暂停回退
 - [ ] 模拟器验证：通知栏 / 锁屏第二行变化；A2DP 字段映射留真机项
 
 **DoD**：关闭输出后元数据完全还原；暂停/停止不残留歌词字段。
@@ -474,8 +474,8 @@ abstract class LyricsOutput {
 ### 收尾
 
 - [ ] 播放页歌词快捷操作栏加「桌面歌词」开关（可选）
-- [ ] `docs/architecture.md`、`AGENTS.md` 同步；本文件更新为 as-built
-- [ ] 全量验证：`flutter analyze` / `flutter test` /
+- [x] `docs/architecture.md`、`AGENTS.md` 同步；本文件更新为 as-built
+- [x] 全量验证：`flutter analyze` / `flutter test` /
       桌面端集成测试保持可跑
 
 ## 8. 测试计划
@@ -483,18 +483,18 @@ abstract class LyricsOutput {
 | 层 | 文件 | 覆盖 |
 |---|---|---|
 | 单测 | `test/lyrics_core_test.dart` | 行边界、同时间戳、翻译对齐、偏移、未同步、upcoming |
-| | `test/media_lyric_composer_test.dart` | 字段映射、格式、翻译拼接、A2DP 门控、优先级、暂停回退 |
-| | `test/lyrics_display_settings_test.dart` | 默认值、JSON 往返、缺键合并、版本兼容 |
-| | `test/lyrics_display_provider_test.dart` | 曲目切换、去重、能力状态、输出启停 |
-| | `test/lyric_providers_translation_test.dart` | 网易云 / QQ 翻译解析（夹具）、缓存兼容 |
-| | `test/lyrics_display_channel_test.dart` | 通道协议编解码（`TestDefaultBinaryMessenger`） |
+| | `test/services/media_lyric_composer_test.dart` | 字段映射、格式、翻译拼接、A2DP 门控、优先级、暂停回退 |
+| | `test/services/lyrics_display_settings_test.dart` | 默认值、JSON 往返、缺键合并、版本兼容 |
+| | `test/services/lyrics_display_provider_test.dart` | 曲目切换、去重、能力状态、输出启停 |
+| | `test/lyrics_provider_translation_cases.dart` | 网易云 / QQ 翻译解析（夹具）、缓存兼容 |
+| | `test/services/desktop_lyrics_output_test.dart` | 通道协议编解码（`TestDefaultBinaryMessenger`）与窗口生命周期 |
 | 架构 | `test/architecture/*` | 分层 / 图标 / 色彩扫描保持全绿 |
 | 模拟器 | `tool/agent/*` | 悬浮窗全交互 + 通知/锁屏歌词 + 截图留档 |
 | 真机 | 清单 | A2DP 车载显示、权限撤销 |
 
 ## 9. 风险与开放问题
 
-1. **Flutter 官方多窗口**：stable 3.50.0 的 `flutter config --help` 明确标注
+1. **Flutter 官方多窗口**：`flutter config --help`（当前 stable，版本见 `AGENTS.md`「工具链」）明确标注
    `--enable-windowing` "applies only to the master channel"；框架源码标注 production 禁用、
    随时破坏性变更，且现属性面（size/title/min/max/fullscreen/resizable）**不含**
    置顶 / 透明 / 无边框 / 点击穿透 / 不占任务栏。桌面输出实现时大概率仍需平台逃逸口代码，
@@ -547,4 +547,4 @@ abstract class LyricsOutput {
 | 媒体元数据 | `lib/services/lyrics_display/media_lyric_composer.dart`、`media_lyric_output.dart`、`lib/playback/local_audio_handler.dart` | 通知/锁屏 + 蓝牙 profile 合成 → `MediaMetadata` 覆盖（`displaySubtitle` 无对应字段，忽略）；播放顺序动作图标在 `res/drawable/audio_service_*`（`res/raw/keep.xml` 防资源压缩，见已知坑 34） |
 | 设置页 | `lib/pages/settings_page.dart`、`lib/pages/lyrics_display/*` | 首屏三条直达入口（桌面歌词 / 歌词与输出 / 系统媒体歌词）；歌词页分组 + 输出共享分组 + 预览 + 权限引导；主题种子色与歌词颜色共用任意调色器 |
 | 颜色系统 | `lib/services/lyrics_display/lyric_color_resolver.dart`、`lib/theme/scheme_builder.dart`、`lib/services/artwork_palette_service.dart` | 跟随主题 / 跟随封面经同一解析函数与同一份封面色板；通用 HSV/Hex 任意取色 |
-| 测试 | `test/lyrics_core_test.dart`、`test/services/media_lyric_composer_test.dart`、`test/services/lyrics_display_settings_test.dart`、`test/services/lyrics_display_provider_test.dart`、`test/services/desktop_lyrics_output_test.dart`、`test/services/lyrics_cache_test.dart`、`test/lyrics_core_test.dart` | 单一新 seam：`LyricsOutput` 假输出 |
+| 测试 | `test/lyrics_core_test.dart`、`test/lyric_line_tracker_cases.dart`、`test/services/lyric_timing_policy_cases.dart`、`test/services/lyric_color_resolver_cases.dart`、`test/lyrics_provider_translation_cases.dart`、`test/services/`（`media_lyric_composer_test` / `lyrics_display_settings_test` / `lyrics_display_provider_test` / `desktop_lyrics_output_test` / `lyrics_cache_test`） | 单一新 seam：`LyricsOutput` 假输出 |

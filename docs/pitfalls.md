@@ -87,7 +87,7 @@
 17. **歌词展示策略全在 Dart**：行定位 / 偏移 / 翻译拼装 / 暂停与无歌词回退 / 元数据
     格式 / 蓝牙门控都在 `LyricsDisplayProvider` 与输出映射层完成，原生只渲染与上报
     交互；新增输出实现 `LyricsOutput` 接口即可（桌面平台输出等 Flutter windowing
-    进入 stable 后再接，见 `docs/lyrics_display.md` §11）。
+    进入 stable 后再接，见 `docs/lyrics_display.md` §9）。
 18. **通知 small icon 必须指向真实存在的 drawable**：Android 通知不支持自适应图标
     （`mipmap/launcher_icon`），资源 ID=0 时 `NotificationManager` 抛
     「Invalid notification (no valid small icon)」**直接崩溃进程**。
@@ -141,10 +141,11 @@
 26. **新 worktree 的 Android 构建先对齐前置条件**：`android/gradle/`、`android/key.properties`、
     `*.jks` 与 `.dart_tool/hooks_runner/` 都被 .gitignore 排除。新 worktree 里先跑
     `tool/agent/worktree_prepare.sh <worktree-dir> [branch]`，它会补 Gradle wrapper
-    （项目要求 9.9.0，Flutter 默认模板可能生成 9.3.1，AGP 要求 ≥ 9.6）、release 签名和
+    （版本以 `android/gradle/wrapper/gradle-wrapper.properties` 为准；Flutter 默认模板
+    可能生成更旧的 9.3.1，AGP 要求 ≥ 9.6）、release 签名和
     sqlite3/cnativeapi 的 native assets hooks 缓存；另外它会把 OpenCode `worktree_create`
     的 detached HEAD 切到分支。JDK 27 + Gradle 9.3.1 会因 class file 71 直接失败
-    （Gradle 9.9.0 + JDK 27 已验证可用）。
+    （当前 wrapper 组合已验证可用）。
 27. **16 KB 页对齐是发布硬条件，而且属于「依赖带进来的属性」**：Android 15+ 的 16 KB
     内核设备要求 64 位 .so 的 ELF 段按 16 KB 对齐（Google Play 自 2027-02 起强制）。
     构建侧已满足（AGP ≥ 8.5.1 管 zip 页对齐、NDK r28+ 默认 16 KB 段对齐），但本项目没有
