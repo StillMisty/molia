@@ -9,7 +9,7 @@ import '../providers/search_assist_controller.dart';
 import '../providers/search_provider.dart';
 import '../services/search_history_store.dart';
 import 'ai_dj_carousel.dart';
-import 'app_search_bar.dart';
+import 'channel_search_bar.dart';
 import 'discover_layout.dart';
 import 'empty_state.dart';
 import 'search_assist_panel.dart';
@@ -20,11 +20,16 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 发现页「搜索」tab：搜索框 + 搜索结果。
 class LibrarySearchTab extends StatefulWidget {
-  const LibrarySearchTab({super.key, this.controller});
+  const LibrarySearchTab({super.key, this.controller, this.focusNode});
 
   /// 结果列表滚动控制器（宿主页面注入：重复点击底栏资料库时回顶）；
   /// 为空时由 [SearchSection] 自建。
   final ScrollController? controller;
+
+  /// 搜索输入框焦点节点（宿主页面注入：重复点击「资料库」时聚焦搜索框）。
+  ///
+  /// 为空时自建；注入时生命周期归宿主，本组件只负责监听焦点。
+  final FocusNode? focusNode;
 
   @override
   State<LibrarySearchTab> createState() => _LibrarySearchTabState();
@@ -33,7 +38,8 @@ class LibrarySearchTab extends StatefulWidget {
 class _LibrarySearchTabState extends State<LibrarySearchTab>
     with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
+  late final FocusNode _searchFocusNode;
+  late final bool _ownsSearchFocusNode;
   late final SearchInputBinding _searchInput;
   late final SearchProvider _searchProvider;
   late final SearchAssistController _assist;
@@ -44,6 +50,9 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
   @override
   void initState() {
     super.initState();
+    _ownsSearchFocusNode = widget.focusNode == null;
+    _searchFocusNode =
+        widget.focusNode ?? FocusNode(debugLabel: 'librarySearchField');
     _searchProvider = Provider.of<SearchProvider>(context, listen: false);
     _searchInput = SearchInputBinding(
       session: _searchProvider.session,
@@ -67,7 +76,7 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
     _assist.dispose();
     _searchInput.dispose();
     _searchController.dispose();
-    _searchFocusNode.dispose();
+    if (_ownsSearchFocusNode) _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -118,20 +127,21 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
           child: Column(
             children: [
               Padding(
-                // 搜索栏自己管横向边距：空闲时与内容栏同 gutter，聚焦时
-                // 向两侧弹性展开 4px（保留原有手感），这里只留纵向。
-                padding: const EdgeInsets.only(
-                  top: discoverPageTopPadding,
-                  bottom: discoverSectionGap,
+                // 与内容栏同一 gutter；条内不再放渠道控件（页面顶部已有
+                // 唯一渠道下拉），搜索 tab 与 Ctrl+F 共用同一条胶囊。
+                padding: EdgeInsets.fromLTRB(
+                  gutter,
+                  discoverPageTopPadding,
+                  gutter,
+                  discoverSectionGap,
                 ),
-                child: AppSearchBar(
+                child: ChannelSearchBar(
                   controller: _searchController,
                   focusNode: _searchFocusNode,
                   hintText: _l10n(context).searchHint,
-                  constraints: discoverSearchBarConstraints(context),
-                  margin: gutter,
-                  focusedMargin: gutter > 4 ? gutter - 4 : 0,
-                  expandOnFocus: true,
+                  // 无 chip 变体：胶囊 / 高度 / 清除键 / 焦点环与 Ctrl+F 同源，
+                  // 渠道控件留在页面顶部，搜索 tab 切来切去不会多出一个入口。
+                  showChannelChip: false,
                   onSubmitted: (value) {
                     _searchProvider.submitSearch(value);
                     _searchFocusNode.unfocus();

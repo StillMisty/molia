@@ -1441,7 +1441,9 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   同一 `SearchProvider`，空关键词时结果面留空（只剩搜索条）；结果面板与资料库搜索结果页
   共用 **Search results surface**（`lib/widgets/search_results_view.dart`）：行映射 / 分段 /
   失败 / 空态一份实现。搜索条是 `ChannelSearchBar`：单层胶囊，左侧透明背景 + 描边的
-  渠道 chip 直接占据搜索图标位置，右侧裸输入 + 清除键（不再嵌套 AppSearchBar）；选择渠道会同时
+  渠道 chip 直接占据搜索图标位置，右侧裸输入 + 清除键（不再嵌套 AppSearchBar）；资料库
+  搜索 tab 用同一条胶囊的 `showChannelChip: false` 变体（渠道下拉常驻页面顶部，条内不重复，
+  高度 / 清除键 / 焦点环与 Ctrl+F 同源）；选择渠道会同时
   切发现内容与搜索，并把焦点还给输入框；当前渠道不支持搜索时面板显示专用空态。
   结果面只有当前渠道一组，
   保留宽屏表格与触底自动分页，遮罩最多预览 8 行并以「查看全部结果」收尾。
