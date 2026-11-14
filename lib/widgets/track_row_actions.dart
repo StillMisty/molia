@@ -17,7 +17,7 @@ import '../domain/ports/source_registry.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/comments_provider.dart';
 import '../providers/playback_provider.dart';
-import '../services/download/download_intent.dart';
+import '../services/download/download_requests.dart';
 import '../utils/download_failure_label.dart';
 import 'download_data_saver_guard.dart';
 import 'row_actions.dart';
@@ -54,10 +54,10 @@ List<RowAction> trackCommonActions(
     }
   }
 
-  // 入口可见性也由意图层给出：本地 / 已下载 / 进行中统一隐藏，UI 不再
+  // 入口可见性也由请求层给出：本地 / 已下载 / 进行中统一隐藏，UI 不再
   // 分别读 supported / DownloadRecords / DownloadTask。
-  final canDownload = context.select<DownloadLauncher?, bool>(
-    (launcher) => launcher?.statusOf(track) == DownloadIntentStatus.ready,
+  final canDownload = context.select<DownloadRequests?, bool>(
+    (requests) => requests?.statusOf(track) == DownloadIntentStatus.ready,
   );
   if (canDownload) {
     actions.add(
@@ -146,49 +146,38 @@ Future<void> _enqueueTrack(BuildContext context, Track track) async {
 /// 直接按默认音质下载：保留省流确认，成功 / 失败都有回执。
 ///
 /// 与本地数据页不同，菜单入口不跳页：入队后立即确认一句，失败在任务结束时
-/// 补提示。`DownloadTask.done` 挂在 unawaited 外层时必须自行 catch，
-/// 否则失败任务会变成未处理异步错误。
+/// 补提示。终态由请求层给出；活动任务只提示「正在下载」不等待，保持入口
+/// 原来的非阻塞语义。
 Future<void> _downloadTrack(BuildContext context, Track track) async {
-  final launcher = context.read<DownloadLauncher?>();
-  if (launcher == null) return;
+  final requests = context.read<DownloadRequests?>();
+  if (requests == null) return;
   final l10n = _l10n(context);
   if (!await confirmDownloadOnDataSaver(context)) return;
   if (!context.mounted) return;
-  final DownloadStartResult result;
-  try {
-    result = await launcher.start(track);
-  } catch (error) {
-    final message = downloadFailureMessage(l10n, error);
-    if (message != null && context.mounted) {
-      M3ESnackbar.show(context, message: message);
-    }
-    return;
-  }
-  switch (result) {
-    case DownloadStarted(:final task):
-      if (context.mounted) {
-        M3ESnackbar.show(context, message: l10n.downloadStarted);
-      }
-      try {
-        await task.done;
-      } catch (error) {
-        if (!context.mounted) return;
-        final message = downloadFailureMessage(l10n, error);
-        if (message != null) {
-          M3ESnackbar.show(context, message: message);
-        }
-      }
+  final outcome = await requests.requestAudio(
+    track,
+    waitForActive: false,
+    onStarted: (task, {required joined}) {
+      // 加入已有任务时由 DownloadActive 分支提示，不重复说「已开始」。
+      if (joined || !context.mounted) return;
+      M3ESnackbar.show(context, message: l10n.downloadStarted);
+    },
+  );
+  if (!context.mounted) return;
+  switch (outcome) {
+    case DownloadCompleted():
+    case DownloadCancelled():
+      break;
+    case DownloadActive():
+      M3ESnackbar.show(context, message: l10n.downloadStatusDownloading);
     case DownloadAlreadyDownloaded():
-      if (context.mounted) {
-        M3ESnackbar.show(context, message: l10n.downloadAlreadyExists);
-      }
-    case DownloadAlreadyActive():
-      if (context.mounted) {
-        M3ESnackbar.show(context, message: l10n.downloadStatusDownloading);
-      }
+      M3ESnackbar.show(context, message: l10n.downloadAlreadyExists);
     case DownloadUnsupported(:final reason):
-      if (context.mounted) {
-        M3ESnackbar.show(context, message: downloadFailureLabel(l10n, reason));
+      M3ESnackbar.show(context, message: downloadFailureLabel(l10n, reason));
+    case DownloadFailed(:final error):
+      final message = downloadFailureMessage(l10n, error);
+      if (message != null) {
+        M3ESnackbar.show(context, message: message);
       }
   }
 }

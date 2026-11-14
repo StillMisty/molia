@@ -22,7 +22,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/library_collection_request.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
-import '../services/download/download_intent.dart';
+import '../services/download/download_requests.dart';
 import '../services/download/download_maintenance.dart';
 import '../services/download/download_records.dart';
 import '../services/local/local_library_service.dart';
@@ -369,15 +369,15 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
 
   /// 批量下载：省流确认 → 一次性入队 → 立即提示；页面不锁。
   ///
-  /// 候选过滤（本地 / 已下载 / 进行中 / 重复）由意图层的 `startBatch` 转交
+  /// 候选过滤（本地 / 已下载 / 进行中 / 重复）由请求层的 `startBatch` 转交
   /// 下载服务唯一实现，页面不再先算一遍候选。
   Future<void> _batchDownload(List<Track> queue) async {
     final l10n = AppLocalizations.of(context)!;
-    final launcher = context.read<DownloadLauncher?>();
-    if (launcher == null) return;
+    final requests = context.read<DownloadRequests?>();
+    if (requests == null) return;
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
     try {
-      final result = await launcher.startBatch(
+      final result = await requests.startBatch(
         queue,
         onEnqueued: (enqueued) {
           if (!mounted) return;

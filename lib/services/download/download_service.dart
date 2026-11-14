@@ -45,8 +45,9 @@
 ///   三步的唯一写入顺序）；
 /// - 通知 presenter：`download_notification_presenter.dart`（id 分配 / 批量
 ///   共享一条 / 系统频率节流 / 收尾不残留；端口由组合根注入）；
-/// - 下载意图：`download_intent.dart`（单曲 / 批量的资格判定、默认音质与
-///   类型化结果入口；曲目菜单 / 分享 / 本地数据页 / 管理页共用）。
+/// - 下载请求：`download_requests.dart`（单曲 / 歌词 / 封面 / 批量的资格
+///   判定、入队等待与类型化结果入口；曲目菜单 / 分享 / 本地数据页 / 管理页
+///   共用）。
 library;
 
 import 'dart:async';
@@ -79,7 +80,6 @@ import '../covers/cover_bytes_downloader.dart';
 import '../covers/cover_resolution.dart';
 import '../../sources/source_track.dart' show pickQualityFor;
 import 'download_file_layout.dart';
-import 'download_intent.dart';
 import 'download_journal.dart';
 import 'download_maintenance.dart';
 import 'download_manager.dart';
@@ -88,6 +88,7 @@ import 'download_queue.dart';
 import 'download_record_assembler.dart';
 import 'download_record_store.dart';
 import 'download_records.dart';
+import 'download_requests.dart';
 import 'download_settings.dart';
 import 'download_task_artifacts.dart';
 
@@ -99,17 +100,6 @@ typedef DownloadLyricsResolver = Future<DownloadLyrics?> Function(Track track);
 
 /// 下载时封面 URL 解析（组合根注入：`SourceManager.fetchPic` 适配）。
 typedef DownloadArtworkResolver = Future<String?> Function(Track track);
-
-/// 重定位结果（UI 只按这些分支提示）。
-enum LocalRelocateResult {
-  relocated,
-
-  /// 后缀不在音频集合内。
-  unsupportedFormat,
-
-  /// 新路径不存在 / 不可读。
-  fileMissing,
-}
 
 /// 本地下载服务（`ChangeNotifier`：UI 用 `Selector` 订阅状态）。
 class DownloadService extends DownloadManager
@@ -411,7 +401,7 @@ class DownloadService extends DownloadManager
     final candidates = <({int index, Track track})>[];
     for (var index = 0; index < items.length; index++) {
       final track = items[index];
-      // 资格判定与单曲意图共用同一实现（本地 / 已下载 / 进行中）。
+      // 资格判定与单曲请求共用同一实现（本地 / 已下载 / 进行中）。
       final status = downloadIntentStatusOf(
         track,
         records: _recordStore.records,
@@ -611,10 +601,10 @@ class DownloadService extends DownloadManager
     await task.done;
   }
 
-  /// 入队音频下载并立即返回任务对象（意图层据此渲染「已开始」）。
+  /// 入队音频下载并立即返回任务对象（请求层据此等待终态）。
   ///
-  /// 资格判定与 `DownloadLauncher` 共用 [downloadIntentStatusOf]：本地 /
-  /// 已下载在这里再兜一次底（调用方可能绕过意图层），不重复维护规则。
+  /// 资格判定与 `DownloadRequests` 共用 [downloadIntentStatusOf]：本地 /
+  /// 已下载在这里再兜一次底（调用方可能绕过请求层），不重复维护规则。
   @override
   Future<DownloadTask> enqueueDownload(
     Track track, {
