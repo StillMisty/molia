@@ -878,6 +878,18 @@ abstract class AppLocalizations {
   /// **'Single repeat'**
   String get playModeSingleRepeat;
 
+  /// No description provided for @playModeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Play mode'**
+  String get playModeTitle;
+
+  /// No description provided for @moreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get moreActions;
+
   /// No description provided for @generalTitle.
   ///
   /// In en, this message translates to:
@@ -2677,6 +2689,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'All tags'**
   String get discoverAllTags;
+
+  /// No description provided for @discoverTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Tags'**
+  String get discoverTags;
 
   /// No description provided for @discoverLoadFailed.
   ///
@@ -7771,13 +7789,13 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsSwapAction.
   ///
   /// In en, this message translates to:
-  /// **'Change lyrics'**
+  /// **'Change source'**
   String get lyricsSwapAction;
 
   /// No description provided for @lyricsCopyModeAction.
   ///
   /// In en, this message translates to:
-  /// **'Copy lyrics mode'**
+  /// **'Copy lyrics'**
   String get lyricsCopyModeAction;
 
   /// No description provided for @lyricsCopyModeExit.

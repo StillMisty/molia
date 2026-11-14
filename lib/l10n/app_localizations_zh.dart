@@ -414,6 +414,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get playModeSingleRepeat => '单曲循环';
 
   @override
+  String get playModeTitle => '播放模式';
+
+  @override
+  String get moreActions => '更多';
+
+  @override
   String get generalTitle => '通用';
 
   @override
@@ -1367,6 +1373,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get discoverAllTags => '全部标签';
+
+  @override
+  String get discoverTags => '标签';
 
   @override
   String get discoverLoadFailed => '加载失败';
@@ -4160,10 +4169,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsDisplaySettingsAction => '歌词显示设置';
 
   @override
-  String get lyricsSwapAction => '换歌词';
+  String get lyricsSwapAction => '换源';
 
   @override
-  String get lyricsCopyModeAction => '复制歌词模式';
+  String get lyricsCopyModeAction => '复制歌词';
 
   @override
   String get lyricsCopyModeExit => '退出复制模式';
