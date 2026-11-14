@@ -3181,7 +3181,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncCategoryCredentials => 'AI radio and keys';
 
   @override
-  String get syncTransportSection => 'Transport';
+  String get syncTransportSection => 'Connection method';
 
   @override
   String get syncTransportAllOffHint =>
@@ -3677,10 +3677,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Unknown reason — retry first; if it keeps failing, check the sync log';
 
   @override
-  String get syncIssueNotConfigured => 'Sync transport is not configured';
+  String get syncIssueNotConfigured => 'Sync isn\'t set up yet';
 
   @override
-  String get syncIssueStartFailed => 'Transport failed to start';
+  String get syncIssueStartFailed => 'Sync couldn\'t start';
 
   @override
   String get syncIssuePermissionDenied =>
@@ -4051,7 +4051,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'In-app updates are not supported on this platform';
 
   @override
-  String get updateErrorChecksum => 'Package checksum mismatch; file deleted';
+  String get updateErrorChecksum =>
+      'The downloaded update is incomplete; it was deleted. Try again.';
 
   @override
   String get updateErrorPermission =>
@@ -4724,7 +4725,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shortcutsInAppHint =>
-      'Active while the window is focused; tap a binding to re-record it';
+      'Active while the window is focused; tap a shortcut to re-record it';
 
   @override
   String get shortcutsGlobalSection => 'Global shortcuts';
@@ -5449,7 +5450,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get listeningSyncNotSent =>
-      'Local file paths, playlist contents, device identifiers, and app settings are never sent.';
+      'Local file paths, playlist contents, device information, and app settings are never sent.';
 
   @override
   String get listeningSyncNetwork =>

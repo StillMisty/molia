@@ -3066,7 +3066,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncCategoryCredentials => 'AI 推歌与密钥';
 
   @override
-  String get syncTransportSection => '传输方式';
+  String get syncTransportSection => '连接方式';
 
   @override
   String get syncTransportAllOffHint => '两种方式都关闭时不会同步；打开任一开关即可开始。';
@@ -3530,10 +3530,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncIssueUnknown => '未知原因；可先重试，持续失败可查看同步日志排查';
 
   @override
-  String get syncIssueNotConfigured => '同步传输尚未配置';
+  String get syncIssueNotConfigured => '同步还没设置好';
 
   @override
-  String get syncIssueStartFailed => '传输启动失败';
+  String get syncIssueStartFailed => '同步没能启动';
 
   @override
   String get syncIssuePermissionDenied => '缺少局域网权限（Android 17 起需「附近设备」权限）';
@@ -3881,7 +3881,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateErrorUnsupported => '当前平台不支持应用内更新';
 
   @override
-  String get updateErrorChecksum => '安装包校验失败，已删除';
+  String get updateErrorChecksum => '更新包下载不完整，已删除，请重试';
 
   @override
   String get updateErrorPermission => '需要允许「安装未知应用」才能自动安装';
@@ -5218,7 +5218,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get listeningSyncSent => '歌曲名、歌手、专辑、时长、开始播放的时间，以及你的服务账号。';
 
   @override
-  String get listeningSyncNotSent => '不会发送本地文件路径、歌单内容、设备标识或应用设置。';
+  String get listeningSyncNotSent => '不会发送本地文件路径、歌单内容、设备信息或应用设置。';
 
   @override
   String get listeningSyncNetwork => '发送请求时，服务会看到你的网络地址。';

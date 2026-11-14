@@ -5793,7 +5793,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncTransportSection.
   ///
   /// In en, this message translates to:
-  /// **'Transport'**
+  /// **'Connection method'**
   String get syncTransportSection;
 
   /// No description provided for @syncTransportAllOffHint.
@@ -6615,13 +6615,13 @@ abstract class AppLocalizations {
   /// No description provided for @syncIssueNotConfigured.
   ///
   /// In en, this message translates to:
-  /// **'Sync transport is not configured'**
+  /// **'Sync isn\'t set up yet'**
   String get syncIssueNotConfigured;
 
   /// No description provided for @syncIssueStartFailed.
   ///
   /// In en, this message translates to:
-  /// **'Transport failed to start'**
+  /// **'Sync couldn\'t start'**
   String get syncIssueStartFailed;
 
   /// No description provided for @syncIssuePermissionDenied.
@@ -7239,7 +7239,7 @@ abstract class AppLocalizations {
   /// No description provided for @updateErrorChecksum.
   ///
   /// In en, this message translates to:
-  /// **'Package checksum mismatch; file deleted'**
+  /// **'The downloaded update is incomplete; it was deleted. Try again.'**
   String get updateErrorChecksum;
 
   /// No description provided for @updateErrorPermission.
@@ -8401,7 +8401,7 @@ abstract class AppLocalizations {
   /// No description provided for @shortcutsInAppHint.
   ///
   /// In en, this message translates to:
-  /// **'Active while the window is focused; tap a binding to re-record it'**
+  /// **'Active while the window is focused; tap a shortcut to re-record it'**
   String get shortcutsInAppHint;
 
   /// No description provided for @shortcutsGlobalSection.
@@ -9685,7 +9685,7 @@ abstract class AppLocalizations {
   /// No description provided for @listeningSyncNotSent.
   ///
   /// In en, this message translates to:
-  /// **'Local file paths, playlist contents, device identifiers, and app settings are never sent.'**
+  /// **'Local file paths, playlist contents, device information, and app settings are never sent.'**
   String get listeningSyncNotSent;
 
   /// No description provided for @listeningSyncNetwork.
