@@ -13,8 +13,7 @@ import 'settings_tiles.dart';
 /// 设置首屏「曲库与存储」卡：新歌加入位置、本地文件夹与下载 / 缓存。
 ///
 /// 这些行都围绕「歌从哪里来、存在哪里」：加入位置是曲库行为，文件夹是本地
-/// 导入，下载与缓存是占用治理。文件夹、下载与缓存是设备本地键，卡底一句
-/// 说明；加入位置跟人走，不在此列。
+/// 导入，下载与缓存是占用治理。
 class LibraryStorageSection extends StatelessWidget {
   const LibraryStorageSection({super.key});
 
@@ -24,9 +23,6 @@ class LibraryStorageSection extends StatelessWidget {
     final libraryAddSettings = context.watch<LibraryAddSettings?>();
     return SettingsSectionCard(
       title: l10n.settingsLibraryStorageTitle,
-      footer: SettingsSectionHint(
-        text: l10n.settingsLibraryStorageDeviceLocalHint,
-      ),
       children: [
         // 加入收藏 / 列表的位置：新曲目放开头还是末尾（默认开头）。
         if (libraryAddSettings != null)

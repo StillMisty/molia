@@ -11,7 +11,7 @@ import 'settings_tiles.dart';
 /// 设置首屏「桌面」卡：关闭到托盘 / 记住窗口位置 / 快捷键。
 ///
 /// 只在桌面平台出现（由首屏决定是否挂载）：移动端没有托盘与窗口，放一行
-/// 置灰的入口只会制造困惑。托盘与窗口是设备本地键，卡底给一句说明。
+/// 置灰的入口只会制造困惑。
 class DesktopSettingsSection extends StatelessWidget {
   const DesktopSettingsSection({super.key});
 
@@ -23,16 +23,10 @@ class DesktopSettingsSection extends StatelessWidget {
     final desktopTray = AppTray.isSupported && tray != null;
     return SettingsSectionCard(
       title: l10n.settingsDesktopSection,
-      footer: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (AppTray.isLinuxDesktop) ...[
-            SettingsSectionHint(text: l10n.settingsTrayLinuxHint),
-            const SizedBox(height: 4),
-          ],
-          SettingsSectionHint(text: l10n.settingsDesktopDeviceLocalHint),
-        ],
-      ),
+      // Linux 托盘提示是操作前提（没有扩展就没有图标），保留。
+      footer: AppTray.isLinuxDesktop
+          ? SettingsSectionHint(text: l10n.settingsTrayLinuxHint)
+          : null,
       children: [
         if (desktopTray) ...[
           SettingsSwitchTile(

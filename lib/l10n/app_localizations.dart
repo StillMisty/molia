@@ -278,12 +278,6 @@ abstract class AppLocalizations {
   /// **'Library & storage'**
   String get settingsLibraryStorageTitle;
 
-  /// No description provided for @settingsLibraryStorageDeviceLocalHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Local folders, downloads and cache stay on this device and are not synced.'**
-  String get settingsLibraryStorageDeviceLocalHint;
-
   /// No description provided for @settingsDataBackupTitle.
   ///
   /// In en, this message translates to:
@@ -626,12 +620,6 @@ abstract class AppLocalizations {
   /// **'Playback details'**
   String get settingsPlaybackDetailsTitle;
 
-  /// No description provided for @settingsPlaybackDetailsDeviceLocalHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Fade and shuffle preferences stay on this device and are not synced.'**
-  String get settingsPlaybackDetailsDeviceLocalHint;
-
   /// No description provided for @settingsFadeTitle.
   ///
   /// In en, this message translates to:
@@ -901,12 +889,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Light vibration on taps such as navigation and playback'**
   String get settingsHapticsSubtitle;
-
-  /// No description provided for @settingsGeneralDeviceLocalHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Vibration settings stay on this device and are not synced.'**
-  String get settingsGeneralDeviceLocalHint;
 
   /// No description provided for @settingsAutoSaveHint.
   ///
@@ -8349,12 +8331,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Desktop'**
   String get settingsDesktopSection;
-
-  /// No description provided for @settingsDesktopDeviceLocalHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Tray and window settings stay on this device and are not synced.'**
-  String get settingsDesktopDeviceLocalHint;
 
   /// No description provided for @settingsCloseToTray.
   ///

@@ -110,10 +110,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsLibraryStorageTitle => '曲库与存储';
 
   @override
-  String get settingsLibraryStorageDeviceLocalHint =>
-      '本地文件夹、下载与缓存只保存在本机，不随跨设备同步。';
-
-  @override
   String get settingsDataBackupTitle => '数据与备份';
 
   @override
@@ -285,10 +281,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPlaybackDetailsTitle => '播放细节';
 
   @override
-  String get settingsPlaybackDetailsDeviceLocalHint =>
-      '淡入淡出与随机偏好只保存在本机，不随跨设备同步。';
-
-  @override
   String get settingsFadeTitle => '淡入淡出';
 
   @override
@@ -424,9 +416,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsHapticsSubtitle => '点按导航、播放等操作时给出轻震动';
-
-  @override
-  String get settingsGeneralDeviceLocalHint => '震动反馈只保存在本机，不随跨设备同步。';
 
   @override
   String get settingsAutoSaveHint => '改动即时生效';
@@ -4497,9 +4486,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsDesktopSection => '桌面';
-
-  @override
-  String get settingsDesktopDeviceLocalHint => '托盘与窗口设置只保存在本机，不随跨设备同步。';
 
   @override
   String get settingsCloseToTray => '关闭时最小化到托盘';
