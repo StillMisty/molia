@@ -20,8 +20,9 @@ description: 发布 Molia 版本，或改动发布产物 / 更新清单 / 平台
 | `integration.yml` | 每日 02:00（UTC+8）/ 手动 | Linux 端到端（真实引擎 + 本地 mock；不含播放，见 `docs/pitfalls.md` #33；xvfb） |
 | `release.yml` | 推 `v*` tag | 矩阵构建 → 产物 + sha256 + `latest.json` → GitHub Release |
 
-Flutter `3.50.0`、JDK 27、Android NDK `30.0.16248370` 与 `AGENTS.md` 的工具链表同源，
-改版本时两边一起改。
+工具链版本（Flutter / Dart / JDK / Gradle / AGP / Kotlin / SDK / NDK）只以 `AGENTS.md`
+的「工具链」一行为准，这里不复列；改版本时先改那一行，再让 `.github/workflows/` 与
+`android/app/build.gradle` 跟上。
 
 ## 2. 发一个版本
 
@@ -56,7 +57,8 @@ Flutter `3.50.0`、JDK 27、Android NDK `30.0.16248370` 与 `AGENTS.md` 的工�
 
 ## 4. 一次性准备（换机 / 重建仓库时）
 
-1. **Actions secrets**（Settings → Secrets and variables → Actions；缺一个发布就失败）：
+1. **Actions secrets**（Settings → Secrets and variables → Actions；Android 签名四项缺一个
+   发布就失败）：
 
    | Secret | 内容 |
    |---|---|
@@ -64,9 +66,16 @@ Flutter `3.50.0`、JDK 27、Android NDK `30.0.16248370` 与 `AGENTS.md` 的工�
    | `ANDROID_KEYSTORE_PASSWORD` | keystore 口令 |
    | `ANDROID_KEY_ALIAS` | key alias（现有 keystore 为 `molia`） |
    | `ANDROID_KEY_PASSWORD` | key 口令 |
+   | `MOLIA_LASTFM_API_KEY` | Last.fm API key（**可空**） |
+   | `MOLIA_LASTFM_API_SECRET` | Last.fm 请求签名用 shared secret（**可空**） |
 
    **签名必须与用户已安装的 APK 一致**，否则系统安装器拒绝覆盖安装；
    keystore 必须长期保存（丢了就只能让用户卸载重装）。
+
+   Last.fm 两项按桌面 scrobbler 惯例内置进构建、不提交进仓库；release.yml 各平台构建
+   都以 `--dart-define` 传入，未配置时为空字符串，应用照常构建，但设置页的 Last.fm
+   连接入口会显示「这个版本没有内置 Last.fm 应用密钥」。共享密钥无法在分发型客户端里
+   真正保密，保护模型是每用户会话密钥 + TLS；不要把密钥写进日志、错误文案或 UI。
 
 2. **签名 tag 的 GPG**：本机有私钥，且公钥已上传 GitHub（Settings → SSH and GPG keys），
    Release 页才显示 Verified；发布机没有私钥时 `git tag -s` 直接失败——宁可不发，
@@ -101,6 +110,10 @@ python3 tool/ci/gen_update_manifest.py --help      # 清单脚本自测
 flutter test --no-pub test/update                  # 更新链路单测/组件测试
 # 试发：先推一个测试 tag（会真的创建 Release，确认后再发正式版）
 git tag -s v0.0.1-beta.1 -m "Molia 0.0.1-beta.1" && git push origin v0.0.1-beta.1
+# 本地带 Last.fm 凭证调试（不配置也能跑，只是连接入口会提示缺密钥）
+flutter run \
+  --dart-define=MOLIA_LASTFM_API_KEY=... \
+  --dart-define=MOLIA_LASTFM_API_SECRET=...
 ```
 
 Windows 安装器可在 Windows 本机单独编译验证：

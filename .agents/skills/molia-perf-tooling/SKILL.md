@@ -17,7 +17,7 @@ description: 优化或验证 Molia 的包体积、内存、APK 内容、Linux re
 | Linux / Windows 内存 | `tool/agent/perf.sh memory linux\|windows` |
 | Linux release 卫生 | `tool/agent/check_linux_bundle.sh [bundle]` |
 
-权威数字与基线：`docs/performance.md`、`docs/memory.md`、`docs/performance-audit-*.md`。
+权威数字与基线：`docs/performance.md`、`docs/memory.md`、`docs/performance-audit.md`。
 **先有原始产物 / 日志，再写数字；没有 A/B 就明确写「未测」，不要归因。**
 
 ## 新 worktree
