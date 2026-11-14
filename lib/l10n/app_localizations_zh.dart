@@ -1989,6 +1989,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get annualReportShareFailed => '海报没有生成，再试一次';
 
   @override
+  String get annualReportSaveImage => '保存图片';
+
+  @override
+  String get annualReportSaveFailed => '图片没有保存，再试一次';
+
+  @override
+  String get annualReportMoreActions => '更多操作';
+
+  @override
   String get annualReportLoadFailed => '报告没有加载出来';
 
   @override
@@ -2094,6 +2103,27 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get statsExportFailed => '导出失败';
+
+  @override
+  String get statsShareTitle => '分享听歌统计';
+
+  @override
+  String get statsShareImage => '分享图片';
+
+  @override
+  String get statsSaveImage => '保存图片';
+
+  @override
+  String get statsPosterTitle => '听歌记录';
+
+  @override
+  String get statsPosterShareFailed => '图片没有生成，再试一次';
+
+  @override
+  String get statsPosterSaveFailed => '图片没有保存，再试一次';
+
+  @override
+  String get statsPosterEmpty => '还没有可以做成图片的记录';
 
   @override
   String get statsClear => '清空统计';

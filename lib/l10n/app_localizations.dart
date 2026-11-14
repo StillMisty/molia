@@ -3842,6 +3842,24 @@ abstract class AppLocalizations {
   /// **'Couldn\'t make the poster. Try again.'**
   String get annualReportShareFailed;
 
+  /// No description provided for @annualReportSaveImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Save image'**
+  String get annualReportSaveImage;
+
+  /// No description provided for @annualReportSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the image. Try again.'**
+  String get annualReportSaveFailed;
+
+  /// No description provided for @annualReportMoreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get annualReportMoreActions;
+
   /// No description provided for @annualReportLoadFailed.
   ///
   /// In en, this message translates to:
@@ -4039,6 +4057,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Export failed'**
   String get statsExportFailed;
+
+  /// No description provided for @statsShareTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Share listening stats'**
+  String get statsShareTitle;
+
+  /// No description provided for @statsShareImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Share image'**
+  String get statsShareImage;
+
+  /// No description provided for @statsSaveImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Save image'**
+  String get statsSaveImage;
+
+  /// No description provided for @statsPosterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening stats'**
+  String get statsPosterTitle;
+
+  /// No description provided for @statsPosterShareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t make the image. Try again.'**
+  String get statsPosterShareFailed;
+
+  /// No description provided for @statsPosterSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the image. Try again.'**
+  String get statsPosterSaveFailed;
+
+  /// No description provided for @statsPosterEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No listening data to turn into an image yet'**
+  String get statsPosterEmpty;
 
   /// No description provided for @statsClear.
   ///

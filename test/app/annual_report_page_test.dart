@@ -7,9 +7,14 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/annual_report_page.dart';
 import 'package:molia/providers/annual_report_provider.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
+import 'package:molia/services/notification_service.dart';
+import 'package:molia/services/save_as.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/fake_save_as.dart';
 import '../support/memory_database.dart';
+import '../support/notification_recorder.dart';
 import '../support/sync_test_support.dart';
 
 /// 年度报告页：单页滚动、一个分享主操作、空年份隐藏行动。
@@ -20,6 +25,7 @@ void main() {
   late PlayStatisticsRepository repository;
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     db = openMemoryDatabase();
     repository = PlayStatisticsRepository(
       databaseProvider: () => db,
@@ -36,6 +42,8 @@ void main() {
     WidgetTester tester, {
     required List<int> years,
     required int featuredYear,
+    FakeSaveAs? saveAs,
+    RecordingNotificationService? notifications,
   }) async {
     await tester.pumpWidget(
       M3EMaterialApp(
@@ -56,6 +64,9 @@ void main() {
               ),
             ),
             Provider<CustomCoverStore>.value(value: CustomCoverStore()),
+            if (saveAs != null) Provider<SaveAs>.value(value: saveAs),
+            if (notifications != null)
+              Provider<NotificationService?>.value(value: notifications),
           ],
           child: AnnualReportPage(years: years, featuredYear: featuredYear),
         ),
@@ -91,6 +102,53 @@ void main() {
     expect(find.text('存成歌单'), findsOneWidget);
     expect(find.textContaining('至 截至今天'), findsNothing);
     expect(find.textContaining('数据范围：'), findsOneWidget);
+  });
+
+  testWidgets('保存图片写入海报目录，分享主操作仍在', (tester) async {
+    final start = DateTime(2026, 4, 1, 12);
+    await insertPlayEvent(
+      db,
+      sourceKey: 'other',
+      songId: 'save1',
+      title: '晴天',
+      artist: '周杰伦',
+      album: '叶惠美',
+      startedAt: start.millisecondsSinceEpoch,
+      endedAt: start.millisecondsSinceEpoch + 120000,
+      listenedMs: 120000,
+      maxPositionMs: 120000,
+      endReason: 'completed',
+    );
+    final saveAs = FakeSaveAs();
+    final notifications = RecordingNotificationService();
+    await pumpPage(
+      tester,
+      years: [2026],
+      featuredYear: 2026,
+      saveAs: saveAs,
+      notifications: notifications,
+    );
+
+    expect(find.text('分享海报'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存图片'));
+    // 保存中会显示不确定进度条：不能 pumpAndSettle，交替让出真实异步直到落盘。
+    for (var i = 0; i < 100 && saveAs.saves.isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+
+    expect(saveAs.saves, hasLength(1));
+    final call = saveAs.saves.single;
+    expect(call.relativeDir, saveAsPostersDirName);
+    expect(call.mimeType, 'image/png');
+    expect(call.fileName, 'molia_annual_2026.png');
+    expect(call.bytes, isNotEmpty);
+    expect(notifications.last, contains('posters/'));
   });
 
   testWidgets('空年份：诚实空态，隐藏分享与歌单', (tester) async {

@@ -1,8 +1,9 @@
 /// 年度听歌报告：单页滚动、只读、无二级导航。
 ///
 /// 数据全部来自既有听歌统计表（`AnnualReportProvider` → 仓库年度窗口），
-/// 不新增表 / 列，也不改统计口径。唯一主操作是「分享海报」；底部可选把
-/// 年度 Top 50 存成歌单，写入仍走既有资料库导入引擎。
+/// 不新增表 / 列，也不改统计口径。唯一主操作是「分享海报」；保存图片收在
+/// 旁边的溢出菜单里；底部可选把年度 Top 50 存成歌单，写入仍走既有资料库
+/// 导入引擎。
 library;
 
 import 'dart:async';
@@ -25,14 +26,12 @@ import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/annual_poster_service.dart';
 import '../services/notification_service.dart';
-import '../services/poster_color_store.dart';
-import '../services/poster_font_store.dart';
-import '../services/system_fonts_service.dart';
+import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
-import '../theme/poster_palette.dart';
-import '../theme/scheme_builder.dart';
 import '../utils/listened_duration.dart';
+import '../utils/poster_render_style.dart';
 import '../utils/responsive.dart';
+import '../utils/save_as_label.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/track_row.dart';
@@ -54,6 +53,7 @@ class AnnualReportPage extends StatefulWidget {
 class _AnnualReportPageState extends State<AnnualReportPage> {
   late final AnnualReportProvider _provider;
   bool _sharing = false;
+  bool _savingImage = false;
   bool _savingPlaylist = false;
 
   @override
@@ -268,20 +268,45 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
             ),
           ),
           const SizedBox(height: 20),
-          M3EButton.filled(
-            onPressed: _sharing
-                ? null
-                : () => unawaited(_share(context, report)),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.ios_share_rounded, size: 18),
-                const SizedBox(width: 8),
-                Text(l10n.annualReportSharePoster),
-              ],
-            ),
+          Row(
+            children: [
+              M3EButton.filled(
+                onPressed: _sharing
+                    ? null
+                    : () => unawaited(_share(context, report)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.ios_share_rounded, size: 18),
+                    const SizedBox(width: 8),
+                    Text(l10n.annualReportSharePoster),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // 次要输出（保存图片）收进溢出菜单：主操作仍只有「分享海报」。
+              M3EMenu.entries(
+                position: M3EMenuAnchorPosition.bottomEnd,
+                anchorBuilder: (context, open) => M3EIconButton(
+                  variant: M3EIconButtonVariant.standard,
+                  icon: const Icon(Icons.more_vert_rounded),
+                  semanticLabel: l10n.annualReportMoreActions,
+                  onPressed: _savingImage ? null : open,
+                ),
+                onSelected: (value) {
+                  if (value == 'save') unawaited(_saveImage(context, report));
+                },
+                entries: [
+                  M3EMenuEntry(
+                    label: l10n.annualReportSaveImage,
+                    value: 'save',
+                    leading: const Icon(Icons.download_rounded),
+                  ),
+                ],
+              ),
+            ],
           ),
-          if (_sharing) ...[
+          if (_sharing || _savingImage) ...[
             const SizedBox(height: 12),
             Semantics(
               liveRegion: true,
@@ -786,42 +811,9 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
     setState(() => _sharing = true);
     final l10n = AppLocalizations.of(context)!;
     final notifications = context.read<NotificationService?>();
-    final appScheme = Theme.of(context).colorScheme;
-    final textStyle = context.typeScale.bodyMedium;
-    // 海报数据只依赖当前同步状态：在第一个 await 之前取齐，避免异步返回后
-    // 再读已可能失效的 BuildContext / Theme。
-    final posterData = _posterData(l10n, report);
     try {
-      final saved = await PosterColorStore.load();
-      if (!mounted) return;
-      final scheme = switch (saved.source) {
-        PosterColorSource.appTheme || PosterColorSource.artwork => appScheme,
-        PosterColorSource.custom => buildColorScheme(
-          Color(saved.seed),
-          appScheme.brightness,
-        ),
-      };
-      final override = await PosterFontStore.load();
-      if (!mounted) return;
-      final font = switch (override) {
-        null => (
-          family: textStyle.fontFamily,
-          fallback: textStyle.fontFamilyFallback,
-        ),
-        '' => (
-          family: SystemFontsService.platformDefaultFamily,
-          fallback: SystemFontsService.platformDefaultFontFallbacks,
-        ),
-        final family => (family: family, fallback: null),
-      };
-      final bytes = await AnnualPosterService().render(
-        data: posterData,
-        palette: PosterPalette.fromScheme(scheme),
-        fontFamily: font.family,
-        fontFamilyFallback: font.fallback,
-        watermarkText: l10n.appName,
-      );
-      if (!mounted) return;
+      final bytes = await _renderPosterBytes(l10n, report);
+      if (!mounted || bytes == null) return;
       final directory = await getTemporaryDirectory();
       if (!mounted) return;
       final file = File('${directory.path}/annual_report_${report.year}.png');
@@ -836,6 +828,60 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
+  }
+
+  /// 保存海报到另存目录（与分享共用同一份渲染数据）。
+  Future<void> _saveImage(BuildContext context, AnnualReport report) async {
+    if (_savingImage) return;
+    final l10n = AppLocalizations.of(context)!;
+    final notifications = context.read<NotificationService?>();
+    final saveAs = context.read<SaveAs?>();
+    setState(() => _savingImage = true);
+    try {
+      if (saveAs == null) throw StateError('SaveAs 未装配');
+      final bytes = await _renderPosterBytes(l10n, report);
+      if (!mounted || bytes == null) return;
+      final result = await saveAs.saveBytes(
+        fileName: 'molia_annual_${report.year}.png',
+        bytes: bytes,
+        mimeType: 'image/png',
+        relativeDir: saveAsPostersDirName,
+        dialogTitle: l10n.annualReportSaveImage,
+      );
+      if (!mounted) return;
+      switch (result) {
+        case SaveAsSaved(:final displayPath, :final kind):
+          notifications?.showSuccessSnackBar(
+            savedLocationMessage(l10n, kind, displayPath),
+          );
+        case SaveAsCancelled():
+          return;
+        case SaveAsFailed():
+          notifications?.showErrorSnackBar(l10n.annualReportSaveFailed);
+      }
+    } catch (_) {
+      if (mounted) {
+        notifications?.showErrorSnackBar(l10n.annualReportSaveFailed);
+      }
+    } finally {
+      if (mounted) setState(() => _savingImage = false);
+    }
+  }
+
+  Future<Uint8List?> _renderPosterBytes(
+    AppLocalizations l10n,
+    AnnualReport report,
+  ) async {
+    final posterData = _posterData(l10n, report);
+    final style = await resolvePosterRenderStyle(context);
+    if (!mounted) return null;
+    return AnnualPosterService().render(
+      data: posterData,
+      palette: style.palette,
+      fontFamily: style.fontFamily,
+      fontFamilyFallback: style.fontFamilyFallback,
+      watermarkText: l10n.appName,
+    );
   }
 
   AnnualPosterData _posterData(AppLocalizations l10n, AnnualReport report) {

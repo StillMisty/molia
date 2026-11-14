@@ -2066,6 +2066,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get annualReportShareFailed => 'Couldn\'t make the poster. Try again.';
 
   @override
+  String get annualReportSaveImage => 'Save image';
+
+  @override
+  String get annualReportSaveFailed => 'Couldn\'t save the image. Try again.';
+
+  @override
+  String get annualReportMoreActions => 'More actions';
+
+  @override
   String get annualReportLoadFailed => 'Couldn\'t load the report';
 
   @override
@@ -2174,6 +2183,27 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get statsExportFailed => 'Export failed';
+
+  @override
+  String get statsShareTitle => 'Share listening stats';
+
+  @override
+  String get statsShareImage => 'Share image';
+
+  @override
+  String get statsSaveImage => 'Save image';
+
+  @override
+  String get statsPosterTitle => 'Listening stats';
+
+  @override
+  String get statsPosterShareFailed => 'Couldn\'t make the image. Try again.';
+
+  @override
+  String get statsPosterSaveFailed => 'Couldn\'t save the image. Try again.';
+
+  @override
+  String get statsPosterEmpty => 'No listening data to turn into an image yet';
 
   @override
   String get statsClear => 'Clear stats';
