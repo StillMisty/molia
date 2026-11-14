@@ -83,6 +83,8 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    // 进程内完成态不跨用例：每个用例都从「未完成」开始。
+    OnboardingStore.resetSessionForTest();
     sources = _FakeSources();
     dataSaver = _FakeDataSaver();
     finished = 0;
@@ -276,6 +278,40 @@ void main() {
           find.byType(M3ENavigationRail).evaluate().isNotEmpty,
       isTrue,
     );
+  });
+
+  testWidgets('壳层重建（托盘休眠恢复）不会重新出现引导', (tester) async {
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      showOnboarding: true,
+      waitForHome: false,
+    );
+    await tester.tap(find.byKey(const Key('onboardingSkip')));
+    await waitForFinder(
+      tester,
+      find.text('Performance Track 0'),
+      reason: '跳过后未进入壳层',
+    );
+
+    // 托盘休眠会卸载整棵界面（TrayDormantGate），恢复时按启动时的
+    // showOnboarding 重建壳层；完成态必须由进程级标记兜住，否则每次
+    // 从托盘恢复都会重新引导。
+    // 先卸掉整棵树，复现「卸载 → 重建」而不是保留旧 State。
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      showOnboarding: true,
+      resetPreferences: false,
+      waitForHome: false,
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('音乐留在本机'), findsNothing);
+    expect(find.byKey(const Key('onboardingSkip')), findsNothing);
   });
 
   test('完成标记持久化且设备本地', () async {
