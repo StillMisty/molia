@@ -78,8 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           # 与 android/app/build.gradle 的 compileSdkMinor / buildToolsVersion /
-          # ndkVersion 以及 AGENTS.md 工具链表一致。用 Android CLI（sdkmanager
-          # 已被官方标记为 deprecated）。
+          # ndkVersion 以及 AGENTS.md 工具链表一致。用 Android CLI 管理。
           compile_sdk_platform=platforms/android-37.2
           build_tools_version=37.0.0
           ndk_version=30.0.16248370
