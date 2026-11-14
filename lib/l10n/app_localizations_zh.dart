@@ -543,6 +543,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deselectAll => '取消全选';
 
   @override
+  String selectionCountSelected(int count) {
+    return '已选 $count';
+  }
+
+  @override
+  String get selectionRangeToHere => '选中到这里';
+
+  @override
   String get selectionRangeAction => '范围选择';
 
   @override
@@ -1090,6 +1098,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sortTooltip => '排序';
+
+  @override
+  String get moreActions => '更多操作';
 
   @override
   String get trackActionsTooltip => '曲目操作';

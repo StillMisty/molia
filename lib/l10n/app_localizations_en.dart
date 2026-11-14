@@ -562,6 +562,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deselectAll => 'Deselect All';
 
   @override
+  String selectionCountSelected(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get selectionRangeToHere => 'Select range to here';
+
+  @override
   String get selectionRangeAction => 'Select range';
 
   @override
@@ -1132,6 +1140,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sortTooltip => 'Sort';
+
+  @override
+  String get moreActions => 'More actions';
 
   @override
   String get trackActionsTooltip => 'Track actions';

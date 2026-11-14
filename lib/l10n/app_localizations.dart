@@ -1118,6 +1118,18 @@ abstract class AppLocalizations {
   /// **'Deselect All'**
   String get deselectAll;
 
+  /// No description provided for @selectionCountSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String selectionCountSelected(int count);
+
+  /// No description provided for @selectionRangeToHere.
+  ///
+  /// In en, this message translates to:
+  /// **'Select range to here'**
+  String get selectionRangeToHere;
+
   /// No description provided for @selectionRangeAction.
   ///
   /// In en, this message translates to:
@@ -2143,6 +2155,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sort'**
   String get sortTooltip;
+
+  /// No description provided for @moreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get moreActions;
 
   /// No description provided for @trackActionsTooltip.
   ///

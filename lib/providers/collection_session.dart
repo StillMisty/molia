@@ -382,6 +382,9 @@ class CollectionSession extends ChangeNotifier {
   void selectRangeTo(CollectionView view, String key) => _selection
       .selectRangeTo(key, [for (final row in view.visibleRows) row.key]);
 
+  /// 当前范围锚点；长按第二段手势只在有锚点时解释为区间。
+  String? get selectionAnchorKey => _selection.anchorKey;
+
   /// 某一行是否选中（行渲染读取，生产代码不直接碰选择状态机）。
   bool isSelected(String key) => _selection.isSelected(key);
 

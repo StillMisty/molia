@@ -87,7 +87,6 @@ import '../widgets/playlist_folder_dialog.dart';
 import '../widgets/playlist_header_overflow.dart';
 import '../widgets/playlist_sheets.dart';
 import '../widgets/row_actions.dart';
-import '../widgets/selection_range_action.dart';
 import '../widgets/settings/settings_tiles.dart';
 import '../widgets/shell_page_visibility.dart';
 import '../widgets/shell_reselect.dart';
@@ -207,10 +206,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 上次观察到的壳层可见性：隐藏 → 可见 = 重新进入收藏页，刷新播放历史
   /// 顺序（顺序在停留期间冻结，见 LibraryProvider）。未挂壳层的单测按可见。
   bool _pageVisible = true;
-
-  /// 一次性范围选择模式：true = 下一次行点击选中锚点到该行的区间，
-  /// 而不是切换该行。任何退出多选 / 全选 / 再次点击入口都会关掉它。
-  bool _rangeMode = false;
 
   /// 智能列表的重复版本展开（按代表行 key）与当前计数。
   final Set<String> _expandedSmartVersions = {};
@@ -337,12 +332,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   /// 会话状态（选择 / 模式 / 恢复完成）变化：页面重建。
   void _onSessionChanged() {
-    if (!mounted) return;
-    setState(() {
-      // 选择被清空（关闭 / Esc / 批量写入成功）时范围模式一并退出：
-      // 否则下一次进入多选会继承一个没有起点的待命状态。
-      if (!_session.selecting) _rangeMode = false;
-    });
+    if (mounted) setState(() {});
   }
 
   void _onCollectionRequest() {
@@ -417,25 +407,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _session.exitSearch();
   }
 
-  void _enterSelection(String key) {
-    HapticsService.lightImpact();
-    setState(() => _rangeMode = false);
-    _session.selectRow(key);
-  }
-
-  /// 底部右侧「范围选择」：进入 / 取消一次性范围模式。
+  /// 行长按：不在多选时进入多选；已经在多选时把长按行作为区间终点。
   ///
-  /// 只切页面状态，不动选择集：起点由用户先长按 / 点选的那一行（选择
-  /// 状态机的锚点）决定，终点由下一次行点击决定。
-  void _toggleRangeMode() {
-    HapticsService.selectionClick();
-    if (_rangeMode) {
-      setState(() => _rangeMode = false);
-      M3ESnackbar.defaultController.dismiss();
+  /// 触摸端没有 Shift，长按承担桌面 Shift 点击的第二段手势；锚点由上一次
+  /// 普通点击 / 长按落下（见 [CollectionSelection.anchorKey]）。
+  void _onRowLongPress(CollectionView view, String key) {
+    HapticsService.lightImpact();
+    if (_session.selecting && _session.selectionAnchorKey != null) {
+      _session.selectRangeTo(view, key);
       return;
     }
-    setState(() => _rangeMode = true);
-    M3ESnackbar.show(context, message: _l10n(context).selectionRangeHint);
+    _session.selectRow(key);
   }
 
   /// 此刻 Esc 是否由本页接管：多选生效 + 页面可见 + 输入框未聚焦。
@@ -481,14 +463,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     bool shift = false,
   }) {
     final row = view.visibleRows[index];
-    if (_rangeMode) {
-      // 范围模式是两段式手势的第二段：这次点击只定终点，不切换该行、
-      // 也不点播；完成后立刻退回普通多选。
-      setState(() => _rangeMode = false);
-      _session.selectRangeTo(view, row.key);
-      M3ESnackbar.defaultController.dismiss();
-      return;
-    }
     if (_session.handleRowTap(row.key, view, ctrl: ctrl, shift: shift)) {
       return;
     }
@@ -1278,24 +1252,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
             ],
           )
         : body;
-    // 范围选择入口是列表上的浮动动作，不新增工具栏：只在多选态出现，
-    // 页面正文本身已止于壳层底栏 / 播放条上缘，bottom 留白就是「在它们上面」。
-    final contentWithRangeAction = Stack(
-      fit: StackFit.expand,
-      children: [
-        content,
-        if (_selecting && _session.selectedCount > 0)
-          Positioned(
-            right: 16,
-            bottom: 16,
-            child: SelectionRangeAction(
-              key: const Key('collectionSelectionRangeAction'),
-              active: _rangeMode,
-              onPressed: _toggleRangeMode,
-            ),
-          ),
-      ],
-    );
     return PopScope(
       canPop: !_selecting && !_session.searching && !reorderActive,
       onPopInvokedWithResult: (didPop, _) {
@@ -1313,7 +1269,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       child: ResponsivePageContainer(
         pageType: ResponsivePageType.browse,
         alignment: Alignment.topCenter,
-        child: contentWithRangeAction,
+        child: content,
       ),
     );
   }
@@ -2346,6 +2302,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
+  /// 多选栏只保留两个高频动作（按合集种类定），其余批量动作收进 ⋮。
   List<Widget> _buildSelectionActions(
     BuildContext context,
     AppLocalizations l10n,
@@ -2353,17 +2310,55 @@ class _FavoritesPageState extends State<FavoritesPage> {
   ) {
     final selected = _selectedRows(view);
     if (selected.isEmpty) return const [];
-    // 图标 / 文案与写意图同源：全部已收藏 → 取消，否则 → 收藏。
+    final addToPlaylist = M3EIconButton(
+      key: const Key('collectionSelectionAddToPlaylist'),
+      variant: M3EIconButtonVariant.standard,
+      icon: const Icon(Icons.playlist_add_rounded),
+      semanticLabel: l10n.addToPlaylist,
+      onPressed: () => unawaited(_copySelectionToPlaylist(view)),
+    );
+    if (view.isCustom) {
+      return [
+        M3EIconButton(
+          key: const Key('collectionSelectionRemove'),
+          variant: M3EIconButtonVariant.standard,
+          icon: const Icon(Icons.playlist_remove_rounded),
+          semanticLabel: l10n.playlistRemoveTrack,
+          onPressed: () => unawaited(_removeSelectedFromPlaylist(view)),
+        ),
+        addToPlaylist,
+      ];
+    }
+    if (view.isHistory) {
+      return [
+        M3EIconButton(
+          key: const Key('collectionSelectionDelete'),
+          variant: M3EIconButtonVariant.standard,
+          icon: const Icon(Icons.delete_rounded),
+          semanticLabel: l10n.historyDeleteEntry,
+          onPressed: () => unawaited(_deleteSelectedHistory(view)),
+        ),
+        addToPlaylist,
+      ];
+    }
+    if (view.isLocalSongs) {
+      return [
+        M3EIconButton(
+          key: const Key('collectionSelectionDelete'),
+          variant: M3EIconButtonVariant.standard,
+          icon: const Icon(Icons.delete_rounded),
+          semanticLabel: l10n.delete,
+          onPressed: () => unawaited(_deleteSelectedLocalSongs(view)),
+        ),
+        addToPlaylist,
+      ];
+    }
+    // 收藏 / 智能列表：收藏开关 + 加入列表（全部已收藏时开关变取消）。
     final favoriteChange = _actions.favoriteChange(selected);
     final allFavorited = favoriteChange == CollectionFavoriteChange.remove;
     return [
       M3EIconButton(
-        variant: M3EIconButtonVariant.standard,
-        icon: const Icon(Icons.playlist_add_rounded),
-        semanticLabel: l10n.addToPlaylist,
-        onPressed: () => unawaited(_copySelectionToPlaylist(view)),
-      ),
-      M3EIconButton(
+        key: const Key('collectionSelectionFavorite'),
         variant: M3EIconButtonVariant.standard,
         icon: IconSwap<bool>(
           value: allFavorited,
@@ -2374,40 +2369,40 @@ class _FavoritesPageState extends State<FavoritesPage> {
           ),
         ),
         semanticLabel: allFavorited ? l10n.favoriteRemove : l10n.favoriteAdd,
-        // 三种行共用同一写路径（行联合提供曲目快照 / 收藏键）。
         onPressed: () => unawaited(_setSelectedFavorite(view)),
       ),
-      if (view.isCustom)
-        M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          icon: const Icon(Icons.playlist_remove_rounded),
-          semanticLabel: l10n.playlistRemoveTrack,
-          onPressed: () => unawaited(_removeSelectedFromPlaylist(view)),
-        ),
+      addToPlaylist,
+    ];
+  }
+
+  /// 多选栏 ⋮：下载等低频批量动作只在这里出现，避免选中栏变成功作墙。
+  Widget _buildSelectionOverflow(
+    BuildContext context,
+    AppLocalizations l10n,
+    CollectionView view,
+  ) {
+    final entries = <M3EMenuEntry>[
       if (_selectedDownloadableTracks(view).isNotEmpty)
-        M3EIconButton(
-          key: const Key('playlistDownloadSelected'),
-          variant: M3EIconButtonVariant.standard,
-          icon: const Icon(Icons.download_rounded),
-          semanticLabel: l10n.playlistDownloadSelected,
-          onPressed: () => unawaited(_downloadSelected(view)),
-        ),
-      if (view.isHistory)
-        M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          icon: const Icon(Icons.delete_rounded),
-          semanticLabel: l10n.historyDeleteEntry,
-          onPressed: () => unawaited(_deleteSelectedHistory(view)),
-        ),
-      // 本地歌曲：下载副本删文件、导入项只移出列表（确认文案在动作内区分）。
-      if (view.isLocalSongs)
-        M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          icon: const Icon(Icons.delete_rounded),
-          semanticLabel: l10n.delete,
-          onPressed: () => unawaited(_deleteSelectedLocalSongs(view)),
+        M3EMenuEntry(
+          label: l10n.playlistDownloadSelected,
+          value: 'download',
+          leading: const Icon(Icons.download_rounded),
         ),
     ];
+    if (entries.isEmpty) return const SizedBox.shrink();
+    return M3EMenu.entries(
+      position: M3EMenuAnchorPosition.bottomEnd,
+      anchorBuilder: (context, open) => M3EIconButton(
+        variant: M3EIconButtonVariant.standard,
+        icon: const Icon(Icons.more_vert_rounded),
+        semanticLabel: l10n.moreActions,
+        onPressed: open,
+      ),
+      onSelected: (value) {
+        if (value == 'download') unawaited(_downloadSelected(view));
+      },
+      entries: entries,
+    );
   }
 
   /// 多选上下文栏（单行紧凑版）：关闭 / 已选计数 / 全选 / 批量操作。
@@ -2447,47 +2442,31 @@ class _FavoritesPageState extends State<FavoritesPage> {
               children: [
                 const SizedBox(width: 4),
                 M3EIconButton(
+                  key: const Key('collectionSelectionClose'),
                   variant: M3EIconButtonVariant.standard,
                   icon: const Icon(Icons.close_rounded),
                   semanticLabel: l10n.cancel,
                   onPressed: _session.clearSelection,
                 ),
-                // 计数胶囊只显示数量（没有上限，也就没有 /N 的分子分母）。
-                Container(
+                // 计数是纯文本（没有上限，也没有胶囊 / 警告色）。
+                Text(
+                  l10n.selectionCountSelected(_session.selectedCount),
                   key: const Key('collectionSelectionCount'),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: foreground.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    '${_session.selectedCount}',
-                    style: m3e.typeScale.labelLarge.copyWith(
-                      color: foreground,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  style: m3e.typeScale.titleSmall.copyWith(color: foreground),
                 ),
                 const Spacer(),
+                // 全选只负责选中；清空 / 退出只走 ✕。
                 M3EIconButton(
+                  key: const Key('collectionSelectionSelectAll'),
                   variant: M3EIconButtonVariant.standard,
                   icon: const Icon(Icons.select_all_rounded),
-                  semanticLabel: allSelected
-                      ? l10n.deselectAll
-                      : l10n.selectAllItems,
-                  onPressed: () {
-                    setState(() => _rangeMode = false);
-                    if (allSelected) {
-                      _session.clearSelection();
-                    } else {
-                      _session.selectAllVisible(view);
-                    }
-                  },
+                  semanticLabel: l10n.selectAllItems,
+                  onPressed: allSelected
+                      ? null
+                      : () => _session.selectAllVisible(view),
                 ),
                 ..._buildSelectionActions(context, l10n, view),
+                _buildSelectionOverflow(context, l10n, view),
                 const SizedBox(width: 4),
               ],
             ),
@@ -2664,7 +2643,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
         onTapWithModifiers: (reorderActive || !isDesktopPlatform())
             ? null
             : (ctrl, shift) => _onRowTap(view, index, ctrl: ctrl, shift: shift),
-        onLongPress: reorderActive ? null : () => _enterSelection(row.key),
+        onLongPress: reorderActive
+            ? null
+            : () => _onRowLongPress(view, row.key),
+        // 多选时长按 = 选中锚点到这一行的区间；读屏通过自定义动作拿到同一
+        // 语义（普通长按进入多选时不给这个动作，避免两种含义混在一起）。
+        longPressSemanticLabel: _selecting ? l10n.selectionRangeToHere : null,
         actions: actions.isEmpty ? null : actions,
       ),
     );

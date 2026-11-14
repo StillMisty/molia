@@ -250,6 +250,15 @@
   "selectLyrics": "Select Lyrics",
   "lyricsPosterAction": "Lyrics poster",
   "deselectAll": "Deselect All",
+  "selectionCountSelected": "{count} selected",
+  "@selectionCountSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectionRangeToHere": "Select range to here",
   "selectionRangeAction": "Select range",
   "selectionRangeHint": "Tap the end item",
   "selectionRangeCancel": "Cancel range selection",
@@ -536,6 +545,7 @@
   "favoritesSwitchTitle": "Switch collection",
   "shufflePlay": "Shuffle",
   "sortTooltip": "Sort",
+  "moreActions": "More actions",
   "trackActionsTooltip": "Track actions",
   "sortDefaultOrder": "Default order",
   "tableColumnArtist": "Artist",

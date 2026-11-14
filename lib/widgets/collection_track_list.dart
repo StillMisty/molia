@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -129,6 +130,7 @@ class CollectionTrackRow extends StatelessWidget {
     this.onTap,
     this.onTapWithModifiers,
     this.onLongPress,
+    this.longPressSemanticLabel,
     this.actions,
   });
 
@@ -153,6 +155,12 @@ class CollectionTrackRow extends StatelessWidget {
 
   final VoidCallback? onLongPress;
 
+  /// 长按动作的无障碍名（多选时 = 「选中到这里」）。
+  ///
+  /// 读屏没有长按手势，用 [CustomSemanticsAction] 把同一语义暴露成动作；
+  /// 非多选态传 null，避免把「进入多选」误读成范围选择。
+  final String? longPressSemanticLabel;
+
   /// 行动作描述；null / 空 = 无动作（多选与排序模式：没有 ⋮，桌面端
   /// 也没有右键菜单）。
   final List<RowAction>? actions;
@@ -170,7 +178,7 @@ class CollectionTrackRow extends StatelessWidget {
           )
         : null;
     final trailingWidget = _mergeTrailing(trailing, menu);
-    return TrackRow(
+    final rowWidget = TrackRow(
       model: row,
       surface: surface,
       position: position,
@@ -186,6 +194,14 @@ class CollectionTrackRow extends StatelessWidget {
       onLongPress: onLongPress,
       // 桌面端入口是行表面右键：动作编译成同一份菜单，在落点弹出。
       onSecondaryTap: rowActionsAtPointer(context, rowActions),
+    );
+    final longPressLabel = longPressSemanticLabel;
+    if (longPressLabel == null || onLongPress == null) return rowWidget;
+    return Semantics(
+      customSemanticsActions: {
+        CustomSemanticsAction(label: longPressLabel): onLongPress!,
+      },
+      child: rowWidget,
     );
   }
 
