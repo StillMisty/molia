@@ -43,6 +43,25 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     final provider = context.read<DiagnosticsProvider>();
     return SettingsSubPage(
       title: l10n.diagnosticsTitle,
+      actions: [
+        // 导出是辅助动作，收进顶栏；页面唯一的按钮留给「检查渠道」。
+        ListenableBuilder(
+          listenable: provider,
+          builder: (context, _) => M3EIconButton(
+            key: const Key('diagnosticsExportButton'),
+            variant: M3EIconButtonVariant.standard,
+            icon: Icon(
+              provider.isExporting
+                  ? Icons.hourglass_top_rounded
+                  : Icons.save_alt_rounded,
+            ),
+            semanticLabel: l10n.diagnosticsExportAction,
+            onPressed: provider.isExporting
+                ? null
+                : () => unawaited(_runExport(context, l10n)),
+          ),
+        ),
+      ],
       children: [
         ListenableBuilder(
           listenable: provider,
@@ -59,10 +78,10 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
           builder: (context, _) => _channelCheck(context, l10n, provider),
         ),
         const SizedBox(height: kSettingsSectionSpacing),
-        ListenableBuilder(
-          listenable: provider,
-          builder: (context, _) => _exportSection(context, l10n, provider),
-        ),
+        // 导出的隐私与提醒留在页尾，不再占一张卡或一个主按钮。
+        SettingsSectionHint(text: l10n.diagnosticsExportPrivacy),
+        const SizedBox(height: 4),
+        SettingsSectionHint(text: l10n.diagnosticsExportWarning),
       ],
     );
   }
@@ -217,51 +236,6 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             ),
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _exportSection(
-    BuildContext context,
-    AppLocalizations l10n,
-    DiagnosticsProvider provider,
-  ) {
-    final exporting = provider.isExporting;
-    return SettingsSectionCard(
-      title: l10n.diagnosticsExportSection,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: SizedBox(
-            width: double.infinity,
-            child: M3EButton.filled(
-              key: const Key('diagnosticsExportButton'),
-              enabled: !exporting,
-              onPressed: () => unawaited(_runExport(context, l10n)),
-              semanticLabel: l10n.diagnosticsExportAction,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (exporting) ...[
-                    M3EProgressIndicator.circular(size: 16, strokeWidth: 2),
-                    const SizedBox(width: 8),
-                  ],
-                  Semantics(
-                    liveRegion: exporting,
-                    child: Text(
-                      exporting
-                          ? l10n.diagnosticsExporting
-                          : l10n.diagnosticsExportAction,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        SettingsSectionHint(text: l10n.diagnosticsExportPrivacy),
-        const SizedBox(height: 4),
-        SettingsSectionHint(text: l10n.diagnosticsExportWarning),
       ],
     );
   }

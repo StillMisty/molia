@@ -4,31 +4,36 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../l10n/app_localizations.dart';
-import '../providers/nav_provider.dart';
-import '../services/app_branding_service.dart';
-import '../services/haptics.dart';
-import '../services/language_service.dart';
-import '../services/notification_service.dart';
-import '../services/window/app_tray.dart';
-import '../services/window/tray_settings.dart';
-import '../services/window/window_settings.dart';
-import '../widgets/nav_destination_style.dart';
-import '../widgets/settings/settings_reorderable_rows.dart';
-import '../widgets/settings/settings_subpage.dart';
-import '../widgets/settings/settings_tiles.dart';
+import '../../l10n/app_localizations.dart';
+import '../../pages/shortcut_settings_page.dart';
+import '../../pages/update_settings_page.dart';
+import '../../providers/nav_provider.dart';
+import '../../providers/update_provider.dart';
+import '../../services/app_branding_service.dart';
+import '../../services/haptics.dart';
+import '../../services/language_service.dart';
+import '../../services/notification_service.dart';
+import '../../services/window/app_tray.dart';
+import '../../services/window/tray_settings.dart';
+import '../../services/window/window_settings.dart';
+import '../../utils/responsive.dart';
+import '../nav_destination_style.dart';
+import 'settings_reorderable_rows.dart';
+import 'settings_tiles.dart';
 
-/// 通用设置子页：底部导航、语言、应用名称与震动反馈（按改动频率排序）。
+/// 设置首屏「通用与关于」卡：启动页 / 底栏 / 语言 / 震动 / 桌面行为 /
+/// 快捷键 / 更新。
 ///
-/// 从设置首屏「通用与数据」进入，在设置弹层内部导航（见 `settings_sheet.dart`）。
-class GeneralSettingsPage extends StatefulWidget {
-  const GeneralSettingsPage({super.key});
+/// 原先独立的「通用设置」子页收进首屏，目录入口不再单开子页。托盘、窗口与
+/// 震动反馈是设备本地键，卡底给一句说明。
+class GeneralSettingsSection extends StatefulWidget {
+  const GeneralSettingsSection({super.key});
 
   @override
-  State<GeneralSettingsPage> createState() => _GeneralSettingsPageState();
+  State<GeneralSettingsSection> createState() => _GeneralSettingsSectionState();
 }
 
-class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
+class _GeneralSettingsSectionState extends State<GeneralSettingsSection> {
   /// 当前语言偏好（null = 跟随系统）；异步装载一次，切换后本地更新。
   Locale? _locale;
 
@@ -66,100 +71,123 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
     final nav = context.watch<NavProvider?>();
     // 托盘设置同理：缺省（或非桌面平台）时隐藏「桌面」分组。
     final tray = context.watch<TraySettings?>();
+    final update = context.watch<UpdateProvider?>();
 
-    return SettingsSubPage(
-      title: l10n.generalTitle,
-      children: [
-        // 行序按改动频率：底部导航（常改）→ 震动反馈 → 语言 → 应用名称
-        // → 桌面行为。
-        if (nav != null) ...[
-          SettingsSectionCard(
-            title: l10n.settingsBottomNavTitle,
-            footer: SettingsSectionHint(text: l10n.settingsBottomNavHint),
-            children: [
-              _StartupPageSettings(provider: nav),
-              _BottomNavSettings(provider: nav),
-            ],
-          ),
-          const SizedBox(height: kSettingsSectionSpacing),
-        ],
-        SettingsSectionCard(
-          children: [
-            // 震动反馈（设备本地键，不随同步）：关掉后全应用触感一起静音。
-            ValueListenableBuilder<bool>(
-              valueListenable: HapticsService.enabledNotifier,
-              builder: (context, hapticsEnabled, _) => SettingsSwitchTile(
-                switchKey: const Key('settingsHapticsSwitch'),
-                icon: Icons.vibration_rounded,
-                title: l10n.settingsHapticsTitle,
-                subtitle: l10n.settingsHapticsSubtitle,
-                value: hapticsEnabled,
-                onChanged: HapticsService.setEnabled,
-              ),
-            ),
-            SettingsChoiceRow<String>(
-              key: const Key('settingsLanguageItem'),
-              icon: Icons.language_rounded,
-              title: l10n.languageSettingTitle,
-              value: _locale?.languageCode ?? 'system',
-              options: [
-                ('system', l10n.languageSystem),
-                ('en', l10n.languageEnglish),
-                ('zh', l10n.languageSimplifiedChinese),
+    final desktopTray = AppTray.isSupported && tray != null;
+    return SettingsSectionCard(
+      title: l10n.settingsGeneralAboutTitle,
+      // 托盘 / 窗口只在桌面出现；移动端没有这两行，不显示会撒谎的说明。
+      footer: desktopTray
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (AppTray.isLinuxDesktop) ...[
+                  SettingsSectionHint(text: l10n.settingsTrayLinuxHint),
+                  const SizedBox(height: 4),
+                ],
+                SettingsSectionHint(text: l10n.settingsGeneralDeviceLocalHint),
               ],
-              onChanged: _setLanguage,
-            ),
-            // 应用名称：顶栏无歌曲时显示的自定义文案。
-            ValueListenableBuilder<String>(
-              valueListenable: AppBrandingService.titleNotifier,
-              builder: (context, appTitle, _) => SettingsNavTile(
-                key: const Key('settingsAppTitleItem'),
-                icon: Icons.badge_rounded,
-                title: l10n.settingsAppTitle,
-                subtitle: appTitle,
-                onTap: () => _showAppTitleDialog(context, l10n),
-              ),
-            ),
+            )
+          : null,
+      children: [
+        // 行序按改动频率：启动页（常改）→ 底栏 → 震动 → 语言 → 应用名称
+        // → 桌面行为 → 快捷键 / 更新。
+        if (nav != null) ...[
+          _StartupPageSettings(provider: nav),
+          _BottomNavSettings(provider: nav),
+        ],
+        ValueListenableBuilder<bool>(
+          valueListenable: HapticsService.enabledNotifier,
+          builder: (context, hapticsEnabled, _) => SettingsSwitchTile(
+            switchKey: const Key('settingsHapticsSwitch'),
+            icon: Icons.vibration_rounded,
+            title: l10n.settingsHapticsTitle,
+            subtitle: l10n.settingsHapticsSubtitle,
+            value: hapticsEnabled,
+            onChanged: HapticsService.setEnabled,
+          ),
+        ),
+        SettingsChoiceRow<String>(
+          key: const Key('settingsLanguageItem'),
+          icon: Icons.language_rounded,
+          title: l10n.languageSettingTitle,
+          value: _locale?.languageCode ?? 'system',
+          options: [
+            ('system', l10n.languageSystem),
+            ('en', l10n.languageEnglish),
+            ('zh', l10n.languageSimplifiedChinese),
           ],
+          onChanged: _setLanguage,
+        ),
+        // 应用名称：顶栏无歌曲时显示的自定义文案。
+        ValueListenableBuilder<String>(
+          valueListenable: AppBrandingService.titleNotifier,
+          builder: (context, appTitle, _) => SettingsNavTile(
+            key: const Key('settingsAppTitleItem'),
+            icon: Icons.badge_rounded,
+            title: l10n.settingsAppTitle,
+            subtitle: appTitle,
+            onTap: () => _showAppTitleDialog(context, l10n),
+          ),
         ),
         // 桌面托盘：Linux / Windows / macOS 显示（其余平台 AppTray.isSupported
         // 为 false，开关没有意义）。
-        if (AppTray.isSupported && tray != null) ...[
-          const SizedBox(height: kSettingsSectionSpacing),
-          SettingsSectionCard(
-            title: l10n.settingsDesktopSection,
-            // Linux 托盘图标依赖桌面面板：GNOME 需 AppIndicator 扩展，
-            // 否则图标不显示（只在 Linux 提醒，避免 Windows 用户困惑）。
-            footer: AppTray.isLinuxDesktop
-                ? SettingsSectionHint(text: l10n.settingsTrayLinuxHint)
-                : null,
-            children: [
-              SettingsSwitchTile(
-                switchKey: const Key('settingsCloseToTraySwitch'),
-                icon: Icons.desktop_windows_rounded,
-                title: l10n.settingsCloseToTray,
-                subtitle: l10n.settingsCloseToTraySubtitle,
-                value: tray.closeToTray,
-                onChanged: tray.setCloseToTray,
-              ),
-              // 记住窗口位置与大小（设备本地键，不随同步）：重启后窗口回到
-              // 上次的位置/尺寸（最大化状态一并恢复）。
-              ValueListenableBuilder<bool>(
-                valueListenable: WindowSettings.rememberBoundsNotifier,
-                builder: (context, rememberBounds, _) => SettingsSwitchTile(
-                  switchKey: const Key('settingsRememberWindowBoundsSwitch'),
-                  icon: Icons.window_rounded,
-                  title: l10n.settingsRememberWindowBounds,
-                  subtitle: l10n.settingsRememberWindowBoundsSubtitle,
-                  value: rememberBounds,
-                  onChanged: WindowSettings.setRememberBounds,
-                ),
-              ),
-            ],
+        if (desktopTray) ...[
+          SettingsSwitchTile(
+            switchKey: const Key('settingsCloseToTraySwitch'),
+            icon: Icons.desktop_windows_rounded,
+            title: l10n.settingsCloseToTray,
+            subtitle: l10n.settingsCloseToTraySubtitle,
+            value: tray.closeToTray,
+            onChanged: tray.setCloseToTray,
+          ),
+          ValueListenableBuilder<bool>(
+            valueListenable: WindowSettings.rememberBoundsNotifier,
+            builder: (context, rememberBounds, _) => SettingsSwitchTile(
+              switchKey: const Key('settingsRememberWindowBoundsSwitch'),
+              icon: Icons.window_rounded,
+              title: l10n.settingsRememberWindowBounds,
+              subtitle: l10n.settingsRememberWindowBoundsSubtitle,
+              value: rememberBounds,
+              onChanged: WindowSettings.setRememberBounds,
+            ),
           ),
         ],
+        // 快捷键：软件内 / 全局两组的总开关与绑定自定义。只在桌面平台显示
+        // （移动端软件内快捷键与全局热键都不注册）。
+        if (isDesktopPlatform())
+          SettingsNavTile(
+            key: const Key('settingsShortcutsItem'),
+            icon: Icons.keyboard_rounded,
+            title: l10n.settingsShortcutsTitle,
+            subtitle: l10n.settingsShortcutsSubtitle,
+            onTap: () =>
+                openSettingsSubPage(context, const ShortcutSettingsPage()),
+          ),
+        // 关于与更新：版本 / 渠道 / 自动检查 / 下载安装。
+        if (update != null)
+          SettingsNavTile(
+            key: const Key('settingsUpdateItem'),
+            icon: Icons.system_update_alt_rounded,
+            title: l10n.settingsUpdateTitle,
+            subtitle: _updateSubtitle(l10n, update),
+            onTap: () =>
+                openSettingsSubPage(context, const UpdateSettingsPage()),
+          ),
       ],
     );
+  }
+
+  /// 更新入口副标题：上次安装未完成优先，其次「可更新至 x.y.z」，否则当前版本。
+  String _updateSubtitle(AppLocalizations l10n, UpdateProvider provider) {
+    if (provider.installResult == UpdateInstallResult.incomplete) {
+      return l10n.updateInstallIncomplete;
+    }
+    final version = provider.release?.version;
+    if (provider.updateAvailable && version != null && version.isNotEmpty) {
+      return l10n.settingsUpdateAvailable(version);
+    }
+    return l10n.settingsUpdateSubtitle(provider.currentVersionLabel);
   }
 
   /// 自定义应用名称：文本输入弹层（空白回退默认名称 Molia）。
@@ -264,12 +292,19 @@ class _BottomNavSettings extends StatelessWidget {
     final nav = provider;
     final order = nav.order;
 
-    return SettingsReorderableRows(
-      itemCount: order.length,
-      itemKey: (index) => ValueKey(order[index]),
-      itemBuilder: (context, index) =>
-          _buildRow(context, l10n, nav, order[index], index),
-      onReorder: (oldIndex, newIndex) => nav.reorder(oldIndex, newIndex),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SettingsReorderableRows(
+          itemCount: order.length,
+          itemKey: (index) => ValueKey(order[index]),
+          itemBuilder: (context, index) =>
+              _buildRow(context, l10n, nav, order[index], index),
+          onReorder: (oldIndex, newIndex) => nav.reorder(oldIndex, newIndex),
+        ),
+        const SizedBox(height: kSettingsSmallSpacing),
+        SettingsSectionHint(text: l10n.settingsBottomNavHint),
+      ],
     );
   }
 

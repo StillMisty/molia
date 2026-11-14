@@ -290,12 +290,6 @@ abstract class AppLocalizations {
   /// **'Appearance'**
   String get settingsAppearanceTitle;
 
-  /// No description provided for @settingsCoversSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Covers'**
-  String get settingsCoversSection;
-
   /// No description provided for @settingsThemeMode.
   ///
   /// In en, this message translates to:
@@ -626,6 +620,12 @@ abstract class AppLocalizations {
   /// **'Playback details'**
   String get settingsPlaybackDetailsTitle;
 
+  /// No description provided for @settingsPlaybackDetailsDeviceLocalHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback details stay on this device and are not synced.'**
+  String get settingsPlaybackDetailsDeviceLocalHint;
+
   /// No description provided for @settingsFadeTitle.
   ///
   /// In en, this message translates to:
@@ -809,7 +809,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsLyricsSection.
   ///
   /// In en, this message translates to:
-  /// **'Lyrics & display'**
+  /// **'Lyrics'**
   String get settingsLyricsSection;
 
   /// No description provided for @settingsBottomNavTitle.
@@ -878,12 +878,6 @@ abstract class AppLocalizations {
   /// **'Single repeat'**
   String get playModeSingleRepeat;
 
-  /// No description provided for @generalTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'General'**
-  String get generalTitle;
-
   /// No description provided for @settingsHapticsTitle.
   ///
   /// In en, this message translates to:
@@ -896,47 +890,35 @@ abstract class AppLocalizations {
   /// **'Light vibration on taps such as navigation and playback'**
   String get settingsHapticsSubtitle;
 
-  /// No description provided for @settingsGeneralTitle.
+  /// No description provided for @settingsGeneralAboutTitle.
   ///
   /// In en, this message translates to:
-  /// **'General settings'**
-  String get settingsGeneralTitle;
+  /// **'General & about'**
+  String get settingsGeneralAboutTitle;
 
-  /// No description provided for @settingsGeneralSubtitle.
+  /// No description provided for @settingsGeneralDeviceLocalHint.
   ///
   /// In en, this message translates to:
-  /// **'Language, app name and bottom navigation'**
-  String get settingsGeneralSubtitle;
+  /// **'Tray, window and vibration settings stay on this device and are not synced.'**
+  String get settingsGeneralDeviceLocalHint;
 
-  /// No description provided for @settingsDataSection.
+  /// No description provided for @settingsAutoSaveHint.
   ///
   /// In en, this message translates to:
-  /// **'Data'**
-  String get settingsDataSection;
+  /// **'Changes take effect immediately'**
+  String get settingsAutoSaveHint;
+
+  /// No description provided for @settingsMoreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get settingsMoreActions;
 
   /// No description provided for @dataManagementTitle.
   ///
   /// In en, this message translates to:
   /// **'Data & storage'**
   String get dataManagementTitle;
-
-  /// No description provided for @settingsDataSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Cache, downloads and data import/export'**
-  String get settingsDataSubtitle;
-
-  /// No description provided for @settingsDataStorageSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Storage & stats'**
-  String get settingsDataStorageSection;
-
-  /// No description provided for @settingsDataPortabilitySection.
-  ///
-  /// In en, this message translates to:
-  /// **'Import & export'**
-  String get settingsDataPortabilitySection;
 
   /// No description provided for @exportDataTitle.
   ///
@@ -1549,12 +1531,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'When off, it is hidden from search and makes no network requests'**
   String get anyListenEnableSubtitle;
-
-  /// No description provided for @anyListenSave.
-  ///
-  /// In en, this message translates to:
-  /// **'Save'**
-  String get anyListenSave;
 
   /// No description provided for @anyListenTest.
   ///
@@ -3020,6 +2996,18 @@ abstract class AppLocalizations {
   /// **'Clear'**
   String get cacheClearPartition;
 
+  /// No description provided for @cacheClearPartitionNamed.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear {part}'**
+  String cacheClearPartitionNamed(String part);
+
+  /// No description provided for @cacheUsageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Used space'**
+  String get cacheUsageTitle;
+
   /// No description provided for @cacheClearAll.
   ///
   /// In en, this message translates to:
@@ -4334,23 +4322,11 @@ abstract class AppLocalizations {
   /// **'Connected — config saved'**
   String get aiDjTestSaved;
 
-  /// No description provided for @aiDjSaveConfig.
-  ///
-  /// In en, this message translates to:
-  /// **'Save'**
-  String get aiDjSaveConfig;
-
   /// No description provided for @aiDjClearConfig.
   ///
   /// In en, this message translates to:
   /// **'Clear'**
   String get aiDjClearConfig;
-
-  /// No description provided for @aiDjConfigSaved.
-  ///
-  /// In en, this message translates to:
-  /// **'Saved'**
-  String get aiDjConfigSaved;
 
   /// No description provided for @aiDjQueued.
   ///
@@ -5246,6 +5222,18 @@ abstract class AppLocalizations {
   /// **'What gets sent'**
   String get aiDjPrefsDataScope;
 
+  /// No description provided for @aiDjScopeSentCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} categories sent'**
+  String aiDjScopeSentCount(int count);
+
+  /// No description provided for @aiDjScopeSheetHint.
+  ///
+  /// In en, this message translates to:
+  /// **'These are sent to the AI service to avoid repeat recommendations.'**
+  String get aiDjScopeSheetHint;
+
   /// No description provided for @aiDjScopeSummary.
   ///
   /// In en, this message translates to:
@@ -5407,6 +5395,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Any device that knows the passphrase can read and write all synced data; reset it if leaked.'**
   String get syncPassphraseTrustHint;
+
+  /// No description provided for @syncPassphraseDeviceLocalHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The sync passphrase stays on this device and is never uploaded.'**
+  String get syncPassphraseDeviceLocalHint;
 
   /// No description provided for @syncPassphraseCopy.
   ///
@@ -8137,7 +8131,7 @@ abstract class AppLocalizations {
   /// No description provided for @downloadsMaintenanceSection.
   ///
   /// In en, this message translates to:
-  /// **'File maintenance'**
+  /// **'Advanced'**
   String get downloadsMaintenanceSection;
 
   /// No description provided for @downloadsCleanupParts.
@@ -8715,12 +8709,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Bilibili'**
   String get providerBilibili;
-
-  /// No description provided for @settingsTroubleshootingSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Troubleshooting'**
-  String get settingsTroubleshootingSection;
 
   /// No description provided for @diagnosticsTitle.
   ///

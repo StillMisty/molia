@@ -5,7 +5,7 @@
 - 相关：`lib/services/window/app_tray.dart` / `app_tray_stub.dart` / `app_tray_io.dart`、
   `lib/services/window/tray_menu_labels.dart`、`lib/services/window/tray_settings.dart`、
   `lib/services/window/window_chrome.dart` / `window_chrome_io.dart` / `window_chrome_stub.dart`、
-  `lib/pages/general_settings_page.dart`、`lib/main.dart`、`assets/icons/tray_icon.png`、
+  `lib/widgets/settings/general_settings_section.dart`、`lib/main.dart`、`assets/icons/tray_icon.png`、
   `test/architecture/tray_import_test.dart`、`integration_test/lx_engine_integration_test.dart`、
   ADR-0004、`docs/pitfalls.md` #30 / #35
 

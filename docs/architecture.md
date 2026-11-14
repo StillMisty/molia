@@ -1634,8 +1634,9 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   收藏页多选栏也走这套收口：浮层缩放是 spatial 弹簧、透明度从同一进度截断
   0..1；多选栏与页头同高交叉淡入淡出（effects 时长 + 曲线，离场层
   `IgnorePointer`）。
-- 设置页：首屏 8 个语义分区（外观 / 封面 / 播放 / 播放细节 / 歌词与展示 /
-  内容与来源 / 通用 / 数据），分组标题 + 分段卡片行：行表面统一走共享的
+- 设置页：首屏 6 个语义分区（外观〔含封面〕/ 播放〔含播放细节〕/ 歌词 /
+  内容与来源 / 数据与存储 / 通用与关于），不再有「通用」「数据」目录子页；
+  分组标题 + 分段卡片行：行表面统一走共享的
   `lib/widgets/card_list_surface.dart`
   （`CardListSurface`：静止内 4dp / 首末外侧 16dp、hover 12dp、press 16dp，
   expressive spatial 形状弹簧；`TrackRow`、设置行、AI 推荐卡同一套形状语言），
@@ -1651,7 +1652,7 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   ≥5 项或长文案 → Dropdown（必设 `fieldStyle.hintText`）、区间数值 → Slider、
   大范围绝对量（缓存上限）→ Value + 输入弹层（带常用预设）；
   子页（音源 / 歌词显示〔二级：歌词页 / 歌词输出 / 桌面歌词 / 通知·锁屏 / 蓝牙〕/
-  AI 推歌 / 通用 / 数据与存储 / 缓存 / 统计）经设置弹层壳
+  AI 推歌 / 缓存 / 下载 / 统计 / 同步 / 更新）经设置弹层壳
   （`lib/widgets/settings/settings_sheet.dart`，内部 Navigator 由
   `lib/widgets/modal_page_navigator.dart` 提供）在同一弹层内 push
   （`openSettingsSubPage`）；发现页打开的 AI 页弹层也使用同一个壳，

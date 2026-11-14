@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -35,29 +37,44 @@ class AnyListenPage extends StatefulWidget {
 }
 
 class _AnyListenPageState extends State<AnyListenPage> {
+  /// 文本输入落盘防抖：逐字写会反复重载音源，停顿后再保存。
+  static const Duration _saveDelay = Duration(milliseconds: 400);
+
   final _serverUrlController = TextEditingController();
   final _tokenController = TextEditingController();
 
+  late final SourcesProvider _provider;
+  Timer? _saveTimer;
+  bool _pendingSave = false;
   bool _enabled = false;
   bool _loading = true;
-  bool _saving = false;
   bool _testing = false;
   bool _tokenVisible = false;
   String? _serverUrlError;
   String? _testMessage;
   bool _testOk = false;
 
-  SourcesProvider get _provider =>
-      widget.provider ?? context.read<SourcesProvider>();
-
   @override
   void initState() {
     super.initState();
+    _provider = widget.provider ?? context.read<SourcesProvider>();
     _load();
   }
 
   @override
   void dispose() {
+    _saveTimer?.cancel();
+    // 防抖窗口内退出页面：补写一次，避免最后一段输入丢失。dispose 里不再
+    // 查 l10n（祖先查找在卸载阶段不安全），只做纯领域校验。
+    if (_pendingSave) {
+      final raw = _serverUrlController.text.trim();
+      final valid = raw.isEmpty
+          ? !_enabled
+          : AnyListenConfig.validateServerUrl(raw) == null;
+      if (valid) {
+        unawaited(_provider.saveAnyListenConfig(_formConfig()));
+      }
+    }
     _serverUrlController.dispose();
     _tokenController.dispose();
     super.dispose();
@@ -91,25 +108,51 @@ class _AnyListenPageState extends State<AnyListenPage> {
     return AnyListenConfig.validateServerUrl(raw);
   }
 
-  Future<void> _save() async {
+  /// 文本变化：清掉旧错误并安排一次落盘。
+  void _onFieldChanged() {
+    if (_serverUrlError != null) {
+      setState(() => _serverUrlError = null);
+    }
+    _scheduleSave();
+  }
+
+  void _scheduleSave() {
+    _pendingSave = true;
+    _saveTimer?.cancel();
+    _saveTimer = Timer(_saveDelay, () => unawaited(_persist()));
+  }
+
+  /// 即时写入当前表单；地址不合法时只显示行内错误，不落盘。
+  Future<void> _persist() async {
+    _saveTimer?.cancel();
+    if (!_pendingSave) return;
+    _pendingSave = false;
     final l10n = _l10n(context);
     final error = _validateAddress(l10n);
     if (error != null) {
-      setState(() => _serverUrlError = error);
+      if (mounted) setState(() => _serverUrlError = error);
       return;
     }
-    setState(() {
-      _serverUrlError = null;
-      _saving = true;
-    });
-
+    if (mounted) setState(() => _serverUrlError = null);
     final saved = await _provider.saveAnyListenConfig(_formConfig());
-
     if (!mounted) return;
-    setState(() => _saving = false);
     if (!saved) {
       M3ESnackbar.show(context, message: l10n.anyListenSaveFailed);
     }
+  }
+
+  /// 启用开关：先校验地址，再立即落盘（不等防抖）。
+  Future<void> _setEnabled(bool value) async {
+    if (value) {
+      final error = _validateAddress(_l10n(context));
+      if (error != null) {
+        setState(() => _serverUrlError = error);
+        return;
+      }
+    }
+    setState(() => _enabled = value);
+    _scheduleSave();
+    await _persist();
   }
 
   Future<void> _test() async {
@@ -159,6 +202,7 @@ class _AnyListenPageState extends State<AnyListenPage> {
                 const SizedBox(height: kSettingsSectionSpacing),
                 SettingsSectionCard(
                   title: l10n.anyListenServerSection,
+                  footer: SettingsSectionHint(text: l10n.settingsAutoSaveHint),
                   children: [
                     _fieldRow(
                       context,
@@ -171,11 +215,7 @@ class _AnyListenPageState extends State<AnyListenPage> {
                         placeholder: l10n.anyListenServerUrlHint,
                         errorText: _serverUrlError,
                         leading: const Icon(Icons.dns_rounded),
-                        onChanged: (_) {
-                          if (_serverUrlError != null) {
-                            setState(() => _serverUrlError = null);
-                          }
-                        },
+                        onChanged: (_) => _onFieldChanged(),
                       ),
                     ),
                     _fieldRow(
@@ -185,6 +225,7 @@ class _AnyListenPageState extends State<AnyListenPage> {
                       child: M3ETextField(
                         controller: _tokenController,
                         obscureText: !_tokenVisible,
+                        onChanged: (_) => _onFieldChanged(),
                         variant: M3ETextFieldVariant.outlined,
                         placeholder: l10n.anyListenTokenPlaceholder,
                         leading: const Icon(Icons.key_rounded),
@@ -212,38 +253,23 @@ class _AnyListenPageState extends State<AnyListenPage> {
                       title: l10n.anyListenEnable,
                       subtitle: l10n.anyListenEnableSubtitle,
                       value: _enabled,
-                      onChanged: (value) => setState(() => _enabled = value),
+                      onChanged: (value) => unawaited(_setEnabled(value)),
                     ),
                     Padding(
                       padding: const EdgeInsets.only(
                         top: kSettingsSmallSpacing,
                       ),
-                      child: M3EButtonGroup(
-                        type: M3EButtonGroupType.standard,
-                        style: M3EButtonStyle.tonal,
-                        actions: [
-                          M3EButtonGroupAction(
-                            icon: _saving
-                                ? const _ButtonSpinner()
-                                : const Icon(Icons.save_rounded),
-                            label: Text(l10n.anyListenSave),
-                            enabled: !_saving,
-                          ),
-                          M3EButtonGroupAction(
-                            icon: _testing
-                                ? const _ButtonSpinner()
-                                : const Icon(Icons.network_check_rounded),
-                            label: Text(l10n.anyListenTest),
-                            enabled: !_testing,
-                          ),
-                        ],
-                        onSelectedIndexChanged: (index) {
-                          if (index == 0) {
-                            _save();
-                          } else if (index == 1) {
-                            _test();
-                          }
-                        },
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: M3EButton.tonal(
+                          key: const Key('anyListenTestButton'),
+                          enabled: !_testing,
+                          onPressed: _test,
+                          icon: _testing
+                              ? const _ButtonSpinner()
+                              : const Icon(Icons.network_check_rounded),
+                          label: Text(l10n.anyListenTest),
+                        ),
                       ),
                     ),
                     if (_testMessage != null)

@@ -77,6 +77,46 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
 
     return SettingsSubPage(
       title: l10n.downloadsManageTitle,
+      actions: [
+        // 破坏性批量动作收进顶栏 ⋮：卡片里只留任务 / 维护本身。
+        M3EMenu.entries(
+          key: const Key('downloadsOverflowMenu'),
+          position: M3EMenuAnchorPosition.bottomEnd,
+          anchorBuilder: (context, open) => M3EIconButton(
+            key: const Key('downloadsOverflowButton'),
+            variant: M3EIconButtonVariant.standard,
+            icon: const Icon(Icons.more_vert_rounded),
+            semanticLabel: l10n.settingsMoreActions,
+            onPressed: open,
+          ),
+          onSelected: (value) {
+            if (value == 'cancelAll' && downloads != null) {
+              _cancelQueued(downloads);
+            } else if (value == 'cleanupOrphans' && maintenance != null) {
+              unawaited(_cleanupOrphans(maintenance));
+            }
+          },
+          entries: [
+            M3EMenuEntry(
+              label: l10n.downloadsCancelAll,
+              value: 'cancelAll',
+              leading: const Icon(Icons.playlist_remove_rounded),
+              enabled:
+                  !_busy &&
+                  downloads != null &&
+                  downloads.taskGroups.queued.length > 1,
+              isDestructive: true,
+            ),
+            M3EMenuEntry(
+              label: l10n.downloadsCleanupOrphans,
+              value: 'cleanupOrphans',
+              leading: const Icon(Icons.delete_sweep_rounded),
+              enabled: !_busy && maintenance != null,
+              isDestructive: true,
+            ),
+          ],
+        ),
+      ],
       children: [
         _buildTasksSection(l10n, downloads),
         const SizedBox(height: kSettingsSectionSpacing),
@@ -129,16 +169,6 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
               onTap: _busy || maintenance == null
                   ? null
                   : () => unawaited(_cleanupParts(maintenance)),
-            ),
-            SettingsNavTile(
-              key: const Key('downloadsCleanupOrphansItem'),
-              icon: Icons.delete_sweep_rounded,
-              title: l10n.downloadsCleanupOrphans,
-              subtitle: l10n.downloadsCleanupOrphansSubtitle,
-              isDestructive: true,
-              onTap: _busy || maintenance == null
-                  ? null
-                  : () => unawaited(_cleanupOrphans(maintenance)),
             ),
             // 公共目录补发布只在 Android 有语义（其余平台下载根目录本身
             // 就是公共目录）。
@@ -227,15 +257,6 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                     subtitle: '',
                   )
                 else ...[
-                  if (queued.length > 1)
-                    SettingsNavTile(
-                      key: const Key('downloadsCancelAllItem'),
-                      icon: Icons.playlist_remove_rounded,
-                      title: l10n.downloadsCancelAll,
-                      subtitle: '',
-                      isDestructive: true,
-                      onTap: () => _cancelQueued(downloads),
-                    ),
                   for (final task in [...running, ...visibleQueued])
                     _taskTile(l10n, downloads, task),
                   if (hiddenQueued > 0)

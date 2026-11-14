@@ -197,11 +197,15 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
         const SizedBox(height: kSettingsSectionSpacing),
         _buildArtworkSection(l10n),
         const SizedBox(height: 24),
-        M3EButton.icon(
-          style: M3EButtonStyle.tonal,
-          onPressed: _busy ? null : _clearAll,
-          icon: const Icon(Icons.delete_sweep_rounded),
-          label: Text(l10n.cacheClearAll),
+        // 唯一整行主操作：全清仍走确认弹层。
+        SizedBox(
+          width: double.infinity,
+          child: M3EButton.icon(
+            style: M3EButtonStyle.tonal,
+            onPressed: _busy ? null : _clearAll,
+            icon: const Icon(Icons.delete_sweep_rounded),
+            label: Text(l10n.cacheClearAll),
+          ),
         ),
       ],
     );
@@ -250,14 +254,13 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
           title: l10n.cachePolicyAudioScope,
           subtitle: l10n.cachePolicyAudioHint,
         ),
-        // 用量 + 单清：危险操作行放分区末行（error 容器成对色）。
-        SettingsNavTile(
+        // 用量行 + 行尾清理按钮：破坏性动作不占整行，也不夹在普通行中间。
+        SettingsInfoTile(
           key: const Key('cacheClearAudioItem'),
-          icon: Icons.delete_outline_rounded,
-          title: l10n.cacheClearPartition,
+          icon: Icons.audiotrack_rounded,
+          title: l10n.cacheUsageTitle,
           subtitle: _usageText(l10n, CachePartition.audio),
-          isDestructive: true,
-          onTap: _busy ? null : () => _clear(CachePartition.audio),
+          trailing: _clearButton(l10n, CachePartition.audio),
         ),
       ],
     );
@@ -286,13 +289,12 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
             },
           ),
         ),
-        SettingsNavTile(
+        SettingsInfoTile(
           key: const Key('cacheClearLyricsItem'),
-          icon: Icons.delete_outline_rounded,
-          title: l10n.cacheClearPartition,
+          icon: Icons.lyrics_rounded,
+          title: l10n.cacheUsageTitle,
           subtitle: _usageText(l10n, CachePartition.lyrics),
-          isDestructive: true,
-          onTap: _busy ? null : () => _clear(CachePartition.lyrics),
+          trailing: _clearButton(l10n, CachePartition.lyrics),
         ),
       ],
     );
@@ -340,15 +342,29 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
             },
           ),
         ),
-        SettingsNavTile(
+        SettingsInfoTile(
           key: const Key('cacheClearArtworkItem'),
-          icon: Icons.delete_outline_rounded,
-          title: l10n.cacheClearPartition,
+          icon: Icons.image_rounded,
+          title: l10n.cacheUsageTitle,
           subtitle: _usageText(l10n, CachePartition.artwork),
-          isDestructive: true,
-          onTap: _busy ? null : () => _clear(CachePartition.artwork),
+          trailing: _clearButton(l10n, CachePartition.artwork),
         ),
       ],
+    );
+  }
+
+  /// 行尾清理按钮：图标语义带分区名，点击仍先确认。
+  Widget _clearButton(AppLocalizations l10n, CachePartition partition) {
+    return M3EIconButton(
+      variant: M3EIconButtonVariant.standard,
+      icon: Icon(
+        Icons.delete_outline_rounded,
+        color: Theme.of(context).colorScheme.error,
+      ),
+      semanticLabel: l10n.cacheClearPartitionNamed(
+        _partitionLabel(l10n, partition),
+      ),
+      onPressed: _busy ? null : () => _clear(partition),
     );
   }
 

@@ -119,9 +119,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAppearanceTitle => 'Appearance';
 
   @override
-  String get settingsCoversSection => 'Covers';
-
-  @override
   String get settingsThemeMode => 'Theme mode';
 
   @override
@@ -289,6 +286,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPlaybackDetailsTitle => 'Playback details';
 
   @override
+  String get settingsPlaybackDetailsDeviceLocalHint =>
+      'Playback details stay on this device and are not synced.';
+
+  @override
   String get settingsFadeTitle => 'Fade in and out';
 
   @override
@@ -389,7 +390,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsContentSection => 'Content & sources';
 
   @override
-  String get settingsLyricsSection => 'Lyrics & display';
+  String get settingsLyricsSection => 'Lyrics';
 
   @override
   String get settingsBottomNavTitle => 'Bottom navigation';
@@ -429,9 +430,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playModeSingleRepeat => 'Single repeat';
 
   @override
-  String get generalTitle => 'General';
-
-  @override
   String get settingsHapticsTitle => 'Vibration feedback';
 
   @override
@@ -439,26 +437,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'Light vibration on taps such as navigation and playback';
 
   @override
-  String get settingsGeneralTitle => 'General settings';
+  String get settingsGeneralAboutTitle => 'General & about';
 
   @override
-  String get settingsGeneralSubtitle =>
-      'Language, app name and bottom navigation';
+  String get settingsGeneralDeviceLocalHint =>
+      'Tray, window and vibration settings stay on this device and are not synced.';
 
   @override
-  String get settingsDataSection => 'Data';
+  String get settingsAutoSaveHint => 'Changes take effect immediately';
+
+  @override
+  String get settingsMoreActions => 'More actions';
 
   @override
   String get dataManagementTitle => 'Data & storage';
-
-  @override
-  String get settingsDataSubtitle => 'Cache, downloads and data import/export';
-
-  @override
-  String get settingsDataStorageSection => 'Storage & stats';
-
-  @override
-  String get settingsDataPortabilitySection => 'Import & export';
 
   @override
   String get exportDataTitle => 'Export data';
@@ -792,9 +784,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get anyListenEnableSubtitle =>
       'When off, it is hidden from search and makes no network requests';
-
-  @override
-  String get anyListenSave => 'Save';
 
   @override
   String get anyListenTest => 'Test connection';
@@ -1623,6 +1612,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cacheClearPartition => 'Clear';
 
   @override
+  String cacheClearPartitionNamed(String part) {
+    return 'Clear $part';
+  }
+
+  @override
+  String get cacheUsageTitle => 'Used space';
+
+  @override
   String get cacheClearAll => 'Clear all caches';
 
   @override
@@ -2352,13 +2349,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjTestSaved => 'Connected — config saved';
 
   @override
-  String get aiDjSaveConfig => 'Save';
-
-  @override
   String get aiDjClearConfig => 'Clear';
-
-  @override
-  String get aiDjConfigSaved => 'Saved';
 
   @override
   String aiDjQueued(int count) {
@@ -2863,6 +2854,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjPrefsDataScope => 'What gets sent';
 
   @override
+  String aiDjScopeSentCount(int count) {
+    return '$count categories sent';
+  }
+
+  @override
+  String get aiDjScopeSheetHint =>
+      'These are sent to the AI service to avoid repeat recommendations.';
+
+  @override
   String get aiDjScopeSummary => 'Listening summary';
 
   @override
@@ -2950,6 +2950,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get syncPassphraseTrustHint =>
       'Any device that knows the passphrase can read and write all synced data; reset it if leaked.';
+
+  @override
+  String get syncPassphraseDeviceLocalHint =>
+      'The sync passphrase stays on this device and is never uploaded.';
 
   @override
   String get syncPassphraseCopy => 'Copy passphrase';
@@ -4554,7 +4558,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get downloadsMaintenanceSection => 'File maintenance';
+  String get downloadsMaintenanceSection => 'Advanced';
 
   @override
   String get downloadsCleanupParts => 'Remove unfinished downloads';
@@ -4894,9 +4898,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get providerBilibili => 'Bilibili';
-
-  @override
-  String get settingsTroubleshootingSection => 'Troubleshooting';
 
   @override
   String get diagnosticsTitle => 'Troubleshooting';
