@@ -41,6 +41,8 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
   void initState() {
     super.initState();
     _provider = context.read<AiDjProvider>();
+    // 直接打开偏好页时也补齐配置读取（幂等；安全存储只在页面路径上读）。
+    unawaited(_provider.init());
     _extraController = TextEditingController(
       text: _provider.preferences.extraPrompt,
     );

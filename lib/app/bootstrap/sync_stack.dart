@@ -373,13 +373,12 @@ Future<SyncStack> buildSyncStack({
 
   // 可选子系统（跨设备同步）初始化失败不允许阻断启动：runApp 之前任何
   // 未捕获异常都会让桌面端停在「窗口已显示但没有首帧」的黑窗状态。
-  // 口令读取失败已在 SecureSettingsSecretStore 内降级为「未设置」，
-  // 这里再兜一层其它初始化异常（日志 + 继续，同步页表现为未配置）。
+  // 这里兜一层初始化异常（日志 + 继续，同步页表现为未配置）。
   //
-  // 引擎 init（含安全存储读口令）与调度器启动都后移到首帧之后
-  // （见 [startSync]）：两者都要碰安全存储 / 电量与网络探针
-  // （sync_scheduler 的 refreshEnvironment），不参与首帧内容，
-  // 留在 runApp 前只是让用户多等一次 IPC。
+  // 引擎 init 与调度器启动都后移到首帧之后（见 [startSync]）：启动路径
+  // 不读写安全存储（无钥匙串环境里 libsecret 会直接终止进程），调度器
+  // 还要跑电量 / 网络探针（sync_scheduler 的 refreshEnvironment），都不
+  // 参与首帧内容。
   //
   // 网络变化统一由 SyncScheduler.onNetworkChanged 处理（它自己订阅
   // dataSaver.networkEvents）：这里不再挂 ChangeNotifier 监听，避免同一次
@@ -394,11 +393,12 @@ Future<SyncStack> buildSyncStack({
   );
 }
 
-/// 首帧后的同步启动：引擎 init（安全存储读口令）→ 调度器启动。
+/// 首帧后的同步启动：引擎 init → 调度器启动。
 ///
-/// 组合根在 `post_frame_init.dart` 调用：这两步在启动装配
-/// 里最重（桌面 release 中位数 ~38ms），而同步状态面（设置页开关 / 口令）
-/// 在首帧后才有机会被看到。失败不阻断启动（见 docs/pitfalls.md #31）。
+/// 组合根在 `post_frame_init.dart` 调用：调度器要跑电量 / 网络探针
+/// （桌面 release 中位数 ~38ms），而同步状态面（设置页开关 / 口令）
+/// 在首帧后才有机会被看到。启动路径不读写安全存储。失败不阻断启动
+/// （见 docs/pitfalls.md #31）。
 Future<void> startSync(SyncStack sync) async {
   try {
     await sync.provider.init();

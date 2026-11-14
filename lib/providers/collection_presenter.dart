@@ -14,11 +14,16 @@ import '../utils/collection_row_query.dart';
 import 'library_collections.dart';
 import 'local_songs_collection.dart';
 
-/// 当前合集的四种形态（收藏 / 播放历史 / 本地歌曲 / 自建列表）。
-enum CollectionKind { favorites, history, localSongs, custom, smartList }
-
-/// 行内表格列档位（页面映射到 `TrackRowColumnSpec`，本层不依赖 widget）。
-enum CollectionColumnLayout { standard, history }
+/// 当前合集的形态（收藏 / 播放历史 / 本地歌曲 / 自建列表 / 智能列表 /
+/// 曲库聚合浏览）。
+enum CollectionKind {
+  favorites,
+  history,
+  localSongs,
+  custom,
+  smartList,
+  libraryBrowse,
+}
 
 /// 合集身份：与「行内容」无关的稳定部分（选中项、落库 id、展示名、键）。
 class CollectionIdentity {
@@ -49,14 +54,15 @@ class CollectionIdentity {
   bool get isLocalSongs => kind == CollectionKind.localSongs;
   bool get isCustom => kind == CollectionKind.custom;
   bool get isSmartList => kind == CollectionKind.smartList;
+  bool get isLibraryBrowse => kind == CollectionKind.libraryBrowse;
 
-  /// 当前合集的持久化键：收藏 / 历史 / 本地歌曲用固定键，自建列表按 id。
-  ///
-  /// 滚动偏移与合集顺序（弹层排序）共用同一套键。
+  /// 当前合集的持久化键：收藏 / 历史 / 本地歌曲 / 曲库用固定键，
+  /// 自建列表按 id。滚动偏移与合集顺序共用同一套键。
   String get collectionKey => switch (kind) {
     CollectionKind.history => LibraryCollections.historyOrderKey,
     CollectionKind.localSongs => LibraryCollections.downloadsOrderKey,
     CollectionKind.favorites => LibraryCollections.favoritesOrderKey,
+    CollectionKind.libraryBrowse => LibraryCollections.libraryBrowseOrderKey,
     CollectionKind.custom =>
       playlistId == null
           ? LibraryCollections.favoritesOrderKey
@@ -64,11 +70,6 @@ class CollectionIdentity {
     CollectionKind.smartList =>
       smartListId ?? LibraryCollections.favoritesOrderKey,
   };
-
-  /// 列规范：只有播放历史多一列「播放时间」。
-  CollectionColumnLayout get columnLayout => kind == CollectionKind.history
-      ? CollectionColumnLayout.history
-      : CollectionColumnLayout.standard;
 }
 
 /// 合集可见行的统一联合：三种行（列表曲目 / 播放历史 / 本地歌曲）共用同一
@@ -254,13 +255,13 @@ class CollectionView {
   int? get playlistId => identity.playlistId;
   String get displayName => identity.displayName;
   String get collectionKey => identity.collectionKey;
-  CollectionColumnLayout get columnLayout => identity.columnLayout;
 
   bool get isHistory => identity.isHistory;
   bool get isFavorites => identity.isFavorites;
   bool get isLocalSongs => identity.isLocalSongs;
   bool get isCustom => identity.isCustom;
   bool get isSmartList => identity.isSmartList;
+  bool get isLibraryBrowse => identity.isLibraryBrowse;
 
   /// 全量曲目（历史 / 本地歌曲集合为空）；只用于空态与「调整顺序」入口判定。
   final List<PlaylistTrack> tracks;
@@ -300,6 +301,7 @@ class CollectionPresenter {
     required String favoritesName,
     required String historyName,
     required String localSongsName,
+    required String libraryBrowseName,
     Map<String, String> smartListNames = const {},
   }) {
     final selected = LibraryCollections.resolveSelection(
@@ -314,12 +316,15 @@ class CollectionPresenter {
             LibraryCollections.historySentinel => CollectionKind.history,
             LibraryCollections.downloadsSentinel => CollectionKind.localSongs,
             LibraryCollections.favoritesSentinel => CollectionKind.favorites,
+            LibraryCollections.libraryBrowseSentinel =>
+              CollectionKind.libraryBrowse,
             _ => CollectionKind.custom,
           };
     final playlistId = switch (kind) {
       CollectionKind.history ||
       CollectionKind.localSongs ||
-      CollectionKind.smartList => null,
+      CollectionKind.smartList ||
+      CollectionKind.libraryBrowse => null,
       CollectionKind.favorites => favoritesId,
       CollectionKind.custom => selected,
     };
@@ -331,6 +336,7 @@ class CollectionPresenter {
         _playlistName(playlists, selected) ?? favoritesName,
       CollectionKind.smartList =>
         smartListNames[smartListId] ?? smartListId ?? favoritesName,
+      CollectionKind.libraryBrowse => libraryBrowseName,
     };
     return CollectionIdentity(
       selectedId: selected,
@@ -361,6 +367,8 @@ class CollectionPresenter {
       CollectionKind.smartList =>
         smartRows[smartKey] ?? const <CollectionRow>[],
       CollectionKind.favorites || CollectionKind.custom => tracks,
+      // 曲库由 LocalLibraryProvider 的聚合索引直接渲染，不经过合集行投影。
+      CollectionKind.libraryBrowse => const <CollectionRow>[],
     };
     final key = _CollectionViewKey(
       selectedId: identity.selectedId,
@@ -403,6 +411,7 @@ class CollectionPresenter {
         for (final row in smartRows[smartKey] ?? const <CollectionRow>[])
           if (_rowMatchesQuery(row, query)) row,
       ],
+      CollectionKind.libraryBrowse => const <CollectionRow>[],
     };
     final hasItems = switch (identity.kind) {
       CollectionKind.history => history.isNotEmpty,
@@ -410,11 +419,15 @@ class CollectionPresenter {
       CollectionKind.smartList =>
         (smartRows[smartKey] ?? const <CollectionRow>[]).isNotEmpty,
       CollectionKind.favorites || CollectionKind.custom => tracks.isNotEmpty,
+      CollectionKind.libraryBrowse => false,
     };
     final view = CollectionView(
       identity: identity,
       tracks:
-          identity.isHistory || identity.isLocalSongs || identity.isSmartList
+          identity.isHistory ||
+              identity.isLocalSongs ||
+              identity.isSmartList ||
+              identity.isLibraryBrowse
           ? const <PlaylistTrack>[]
           : tracks,
       visibleRows: visibleRows,

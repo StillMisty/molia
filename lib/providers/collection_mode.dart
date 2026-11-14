@@ -1,21 +1,22 @@
-/// 收藏页 / 曲库页的展示模式（歌曲 / 专辑 / 歌手）。
+/// 曲库聚合浏览的展示模式（专辑 / 歌手）。
 ///
 /// 设备本地 UI 状态：持久化到偏好，不登记设置注册表、不参与同步。
+/// 只服务「曲库」合集；收藏 / 历史 / 本地歌曲 / 自建列表不再有模式切换。
 library;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum CollectionMode { songs, albums, artists }
+enum CollectionMode { albums, artists }
 
 class CollectionModeStore extends ChangeNotifier {
   CollectionModeStore({Future<SharedPreferences> Function()? preferences})
     : _preferences = preferences ?? SharedPreferences.getInstance;
 
-  static const String prefsKey = 'favorites_collection_mode_v1';
+  static const String prefsKey = 'library_browse_mode_v1';
 
   final Future<SharedPreferences> Function() _preferences;
-  CollectionMode _mode = CollectionMode.songs;
+  CollectionMode _mode = CollectionMode.albums;
   bool _loaded = false;
 
   CollectionMode get mode => _mode;
@@ -27,7 +28,7 @@ class CollectionModeStore extends ChangeNotifier {
       final raw = prefs.getString(prefsKey);
       _mode = CollectionMode.values.firstWhere(
         (mode) => mode.name == raw,
-        orElse: () => CollectionMode.songs,
+        orElse: () => CollectionMode.albums,
       );
     } catch (e) {
       debugPrint('[Molia] 读取曲库模式失败: $e');

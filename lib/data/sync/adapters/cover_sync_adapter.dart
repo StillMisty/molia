@@ -27,10 +27,10 @@ import '../sync_stamp.dart';
 ///   已重置各传输的快照发布覆盖，全量快照会携带它们；此后首次登记 / 真实
 ///   变化 / 删除 / 墓碑后重设都追加日志，让增量对端收到；墓碑后重设必须取
 ///   新版本，不能复用旧戳（否则会输给更陈旧的墓碑）；
-/// - 只接受本地归一化产出的 JPEG（记录固定 `image/jpeg` / `.jpg`）：
-///   PNG / GIF / WebP 与损坏载荷一律跳过；单张图超过
-///   [CustomCoverStore.maxSyncBytes] 只跳过同步并记一次日志，本地封面继续
-///   可用；接收侧在 base64 解码前先按长度拒绝超限记录；
+/// - 接受 JPEG / GIF / WebP（静态图归一化为 JPEG，动图原样保留）：
+///   记录里的 `mime` 与实际字节必须一致；PNG 等未支持格式与损坏载荷一律
+///   跳过。单张图超过 [CustomCoverStore.maxSyncBytes] 在选图阶段就被拒绝，
+///   保证「能选就能同步」；接收侧在 base64 解码前先按长度拒绝超限记录；
 /// - 远端应用只写封面存储与登记，不触发本地变更回调（不会形成同步回环）。
 class CoverSyncAdapter
     implements CategoryScopedSyncAdapter, SyncAdapterCacheReleaser {
@@ -46,9 +46,6 @@ class CoverSyncAdapter
     // 变化。构造时关闭、之后开启才走切换轮规则（见 [collectForCategories]）。
     _wasEnabled = _enabled();
   }
-
-  /// 线上图片 MIME（归一化产物固定是 JPEG）。
-  static const String _mime = 'image/jpeg';
 
   /// [CustomCoverStore.maxSyncBytes] 上限对应的 base64 文本长度。
   ///
@@ -79,12 +76,13 @@ class CoverSyncAdapter
   /// base64 缓存上限：只缓存最近读过的少量封面，避免随曲库增长。
   ///
   /// 超过上限后整库 collect 会逐张重读（有界内存优先）；缓存只服务最近
-  /// 变化过的少量封面，不随曲库增长。
-  static const int _base64CacheLimit = 16;
+  /// 变化过的少量封面，不随曲库增长。动图封面单张 base64 可达 ~2.8MB，
+  /// 因此上限从 16 收到 4，避免几张动图把内存顶到几十 MB。
+  static const int _base64CacheLimit = 4;
 
-  /// 封面键 → 上轮读到的内容哈希 + base64（哈希未变不重读文件；LRU）。
-  final LinkedHashMap<String, ({String hash, String base64})> _base64Cache =
-      LinkedHashMap();
+  /// 封面键 → 上轮读到的内容哈希 + base64 + MIME（哈希未变不重读文件；LRU）。
+  final LinkedHashMap<String, ({String hash, String base64, String mime})>
+  _base64Cache = LinkedHashMap();
 
   /// 已提示过「无法同步」的键（同一张大图不每轮刷日志）。
   final Set<String> _unsyncableLogged = {};
@@ -253,7 +251,12 @@ class CoverSyncAdapter
       _base64Cache[key] = cached;
       return (
         hash: cached.hash,
-        data: _recordDataOf(cached.hash, cached.base64, entry.updatedAt),
+        data: _recordDataOf(
+          cached.hash,
+          cached.base64,
+          cached.mime,
+          entry.updatedAt,
+        ),
       );
     }
 
@@ -276,12 +279,19 @@ class CoverSyncAdapter
     }
     final hash = sha256.convert(bytes).toString();
     final base64 = base64Encode(bytes);
-    _cacheBase64(key, (hash: hash, base64: base64));
-    return (hash: hash, data: _recordDataOf(hash, base64, entry.updatedAt));
+    final mime = CustomCoverStore.syncMimeOf(bytes)!;
+    _cacheBase64(key, (hash: hash, base64: base64, mime: mime));
+    return (
+      hash: hash,
+      data: _recordDataOf(hash, base64, mime, entry.updatedAt),
+    );
   }
 
   /// 写入 base64 缓存并淘汰最久未用的条目（内存不随曲库增长）。
-  void _cacheBase64(String key, ({String hash, String base64}) value) {
+  void _cacheBase64(
+    String key,
+    ({String hash, String base64, String mime}) value,
+  ) {
     _base64Cache.remove(key);
     _base64Cache[key] = value;
     while (_base64Cache.length > _base64CacheLimit) {
@@ -292,8 +302,9 @@ class CoverSyncAdapter
   static Map<String, Object?> _recordDataOf(
     String hash,
     String base64,
+    String mime,
     int updatedAt,
-  ) => {'image': base64, 'mime': _mime, 'hash': hash, 'updatedAt': updatedAt};
+  ) => {'image': base64, 'mime': mime, 'hash': hash, 'updatedAt': updatedAt};
 
   @override
   Future<SyncApplyOutcome> apply(
@@ -424,11 +435,13 @@ class CoverSyncAdapter
     return SyncApplyOutcome(applied: applied, skipped: applied == 0 ? 1 : 0);
   }
 
-  /// base64 → 图片字节；损坏 / 超限 / 非图片一律返回 null（跳过，不抛）。
+  /// base64 → 图片字节；损坏 / 超限 / MIME 不符一律返回 null（跳过，不抛）。
   ({Uint8List bytes, String hash})? _decode(SyncRecord record) {
     final raw = record.data?['image'];
     if (raw is! String || raw.isEmpty) return null;
-    // base64 长度先于解码判定：超过 500KB 字节上限的记录直接拒绝。
+    final mime = record.data?['mime'];
+    if (mime is! String || mime.isEmpty) return null;
+    // base64 长度先于解码判定：超过同步上限的记录直接拒绝。
     if (raw.length > _maxBase64Length) return null;
     final Uint8List bytes;
     try {
@@ -436,7 +449,8 @@ class CoverSyncAdapter
     } catch (_) {
       return null;
     }
-    if (!CustomCoverStore.canSyncImageBytes(bytes)) return null;
+    final actualMime = CustomCoverStore.syncMimeOf(bytes);
+    if (actualMime == null || actualMime != mime) return null;
     return (bytes: bytes, hash: sha256.convert(bytes).toString());
   }
 

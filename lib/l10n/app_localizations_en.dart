@@ -5171,7 +5171,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get localTitleFailed => 'Didn\'t change. Try again.';
 
   @override
-  String get collectionModeSongs => 'Songs';
+  String get libraryBrowseTitle => 'Library';
+
+  @override
+  String libraryBrowseSummary(int albums, int artists) {
+    return '$albums albums · $artists artists';
+  }
 
   @override
   String get collectionModeAlbums => 'Albums';
@@ -5245,12 +5250,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistDetails => 'Playlist details';
 
   @override
-  String get playlistDescription => 'Description';
-
-  @override
-  String get playlistDescriptionHint => 'What is this playlist for?';
-
-  @override
   String get playlistFolder => 'Group';
 
   @override
@@ -5277,17 +5276,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistCoverRestored => 'Playlist cover removed';
-
-  @override
-  String get playlistShare => 'Share playlist';
-
-  @override
-  String get playlistShareEmpty => 'This playlist has no tracks yet';
-
-  @override
-  String playlistShareMore(int count) {
-    return 'and $count more';
-  }
 
   @override
   String get playlistExport => 'Export playlist';

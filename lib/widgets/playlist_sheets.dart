@@ -1,13 +1,11 @@
-/// 列表增强的四个弹层：详情、分享、导出、导入复核。
+/// 列表增强的三个弹层：详情、导出、导入复核。
 ///
-/// 每个弹层只有一层 modal；详情不嵌套封面选择，导出格式只在导出弹层里出现，
-/// 分享的图片 / 文本是同一层的两个 section。弹层只做展示与回调，读写由页面
-/// / provider 注入。
+/// 每个弹层只有一层 modal；详情不嵌套封面选择，导出格式只在导出弹层里出现。
+/// 弹层只做展示与回调，读写由页面 / provider 注入。
 library;
 
 import 'dart:async';
 
-import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -15,31 +13,20 @@ import '../domain/models/library.dart';
 import '../domain/models/playlist_folders.dart';
 import '../l10n/app_localizations.dart';
 import '../services/playlist/playlist_import_service.dart';
-import '../services/poster/playlist_poster_layout.dart';
-import '../services/poster/playlist_poster_renderer.dart';
 import '../theme/m3e_context.dart';
-import '../theme/poster_palette.dart';
-import '../utils/file_name.dart';
 import '../utils/responsive.dart';
 import 'empty_state.dart';
-import 'poster_share_sheet.dart';
 import 'simple_modal_body.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 描述 / 分组不接受控制字符（换行由多行描述自己处理）。
-final RegExp _controlCharacters = RegExp(
-  r'[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]',
-);
-
-/// 列表详情弹层：名称 / 描述 / 分组一次保存。
+/// 列表详情弹层：名称 / 分组一次保存。
 Future<bool?> showPlaylistDetailsSheet(
   BuildContext context, {
   required PlaylistInfo playlist,
   required List<String> existingNames,
-  required Future<bool> Function(String name, String description, String folder)
-  onSave,
+  required Future<bool> Function(String name, String folder) onSave,
 }) {
   return ResponsiveNavigation.showSimpleModal<bool>(
     context: context,
@@ -66,8 +53,7 @@ class PlaylistDetailsSheet extends StatefulWidget {
   final List<String> existingNames;
 
   /// 保存回调；返回 false 表示写失败（弹层保留输入）。
-  final Future<bool> Function(String name, String description, String folder)
-  onSave;
+  final Future<bool> Function(String name, String folder) onSave;
 
   @override
   State<PlaylistDetailsSheet> createState() => _PlaylistDetailsSheetState();
@@ -79,9 +65,6 @@ class _PlaylistDetailsSheetState extends State<PlaylistDetailsSheet> {
         ? _l10n(context).favoritesPlaylistName
         : widget.playlist.name,
   );
-  late final TextEditingController _description = TextEditingController(
-    text: widget.playlist.description,
-  );
   late final TextEditingController _folder = TextEditingController(
     text: widget.playlist.folder,
   );
@@ -92,7 +75,6 @@ class _PlaylistDetailsSheetState extends State<PlaylistDetailsSheet> {
   @override
   void dispose() {
     _name.dispose();
-    _description.dispose();
     _folder.dispose();
     super.dispose();
   }
@@ -135,7 +117,7 @@ class _PlaylistDetailsSheetState extends State<PlaylistDetailsSheet> {
       _nameError = null;
       _folderError = null;
     });
-    final ok = await widget.onSave(name, _description.text.trim(), folder);
+    final ok = await widget.onSave(name, folder);
     if (!mounted) return;
     if (ok) {
       Navigator.of(context).pop(true);
@@ -172,18 +154,6 @@ class _PlaylistDetailsSheetState extends State<PlaylistDetailsSheet> {
                 if (_nameError != null) setState(() => _nameError = null);
               },
             ),
-          const SizedBox(height: 12),
-          M3ETextField(
-            key: const Key('playlistDetailsDescription'),
-            controller: _description,
-            label: l10n.playlistDescription,
-            placeholder: l10n.playlistDescriptionHint,
-            maxLines: 3,
-            maxLength: 280,
-            inputFormatters: [
-              FilteringTextInputFormatter.deny(_controlCharacters),
-            ],
-          ),
           if (!widget.playlist.isFavorites) ...[
             const SizedBox(height: 12),
             M3ETextField(
@@ -208,45 +178,6 @@ class _PlaylistDetailsSheetState extends State<PlaylistDetailsSheet> {
       ),
     );
   }
-}
-
-// 分享
-
-/// 列表分享弹层：与听歌统计 / 年度报告共用统一结构。
-///
-/// 预览海报在弹层内生成；主操作只有分享，保存图片与复制文本是次要输出。
-Future<void> showPlaylistShareSheet(
-  BuildContext context, {
-  required PlaylistShareContent content,
-  required Future<List<Uint8List?>> Function() loadCovers,
-  required PosterPalette palette,
-  String? fontFamily,
-  List<String>? fontFamilyFallback,
-  PosterFileShare? shareFile,
-}) {
-  final l10n = _l10n(context);
-  return showPosterShareSheet(
-    context,
-    title: l10n.playlistShare,
-    renderPoster: () async {
-      if (content.tracks.isEmpty) return null;
-      final covers = await loadCovers();
-      return const PlaylistPosterRenderer().render(
-        content: content,
-        covers: covers,
-        palette: palette,
-        fontFamily: fontFamily,
-        fontFamilyFallback: fontFamilyFallback,
-        watermarkText: l10n.appName,
-      );
-    },
-    shareText: content.name,
-    fileName: '${sanitizeFileName(content.name, fallback: 'playlist')}.png',
-    saveDialogTitle: l10n.shareSaveImage,
-    emptyMessage: l10n.playlistShareEmpty,
-    copyText: content.tracks.isEmpty ? null : content.toShareText(),
-    shareFile: shareFile,
-  );
 }
 
 // 导出

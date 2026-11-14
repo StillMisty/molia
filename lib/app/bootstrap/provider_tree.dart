@@ -145,7 +145,7 @@ List<SingleChildWidget> buildAppProviders({
     ChangeNotifierProvider<LocalLibraryProvider>.value(
       value: localLibraryProvider,
     ),
-    // 歌曲 / 专辑 / 歌手模式：设备本地 UI 状态。
+    // 曲库的专辑 / 歌手浏览模式：设备本地 UI 状态，只服务「曲库」合集。
     ChangeNotifierProvider<CollectionModeStore>.value(value: collectionMode),
     // 跨页面「打开某个智能列表」请求（下载维护 → 收藏 › 文件不见）。
     ChangeNotifierProvider<LibraryCollectionRequest>.value(
@@ -174,7 +174,7 @@ List<SingleChildWidget> buildAppProviders({
       value: library.playStatisticsRepository,
     ),
     Provider<PlayStatisticsService>.value(value: library.playStatisticsService),
-    // 听歌同步：设置页读写同一实例；服务本身是纯观察者（首帧后 init）。
+    // 听歌同步：设置页读写同一实例；服务本身是纯观察者（页面打开时 init）。
     ChangeNotifierProvider<ScrobbleService>.value(value: scrobble.service),
     // 听歌统计页状态（范围 / 加载 / 清空 / 导出）；页面打开期间
     // 自行订阅仓库变更，关闭后取消。

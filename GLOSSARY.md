@@ -257,11 +257,13 @@
 ## 自定义封面（custom covers）
 
 - **Custom cover store（自定义封面存储）** — `lib/services/covers/custom_cover_store.dart`：
-  每曲自定义封面 + 全局默认封面的唯一存储（设备本地；索引在 SharedPreferences，
-  文件在应用支持目录 `custom_covers/`）。实现 `CoverIndex` 只读端口；写入 / 持久化 /
-  同步落地的所有者，解析与展示策略在 **Cover resolution**。启动只读索引并剔除
-  丢失文件；每次替换写新文件名，保证 Flutter ImageCache 与取色 LRU 不会继续显示
-  旧图。实例只在 `lib/app/bootstrap/local_data_stack.dart` 构造一次：UI 经
+  每曲自定义封面 + 列表封面 + 全局默认封面的唯一存储（设备本地；索引在
+  SharedPreferences，文件在应用支持目录 `custom_covers/`）。实现 `CoverIndex`
+  只读端口；写入 / 持久化 / 同步落地的所有者，解析与展示策略在
+  **Cover resolution**。静态图归一化为 JPEG；GIF / WebP 原样保留并写入对应扩展名，
+  由 Flutter 的 `Image` 播放动画（上限 2MB，与同步上限同一值）。启动只读索引并
+  剔除丢失文件；每次替换写新文件名，保证 Flutter ImageCache 与取色 LRU 不会继续
+  显示旧图。实例只在 `lib/app/bootstrap/local_data_stack.dart` 构造一次：UI 经
   `Provider<CustomCoverStore>` 读取，下载 / 播放 / 同步 / 取色经构造参数接收；
   没有 `CustomCoverStore.instance`，也没有测试替换钩子。UI 经 **TrackArtwork** /
   `CoverChangeBuilder` 订阅，组合根另接 change listener 刷新当前播放 / 主题 /
@@ -623,9 +625,9 @@
   （列名 / `sortOrder` / 墓碑 / 保留行名）。实现 `lib/data/library_repository.dart`
   同时兼同步面（见下条）。
 - **Playlist metadata（列表元数据）** — `PlaylistInfo.description / folder /
-  coverKey / syncId`：描述与分组是列表行上的普通字段，分组没有实体；封面字节
-  仍走 `CustomCoverStore`，列表只保存 `playlist:<syncId>` 指针。分享海报布局在
-  `services/poster/playlist_poster_layout.dart`，M3U / PLS 编解码在
+  coverKey / syncId`：描述与分组是列表行上的普通字段，分组没有实体；描述编辑
+  入口已移除（数据 / 同步字段保留，不再展示），封面字节走 `CustomCoverStore`
+  （含 GIF / WebP 动图），列表只保存 `playlist:<syncId>` 指针。M3U / PLS 编解码在
   `services/playlist/playlist_file_codec.dart`，导入解析在
   `services/playlist/playlist_import_service.dart`；取舍见 ADR-0022。
 - **Library sync store（资料库同步端口）** — `lib/domain/ports/library_sync_store.dart`：
@@ -1036,8 +1038,9 @@
   哈希 / base64）；开启后的第一次收集只登记已有封面、不逐张追加（全量快照会
   携带它们），此后首次登记 / 真实变化 / 删除 / 墓碑后重设才写增量；手动完整
   备份请求全部类别，开关关闭也包含封面。远端应用经
-  `CustomCoverStore.applySynced*`（不触发本地变更回调）。单张 > 500KB 或损坏
-  只跳过同步，本地封面保留。
+  `CustomCoverStore.applySynced*`（不触发本地变更回调）。记录带 `mime`
+  （`image/jpeg` / `image/gif` / `image/webp`），接收端校验 MIME 与实际字节一致；
+  单张上限 2MB（与选图阶段同一值，保证「能选就能同步」），超过或损坏才跳过。
 - **Playback session record（会话记录）** — `session` 类别的单例记录：会话 JSON
   （队列/下标/进度/模式）+ `savedAt` 时间戳；正在播放的设备持续刷新从而抢占，
   本地停止播放不回传删除（换设备接着听的轻量实现）。系统控制路径（通知暂停 /
@@ -1166,10 +1169,11 @@
   手动轮不套用调度器的蜂窝小类别限制——显式用户动作按全部启用类别跑（刻意
   如此：用户要的是「现在就同步完」）；调度器的待外发类别簿记也不会被手动轮
   更新，后续自动轮可能因此再跑一次（幂等，仅多一轮）。
-- **Device identity（设备身份）** — `sync_device_id_v2`：独立的 prefs 小键 +
-  安全存储备份，用来标识「本机是哪台设备」（版本戳 / 探测 / 附近设备配对 /
-  WebDAV 文件名）。**不跟着 `sync_state_v2` 一起重生成**：大状态损坏时从小键 /
-  安全存储恢复，避免手机重启或换 IP 后被对端当成一台新设备。
+- **Device identity（设备身份）** — `sync_device_id_v2`：独立的 prefs 小键，
+  用来标识「本机是哪台设备」（版本戳 / 探测 / 附近设备配对 / WebDAV 文件名）。
+  **不跟着 `sync_state_v2` 一起重生成**：大状态损坏时从小键恢复，避免手机重启
+  或换 IP 后被对端当成一台新设备。启动路径不碰安全存储（无钥匙串环境里的
+  libsecret 原生异常会直接终止进程），设备身份不做安全存储备份。
 - **Sync peer roster（同步名册）** — `SyncPeerState`：每台对端的最近接触观测
   （名称 / 传输 / 最后拉取·推送 / 时钟偏移 / 落后条数 / 最近失败），持久化在
   `sync_state_v2`，UI 在同步设置页首屏的「设备」区呈现（名册内联）；
@@ -1325,14 +1329,15 @@
   `FavoriteCountPolicy`（收藏键 > 已加载列表 > ±1）的唯一实现；批量历史的
   `playedAt` 由 `LibraryWriteEngine.addHistoryTracks` 发放，provider 不再自己
   造时间戳。
-- **Library collections（合集策略模块）** — `lib/providers/library_collections.dart`：收藏 / 播放历史 / 本地歌曲 / 自建列表的哨兵（`unset` / `favoritesSentinel` / `historySentinel` / `downloadsSentinel`）、默认选择解析（`resolveSelection`，后两者仅显式选择进入）、顺序应用（`applyOrder`）与持久化（顺序 / 选择的唯一实现）；收藏页只保留 UI 状态。滚动位置见 Collection scroll bookkeeping。
+- **Library collections（合集策略模块）** — `lib/providers/library_collections.dart`：收藏 / 播放历史 / 本地歌曲 / 曲库 / 自建列表的哨兵（`unset` / `favoritesSentinel` / `historySentinel` / `downloadsSentinel` / `libraryBrowseSentinel`）、默认选择解析（`resolveSelection`，后四者仅显式选择进入）、顺序应用（`applyOrder`，固定入口不参与排序）与持久化（顺序 / 选择的唯一实现）；收藏页只保留 UI 状态。滚动位置见 Collection scroll bookkeeping。
 - **Local songs collection（本地歌曲状态机）** — `lib/providers/local_songs_collection.dart`：本地歌曲伪合集的数据状态机：拥有播放历史 × 下载 / 导入记录 × 完整音频缓存的联结、下载优先去重、输入签名（历史键 + 下载记录键 + 缓存 revision）、在途加载令牌（输入变化即丢弃过期结果）与加载态 / 弹层计数；`CollectionLocalSong` 的行形状也从渲染层移到这里。页面每帧只把输入交给 `sync` 并消费 `rows`，不再在 build 里重算联结；`rows` 在输入签名、历史 / 下载列表身份与缓存行身份都不变时复用同一个列表（presenter 的源引用缓存因此对本地歌曲也生效，`rowsRevision` 是列表被替换的观察信号），缓存列举失败只影响缓存行，不拖垮下载 / 导入行。
-- **Collection presenter（合集投影器）** — `lib/providers/collection_presenter.dart`：收藏页合集身份、可见行与行动作构成的唯一推导：先把选集解析成 `CollectionIdentity`（`CollectionKind` / 落库 `playlistId` / 展示名 / 合集键 / 列规范），再按当前合集做过滤与排序，产出 `CollectionView.visibleRows`——统一的 `CollectionRow` 联合（`TrackCollectionRow` / `HistoryCollectionRow` / `LocalSongCollectionRow`）与 `hasItems`；排序结果按源列表身份记忆化，`rowActionsFor` 按行变体给出动作规格。收藏页不再用四个布尔值 + 三份可见列表，也不按 `CollectionKind` 分支拼行或挑动作；标题 / 滚动键 / 多选栏 / 表头都读同一份视图。
+- **Collection presenter（合集投影器）** — `lib/providers/collection_presenter.dart`：收藏页合集身份、可见行与行动作构成的唯一推导：先把选集解析成 `CollectionIdentity`（`CollectionKind` / 落库 `playlistId` / 展示名 / 合集键），再按当前合集做过滤与排序，产出 `CollectionView.visibleRows`——统一的 `CollectionRow` 联合（`TrackCollectionRow` / `HistoryCollectionRow` / `LocalSongCollectionRow`）与 `hasItems`；排序结果按源列表身份记忆化，`rowActionsFor` 按行变体给出动作规格。曲库是 `CollectionKind.libraryBrowse` 的虚拟合集（无行投影，页面直接消费 LocalLibraryProvider 的专辑 / 歌手索引）。收藏页不再用四个布尔值 + 三份可见列表，也不按 `CollectionKind` 分支拼行或挑动作；标题 / 滚动键 / 多选栏都读同一份视图。
 - **Collection actions（合集行动作）** — `lib/providers/collection_actions.dart`：收藏页「选中的行 / 当前视图 → 类型化命令」的唯一实现（播放 / 收藏 / 移除 / 历史删除 / 本地删除 / 重排 / 复制）。行变体归一（列表曲目 / 历史 / 本地歌曲）与 provider / 下载 / 缓存选择在模块内，页面只留确认 / 提示 / 清选择与布局；播放 / 加入列表接 **Track handoff**（context 适配在 `lib/widgets/collection_handoff.dart`）。本地删除返回 `CollectionLocalDeleteOutcome`（逐项 deleted / removed / cleared / skipped / failed），失败不再逃进 `unawaited`；页面不再出现 `as ...Row` 强转。
 
 - **Collection session（合集会话）** — `lib/providers/collection_session.dart`：收藏页「当前合集」的唯一状态机：恢复（合集顺序 / 选集 / 滚动偏移，一次）、选中合集校准（合集列表首次加载完成、下载能力就绪后校准一次；失效 / 未选的选集回退到默认解析并落盘）、模式（搜索 / 排序 / 调整顺序）、按行 key 的多选与失效、加载组合（首帧列表 / 列表曲目 / 历史首载 / 本地歌曲联结合成为一个 `loading` / `ready` / `failed` 阶段，failed 提供重试）、合集切换与选择 / 顺序持久化、滚动键与恢复时机（同一合集只激活 / 恢复一次）。页面每帧只交一份 `CollectionSessionInput`（资料库读取端口 `CollectionLibrary` + 展示名 + 搜索词 + 下载 / 缓存快照）、消费一个 `CollectionSessionView`；`sync` 把当帧解析结果装进 `CollectionFrame`（资料库端口 + `CollectionLibrarySnapshot` + 下载 / 缓存输入 + 落库列表 id）一并交回，弹层计数 `ensureLocalSongsReady(frame)` 与失败重试 `retry(frame)` 只读这个帧，不再读会话缓存的上一帧，也不依赖「先 sync 一次」的隐藏顺序。多选的生产入口同样是会话意图（`clearSelection` / `selectAllVisible` / `isSelected` / `selectedCount` / `handleRowTap`），页面不直接持有 `CollectionSelection`。端口只有 `snapshot(playlistId:)`（一帧 `CollectionLibrarySnapshot`：列表清单 / 历史 / 读取阶段 / 当前列表曲目视图）、`load(CollectionLibraryLoad)`（首帧 / 当前列表 / 整页重试 / 历史重排意图）与 `trackFromHistoryEntry`。本地歌曲联结与展示名以外的合集投影仍由 Collection presenter 提供。
 - **Collection selection（合集多选状态机）** — `lib/utils/collection_selection.dart`：收藏页收藏 / 历史 / 本地歌曲共用的多选唯一实现（选择集按**行稳定 key** 而不是可见行下标，Ctrl 切换、Shift 区间与锚点移动、全选三态、`retainKeys` 随视图收缩；插入 / 过滤后选择仍指向原行）；页面只保留点播分支与动作实现，Esc 的可见性 / 焦点判定仍属页面（同源规则见 Escape claims）。
 - **Collection list（合集列表模块）** — `lib/widgets/collection_track_list.dart`：收藏页各合集共用的一份列表脚手架（Scrollbar 参数、`itemExtent = TrackRow.extentOf(context, tableColumns: …) + gap`、懒构建、重排模式、空态 / 搜索空态、行动作（触摸端行尾 ⋮ / 桌面右键菜单）与行外壳 `CollectionTrackRow`）；行内容由调用方 `itemBuilder` 提供，页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`（`collectionRowMatches` / `sortCollectionTracks`）。
+- **Collection spine（合集书脊）** — `lib/widgets/collection_spine.dart`：合集标题前的书脊细条（约 3dp 宽、随标题高度缩放、`colorScheme.primary` 实色、小圆角）。所有合集默认显示；列表有自定义封面时由 `PlaylistCover` 换成封面缩略图，未设置 / 读取失败回落到书脊，不再使用中性占位图标。
 - **Collection scroll bookkeeping（合集滚动簿记）** — `lib/widgets/collection_scroll_bookkeeping.dart`：按合集键保存 / 恢复滚动位置的唯一实现（节流 ≤2 次/秒、切换合集各自只恢复一次、夹取到可滚动范围）；调度器（`CollectionScrollScheduler`）可注入，脱离 widget 树可单测。
 - **Local songs（本地歌曲合集）** — 收藏页的伪合集（`downloadsSentinel` ↔ `downloadsOrderKey`）：数据来自 `DownloadService.downloads`（下载副本 + 本地导入）与 `TrackLocalDataService.cachedAudioTrackIds`（播放历史 × 完整音频缓存命中且无音频下载，一次目录列举），不落列表表；仅在下载能力可用（`DownloadService.supported`）时出现在合集弹层，排序固定按下载 / 导入时间倒序。合集弹层打开前先把缓存行重算到当前输入，弹层计数与列表行数同源。
 - **Local import（本地导入）** — `downloads` 表 `imported` 行 = **就地引用**用户自己的音频文件：`originSourceKey = 'local'`、`originSongId` = 稳定 `localKey`（`file:<uuid>`，同路径重复导入按 `filePath` 复用），`filePath` 指向原文件；删除记录只移行、不删文件，补发布跳过。导入曲目的领域身份是 `TrackId(local, localKey)`，记录键是 `local:<localKey>`；路径不再是身份（见 **Local identity**）。写入唯一入口 `DownloadService.importLocalFiles`（标签解析见 `lib/data/downloads/audio_tag_reader.dart`：mp3 ID3v2 / flac Vorbis Comment，其余格式按文件名兜底）。

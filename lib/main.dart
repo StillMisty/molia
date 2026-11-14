@@ -232,7 +232,7 @@ void main() async {
   ).wait;
   await databasePrewarm;
   _markStartup('本地数据/资料库栈', startup);
-  // 听歌同步：纯构造（不读安全存储）；服务在首帧后 init，之前完全惰性。
+  // 听歌同步：纯构造（不读安全存储）；服务在听歌同步页打开时 init。
   final scrobble = buildScrobbleStack(settings: catalog.settings);
   // 健康检查探针依赖目录服务与省流上限：两者都就绪后挂到同一个诊断服务上。
   // 偏好音质直接读正常播放同源的 `dataSaver × sourceManager`，不另建配置。
@@ -611,9 +611,7 @@ void main() async {
       catalog: catalog,
       local: local,
       library: library,
-      scrobble: scrobble,
       desktop: desktop,
-      ai: ai,
       update: update,
       sync: sync,
     );

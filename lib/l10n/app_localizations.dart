@@ -9190,11 +9190,17 @@ abstract class AppLocalizations {
   /// **'Didn\'t change. Try again.'**
   String get localTitleFailed;
 
-  /// No description provided for @collectionModeSongs.
+  /// No description provided for @libraryBrowseTitle.
   ///
   /// In en, this message translates to:
-  /// **'Songs'**
-  String get collectionModeSongs;
+  /// **'Library'**
+  String get libraryBrowseTitle;
+
+  /// No description provided for @libraryBrowseSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{albums} albums · {artists} artists'**
+  String libraryBrowseSummary(int albums, int artists);
 
   /// No description provided for @collectionModeAlbums.
   ///
@@ -9328,18 +9334,6 @@ abstract class AppLocalizations {
   /// **'Playlist details'**
   String get playlistDetails;
 
-  /// No description provided for @playlistDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Description'**
-  String get playlistDescription;
-
-  /// No description provided for @playlistDescriptionHint.
-  ///
-  /// In en, this message translates to:
-  /// **'What is this playlist for?'**
-  String get playlistDescriptionHint;
-
   /// No description provided for @playlistFolder.
   ///
   /// In en, this message translates to:
@@ -9393,24 +9387,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Playlist cover removed'**
   String get playlistCoverRestored;
-
-  /// No description provided for @playlistShare.
-  ///
-  /// In en, this message translates to:
-  /// **'Share playlist'**
-  String get playlistShare;
-
-  /// No description provided for @playlistShareEmpty.
-  ///
-  /// In en, this message translates to:
-  /// **'This playlist has no tracks yet'**
-  String get playlistShareEmpty;
-
-  /// No description provided for @playlistShareMore.
-  ///
-  /// In en, this message translates to:
-  /// **'and {count} more'**
-  String playlistShareMore(int count);
 
   /// No description provided for @playlistExport.
   ///

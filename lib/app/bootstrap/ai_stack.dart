@@ -83,8 +83,8 @@ AiStack buildAiStack({
     recommendationService: aiRecommendationService,
     settingsStore: aiSettingsStore,
   );
-  // init 读安全存储 / 历史批次，由首帧后的 `post_frame_init.dart` 触发：
-  // AI 页与推荐流不在首帧内容里，不必和窗口 / 播放装配抢首帧前的平台通道。
+  // init 读安全存储 / 历史批次，由 AI 页面打开时触发（幂等）：
+  // 启动路径不碰钥匙串；AI 页与推荐流不在首帧内容里。
   playback.addListener(aiDjProvider.onPlaybackChanged);
   playback.position.addListener(aiDjProvider.onPositionChanged);
 

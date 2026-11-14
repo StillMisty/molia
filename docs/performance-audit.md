@@ -552,6 +552,8 @@ Linux profile、`mobile-mini-expand`、3 轮中位数：
   Android 模拟器 build p95 **3.5–6.3ms**，无稳定回归。
 - **AI 初始化从首帧前移到首帧后**，并把安全存储 / 偏好 / 历史读取并行化：
   Android `sub.ai.init` **207 → 158ms**（−49ms），Linux 129 → 102ms。
+  > 2026-11-14 后续：AI / 听歌同步改为页面打开时初始化，启动路径不再读写
+  > 安全存储；`sub.ai.init` / `sub.scrobble.init` 首帧后埋点已移除。
 - **音源初始化不再等待同步初始化**：音源脚本与搜索 / 播放入口只依赖本地
   脚本仓库；同步仍等戳种子，传输 / 首轮在两边就绪后起。Android
   `sub.sourceManager.init` 105ms、`sub.sync.start` 181ms，互不阻塞。

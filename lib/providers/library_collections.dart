@@ -27,6 +27,11 @@ class LibraryCollections {
   /// 下载记录伪合集哨兵（同上；数据来自 `DownloadRecords`，不落列表表）。
   static const int downloadsSentinel = -4;
 
+  /// 曲库聚合浏览哨兵（专辑 / 歌手；数据来自 LocalLibraryProvider）。
+  ///
+  /// 取值远离智能列表连续段，避免与 [smartIdFor] 的索引推导重叠。
+  static const int libraryBrowseSentinel = -100;
+
   /// 智能列表哨兵起点（-5 起，按 [SmartListIds.all] 顺序；不落列表表）。
   static const int _smartSentinelBase = -5;
 
@@ -48,6 +53,7 @@ class LibraryCollections {
   static const String favoritesOrderKey = 'favorites';
   static const String historyOrderKey = 'history';
   static const String downloadsOrderKey = 'downloads';
+  static const String libraryBrowseOrderKey = 'library';
 
   /// 上次选中的合集（含收藏/历史哨兵；未保存时不存在）。
   static const String selectionKey = 'favorites_selected_collection';
@@ -79,6 +85,7 @@ class LibraryCollections {
   }) {
     if (selected == historySentinel) return historySentinel;
     if (selected == downloadsSentinel) return downloadsSentinel;
+    if (selected == libraryBrowseSentinel) return libraryBrowseSentinel;
     if (isSmartSentinel(selected)) return selected;
     // 未知的负哨兵（旧版本 / 损坏持久化）不静默落到最近添加；回退默认合集。
     if (selected < downloadsSentinel) return favoritesSentinel;

@@ -2855,7 +2855,18 @@
       }
     }
   },
-  "collectionModeSongs": "Songs",
+  "libraryBrowseTitle": "Library",
+  "libraryBrowseSummary": "{albums} albums · {artists} artists",
+  "@libraryBrowseSummary": {
+    "placeholders": {
+      "albums": {
+        "type": "int"
+      },
+      "artists": {
+        "type": "int"
+      }
+    }
+  },
   "collectionModeAlbums": "Albums",
   "collectionModeArtists": "Artists",
   "unknownAlbum": "Unknown album",
@@ -2892,8 +2903,6 @@
     }
   },
   "playlistDetails": "Playlist details",
-  "playlistDescription": "Description",
-  "playlistDescriptionHint": "What is this playlist for?",
   "playlistFolder": "Group",
   "playlistFolderHint": "Leave empty for no group",
   "playlistEditDetails": "Edit details",
@@ -2903,16 +2912,6 @@
   "playlistCoverReset": "Remove cover",
   "playlistCoverUpdated": "Playlist cover updated",
   "playlistCoverRestored": "Playlist cover removed",
-  "playlistShare": "Share playlist",
-  "playlistShareEmpty": "This playlist has no tracks yet",
-  "playlistShareMore": "and {count} more",
-  "@playlistShareMore": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "playlistExport": "Export playlist",
   "playlistExportM3u8": "Playlist file (M3U8)",
   "playlistExportM3u8Subtitle": "Opens in other players too",

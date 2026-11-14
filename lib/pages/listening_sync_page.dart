@@ -4,6 +4,8 @@
 /// 状态只反映本机（设备本地开关 / 凭证是否存在），不外泄口令或请求内容。
 library;
 
+import 'dart:async';
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -25,6 +27,13 @@ class ListeningSyncPage extends StatefulWidget {
 
 class _ListeningSyncPageState extends State<ListeningSyncPage> {
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 凭据在安全存储里：只在本页打开时读，启动路径不碰钥匙串。
+    unawaited(context.read<ScrobbleService?>()?.init());
+  }
 
   /// 服务名的唯一来源：设置行、同意书、断开确认与 Last.fm 对话框共用。
   String _targetName(ScrobbleTarget target) => switch (target) {

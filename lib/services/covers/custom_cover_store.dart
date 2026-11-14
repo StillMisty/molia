@@ -28,6 +28,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/files/app_data_directory.dart';
 import '../../domain/models/track.dart';
+import 'cover_image_codec.dart';
 import 'cover_resolution.dart' as cover_resolution;
 
 /// 自定义封面变化类型（组合根按它决定刷新哪些展示面）。
@@ -131,11 +132,12 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
   static const String prefsKey = 'custom_cover_index_v1';
   static const String directoryName = 'custom_covers';
 
-  /// 单张封面可进入同步记录的字节上限（归一化产物通常远小于此）。
+  /// 单张封面可进入同步记录的字节上限；与
+  /// `CoverImageCodec.maxAnimatedBytes` 同值，保证「能选就能同步」。
   ///
-  /// base64 后约 667KB，仍远低于增量日志 4MB 窗口；超限只跳过同步，本地
-  /// 封面继续可用。接收侧用同一上限拒绝异常远端记录。
-  static const int maxSyncBytes = 500 * 1024;
+  /// base64 后约 2.7MB，仍在增量日志 4MB 窗口内；超限的动图在选图阶段
+  /// 就被拒绝，不会出现本机可用、其它端收不到的不一致。
+  static const int maxSyncBytes = CoverImageCodec.maxAnimatedBytes;
 
   final Future<SharedPreferences> Function() _preferences;
   final Future<Directory> Function() _supportDirectory;
@@ -414,17 +416,18 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
   /// 读取全局默认封面字节（不存在 / 不可读返回 null）。
   Future<Uint8List?> readDefaultCover() => _readFile(_defaultCover?.path);
 
-  /// 图片字节是否可进入同步记录（大小 + JPEG 魔数；不在这里解码整图）。
+  /// 图片字节是否可进入同步记录（大小 + 魔数；不在这里解码整图）。
   ///
-  /// 同步记录固定声明 `image/jpeg`、落地文件固定 `.jpg`，因此只接受本地
-  /// 归一化（`CoverImageCodec`）产出的 JPEG；PNG / GIF / WebP 一律拒绝，
-  /// 避免远端落地后扩展名与内容不一致。
+  /// 接受 JPEG / GIF / WebP：静态封面归一化为 JPEG，动图原样保留。
+  /// 记录里的 `mime` 必须与实际字节一致，接收端会再校验一次。
   static bool canSyncImageBytes(Uint8List bytes) =>
-      bytes.length >= 3 &&
+      bytes.isNotEmpty &&
       bytes.length <= maxSyncBytes &&
-      bytes[0] == 0xFF &&
-      bytes[1] == 0xD8 &&
-      bytes[2] == 0xFF;
+      CoverImageCodec.mimeOf(bytes) != null;
+
+  /// 同步记录的 MIME（不可同步时返回 null）。
+  static String? syncMimeOf(Uint8List bytes) =>
+      canSyncImageBytes(bytes) ? CoverImageCodec.mimeOf(bytes) : null;
 
   /// 保存曲目封面（[bytes] 应已由 `CoverImageCodec` 归一化）。
   Future<void> setTrackCover(TrackId id, Uint8List bytes) async {
@@ -730,7 +733,9 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
   }) async {
     final directory = await _coverDirectory();
     final stamp = _clock().microsecondsSinceEpoch;
-    final name = '${filePrefix}_${stamp}_${_writeSequence++}.jpg';
+    // 扩展名跟随实际字节：动图（GIF / WebP）原样落盘，静态图仍是归一化 JPEG。
+    final extension = CoverImageCodec.extensionOf(bytes);
+    final name = '${filePrefix}_${stamp}_${_writeSequence++}$extension';
     final file = File('${directory.path}/$name');
     final part = File('${file.path}.part');
     await part.writeAsBytes(bytes, flush: true);

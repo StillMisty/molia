@@ -64,7 +64,7 @@ class SyncStateStore
   /// 旧键不读、不删、不迁移：新键缺失即全新安装行为，旧数据当从未存在。
   static const String stateKey = 'sync_state_v2';
 
-  /// 设备身份的独立持久化键（prefs + 安全存储同名）。
+  /// 设备身份的独立持久化键（只走 prefs 小键，不碰安全存储）。
   ///
   /// 身份不能只放在 `sync_state_v2` 里：那份 JSON 体积大、写入频繁，损坏时
   /// 若连身份一起丢，对端就会把同一台设备当成新设备（换 IP / 重启后尤其明显）。
@@ -103,7 +103,6 @@ class SyncStateStore
 
   final Logger _logger = Logger('molia.sync.state');
   bool _saveFailureLogged = false;
-  bool _identityBackupFailureLogged = false;
 
   /// 有内存变更尚未落盘。UI 命令改完即提交；轮内的登记 / 名册 / 台账只
   /// 标脏，由引擎在 `runRound` 返回后提交一次。
@@ -303,19 +302,6 @@ class SyncStateStore
     _freshInstall = false;
   }
 
-  /// 设备 id 的 prefs 键已写、安全存储备份还没写（首装 / 身份迁移）。
-  ///
-  /// 首帧前只写小体积 prefs（设备 id 立即可用）；Keystore 备份放到首帧后，
-  /// 避免首装冷启动在主线程等一次安全存储写入。
-  bool _deviceIdBackupPending = false;
-
-  /// 备份尚未完成的持久标记：进程在首帧后备份前被杀时，下次启动继续补写，
-  /// 避免「prefs 有 id 就以为备份已完成」而永久丢掉安全存储副本。
-  ///
-  /// 同样按命名空间断代：旧标记不读。
-  static const String _deviceIdBackupPendingKey =
-      'sync_device_id_backup_pending_v2';
-
   /// 写入方等待「全库最大戳」种子完成（首帧后的 DB 查询）。
   Future<void> get stampSeedReady => _stampSeedReady.future;
 
@@ -350,9 +336,9 @@ class SyncStateStore
           _applyState(state);
         }
       } catch (e) {
-        // 损坏状态按默认处理，但**设备身份不能跟着重生成**：先尝试独立键
-        // 与安全存储备份，只有全部缺失时才生成新 id（否则对端会多出一台
-        // 同名的“新设备”）。
+        // 损坏状态按默认处理，但**设备身份不能跟着重生成**：先尝试独立
+        // prefs 小键，只有全部缺失时才生成新 id（否则对端会多出一台同名
+        // 的“新设备”）。
         stateCorrupt = true;
         _logger.warning('同步状态解析失败（设备身份将从独立备份恢复）', e);
       }
@@ -362,9 +348,6 @@ class SyncStateStore
     var identity = stateId;
     if (identity.isEmpty) {
       identity = (_prefs!.getString(deviceIdKey) ?? '').trim();
-    }
-    if (identity.isEmpty) {
-      identity = await _readDeviceIdBackup();
     }
     if (identity.isEmpty) {
       identity = _generateDeviceId();
@@ -393,68 +376,16 @@ class SyncStateStore
 
   /// 把身份写进独立 prefs 键（首帧前；只在缺失 / 不一致时写）。
   ///
-  /// 正常启动 prefs 已一致：不碰安全存储，也不触发任何后续备份。
+  /// 设备身份只走 prefs 小键，不碰安全存储：在没有系统钥匙串的桌面 /
+  /// 容器里，libsecret 原生异常会直接终止进程，身份备份不值得阻断启动。
   Future<void> _persistDeviceIdToPrefs() async {
     final current = (_prefs!.getString(deviceIdKey) ?? '').trim();
-    if (current == _deviceId) {
-      // 上次进程可能没走到首帧后的备份：持久标记还在就继续补写。
-      _deviceIdBackupPending =
-          _prefs!.getBool(_deviceIdBackupPendingKey) ?? false;
-      return;
-    }
-    _deviceIdBackupPending = true;
+    if (current == _deviceId) return;
     try {
       await _prefs!.setString(deviceIdKey, _deviceId);
-      await _prefs!.setBool(_deviceIdBackupPendingKey, true);
     } catch (e) {
-      _logIdentityBackupFailure('写入', e);
+      _logger.warning('写入同步设备身份失败', e);
     }
-  }
-
-  /// 把设备 id 备份到安全存储（首帧后调用；正常启动是空操作）。
-  ///
-  /// 首装 / 身份变化时 Keystore 写入可能上百毫秒，放在首帧后避免推后首帧。
-  /// 读取仍留在 [init]：身份缺失时要靠备份恢复既有身份，不能安全后移。
-  Future<void> backupDeviceId() async {
-    if (!_deviceIdBackupPending) return;
-    _deviceIdBackupPending = false;
-    var backedUp = false;
-    if (await _readDeviceIdBackup() == _deviceId) {
-      backedUp = true;
-    } else {
-      try {
-        await _secrets.write(deviceIdKey, _deviceId);
-        backedUp = true;
-      } catch (e) {
-        _logIdentityBackupFailure('写入', e);
-      }
-    }
-    if (!backedUp) {
-      // 写失败保留内存标记：同进程再次调用还能重试；prefs 标记也留着，
-      // 下次启动继续补写。
-      _deviceIdBackupPending = true;
-      return;
-    }
-    try {
-      await _prefs!.setBool(_deviceIdBackupPendingKey, false);
-    } catch (_) {
-      // 清标记失败只影响下次启动多读一次安全存储，不影响正确性。
-    }
-  }
-
-  Future<String> _readDeviceIdBackup() async {
-    try {
-      return (await _secrets.read(deviceIdKey) ?? '').trim();
-    } catch (e) {
-      _logIdentityBackupFailure('读取', e);
-      return '';
-    }
-  }
-
-  void _logIdentityBackupFailure(String action, Object error) {
-    if (_identityBackupFailureLogged) return;
-    _identityBackupFailureLogged = true;
-    _logger.warning('设备身份备份$action失败（仅影响状态损坏后的恢复）', error);
   }
 
   @override

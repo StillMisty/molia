@@ -27,7 +27,7 @@ void main() {
     return store;
   }
 
-  test('设备身份独立持久化：状态 JSON 损坏、prefs 键丢失都能恢复', () async {
+  test('设备身份独立持久化：状态 JSON 损坏时从小键恢复', () async {
     final prefs = await SharedPreferences.getInstance();
     final secrets = MemorySyncSecretStore();
     final store = SyncStateStore(
@@ -39,9 +39,6 @@ void main() {
     final id = store.deviceId;
     expect(id, isNotEmpty);
     expect(prefs.getString(SyncStateStore.deviceIdKey), id);
-    // 安全存储备份是首帧后的动作：显式触发一次再断言（见 backupDeviceId）。
-    await store.backupDeviceId();
-    expect(secrets.values[SyncStateStore.deviceIdKey], id);
 
     // 大状态 JSON 损坏：身份从小键恢复，不生成新设备。
     await prefs.setString(SyncStateStore.stateKey, '{broken');
@@ -53,19 +50,20 @@ void main() {
     await recovered.init();
     expect(recovered.deviceId, id);
 
-    // 状态 JSON 与小键都丢：安全存储备份仍能恢复同一身份。
+    // 状态 JSON 与小键都丢：只能生成新身份（启动路径不碰安全存储）。
     await prefs.remove(SyncStateStore.stateKey);
     await prefs.remove(SyncStateStore.deviceIdKey);
-    final fromSecret = SyncStateStore(
+    final regenerated = SyncStateStore(
       preferences: prefs,
       secrets: secrets,
       clock: () => 1000,
     );
-    await fromSecret.init();
-    expect(fromSecret.deviceId, id);
+    await regenerated.init();
+    expect(regenerated.deviceId, isNotEmpty);
+    expect(regenerated.deviceId, isNot(id));
   });
 
-  test('身份从状态 JSON 回填到独立键与安全存储', () async {
+  test('身份从状态 JSON 回填到独立键', () async {
     final prefs = await SharedPreferences.getInstance();
     final secrets = MemorySyncSecretStore();
     await prefs.setString(
@@ -79,12 +77,10 @@ void main() {
       clock: () => 1000,
     );
     await store.init();
-    await store.backupDeviceId();
 
     expect(store.freshInstall, isFalse, reason: '新 key 已存在且派生清理标记已完成 = 不是首次清理');
     expect(store.deviceId, 'devA');
     expect(prefs.getString(SyncStateStore.deviceIdKey), 'devA');
-    expect(secrets.values[SyncStateStore.deviceIdKey], 'devA');
   });
 
   test('旧命名空间完全不读：旧 key 存在也按全新安装处理', () async {

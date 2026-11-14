@@ -12,6 +12,7 @@ import 'package:molia/services/local_cover_identity_sweep.dart';
 
 import '../support/memory_database.dart';
 
+import 'package:molia/services/covers/cover_image_codec.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
 
 Uint8List _bytes(int seed) => Uint8List.fromList([seed, seed, seed]);
@@ -400,6 +401,44 @@ void main() {
     await reloaded.load();
     expect(reloaded.playlistCoverPath(key), isNotNull);
     expect(await reloaded.readPlaylistCover(key), _bytes(3));
+  });
+
+  test('动图封面：GIF / WebP 原样保留并落成对应扩展名', () async {
+    final gif = Uint8List.fromList([...'GIF89a'.codeUnits, 0, 0, 0, 0]);
+    final webp = Uint8List.fromList([
+      ...'RIFF'.codeUnits,
+      4,
+      0,
+      0,
+      0,
+      ...'WEBP'.codeUnits,
+      0,
+      0,
+    ]);
+
+    expect(CoverImageCodec.normalizeSync(gif), gif);
+    expect(CoverImageCodec.normalizeSync(webp), webp);
+    expect(CoverImageCodec.mimeOf(gif), 'image/gif');
+    expect(CoverImageCodec.mimeOf(webp), 'image/webp');
+    expect(CustomCoverStore.canSyncImageBytes(gif), isTrue);
+    expect(CustomCoverStore.canSyncImageBytes(webp), isTrue);
+
+    await store.setPlaylistCover('playlist:gif', gif);
+    await store.setPlaylistCover('playlist:webp', webp);
+    expect(store.playlistCoverPath('playlist:gif'), endsWith('.gif'));
+    expect(store.playlistCoverPath('playlist:webp'), endsWith('.webp'));
+    expect(await store.readPlaylistCover('playlist:gif'), gif);
+    expect(await store.readPlaylistCover('playlist:webp'), webp);
+  });
+
+  test('动图超过同步上限：选图阶段就拒绝，避免只在本机可用', () {
+    final huge = Uint8List(CoverImageCodec.maxAnimatedBytes + 1)
+      ..setAll(0, 'GIF89a'.codeUnits);
+    expect(
+      () => CoverImageCodec.normalizeSync(huge),
+      throwsA(isA<CoverImageException>()),
+    );
+    expect(CustomCoverStore.canSyncImageBytes(huge), isFalse);
   });
 }
 

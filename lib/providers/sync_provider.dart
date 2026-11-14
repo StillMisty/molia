@@ -470,19 +470,10 @@ class SyncProvider extends ChangeNotifier
   Future<void> init() async {
     await _controlPlane.init();
     await _engine.init();
-    // 口令即设备身份：初始化就绪，附近设备配对随时可用。生成口令没有网络
-    // 副作用，也不依赖任何传输开关——既然没有总开关，就不能等「首次开启
-    // 同步」才生成（否则配对请求会指向一个不存在的口令）。
-    //
-    // 无钥匙串的环境（WSLg / 容器）写入会抛：按「未设置」降级继续，可选子
-    // 系统的故障不允许阻断启动（与 `SecureSettingsSecretStore.read` 的容错
-    // 同一契约，见 docs/pitfalls.md #31）。
-    try {
-      await _controlPlane.ensurePassphrase();
-    } catch (e) {
-      debugPrint('[Molia] 同步口令初始化失败（按未设置继续）: $e');
-    }
-    await _controlPlane.readPassphrase();
+    // 启动阶段不碰安全存储：口令只在用户真正开启传输 / 配对时按需生成
+    // （见 `_applyTransportEnabled`）。没有系统钥匙串的桌面 / 容器里，
+    // libsecret 的原生异常会直接终止进程，try/catch 兜不住，因此不能把
+    // 口令读写放进应用启动路径。
     notifyListeners();
   }
 

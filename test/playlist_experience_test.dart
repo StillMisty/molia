@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -14,15 +13,12 @@ import 'package:molia/services/download/download_intent.dart';
 import 'package:molia/services/playlist/playlist_export_builder.dart';
 import 'package:molia/services/playlist/playlist_file_codec.dart';
 import 'package:molia/services/playlist/playlist_import_service.dart';
-import 'package:molia/services/poster/playlist_poster_layout.dart';
-import 'package:molia/services/poster/playlist_poster_renderer.dart';
 import 'package:molia/services/poster/poster_draw.dart';
 import 'package:molia/services/poster/poster_share_file.dart';
 import 'package:molia/services/library/playlist_folder_prefs.dart';
 import 'package:molia/services/save_as_types.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/utils/save_as_label.dart';
-import 'package:molia/theme/poster_palette.dart';
 import 'package:material_ui/material_ui.dart';
 
 void main() {
@@ -54,6 +50,26 @@ void main() {
       await reloaded.toggle('Office');
       await reloaded.delete('Office');
       expect(reloaded.isCollapsed('Office'), isFalse);
+    });
+
+    test('首次进入默认收起，当前分组展开；用户展开后不再套默认值', () async {
+      final controller = PlaylistFolderCollapseController();
+      addTearDown(controller.dispose);
+      await controller.load();
+      controller.applyDefaults(['Work', 'Gym'], expanded: 'Gym');
+      expect(controller.isCollapsed('Work'), isTrue);
+      expect(controller.isCollapsed('Gym'), isFalse);
+
+      await controller.toggle('Work');
+      expect(controller.isCollapsed('Work'), isFalse);
+
+      final reloaded = PlaylistFolderCollapseController();
+      addTearDown(reloaded.dispose);
+      await reloaded.load();
+      // 已落盘的状态优先：用户展开过的 Work 不会被重新收起。
+      reloaded.applyDefaults(['Work', 'Gym'], expanded: null);
+      expect(reloaded.isCollapsed('Work'), isFalse);
+      expect(reloaded.isCollapsed('Gym'), isFalse, reason: '用户改过状态后不再套默认值');
     });
   });
 
@@ -580,94 +596,6 @@ void main() {
         expect(await file.exists(), isTrue);
       });
       expect(await File(path).exists(), isFalse);
-    });
-  });
-
-  group('列表分享布局与海报', () {
-    PlaylistShareContent content({
-      required int trackCount,
-      int coverCount = 0,
-    }) => PlaylistShareContent(
-      name: 'My playlist',
-      description: 'desc',
-      trackCountLabel: '$trackCount 首',
-      coverCount: coverCount,
-      andMoreLabel: (count) => '还有 $count 首',
-      tracks: [
-        for (var index = 0; index < trackCount; index++)
-          PlaylistShareTrack(title: 'T$index', artist: 'A$index'),
-      ],
-    );
-
-    test('马赛克槽位：空槽中性、不重复封面', () {
-      expect(content(trackCount: 0).mosaicSlotIndices, everyElement(isNull));
-      expect(content(trackCount: 3, coverCount: 1).mosaicSlotIndices, [
-        0,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null,
-      ]);
-      final nine = content(trackCount: 9, coverCount: 9).mosaicSlotIndices;
-      expect(nine, [0, 1, 2, 3, 4, 5, 6, 7, 8]);
-      final more = content(trackCount: 9, coverCount: 20).mosaicSlotIndices;
-      expect(more, hasLength(9));
-      expect(more.last, 8);
-    });
-
-    test('前五首 / 还有 N 首 / 500 条文本上限', () {
-      expect(content(trackCount: 7).posterTracks, hasLength(5));
-      expect(content(trackCount: 7).posterExtraCount, 2);
-      final text = content(trackCount: 509).toShareText();
-      expect(text, contains('500. T499'));
-      expect(text, isNot(contains('501. T500')));
-      expect(text, contains('还有 9 首'));
-      expect(text, isNot(contains('/')));
-    });
-
-    test('渲染：无封面 / 一张 / 九张都产出 1440 宽 PNG', () async {
-      Future<Uint8List> png(Color color) async {
-        final recorder = ui.PictureRecorder();
-        final canvas = Canvas(recorder);
-        canvas.drawRect(
-          const Rect.fromLTWH(0, 0, 300, 300),
-          Paint()..color = color,
-        );
-        final picture = recorder.endRecording();
-        try {
-          final image = await picture.toImage(300, 300);
-          try {
-            final data = await image.toByteData(format: ui.ImageByteFormat.png);
-            return data!.buffer.asUint8List();
-          } finally {
-            image.dispose();
-          }
-        } finally {
-          picture.dispose();
-        }
-      }
-
-      final cover = await png(const Color(0xFF336699));
-      for (final count in [0, 1, 9]) {
-        final bytes = await const PlaylistPosterRenderer().render(
-          content: content(trackCount: 9, coverCount: count),
-          covers: [for (var i = 0; i < count; i++) cover],
-          palette: PosterPalette.fromScheme(
-            ColorScheme.fromSeed(seedColor: const Color(0xFF2196F3)),
-          ),
-        );
-        expect(bytes, isNotEmpty);
-        final codec = await ui.instantiateImageCodec(bytes);
-        final frame = await codec.getNextFrame();
-        expect(frame.image.width, kPlaylistPosterWidth);
-        expect(frame.image.height, kPlaylistPosterMaxHeight);
-        frame.image.dispose();
-        codec.dispose();
-      }
     });
   });
 }

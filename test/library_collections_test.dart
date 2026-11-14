@@ -57,7 +57,7 @@ void main() {
       );
     });
 
-    test('显式收藏 / 历史哨兵始终有效', () {
+    test('显式收藏 / 历史 / 曲库哨兵始终有效', () {
       expect(
         LibraryCollections.resolveSelection(
           selected: LibraryCollections.favoritesSentinel,
@@ -73,6 +73,14 @@ void main() {
           favoritesId: 1,
         ),
         LibraryCollections.historySentinel,
+      );
+      expect(
+        LibraryCollections.resolveSelection(
+          selected: LibraryCollections.libraryBrowseSentinel,
+          playlists: [favorites, nonEmpty],
+          favoritesId: 1,
+        ),
+        LibraryCollections.libraryBrowseSentinel,
       );
     });
 

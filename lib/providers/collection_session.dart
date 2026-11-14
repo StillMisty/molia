@@ -191,12 +191,14 @@ class CollectionNames {
     required this.favorites,
     required this.history,
     required this.localSongs,
+    required this.libraryBrowse,
     this.smartLists = const {},
   });
 
   final String favorites;
   final String history;
   final String localSongs;
+  final String libraryBrowse;
 
   /// 智能列表 id → 展示名。
   final Map<String, String> smartLists;
@@ -537,7 +539,7 @@ class CollectionSession extends ChangeNotifier {
           ? snapshot.historyState.error
           : null;
     }
-    if (identity.isSmartList) return null;
+    if (identity.isSmartList || identity.isLibraryBrowse) return null;
     if (identity.isLocalSongs) {
       // 本地歌曲以下载 / 导入记录为准，历史缓存行失败不影响列表可用。
       return null;
@@ -719,6 +721,7 @@ class CollectionSession extends ChangeNotifier {
     favoritesName: input.names.favorites,
     historyName: input.names.history,
     localSongsName: input.names.localSongs,
+    libraryBrowseName: input.names.libraryBrowse,
     smartListNames: input.names.smartLists,
   );
 
@@ -747,6 +750,7 @@ class CollectionSession extends ChangeNotifier {
         previous == LibraryCollections.unset ||
         previous == LibraryCollections.favoritesSentinel ||
         previous == LibraryCollections.historySentinel ||
+        previous == LibraryCollections.libraryBrowseSentinel ||
         LibraryCollections.isSmartSentinel(previous) ||
         (previous == LibraryCollections.downloadsSentinel &&
             input.downloads.supported) ||
