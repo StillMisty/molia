@@ -768,7 +768,10 @@
   字幕 CDN 继续匿名；凭据是凭证类别设置键，默认随同步与完整备份。`BiliSession`
   是 Cookie / 账号 / 就绪 Future 的唯一持有者（账号服务只保留 UI 状态），
   `BiliClient` / `BiliLyric` 接受注入会话；账号请求与字幕取词都在读取 Cookie
-  前 await `ready`，过期标记由会话持有。决策与边界见 ADR-0014 / ADR-0016。
+  前 await `ready`，过期标记由会话持有。启动路径不读安全存储：
+  `bili_cookie_present_v1` prefs 提示为 true 时首帧后补一次账号服务 `init()`
+  （登录用户的字幕照常可用），从未登录过的环境保持匿名，账号页 / 登录动作
+  再显式 init。决策与边界见 ADR-0014 / ADR-0016。
 - **内置尝试循环 / 发现执行器**：`builtin_transport.dart::runBuiltinAttempts` 是
   「`attempt` 返回 null 即重试、异常直接上抛、耗尽抛 `StateError`」的唯一循环，
   `cachedRetry` 与无缓存的发现端点共用；`BuiltinRetryBudget` 集中命名

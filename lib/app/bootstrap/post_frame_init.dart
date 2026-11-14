@@ -35,6 +35,11 @@ void initAfterFirstFrame({
 
   // AI / 听歌同步的配置与凭据都在安全存储里：启动路径不读，页面打开时
   // 各自按需 init（无钥匙串桌面 / 容器里 libsecret 会直接终止进程）。
+  //
+  // B 站账号：只有 prefs 提示「登录过」时才补读安全存储。登录用户的字幕
+  // 链路（`BiliSession.ready` / `isLoggedIn`）在首帧后即恢复；从未登录过的
+  // 环境不碰钥匙串。
+  unawaited(catalog.biliAccount.initIfStored());
 
   // 首帧后的本地数据尾巴：省流网络探测 / 下载记录加载 / 音频缓存维护。
   // 这几项都要过平台通道或磁盘，继续留在 runApp 前会把首帧整体推后。
