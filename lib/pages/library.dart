@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -31,7 +33,7 @@ enum _LibraryTab { search, leaderboards, playlists }
 
 /// 资料库页：
 /// - 「搜索 / 热榜 / 歌单」三个 tab；全局只有一个当前渠道；
-/// - 顶部渠道下拉在所有 tab（含搜索）左侧常显，同时决定热榜 / 歌单与搜索；
+/// - 顶部渠道选择在所有 tab（含搜索）左侧常显，同时决定热榜 / 歌单与搜索；
 /// - 当前渠道不支持搜索时隐藏搜索 tab；热榜 / 歌单按渠道能力隐藏；
 /// - 个人内容（播放历史 / 我的列表 / 导入收藏）在收藏页。
 class Library extends StatefulWidget {
@@ -238,7 +240,7 @@ class _LibraryState extends State<Library> {
       if (discoverActive && discover.supportsPlaylists) _LibraryTab.playlists,
     ];
 
-    // 顶部工具行与三个 tab 共用页边距：渠道下拉、tab、搜索栏和内容栏
+    // 顶部工具行与三个 tab 共用页边距：渠道选择、tab、搜索栏和内容栏
     // 都从同一条 gutter 起排。
     final gutter = discoverGutterOf(context);
     final multiChannel = enabledChannels.length >= 2;
@@ -246,7 +248,7 @@ class _LibraryState extends State<Library> {
     final selectedIndex = _indexOf(visibleTabs);
 
     if (visibleTabs.isEmpty) {
-      // 当前渠道既不能搜索也没有发现内容：顶部渠道下拉仍保留（可切到其它
+      // 当前渠道既不能搜索也没有发现内容：顶部渠道选择仍保留（可切到其它
       // 渠道），正文只提示当前渠道没有内容，不误报「所有渠道都已停用」。
       return ResponsivePageContainer(
         pageType: ResponsivePageType.browse,
@@ -324,10 +326,11 @@ class _LibraryState extends State<Library> {
     );
   }
 
-  /// 顶部工具行：渠道下拉在所有 tab（含搜索）左侧常显，tab 在右。
+  /// 顶部工具行：渠道选择在所有 tab（含搜索）左侧常显，tab 在右。
   ///
-  /// 渠道只有 1 个时下拉框不渲染（[LibraryChannelSelector] 自己返回空盒），
-  /// 单行布局保持不变。
+  /// 渠道只有 1 个时触发框不渲染（[LibraryChannelSelector] 自己返回空盒），
+  /// 单行布局保持不变。渠道触发框按当前名字自适应，上限扣掉可见 tab 的
+  /// 最小槽位，避免长渠道名把 tab 挤成不可点的宽度。
   Widget _topBar({
     required AppLocalizations l10n,
     required List<SourceDescriptor> channels,
@@ -347,32 +350,45 @@ class _LibraryState extends State<Library> {
         gutter,
         hasTopBar ? 4 : 0,
       ),
-      child: Row(
-        children: [
-          LibraryChannelSelector(
-            channels: channels,
-            selectedKey: selectedKey,
-            onSelected: onSelected,
-          ),
-          if (showTabBar) ...[
-            if (multiChannel) const SizedBox(width: 12),
-            Expanded(
-              child: M3ETabs(
-                // 次 tab：图标在文案左侧同一行、行高 48；渠道下拉框与
-                // 内容页共用这一行分组切换（不是顶层导航）。
-                variant: M3ETabsVariant.secondary,
-                // 触摸端 / 桌面都等分铺满渠道下拉之后的剩余宽度，tab 栏
-                // 右缘与内容右缘对齐。
-                alignment: M3ETabsAlignment.fill,
-                tabs: [for (final tab in visibleTabs) _tabSpec(l10n, tab)],
-                selectedIndex: selectedIndex,
-                onTabSelected: (index) =>
-                    setState(() => _tab = visibleTabs[index]),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final reserved = showTabBar
+              ? visibleTabs.length * discoverTabSlotMinWidth +
+                    (multiChannel ? 12 : 0)
+              : 0;
+          final pickerMaxWidth = math.max(
+            0.0,
+            constraints.maxWidth - reserved.toDouble(),
+          );
+          return Row(
+            children: [
+              LibraryChannelSelector(
+                channels: channels,
+                selectedKey: selectedKey,
+                onSelected: onSelected,
+                maxWidth: pickerMaxWidth,
               ),
-            ),
-          ] else if (multiChannel)
-            const Spacer(),
-        ],
+              if (showTabBar) ...[
+                if (multiChannel) const SizedBox(width: 12),
+                Expanded(
+                  child: M3ETabs(
+                    // 次 tab：图标在文案左侧同一行、行高 48；渠道选择与
+                    // 内容页共用这一行分组切换（不是顶层导航）。
+                    variant: M3ETabsVariant.secondary,
+                    // 触摸端 / 桌面都等分铺满渠道选择之后的剩余宽度，tab 栏
+                    // 右缘与内容右缘对齐。
+                    alignment: M3ETabsAlignment.fill,
+                    tabs: [for (final tab in visibleTabs) _tabSpec(l10n, tab)],
+                    selectedIndex: selectedIndex,
+                    onTabSelected: (index) =>
+                        setState(() => _tab = visibleTabs[index]),
+                  ),
+                ),
+              ] else if (multiChannel)
+                const Spacer(),
+            ],
+          );
+        },
       ),
     );
   }
@@ -425,7 +441,7 @@ class _LibraryState extends State<Library> {
 
   /// 单个 tab：桌面端图标 + 文案，触摸端只留图标（文案走无障碍名）。
   ///
-  /// 触摸端去掉文案：窄屏上「渠道下拉框 + 三 tab」挤在一行，文案会被压到
+  /// 触摸端去掉文案：窄屏上「渠道选择 + 三 tab」挤在一行，文案会被压到
   /// 逐字换行 / 截断；桌面窗口富余、文案与图标同行也更有可读性，保持原样。
   M3ETab _buildTab({required IconData icon, required String label}) {
     final showLabel = isDesktopPlatform();

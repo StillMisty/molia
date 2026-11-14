@@ -43,9 +43,11 @@ const double discoverSectionGap = 8;
 double discoverGutterOf(BuildContext context) =>
     context.layoutType(ResponsivePageType.browse).horizontalPadding;
 
-/// 渠道下拉的响应式宽度：约占屏宽 32%，夹在 104–148 之间。
-double discoverChannelSelectorWidth(BuildContext context) =>
-    (context.screenWidth * 0.32).clamp(104.0, 148.0).toDouble();
+/// 顶部工具行里每个可见 tab 至少预留的宽度（含触摸目标）。
+///
+/// 渠道触发框按当前名字自适应，宽度上限 = 行宽 − 可见 tab 数 × 本值 − 间距；
+/// 数字只在本文件维护，页面不要另写 48。
+const double discoverTabSlotMinWidth = 48;
 
 /// 内容宽度 = 页面可用宽 − 两侧 gutter。
 double discoverContentWidthOf(BuildContext context, double availableWidth) {

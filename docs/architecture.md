@@ -687,10 +687,11 @@
   唯一的渠道状态（持久化 `kDiscoverChannelKey`，`kSearchSourceFilter` / 来源 chips
   已删除，见 ADR-0019）；`DiscoverProvider.channelKey` 与
   `SearchProvider.activeSourceKey` 都读同一实例，组合根不再在发现 → 搜索之间
-  手工同步。资料页下拉与 Ctrl+F chip 只调 `ChannelSelection.select`；停用 / 删除
+  手工同步。资料页与 Ctrl+F 共用 `lib/widgets/channel_picker.dart` 的
+  `ChannelPicker`，两者只调 `ChannelSelection.select`；停用 / 删除
   后的回退规则在模块 `ensureValid`，触发时机仍属于资料页：渠道缺失且音源就绪时
   post-frame 调用一次（有效 key 列表为空——音源未初始化 / 脚本激活中——不回退）。
-  模块不订阅音源状态，搜索侧也不会因来源消失自动改搜其它渠道。顶部渠道下拉在
+  模块不订阅音源状态，搜索侧也不会因来源消失自动改搜其它渠道。顶部渠道选择在
   所有 tab（含搜索）左侧常显；当前渠道不支持搜索时隐藏搜索 tab，Ctrl+F 仍可打开
   并显示「当前渠道不支持搜索」空态。
 - **搜索会话**：`lib/providers/search_session.dart` 的 `SearchSession` 是关键词 /
@@ -710,11 +711,13 @@
   `ResponsivePageType.browse` 的页边距（compact 12 / 手机 16 / 平板桌面 24），
   内容栏**全宽自适应**（资料页 `ResponsivePageContainer` 传
   `maxWidth: double.infinity`，不再有 960 / 1600 上限），手机 / 桌面都铺满
-  可用内容宽。顶部工具行保持单行：渠道下拉在左（宽度
-  `(屏宽 × 0.32).clamp(104, 148)`），tab 在右；触摸端 tab 只留图标
-  （文案走语义名），桌面与触摸端都用 `M3ETabsAlignment.fill` 等分铺满渠道下拉后的
-  剩余宽度。渠道下拉 item 固定单行（长名称省略，选中项右侧预留打勾槽），不因
-  选中态改变行高。歌单内容宽
+  可用内容宽。顶部工具行保持单行：渠道选择在左（触发框按当前渠道名自适应，
+  上限 = 行宽 − 可见 tab 数 × `discoverTabSlotMinWidth` − 间距），tab 在右；
+  触摸端 tab 只留图标（文案走语义名），桌面与触摸端都用 `M3ETabsAlignment.fill`
+  等分铺满渠道选择后的剩余宽度。点开的渠道列表用 M3E 菜单：菜单宽度由
+  `anchor + 176`（最大 280）决定，不继承触发框宽度，渠道名在列表里完整显示；
+  超长脚本名在触发框 / 菜单里仍单行省略。渠道很多时菜单滚动 + 键盘方向键 /
+  字母数字定位，不再单独弹搜索框。歌单内容宽
   < 600 用 56dp 封面紧凑列表，≥ 600 切封面网格：列数按含列距的
   `floor((内容宽 + 12) / (200 + 12))` 计算（夹在 2–6），全宽后最多 6 列；
   间距 12，方形封面 = 卡片宽 − 16，标题最多 2 行 / 副标题
@@ -1491,7 +1494,7 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   共用 **Search results surface**（`lib/widgets/search_results_view.dart`）：行映射 / 分段 /
   失败 / 空态一份实现。搜索条是 `ChannelSearchBar`：单层胶囊，左侧透明背景 + 描边的
   渠道 chip 直接占据搜索图标位置，右侧裸输入 + 清除键（不再嵌套 AppSearchBar）；资料库
-  搜索 tab 用同一条胶囊的 `showChannelChip: false` 变体（渠道下拉常驻页面顶部，条内不重复，
+  搜索 tab 用同一条胶囊的 `showChannelChip: false` 变体（渠道选择常驻页面顶部，条内不重复，
   高度 / 清除键 / 焦点环与 Ctrl+F 同源）；选择渠道会同时
   切发现内容与搜索，并把焦点还给输入框；当前渠道不支持搜索时面板显示专用空态。
   结果面只有当前渠道一组，

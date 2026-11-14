@@ -1,13 +1,7 @@
-import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/source.dart' show SourceDescriptor;
-import '../l10n/app_localizations.dart';
-import 'channel_dropdown.dart';
-import 'discover_layout.dart';
-
-AppLocalizations _l10n(BuildContext context) =>
-    AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
+import 'channel_picker.dart';
 
 /// 启用渠道（顺序不变）。
 List<SourceDescriptor> _enabledOf(List<SourceDescriptor> channels) {
@@ -17,17 +11,23 @@ List<SourceDescriptor> _enabledOf(List<SourceDescriptor> channels) {
   ];
 }
 
-/// 发现页统一渠道下拉框：搜索 / 热榜 / 歌单共用同一个渠道选择。
+/// 发现页统一渠道选择器：搜索 / 热榜 / 歌单共用同一个渠道选择。
 ///
 /// 只接收纯数据（[channels] + [selectedKey]）；渠道的顺序与启停由
 /// 「音源管理」页维护（`SourcesProvider.reorderChannel / setChannelEnabled`）。
+/// 触发框宽度由 [ChannelPicker] 按当前渠道名实测，[maxWidth] 由顶部工具行
+/// 扣掉可见 tab 槽位后传入。
 class LibraryChannelSelector extends StatelessWidget {
   const LibraryChannelSelector({
     super.key,
     required this.channels,
     required this.selectedKey,
     required this.onSelected,
+    required this.maxWidth,
   });
+
+  /// 触发框稳定 Key（测试定位用）。
+  static const Key triggerKey = Key('libraryChannelSelectorTrigger');
 
   /// 全部渠道（含停用项；本组件只展示启用项）。
   final List<SourceDescriptor> channels;
@@ -38,37 +38,19 @@ class LibraryChannelSelector extends StatelessWidget {
   /// 选择渠道（不会回调停用项）。
   final ValueChanged<String> onSelected;
 
+  /// 触发框宽度上限（顶部工具行剩余空间）。
+  final double maxWidth;
+
   @override
   Widget build(BuildContext context) {
     final entries = _enabledOf(channels);
     if (entries.length < 2) return const SizedBox.shrink();
-    return SizedBox(
-      // 窄屏别挤掉 tab，宽屏也别让渠道名一直截断：按屏宽取 32%。
-      width: discoverChannelSelectorWidth(context),
-      child: M3EDropdownMenu<String>(
-        items: [
-          for (final entry in entries)
-            M3EDropdownItem<String>(
-              label: entry.displayName,
-              value: entry.key,
-              selected: entry.key == selectedKey,
-            ),
-        ],
-        singleSelect: true,
-        // 单选用纯文本展示（默认 chip 模式点击会取消选中）。
-        showChipAnimation: false,
-        // 渠道较多（多脚本 / any-listen）时提供搜索过滤。
-        searchEnabled: entries.length > 8,
-        itemBuilder: channelDropdownItemBuilder(context),
-        fieldStyle: M3EDropdownFieldStyle(
-          hintText: _l10n(context).libraryChannelSelect,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        ),
-        onSelectionChanged: (items) {
-          if (items.isEmpty) return;
-          onSelected(items.first.value);
-        },
-      ),
+    return ChannelPicker(
+      triggerKey: triggerKey,
+      channels: entries,
+      selectedKey: selectedKey,
+      onSelected: onSelected,
+      maxWidth: maxWidth,
     );
   }
 }

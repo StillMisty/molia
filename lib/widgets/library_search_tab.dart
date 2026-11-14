@@ -125,7 +125,7 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
             children: [
               Padding(
                 // 与内容栏同一 gutter；条内不再放渠道控件（页面顶部已有
-                // 唯一渠道下拉），搜索 tab 与 Ctrl+F 共用同一条胶囊。
+                // 唯一渠道选择），搜索 tab 与 Ctrl+F 共用同一条胶囊。
                 padding: EdgeInsets.fromLTRB(
                   gutter,
                   discoverPageTopPadding,

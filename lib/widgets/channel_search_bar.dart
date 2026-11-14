@@ -6,13 +6,12 @@ import 'package:material_ui/material_ui.dart';
 import '../domain/models/source.dart';
 import '../l10n/app_localizations.dart';
 import 'app_search_bar.dart';
-import 'channel_dropdown.dart';
-import 'discover_layout.dart';
+import 'channel_picker.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 桌面全局搜索的组合搜索条：单层胶囊，渠道下拉占据原搜索图标位置。
+/// 桌面全局搜索的组合搜索条：单层胶囊，渠道选择占据原搜索图标位置。
 ///
 /// 多渠道时整条是一个 M3E 风格胶囊：左侧透明背景 + outline 描边的渠道 chip
 /// → 输入 → 清除键；不再嵌套第二层 [AppSearchBar]，也不显示搜索图标。
@@ -39,8 +38,8 @@ class ChannelSearchBar extends StatelessWidget {
     this.channelFocusNode,
   });
 
-  /// 渠道下拉的稳定 Key（测试定位用）。
-  static const Key channelDropdownKey = Key('channelSearchChannelDropdown');
+  /// 渠道选择触发的稳定 Key（测试定位用）。
+  static const Key channelPickerKey = Key('channelSearchChannelDropdown');
 
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -62,10 +61,10 @@ class ChannelSearchBar extends StatelessWidget {
 
   /// 是否在胶囊左侧渲染渠道 chip（≥2 个启用渠道时才真正出现）。
   ///
-  /// 资料库搜索 tab 传 false：渠道下拉常驻页面顶部，条内不再重复。
+  /// 资料库搜索 tab 传 false：渠道选择常驻页面顶部，条内不再重复。
   final bool showChannelChip;
 
-  /// 渠道下拉的焦点节点（宿主可在选择后主动失焦，避免关闭时抢回焦点）。
+  /// 渠道选择的焦点节点（宿主可在选择后主动失焦，避免关闭时抢回焦点）。
   final FocusNode? channelFocusNode;
 
   @override
@@ -108,10 +107,6 @@ class ChannelSearchBar extends StatelessWidget {
     final cursorColor = barTheme.cursorColor(chipScheme);
     final selectionColor = barTheme.selectionColor(chipScheme);
     final layout = appSearchBarLayoutFor(context, null);
-    final selectorWidth = math.min(
-      148.0,
-      math.max(120.0, discoverChannelSelectorWidth(context)),
-    );
     final l10n = _l10n(context);
 
     return ListenableBuilder(
@@ -132,123 +127,90 @@ class ChannelSearchBar extends StatelessWidget {
             showFocusFill: false,
             child: SizedBox(
               height: layout.constraints.minHeight,
-              child: Row(
-                children: [
-                  if (showChip)
-                    SizedBox(
-                      width: selectorWidth,
-                      child: Padding(
-                        // 左/上/下 6、右 4：chip 不贴搜索条边缘；右侧与输入区
-                        // 再隔 4（输入区自身左 padding 4）= 约 8dp 间距。
-                        padding: const EdgeInsets.fromLTRB(6, 6, 4, 6),
-                        // 下拉内部是 mainAxisSize.min 的 Column，给死高度也不会
-                        // 撑满；改用 Align 在剩余高度里居中，chip 高度随字体缩放
-                        // 自然增长，1.5× 时仍保持上下对称内缩。
-                        child: Align(
-                          alignment: Alignment.center,
-                          child: Semantics(
-                            container: true,
-                            label: l10n.searchSourcesLabel,
-                            child: M3EDropdownMenu<String>(
-                              key: channelDropdownKey,
-                              focusNode: channelFocusNode,
-                              items: [
-                                for (final channel in channels)
-                                  M3EDropdownItem<String>(
-                                    label: channel.displayName,
-                                    value: channel.key,
-                                    selected: channel.key == selectedKey,
-                                  ),
-                              ],
-                              singleSelect: true,
-                              // 单选用纯文本展示（默认 chip 模式点击会取消选中）。
-                              showChipAnimation: false,
-                              searchEnabled: channels.length > 8,
-                              itemBuilder: channelDropdownItemBuilder(context),
-                              fieldStyle: M3EDropdownFieldStyle(
-                                // 透明背景：露出外层搜索胶囊底色，只用描边区分
-                                // chip；聚焦 / 展开时描边略强。
-                                backgroundColor: Colors.transparent,
-                                foregroundColor: chipScheme.onSurface,
-                                border: BorderSide(
-                                  color: chipScheme.outlineVariant,
-                                ),
-                                focusedBorder: BorderSide(
-                                  color: chipScheme.outline,
-                                ),
-                                borderRadius: BorderRadius.circular(999),
-                                margin: EdgeInsets.zero,
-                                // 10 + 10：1× 下 chip 自然高度约 44，正好填满
-                                // 56dp 搜索条减掉上下 6dp 的剩余高度。
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                hintText: l10n.searchSourcesLabel,
-                                hintStyle: m3e.typeScale.bodyMedium.copyWith(
-                                  color: chipScheme.onSurface,
-                                ),
-                                selectedTextStyle: m3e.typeScale.bodyMedium
-                                    .copyWith(color: chipScheme.onSurface),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // 输入区至少留 100、清除键 48、间距 12：渠道 chip 再长
+                  // 也不能把搜索输入挤到不可用；上限 200 防止桌面窗口里
+                  // chip 过宽。
+                  final chipMaxWidth = math.max(
+                    104.0,
+                    math.min(200.0, constraints.maxWidth - 160),
+                  );
+                  return Row(
+                    children: [
+                      if (showChip)
+                        Padding(
+                          // 左/上/下 6、右 4：chip 不贴搜索条边缘；右侧与输入区
+                          // 再隔 4（输入区自身左 padding 4）= 约 8dp 间距。
+                          padding: const EdgeInsets.fromLTRB(6, 6, 4, 6),
+                          // chip 高度随字体缩放自然增长；Align 让它在剩余高度里
+                          // 垂直居中，1.5× 时仍保持上下对称内缩。
+                          child: Align(
+                            alignment: Alignment.center,
+                            child: Semantics(
+                              container: true,
+                              label: l10n.searchSourcesLabel,
+                              child: ChannelPicker(
+                                triggerKey: channelPickerKey,
+                                focusNode: channelFocusNode,
+                                channels: channels,
+                                selectedKey: selectedKey,
+                                onSelected: (key) =>
+                                    onChannelSelected?.call(key),
+                                maxWidth: chipMaxWidth,
+                                surface: ChannelPickerSurface.outlined,
                               ),
-                              dropdownStyle: M3EDropdownPanelStyle(
-                                noItemsFoundText: l10n.noItemsFound,
-                              ),
-                              onSelectionChanged: (items) {
-                                if (items.isEmpty) return;
-                                onChannelSelected?.call(items.first.value);
-                              },
                             ),
                           ),
                         ),
+                      if (!showChip)
+                        SizedBox(
+                          width: 48,
+                          child: Icon(
+                            Icons.search_rounded,
+                            color: chipScheme.onSurface,
+                          ),
+                        ),
+                      Expanded(
+                        child: Padding(
+                          // 有 chip 时与 chip 隔 4；无 chip 时左侧是搜索图标，
+                          // 图标槽自身已留出内缩，这里只补 4dp 文字间距。
+                          padding: const EdgeInsets.only(left: 4, right: 4),
+                          child: _ChannelSearchField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            hintText: hintText,
+                            autofocus: autofocus,
+                            enabled: enabled,
+                            inputStyle: layout.inputStyle,
+                            hintStyle: layout.hintStyle,
+                            cursorColor: cursorColor,
+                            selectionColor: selectionColor,
+                            onChanged: onChanged,
+                            onSubmitted: onSubmitted,
+                            onEscape: onEscape,
+                          ),
+                        ),
                       ),
-                    ),
-                  if (!showChip)
-                    SizedBox(
-                      width: 48,
-                      child: Icon(
-                        Icons.search_rounded,
-                        color: chipScheme.onSurface,
-                      ),
-                    ),
-                  Expanded(
-                    child: Padding(
-                      // 有 chip 时与 chip 隔 4；无 chip 时左侧是搜索图标，
-                      // 图标槽自身已留出内缩，这里只补 4dp 文字间距。
-                      padding: const EdgeInsets.only(left: 4, right: 4),
-                      child: _ChannelSearchField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        hintText: hintText,
-                        autofocus: autofocus,
-                        enabled: enabled,
-                        inputStyle: layout.inputStyle,
-                        hintStyle: layout.hintStyle,
-                        cursorColor: cursorColor,
-                        selectionColor: selectionColor,
-                        onChanged: onChanged,
-                        onSubmitted: onSubmitted,
-                        onEscape: onEscape,
-                      ),
-                    ),
-                  ),
-                  if (enabled && hasText)
-                    SizedBox(
-                      width: 48,
-                      child: M3EIconButton(
-                        variant: M3EIconButtonVariant.standard,
-                        icon: const Icon(Icons.close_rounded),
-                        semanticLabel: l10n.clearSearch,
-                        onPressed: () {
-                          controller.clear();
-                          onChanged?.call('');
-                          focusNode.requestFocus();
-                        },
-                      ),
-                    )
-                  else
-                    const SizedBox(width: 4),
-                ],
+                      if (enabled && hasText)
+                        SizedBox(
+                          width: 48,
+                          child: M3EIconButton(
+                            variant: M3EIconButtonVariant.standard,
+                            icon: const Icon(Icons.close_rounded),
+                            semanticLabel: l10n.clearSearch,
+                            onPressed: () {
+                              controller.clear();
+                              onChanged?.call('');
+                              focusNode.requestFocus();
+                            },
+                          ),
+                        )
+                      else
+                        const SizedBox(width: 4),
+                    ],
+                  );
+                },
               ),
             ),
           ),
