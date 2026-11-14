@@ -1,10 +1,10 @@
 /// 收藏页合集 I/O 编排：文件导入 / 链接导入 / 导出 / 批量下载 → 类型化结果。
 ///
-/// 为什么单独一层：这些流程原先写在收藏页 State 里，选文件、读盘、解析、复核、
-/// 写库、另存、批量入队与 `mounted` 检查缠在一起，失败只能各自 snackbar，
-/// 纯单测必须挂 widget 树。这里把「选什么 → 解析什么 → 谁确认 → 写到哪」
-/// 收进窄端口，页面只保留弹层 / 文案 / 触感 / 清选择；异常在命令边界统一
-/// 收口成结果，不再有原始异常逃进 `unawaited`。
+/// 为什么单独一层：选文件、读盘、解析、复核、写库、另存、批量入队与页面
+/// 生命周期检查若散在收藏页 State 里，失败只能各自 snackbar，纯单测必须挂
+/// widget 树。这里把「选什么 → 解析什么 → 谁确认 → 写到哪」收进窄端口，
+/// 页面只保留弹层 / 文案 / 触感 / 清选择；异常在命令边界统一收口成结果，
+/// 不把原始异常留给 `unawaited`。
 ///
 /// 模块不读 BuildContext、不 import widgets：生产端口由页面按 context 组装，
 /// 单测用假端口直接断言结果（取消 / 空 / 失败 / 部分成功各自可区分）。
@@ -21,7 +21,6 @@ import '../domain/models/download.dart';
 import '../domain/models/library.dart';
 import '../domain/models/playlist_cover_keys.dart';
 import '../domain/models/track.dart';
-import '../services/download/download_intent.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_records.dart';
 import '../services/playlist/playlist_export_builder.dart';
@@ -86,9 +85,27 @@ abstract interface class CollectionExportSaver {
   });
 }
 
+/// 批量下载入口的结果形状：命令模块不引用下载意图实现，接线处负责映射。
+final class CollectionBatchStart {
+  const CollectionBatchStart({
+    required this.enqueued,
+    required this.done,
+    required this.failed,
+  });
+
+  /// 实际新入队数（0 = 没有候选）。
+  final int enqueued;
+
+  /// 成功数（取消不计入成功 / 失败）。
+  final int done;
+
+  /// 失败数（失败音频任务留在管理页失败区可重试）。
+  final int failed;
+}
+
 /// 批量下载端口（批量入队 / 候选过滤 / 结果统计仍由下载服务唯一实现）。
 abstract interface class CollectionBatchDownloader {
-  Future<DownloadBatchStart> startBatch(
+  Future<CollectionBatchStart> startBatch(
     List<Track> tracks, {
     void Function(int enqueued)? onEnqueued,
   });
@@ -288,8 +305,8 @@ final class CollectionIoCommands {
 
   /// M3U / M3U8 / PLS：选文件 → 读文本 → 解析 → 复核 → 创建列表并批量加入。
   ///
-  /// [isActive] 由页面传 `mounted` 检查：页面卸载后不再做解析 / 复核 / 写库，
-  /// 与原来分段的 `mounted` 守卫同一语义。
+  /// [isActive] 由页面传 `mounted` 检查：页面卸载后立即停止剩余 I/O，
+  /// 不再做解析 / 复核 / 写库。
   Future<CollectionPlaylistImportOutcome> importPlaylistFile({
     required String dialogTitle,
     bool Function()? isActive,
@@ -670,20 +687,6 @@ final class SaveAsCollectionExportSaver implements CollectionExportSaver {
     relativeDir: relativeDir,
     dialogTitle: dialogTitle,
   );
-}
-
-/// [CollectionBatchDownloader] 的生产实现：转发下载意图入口。
-final class LauncherCollectionBatchDownloader
-    implements CollectionBatchDownloader {
-  const LauncherCollectionBatchDownloader(this._launcher);
-
-  final DownloadLauncher _launcher;
-
-  @override
-  Future<DownloadBatchStart> startBatch(
-    List<Track> tracks, {
-    void Function(int enqueued)? onEnqueued,
-  }) => _launcher.startBatch(tracks, onEnqueued: onEnqueued);
 }
 
 /// [CollectionLinkImporter] 的生产实现：转发发现页的链接导入。

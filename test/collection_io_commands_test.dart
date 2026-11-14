@@ -7,7 +7,6 @@ import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/collection_io_commands.dart';
-import 'package:molia/services/download/download_intent.dart';
 import 'package:molia/services/playlist/playlist_import_service.dart';
 import 'package:molia/services/save_as_types.dart';
 
@@ -686,7 +685,7 @@ class _FakeDownloader implements CollectionBatchDownloader {
   int startCalls = 0;
 
   @override
-  Future<DownloadBatchStart> startBatch(
+  Future<CollectionBatchStart> startBatch(
     List<Track> tracks, {
     void Function(int enqueued)? onEnqueued,
   }) async {
@@ -694,6 +693,6 @@ class _FakeDownloader implements CollectionBatchDownloader {
     final failure = error;
     if (failure != null) throw failure;
     onEnqueued?.call(enqueued);
-    return DownloadBatchStart(enqueued: enqueued, done: done, failed: failed);
+    return CollectionBatchStart(enqueued: enqueued, done: done, failed: failed);
   }
 }

@@ -14,6 +14,7 @@ import '../domain/models/playlist_folders.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/collection_actions.dart';
+import '../providers/collection_batch_download_adapter.dart';
 import '../providers/collection_io_commands.dart';
 import '../providers/collection_mode.dart';
 import '../providers/collection_presenter.dart';
