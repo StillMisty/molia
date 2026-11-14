@@ -21,6 +21,7 @@ import 'next_track_preloader.dart';
 import 'playback_order.dart';
 import 'playback_power_policy.dart';
 import 'playing_track_cache_writer.dart';
+import 'queue_edit_policy.dart';
 import 'queue_navigation.dart';
 import 'queue_projection.dart';
 import 'shuffle_order.dart';
@@ -898,23 +899,21 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 为当前曲目或越界/原地不动都返回 false（no-op）。
   ///
   /// 队列是播放顺序的唯一事实：移动后同步播放顺序栈与 shuffle 排列的下标，
-  /// 否则 previous / 下一首预览会指到另一首。
+  /// 否则 previous / 下一首预览会指到另一首。判定与当前下标平移走
+  /// [planQueueMove]，与恢复态共用一套口径。
   bool moveQueueIndex(int from, int to) {
-    if (_mode == PlayMode.shuffle) return false;
-    if (from < 0 || from >= _queue.length) return false;
-    if (to < 0 || to >= _queue.length) return false;
-    if (from == to || from == _currentIndex || to == _currentIndex) {
-      return false;
-    }
+    final plan = planQueueMove(
+      mode: _mode,
+      length: _queue.length,
+      currentIndex: _currentIndex,
+      from: from,
+      to: to,
+    );
+    if (!plan.allowed) return false;
     final track = _queue.removeAt(from);
     _queue.insert(to, track);
     _queueRevision++;
-    // 当前曲目只随「跨过它的移动」平移，不允许被移动本身。
-    if (from < to) {
-      if (_currentIndex > from && _currentIndex <= to) _currentIndex--;
-    } else {
-      if (_currentIndex >= to && _currentIndex < from) _currentIndex++;
-    }
+    _currentIndex = plan.currentIndex;
     _order.moveIndex(from, to);
     _shuffleOrder.moveIndex(from, to);
     notifyListeners();
@@ -927,11 +926,15 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 随机模式同样允许移除（产品约定：随机队列只保留「移出队列」）；
   /// 播放顺序栈与洗牌排列同步重映射，轮次剩余不会包含已移除下标。
   bool removeQueueIndex(int index) {
-    if (index < 0 || index >= _queue.length) return false;
-    if (index == _currentIndex) return false;
+    final plan = planQueueRemove(
+      length: _queue.length,
+      currentIndex: _currentIndex,
+      index: index,
+    );
+    if (!plan.allowed) return false;
     _queue.removeAt(index);
     _queueRevision++;
-    if (index < _currentIndex) _currentIndex--;
+    _currentIndex = plan.currentIndex;
     _order.removeIndex(index);
     _shuffleOrder.removeIndex(index);
     notifyListeners();
