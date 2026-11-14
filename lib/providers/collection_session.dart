@@ -375,7 +375,7 @@ class CollectionSession extends ChangeNotifier {
   void selectAllVisible(CollectionView view) =>
       _selection.selectAll([for (final row in view.visibleRows) row.key]);
 
-  /// 范围选择（触摸端「范围选择」动作）：选中锚点到 [key] 的闭区间。
+  /// 范围选择（触摸端长按端点 / 桌面 Shift）：选中锚点到 [key] 的闭区间。
   ///
   /// 锚点由上一次普通点击 / 长按落下（见 [selectRow] / [handleRowTap]）；
   /// 没有锚点或目标行不在当前可见列表时不做任何事。
