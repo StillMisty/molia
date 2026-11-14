@@ -196,6 +196,60 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
     );
   }
 
+  /// 多选上下文栏：`[✕] 已选 N [加入列表]`。
+  ///
+  /// 选中态是**可见**模式：栏出现时按钮含义明确（加入选中的 N 首），不会
+  /// 像旧版那样同一个「加入列表」图标在隐藏选中集合时悄悄换成另一批歌。
+  /// 行点击始终播放，长按进入 / 退出选中。
+  Widget _buildSelectionBar(
+    BuildContext context,
+    AppLocalizations l10n,
+    List<BrowseTrack> selected,
+  ) {
+    final m3e = M3ETheme.of(context);
+    final selectionTheme = m3e.selectionTheme;
+    final foreground = selectionTheme.contextualForeground(m3e.colorScheme);
+    return ColoredBox(
+      color: selectionTheme.contextualBackground(m3e.colorScheme),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+        child: IconTheme.merge(
+          data: IconThemeData(color: foreground),
+          child: Row(
+            children: [
+              M3EIconButton(
+                variant: M3EIconButtonVariant.standard,
+                icon: const Icon(Icons.close_rounded),
+                semanticLabel: l10n.cancel,
+                onPressed: () => setState(_selectedTracks.clear),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  l10n.librarySelectedCount(selected.length),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.typeScale.titleMedium.copyWith(
+                    color: foreground,
+                  ),
+                ),
+              ),
+              M3EButton.text(
+                onPressed: () => widget.onAdd(selected),
+                child: Text(
+                  l10n.addToPlaylist,
+                  style: context.typeScale.labelLarge.copyWith(
+                    color: foreground,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDetail(
     BuildContext context,
     AppLocalizations l10n,
@@ -245,70 +299,66 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
       for (final track in filtered)
         if (representativeOf[track.key] == track.key) track,
     ];
+    // 选中集合只在可见行里取（搜索过滤 / 切换分组后不会带出旧行）。
+    final selectedTracks = [
+      for (final track in filtered)
+        if (_selectedTracks.contains(track.key)) track,
+    ];
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-          child: Row(
-            children: [
-              M3EIconButton(
-                variant: M3EIconButtonVariant.standard,
-                icon: const Icon(Icons.arrow_back_rounded),
-                semanticLabel: l10n.backButton,
-                onPressed: () => setState(() => _selectedKey = null),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  group.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.typeScale.titleMedium,
-                ),
-              ),
-              M3EIconButton(
-                variant: M3EIconButtonVariant.standard,
-                icon: const Icon(Icons.play_arrow_rounded),
-                semanticLabel: l10n.playAll,
-                onPressed: representatives.isEmpty
-                    ? null
-                    : () => widget.onPlay(group, representatives),
-              ),
-              M3EIconButton(
-                variant: M3EIconButtonVariant.standard,
-                icon: const Icon(Icons.shuffle_rounded),
-                semanticLabel: l10n.playAllShuffled,
-                onPressed: representatives.isEmpty
-                    ? null
-                    : () =>
-                          widget.onPlay(group, representatives, shuffle: true),
-              ),
-              if (_selectedTracks.isNotEmpty)
+        if (selectedTracks.isNotEmpty)
+          _buildSelectionBar(context, l10n, selectedTracks)
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            child: Row(
+              children: [
                 M3EIconButton(
                   variant: M3EIconButtonVariant.standard,
-                  icon: const Icon(Icons.close_rounded),
-                  semanticLabel: l10n.cancel,
-                  onPressed: () => setState(_selectedTracks.clear),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  semanticLabel: l10n.backButton,
+                  onPressed: () => setState(() => _selectedKey = null),
                 ),
-              M3EIconButton(
-                variant: M3EIconButtonVariant.standard,
-                icon: const Icon(Icons.playlist_add_rounded),
-                semanticLabel: l10n.addToPlaylist,
-                onPressed: representatives.isEmpty
-                    ? null
-                    : () => widget.onAdd(
-                        _selectedTracks.isEmpty
-                            ? representatives
-                            : [
-                                for (final track in filtered)
-                                  if (_selectedTracks.contains(track.key))
-                                    track,
-                              ],
-                      ),
-              ),
-            ],
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    group.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.typeScale.titleMedium,
+                  ),
+                ),
+                M3EIconButton(
+                  variant: M3EIconButtonVariant.standard,
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  semanticLabel: l10n.playAll,
+                  onPressed: representatives.isEmpty
+                      ? null
+                      : () => widget.onPlay(group, representatives),
+                ),
+                M3EIconButton(
+                  variant: M3EIconButtonVariant.standard,
+                  icon: const Icon(Icons.shuffle_rounded),
+                  semanticLabel: l10n.playAllShuffled,
+                  onPressed: representatives.isEmpty
+                      ? null
+                      : () => widget.onPlay(
+                          group,
+                          representatives,
+                          shuffle: true,
+                        ),
+                ),
+                M3EIconButton(
+                  variant: M3EIconButtonVariant.standard,
+                  icon: const Icon(Icons.playlist_add_rounded),
+                  semanticLabel: l10n.addToPlaylist,
+                  onPressed: representatives.isEmpty
+                      ? null
+                      : () => widget.onAdd(representatives),
+                ),
+              ],
+            ),
           ),
-        ),
         Expanded(
           child: rows.isEmpty
               ? Center(
@@ -354,14 +404,8 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
                               )
                             : null,
                         onTap: () {
-                          if (_selectedTracks.isNotEmpty) {
-                            setState(() {
-                              if (!_selectedTracks.remove(row.track.key)) {
-                                _selectedTracks.add(row.track.key);
-                              }
-                            });
-                            return;
-                          }
+                          // 行点击始终播放：选中是长按进入的可见模式，点一下
+                          // 不应因为「有选中项」就悄悄变成切换选中。
                           widget.onPlayTrack(row.track);
                         },
                         onLongPress: () => setState(() {

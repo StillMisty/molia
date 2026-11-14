@@ -40,7 +40,8 @@ class Library extends StatefulWidget {
   const Library({super.key, this.reselect, this.showSearchRequest});
 
   /// 壳层「重复点击底栏 / 导航轨资料库目的地」的请求通道：
-  /// 当前渲染 tab 的列表回到顶部。
+  /// 当前渠道可搜索时切到搜索 tab 并聚焦搜索框（键盘即用），
+  /// 没有搜索 tab 时当前渲染 tab 的列表回到顶部。
   final ShellReselectSignal? reselect;
 
   /// 壳层「顶栏全局搜索要看全部结果」的请求通道：切到搜索 tab 并回到顶部。
@@ -60,6 +61,16 @@ class _LibraryState extends State<Library> {
   /// 当前渲染的 tab（选中项被隐藏时是第一个可见 tab）：重复点击回顶按它取列表。
   /// build 期写入，不触发重建。
   _LibraryTab _renderedTab = _LibraryTab.search;
+
+  /// 当前渠道是否具备任一搜索能力（build 期写入）：重复点击「资料库」时
+  /// 决定「聚焦搜索」还是「列表回顶」。
+  bool _currentSupportsSearch = false;
+
+  /// 搜索输入框焦点节点。由页面持有，重复点击「资料库」时跨 tab 请求焦点
+  /// （搜索 tab 保持存活，切回来仍能立即打字）。
+  final FocusNode _searchFocusNode = FocusNode(
+    debugLabel: 'librarySearchField',
+  );
 
   /// 各 tab 列表的滚动控制器。由页面持有（重复点击资料库要按当前 tab 回顶），
   /// 下传给 tab 子组件；子组件在未注入时仍可自建（独立挂载 / 测试）。
@@ -102,16 +113,48 @@ class _LibraryState extends State<Library> {
     _searchResultsController.dispose();
     _leaderboardsController.dispose();
     _playlistsController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
-  /// 壳层重复点击「资料库」目的地：当前渲染 tab 的列表回到顶部
-  /// （列表未挂载 / 已在顶部 = 空操作）。
+  /// 壳层重复点击「资料库」目的地：
+  /// - 当前渠道可搜索 → 切到搜索 tab 并聚焦搜索框（用户带着键盘来）；
+  /// - 没有搜索 tab → 当前渲染 tab 的列表回到顶部（原有语义）。
   void _handleReselect() {
+    if (_currentSupportsSearch) {
+      _focusSearch();
+      return;
+    }
     animateScrollToTop(switch (_renderedTab) {
       _LibraryTab.search => _searchResultsController,
       _LibraryTab.leaderboards => _leaderboardsController,
       _LibraryTab.playlists => _playlistsController,
+    });
+  }
+
+  /// 切到搜索 tab 并把焦点交给搜索框。
+  ///
+  /// 搜索 tab 在 PageView 里保持存活，但切 tab 的翻页动画 / 首次挂载会让
+  /// 同一帧的 requestFocus 落空：逐帧重试到焦点真正落定（同 Ctrl+F 重新
+  /// 聚焦的做法）。
+  void _focusSearch() {
+    if (_tab != _LibraryTab.search) {
+      setState(() => _tab = _LibraryTab.search);
+    }
+    var attempts = 0;
+    void requestFocus() {
+      if (!mounted) return;
+      _searchFocusNode.requestFocus();
+      if (_searchFocusNode.hasFocus || ++attempts >= 8) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        requestFocus();
+        WidgetsBinding.instance.scheduleFrame();
+      });
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      requestFocus();
+      WidgetsBinding.instance.scheduleFrame();
     });
   }
 
@@ -158,6 +201,7 @@ class _LibraryState extends State<Library> {
 
     // 全部渠道停用：没有任何可展示的渠道，保留原来的设置引导。
     if (enabledChannels.isEmpty) {
+      _currentSupportsSearch = false;
       return ResponsivePageContainer(
         pageType: ResponsivePageType.browse,
         // 发现页全宽自适应：不再受 browse 的 1600 桌面上限约束。
@@ -186,6 +230,8 @@ class _LibraryState extends State<Library> {
         discover.channelKey == current.key;
     final currentSupportsSearch =
         current != null && sourceSupportsAnySearch(current);
+    // 布局期写入（不触发重建）：重复点击「资料库」据此决定聚焦搜索还是回顶。
+    _currentSupportsSearch = currentSupportsSearch;
     final visibleTabs = <_LibraryTab>[
       // 搜索 tab 跟随当前渠道：任一搜索能力（单曲 / 歌手 / 歌词）都显示；
       // 完全无搜索能力才隐藏（Ctrl+F 仍可打开并显示 unsupported 空态）。
@@ -443,6 +489,7 @@ class _LibraryState extends State<Library> {
   Widget _tabContent(_LibraryTab tab) => switch (tab) {
     _LibraryTab.search => LibrarySearchTab(
       controller: _searchResultsController,
+      focusNode: _searchFocusNode,
     ),
     _LibraryTab.leaderboards => DiscoverLeaderboardsTab(
       controller: _leaderboardsController,

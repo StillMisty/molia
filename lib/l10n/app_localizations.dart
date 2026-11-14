@@ -1208,6 +1208,12 @@ abstract class AppLocalizations {
   /// **'Playlists'**
   String get libraryTabPlaylists;
 
+  /// No description provided for @librarySelectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String librarySelectedCount(int count);
+
   /// No description provided for @libraryChannelSelect.
   ///
   /// In en, this message translates to:

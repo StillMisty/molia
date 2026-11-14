@@ -241,6 +241,14 @@
   "libraryTabSearch": "搜索",
   "libraryTabLeaderboards": "热榜",
   "libraryTabPlaylists": "歌单",
+  "librarySelectedCount": "已选 {count}",
+  "@librarySelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "libraryChannelSelect": "选择渠道",
   "libraryNoChannels": "所有渠道都已停用，请在「音源管理」中启用渠道。",
   "discoverChannelUnavailable": "当前渠道没有可用内容，换一个渠道试试",

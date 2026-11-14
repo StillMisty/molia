@@ -616,6 +616,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get libraryTabPlaylists => 'Playlists';
 
   @override
+  String librarySelectedCount(int count) {
+    return '$count selected';
+  }
+
+  @override
   String get libraryChannelSelect => 'Select channel';
 
   @override
