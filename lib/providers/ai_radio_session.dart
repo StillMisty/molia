@@ -17,8 +17,8 @@ import 'playback_provider.dart';
 
 /// 一次「用这批推荐接管播放队列」的意图。
 ///
-/// 起点 / 上下文 / 是否进入电台由调用方决定；会话按同一顺序落状态：
-/// 清停止标记 → 占互斥位 → 清本轮反馈与曲目跟踪 → 准备态 → 替换队列 →
+/// 起点 / 上下文 / 状态口径由调用方决定；会话按同一顺序落状态：
+/// 占互斥位 →（可选）准备态 → 清本轮反馈与曲目跟踪 → 替换队列 →
 /// 登记曲目 → 落定（playing / off）→ 释放互斥位。
 class AiRadioTakeOver {
   AiRadioTakeOver({
@@ -26,6 +26,8 @@ class AiRadioTakeOver {
     this.startIndex = 0,
     this.contextName,
     this.adopt = true,
+    this.enterPreparing = true,
+    this.errorOnFailure = true,
   }) : assert(items.isNotEmpty),
        items = List.unmodifiable(items);
 
@@ -35,8 +37,14 @@ class AiRadioTakeOver {
   /// 写入播放上下文的名称；历史批次在功能关闭时为 null（按普通队列播放）。
   final String? contextName;
 
-  /// 是否真正进入电台：false 时保持原状态，成功后归到 off。
+  /// 是否真正进入电台：false 时成功后归到 off。
   final bool adopt;
+
+  /// 是否显示「准备中」：历史播放从来不是生成准备，不能借 [adopt] 推断。
+  final bool enterPreparing;
+
+  /// 播放失败是否落 error：历史失败保留接管前状态，只写门面的 lastError。
+  final bool errorOnFailure;
 
   /// 起点按实际曲目数夹取，越界输入不抛给播放层。
   int get clampedIndex => startIndex.clamp(0, items.length - 1).toInt();
@@ -177,13 +185,12 @@ class AiRadioSession {
 
   /// 用一批推荐接管播放队列（起播 / 播放历史批次的唯一实现）。
   ///
-  /// 同步前缀（清理、占互斥位、准备态）在第一个 await 之前完成，调用方可在
+  /// 同步前缀（占互斥位、可选准备态）在第一个 await 之前完成，调用方可在
   /// 这之后统一发一次通知，再等结果落定后发第二次；本类不持有监听器。
   /// 失败不抛出：返回 [AiRadioTakeOverFailure]，错误映射与日志仍归 provider。
   Future<AiRadioTakeOverResult> takeOver(AiRadioTakeOver intent) async {
-    clearStoppedByUser();
     beginQueueOperation();
-    if (intent.adopt) _status = AiDjStatus.preparing;
+    if (intent.enterPreparing) _status = AiDjStatus.preparing;
     try {
       _onRoundReset();
       _resetTracks();
@@ -196,8 +203,8 @@ class AiRadioSession {
       _status = intent.adopt ? AiDjStatus.playing : AiDjStatus.off;
       return const AiRadioTakeOverSuccess();
     } catch (error) {
-      // 功能关闭时的历史批次只是普通队列：失败不改电台状态，也不进 error。
-      if (intent.adopt) _status = AiDjStatus.error;
+      // 历史批次失败保留接管前状态（与 startRadio 的 error 口径不同）。
+      if (intent.errorOnFailure) _status = AiDjStatus.error;
       return AiRadioTakeOverFailure(error);
     } finally {
       endQueueOperation();

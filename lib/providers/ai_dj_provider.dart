@@ -601,12 +601,16 @@ class AiDjProvider extends ChangeNotifier {
   Future<void> playHistoryBatch(String id) async {
     final batch = await loadHistoryBatch(id);
     if (batch == null || batch.items.isEmpty || _radio.queueBusy) return;
+    _radio.clearStoppedByUser();
     _feedback.clearUndo();
     await _history.setActive(id);
     final takeover = AiRadioTakeOver(
       items: batch.items,
       contextName: _enabled ? kAiDjContextName : null,
       adopt: _enabled,
+      // 历史播放不是生成准备；失败也只写 lastError，不改电台状态。
+      enterPreparing: false,
+      errorOnFailure: false,
     );
     final transition = _radio.takeOver(takeover);
     notifyListeners();

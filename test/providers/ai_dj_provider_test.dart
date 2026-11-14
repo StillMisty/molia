@@ -266,7 +266,7 @@ void main() {
     expect(provider.recommendations?.items, hasLength(3));
   });
 
-  test('接管意图：起播与历史播放走同一状态序列', () async {
+  test('接管意图：起播进入准备态，历史播放保持原状态', () async {
     await enableWithList();
     final batchId = provider.activeBatchId!;
 
@@ -276,21 +276,21 @@ void main() {
     await provider.startRadio();
     provider.removeListener(recordRadio);
 
+    // 回到 off 再播历史：历史接管不应经过 preparing。
+    await provider.stop();
+    expect(provider.status, AiDjStatus.off);
+
     final history = <(AiDjStatus, bool)>[];
     void recordHistory() => history.add((provider.status, provider.queueBusy));
     provider.addListener(recordHistory);
     await provider.playHistoryBatch(batchId);
     provider.removeListener(recordHistory);
 
-    const expected = [
-      (AiDjStatus.preparing, true),
-      (AiDjStatus.playing, false),
-    ];
-    expect(radio, expected);
-    expect(history, expected);
+    expect(radio, [(AiDjStatus.preparing, true), (AiDjStatus.playing, false)]);
+    expect(history, [(AiDjStatus.off, true), (AiDjStatus.playing, false)]);
   });
 
-  test('会话接管：夹取起点、清停止标记并重置本轮反馈', () async {
+  test('会话接管：夹取起点、可选准备态与失败状态', () async {
     final facade = FakePlaybackFacade();
     final playback = buildTestPlaybackProvider(facade: facade);
     await playback.preferencesReady;
@@ -310,18 +310,17 @@ void main() {
       playback.dispose();
     });
 
-    session.markStoppedByUser();
     final transition = session.takeOver(
       AiRadioTakeOver(
         items: _batch(0, 3).items,
         startIndex: 99,
         contextName: kAiDjContextName,
+        enterPreparing: false,
       ),
     );
 
-    expect(session.stoppedByUser, isFalse);
     expect(session.queueBusy, isTrue);
-    expect(session.status, AiDjStatus.preparing);
+    expect(session.status, AiDjStatus.off, reason: '历史口径不进入准备态');
     await transition;
 
     expect(roundResets, 1);
@@ -329,9 +328,25 @@ void main() {
     expect(session.status, AiDjStatus.playing);
     expect(facade.lastRequest?.startIndex, 2);
     expect(facade.lastRequest?.context?.name, kAiDjContextName);
+
+    // 失败不落 error 时保留接管前状态，互斥位仍要释放。
+    facade.playError = StateError('boom');
+    final failed = session.takeOver(
+      AiRadioTakeOver(
+        items: _batch(3, 3).items,
+        enterPreparing: false,
+        errorOnFailure: false,
+      ),
+    );
+    expect(session.status, AiDjStatus.playing, reason: '失败前不改准备态');
+    final failure = await failed;
+
+    expect(failure, isA<AiRadioTakeOverFailure>());
+    expect(session.status, AiDjStatus.playing, reason: '失败保留原状态');
+    expect(session.queueBusy, isFalse);
   });
 
-  test('接管失败：状态 error、释放互斥位并把错误交给门面', () async {
+  test('接管失败：起播落 error，历史保留原状态', () async {
     await enableWithList();
     final batchId = provider.activeBatchId!;
     backend.playError = StateError('boom');
@@ -345,9 +360,11 @@ void main() {
     expect(provider.queueBusy, isFalse);
     expect(provider.lastError, isNotNull);
 
-    // 历史批次走同一意图：失败同样落 error 并释放互斥位。
+    // 历史失败只写 lastError：off 保持不变，互斥位照常释放。
+    await provider.stop();
+    expect(provider.status, AiDjStatus.off);
     await provider.playHistoryBatch(batchId);
-    expect(provider.status, AiDjStatus.error);
+    expect(provider.status, AiDjStatus.off);
     expect(provider.queueBusy, isFalse);
     expect(provider.lastError, isNotNull);
   });
