@@ -1015,6 +1015,11 @@
   （context 适配在 `widgets/collection_handoff.dart`）；本地删除返回
   `CollectionLocalDeleteOutcome` 逐项状态，失败不再逃进 `unawaited`。收藏页
   不再出现 `as ...Row` 强转。
+- **合集 I/O 命令**：`lib/providers/collection_io_commands.dart` 是收藏页文件导入 /
+  链接导入 / 导出 / 批量下载的唯一编排层。选文件、读文本、复核回调、链接拉取、
+  另存、导出所需的资料库读取与批量入口都是窄端口，返回 sealed 结果（取消 / 空 /
+  失败 / 部分成功可区分）；生产适配器同文件，模块不读 BuildContext、不 import
+  widgets。页面只留弹层、文案映射、触感与选择清空。
 - **链接导入**：收藏页合集弹层的「导入收藏」有文件 / 链接两条路径；链接路径
   `showLinkImportDialog` 的平台列表来自 `SongChannels` 的 `discover` 声明
   （七渠道），`DiscoverProvider.playlistDetail` 拉详情后写入本地列表。
