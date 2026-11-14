@@ -5,26 +5,19 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../../pages/shortcut_settings_page.dart';
-import '../../pages/update_settings_page.dart';
+import '../../pages/bottom_nav_settings_page.dart';
 import '../../providers/nav_provider.dart';
-import '../../providers/update_provider.dart';
 import '../../services/app_branding_service.dart';
 import '../../services/haptics.dart';
 import '../../services/language_service.dart';
-import '../../services/notification_service.dart';
-import '../../services/window/app_tray.dart';
-import '../../services/window/tray_settings.dart';
-import '../../services/window/window_settings.dart';
-import '../../utils/responsive.dart';
 import '../nav_destination_style.dart';
-import 'settings_reorderable_rows.dart';
 import 'settings_tiles.dart';
 
-/// 设置首屏「通用与关于」卡：启动页 / 底栏 / 语言 / 震动 / 桌面行为 /
-/// 快捷键 / 更新。
+/// 设置首屏「通用」卡：启动页 / 底部导航 / 语言 / 震动 / 应用名称。
 ///
-/// 托盘、窗口与震动反馈是设备本地键，卡底给一句说明。
+/// 桌面托盘、窗口与快捷键在「桌面」卡（仅桌面出现），更新与问题排查在
+/// 「关于与更新」卡；本卡只放平台无关的通用偏好。震动是设备本地键，卡底
+/// 给一句说明。
 class GeneralSettingsSection extends StatefulWidget {
   const GeneralSettingsSection({super.key});
 
@@ -66,34 +59,24 @@ class _GeneralSettingsSectionState extends State<GeneralSettingsSection> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // 测试等场景可能不提供 NavProvider：缺省时隐藏底部导航分组。
+    // 测试等场景可能不提供 NavProvider：缺省时隐藏导航相关行。
     final nav = context.watch<NavProvider?>();
-    // 托盘设置同理：缺省（或非桌面平台）时隐藏「桌面」分组。
-    final tray = context.watch<TraySettings?>();
-    final update = context.watch<UpdateProvider?>();
 
-    final desktopTray = AppTray.isSupported && tray != null;
     return SettingsSectionCard(
-      title: l10n.settingsGeneralAboutTitle,
-      // 托盘 / 窗口只在桌面出现；移动端没有这两行，不显示会撒谎的说明。
-      footer: desktopTray
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (AppTray.isLinuxDesktop) ...[
-                  SettingsSectionHint(text: l10n.settingsTrayLinuxHint),
-                  const SizedBox(height: 4),
-                ],
-                SettingsSectionHint(text: l10n.settingsGeneralDeviceLocalHint),
-              ],
-            )
-          : null,
+      title: l10n.settingsGeneralTitle,
+      footer: SettingsSectionHint(text: l10n.settingsGeneralDeviceLocalHint),
       children: [
-        // 行序按改动频率：启动页（常改）→ 底栏 → 震动 → 语言 → 应用名称
-        // → 桌面行为 → 快捷键 / 更新。
+        // 行序按改动频率：启动页（常改）→ 底栏 → 震动 → 语言 → 应用名称。
         if (nav != null) ...[
           _StartupPageSettings(provider: nav),
-          _BottomNavSettings(provider: nav),
+          SettingsNavTile(
+            key: const Key('settingsBottomNavItem'),
+            icon: Icons.dashboard_customize_rounded,
+            title: l10n.settingsBottomNavTitle,
+            subtitle: l10n.settingsBottomNavSubtitle,
+            onTap: () =>
+                openSettingsSubPage(context, const BottomNavSettingsPage()),
+          ),
         ],
         ValueListenableBuilder<bool>(
           valueListenable: HapticsService.enabledNotifier,
@@ -129,64 +112,8 @@ class _GeneralSettingsSectionState extends State<GeneralSettingsSection> {
             onTap: () => _showAppTitleDialog(context, l10n),
           ),
         ),
-        // 桌面托盘：Linux / Windows / macOS 显示（其余平台 AppTray.isSupported
-        // 为 false，开关没有意义）。
-        if (desktopTray) ...[
-          SettingsSwitchTile(
-            switchKey: const Key('settingsCloseToTraySwitch'),
-            icon: Icons.desktop_windows_rounded,
-            title: l10n.settingsCloseToTray,
-            subtitle: l10n.settingsCloseToTraySubtitle,
-            value: tray.closeToTray,
-            onChanged: tray.setCloseToTray,
-          ),
-          ValueListenableBuilder<bool>(
-            valueListenable: WindowSettings.rememberBoundsNotifier,
-            builder: (context, rememberBounds, _) => SettingsSwitchTile(
-              switchKey: const Key('settingsRememberWindowBoundsSwitch'),
-              icon: Icons.window_rounded,
-              title: l10n.settingsRememberWindowBounds,
-              subtitle: l10n.settingsRememberWindowBoundsSubtitle,
-              value: rememberBounds,
-              onChanged: WindowSettings.setRememberBounds,
-            ),
-          ),
-        ],
-        // 快捷键：软件内 / 全局两组的总开关与绑定自定义。只在桌面平台显示
-        // （移动端软件内快捷键与全局热键都不注册）。
-        if (isDesktopPlatform())
-          SettingsNavTile(
-            key: const Key('settingsShortcutsItem'),
-            icon: Icons.keyboard_rounded,
-            title: l10n.settingsShortcutsTitle,
-            subtitle: l10n.settingsShortcutsSubtitle,
-            onTap: () =>
-                openSettingsSubPage(context, const ShortcutSettingsPage()),
-          ),
-        // 关于与更新：版本 / 渠道 / 自动检查 / 下载安装。
-        if (update != null)
-          SettingsNavTile(
-            key: const Key('settingsUpdateItem'),
-            icon: Icons.system_update_alt_rounded,
-            title: l10n.settingsUpdateTitle,
-            subtitle: _updateSubtitle(l10n, update),
-            onTap: () =>
-                openSettingsSubPage(context, const UpdateSettingsPage()),
-          ),
       ],
     );
-  }
-
-  /// 更新入口副标题：上次安装未完成优先，其次「可更新至 x.y.z」，否则当前版本。
-  String _updateSubtitle(AppLocalizations l10n, UpdateProvider provider) {
-    if (provider.installResult == UpdateInstallResult.incomplete) {
-      return l10n.updateInstallIncomplete;
-    }
-    final version = provider.release?.version;
-    if (provider.updateAvailable && version != null && version.isNotEmpty) {
-      return l10n.settingsUpdateAvailable(version);
-    }
-    return l10n.settingsUpdateSubtitle(provider.currentVersionLabel);
   }
 
   /// 自定义应用名称：文本输入弹层（空白回退默认名称 Molia）。
@@ -270,77 +197,6 @@ class _StartupPageSettings extends StatelessWidget {
       icons: {
         for (final destination in ShellDestination.values)
           destination: destination.settingsIcon,
-      },
-    );
-  }
-}
-
-/// 底部导航定制：拖拽排序 + 显示/隐藏（至少保留 1 个），即时生效并持久化。
-///
-/// 行是标准设置开关行（[SettingsSwitchTile]）；拖拽手柄挂在行尾
-/// （[ReorderableDragStartListener] 只包手柄，整行点击仍是显隐开关，
-/// 两种手势互不抢），排序容器与音源渠道共用 [SettingsReorderableRows]。
-class _BottomNavSettings extends StatelessWidget {
-  const _BottomNavSettings({required this.provider});
-
-  final NavProvider provider;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final nav = provider;
-    final order = nav.order;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SettingsReorderableRows(
-          itemCount: order.length,
-          itemKey: (index) => ValueKey(order[index]),
-          itemBuilder: (context, index) =>
-              _buildRow(context, l10n, nav, order[index], index),
-          onReorder: (oldIndex, newIndex) => nav.reorder(oldIndex, newIndex),
-        ),
-        const SizedBox(height: kSettingsSmallSpacing),
-        SettingsSectionHint(text: l10n.settingsBottomNavHint),
-      ],
-    );
-  }
-
-  Widget _buildRow(
-    BuildContext context,
-    AppLocalizations l10n,
-    NavProvider nav,
-    ShellDestination destination,
-    int index,
-  ) {
-    final scheme = Theme.of(context).colorScheme;
-    final label = destination.label(l10n);
-    // 启动首页锁定：置灰并要求先改首页；已是不可见的不一致态不禁用，
-    // 否则用户无法把它重新打开（想关先改首页只在可见时成立）。
-    final locked =
-        destination == nav.homeDestination && nav.isVisible(destination);
-
-    return SettingsSwitchTile(
-      // 图标用实心变体（与底栏/侧栏选中态一致，识别度更好）。
-      icon: destination.settingsIcon,
-      title: label,
-      subtitle: locked ? l10n.settingsBottomNavKeepHome : '',
-      value: nav.isVisible(destination),
-      enabled: !locked,
-      trailing: ReorderableDragStartListener(
-        index: index,
-        child: Icon(Icons.drag_handle_rounded, color: scheme.onSurfaceVariant),
-      ),
-      onChanged: (bool value) async {
-        // 置灰后正常不可达；留作并发/同步改变状态时的兜底拒绝提示。
-        final accepted = await nav.setVisible(destination, value);
-        if (!accepted && context.mounted) {
-          Provider.of<NotificationService>(
-            context,
-            listen: false,
-          ).showSnackBar(l10n.settingsBottomNavKeepOne);
-        }
       },
     );
   }

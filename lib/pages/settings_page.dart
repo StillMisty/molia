@@ -13,7 +13,6 @@ import '../services/scrobble/scrobble_service.dart';
 import '../providers/theme_provider.dart';
 import '../services/audio_focus_settings.dart';
 import '../services/data_saver_service.dart';
-import '../services/library/library_add_settings.dart';
 import '../services/lyrics_display/lyrics_output.dart';
 import '../services/source_swap/source_swap_settings.dart';
 import '../theme/m3e_context.dart';
@@ -26,8 +25,11 @@ import '../widgets/adaptive_layout.dart';
 import '../widgets/app_color_picker.dart';
 import '../widgets/cover_picker_sheet.dart';
 import '../widgets/font_picker_sheet.dart';
-import '../widgets/settings/data_settings_section.dart';
+import '../widgets/settings/about_settings_section.dart';
+import '../widgets/settings/data_backup_section.dart';
+import '../widgets/settings/desktop_settings_section.dart';
 import '../widgets/settings/general_settings_section.dart';
+import '../widgets/settings/library_storage_section.dart';
 import '../widgets/settings/playback_details_section.dart';
 import '../widgets/settings/settings_section_grid.dart';
 import '../widgets/settings/settings_tiles.dart';
@@ -95,7 +97,6 @@ class _SettingsPageState extends State<SettingsPage>
     // 以下 provider 在测试等场景可能缺省：缺省时隐藏对应行，不报错。
     final dataSaver = context.watch<DataSaverService?>();
     final sourceSwapSettings = context.watch<SourceSwapSettings?>();
-    final libraryAddSettings = context.watch<LibraryAddSettings?>();
     final audioFocusSettings = context.watch<AudioFocusSettings?>();
     final sources = context.read<SourcesProvider?>();
     final lyricsDisplay = context.watch<LyricsDisplayProvider?>();
@@ -125,24 +126,30 @@ class _SettingsPageState extends State<SettingsPage>
             children: [
               SettingsSectionGrid(
                 twoColumn: twoColumn,
-                // 宽屏按内容量分列：外观 / 歌词 / 数据在左，播放 / 内容 /
-                // 通用与关于在右；六张卡按「同一类事情」聚合。
-                startColumn: const {0, 2, 4},
+                // 宽屏按内容量分列：外观 / 歌词 / 曲库 / 通用在左，播放 /
+                // 音源与在线服务 / 数据与备份 / 桌面 / 关于在右；左右各约
+                // 20 行。九张卡按「同一类事情」聚合，同类不跨卡。
+                startColumn: const {0, 2, 4, 6},
                 children: [
                   _appearanceSection(context, l10n),
                   _playbackSection(
                     context,
                     l10n,
-                    dataSaver: dataSaver,
-                    sourceSwapSettings: sourceSwapSettings,
-                    libraryAddSettings: libraryAddSettings,
                     audioFocusSettings: audioFocusSettings,
-                    sources: sources,
                   ),
                   _lyricsSection(context, l10n, lyricsDisplay),
-                  _contentSection(context, l10n),
-                  const DataSettingsSection(),
+                  _networkSection(
+                    context,
+                    l10n,
+                    dataSaver: dataSaver,
+                    sourceSwapSettings: sourceSwapSettings,
+                    sources: sources,
+                  ),
+                  const LibraryStorageSection(),
+                  const DataBackupSection(),
                   const GeneralSettingsSection(),
+                  if (isDesktopPlatform()) const DesktopSettingsSection(),
+                  const AboutSettingsSection(),
                 ],
               ),
             ],
@@ -320,19 +327,16 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  /// 播放：默认播放模式 / 启动恢复 / 加入位置 / 默认音质 / 自动换源 /
-  /// 省流（开关与生效子项）。
+  /// 播放：默认播放模式 / 启动恢复 / 与其他应用同时播放 / 淡入淡出 /
+  /// 少放最近听过的。
   ///
-  /// 省流不单开子页：开关行排在分区末位，开启时才展开音质上限与封面省流
-  /// （三行共用同一套设置行，行为与独立子页一致）。
+  /// 音质、自动换源与省流属于「音源与在线服务」，加入位置属于「曲库与
+  /// 存储」：同一类事情只在一张卡里出现。淡入淡出与随机偏好是设备本地值，
+  /// 卡底只说明这两项不随同步。
   Widget _playbackSection(
     BuildContext context,
     AppLocalizations l10n, {
-    required DataSaverService? dataSaver,
-    required SourceSwapSettings? sourceSwapSettings,
-    required LibraryAddSettings? libraryAddSettings,
     required AudioFocusSettings? audioFocusSettings,
-    required SourcesProvider? sources,
   }) {
     return SettingsSectionCard(
       title: l10n.settingsPlaybackTitle,
@@ -385,101 +389,6 @@ class _SettingsPageState extends State<SettingsPage>
               onChanged: audioFocusSettings.setPlayWithOtherApps,
             ),
           ),
-        // 加入收藏 / 列表的位置：新曲目放开头还是末尾（默认开头）。
-        if (libraryAddSettings != null)
-          Selector<LibraryAddSettings, LibraryAddPosition>(
-            selector: (context, settings) => settings.position,
-            builder: (context, position, _) =>
-                SettingsChoiceRow<LibraryAddPosition>(
-                  key: const Key('settingsLibraryAddPositionItem'),
-                  icon: Icons.playlist_add_rounded,
-                  title: l10n.settingsLibraryAddPosition,
-                  subtitle: l10n.settingsLibraryAddPositionSubtitle,
-                  value: position,
-                  options: [
-                    (
-                      LibraryAddPosition.top,
-                      l10n.settingsLibraryAddPositionTop,
-                    ),
-                    (
-                      LibraryAddPosition.bottom,
-                      l10n.settingsLibraryAddPositionBottom,
-                    ),
-                  ],
-                  onChanged: libraryAddSettings.setPosition,
-                ),
-          ),
-        // 音源默认音质：设置页唯一入口。
-        if (sources != null)
-          Selector<SourcesProvider, String>(
-            selector: (context, provider) => provider.preferredQuality,
-            builder: (context, quality, _) => SettingsDropdownRow<String>(
-              key: const Key('settingsDefaultQualityItem'),
-              icon: Icons.high_quality_rounded,
-              title: l10n.sourcesDefaultQuality,
-              subtitle: l10n.sourcesQualityHint,
-              // 音质标签都是短词（无损 / 320K / Hi-Res）：字段从 112 起按最长
-              // 选项自适应加宽（「Hi-Res」不被折行），把其余宽度让给标题与说明。
-              fieldWidth: 112,
-              value: quality,
-              options: [
-                for (final option in sources.qualityOptions)
-                  (option.value, sourceQualityLabel(l10n, option.value)),
-              ],
-              onChanged: sources.setPreferredQuality,
-            ),
-          ),
-        // 自动换源：播放失败后的跨源找回（手动换源不受此开关控制）。
-        if (sourceSwapSettings != null)
-          Selector<SourceSwapSettings, bool>(
-            selector: (context, settings) => settings.autoEnabled,
-            builder: (context, autoEnabled, _) => SettingsSwitchTile(
-              switchKey: const Key('settingsAutoSourceSwapSwitch'),
-              icon: Icons.swap_horiz_rounded,
-              title: l10n.settingsAutoSourceSwap,
-              subtitle: l10n.settingsAutoSourceSwapSubtitle,
-              value: autoEnabled,
-              onChanged: (value) => sourceSwapSettings.setAutoEnabled(value),
-            ),
-          ),
-        // 省流模式：开关行在分区末位，开启时才展开跟随子项（音质上限 / 封面省流）；
-        // 副标题保留当前网络状态，让「仅移动数据生效」对用户透明。
-        if (dataSaver != null) ...[
-          SettingsSwitchTile(
-            switchKey: const Key('settingsDataSaverSwitch'),
-            icon: Icons.data_saver_on_rounded,
-            title: l10n.settingsDataSaverTitle,
-            subtitle: dataSaverSubtitle(
-              l10n,
-              enabled: dataSaver.enabled,
-              detectionAvailable: dataSaver.detectionAvailable,
-              onCellular: dataSaver.onCellular,
-            ),
-            value: dataSaver.enabled,
-            onChanged: (value) => dataSaver.setEnabled(value),
-          ),
-          if (dataSaver.enabled) ...[
-            SettingsChoiceRow<String>(
-              key: const Key('settingsDataSaverQualityItem'),
-              icon: Icons.graphic_eq_rounded,
-              title: l10n.settingsDataSaverQuality,
-              value: dataSaver.qualityCap,
-              options: [
-                for (final option in DataSaverService.qualityOptions)
-                  (option, sourceQualityLabel(l10n, option)),
-              ],
-              onChanged: (value) => dataSaver.setQualityCap(value),
-            ),
-            SettingsSwitchTile(
-              switchKey: const Key('settingsDataSaverCoversSwitch'),
-              icon: Icons.image_rounded,
-              title: l10n.settingsDataSaverCovers,
-              subtitle: l10n.settingsDataSaverCoversSubtitle,
-              value: dataSaver.coversSaverEnabled,
-              onChanged: (value) => dataSaver.setCoversSaverEnabled(value),
-            ),
-          ],
-        ],
         // 播放细节同挂在这一张卡（淡入淡出 / 智能随机都是设备本地值）。
         ...PlaybackDetailsSection.rows(context),
       ],
@@ -571,16 +480,107 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  /// 内容与来源：音源管理 / AI 推歌。
-  Widget _contentSection(BuildContext context, AppLocalizations l10n) {
+  /// 音源与在线服务：音源管理 / 默认音质 / 自动换源 / 省流 / AI 推歌 /
+  /// 听歌同步。
+  ///
+  /// 同一域只在一张卡出现：音源管理与默认音质、自动换源、省流不再分居两卡。
+  /// 省流开关排在在线服务入口之前，开启时才展开音质上限与封面省流。
+  Widget _networkSection(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required DataSaverService? dataSaver,
+    required SourceSwapSettings? sourceSwapSettings,
+    required SourcesProvider? sources,
+  }) {
     return SettingsSectionCard(
-      title: l10n.settingsContentSection,
+      title: l10n.settingsNetworkSourcesTitle,
       children: [
         SettingsNavTile(
+          key: const Key('settingsSourcesItem'),
           icon: Icons.library_music_rounded,
           title: l10n.sourcesTitle,
           subtitle: l10n.settingsSourcesItemSubtitle,
           onTap: () => openSettingsSubPage(context, const SourcesPage()),
+        ),
+        // 音源默认音质：设置页唯一入口。
+        if (sources != null)
+          Selector<SourcesProvider, String>(
+            selector: (context, provider) => provider.preferredQuality,
+            builder: (context, quality, _) => SettingsDropdownRow<String>(
+              key: const Key('settingsDefaultQualityItem'),
+              icon: Icons.high_quality_rounded,
+              title: l10n.sourcesDefaultQuality,
+              subtitle: l10n.sourcesQualityHint,
+              // 音质标签都是短词（无损 / 320K / Hi-Res）：字段从 112 起按最长
+              // 选项自适应加宽（「Hi-Res」不被折行），把其余宽度让给标题与说明。
+              fieldWidth: 112,
+              value: quality,
+              options: [
+                for (final option in sources.qualityOptions)
+                  (option.value, sourceQualityLabel(l10n, option.value)),
+              ],
+              onChanged: sources.setPreferredQuality,
+            ),
+          ),
+        // 自动换源：播放失败后的跨源找回（手动换源不受此开关控制）。
+        if (sourceSwapSettings != null)
+          Selector<SourceSwapSettings, bool>(
+            selector: (context, settings) => settings.autoEnabled,
+            builder: (context, autoEnabled, _) => SettingsSwitchTile(
+              switchKey: const Key('settingsAutoSourceSwapSwitch'),
+              icon: Icons.swap_horiz_rounded,
+              title: l10n.settingsAutoSourceSwap,
+              subtitle: l10n.settingsAutoSourceSwapSubtitle,
+              value: autoEnabled,
+              onChanged: (value) => sourceSwapSettings.setAutoEnabled(value),
+            ),
+          ),
+        // 省流模式：开关行排在在线服务入口之前，开启时才展开跟随子项
+        //（音质上限 / 封面省流）；副标题保留当前网络状态，让「仅移动数据
+        // 生效」对用户透明。
+        if (dataSaver != null) ...[
+          SettingsSwitchTile(
+            switchKey: const Key('settingsDataSaverSwitch'),
+            icon: Icons.data_saver_on_rounded,
+            title: l10n.settingsDataSaverTitle,
+            subtitle: dataSaverSubtitle(
+              l10n,
+              enabled: dataSaver.enabled,
+              detectionAvailable: dataSaver.detectionAvailable,
+              onCellular: dataSaver.onCellular,
+            ),
+            value: dataSaver.enabled,
+            onChanged: (value) => dataSaver.setEnabled(value),
+          ),
+          if (dataSaver.enabled) ...[
+            SettingsChoiceRow<String>(
+              key: const Key('settingsDataSaverQualityItem'),
+              icon: Icons.graphic_eq_rounded,
+              title: l10n.settingsDataSaverQuality,
+              value: dataSaver.qualityCap,
+              options: [
+                for (final option in DataSaverService.qualityOptions)
+                  (option, sourceQualityLabel(l10n, option)),
+              ],
+              onChanged: (value) => dataSaver.setQualityCap(value),
+            ),
+            SettingsSwitchTile(
+              switchKey: const Key('settingsDataSaverCoversSwitch'),
+              icon: Icons.image_rounded,
+              title: l10n.settingsDataSaverCovers,
+              subtitle: l10n.settingsDataSaverCoversSubtitle,
+              value: dataSaver.coversSaverEnabled,
+              onChanged: (value) => dataSaver.setCoversSaverEnabled(value),
+            ),
+          ],
+        ],
+        // AI 推歌：配置与开启入口（模式生效后推荐流出在发现页）。
+        SettingsNavTile(
+          key: const Key('settingsAiDjItem'),
+          icon: Icons.auto_awesome_rounded,
+          title: l10n.aiDjTitle,
+          subtitle: l10n.aiDjSettingsSubtitle,
+          onTap: () => openSettingsSubPage(context, const AiDjPage()),
         ),
         // 听歌同步：一个入口覆盖 ListenBrainz / Last.fm，默认关闭。
         if (context.watch<ScrobbleService?>() != null)
@@ -592,14 +592,6 @@ class _SettingsPageState extends State<SettingsPage>
             onTap: () =>
                 openSettingsSubPage(context, const ListeningSyncPage()),
           ),
-        // AI 推歌：配置与开启入口（模式生效后推荐流出在发现页）。
-        SettingsNavTile(
-          key: const Key('settingsAiDjItem'),
-          icon: Icons.auto_awesome_rounded,
-          title: l10n.aiDjTitle,
-          subtitle: l10n.aiDjSettingsSubtitle,
-          onTap: () => openSettingsSubPage(context, const AiDjPage()),
-        ),
       ],
     );
   }

@@ -266,6 +266,36 @@ abstract class AppLocalizations {
   /// **'Appearance'**
   String get settingsAppearanceTitle;
 
+  /// No description provided for @settingsNetworkSourcesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sources & online services'**
+  String get settingsNetworkSourcesTitle;
+
+  /// No description provided for @settingsLibraryStorageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Library & storage'**
+  String get settingsLibraryStorageTitle;
+
+  /// No description provided for @settingsLibraryStorageDeviceLocalHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Local folders, downloads and cache stay on this device and are not synced.'**
+  String get settingsLibraryStorageDeviceLocalHint;
+
+  /// No description provided for @settingsDataBackupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data & backup'**
+  String get settingsDataBackupTitle;
+
+  /// No description provided for @settingsGeneralTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'General'**
+  String get settingsGeneralTitle;
+
   /// No description provided for @settingsThemeMode.
   ///
   /// In en, this message translates to:
@@ -599,7 +629,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsPlaybackDetailsDeviceLocalHint.
   ///
   /// In en, this message translates to:
-  /// **'Playback details stay on this device and are not synced.'**
+  /// **'Fade and shuffle preferences stay on this device and are not synced.'**
   String get settingsPlaybackDetailsDeviceLocalHint;
 
   /// No description provided for @settingsFadeTitle.
@@ -776,12 +806,6 @@ abstract class AppLocalizations {
   /// **'Import LX Music source scripts to search more platforms'**
   String get settingsSourcesItemSubtitle;
 
-  /// No description provided for @settingsContentSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Content & sources'**
-  String get settingsContentSection;
-
   /// No description provided for @settingsLyricsSection.
   ///
   /// In en, this message translates to:
@@ -793,6 +817,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Bottom navigation'**
   String get settingsBottomNavTitle;
+
+  /// No description provided for @settingsBottomNavSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Order and visibility'**
+  String get settingsBottomNavSubtitle;
 
   /// No description provided for @settingsBottomNavHint.
   ///
@@ -872,16 +902,10 @@ abstract class AppLocalizations {
   /// **'Light vibration on taps such as navigation and playback'**
   String get settingsHapticsSubtitle;
 
-  /// No description provided for @settingsGeneralAboutTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'General & about'**
-  String get settingsGeneralAboutTitle;
-
   /// No description provided for @settingsGeneralDeviceLocalHint.
   ///
   /// In en, this message translates to:
-  /// **'Tray, window and vibration settings stay on this device and are not synced.'**
+  /// **'Vibration settings stay on this device and are not synced.'**
   String get settingsGeneralDeviceLocalHint;
 
   /// No description provided for @settingsAutoSaveHint.
@@ -896,12 +920,6 @@ abstract class AppLocalizations {
   /// **'More actions'**
   String get settingsMoreActions;
 
-  /// No description provided for @dataManagementTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Data & storage'**
-  String get dataManagementTitle;
-
   /// No description provided for @exportDataTitle.
   ///
   /// In en, this message translates to:
@@ -913,6 +931,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Full backup: playlists, sources, settings, stats, history, sign-in info and keys (keep the file safe)'**
   String get exportDataSubtitle;
+
+  /// No description provided for @settingsBackupRestoreTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup & restore'**
+  String get settingsBackupRestoreTitle;
+
+  /// No description provided for @settingsBackupRestoreSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export, import and favorites migration'**
+  String get settingsBackupRestoreSubtitle;
 
   /// No description provided for @importDataTitle.
   ///
@@ -8343,6 +8373,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Desktop'**
   String get settingsDesktopSection;
+
+  /// No description provided for @settingsDesktopDeviceLocalHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tray and window settings stay on this device and are not synced.'**
+  String get settingsDesktopDeviceLocalHint;
 
   /// No description provided for @settingsCloseToTray.
   ///

@@ -104,6 +104,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAppearanceTitle => '外观';
 
   @override
+  String get settingsNetworkSourcesTitle => '音源与在线服务';
+
+  @override
+  String get settingsLibraryStorageTitle => '曲库与存储';
+
+  @override
+  String get settingsLibraryStorageDeviceLocalHint =>
+      '本地文件夹、下载与缓存只保存在本机，不随跨设备同步。';
+
+  @override
+  String get settingsDataBackupTitle => '数据与备份';
+
+  @override
+  String get settingsGeneralTitle => '通用';
+
+  @override
   String get settingsThemeMode => '主题模式';
 
   @override
@@ -269,7 +285,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPlaybackDetailsTitle => '播放细节';
 
   @override
-  String get settingsPlaybackDetailsDeviceLocalHint => '播放细节只保存在本机，不随跨设备同步。';
+  String get settingsPlaybackDetailsDeviceLocalHint =>
+      '淡入淡出与随机偏好只保存在本机，不随跨设备同步。';
 
   @override
   String get settingsFadeTitle => '淡入淡出';
@@ -359,13 +376,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSourcesItemSubtitle => '导入 LX Music 音源脚本，扩展可搜索的平台';
 
   @override
-  String get settingsContentSection => '内容与来源';
-
-  @override
   String get settingsLyricsSection => '歌词';
 
   @override
   String get settingsBottomNavTitle => '底部导航';
+
+  @override
+  String get settingsBottomNavSubtitle => '排序与显示';
 
   @override
   String get settingsBottomNavHint => '拖拽排序；开关控制显示，至少保留 1 个标签';
@@ -409,10 +426,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsHapticsSubtitle => '点按导航、播放等操作时给出轻震动';
 
   @override
-  String get settingsGeneralAboutTitle => '通用与关于';
-
-  @override
-  String get settingsGeneralDeviceLocalHint => '托盘、窗口与震动反馈只保存在本机，不随跨设备同步。';
+  String get settingsGeneralDeviceLocalHint => '震动反馈只保存在本机，不随跨设备同步。';
 
   @override
   String get settingsAutoSaveHint => '改动即时生效';
@@ -421,13 +435,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsMoreActions => '更多操作';
 
   @override
-  String get dataManagementTitle => '数据与存储';
-
-  @override
   String get exportDataTitle => '导出数据';
 
   @override
   String get exportDataSubtitle => '完整备份：歌单、音源、设置、统计、历史、登录信息与密钥（请妥善保管）';
+
+  @override
+  String get settingsBackupRestoreTitle => '备份与恢复';
+
+  @override
+  String get settingsBackupRestoreSubtitle => '导出、导入与收藏迁移';
 
   @override
   String get importDataTitle => '导入数据';
@@ -4498,6 +4515,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsDesktopSection => '桌面';
+
+  @override
+  String get settingsDesktopDeviceLocalHint => '托盘与窗口设置只保存在本机，不随跨设备同步。';
 
   @override
   String get settingsCloseToTray => '关闭时最小化到托盘';

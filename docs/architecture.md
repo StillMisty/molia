@@ -657,7 +657,7 @@
   「删除 vs 播放」按真实时间判定；上次播放会话按 `savedAt` 内容时间变化取新戳
   （本地停止不回传删除），应用后经
   `PlaybackProvider.reloadRestoredSessionFromStore` 重载恢复态。**完整备份**
-  （数据与存储页导出/导入）是独立模块（`sync_backup.dart` 的
+  （设置 › 数据与备份 › 备份与恢复的导出/导入）是独立模块（`sync_backup.dart` 的
   `SyncBackup.exportBackupJson` / `importBackupJson`）：复用同一 envelope、
   适配器、版本戳与 **Sync record pipeline**（`SyncEngine.recordPipeline`，
   与一轮同步同一实例），但不构造轮次也不经传输；默认导出全部类别与凭证
@@ -891,7 +891,7 @@
   （经 `PlaybackSessionCoordinator.replaceQueueTrack` 命令：live 转发 facade 并
   返回前提交会话，恢复态 / 未命中 no-op，provider 不直写 facade）；
   provenance（每个曲目的已尝试来源）保证级联每源至多一次、有界；
-  开关 `SourceSwapSettings`（`source_swap_auto_enabled`，默认开）在设置 › 播放。
+  开关 `SourceSwapSettings`（`source_swap_auto_enabled`，默认开）在设置 › 音源与在线服务。
 
 ### 听歌统计（listening statistics）
 
@@ -935,7 +935,7 @@
   SharedPreferences（不登记同步）；`kListenBrainzToken` / `kLastFmSessionKey` 是 secure 凭证键，
   随凭证同步（ADR-0016）；断开连接清空该服务凭证与队列；
 - **组合根与入口**：`lib/app/bootstrap/scrobble_stack.dart` 在首帧后初始化（`sub.scrobble.init`），
-  `SettingsModule` 挂两个凭证键并在远端应用后重读；设置 › 内容与来源的「听歌同步」页
+  `SettingsModule` 挂两个凭证键并在远端应用后重读；设置 › 音源与在线服务的「听歌同步」页
   （`lib/pages/listening_sync_page.dart`）负责同意、连接与断开。
 
 ### 资料库（library）
@@ -1202,7 +1202,7 @@
   （已下载 / 已缓存 · 可离线使用 / 下载中 / 未下载）+ 动作（下载 / 转存到本地
   文件夹 / 取消 / 分享导出 / 删除下载）+ 歌词/封面各自下载或转存 + 缓存占用
   四项（音频 / 歌词 / 封面 / 取链）逐项清理与全部清理；
-  下载管理页（`lib/pages/downloads_manage_page.dart`，设置 › 数据与存储；
+  下载管理页（`lib/pages/downloads_manage_page.dart`，设置 › 曲库与存储；
   任务 / 批量 / 删除读 `DownloadManager`，目录 / 清扫 / 孤儿 / 补发布读
   `DownloadMaintenance`）：
   **任务区只展示运行 / 等待 / 失败**（运行在前；等待超过 20 首折叠成「还有
@@ -1501,7 +1501,7 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   桌面专属交互：**快捷键分「软件内」与「全局」两组**（用户口径：都可关闭、可自定义）。
   绑定模型在 `lib/services/shortcut_bindings.dart`（动作 ↔ 组合、两组默认表、JSON 覆盖），
   开关与自定义持久化在 `lib/services/shortcut_settings.dart`（跟人走），设置入口
-  「设置 › 快捷键」（设置首屏「通用」卡，与听歌统计同一层；
+  「设置 › 快捷键」（设置首屏「桌面」卡，与托盘 / 窗口同一层；
   录制交互见 `lib/widgets/settings/shortcut_recorder_tile.dart`；
   录到已被占用的组合、或单行「回默认」撞上被占用的默认组合时弹确认层，确认后
   互换两者的生效组合——`ShortcutSettings.swapBindings`；「同组无重复」由
@@ -1660,8 +1660,10 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   收藏页多选栏也走这套收口：浮层缩放是 spatial 弹簧、透明度从同一进度截断
   0..1；多选栏与页头同高交叉淡入淡出（effects 时长 + 曲线，离场层
   `IgnorePointer`）。
-- 设置页：首屏 6 个语义分区（外观〔含封面〕/ 播放〔含播放细节〕/ 歌词 /
-  内容与来源 / 数据与存储 / 通用与关于），不再有「通用」「数据」目录子页；
+- 设置页：首屏 9 个语义分区（外观〔含封面〕/ 播放〔含播放细节〕/ 歌词 /
+  音源与在线服务 / 曲库与存储 / 数据与备份 / 通用 / 桌面〔仅桌面〕/
+  关于与更新），不设纯目录子页；同一域只在一张卡，卡内按「常用 → 少用、
+  开关 → 入口」排序，低频长表单下沉子页（底部导航拖拽列表、备份与恢复）；
   分组标题 + 分段卡片行：行表面统一走共享的
   `lib/widgets/card_list_surface.dart`
   （`CardListSurface`：静止内 4dp / 首末外侧 16dp、hover 12dp、press 16dp，
@@ -1677,13 +1679,14 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   （Repeat all / Sequential / Single repeat）保持纯文字分段，图标或勾都会挤断文案）、
   ≥5 项或长文案 → Dropdown（必设 `fieldStyle.hintText`）、区间数值 → Slider、
   大范围绝对量（缓存上限）→ Value + 输入弹层（带常用预设）；
-  子页（音源 / 歌词显示〔二级：歌词页 / 歌词输出 / 桌面歌词 / 通知·锁屏 / 蓝牙〕/
+  子页（音源 / 底部导航 / 备份与恢复 / 歌词显示〔二级：歌词页 / 歌词输出 /
+  桌面歌词 / 通知·锁屏 / 蓝牙〕/
   AI 推歌 / 缓存 / 下载 / 统计 / 同步 / 更新）经设置弹层壳
   （`lib/widgets/settings/settings_sheet.dart`，内部 Navigator 由
   `lib/widgets/modal_page_navigator.dart` 提供）在同一弹层内 push
   （`openSettingsSubPage`）；发现页打开的 AI 页弹层也使用同一个壳，
   AI 页内部的推荐偏好 / 历史同样在弹层内 push；省流模式不单开
-  子页，开关与生效子项并回首屏「播放」分区。音源管理页（`sources_page.dart`）
+  子页，开关与生效子项并回首屏「音源与在线服务」分区。音源管理页（`sources_page.dart`）
   与 any-listen 页同样使用这套设置行组件与分段卡片行距。系统返回先退子页、
   再关弹层：窄屏底部弹层由 `showPageModal(onDismissRequest:)` guard 读取
   内部 Navigator 的 `canPop()`（M3E 弹层宿主会给层内所有 PopScope 回调发 didPop=false
@@ -1795,8 +1798,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   - 紧凑位置（行内重试、状态卡内取消）用 `M3EIconButton`（语义交给
     `semanticLabel`）；
     纯图标按钮保留稳定 key，测试按 key 定位。
-- 触感：全应用唯一入口 `lib/services/haptics.dart`（设置 › 通用 › 通用设置 ›
-  震动反馈，默认开，设备本地键）；底栏重复点击的轻震由壳层给一次、页面不重复给
+- 触感：全应用唯一入口 `lib/services/haptics.dart`（设置 › 通用 › 震动反馈，
+  默认开，设备本地键）；底栏重复点击的轻震由壳层给一次、页面不重复给
   （原「壳层不给触感」的口径已反转）。
 - 已知保留（无法等价替换）：全局搜索遮罩的自建 route（`showGeneralDialog`）、
   `ScaffoldMessenger` 兼容代码（M3ESnackbar 宿主）；组件级白名单见上文「已知例外」。
