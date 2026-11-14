@@ -187,6 +187,9 @@ class SettingsRows extends StatelessWidget {
 ///
 /// 副标题封顶 2 行（见 [SettingsTileLabel]），行高不再随文案长度在
 /// 56–158dp 之间漂移；内容在行内垂直居中（Row 默认 crossAxisAlignment）。
+///
+/// 这里只管下限：挂了进度条的行（[SettingsInfoTile.progress]）会多一行、
+/// 自然超过 token，属预期。
 class _SettingsRowContent extends StatelessWidget {
   const _SettingsRowContent({required this.hasSubtitle, required this.child});
 
@@ -220,6 +223,7 @@ class _SettingsTileRow extends StatelessWidget {
     required this.subtitle,
     required this.onPressed,
     this.trailing,
+    this.progress,
     this.enabled = true,
     this.isDestructive = false,
     this.subtitleColor,
@@ -231,6 +235,7 @@ class _SettingsTileRow extends StatelessWidget {
   final String subtitle;
   final VoidCallback? onPressed;
   final Widget? trailing;
+  final Widget? progress;
   final bool enabled;
   final bool isDestructive;
   final Color? subtitleColor;
@@ -254,11 +259,21 @@ class _SettingsTileRow extends StatelessWidget {
               SettingsTileIcon(icon: icon, isDestructive: isDestructive),
               const SizedBox(width: _settingsTileLeadGap),
               Expanded(
-                child: SettingsTileLabel(
-                  title: title,
-                  subtitle: subtitle,
-                  isDestructive: isDestructive,
-                  subtitleColor: subtitleColor,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SettingsTileLabel(
+                      title: title,
+                      subtitle: subtitle,
+                      isDestructive: isDestructive,
+                      subtitleColor: subtitleColor,
+                    ),
+                    if (progress != null) ...[
+                      const SizedBox(height: 6),
+                      progress!,
+                    ],
+                  ],
                 ),
               ),
               if (trailing != null) ...[
@@ -475,6 +490,7 @@ class SettingsInfoTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.trailing,
+    this.progress,
   });
 
   final IconData icon;
@@ -484,6 +500,12 @@ class SettingsInfoTile extends StatelessWidget {
   /// 只读行尾的附加动作（如下载任务的取消 / 重试按钮）；整行仍不可点。
   final Widget? trailing;
 
+  /// 标题/副标题下方的进度条：只给「正在进行的任务」行用。
+  ///
+  /// 进度条是第三行，会把行撑高（行高只设下限，见 [_SettingsRowContent]）；
+  /// 普通信息行不要传，保持 56/72dp 的标准行高。
+  final Widget? progress;
+
   @override
   Widget build(BuildContext context) {
     return _SettingsTileRow(
@@ -491,6 +513,7 @@ class SettingsInfoTile extends StatelessWidget {
       title: title,
       subtitle: subtitle,
       trailing: trailing,
+      progress: progress,
       onPressed: null,
     );
   }

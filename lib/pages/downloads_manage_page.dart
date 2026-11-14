@@ -30,6 +30,7 @@ import '../services/download/download_manager.dart';
 import '../services/download/download_queue.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 import '../utils/download_failure_label.dart';
 import '../utils/download_task_label.dart';
 import '../utils/source_quality_label.dart';
@@ -313,6 +314,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
             status,
             quality,
           ].where((part) => part.isNotEmpty).join(' · '),
+          progress: _taskProgress(context, task),
           trailing: M3EIconButton(
             key: Key('downloadsTaskCancel_${task.key}'),
             variant: M3EIconButtonVariant.standard,
@@ -325,6 +327,25 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
         );
       },
     );
+  }
+
+  /// 运行中任务的进度条；等待 / 其它状态返回 null（不占第三行）。
+  ///
+  /// 服务端没给 Content-Length 时进度不可量化：宁可不出条，也不画一条 0% 的
+  /// 空轨道（读起来像「卡在起点」）；副标题里仍然有已下载字节数。减弱动效时
+  /// wavy 换成平坦条，避免波纹相位常驻动画。
+  ///
+  /// 读屏走 `ExcludeSemantics`：百分比已经由副标题播报（`downloadTaskStatusLabel`
+  /// 拼的就是同一串「下载中 · 42%」），再挂一条 progressBar 语义会把同一句话
+  /// 念两遍。
+  Widget? _taskProgress(BuildContext context, DownloadTask task) {
+    if (task.status != DownloadTaskStatus.running) return null;
+    if (task.progress.percent == null) return null;
+    final value = task.progress.fraction;
+    final Widget bar = reduceMotionOf(context)
+        ? M3EProgressIndicator.linear(value: value)
+        : M3EProgressIndicator.linearWavy(value: value);
+    return ExcludeSemantics(child: bar);
   }
 
   /// 失败任务：失败原因 + 重试 + 移除（顶部另有「全部重试」）。
