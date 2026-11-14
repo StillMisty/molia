@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as image;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/data/downloads/downloads_repository.dart';
@@ -13,6 +14,7 @@ import 'package:molia/services/local_cover_identity_sweep.dart';
 import '../support/memory_database.dart';
 
 import 'package:molia/services/covers/cover_image_codec.dart';
+import 'package:molia/services/covers/cover_image_format.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
 
 Uint8List _bytes(int seed) => Uint8List.fromList([seed, seed, seed]);
@@ -71,6 +73,25 @@ void main() {
     expect(secondPath, isNot(firstPath));
     expect(File(firstPath).existsSync(), isFalse, reason: '替换后旧文件应删除');
     expect(await File(secondPath!).readAsBytes(), _bytes(2));
+  });
+
+  test('WebP 封面：扩展名跟字节走，索引持久化格式', () async {
+    const id = TrackId('wy', 'webp');
+    final source = image.Image(width: 16, height: 16);
+    image.fill(source, color: image.ColorRgb8(10, 20, 30));
+    final bytes = image.encodeWebP(source, lossless: false, quality: 80);
+
+    await store.setTrackCover(id, bytes);
+    final path = store.trackCoverPath(id);
+    expect(path, endsWith('.webp'));
+    expect(store.trackEntry('wy:webp')!.format, CoverImageFormat.webp);
+    expect(store.trackEntry('wy:webp')!.mimeType, 'image/webp');
+
+    final reloaded = buildStore();
+    await reloaded.load();
+    expect(reloaded.trackCoverPath(id), path);
+    expect(reloaded.trackEntry('wy:webp')!.format, CoverImageFormat.webp);
+    expect(await reloaded.readTrackCover(id), bytes);
   });
 
   test('键规范化：local 下载副本剥一层前缀，导入记录键保持', () async {
@@ -403,8 +424,18 @@ void main() {
     expect(await reloaded.readPlaylistCover(key), _bytes(3));
   });
 
-  test('动图封面：GIF / WebP 原样保留并落成对应扩展名', () async {
-    final gif = Uint8List.fromList([...'GIF89a'.codeUnits, 0, 0, 0, 0]);
+  test('既有 GIF / WebP 封面：按字节识别并落成对应扩展名', () async {
+    final gif = Uint8List.fromList([
+      ...'GIF89a'.codeUnits,
+      4,
+      0,
+      4,
+      0,
+      0,
+      0,
+      0,
+      0,
+    ]);
     final webp = Uint8List.fromList([
       ...'RIFF'.codeUnits,
       4,
@@ -416,10 +447,12 @@ void main() {
       0,
     ]);
 
-    expect(CoverImageCodec.normalizeSync(gif), gif);
-    expect(CoverImageCodec.normalizeSync(webp), webp);
     expect(CoverImageCodec.mimeOf(gif), 'image/gif');
     expect(CoverImageCodec.mimeOf(webp), 'image/webp');
+    expect(CoverImageCodec.extensionOf(gif), '.gif');
+    expect(CoverImageCodec.extensionOf(webp), '.webp');
+    expect(CoverImageCodec.isAnimationCapableFormat(gif), isTrue);
+    expect(CoverImageFormats.detect(gif)!.format, CoverImageFormat.gif);
     expect(CustomCoverStore.canSyncImageBytes(gif), isTrue);
     expect(CustomCoverStore.canSyncImageBytes(webp), isTrue);
 
@@ -431,14 +464,14 @@ void main() {
     expect(await store.readPlaylistCover('playlist:webp'), webp);
   });
 
-  test('动图超过同步上限：选图阶段就拒绝，避免只在本机可用', () {
+  test('超过同步上限：选图阶段拒绝，避免只在本机可用', () {
     final huge = Uint8List(CoverImageCodec.maxAnimatedBytes + 1)
       ..setAll(0, 'GIF89a'.codeUnits);
+    expect(CustomCoverStore.canSyncImageBytes(huge), isFalse);
     expect(
       () => CoverImageCodec.normalizeSync(huge),
       throwsA(isA<CoverImageException>()),
     );
-    expect(CustomCoverStore.canSyncImageBytes(huge), isFalse);
   });
 }
 

@@ -1,19 +1,28 @@
-/// 自定义封面图片的归一化（解码 → 摆正方向 → 缩放 → JPEG）。
+/// 自定义封面图片的归一化（解码 → 摆正方向 → 缩放 → WebP）。
 ///
-/// 选图来源不可控（相册原图可能带 EXIF 方向、边长数千像素、格式各异）：
-/// 在写入本地存储前统一成「最长边 ≤ [maxEdge] 的 JPEG」，让 Flutter 图片
-/// 缓存 / 取色 LRU 拿到的是可预期的有界图，而不是按原图尺寸解码。
+/// 选图来源不可控（相册原图可能带 EXIF 方向、边长数千像素、格式各异，
+/// 也可能是 GIF / 动画 WebP）：在写入本地存储前统一成「最长边 ≤ 1024px 的
+/// 静态 WebP」或「最长边 ≤ 512px 的动画 WebP」，让 Flutter 图片缓存 / 取色
+/// LRU 拿到的是可预期的有界图，而不是按原图尺寸解码。
 ///
-/// GIF / WebP 例外：动图一旦解码再编码就会丢掉后续帧，因此这两种格式
-/// 原样保留（只做体积上限检查），让 Flutter 的 `Image` 直接播放动画。
-/// 同步接受 JPEG / GIF / WebP 并携带实际 MIME（见
-/// `CustomCoverStore.canSyncImageBytes`），各端落地后显示一致。
+/// 为什么是 WebP 而不是 AVIF：
+/// - Flutter 官方保证解码 JPEG / PNG / GIF / Animated GIF / WebP /
+///   Animated WebP；AVIF 只走平台解码器，桌面与旧系统并不一致，动图 AVIF
+///   更不可靠；
+/// - `package:image` 能纯 Dart 编码动画 WebP，不需要引入原生编解码依赖；
+/// - WebP 同时覆盖静态、透明与动画，同步记录可以固定一个 MIME（`image/webp`），
+///   另一台设备拿到的是**同一份字节**，不会因平台重新编码而变样。
+///
+/// 归一化只发生在选图 / 导入时一次；同步落盘不再重编码。这样封面内容哈希、
+/// 取色 seed 与显示结果在设备间保持一致。
 library;
 
 import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as image;
+
+import 'cover_image_format.dart';
 
 /// 无法解码 / 编码图片（UI 只显示「无法读取这张图片」，不暴露异常文本）。
 class CoverImageException implements Exception {
@@ -25,101 +34,254 @@ class CoverImageException implements Exception {
   String toString() => 'CoverImageException: $message';
 }
 
+/// 归一化产物：字节 + 由字节识别出的格式元数据。
+class NormalizedCoverImage {
+  const NormalizedCoverImage({required this.bytes, required this.info});
+
+  final Uint8List bytes;
+  final CoverImageInfo info;
+
+  String get mimeType => info.mimeType;
+  String get extension => info.extension;
+  bool get animated => info.animated;
+  int? get width => info.width;
+  int? get height => info.height;
+}
+
 /// 自定义封面归一化参数（唯一口径）。
 class CoverImageCodec {
   const CoverImageCodec._();
 
-  /// 最长边上限：封面展示最大约 480dp，1024px 已足够 2x 屏。
+  /// 静态封面最长边：封面展示最大约 480dp，1024px 已足够 2x 屏。
   static const int maxEdge = 1024;
 
-  /// JPEG 质量：85 在封面观感与文件大小之间折中。
-  static const int jpegQuality = 85;
+  /// 动图最长边：帧数多时像素预算增长很快；512px 在播放页 / 歌词海报
+  /// 的展示尺寸下仍足够，也把编码与同步体积压在可控范围。
+  static const int maxAnimatedEdge = 512;
 
-  /// 动图原样保留的字节上限。动图不能缩放 / 重编码，只能限制落盘体积；
-  /// 超过上限拒绝，避免把几十 MB 的 GIF 写进封面目录。
+  /// 静态 WebP 质量：与 JPEG 85 观感接近，体积通常更小。
+  static const int webpQuality = 85;
+
+  /// 动图 WebP 质量：帧间内容变化大，75 在体积与观感之间更稳。
+  static const int animatedWebpQuality = 75;
+
+  /// 最多保留的动画帧数。超过时按时间均匀抽帧并把被抽掉帧的时长合并到
+  /// 保留帧，循环总时长不变（不是简单截断前 N 帧）。
+  static const int maxAnimationFrames = 90;
+
+  /// 解码像素预算（所有帧合计）：防止小体积恶意 GIF 声明超大画布。
+  static const int maxDecodePixels = 32 * 1024 * 1024;
+
+  /// 兼容旧调用方的命名：动图 / 任意封面进入同步记录的字节上限。
   ///
-  /// 必须与同步上限保持一致：能落盘的动图也必须能进同步记录，否则会出现
-  /// 「本机看得到、其它端没有」的不一致。上限同时受增量日志 4MB 窗口约束
-  /// （base64 后约 2.7MB，留出键与记录开销）。
-  static const int maxAnimatedBytes = 2 * 1024 * 1024;
+  /// 与 `kCoverSyncMaxBytes` 同值；超过时归一化会先降参数，最终仍超限才
+  /// 抛 [CoverImageException]。保留这个别名是因为存储层 / 测试直接引用它。
+  static const int maxAnimatedBytes = kCoverSyncMaxBytes;
 
-  /// 是否为需要原样保留的动图容器格式（GIF / WebP）。
-  static bool isAnimationCapableFormat(Uint8List bytes) =>
-      _isGif(bytes) || _isWebp(bytes);
-
-  /// 图片字节的 MIME；未知 / 损坏返回 null。
-  static String? mimeOf(Uint8List bytes) {
-    if (_isGif(bytes)) return 'image/gif';
-    if (_isWebp(bytes)) return 'image/webp';
-    if (bytes.length >= 3 &&
-        bytes[0] == 0xFF &&
-        bytes[1] == 0xD8 &&
-        bytes[2] == 0xFF) {
-      return 'image/jpeg';
-    }
-    return null;
-  }
-
-  /// 落盘文件扩展名（必须与实际字节一致：Flutter 靠内容解码，
-  /// 但封面查看器「保存原图」与外部打开会按扩展名处理）。
-  static String extensionOf(Uint8List bytes) {
-    if (_isGif(bytes)) return '.gif';
-    if (_isWebp(bytes)) return '.webp';
-    return '.jpg';
-  }
-
-  static bool _isGif(Uint8List bytes) {
-    if (bytes.length < 6) return false;
-    final header = String.fromCharCodes(bytes, 0, 6);
-    return header == 'GIF87a' || header == 'GIF89a';
-  }
-
-  static bool _isWebp(Uint8List bytes) {
-    if (bytes.length < 12) return false;
-    return String.fromCharCodes(bytes, 0, 4) == 'RIFF' &&
-        String.fromCharCodes(bytes, 8, 12) == 'WEBP';
-  }
+  /// 压缩重试的最低参数（仍超过同步上限时抛 [CoverImageException]）。
+  static const int _minQuality = 55;
+  static const int _minAnimatedEdge = 256;
+  static const int _minAnimationFrames = 24;
 
   /// 归一化图片（CPU 密集，放到独立 isolate）。
   ///
   /// 失败抛 [CoverImageException]（调用方映射成友好文案）。
-  static Future<Uint8List> normalize(Uint8List bytes) {
+  static Future<Uint8List> normalize(Uint8List bytes) =>
+      normalizeImage(bytes).then((result) => result.bytes);
+
+  /// 归一化并返回格式元数据（测试 / 诊断使用；生产写入只需要字节）。
+  static Future<NormalizedCoverImage> normalizeImage(Uint8List bytes) {
     if (bytes.isEmpty) {
       return Future.error(const CoverImageException('empty image'));
     }
-    return Isolate.run(() => normalizeSync(bytes));
+    return Isolate.run(() => normalizeImageSync(bytes));
   }
 
-  /// 同步实现（测试 / 已在小 isolate 内时使用）。
-  static Uint8List normalizeSync(Uint8List bytes) {
-    // 动图：只检查体积，不碰帧数据。静态 GIF / WebP 也走这条，
-    // 保持「容器格式原样落盘」的简单规则。
-    if (isAnimationCapableFormat(bytes)) {
-      if (bytes.length > maxAnimatedBytes) {
-        throw const CoverImageException('animated image too large');
+  /// 同步实现（只返回字节；兼容既有调用方）。
+  static Uint8List normalizeSync(Uint8List bytes) =>
+      normalizeImageSync(bytes).bytes;
+
+  /// 同步实现（带格式元数据；测试 / 已在小 isolate 内时使用）。
+  static NormalizedCoverImage normalizeImageSync(Uint8List bytes) {
+    final decoded = _decode(bytes);
+    final oriented = image.bakeOrientation(decoded);
+    final animated = oriented.numFrames > 1;
+    final capped = animated ? _capAnimationFrames(oriented) : oriented;
+    var prepared = _resize(capped, animated ? maxAnimatedEdge : maxEdge);
+
+    var quality = animated ? animatedWebpQuality : webpQuality;
+    var edge = animated ? maxAnimatedEdge : maxEdge;
+    var frameLimit = animated ? maxAnimationFrames : 1;
+    var attempts = 0;
+    while (true) {
+      attempts++;
+      final encoded = image.encodeWebP(
+        prepared,
+        lossless: false,
+        quality: quality,
+        method: animated ? 3 : 4,
+        exact: false,
+        alphaQuality: 100,
+      );
+      if (encoded.isEmpty) {
+        throw const CoverImageException('failed to encode image');
       }
-      return bytes;
+      final info = CoverImageFormats.detect(encoded);
+      if (info == null || info.format != CoverImageFormat.webp) {
+        throw const CoverImageException('failed to encode webp');
+      }
+      if (animated && !info.animated) {
+        throw const CoverImageException('animation lost while encoding');
+      }
+      if (encoded.length <= _maxBytes || attempts >= 12) {
+        if (encoded.length > _maxBytes) {
+          throw const CoverImageException('image exceeds sync budget');
+        }
+        return NormalizedCoverImage(bytes: encoded, info: info);
+      }
+      // 逐级降参数：先质量、再边长、最后动图帧数。每次重编码都从当前
+      // prepared 图继续，不重新解码原图。
+      if (quality > _minQuality) {
+        quality = _clampInt(quality - 10, _minQuality, quality);
+        continue;
+      }
+      if (edge > _minEdgeFor(animated)) {
+        edge = _clampInt(edge * 3 ~/ 4, _minEdgeFor(animated), edge);
+        prepared = _resize(prepared, edge);
+        continue;
+      }
+      if (animated && prepared.numFrames > _minAnimationFrames) {
+        frameLimit = _clampInt(
+          prepared.numFrames * 2 ~/ 3,
+          _minAnimationFrames,
+          prepared.numFrames - 1,
+        );
+        prepared = _capAnimationFrames(prepared, maxFrames: frameLimit);
+        continue;
+      }
+      throw const CoverImageException('image exceeds sync budget');
     }
-    final decoded = image.decodeImage(bytes);
+  }
+
+  /// 是否为可承载动画的容器格式（GIF / WebP / APNG）。
+  ///
+  /// 只看容器，不判断是否真的多帧；实际动画判定用
+  /// `CoverImageFormats.detect(bytes)?.animated`。
+  static bool isAnimationCapableFormat(Uint8List bytes) {
+    final info = CoverImageFormats.detect(bytes);
+    if (info == null) return false;
+    return info.animated ||
+        info.format == CoverImageFormat.gif ||
+        info.format == CoverImageFormat.webp;
+  }
+
+  /// 图片字节的 MIME；未知 / 损坏返回 null。
+  static String? mimeOf(Uint8List bytes) =>
+      CoverImageFormats.detect(bytes)?.mimeType;
+
+  /// 落盘文件扩展名（必须与实际字节一致：Flutter 靠内容解码，
+  /// 但封面查看器「保存原图」与外部打开会按扩展名处理）。
+  static String extensionOf(Uint8List bytes) =>
+      '.${CoverImageFormats.detect(bytes)?.extension ?? 'jpg'}';
+
+  /// 同步预算与存储层共用同一常量，避免两处上限漂移。
+  static int get _maxBytes => kCoverSyncMaxBytes;
+
+  static int _minEdgeFor(bool animated) => animated ? _minAnimatedEdge : 256;
+
+  static int _clampInt(int value, int min, int max) =>
+      value < min ? min : (value > max ? max : value);
+
+  static image.Image _decode(Uint8List bytes) {
+    final info = CoverImageFormats.detect(bytes);
+    final image.Image? decoded = switch (info?.format) {
+      // PNG / JPEG 的 maxPixels 是构造参数（final），必须按格式重建解码器；
+      // GIF / WebP 是可变字段，可以设完再解码。
+      CoverImageFormat.png => image.PngDecoder(
+        maxPixels: maxDecodePixels,
+      ).decode(bytes),
+      CoverImageFormat.jpeg => image.JpegDecoder(
+        maxPixels: maxDecodePixels,
+      ).decode(bytes),
+      CoverImageFormat.gif =>
+        (image.GifDecoder()..maxPixels = maxDecodePixels).decode(bytes),
+      CoverImageFormat.webp =>
+        (image.WebPDecoder()..maxPixels = maxDecodePixels).decode(bytes),
+      _ => null,
+    };
     if (decoded == null) {
       throw const CoverImageException('unsupported or corrupted image');
     }
-    final oriented = image.bakeOrientation(decoded);
-    final longest = oriented.width > oriented.height
-        ? oriented.width
-        : oriented.height;
-    final resized = longest <= maxEdge
-        ? oriented
-        : image.copyResize(
-            oriented,
-            width: oriented.width >= oriented.height ? maxEdge : null,
-            height: oriented.height > oriented.width ? maxEdge : null,
-            interpolation: image.Interpolation.linear,
-          );
-    final encoded = image.encodeJpg(resized, quality: jpegQuality);
-    if (encoded.isEmpty) {
-      throw const CoverImageException('failed to encode image');
+    return decoded;
+  }
+
+  /// 按时间均匀抽帧，保留循环总时长与首尾帧。
+  ///
+  /// 每个保留帧的时长 = 从该帧到下一保留帧之前所有原帧时长之和；原帧时长
+  /// 为 0（常见 GIF）按 100ms 计，避免生成 0 时长导致解码器不受控地抢帧。
+  static image.Image _capAnimationFrames(
+    image.Image source, {
+    int maxFrames = maxAnimationFrames,
+  }) {
+    final frames = source.frames;
+    if (frames.length <= maxFrames) return source;
+    final selected = <int>[];
+    for (var i = 0; i < maxFrames; i++) {
+      final index = (i * (frames.length - 1) / (maxFrames - 1)).round();
+      if (selected.isEmpty || selected.last != index) selected.add(index);
     }
-    return encoded;
+    int durationBetween(int from, int toExclusive) {
+      var total = 0;
+      for (var i = from; i < toExclusive && i < frames.length; i++) {
+        total += _frameDurationMs(frames[i]);
+      }
+      return total;
+    }
+
+    final first = _cloneFrame(frames[selected.first]);
+    first.frameDuration = durationBetween(
+      selected.first,
+      selected.length > 1 ? selected[1] : frames.length,
+    );
+    final out =
+        image.Image.fromResized(
+            first,
+            width: first.width,
+            height: first.height,
+            noAnimation: true,
+          )
+          ..loopCount = source.loopCount
+          ..backgroundColor = source.backgroundColor
+          ..frameDuration = first.frameDuration;
+    for (var i = 1; i < selected.length; i++) {
+      final frame = _cloneFrame(frames[selected[i]]);
+      frame.frameDuration = durationBetween(
+        selected[i],
+        i + 1 < selected.length ? selected[i + 1] : frames.length,
+      );
+      out.addFrame(frame);
+    }
+    return out;
+  }
+
+  static image.Image _cloneFrame(image.Image frame) => image.Image.fromResized(
+    frame,
+    width: frame.width,
+    height: frame.height,
+    noAnimation: true,
+  )..frameDuration = frame.frameDuration;
+
+  static int _frameDurationMs(image.Image frame) =>
+      frame.frameDuration > 0 ? frame.frameDuration : 100;
+
+  static image.Image _resize(image.Image source, int maxEdge) {
+    final longest = source.width > source.height ? source.width : source.height;
+    if (longest <= maxEdge) return source;
+    return image.copyResize(
+      source,
+      width: source.width >= source.height ? maxEdge : null,
+      height: source.height > source.width ? maxEdge : null,
+      interpolation: image.Interpolation.linear,
+    );
   }
 }

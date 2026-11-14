@@ -241,6 +241,16 @@ void main() {
       DownloadFileLayout.coverPath('/downloads', 'A', 'https://x/c.jpeg'),
       '/downloads/covers/A.jpg',
     );
+    // 自定义封面没有 URL，扩展名必须跟字节 MIME（WebP / 动图 WebP）。
+    expect(
+      DownloadFileLayout.coverPath(
+        '/downloads',
+        'A',
+        '',
+        mimeType: 'image/webp',
+      ),
+      '/downloads/covers/A.webp',
+    );
   });
 
   test('写歌词：主文件 + 翻译边车；空白翻译不写边车', () async {

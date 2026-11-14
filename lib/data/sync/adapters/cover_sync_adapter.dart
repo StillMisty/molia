@@ -8,6 +8,7 @@ import 'package:logging/logging.dart';
 import '../../local_identity.dart';
 import '../../../domain/models/device_sync.dart';
 import '../../../domain/models/playlist_folders.dart';
+import '../../../services/covers/cover_image_format.dart';
 import '../../../services/covers/custom_cover_store.dart';
 import '../sync_adapter.dart';
 import '../sync_book.dart';
@@ -27,10 +28,13 @@ import '../sync_stamp.dart';
 ///   已重置各传输的快照发布覆盖，全量快照会携带它们；此后首次登记 / 真实
 ///   变化 / 删除 / 墓碑后重设都追加日志，让增量对端收到；墓碑后重设必须取
 ///   新版本，不能复用旧戳（否则会输给更陈旧的墓碑）；
-/// - 接受 JPEG / GIF / WebP（静态图归一化为 JPEG，动图原样保留）：
-///   记录里的 `mime` 与实际字节必须一致；PNG 等未支持格式与损坏载荷一律
-///   跳过。单张图超过 [CustomCoverStore.maxSyncBytes] 在选图阶段就被拒绝，
-///   保证「能选就能同步」；接收侧在 base64 解码前先按长度拒绝超限记录；
+/// - 记录携带字节真实格式（`mime` / `ext` / `animated`）：新选图是归一化
+///   WebP，既有本地封面可能是 JPEG / PNG / GIF；接收侧按字节魔数校验，不
+///   信任声明。动画 WebP 原样传输、原样落盘，不会在另一台设备上被重编码成
+///   静态图或 JPEG；
+/// - 单张图超过 [CustomCoverStore.maxSyncBytes] 只跳过同步并记一次日志，
+///   本地封面继续可用；接收侧在 base64 解码前先按长度拒绝超限记录，解码后
+///   再按格式白名单拒绝 AVIF / 损坏载荷；
 /// - 远端应用只写封面存储与登记，不触发本地变更回调（不会形成同步回环）。
 class CoverSyncAdapter
     implements CategoryScopedSyncAdapter, SyncAdapterCacheReleaser {
@@ -73,16 +77,20 @@ class CoverSyncAdapter
   /// 切换轮规则，避免把开启前就存在的封面整库塞进增量日志。
   bool _firstCoversCollectAfterEnable = false;
 
-  /// base64 缓存上限：只缓存最近读过的少量封面，避免随曲库增长。
-  ///
-  /// 超过上限后整库 collect 会逐张重读（有界内存优先）；缓存只服务最近
-  /// 变化过的少量封面，不随曲库增长。动图封面单张 base64 可达 ~2.8MB，
-  /// 因此上限从 16 收到 4，避免几张动图把内存顶到几十 MB。
-  static const int _base64CacheLimit = 4;
+  /// base64 缓存上限：按总字节而不是条目数限制，避免一张大动图挤掉全部
+  /// 小封面，也避免 16 张最大动图同时驻留（16 × 1.5MB → 24MB）。
+  static const int _base64CacheMaxBytes = 8 * 1024 * 1024;
+  static const int _base64CacheMaxEntries = 64;
 
-  /// 封面键 → 上轮读到的内容哈希 + base64 + MIME（哈希未变不重读文件；LRU）。
-  final LinkedHashMap<String, ({String hash, String base64, String mime})>
+  /// 封面键 → 上轮读到的内容哈希 + base64 + 格式（哈希未变不重读文件；LRU）。
+  final LinkedHashMap<
+    String,
+    ({String hash, String base64, CoverImageInfo info})
+  >
   _base64Cache = LinkedHashMap();
+
+  /// 当前缓存里 base64 文本的总长度（粗估内存占用）。
+  int _base64CacheBytes = 0;
 
   /// 已提示过「无法同步」的键（同一张大图不每轮刷日志）。
   final Set<String> _unsyncableLogged = {};
@@ -100,6 +108,7 @@ class CoverSyncAdapter
   @override
   void releaseCaches() {
     _base64Cache.clear();
+    _base64CacheBytes = 0;
     _unsyncableLogged.clear();
   }
 
@@ -254,8 +263,8 @@ class CoverSyncAdapter
         data: _recordDataOf(
           cached.hash,
           cached.base64,
-          cached.mime,
           entry.updatedAt,
+          cached.info,
         ),
       );
     }
@@ -269,42 +278,65 @@ class CoverSyncAdapter
       _logUnsyncable(key, '读取失败');
       return null;
     }
-    if (!CustomCoverStore.canSyncImageBytes(bytes)) {
-      _base64Cache.remove(key);
+    final info = CoverImageFormats.detectSyncable(
+      bytes,
+      maxBytes: CustomCoverStore.maxSyncBytes,
+    );
+    if (info == null) {
+      _cacheRemove(key);
       _logUnsyncable(
         key,
-        bytes.length > CustomCoverStore.maxSyncBytes ? '超过同步大小上限' : '图片损坏',
+        bytes.length > CustomCoverStore.maxSyncBytes
+            ? '超过同步大小上限'
+            : '图片损坏或格式不受支持',
       );
       return null;
     }
     final hash = sha256.convert(bytes).toString();
     final base64 = base64Encode(bytes);
-    final mime = CustomCoverStore.syncMimeOf(bytes)!;
-    _cacheBase64(key, (hash: hash, base64: base64, mime: mime));
+    _cacheBase64(key, (hash: hash, base64: base64, info: info));
     return (
       hash: hash,
-      data: _recordDataOf(hash, base64, mime, entry.updatedAt),
+      data: _recordDataOf(hash, base64, entry.updatedAt, info),
     );
   }
 
-  /// 写入 base64 缓存并淘汰最久未用的条目（内存不随曲库增长）。
+  /// 写入 base64 缓存并淘汰最久未用的条目（按总字节与条目数双重限制）。
   void _cacheBase64(
     String key,
-    ({String hash, String base64, String mime}) value,
+    ({String hash, String base64, CoverImageInfo info}) value,
   ) {
-    _base64Cache.remove(key);
+    _cacheRemove(key);
     _base64Cache[key] = value;
-    while (_base64Cache.length > _base64CacheLimit) {
-      _base64Cache.remove(_base64Cache.keys.first);
+    _base64CacheBytes += value.base64.length;
+    while (_base64Cache.isNotEmpty &&
+        (_base64Cache.length > _base64CacheMaxEntries ||
+            _base64CacheBytes > _base64CacheMaxBytes)) {
+      final oldest = _base64Cache.keys.first;
+      _cacheRemove(oldest);
     }
+  }
+
+  void _cacheRemove(String key) {
+    final removed = _base64Cache.remove(key);
+    if (removed != null) _base64CacheBytes -= removed.base64.length;
   }
 
   static Map<String, Object?> _recordDataOf(
     String hash,
     String base64,
-    String mime,
     int updatedAt,
-  ) => {'image': base64, 'mime': mime, 'hash': hash, 'updatedAt': updatedAt};
+    CoverImageInfo info,
+  ) => {
+    'image': base64,
+    'mime': info.mimeType,
+    'ext': info.extension,
+    'animated': info.animated,
+    if (info.width != null) 'width': info.width,
+    if (info.height != null) 'height': info.height,
+    'hash': hash,
+    'updatedAt': updatedAt,
+  };
 
   @override
   Future<SyncApplyOutcome> apply(
@@ -435,13 +467,13 @@ class CoverSyncAdapter
     return SyncApplyOutcome(applied: applied, skipped: applied == 0 ? 1 : 0);
   }
 
-  /// base64 → 图片字节；损坏 / 超限 / MIME 不符一律返回 null（跳过，不抛）。
+  /// base64 → 图片字节；损坏 / 超限 / 非图片一律返回 null（跳过，不抛）。
+  ///
+  /// 声明字段只作诊断：格式按字节识别，动画 P 帧 / 透明通道原样保留。
   ({Uint8List bytes, String hash})? _decode(SyncRecord record) {
     final raw = record.data?['image'];
     if (raw is! String || raw.isEmpty) return null;
-    final mime = record.data?['mime'];
-    if (mime is! String || mime.isEmpty) return null;
-    // base64 长度先于解码判定：超过同步上限的记录直接拒绝。
+    // base64 长度先于解码判定：超过 1.5MB 字节上限的记录直接拒绝。
     if (raw.length > _maxBase64Length) return null;
     final Uint8List bytes;
     try {
@@ -449,9 +481,21 @@ class CoverSyncAdapter
     } catch (_) {
       return null;
     }
-    final actualMime = CustomCoverStore.syncMimeOf(bytes);
-    if (actualMime == null || actualMime != mime) return null;
-    return (bytes: bytes, hash: sha256.convert(bytes).toString());
+    final info = CoverImageFormats.detectSyncable(
+      bytes,
+      maxBytes: CustomCoverStore.maxSyncBytes,
+    );
+    if (info == null) return null;
+    final hash = sha256.convert(bytes).toString();
+    final declaredHash = record.data?['hash'];
+    // 内容哈希不符 = 传输 / 上游损坏；宁可跳过等下一轮，也不把错图写进
+    // 用户封面。旧记录没有 hash 时按字节重新计算。
+    if (declaredHash is String &&
+        declaredHash.isNotEmpty &&
+        declaredHash != hash) {
+      return null;
+    }
+    return (bytes: bytes, hash: hash);
   }
 
   void _logUnsyncable(String key, String reason) {

@@ -28,7 +28,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/files/app_data_directory.dart';
 import '../../domain/models/track.dart';
-import 'cover_image_codec.dart';
+import 'cover_image_format.dart';
 import 'cover_resolution.dart' as cover_resolution;
 
 /// 自定义封面变化类型（组合根按它决定刷新哪些展示面）。
@@ -76,7 +76,8 @@ class CustomCoverEntry {
     required this.path,
     required this.hash,
     required this.updatedAt,
-  });
+    this.format = CoverImageFormat.jpeg,
+  }) : assert(path != '');
 
   /// 封面文件绝对路径。
   final String path;
@@ -87,10 +88,17 @@ class CustomCoverEntry {
   /// 写入时间（毫秒时间戳）。
   final int updatedAt;
 
+  /// 文件格式；老索引没有该字段时按路径扩展名推断，再兜底 JPEG。
+  final CoverImageFormat format;
+
+  String get mimeType => format.mimeType;
+  String get extension => format.extension;
+
   Map<String, Object?> toJson() => {
     'path': path,
     'hash': hash,
     'updatedAt': updatedAt,
+    'format': format.name,
   };
 
   static CustomCoverEntry? fromJson(Object? raw) {
@@ -99,10 +107,25 @@ class CustomCoverEntry {
     final hash = raw['hash'];
     final updatedAt = raw['updatedAt'];
     if (path is! String || path.isEmpty) return null;
+    final storedFormat = raw['format'];
+    CoverImageFormat? format;
+    for (final value in CoverImageFormat.values) {
+      if (value.name == storedFormat) {
+        format = value;
+        break;
+      }
+    }
+    final dot = path.lastIndexOf('.');
     return CustomCoverEntry(
       path: path,
       hash: hash is String ? hash : '',
       updatedAt: updatedAt is int ? updatedAt : 0,
+      format:
+          format ??
+          CoverImageFormat.fromExtension(
+            dot < 0 ? null : path.substring(dot + 1),
+          ) ??
+          CoverImageFormat.jpeg,
     );
   }
 }
@@ -132,12 +155,14 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
   static const String prefsKey = 'custom_cover_index_v1';
   static const String directoryName = 'custom_covers';
 
-  /// 单张封面可进入同步记录的字节上限；与
-  /// `CoverImageCodec.maxAnimatedBytes` 同值，保证「能选就能同步」。
+  /// 单张封面可进入同步记录的字节上限；与归一化预算同值，保证「能选就能
+  /// 同步」。
   ///
-  /// base64 后约 2.7MB，仍在增量日志 4MB 窗口内；超限的动图在选图阶段
-  /// 就被拒绝，不会出现本机可用、其它端收不到的不一致。
-  static const int maxSyncBytes = CoverImageCodec.maxAnimatedBytes;
+  /// 动图 WebP 需要比静态封面更宽的预算；归一化会按同一上限逐级降参数，
+  /// 正常动图不会被截成静态图。base64 后约 2MB，仍低于增量日志 8MB 窗口。
+  /// 只有既有本地文件 / 异常远端记录才会超过该值：超限跳过同步，本地封面
+  /// 继续可用；接收侧用同一上限拒绝异常远端记录。
+  static const int maxSyncBytes = kCoverSyncMaxBytes;
 
   final Future<SharedPreferences> Function() _preferences;
   final Future<Directory> Function() _supportDirectory;
@@ -418,16 +443,16 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
 
   /// 图片字节是否可进入同步记录（大小 + 魔数；不在这里解码整图）。
   ///
-  /// 接受 JPEG / GIF / WebP：静态封面归一化为 JPEG，动图原样保留。
-  /// 记录里的 `mime` 必须与实际字节一致，接收端会再校验一次。
+  /// 新选图统一是 WebP；既有本地封面可能是 JPEG / PNG / GIF，只要 Flutter
+  /// 能稳定解码就照常同步。扩展名 / MIME 由字节识别，不信任记录声明；AVIF
+  /// 等平台相关格式不接受，避免另一台设备打不开。
   static bool canSyncImageBytes(Uint8List bytes) =>
-      bytes.isNotEmpty &&
-      bytes.length <= maxSyncBytes &&
-      CoverImageCodec.mimeOf(bytes) != null;
+      CoverImageFormats.detectSyncable(bytes, maxBytes: maxSyncBytes) != null;
 
   /// 同步记录的 MIME（不可同步时返回 null）。
-  static String? syncMimeOf(Uint8List bytes) =>
-      canSyncImageBytes(bytes) ? CoverImageCodec.mimeOf(bytes) : null;
+  static String? syncMimeOf(Uint8List bytes) => canSyncImageBytes(bytes)
+      ? CoverImageFormats.detect(bytes)?.mimeType
+      : null;
 
   /// 保存曲目封面（[bytes] 应已由 `CoverImageCodec` 归一化）。
   Future<void> setTrackCover(TrackId id, Uint8List bytes) async {
@@ -731,11 +756,15 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
     required String filePrefix,
     required Uint8List bytes,
   }) async {
+    // 扩展名跟内容走：远端可能发来 WebP，既有本地封面也可能是 JPEG /
+    // PNG / GIF。未知字节只可能是测试或损坏文件，按 JPEG 落盘保持旧行为
+    //（同步面会先做格式校验，不会把未知字节发出去）。
+    final format =
+        CoverImageFormats.detect(bytes)?.format ?? CoverImageFormat.jpeg;
     final directory = await _coverDirectory();
     final stamp = _clock().microsecondsSinceEpoch;
-    // 扩展名跟随实际字节：动图（GIF / WebP）原样落盘，静态图仍是归一化 JPEG。
-    final extension = CoverImageCodec.extensionOf(bytes);
-    final name = '${filePrefix}_${stamp}_${_writeSequence++}$extension';
+    final name =
+        '${filePrefix}_${stamp}_${_writeSequence++}.${format.extension}';
     final file = File('${directory.path}/$name');
     final part = File('${file.path}.part');
     await part.writeAsBytes(bytes, flush: true);
@@ -744,6 +773,7 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
       path: file.path,
       hash: sha256.convert(bytes).toString(),
       updatedAt: _clock().millisecondsSinceEpoch,
+      format: format,
     );
   }
 

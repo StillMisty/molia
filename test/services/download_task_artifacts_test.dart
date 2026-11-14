@@ -97,6 +97,25 @@ void main() {
     expect(storage.files[coverPath], [9, 8]);
   });
 
+  test('封面：自定义 WebP 无 URL 时按 MIME 落 .webp，不写成 .jpg', () async {
+    const coverPath = '/downloads/covers/自定义.webp';
+    final cover = DownloadResolvedCover(
+      bytes: Uint8List.fromList([0x52, 0x49, 0x46, 0x46]),
+      url: null,
+      mimeType: 'image/webp',
+    );
+
+    final path = await artifacts.writeCover(
+      root: '/downloads',
+      base: '自定义',
+      cover: cover,
+    );
+
+    expect(path, coverPath);
+    expect(registryAtWrite.single, contains(coverPath));
+    expect(storage.files[coverPath], cover.bytes);
+  });
+
   test('close：只撤销本任务登记的输出，别的任务不受影响', () {
     const otherTaskPath = '/downloads/other-task.mp3';
     outputs.add(otherTaskPath);
