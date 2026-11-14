@@ -30,6 +30,7 @@ import '../models/play_mode.dart';
 import '../services/playback_session_store.dart';
 import 'playback_commands.dart';
 import 'playback_power_policy.dart';
+import 'queue_edit_policy.dart';
 import 'queue_navigation.dart';
 import 'queue_projection.dart';
 import 'shuffle_order.dart';
@@ -490,27 +491,26 @@ class PlaybackSessionCoordinator
 
   /// 移动队列中的一项：恢复态改会话并落盘，live 转发 facade 后提交。
   ///
-  /// 两个阶段共用同一套 no-op 判定（越界 / 移动当前曲目 / 随机模式），
-  /// 保证 UI 在恢复态与真实播放里看到同样的可编辑边界。
+  /// 两个阶段的 no-op 判定与下标平移都走 [planQueueMove]，保证 UI 在恢复态
+  /// 与真实播放里看到同样的可编辑边界。
   @override
   Future<PlaybackCommandOutcome> moveQueueIndex(int from, int to) async {
     if (phase == PlaybackSessionPhase.restored) {
       final session = _restoredSession!;
-      if (!_canMoveQueueIndex(
+      final plan = planQueueMove(
+        mode: session.mode,
         length: session.tracks.length,
         currentIndex: session.index,
-        mode: session.mode,
         from: from,
         to: to,
-      )) {
-        return PlaybackCommandOutcome.none;
-      }
+      );
+      if (!plan.allowed) return PlaybackCommandOutcome.none;
       final tracks = List<Track>.of(session.tracks);
       final track = tracks.removeAt(from);
       tracks.insert(to, track);
       _restoredSession = session.copyWith(
         tracks: tracks,
-        index: _movedIndex(session.index, from, to),
+        index: plan.currentIndex,
       );
       _publishRestoredSnapshot();
       await _store.save(_restoredSession!);
@@ -527,17 +527,18 @@ class PlaybackSessionCoordinator
   Future<PlaybackCommandOutcome> removeQueueIndex(int index) async {
     if (phase == PlaybackSessionPhase.restored) {
       final session = _restoredSession!;
-      if (index < 0 ||
-          index >= session.tracks.length ||
-          index == session.index) {
-        return PlaybackCommandOutcome.none;
-      }
+      final plan = planQueueRemove(
+        length: session.tracks.length,
+        currentIndex: session.index,
+        index: index,
+      );
+      if (!plan.allowed) return PlaybackCommandOutcome.none;
       final tracks = List<Track>.of(session.tracks)..removeAt(index);
       // 排列下标与队列同源：移除后其后下标前移，否则 upNextIndices 会指错行。
       _restoredShuffleOrder?.removeIndex(index);
       _restoredSession = session.copyWith(
         tracks: tracks,
-        index: index < session.index ? session.index - 1 : session.index,
+        index: plan.currentIndex,
       );
       _publishRestoredSnapshot();
       await _store.save(_restoredSession!);
@@ -1095,31 +1096,6 @@ class PlaybackSessionCoordinator
     _trackCompletions = null;
     _position.dispose();
   }
-}
-
-/// 队列移动的合法边界（恢复态与真实播放共用，避免两套 no-op 口径）。
-bool _canMoveQueueIndex({
-  required int length,
-  required int currentIndex,
-  required PlayMode mode,
-  required int from,
-  required int to,
-}) {
-  if (mode == PlayMode.shuffle) return false;
-  if (from < 0 || from >= length || to < 0 || to >= length) return false;
-  if (from == to || from == currentIndex || to == currentIndex) return false;
-  return true;
-}
-
-/// 队列移动后的当前下标：只随「跨过当前曲目」的移动平移。
-int _movedIndex(int currentIndex, int from, int to) {
-  if (from < to && currentIndex > from && currentIndex <= to) {
-    return currentIndex - 1;
-  }
-  if (to < from && currentIndex >= to && currentIndex < from) {
-    return currentIndex + 1;
-  }
-  return currentIndex;
 }
 
 /// 两份会话内容是否相同（命令提交点的去重依据）。
