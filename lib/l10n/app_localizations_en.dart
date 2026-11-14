@@ -3172,6 +3172,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncCategoryCovers => 'Custom covers';
 
   @override
+  String get syncCategoryAiDj => 'AI recommendations';
+
+  @override
   String get syncCategoryStatistics => 'Play statistics';
 
   @override

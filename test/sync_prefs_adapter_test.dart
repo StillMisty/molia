@@ -73,7 +73,7 @@ void main() {
     );
   });
 
-  test('快捷键四键进入设置类别收集结果（跟人走）', () async {
+  test('快捷键四键与海报样式三键进入设置类别收集结果（跟人走）', () async {
     final fullAdapter = PrefsSyncAdapter(
       state: state,
       settings: SettingsRegistry(
@@ -91,6 +91,9 @@ void main() {
       kGlobalShortcutsEnabled,
       kShortcutBindings,
       kGlobalShortcutBindings,
+      kPosterColorSourceKey,
+      kPosterSeedColor,
+      kPosterFontFamily,
     ]) {
       expect(byKey, contains(key.name));
       expect(byKey[key.name]!.data, {

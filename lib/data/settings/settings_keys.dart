@@ -2,7 +2,7 @@
 ///
 /// 划分原则（与 ADR-0003 §5 一致）：
 /// - **跟人走** → [SyncCategory.settings]：主题 / 语言 / 导航 / 歌词显示 /
-///   默认播放模式 / 统计开关 / App 标题 / AI 功能开关…；
+///   默认播放模式 / 统计开关 / App 标题 / 海报样式 / AI 功能开关…；
 /// - **音源** → [SyncCategory.sources]：渠道顺序、停用、默认音质、
 ///   any-listen 连接（LX 脚本本体由 ScriptSyncAdapter 处理）；
 /// - **凭证** → [SyncCategory.credentials]：AI Key / any-listen token / B 站
@@ -155,6 +155,29 @@ const kLyricsDisplaySettings = SettingsKey<String?>(
   category: SyncCategory.settings,
 );
 
+// 跟人走：海报样式（歌词海报 / 统计海报 / 年度报告共用）
+//
+// 三键此前只存本地 prefs，换设备或重装后样式丢失，也不进完整备份；海报是
+// 用户显式调过的外观偏好，与「跟随应用字体」等设备能力无关，因此按跟人走
+// 登记。字体族在目标设备缺失时由渲染层回退，不影响海报生成。
+const kPosterColorSourceKey = SettingsKey<String>(
+  'poster_color_source',
+  'appTheme',
+  category: SyncCategory.settings,
+);
+const kPosterSeedColor = SettingsKey<int>(
+  'poster_seed_color',
+  0xFF2196F3,
+  category: SyncCategory.settings,
+);
+
+/// 海报字体覆盖：null = 跟随应用字体；空串 = 强制系统默认；其它 = 字体族名。
+const kPosterFontFamily = SettingsKey<String?>(
+  'poster_font_family',
+  null,
+  category: SyncCategory.settings,
+);
+
 // 跟人走：AI 推歌开关与偏好（连接信息见凭证区）
 const kAiDjEnabled = SettingsKey<bool>(
   'ai_dj_enabled',
@@ -298,6 +321,9 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kPlayWithOtherApps,
   kPlayStatisticsEnabled,
   kLyricsDisplaySettings,
+  kPosterColorSourceKey,
+  kPosterSeedColor,
+  kPosterFontFamily,
   kAiDjEnabled,
   kAiDjPreferences,
   kAiDjFeedbackMemory,

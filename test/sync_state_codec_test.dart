@@ -24,6 +24,7 @@ void main() {
       'lanHttpPort',
       'activeScript',
       'sessionStamp',
+      'activeAiBatch',
       'transportLastSuccess',
       'snapshotPush',
       'lanEndpoints',
@@ -81,6 +82,11 @@ void main() {
     expect(value.coverStamps['wy:1']!.hash, 'h-cover');
     expect(value.coverStamps['wy:1']!.version.counter, 5);
     expect(value.coverTombstones['wy:2']!.version.physical, 1770000000450);
+    expect(value.aiBatchStamps['batch-1']!.hash, 'h-ai');
+    expect(value.aiBatchStamps['batch-1']!.version.counter, 6);
+    expect(value.aiBatchTombstones['batch-2']!.version.physical, 1770000000460);
+    expect(value.activeAiBatchStamp!.hash, 'batch-1');
+    expect(value.activeAiBatchStamp!.version.counter, 7);
     expect(value.lastSyncAt, 1770000000500);
     expect(value.transportLastSuccess, {
       'lan': 1770000000500,
@@ -173,6 +179,9 @@ void main() {
     expect(empty.sessionStamp, isNull);
     expect(empty.coverStamps, isEmpty);
     expect(empty.coverTombstones, isEmpty);
+    expect(empty.aiBatchStamps, isEmpty);
+    expect(empty.aiBatchTombstones, isEmpty);
+    expect(empty.activeAiBatchStamp, isNull);
     expect(empty.lastSyncAt, 0);
     expect(empty.transportLastSuccess, isEmpty);
     expect(empty.snapshotPushSeq, isEmpty);
@@ -196,6 +205,8 @@ void main() {
       'scriptStamps',
       'coverStamps',
       'coverTombstones',
+      'aiBatchStamps',
+      'aiBatchTombstones',
       'knownScripts',
       'lastSyncAt',
       'log',
@@ -452,6 +463,19 @@ SyncPersistedState _populatedState() => SyncPersistedState(
   coverTombstones: {
     'wy:2': const SyncStamp(version: SyncVersion(physical: 1770000000450)),
   },
+  aiBatchStamps: {
+    'batch-1': const SyncStamp(
+      hash: 'h-ai',
+      version: SyncVersion(physical: 1770000000350, counter: 6),
+    ),
+  },
+  aiBatchTombstones: {
+    'batch-2': const SyncStamp(version: SyncVersion(physical: 1770000000460)),
+  },
+  activeAiBatchStamp: const SyncStamp(
+    hash: 'batch-1',
+    version: SyncVersion(physical: 1770000000350, counter: 7),
+  ),
   lastSyncAt: 1770000000500,
   transportLastSuccess: {'lan': 1770000000500, 'webdav': 1770000000400},
   snapshotPushSeq: {'lan': 12, 'webdav': 5},

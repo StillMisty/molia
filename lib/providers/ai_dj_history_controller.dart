@@ -70,6 +70,16 @@ class AiDjHistoryController {
     _cache[batch.id] = batch;
   }
 
+  /// 重新读取索引 + active（跨设备同步应用远端历史后由组合根调用）。
+  ///
+  /// 清空按需缓存：远端可能删除 / 覆盖任意批次，旧缓存不能继续展示。
+  Future<void> reload() async {
+    _active = null;
+    _entries = const [];
+    _cache.clear();
+    await init();
+  }
+
   /// 保存一批；[makeActive] 为真时同时切换 active。
   ///
   /// 存储失败降级为内存状态（历史页仍可看到本批），与原生 store 的

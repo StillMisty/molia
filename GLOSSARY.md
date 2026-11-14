@@ -851,12 +851,16 @@
   启动时只加载它（详情懒加载）。换一批后旧 active 留在历史，不丢数据。
 - **历史推荐（recommendation history）** —
   `lib/services/ai/ai_recommendation_store.dart` + `lib/pages/ai_dj_history_page.dart`：
-  索引键 `ai_dj_history_index_v1` + 每批一键 `ai_dj_history_batch_v1:<id>`；
+  索引键 `ai_dj_history_index_v1` + 每批一个文件
+  `<appSupport>/ai_history/<sha1(id)>.json`（旧版 `ai_dj_history_batch_v1:<id>`
+  键首次读取时迁移为文件后删除）；
   保留 20 批 / 400 首 / 30 天，active 永不自动清理；删除 active 回退最近一批，
   清空历史保留 active。索引与批次载荷的写序统一为「先写索引、后删载荷」
   （删除 / 清空 / 保留裁剪都一样），孤儿载荷无害。旧单批键 `ai_dj_pending_batch_v1`
   不再读取、不迁移，`AiDjOrigin.restored` 已删除。历史批次只读（可播放 /
-  加队列 / 设为当前 / 删除），不在历史里编辑反馈。
+  加队列 / 设为当前 / 删除），不在历史里编辑反馈。历史随 `aiDj` 同步类别跨
+  设备同步：每批一条记录（内容哈希取版本、删除写墓碑），active 指针独立
+  记录；首次为空的 active 用零值戳，避免新设备加入时清掉对端的当前推荐。
 - **批次（batch）大小** — 24 / 48 / 96，默认 24，存在
   `AiPreferences.batchSize`；影响 LLM `count`、历史元数据与自动补歌数量，
   「换一首」固定 1；改动只对下一次生成生效。

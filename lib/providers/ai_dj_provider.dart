@@ -679,6 +679,12 @@ class AiDjProvider extends ChangeNotifier {
   /// 按需加载历史详情（不切换 active）。
   Future<AiDjBatch?> loadHistoryBatch(String id) => _history.load(id);
 
+  /// 重新读取历史索引与 active（同步应用远端 AI 推荐历史后调用）。
+  Future<void> reloadHistory() async {
+    await _history.reload();
+    if (!_disposed) notifyListeners();
+  }
+
   /// 退出推歌（电台）。默认保留当前队列继续播放（清空由调用方显式传 false）。
   ///
   /// 功能启用状态与推荐列表不受影响（退出队列 ≠ 关闭功能）。

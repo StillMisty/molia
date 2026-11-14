@@ -16,6 +16,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../data/molia_database.dart';
+import '../../data/sync/adapters/ai_dj_sync_adapter.dart';
 import '../../data/sync/adapters/change_detecting_adapter.dart';
 import '../../data/sync/adapters/cover_sync_adapter.dart';
 import '../../data/sync/adapters/history_sync_adapter.dart';
@@ -45,6 +46,7 @@ import '../../services/covers/custom_cover_store.dart';
 import '../../services/data_saver_service.dart';
 import '../../services/local_endpoints_service.dart';
 import '../../services/sync_trigger_bridge.dart';
+import 'ai_stack.dart';
 import 'catalog_stack.dart';
 import 'library_stack.dart';
 import 'playback_stack.dart';
@@ -64,6 +66,7 @@ Future<SyncStack> buildSyncStack({
   required CatalogStack catalog,
   required LibraryStack library,
   required PlaybackStack playback,
+  required AiStack ai,
   required DataSaverService dataSaver,
 
   /// 自定义封面存储（本地数据栈构造的唯一实例，经 Provider / 构造参数传递）。
@@ -144,6 +147,14 @@ Future<SyncStack> buildSyncStack({
     // 未请求封面类别时 collect 直接返回空，不读封面文件；用户关闭后再
     // 开启时由控制面重置快照发布、用全量快照补传已有封面。
     enabled: () => syncState.isCategoryEnabled(SyncCategory.covers),
+  );
+  final aiDjSyncAdapter = AiDjSyncAdapter(
+    store: ai.historyStore,
+    state: syncState,
+    journal: library.syncJournal,
+    // 远端历史落地后重读 Provider 的内存索引 / active，历史页与 AI 页
+    // 不需要重启就能看到另一台设备生成的推荐。
+    onApplied: ai.djProvider.reloadHistory,
   );
 
   // 引擎与局域网传输互为依赖：传输的快照提供者要读引擎最近一轮快照。
@@ -238,6 +249,7 @@ Future<SyncStack> buildSyncStack({
     statisticsSyncAdapter,
     sessionSyncAdapter,
     coverSyncAdapter,
+    aiDjSyncAdapter,
   ];
   final syncTransports = <String, SyncTransport>{
     SyncTransportKind.lan: lanSyncTransport,
@@ -357,7 +369,9 @@ Future<SyncStack> buildSyncStack({
       onSaved: () => unawaited(sessionSyncAdapter.noteLocalSave()),
     )
     // 仅本地封面写入标脏（远端应用到 store 时走 local=false，不会回环）。
-    ..bindLocalCoverChanges(covers);
+    ..bindLocalCoverChanges(covers)
+    // AI 推荐历史本地变化（远端应用不走这个钩子，不会回环）。
+    ..bindAiHistoryWrites(ai.historyStore);
 
   final syncProvider = SyncProvider(
     engine: syncEngine,

@@ -509,6 +509,14 @@
   超限（> 1.5MB）只跳过，接收侧在 base64 解码前先按长度拒绝。类别默认开启、
   不进蜂窝小类别；封面字节不进入
   非封面轮次，自动同步按类别开关执行，手动完整备份不受该开关限制。
+  `aiDj` 类别由 `AiDjSyncAdapter`（`lib/data/sync/adapters/ai_dj_sync_adapter.dart`）
+  承担：记录键 = 批次 id，内容 = 批次 JSON（曲目 + 未解析项 + 元数据，不含
+  LLM 原文与提示词），active 指针是单例记录 `__active_ai_batch__`。本地变化
+  （生成 / 更新 / 删除 / 清空 / 切换 active）经 `AiRecommendationStore.onLocalChange`
+  标记待发；适配器在 collect 时按内容哈希取戳并补写增量日志，删除写墓碑
+  （保留策略裁剪同样传播）。远端应用走 `applySyncedHistory` 一次写索引、不
+  触发本地变更回调，并让 Provider 重读历史；首次为空的 active 用零值戳，
+  避免新设备加入时清掉对端的当前推荐。批次载荷大，不进蜂窝小类别。
   协议自始为 v3（帧带版本与 nonce，载荷是列式二进制；见 ADR-0003 §1）：对端快照直接
   合并，备份只做结构性校验（不是 Molia 备份 / 结构无效才拒绝），都没有按版本号
   的分支。全量合并模型天然幂等，推送裁剪 90 天前墓碑（按真实删除时间）；入站
@@ -527,8 +535,8 @@
   自动轮。手动轮刻意按全部启用类别跑（不套用调度器的蜂窝小类别限制），也不更新
   调度器的待外发类别簿记——后续自动轮可能因此再跑一次（幂等）。
   数据变更的订阅与回调钩子由 `SyncTriggerBridge`（`sync_trigger_bridge.dart`）
-  唯一持有（资料库 / 统计流、音源、设置写入、脚本、会话、本地封面），
-  `dispose` 取消订阅并恢复绑前回调；应用前后台事件由
+  唯一持有（资料库 / 统计流、音源、设置写入、脚本、会话、本地封面、AI 推荐
+  历史），`dispose` 取消订阅并恢复绑前回调；应用前后台事件由
   `AppLifecycleCoordinator` 统一扇出。设置页只读不可变的 `SyncUiState`、
   只写 `SyncCommands`，`SyncProvider` 不再暴露六个协作者的接口并集。
   记录层的「收集 → 合并 → 登记过滤 → 适配器落地 → 交付登记」由
@@ -542,8 +550,8 @@
   **省电**（低电量未充电或系统省电模式
   暂停自动，只保留恢复动作的手动触发）；电量经平台通道读取（Android `BatteryChannelHandler` /
   iOS `AppDelegate`），移动数据下默认只同步小类别
-  （设置 / 音源 / 凭证 / 歌单与曲目 / 会话）；统计 / 历史 / 自定义封面等
-  大类别留到 Wi-Fi，可在同步页切换为「暂停自动同步」。
+  （设置 / 音源 / 凭证 / 歌单与曲目 / 会话）；统计 / 历史 / 自定义封面 /
+  AI 推荐历史等大类别留到 Wi-Fi，可在同步页切换为「暂停自动同步」。
   **事件驱动重连**：`DataSaverService.networkEvents` →
   `SyncScheduler.onNetworkChanged`（重置空闲退避 → 1.5s 去抖 →
   `SyncTrigger.network` 强制发现）；回前台隐藏 ≥15s 时重绑 UDP + loopback
@@ -1238,7 +1246,10 @@
   不登记，留在各自模块（只有一位消费者，收进来只增加门房面积）。快捷键开关 /
   绑定四键（`kShortcutsEnabled` / `kGlobalShortcutsEnabled` /
   `kShortcutBindings` / `kGlobalShortcutBindings`）按「跟人走」登记，此前漏在
-  总表外、现已进入同步范围；
+  总表外、现已进入同步范围；海报取色来源 / 自定义种子色 / 字体覆盖三键
+  （`kPosterColorSourceKey` / `kPosterSeedColor` / `kPosterFontFamily`）同理：
+  此前只写本地 prefs，换设备或重装后歌词 / 统计 / 年度报告海报样式会丢，
+  也不进完整备份；字体族在目标设备缺失时由渲染层回退，不阻断生成；
 - `settings_access.dart`：模块面 `SettingsAccess`（`read` / `write` / `clear`）；
   重载只能经 `SettingsRegistry.mount(SettingsModule)` 与作用域一起绑定，
   同步适配器只依赖窄接口 `SettingsSyncSurface`（`entries` / `readRaw` /
@@ -1264,6 +1275,15 @@
 同步适配器（`PrefsSyncAdapter`）不再自带键表与类型转换：键规格、默认值与读写
 都来自注册表；ADR-0003 §6 的「登记哈希」变化检测保留，但适用范围收窄为
 未登记的设备本地键。
+
+**同步覆盖口径**（2026-11-14 审计）：一份数据是否跟人走按「换设备后是否期望
+看到同一份」判定。已登记并同步的是歌单与列表曲目、历史、统计、上次会话、
+自定义封面、AI 推荐历史、LX 音源、凭证与跟人走设置。显式留在设备本地的不
+登记：缓存与省流（容量 / 网络）、下载目录与下载记录、本地曲库与音乐文件夹
+（文件只在本机）、音量与播放手感（听感 / 设备能力）、触感（能力）、窗口 /
+托盘（屏幕 / 平台）、更新检查（安装渠道）、听歌同步开关与同意（个人授权
+决策）、派生缓存与 UI 状态（折叠 / 滚动 / 浏览模式）。新增可跟随偏好应进
+登记表并归 `SyncCategory.settings`；不登记即显式选择「不同步」。
 
 ## 4. 状态与通知策略
 

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../data/settings/settings_key.dart';
 import '../data/settings/settings_registry.dart';
 import '../domain/models/device_sync.dart';
+import '../services/ai/ai_recommendation_store.dart';
 import '../services/covers/custom_cover_store.dart';
 import '../services/playback_session_store.dart';
 import '../sources/source_manager.dart';
@@ -139,6 +140,18 @@ class SyncTriggerBridge {
       localChange(categories: const {SyncCategory.covers});
     };
     _restores.add(() => covers.onLocalChange = previous);
+  }
+
+  /// AI 推荐历史本地变化（生成 / 更新 / 删除 / 清空 / 切换 active）。
+  ///
+  /// 远端应用走 `applySyncedHistory`，不触发这个钩子；因此不会形成回环。
+  void bindAiHistoryWrites(AiRecommendationStore store) {
+    final previous = store.onLocalChange;
+    store.onLocalChange = () {
+      previous?.call();
+      localChange(categories: const {SyncCategory.aiDj});
+    };
+    _restores.add(() => store.onLocalChange = previous);
   }
 
   /// 取消全部流订阅并恢复回调钩子；重复调用安全。

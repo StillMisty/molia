@@ -38,7 +38,11 @@ enum SyncCategory {
   /// 与其他类别一样默认同步；封面体积大，用户可在同步内容页单独关闭。
   /// 关闭期间本地修改仍会登记，重新开启后由全量快照 / 后续变更外发。手动
   /// 完整备份不受此开关限制（导出 / 导入仍含封面）。
-  covers;
+  covers,
+
+  /// AI 推荐历史（每批一条记录 + active 指针；批次含曲目原始 payload，
+  /// 按大类别处理：蜂窝小类别轮不带它）。
+  aiDj;
 
   /// 类别默认开关（缺失该类别时使用）。
   ///
@@ -66,6 +70,9 @@ abstract final class SyncRecordKeys {
 
   /// 全局默认封面的单例记录键（`covers` 类别）。
   static const String defaultCoverKey = '__default_cover__';
+
+  /// AI 推荐历史的 active 指针（`aiDj` 类别单例记录）。
+  static const String activeAiBatchKey = '__active_ai_batch__';
 
   static const String _separator = '\u0001';
 

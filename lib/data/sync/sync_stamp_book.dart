@@ -26,12 +26,17 @@ class SyncStampBookState {
     this.sessionStamp,
     Map<String, SyncStamp> coverStamps = const {},
     Map<String, SyncStamp> coverTombstones = const {},
+    Map<String, SyncStamp> aiBatchStamps = const {},
+    Map<String, SyncStamp> aiBatchTombstones = const {},
+    this.activeAiBatchStamp,
   }) : settingStamps = Map.unmodifiable(settingStamps),
        scriptTombstones = Map.unmodifiable(scriptTombstones),
        scriptStamps = Map.unmodifiable(scriptStamps),
        knownScriptIds = List.unmodifiable(knownScriptIds),
        coverStamps = Map.unmodifiable(coverStamps),
-       coverTombstones = Map.unmodifiable(coverTombstones);
+       coverTombstones = Map.unmodifiable(coverTombstones),
+       aiBatchStamps = Map.unmodifiable(aiBatchStamps),
+       aiBatchTombstones = Map.unmodifiable(aiBatchTombstones);
 
   /// 版本戳发号器基线（JSON 键 `stampSeq`）；重启后不倒退。
   final SyncVersion stampBaseline;
@@ -59,6 +64,15 @@ class SyncStampBookState {
 
   /// 自定义封面键 → 删除墓碑。
   final Map<String, SyncStamp> coverTombstones;
+
+  /// AI 推荐批次 id → 内容哈希 + 版本（本地变化检测）。
+  final Map<String, SyncStamp> aiBatchStamps;
+
+  /// AI 推荐批次 id → 删除墓碑。
+  final Map<String, SyncStamp> aiBatchTombstones;
+
+  /// AI 推荐历史 active 指针的登记。
+  final SyncStamp? activeAiBatchStamp;
 }
 
 /// 本机同步戳账本（内存状态；不做持久化）。
@@ -81,8 +95,11 @@ class SyncStampBook implements SyncStampLedger {
   final List<String> _knownScriptIds = [];
   final Map<String, SyncStamp> _coverStamps = {};
   final Map<String, SyncStamp> _coverTombstones = {};
+  final Map<String, SyncStamp> _aiBatchStamps = {};
+  final Map<String, SyncStamp> _aiBatchTombstones = {};
   SyncStamp? _activeScriptStamp;
   SyncStamp? _sessionStamp;
+  SyncStamp? _activeAiBatchStamp;
 
   SyncVersion _stampBaseline = SyncVersion.zero;
 
@@ -133,6 +150,15 @@ class SyncStampBook implements SyncStampLedger {
 
   @override
   Map<String, SyncStamp> get coverTombstones => _coverTombstones;
+
+  @override
+  Map<String, SyncStamp> get aiBatchStamps => _aiBatchStamps;
+
+  @override
+  Map<String, SyncStamp> get aiBatchTombstones => _aiBatchTombstones;
+
+  @override
+  SyncStamp? get activeAiBatchStamp => _activeAiBatchStamp;
 
   @override
   void putSettingStamp(String key, SyncStamp stamp) {
@@ -204,6 +230,34 @@ class SyncStampBook implements SyncStampLedger {
     if (_coverTombstones.remove(key) != null) _onChanged();
   }
 
+  @override
+  void putAiBatchStamp(String id, SyncStamp stamp) {
+    _aiBatchStamps[id] = stamp;
+    _onChanged();
+  }
+
+  @override
+  void removeAiBatchStamp(String id) {
+    if (_aiBatchStamps.remove(id) != null) _onChanged();
+  }
+
+  @override
+  void putAiBatchTombstone(String id, SyncStamp stamp) {
+    _aiBatchTombstones[id] = stamp;
+    _onChanged();
+  }
+
+  @override
+  void removeAiBatchTombstone(String id) {
+    if (_aiBatchTombstones.remove(id) != null) _onChanged();
+  }
+
+  @override
+  void setActiveAiBatchStamp(SyncStamp? stamp) {
+    _activeAiBatchStamp = stamp;
+    _onChanged();
+  }
+
   /// 恢复 / 补入发号器基线（持久化残留、全库最大戳、导入备份最大戳）。
   void seed(SyncVersion known) => stampIssuer.seed(known);
 
@@ -218,6 +272,9 @@ class SyncStampBook implements SyncStampLedger {
     sessionStamp: _sessionStamp,
     coverStamps: _coverStamps,
     coverTombstones: _coverTombstones,
+    aiBatchStamps: _aiBatchStamps,
+    aiBatchTombstones: _aiBatchTombstones,
+    activeAiBatchStamp: _activeAiBatchStamp,
   );
 
   /// 把解码出的切片写回内存（整体替换：状态 JSON 是完整视图，不是增量）。
@@ -243,7 +300,14 @@ class SyncStampBook implements SyncStampLedger {
     _coverTombstones
       ..clear()
       ..addAll(state.coverTombstones);
+    _aiBatchStamps
+      ..clear()
+      ..addAll(state.aiBatchStamps);
+    _aiBatchTombstones
+      ..clear()
+      ..addAll(state.aiBatchTombstones);
     _activeScriptStamp = state.activeScriptStamp;
     _sessionStamp = state.sessionStamp;
+    _activeAiBatchStamp = state.activeAiBatchStamp;
   }
 }

@@ -5772,6 +5772,12 @@ abstract class AppLocalizations {
   /// **'Custom covers'**
   String get syncCategoryCovers;
 
+  /// No description provided for @syncCategoryAiDj.
+  ///
+  /// In en, this message translates to:
+  /// **'AI recommendations'**
+  String get syncCategoryAiDj;
+
   /// No description provided for @syncCategoryStatistics.
   ///
   /// In en, this message translates to:

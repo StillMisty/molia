@@ -57,6 +57,15 @@ abstract interface class SyncStampLedger {
   /// 自定义封面键 → 删除墓碑。
   Map<String, SyncStamp> get coverTombstones;
 
+  /// AI 推荐批次 id → 内容哈希 + 版本（本地变化检测）。
+  Map<String, SyncStamp> get aiBatchStamps;
+
+  /// AI 推荐批次 id → 删除墓碑。
+  Map<String, SyncStamp> get aiBatchTombstones;
+
+  /// AI 推荐历史 active 指针的登记。
+  SyncStamp? get activeAiBatchStamp;
+
   int nowMs();
 
   void putSettingStamp(String key, SyncStamp stamp);
@@ -82,6 +91,16 @@ abstract interface class SyncStampLedger {
   void putCoverTombstone(String key, SyncStamp stamp);
 
   void removeCoverTombstone(String key);
+
+  void putAiBatchStamp(String id, SyncStamp stamp);
+
+  void removeAiBatchStamp(String id);
+
+  void putAiBatchTombstone(String id, SyncStamp stamp);
+
+  void removeAiBatchTombstone(String id);
+
+  void setActiveAiBatchStamp(SyncStamp? stamp);
 }
 
 /// 发布台账的持久覆盖面（`sync_state_v2` 的 `snapshotPushSeq`）。

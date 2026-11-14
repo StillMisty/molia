@@ -5,8 +5,7 @@ library;
 
 import 'package:material_ui/material_ui.dart';
 
-import '../services/poster_color_store.dart';
-import '../services/poster_font_store.dart';
+import '../services/poster/poster_style_settings.dart';
 import '../services/system_fonts_service.dart';
 import '../theme/m3e_context.dart';
 import '../theme/poster_palette.dart';
@@ -25,15 +24,15 @@ typedef PosterRenderStyle = ({
 Future<PosterRenderStyle> resolvePosterRenderStyle(BuildContext context) async {
   final appScheme = Theme.of(context).colorScheme;
   final textStyle = context.typeScale.bodyMedium;
-  final saved = await PosterColorStore.load();
-  final scheme = switch (saved.source) {
+  await PosterStyleSettings.ensureLoaded();
+  final scheme = switch (PosterStyleSettings.colorSource) {
     PosterColorSource.appTheme || PosterColorSource.artwork => appScheme,
     PosterColorSource.custom => buildColorScheme(
-      Color(saved.seed),
+      Color(PosterStyleSettings.seed),
       appScheme.brightness,
     ),
   };
-  final override = await PosterFontStore.load();
+  final override = PosterStyleSettings.fontFamily;
   final font = switch (override) {
     null => (
       family: textStyle.fontFamily,

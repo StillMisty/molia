@@ -1395,6 +1395,7 @@
   "syncCategorySources": "音源（脚本与配置）",
   "syncCategorySettings": "应用设置",
   "syncCategoryCovers": "自定义封面",
+  "syncCategoryAiDj": "AI 推荐历史",
   "syncCategoryStatistics": "听歌统计",
   "syncCategoryHistory": "播放历史",
   "syncCategorySession": "上次播放状态",

@@ -14,8 +14,7 @@ import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
 import '../services/lyrics_poster_service.dart';
-import '../services/poster_color_store.dart';
-import '../services/poster_font_store.dart';
+import '../services/poster/poster_style_settings.dart';
 import '../services/system_fonts_service.dart';
 import '../l10n/app_localizations.dart';
 import '../models/poster_lyric_line.dart';
@@ -65,8 +64,8 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   String? _errorMessage;
 
   /// 海报取色来源（跟随应用主题 / 跟随封面 / 自定义色），独立于全局主题。
-  PosterColorSource _colorSource = PosterColorStore.defaultSource;
-  int _customSeed = PosterColorStore.defaultSeed;
+  PosterColorSource _colorSource = PosterStyleSettings.defaultSource;
+  int _customSeed = PosterStyleSettings.defaultSeed;
 
   /// 最近一次生成海报所用的配色签名：主题变化（莫奈 / 封面取色 / 亮度 /
   /// 种子色）时重新生成，保证海报真正跟随色彩系统。
@@ -159,13 +158,12 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
 
   /// 先恢复海报字体覆盖与取色来源，再在首帧后生成海报（此时才能读取 Theme）。
   Future<void> _initPosterSettings() async {
-    final savedFont = await PosterFontStore.load();
-    final savedColor = await PosterColorStore.load();
+    await PosterStyleSettings.ensureLoaded();
     if (!mounted) return;
     setState(() {
-      _posterFontOverride = savedFont;
-      _colorSource = savedColor.source;
-      _customSeed = savedColor.seed;
+      _posterFontOverride = PosterStyleSettings.fontFamily;
+      _colorSource = PosterStyleSettings.colorSource;
+      _customSeed = PosterStyleSettings.seed;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -411,7 +409,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     setState(() {
       _colorSource = source;
     });
-    await PosterColorStore.saveSource(source);
+    await PosterStyleSettings.setColorSource(source);
     if (mounted) _generatePoster();
   }
 
@@ -425,8 +423,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       _customSeed = picked;
       _colorSource = PosterColorSource.custom;
     });
-    await PosterColorStore.saveSeed(picked);
-    await PosterColorStore.saveSource(PosterColorSource.custom);
+    await PosterStyleSettings.setCustomColor(picked);
     if (mounted) _generatePoster();
   }
 
@@ -450,7 +447,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     final value = choice.inherit ? null : (choice.family ?? '');
     if (value == _posterFontOverride) return;
     setState(() => _posterFontOverride = value);
-    await PosterFontStore.save(value);
+    await PosterStyleSettings.setFontFamily(value);
     if (mounted) {
       _generatePoster();
     }

@@ -3057,6 +3057,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncCategoryCovers => '自定义封面';
 
   @override
+  String get syncCategoryAiDj => 'AI 推荐历史';
+
+  @override
   String get syncCategoryStatistics => '听歌统计';
 
   @override

@@ -24,6 +24,7 @@ class SyncContentPage extends StatelessWidget {
     SyncCategory.playlists: (Icons.queue_music_rounded, _playlistsTitle),
     SyncCategory.sources: (Icons.library_music_rounded, _sourcesTitle),
     SyncCategory.covers: (Icons.image_rounded, _coversTitle),
+    SyncCategory.aiDj: (Icons.auto_awesome_motion_rounded, _aiDjTitle),
     SyncCategory.settings: (Icons.tune_rounded, _settingsTitle),
     SyncCategory.statistics: (Icons.insights_rounded, _statisticsTitle),
     SyncCategory.history: (Icons.history_rounded, _historyTitle),
@@ -41,6 +42,8 @@ class SyncContentPage extends StatelessWidget {
       l10n.syncCategorySettings;
 
   static String _coversTitle(AppLocalizations l10n) => l10n.syncCategoryCovers;
+
+  static String _aiDjTitle(AppLocalizations l10n) => l10n.syncCategoryAiDj;
 
   static String _statisticsTitle(AppLocalizations l10n) =>
       l10n.syncCategoryStatistics;

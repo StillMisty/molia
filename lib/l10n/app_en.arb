@@ -1704,6 +1704,7 @@
   "syncCategorySources": "Sources (scripts & config)",
   "syncCategorySettings": "App settings",
   "syncCategoryCovers": "Custom covers",
+  "syncCategoryAiDj": "AI recommendations",
   "syncCategoryStatistics": "Play statistics",
   "syncCategoryHistory": "Play history",
   "syncCategorySession": "Last playback state",

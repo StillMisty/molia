@@ -22,6 +22,7 @@ import '../../services/app_branding_service.dart';
 import '../../services/bili_account_service.dart';
 import '../../services/diagnostics/failure_ring_buffer.dart';
 import '../../services/language_service.dart';
+import '../../services/poster/poster_style_settings.dart';
 import '../../services/shortcut_settings.dart';
 import '../../services/source_swap/swap_query_planner.dart';
 import '../../sources/source_manager.dart';
@@ -78,6 +79,15 @@ CatalogStack buildCatalogStack({FailureRecorder? failures}) {
     ),
   );
   ShortcutSettings.attachSettings(shortcutSettings);
+  // 海报样式：歌词 / 统计 / 年度报告海报共用的一组外观偏好（跟人走）。
+  // 全静态服务，远端应用后由注册表回调 reload 重读三键。
+  final posterStyleSettings = settingsRegistry.mount(
+    SettingsModule(
+      keys: [kPosterColorSourceKey, kPosterSeedColor, kPosterFontFamily],
+      reload: PosterStyleSettings.reload,
+    ),
+  );
+  PosterStyleSettings.attachSettings(posterStyleSettings);
 
   // B 站账号：凭据是凭证类别（默认随同步 / 备份），初始化放后台，取词链路
   // 会 await `BiliSession.ready`，不阻塞首帧。

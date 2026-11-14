@@ -169,6 +169,9 @@ class SyncPersistedState {
     this.sessionStamp,
     Map<String, SyncStamp> coverStamps = const {},
     Map<String, SyncStamp> coverTombstones = const {},
+    Map<String, SyncStamp> aiBatchStamps = const {},
+    Map<String, SyncStamp> aiBatchTombstones = const {},
+    this.activeAiBatchStamp,
     this.lastSyncAt = 0,
     Map<String, int> transportLastSuccess = const {},
     Map<String, int> snapshotPushSeq = const {},
@@ -191,6 +194,8 @@ class SyncPersistedState {
        scriptStamps = Map.unmodifiable(scriptStamps),
        coverStamps = Map.unmodifiable(coverStamps),
        coverTombstones = Map.unmodifiable(coverTombstones),
+       aiBatchStamps = Map.unmodifiable(aiBatchStamps),
+       aiBatchTombstones = Map.unmodifiable(aiBatchTombstones),
        knownScriptIds = List.unmodifiable(knownScriptIds),
        transportLastSuccess = Map.unmodifiable(transportLastSuccess),
        snapshotPushSeq = Map.unmodifiable(snapshotPushSeq),
@@ -248,6 +253,15 @@ class SyncPersistedState {
 
   /// 自定义封面键 → 删除墓碑。
   final Map<String, SyncStamp> coverTombstones;
+
+  /// AI 推荐批次 id → 内容哈希 + 版本（本地变化检测）。
+  final Map<String, SyncStamp> aiBatchStamps;
+
+  /// AI 推荐批次 id → 删除墓碑。
+  final Map<String, SyncStamp> aiBatchTombstones;
+
+  /// AI 推荐历史 active 指针的登记。
+  final SyncStamp? activeAiBatchStamp;
 
   final int lastSyncAt;
 
@@ -331,6 +345,16 @@ abstract final class SyncStateCodec {
       for (final entry in state.coverTombstones.entries)
         entry.key: entry.value.toJson(),
     },
+    'aiBatchStamps': {
+      for (final entry in state.aiBatchStamps.entries)
+        entry.key: entry.value.toJson(),
+    },
+    'aiBatchTombstones': {
+      for (final entry in state.aiBatchTombstones.entries)
+        entry.key: entry.value.toJson(),
+    },
+    if (state.activeAiBatchStamp != null)
+      'activeAiBatch': state.activeAiBatchStamp!.toJson(),
     'lastSyncAt': state.lastSyncAt,
     if (state.transportLastSuccess.isNotEmpty)
       'transportLastSuccess': state.transportLastSuccess,
@@ -442,6 +466,9 @@ abstract final class SyncStateCodec {
       sessionStamp: SyncStamp.fromJson(raw['sessionStamp']),
       coverStamps: _readStamps(raw['coverStamps']),
       coverTombstones: _readStamps(raw['coverTombstones']),
+      aiBatchStamps: _readStamps(raw['aiBatchStamps']),
+      aiBatchTombstones: _readStamps(raw['aiBatchTombstones']),
+      activeAiBatchStamp: SyncStamp.fromJson(raw['activeAiBatch']),
       lastSyncAt: _readInt(raw['lastSyncAt']),
       transportLastSuccess: _readIntMap(raw['transportLastSuccess']),
       snapshotPushSeq: _readIntMap(raw['snapshotPush']),

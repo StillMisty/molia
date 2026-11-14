@@ -388,6 +388,7 @@ void main() async {
     catalog: catalog,
     library: library,
     playback: playback,
+    ai: ai,
     dataSaver: local.dataSaver,
     customCovers: local.customCovers,
     // 配对发现只在前台应答：生命周期判定留在组合根，数据层不碰 WidgetsBinding。

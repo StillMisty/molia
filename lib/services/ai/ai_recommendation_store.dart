@@ -208,6 +208,12 @@ class AiRecommendationStore {
   /// 批次文件子目录名（位于应用支持目录下）。
   static const String batchDirectoryName = 'ai_history';
 
+  /// 本地历史发生变化（生成 / 更新 / 删除 / 清空 / 切换 active）。
+  ///
+  /// 由同步栈接线成「标记 AI 推荐历史类别待外发」；远端应用（
+  /// [applySyncedHistory]）不触发，避免同步回环。
+  void Function()? onLocalChange;
+
   final SharedPreferences? _preferences;
   final DateTime Function() _clock;
 
@@ -346,6 +352,7 @@ class AiRecommendationStore {
           final wrote = await _writeIndex(prefs, trimmed.index);
           if (!wrote) return;
           await _deleteBatchPayloads(prefs, trimmed.removed);
+          _notifyLocalChange();
         } catch (_) {
           // 持久化失败降级为内存状态。
         }
@@ -357,11 +364,12 @@ class AiRecommendationStore {
       final prefs = await _prefsOrNull();
       if (prefs == null) return;
       final index = _decodeIndex(prefs.getString(indexKey));
-      if (index == null) return;
-      await _writeIndex(
+      if (index == null || index.activeBatchId == id) return;
+      final wrote = await _writeIndex(
         prefs,
         index.copyWith(activeBatchId: id, clearActive: id == null),
       );
+      if (wrote) _notifyLocalChange();
     } catch (_) {
       // 失败保持原 active。
     }
@@ -394,6 +402,7 @@ class AiRecommendationStore {
           // 「索引有条目、载荷已没」的坏条目；删失败只留下孤儿载荷。
           final wrote = await _writeIndex(prefs, updated);
           if (wrote) await _deleteBatchPayload(prefs, id);
+          if (wrote) _notifyLocalChange();
           return (ok: wrote, index: wrote ? updated : index);
         } catch (_) {
           return (ok: false, index: AiDjHistoryIndex.empty);
@@ -432,12 +441,126 @@ class AiRecommendationStore {
             await _deleteBatchPayload(prefs, entry.id);
           }
         }
+        _notifyLocalChange();
       }
       return (ok: wrote, index: wrote ? updated : index);
     } catch (_) {
       return (ok: false, index: AiDjHistoryIndex.empty);
     }
   });
+
+  /// 应用同步来的历史视图（不触发 [onLocalChange]，不会形成同步回环）。
+  ///
+  /// 一次合并只写一次索引：写入 / 覆盖 [batches]、删除 [deletedIds]，按需
+  /// 应用 [activeBatchId]（[activeSpecified] 为 false 时保持本机 active），
+  /// 最后按本地保留策略裁剪一次。返回落盘是否成功与最终 active——适配器用
+  /// 最终值登记，避免「远端 active 指向未落地批次」留下悬空指针。
+  Future<({bool ok, String? activeBatchId})> applySyncedHistory({
+    required Iterable<StoredAiBatch> batches,
+    required Iterable<String> deletedIds,
+    required bool activeSpecified,
+    String? activeBatchId,
+  }) => _serialized(() async {
+    try {
+      final prefs = await _prefsOrNull();
+      if (prefs == null) return (ok: false, activeBatchId: null);
+      await _migrateLegacyBatches(prefs);
+      final existing =
+          _decodeIndex(prefs.getString(indexKey)) ??
+          const AiDjHistoryIndex(entries: []);
+      final entries = <String, AiDjHistoryEntry>{
+        for (final entry in existing.entries) entry.id: entry,
+      };
+      final directory = await _batchDirectory();
+      var failed = false;
+      for (final batch in batches) {
+        if (batch.id.isEmpty) continue;
+        final raw = jsonEncode(batch.toJson());
+        if (directory != null) {
+          // 先落载荷、后写索引：索引失败时旧索引仍引用完整批次。
+          if (!await _writeBatchFile(directory, batch.id, raw)) {
+            failed = true;
+            continue;
+          }
+          await _removeLegacyKey(prefs, batch.id);
+        } else {
+          final saved = await prefs.setString(
+            '$batchKeyPrefix${batch.id}',
+            raw,
+          );
+          if (!saved) {
+            failed = true;
+            continue;
+          }
+        }
+        entries[batch.id] = batch.toHistoryEntry();
+      }
+      // 任一载荷没落盘都按整批失败：让轮次重试，而不是把未落地批次登记成
+      // 已应用（否则对端删除 / 重发都无法自愈）。
+      if (failed) return (ok: false, activeBatchId: existing.activeBatchId);
+      for (final id in deletedIds) {
+        entries.remove(id);
+      }
+
+      var active = existing.activeBatchId;
+      if (active != null && !entries.containsKey(active)) {
+        // 删除 / 未落地 / 被保留策略裁掉：回退最近一批，不留悬空指针。
+        active = _mostRecentId(entries);
+      }
+      if (activeSpecified) {
+        final requested = activeBatchId;
+        active = requested != null && entries.containsKey(requested)
+            ? requested
+            : null;
+      }
+
+      final sorted = entries.values.toList()
+        ..sort((a, b) => b.generatedAt.compareTo(a.generatedAt));
+      final trimmed = trimAiDjHistory(
+        sorted,
+        activeBatchId: active,
+        now: _clock(),
+      );
+      final updated = AiDjHistoryIndex(
+        entries: trimmed.kept,
+        activeBatchId: active,
+      );
+      // 先写索引、后删载荷：写失败时索引仍引用完整批次。
+      final wrote = await _writeIndex(prefs, updated);
+      if (!wrote) return (ok: false, activeBatchId: existing.activeBatchId);
+      for (final id in deletedIds) {
+        await _deleteBatchPayload(prefs, id);
+      }
+      for (final entry in trimmed.removed) {
+        await _deleteBatchPayload(prefs, entry.id);
+      }
+      return (ok: true, activeBatchId: active);
+    } catch (_) {
+      return (ok: false, activeBatchId: null);
+    }
+  });
+
+  static String? _mostRecentId(Map<String, AiDjHistoryEntry> entries) {
+    String? latestId;
+    DateTime? latestAt;
+    for (final entry in entries.values) {
+      if (latestAt == null || entry.generatedAt.isAfter(latestAt)) {
+        latestAt = entry.generatedAt;
+        latestId = entry.id;
+      }
+    }
+    return latestId;
+  }
+
+  void _notifyLocalChange() {
+    final callback = onLocalChange;
+    if (callback == null) return;
+    try {
+      callback();
+    } catch (_) {
+      // 同步通知失败不影响本地持久化结果。
+    }
+  }
 
   AiDjHistoryIndex? _decodeIndex(String? raw) {
     if (raw == null || raw.isEmpty) return null;

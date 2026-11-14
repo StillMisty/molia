@@ -228,6 +228,15 @@ class SyncStateStore
   @override
   Map<String, SyncStamp> get coverTombstones => _stamps.coverTombstones;
 
+  @override
+  Map<String, SyncStamp> get aiBatchStamps => _stamps.aiBatchStamps;
+
+  @override
+  Map<String, SyncStamp> get aiBatchTombstones => _stamps.aiBatchTombstones;
+
+  @override
+  SyncStamp? get activeAiBatchStamp => _stamps.activeAiBatchStamp;
+
   int get lastSyncAt => _activityLog.lastSyncAt;
   List<SyncLogEntry> get log => _activityLog.log;
 
@@ -586,6 +595,24 @@ class SyncStateStore
   @override
   void removeCoverTombstone(String key) => _stamps.removeCoverTombstone(key);
 
+  @override
+  void putAiBatchStamp(String id, SyncStamp stamp) =>
+      _stamps.putAiBatchStamp(id, stamp);
+
+  @override
+  void removeAiBatchStamp(String id) => _stamps.removeAiBatchStamp(id);
+
+  @override
+  void putAiBatchTombstone(String id, SyncStamp stamp) =>
+      _stamps.putAiBatchTombstone(id, stamp);
+
+  @override
+  void removeAiBatchTombstone(String id) => _stamps.removeAiBatchTombstone(id);
+
+  @override
+  void setActiveAiBatchStamp(SyncStamp? stamp) =>
+      _stamps.setActiveAiBatchStamp(stamp);
+
   /// 记录一轮同步结果：日志条目（变更语义）+ 设备名册。
   ///
   /// 日志 / 活动 / 传输成功时间与名册各归其模块；两边都只改内存 + 标脏，
@@ -648,6 +675,9 @@ class SyncStateStore
       sessionStamp: stamps.sessionStamp,
       coverStamps: stamps.coverStamps,
       coverTombstones: stamps.coverTombstones,
+      aiBatchStamps: stamps.aiBatchStamps,
+      aiBatchTombstones: stamps.aiBatchTombstones,
+      activeAiBatchStamp: stamps.activeAiBatchStamp,
       lastSyncAt: activityLog.lastSyncAt,
       transportLastSuccess: activityLog.transportLastSuccess,
       snapshotPushSeq: activityLog.snapshotPushSeq,
@@ -682,6 +712,9 @@ class SyncStateStore
         sessionStamp: state.sessionStamp,
         coverStamps: state.coverStamps,
         coverTombstones: state.coverTombstones,
+        aiBatchStamps: state.aiBatchStamps,
+        aiBatchTombstones: state.aiBatchTombstones,
+        activeAiBatchStamp: state.activeAiBatchStamp,
       ),
     );
     _roster.applySnapshot(

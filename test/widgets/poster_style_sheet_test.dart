@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/l10n/app_localizations.dart';
-import 'package:molia/services/poster_color_store.dart';
+import 'package:molia/services/poster/poster_style_settings.dart';
 import 'package:molia/widgets/poster_style_sheet.dart';
 
 Widget _host(Widget child) {

@@ -12,6 +12,7 @@ import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/ai/ai_prompt_text.dart';
 import '../../services/ai/ai_recommendation_service.dart';
+import '../../services/ai/ai_recommendation_store.dart';
 import '../../services/ai/ai_settings_store.dart';
 import '../../services/ai/llm_client.dart';
 import '../../services/ai/taste_profile_builder.dart';
@@ -23,6 +24,7 @@ import 'library_stack.dart';
 typedef AiStack = ({
   AiSettingsStore settingsStore,
   AiRecommendationService recommendationService,
+  AiRecommendationStore historyStore,
   AiDjProvider djProvider,
 });
 
@@ -77,11 +79,15 @@ AiStack buildAiStack({
     promptLanguage: () =>
         aiPromptLanguageFor(LanguageService.effectiveLocale.languageCode),
   );
+  // 历史存储由组合根持有并暴露给同步适配器：同步读写必须是同一个实例，
+  // 否则远端应用写文件后，Provider 的内存索引仍是旧副本。
+  final historyStore = AiRecommendationStore();
   aiDjProvider = AiDjProvider(
     playbackProvider: playback,
     libraryProvider: libraryProvider,
     recommendationService: aiRecommendationService,
     settingsStore: aiSettingsStore,
+    recommendationStore: historyStore,
   );
   // init 读本机凭据库 / 历史批次，由首帧后的 post_frame_init 触发；
   // 页面直接打开时也会再调一次（幂等）。
@@ -91,6 +97,7 @@ AiStack buildAiStack({
   return (
     settingsStore: aiSettingsStore,
     recommendationService: aiRecommendationService,
+    historyStore: historyStore,
     djProvider: aiDjProvider,
   );
 }

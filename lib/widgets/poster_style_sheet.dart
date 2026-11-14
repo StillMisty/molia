@@ -8,7 +8,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
-import '../services/poster_color_store.dart';
+import '../services/poster/poster_style_settings.dart';
 import '../theme/m3e_context.dart';
 import 'simple_modal_body.dart';
 
