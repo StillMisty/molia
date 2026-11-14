@@ -1,6 +1,8 @@
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'motion_policy.dart';
+
 /// ColorScheme 过渡构建器：封面取色/莫奈/种子色/亮度切换时，在
 /// [duration] 内从旧方案插值到新方案，避免整站配色「闪变」。
 ///
@@ -63,9 +65,9 @@ class _AnimatedSchemeBuilderState extends State<AnimatedSchemeBuilder>
     super.didUpdateWidget(oldWidget);
     if (widget.scheme == oldWidget.scheme) return;
 
-    final disableAnimation =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    if (_firstChange || disableAnimation || widget.duration == Duration.zero) {
+    if (_firstChange ||
+        reduceMotionOf(context) ||
+        widget.duration == Duration.zero) {
       _firstChange = false;
       _from = widget.scheme;
       _to = widget.scheme;

@@ -1,12 +1,18 @@
 import 'package:material_ui/material_ui.dart';
 
-/// 系统「减弱动效」偏好（`MediaQuery.disableAnimations`）。
+/// 系统「减弱动效」偏好。
 ///
-/// effects（透明度 / 颜色等）没有 spatial 弹簧可依赖，统一在这里判一次，
-/// 避免每个组件各写一遍 `MediaQuery.maybeOf` 后出现漏判（开着减弱动效
-/// 仍有半秒淡入）。
-bool reduceMotionOf(BuildContext context) =>
-    MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+/// 同时认两个来源：Android「移除动画」走
+/// [MediaQueryData.disableAnimations]，iOS / macOS「减弱动态效果」走
+/// [MediaQueryData.reduceMotion]（Flutter 3.50 起单独暴露）。effects
+/// （透明度 / 颜色等）没有 spatial 弹簧可依赖，统一在这里判一次，避免
+/// 每个组件各写一遍 `MediaQuery.maybeOf` 后出现漏判（开着减弱动效仍有
+/// 半秒淡入）。
+bool reduceMotionOf(BuildContext context) {
+  final mediaQuery = MediaQuery.maybeOf(context);
+  if (mediaQuery == null) return false;
+  return mediaQuery.disableAnimations || mediaQuery.reduceMotion;
+}
 
 /// effects 动画的实际时长：减弱动效时归零（`Duration.zero` 即硬切）。
 ///
