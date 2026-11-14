@@ -21,6 +21,7 @@ flutter analyze --no-pub   # 必须 0 error / 0 warning
 flutter test --no-pub      # 全量（默认集，本机 <30s）；单文件：flutter test test/lx_core_test.dart --no-pub
 tool/agent/test.sh linux   # 端到端（真实引擎 + 设置页 + 窗口/托盘，不含播放）；Xvfb 无窗口，桌面看门狗勿删
 tool/agent/test.sh android # 同一套跑模拟器（先 emu.sh start）；--window / --timeout 见脚本
+tool/agent/smoke.sh linux  # 启动首帧烟测（真实 main + provider tree；Xvfb，抓 runApp 前崩溃）
 tool/agent/seed.sh android|linux <cmd>   # 数据注入：favorites/covers/history/session/lang/mock-source/status/clear/restore
 tool/agent/startup.sh                    # 启动耗时采样（release 冷启动 N 次取中位；基线与结论见 docs/performance.md）
 tool/agent/perf.sh                       # 全链路体检：frames / startup / data / cpu / memory / size（最新基线与跑法见 docs/performance.md）
@@ -91,6 +92,8 @@ sources/playback。
   排版走 `context.typeScale` / `emphasizedTypeScale`（`lib/theme/m3e_context.dart`），
   `textTheme` 与 `w600/w800/w900` 由 `test/architecture/m3e_typography_test.dart` 拦截；
   顶栏 / 弹层 / 排序的 M3E 口径见 `docs/architecture.md` §6；
+- UI 视觉改动（共享工具栏 / 选择器 / 弹层）先在 360 与 640 宽渲染截图或 preview 再提交；
+  单测的 `didExceedMaxLines` 发现不了「chip 把输入区挤窄」这类比例问题；
 - 每次改动至少 `flutter analyze --no-pub` + `flutter test --no-pub`（迭代可只跑改动范围，提交前跑全量）；
 - 测试按模块聚合：小用例并入同模块 `*_test.dart`，`*_cases.dart` 只作为聚合套件的用例库
   （不被 `flutter test` 单独发现）。每个测试文件都有独立的 engine/kernel 装载开销（~1s，

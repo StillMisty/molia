@@ -53,6 +53,27 @@ PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解�
   `flutter test integration_test/... -d linux` 必须有 DISPLAY（官方要求，无显示时 App 起不来）；
   缺 `xvfb-run` 时 `sudo pacman -S xorg-server-xvfb`。
 
+## WSL 桌面（Linux 应用）
+
+- **后台运行**：Linux 桌面默认用 `tool/agent/app.sh run -d linux`。脚本用
+  `setsid nohup` + pid-file 起 `flutter run`，等就绪后返回；`reload` / `restart` /
+  `stop` 按记录设备操作，不占前台会话。不要直接前台 `flutter run`。
+- **首帧烟测**：`tool/agent/smoke.sh linux` 会清掉旧实例，在 Xvfb + 软件 GL 下启动
+  真实 `main()` / provider tree，等日志出现 `molia.startup: 首帧`；首帧前的
+  `Unhandled Exception` 直接判失败。`flutter test` / 集成测试都不走 `main()`，
+  启动期崩溃只有这个烟测能兜住。
+- **黑屏先看日志**：窗口黑屏不等于 GPU 问题。先 `tool/agent/app.sh log` 查
+  `molia.startup: 首帧` 和 `Unhandled Exception`。典型是
+  `Tried to use Provider with a subtype of Listenable/Stream`：`DownloadService`
+  同时是 `ChangeNotifier`，用 `Provider<DownloadMaintenance>.value` 会在 debug 下
+  于 `runApp` 前中断；窄接口注册改用 `InheritedProvider`。
+- **截图**：`tool/agent/shot.sh` 目前只支持 Android。Linux 需要时用 Xvfb 跑应用，
+  再由 `xdotool getwindowgeometry --shell` 取窗口几何，`ffmpeg -f x11grab
+  -video_size WxH -i "$DISPLAY+$X,$Y" -frames:v 1 shot.png` 截取；不要在仓库里
+  新增 Windows PowerShell 截图脚本。
+- **停止应用**：只用 `tool/agent/app.sh stop`。不要 `pkill -f <路径>`，它会把
+  调用它的 shell 一起匹配掉。
+
 ## WSL 安卓调试（模拟器 / 热重载 / 截图）
 
 Android 侧调试全部在 WSL 内完成（KVM 原生模拟器，不依赖 Windows / Android Studio）：
