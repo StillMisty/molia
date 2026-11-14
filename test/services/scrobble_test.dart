@@ -7,7 +7,6 @@ import 'package:molia/domain/models/scrobble.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/scrobble_sink.dart';
 import 'package:molia/domain/scrobble/scrobble_rules.dart';
-import 'package:molia/services/scrobble/lastfm_sink.dart';
 import 'package:molia/services/scrobble/listenbrainz_sink.dart';
 import 'package:molia/services/scrobble/scrobble_outbox.dart';
 import 'package:molia/services/scrobble/scrobble_preferences.dart';
@@ -199,14 +198,6 @@ void main() {
       expect(due.first.event.id, 'e5');
     });
 
-    test('按服务隔离，断开只丢弃该服务', () async {
-      await outbox.add(event(id: 'lb'));
-      await outbox.add(event(id: 'fm', target: ScrobbleTarget.lastFm));
-      await outbox.discardTarget(ScrobbleTarget.lastFm);
-      expect(outbox.lengthFor(ScrobbleTarget.lastFm), 0);
-      expect(outbox.lengthFor(ScrobbleTarget.listenBrainz), 1);
-    });
-
     test('失败退避与 Retry-After', () async {
       await outbox.add(event(id: 'a'));
       await outbox.markRetry('a', retryAfter: const Duration(seconds: 42));
@@ -296,107 +287,11 @@ void main() {
       expect(result.outcome, ScrobbleDeliveryOutcome.retryable);
       expect(result.retryAfter, const Duration(seconds: 12));
     });
-
-    test('Last.fm 参数排序后签名稳定', () {
-      expect(
-        lastFmSignature({'b': '2', 'a': '1'}, apiSecret: 's'),
-        '1d0396bcbc2c54e569e7af9cf9c4685e',
-      );
-    });
-
-    test('Last.fm 提交带 sk / api_sig，401 标记需要授权', () async {
-      final adapter = MockDioAdapter(
-        (_) async => textResponse('{"scrobbles":{"@attr":{"accepted":1}}}'),
-      );
-      final sink = LastFmSink(
-        sessionKey: () => 'session-key',
-        config: const LastFmApiConfig(apiKey: 'key', apiSecret: 'secret'),
-        dio: mockDio((_) async => textResponse('{}'))
-          ..httpClientAdapter = adapter,
-      );
-      final delivery = await sink.sendScrobble(
-        ScrobbleListen(
-          track: scrobbleTrack(),
-          startedAt: DateTime.utc(2026, 1, 1, 12),
-        ),
-      );
-      expect(delivery.isSuccess, isTrue);
-      final data = adapter.lastRequest.data as Map<String, dynamic>;
-      expect(data['sk'], 'session-key');
-      expect(data['api_key'], 'key');
-      expect(data['method'], 'track.scrobble');
-      expect(data['timestamp'], '1767268800');
-      expect(data['api_sig'], isNotEmpty);
-      expect(adapter.lastRequest.uri.toString(), contains('audioscrobbler'));
-
-      final unauthorized = LastFmSink(
-        sessionKey: () => 'session-key',
-        config: const LastFmApiConfig(apiKey: 'key', apiSecret: 'secret'),
-        dio: mockDio(
-          (_) async => textResponse('{"error":9,"message":"bad session"}'),
-        ),
-      );
-      expect(
-        (await unauthorized.sendScrobble(
-          ScrobbleListen(track: scrobbleTrack(), startedAt: DateTime.utc(2026)),
-        )).outcome,
-        ScrobbleDeliveryOutcome.unauthorized,
-      );
-    });
-
-    test('Last.fm 授权：取令牌、打开浏览器、换取会话密钥、取消', () async {
-      final opened = <Uri>[];
-      var call = 0;
-      final dio = mockDio((options) async {
-        call++;
-        if (call == 1) return textResponse('{"token":"request-token"}');
-        return textResponse(
-          '{"session":{"name":"listener","key":"session-key"}}',
-        );
-      });
-      final auth = LastFmAuth(
-        config: const LastFmApiConfig(apiKey: 'key', apiSecret: 'secret'),
-        openBrowser: (uri) async {
-          opened.add(uri);
-          return true;
-        },
-        dio: dio,
-      );
-      expect(await auth.begin(), LastFmAuthStage.awaitingUser);
-      expect(opened.single.queryParameters['token'], 'request-token');
-      expect(await auth.complete(), LastFmAuthStage.connected);
-      expect(auth.takeSessionKey(), 'session-key');
-      expect(auth.accountName, 'listener');
-
-      final cancelled = LastFmAuth(
-        config: const LastFmApiConfig(apiKey: 'key', apiSecret: 'secret'),
-        openBrowser: (_) async => true,
-        dio: dio,
-      );
-      await cancelled.begin();
-      cancelled.cancel();
-      expect(cancelled.stage, LastFmAuthStage.cancelled);
-    });
-
-    test('Last.fm 未内置应用密钥时不发请求', () async {
-      var requests = 0;
-      final auth = LastFmAuth(
-        config: LastFmApiConfig.none,
-        openBrowser: (_) async => true,
-        dio: mockDio((_) async {
-          requests++;
-          return textResponse('{}');
-        }),
-      );
-      expect(await auth.begin(), LastFmAuthStage.failed);
-      expect(requests, 0);
-    });
   });
 
   group('ScrobbleService', () {
     late SharedPreferences prefs;
     late FakeScrobbleSink listenBrainz;
-    late FakeScrobbleSink lastFm;
     late ScrobbleService service;
     late DateTime now;
 
@@ -405,7 +300,6 @@ void main() {
       prefs = await SharedPreferences.getInstance();
       now = DateTime.utc(2026, 1, 1);
       listenBrainz = FakeScrobbleSink(ScrobbleTarget.listenBrainz);
-      lastFm = FakeScrobbleSink(ScrobbleTarget.lastFm);
       service = ScrobbleService(
         preferences: ScrobblePreferences(
           settings: testSettingsRegistry(),
@@ -413,8 +307,6 @@ void main() {
         ),
         outbox: ScrobbleOutbox(prefs: prefs, clock: () => now),
         listenBrainzSink: listenBrainz,
-        lastFmSink: lastFm,
-        lastFmConfig: LastFmApiConfig.none,
         clock: () => now,
         autoDeliver: false,
       );
@@ -522,12 +414,8 @@ void main() {
       expect(service.queuedFor(ScrobbleTarget.listenBrainz), 0);
     });
 
-    test('断开清凭据与该服务队列；另一服务保留', () async {
+    test('断开清凭据与该服务队列', () async {
       await connect();
-      lastFm.credential = const ScrobbleCredentialCheck.valid('fm');
-      await service.beginLastFmAuthorization();
-      // 直接写 Last.fm 状态（本测试不覆盖浏览器流程）：走服务公开接口
-      // 需要配置密钥，这里改用底层断开语义的对应目标。
       service.onSnapshot(snapshot(current: track()));
       service.onPosition(const Duration(seconds: 90));
       await service.pumpNow();
@@ -595,8 +483,6 @@ void main() {
         ),
         outbox: ScrobbleOutbox(prefs: prefs, clock: () => now),
         listenBrainzSink: listenBrainz,
-        lastFmSink: lastFm,
-        lastFmConfig: LastFmApiConfig.none,
         clock: () => now,
       );
       addTearDown(auto.dispose);
@@ -614,44 +500,6 @@ void main() {
         ScrobbleTargetStatus.needsAuthorization,
       );
       expect(auto.hasScheduledDelivery, isFalse);
-    });
-
-    test('断开一个服务时，另一个仍启用则保留会话', () async {
-      await connect();
-      await prefs.setInt(ScrobblePreferences.keyLastFmConsent, 1);
-      await service.preferences.writeCredential(ScrobbleTarget.lastFm, 'fm');
-      await service.preferences.setEnabled(ScrobbleTarget.lastFm, true);
-      await service.preferences.setMasterEnabled(true);
-      await service.reloadFromPreferences();
-      service.onSnapshot(snapshot(current: track()));
-      expect(service.hasActiveSession, isTrue);
-
-      await service.disconnect(ScrobbleTarget.listenBrainz);
-      expect(service.hasActiveSession, isTrue, reason: 'Last.fm 仍在发送');
-      await service.disconnect(ScrobbleTarget.lastFm);
-      expect(service.hasActiveSession, isFalse);
-    });
-
-    test('发件箱按服务隔离，一个成功不删除另一个', () async {
-      await connect();
-      // 第二个服务通过持久化事件模拟已连接的另一端。
-      await service.outbox.add(
-        ScrobbleEvent(
-          id: 'fm-1',
-          target: ScrobbleTarget.lastFm,
-          kind: ScrobbleEventKind.scrobble,
-          listen: ScrobbleListen(
-            track: scrobbleTrack(),
-            startedAt: DateTime.utc(2026),
-          ),
-          createdAt: DateTime.utc(2026),
-        ),
-      );
-      service.onSnapshot(snapshot(current: track()));
-      service.onPosition(const Duration(seconds: 90));
-      await service.pumpNow();
-      expect(service.queuedFor(ScrobbleTarget.listenBrainz), 0);
-      expect(service.queuedFor(ScrobbleTarget.lastFm), 1);
     });
   });
 }

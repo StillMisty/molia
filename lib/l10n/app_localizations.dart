@@ -9613,7 +9613,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsListeningSyncSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Send what you play to ListenBrainz or Last.fm'**
+  /// **'Send what you play to ListenBrainz'**
   String get settingsListeningSyncSubtitle;
 
   /// No description provided for @listeningSyncTitle.
@@ -9778,47 +9778,11 @@ abstract class AppLocalizations {
   /// **'Cannot reach ListenBrainz right now. Check your network and try again.'**
   String get listeningSyncTokenUnreachable;
 
-  /// No description provided for @listeningSyncLastFmNotConfigured.
-  ///
-  /// In en, this message translates to:
-  /// **'This build has no Last.fm application key, so it cannot connect yet'**
-  String get listeningSyncLastFmNotConfigured;
-
-  /// No description provided for @listeningSyncLastFmBegin.
-  ///
-  /// In en, this message translates to:
-  /// **'Authorize in browser'**
-  String get listeningSyncLastFmBegin;
-
-  /// No description provided for @listeningSyncLastFmWaiting.
-  ///
-  /// In en, this message translates to:
-  /// **'Finish in the browser, then confirm here'**
-  String get listeningSyncLastFmWaiting;
-
-  /// No description provided for @listeningSyncLastFmConfirm.
-  ///
-  /// In en, this message translates to:
-  /// **'I finished authorizing'**
-  String get listeningSyncLastFmConfirm;
-
-  /// No description provided for @listeningSyncLastFmFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Authorization did not finish. Try again.'**
-  String get listeningSyncLastFmFailed;
-
   /// No description provided for @listeningSyncLearnMoreListenBrainz.
   ///
   /// In en, this message translates to:
   /// **'About ListenBrainz'**
   String get listeningSyncLearnMoreListenBrainz;
-
-  /// No description provided for @listeningSyncLearnMoreLastFm.
-  ///
-  /// In en, this message translates to:
-  /// **'About Last.fm'**
-  String get listeningSyncLearnMoreLastFm;
 
   /// No description provided for @listeningSyncUnavailable.
   ///

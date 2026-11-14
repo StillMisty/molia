@@ -64,11 +64,8 @@ void main() {
     const deviceLocal = [
       ScrobblePreferences.keyMasterEnabled,
       ScrobblePreferences.keyListenBrainzEnabled,
-      ScrobblePreferences.keyLastFmEnabled,
       ScrobblePreferences.keyListenBrainzConsent,
-      ScrobblePreferences.keyLastFmConsent,
       ScrobblePreferences.keyListenBrainzAccount,
-      ScrobblePreferences.keyLastFmAccount,
     ];
     for (final name in deviceLocal) {
       expect(
@@ -88,11 +85,9 @@ void main() {
   });
 
   test('听歌同步凭证是凭证类别的安全存储键', () {
-    for (final key in [kListenBrainzToken, kLastFmSessionKey]) {
-      expect(kAllSettingsKeys, contains(key));
-      expect(key.category, SyncCategory.credentials);
-      expect(key.store, SettingsValueStore.secure);
-    }
+    expect(kAllSettingsKeys, contains(kListenBrainzToken));
+    expect(kListenBrainzToken.category, SyncCategory.credentials);
+    expect(kListenBrainzToken.store, SettingsValueStore.secure);
   });
 
   test('登记键名唯一', () {

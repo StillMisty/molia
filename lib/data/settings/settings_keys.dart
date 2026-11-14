@@ -268,12 +268,6 @@ const kListenBrainzToken = SettingsKey<String>(
   category: SyncCategory.credentials,
   store: SettingsValueStore.secure,
 );
-const kLastFmSessionKey = SettingsKey<String>(
-  'lastfm_session_key_v1',
-  '',
-  category: SyncCategory.credentials,
-  store: SettingsValueStore.secure,
-);
 
 /// 全表（顺序即同步收集顺序）：组合根据此构造注册表，扫描测试据此核对键序。
 const List<SettingsKey<Object?>> kAllSettingsKeys = [
@@ -315,5 +309,4 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kAiDjModel,
   kAiDjConsent,
   kListenBrainzToken,
-  kLastFmSessionKey,
 ];

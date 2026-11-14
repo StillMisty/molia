@@ -598,7 +598,7 @@ class _SettingsPageState extends State<SettingsPage>
           subtitle: l10n.settingsSourcesItemSubtitle,
           onTap: () => openSettingsSubPage(context, const SourcesPage()),
         ),
-        // 听歌同步：一个入口覆盖 ListenBrainz / Last.fm，默认关闭。
+        // 听歌同步：一个入口覆盖 ListenBrainz，默认关闭。
         if (context.watch<ScrobbleService?>() != null)
           SettingsNavTile(
             key: const Key('settingsListeningSyncItem'),
