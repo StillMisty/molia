@@ -39,7 +39,11 @@ void main() {
             version: SyncVersion(physical: 100, counter: 4, deviceId: 'dev-a'),
             data: {
               'image': '/9j/4AAQ',
-              'mime': 'image/jpeg',
+              'mime': 'image/webp',
+              'ext': 'webp',
+              'animated': true,
+              'width': 512,
+              'height': 512,
               'hash': 'cover-hash',
               'updatedAt': 100,
             },

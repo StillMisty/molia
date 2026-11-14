@@ -24,7 +24,9 @@ import '../molia_database.dart';
 class SyncJournalLimits {
   const SyncJournalLimits({
     this.maxAge = const Duration(days: 30),
-    this.maxBytes = 4 * 1024 * 1024,
+    // 封面动图单条 base64 约 2MB；4MB 窗口在两三张图连续变化时就会触发
+    // 全量快照，8MB 给媒体类别留出正常批量的余量。
+    this.maxBytes = 8 * 1024 * 1024,
     this.maxEntries = 5000,
   });
 

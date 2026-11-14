@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as image;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/data/local_identity.dart';
@@ -12,6 +13,7 @@ import 'package:molia/data/sync/sync_journal.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/services/covers/cover_image_format.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
 
 import 'support/sync_test_support.dart';
@@ -43,16 +45,36 @@ void main() {
     seed,
   ]);
 
+  /// 动画 WebP：两帧不同颜色，尺寸很小，只验证同步不重编码。
+  Uint8List animatedWebp() {
+    image.Image? first;
+    for (var i = 0; i < 3; i++) {
+      final frame = image.Image(width: 8, height: 8);
+      image.fill(
+        frame,
+        color: image.ColorRgb8(20 + i * 60, 30 + i * 40, 40 + i * 20),
+      );
+      frame.frameDuration = 60;
+      if (first == null) {
+        first = frame;
+      } else {
+        first.addFrame(frame);
+      }
+    }
+    return image.encodeWebP(first!, lossless: false, quality: 75, method: 3);
+  }
+
   SyncRecord imageRecord(
     String key,
     Uint8List bytes, {
     required SyncVersion version,
+    String mime = 'image/jpeg',
   }) => SyncRecord(
     key: key,
     version: version,
     data: {
       'image': base64Encode(bytes),
-      'mime': 'image/jpeg',
+      'mime': mime,
       'hash': sha256.convert(bytes).toString(),
       'updatedAt': version.physical,
     },
@@ -500,6 +522,75 @@ void main() {
     });
     expect(deleted.applied, 1);
     expect(store.playlistEntry(key), isNull);
+  });
+
+  test('动图 WebP：记录带真实 MIME / 扩展名 / animated，接收端原样落盘', () async {
+    final bytes = animatedWebp();
+    await store.setTrackCover(trackId, bytes);
+    final record = (await adapter.collect())[SyncCategory.covers]!.single;
+
+    expect(record.data!['mime'], 'image/webp');
+    expect(record.data!['ext'], 'webp');
+    expect(record.data!['animated'], isTrue);
+    expect(base64Decode(record.data!['image'] as String), bytes);
+    expect(store.trackCoverPath(trackId), endsWith('.webp'));
+    expect(
+      store.trackEntry('wy:1')!.format,
+      CoverImageFormat.webp,
+      reason: '本地索引也按字节识别格式',
+    );
+
+    // 另一台设备收到同一份记录：不重编码，字节完全一致。
+    final newer = SyncVersion(
+      physical: record.version.physical + 1000,
+      deviceId: 'devB',
+    );
+    final outcome = await adapter.apply({
+      SyncCategory.covers: [
+        imageRecord('wy:2', bytes, version: newer, mime: 'image/webp'),
+      ],
+    });
+    expect(outcome.applied, 1);
+    expect(await store.readTrackCover(const TrackId('wy', '2')), bytes);
+    expect(store.trackCoverPath(const TrackId('wy', '2')), endsWith('.webp'));
+    expect(store.trackEntry('wy:2')!.format, CoverImageFormat.webp);
+  });
+
+  test('声明 MIME 与字节不符：按字节识别落地，不信任扩展名声明', () async {
+    final bytes = animatedWebp();
+    final outcome = await adapter.apply({
+      SyncCategory.covers: [
+        imageRecord(
+          'wy:3',
+          bytes,
+          version: const SyncVersion(physical: 9000, deviceId: 'devB'),
+          mime: 'image/jpeg',
+        ),
+      ],
+    });
+    expect(outcome.applied, 1);
+    expect(await store.readTrackCover(const TrackId('wy', '3')), bytes);
+    expect(store.trackCoverPath(const TrackId('wy', '3')), endsWith('.webp'));
+  });
+
+  test('内容哈希不符：拒绝写入，等下一轮修复', () async {
+    final bytes = animatedWebp();
+    final outcome = await adapter.apply({
+      SyncCategory.covers: [
+        SyncRecord(
+          key: 'wy:tampered',
+          version: const SyncVersion(physical: 9000, deviceId: 'devB'),
+          data: {
+            'image': base64Encode(bytes),
+            'mime': 'image/webp',
+            'hash': 'not-the-real-hash',
+          },
+        ),
+      ],
+    });
+    expect(outcome.applied, 0);
+    expect(outcome.skipped, 1);
+    expect(await store.readTrackCover(const TrackId('wy', 'tampered')), isNull);
   });
 
   test('store 未加载时 ready=false，collect 为空', () async {

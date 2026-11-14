@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as image;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/data/downloads/downloads_repository.dart';
@@ -12,6 +13,7 @@ import 'package:molia/services/local_cover_identity_sweep.dart';
 
 import '../support/memory_database.dart';
 
+import 'package:molia/services/covers/cover_image_format.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
 
 Uint8List _bytes(int seed) => Uint8List.fromList([seed, seed, seed]);
@@ -70,6 +72,25 @@ void main() {
     expect(secondPath, isNot(firstPath));
     expect(File(firstPath).existsSync(), isFalse, reason: '替换后旧文件应删除');
     expect(await File(secondPath!).readAsBytes(), _bytes(2));
+  });
+
+  test('WebP 封面：扩展名跟字节走，索引持久化格式', () async {
+    const id = TrackId('wy', 'webp');
+    final source = image.Image(width: 16, height: 16);
+    image.fill(source, color: image.ColorRgb8(10, 20, 30));
+    final bytes = image.encodeWebP(source, lossless: false, quality: 80);
+
+    await store.setTrackCover(id, bytes);
+    final path = store.trackCoverPath(id);
+    expect(path, endsWith('.webp'));
+    expect(store.trackEntry('wy:webp')!.format, CoverImageFormat.webp);
+    expect(store.trackEntry('wy:webp')!.mimeType, 'image/webp');
+
+    final reloaded = buildStore();
+    await reloaded.load();
+    expect(reloaded.trackCoverPath(id), path);
+    expect(reloaded.trackEntry('wy:webp')!.format, CoverImageFormat.webp);
+    expect(await reloaded.readTrackCover(id), bytes);
   });
 
   test('键规范化：local 下载副本剥一层前缀，导入记录键保持', () async {

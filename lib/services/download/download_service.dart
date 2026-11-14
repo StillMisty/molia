@@ -58,6 +58,7 @@ import 'package:path/path.dart' as p;
 
 import '../../data/catalog/catalog_service.dart';
 import '../../data/downloads/audio_tag_reader.dart';
+import '../covers/cover_image_format.dart';
 import '../../data/downloads/audio_tag_writer.dart';
 import '../../data/downloads/download_notifications.dart';
 import '../../data/downloads/download_storage.dart';
@@ -1400,7 +1401,7 @@ class DownloadService extends DownloadManager
           return DownloadResolvedCover(
             bytes: bytes,
             url: null,
-            mimeType: 'image/jpeg',
+            mimeType: CoverImageFormats.detect(bytes)?.mimeType ?? 'image/jpeg',
           );
         }
       } catch (e) {

@@ -21,6 +21,7 @@ import '../../data/downloads/download_storage.dart';
 import '../../domain/models/download.dart';
 import '../../domain/models/track.dart';
 import '../../utils/file_name.dart' as file_name;
+import '../covers/cover_image_format.dart';
 import 'download_settings.dart';
 
 /// 下载目录布局：模板 → 基名 → 去重 → 最终路径 / sidecar 路径。
@@ -128,9 +129,32 @@ class DownloadFileLayout {
   static String lyricsPath(String root, String base) =>
       p.join(root, downloadsLyricsDirName, '$base.lrc');
 
-  /// 封面路径（`covers/` 子目录；扩展名从封面 URL 推断）。
-  static String coverPath(String root, String base, String coverUrl) =>
-      p.join(root, downloadsCoversDirName, '$base.${coverExtension(coverUrl)}');
+  /// 封面路径（`covers/` 子目录；扩展名优先跟字节 MIME，其次从 URL 推断）。
+  ///
+  /// 自定义封面现在可能是 WebP / 动图 WebP；没有 URL 可推断时若仍按 `.jpg`
+  /// 落盘，外部播放器会按错误扩展名处理。调用方拿到 `DownloadResolvedCover`
+  /// 的 MIME 后传进来。
+  static String coverPath(
+    String root,
+    String base,
+    String coverUrl, {
+    String? mimeType,
+  }) {
+    String? fromMime;
+    if (mimeType != null) {
+      for (final format in CoverImageFormat.values) {
+        if (format.mimeType == mimeType) {
+          fromMime = format.extension;
+          break;
+        }
+      }
+    }
+    return p.join(
+      root,
+      downloadsCoversDirName,
+      '$base.${fromMime ?? coverExtension(coverUrl)}',
+    );
+  }
 
   /// 写入歌词主文件 + 翻译边车；失败回滚已写文件并返回 null（best-effort：
   /// 歌词缺失不阻断音频下载，对应路径记为 null）。
@@ -170,10 +194,11 @@ class DownloadFileLayout {
     required String base,
     required String coverUrl,
     required Uint8List bytes,
+    String? mimeType,
   }) async {
     String? path;
     try {
-      path = coverPath(root, base, coverUrl);
+      path = coverPath(root, base, coverUrl, mimeType: mimeType);
       await _storage.writeBytes(path, bytes);
       return path;
     } catch (e) {

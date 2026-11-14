@@ -129,12 +129,20 @@ class DownloadTaskArtifacts {
     required DownloadResolvedCover cover,
   }) {
     final coverUrl = cover.url ?? '';
-    register(DownloadFileLayout.coverPath(root, base, coverUrl));
+    register(
+      DownloadFileLayout.coverPath(
+        root,
+        base,
+        coverUrl,
+        mimeType: cover.mimeType,
+      ),
+    );
     return _layout.writeCover(
       root: root,
       base: base,
       coverUrl: coverUrl,
       bytes: cover.bytes,
+      mimeType: cover.mimeType,
     );
   }
 

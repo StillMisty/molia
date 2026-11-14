@@ -289,9 +289,15 @@
 - **Default cover（默认封面）** — 设置 › 外观里的全局占位封面：只在歌曲没有
   封面或远端封面加载失败时显示；不参与取色、下载与标签嵌入，也不是一张
   「每曲封面」。
+- **Cover image format（封面格式识别）** — `lib/services/covers/cover_image_format.dart`：
+  按魔数识别 JPEG / PNG / GIF / WebP（含动画 WebP）的唯一实现；MIME 与扩展名的
+  映射、同步大小预算 `kCoverSyncMaxBytes` 也在这里。AVIF 不接受（Flutter 只在
+  部分平台交给系统解码）。写入 / 同步一律以字节为准，不信任声明的扩展名。
 - **Cover image codec（封面图片归一化）** — `lib/services/covers/cover_image_codec.dart`：
-  解码 → 烘焙 EXIF 方向 → 最长边 1024px → JPEG 85 的唯一实现；不可读图片抛
-  `CoverImageException`，UI 只显示友好文案。
+  解码 → 烘焙 EXIF 方向 → 缩放 → WebP 的唯一实现：静态最长边 1024px、动画
+  最长边 512px 且最多 90 帧；超过同步预算按质量 → 边长 → 帧数逐级降参数，
+  不把动图截成静态图。归一化只在选图 / 导入时做一次，同步落盘原样写字节；
+  不可读 / 超预算图片抛 `CoverImageException`，UI 只显示友好文案。
 - **Cover picker sheet（封面选择弹层）** — `lib/widgets/cover_picker_sheet.dart`：
   每曲封面 / 默认封面共用的选择、预览、查看原图与重置交互（歌曲信息页 /
   海报预览 / 设置外观三个入口，不各写一套）。
@@ -1036,8 +1042,9 @@
   哈希 / base64）；开启后的第一次收集只登记已有封面、不逐张追加（全量快照会
   携带它们），此后首次登记 / 真实变化 / 删除 / 墓碑后重设才写增量；手动完整
   备份请求全部类别，开关关闭也包含封面。远端应用经
-  `CustomCoverStore.applySynced*`（不触发本地变更回调）。单张 > 500KB 或损坏
-  只跳过同步，本地封面保留。
+  `CustomCoverStore.applySynced*`（不触发本地变更回调）。记录按字节携带真实
+  MIME / 扩展名 / animated；接收侧原样落盘，不在另一台设备上重编码。单张
+  > 1.5MB、AVIF 或损坏只跳过同步，本地封面保留。
 - **Playback session record（会话记录）** — `session` 类别的单例记录：会话 JSON
   （队列/下标/进度/模式）+ `savedAt` 时间戳；正在播放的设备持续刷新从而抢占，
   本地停止播放不回传删除（换设备接着听的轻量实现）。系统控制路径（通知暂停 /
