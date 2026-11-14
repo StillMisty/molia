@@ -14,6 +14,8 @@ import 'package:flutter/foundation.dart';
 /// - Shift 点击选中锚点到当前行的闭区间，连续 Shift 只调整区间端点
 ///   （锚点只在不带 Shift 的点击时移动）；锚点为空 / 已不在可见行时退化为
 ///   单选该行；
+/// - 触摸端没有 Shift：[selectRangeTo] 由多选态下长按端点触发，
+///   区间语义与 Shift 相同，但锚点失效时保持原选择而不是退化；
 /// - 搜索 / 排序 / 换合集等重排可见顺序的操作让锚点失效（[clearAnchor]）。
 ///
 /// 宿主只负责「何时调用」与点播分支；选择语义都在这里。
@@ -23,6 +25,12 @@ class CollectionSelection extends ChangeNotifier {
 
   /// 当前选中的行 key（只读视图）。
   Set<String> get selectedKeys => Set<String>.unmodifiable(_selected);
+
+  /// 当前区间锚点（Shift 点击 / 长按端点起算的行 key）。
+  ///
+  /// 锚点只在可见行集合里有效：搜索 / 排序 / 换合集后由宿主清掉
+  /// （[clearAnchor]），下一次 Shift 或长按端点从当前行重新起算。
+  String? get anchorKey => _anchor;
 
   /// 是否处于选择模式（有任一选中行）。
   bool get isSelecting => _selected.isNotEmpty;
@@ -44,8 +52,9 @@ class CollectionSelection extends ChangeNotifier {
     return selectedVisible == 0 ? false : null;
   }
 
-  /// 选中 [key]（已选中则无操作）。
+  /// 选中 [key] 并把锚点移到这里（长按进入多选 = 范围选择的起点）。
   void select(String key) {
+    _anchor = key;
     if (_selected.add(key)) notifyListeners();
   }
 
@@ -98,6 +107,29 @@ class CollectionSelection extends ChangeNotifier {
       return true;
     }
     return false;
+  }
+
+  /// 范围选择：选中锚点到 [key] 的闭区间（与 Shift 点击同一套区间语义），
+  /// 并把锚点移到 [key]。
+  ///
+  /// 与 Shift 点击的差别只在失效分支：触摸端没有「当前行」可退化，锚点
+  /// 或目标行不在可见列表时直接不做事，交给宿主保持原选择（用户在提示
+  /// 之后点到了列表外 / 已被过滤掉的行，不应静默改选择）。
+  void selectRangeTo(String key, List<String> visibleKeys) {
+    final index = visibleKeys.indexOf(key);
+    if (index < 0) return;
+    final anchor = _anchor;
+    if (anchor == null) return;
+    final anchorIndex = visibleKeys.indexOf(anchor);
+    if (anchorIndex < 0) return;
+    final start = math.min(anchorIndex, index);
+    final end = math.max(anchorIndex, index);
+    _selected.clear();
+    for (var i = start; i <= end; i++) {
+      _selected.add(visibleKeys[i]);
+    }
+    _anchor = key;
+    notifyListeners();
   }
 
   /// 按可见顺序提取选中行；不可见的选中 key 忽略。

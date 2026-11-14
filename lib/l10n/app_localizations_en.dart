@@ -562,6 +562,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deselectAll => 'Deselect All';
 
   @override
+  String selectionCountSelected(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get selectionRangeToHere => 'Select range to here';
+
+  @override
+  String get lyricsSelectionHint =>
+      'Tap to select, long-press to select a range';
+
+  @override
+  String get copyAll => 'Copy all';
+
+  @override
+  String copySelectedLines(int count) {
+    return 'Copy $count lines';
+  }
+
+  @override
   String get noLyricsSelected => 'Please select some lyrics first';
 
   @override
@@ -579,13 +599,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noLyricsToSelect => 'No lyrics available to select';
-
-  @override
-  String get posterLyricsLimitExceeded =>
-      'Maximum 10 lines of lyrics can be selected for poster generation';
-
-  @override
-  String get tapToSelectLyrics => 'Tap lyric line to select';
 
   @override
   String get nowPlayingLabel => 'Playing';
@@ -626,10 +639,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noItemsFound => 'No items found';
 
   @override
-  String get copyButtonText => 'Copy';
-
-  @override
-  String get posterButtonLabel => 'Poster';
+  String get posterButtonLabel => 'Generate poster';
 
   @override
   String get retryButton => 'Retry';
@@ -1127,6 +1137,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sortTooltip => 'Sort';
+
+  @override
+  String get moreActions => 'More actions';
 
   @override
   String get trackActionsTooltip => 'Track actions';

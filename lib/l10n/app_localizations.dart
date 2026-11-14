@@ -1118,6 +1118,36 @@ abstract class AppLocalizations {
   /// **'Deselect All'**
   String get deselectAll;
 
+  /// No description provided for @selectionCountSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String selectionCountSelected(int count);
+
+  /// No description provided for @selectionRangeToHere.
+  ///
+  /// In en, this message translates to:
+  /// **'Select range to here'**
+  String get selectionRangeToHere;
+
+  /// No description provided for @lyricsSelectionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to select, long-press to select a range'**
+  String get lyricsSelectionHint;
+
+  /// No description provided for @copyAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy all'**
+  String get copyAll;
+
+  /// No description provided for @copySelectedLines.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy {count} lines'**
+  String copySelectedLines(int count);
+
   /// No description provided for @noLyricsSelected.
   ///
   /// In en, this message translates to:
@@ -1147,18 +1177,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No lyrics available to select'**
   String get noLyricsToSelect;
-
-  /// No description provided for @posterLyricsLimitExceeded.
-  ///
-  /// In en, this message translates to:
-  /// **'Maximum 10 lines of lyrics can be selected for poster generation'**
-  String get posterLyricsLimitExceeded;
-
-  /// No description provided for @tapToSelectLyrics.
-  ///
-  /// In en, this message translates to:
-  /// **'Tap lyric line to select'**
-  String get tapToSelectLyrics;
 
   /// No description provided for @nowPlayingLabel.
   ///
@@ -1232,16 +1250,10 @@ abstract class AppLocalizations {
   /// **'No items found'**
   String get noItemsFound;
 
-  /// No description provided for @copyButtonText.
-  ///
-  /// In en, this message translates to:
-  /// **'Copy'**
-  String get copyButtonText;
-
   /// No description provided for @posterButtonLabel.
   ///
   /// In en, this message translates to:
-  /// **'Poster'**
+  /// **'Generate poster'**
   String get posterButtonLabel;
 
   /// No description provided for @retryButton.
@@ -2131,6 +2143,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sort'**
   String get sortTooltip;
+
+  /// No description provided for @moreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get moreActions;
 
   /// No description provided for @trackActionsTooltip.
   ///

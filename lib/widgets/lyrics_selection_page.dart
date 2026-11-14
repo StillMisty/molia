@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -8,10 +11,10 @@ import '../l10n/app_localizations.dart';
 import '../models/lyric_line.dart';
 import '../models/poster_lyric_line.dart';
 import '../providers/playback_provider.dart';
+import '../services/covers/cover_resolution.dart';
 import '../services/haptics.dart';
 import '../services/lyrics_display/lyric_timing_policy.dart';
 import '../services/notification_service.dart';
-import '../theme/app_semantic_colors.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'lyrics_poster_preview_page.dart';
@@ -70,6 +73,9 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
   /// 选中行下标（模型不可变，选中态属于页面状态）。
   final Set<int> _selectedIndices = {};
 
+  /// 范围起点（最后一次点选的行；长按另一行时从这里起算区间）。
+  int? _rangeAnchor;
+
   final _scrollController = ScrollController();
 
   @override
@@ -104,6 +110,46 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
     HapticsService.lightImpact();
     setState(() {
       _selectedIndices.clear();
+      _rangeAnchor = null;
+    });
+  }
+
+  /// 可参与「全选」的行：空文本行没有内容可复制 / 进海报，跳过。
+  Iterable<int> get _selectableIndices sync* {
+    for (var i = 0; i < _lyricLines.length; i++) {
+      if (_lyricLines[i].text.trim().isNotEmpty) yield i;
+    }
+  }
+
+  bool get _allSelectableSelected {
+    final selectable = _selectableIndices.toList(growable: false);
+    return selectable.isNotEmpty && selectable.every(_selectedIndices.contains);
+  }
+
+  /// 全选非空行。全选只负责选中；清空 / 退出只走底栏 ✕。
+  void _selectAllLines() {
+    HapticsService.selectionClick();
+    setState(() {
+      _selectedIndices
+        ..clear()
+        ..addAll(_selectableIndices);
+      // 全选不是「点选起点」：长按区间要等下一次点行落下锚点。
+      _rangeAnchor = null;
+    });
+  }
+
+  /// 范围选择：选中锚点到 [index] 的闭区间（与合集多选同一语义）。
+  void _selectRangeTo(int index) {
+    final anchor = _rangeAnchor;
+    if (anchor == null) return;
+    HapticsService.selectionClick();
+    setState(() {
+      final start = math.min(anchor, index);
+      final end = math.max(anchor, index);
+      _selectedIndices
+        ..clear()
+        ..addAll([for (var i = start; i <= end; i++) i]);
+      _rangeAnchor = index;
     });
   }
 
@@ -113,6 +159,24 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
     HapticsService.selectionClick();
     setState(() {
       if (!_selectedIndices.remove(index)) _selectedIndices.add(index);
+      // 范围起点 = 最后一次点选的行（无论这次是选中还是取消）。
+      _rangeAnchor = index;
+    });
+  }
+
+  /// 行长按：已经选中过行时把这一行作为区间终点；否则先选中它。
+  ///
+  /// 触摸端没有 Shift，长按承担桌面 Shift 点击的第二段手势。
+  void _onLineLongPress(int index) {
+    if (index < 0 || index >= _lyricLines.length) return;
+    if (_selectedIndices.isNotEmpty && _rangeAnchor != null) {
+      _selectRangeTo(index);
+      return;
+    }
+    HapticsService.selectionClick();
+    setState(() {
+      _selectedIndices.add(index);
+      _rangeAnchor = index;
     });
   }
 
@@ -151,89 +215,6 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
 
   bool _hasSelectedLyrics() => _selectedIndices.isNotEmpty;
 
-  /// 顶栏操作：复制 split button / ⋮ 菜单 + 选中计数胶囊。
-  ///
-  /// embedded（侧边弹层没有 AppBar）时渲染在正文顶部，与窄屏 AppBar 的
-  /// actions 共用同一份控件与状态，避免两套入口行为漂移。
-  List<Widget> _selectionActions(
-    BuildContext context,
-    AppLocalizations l10n,
-    ThemeData theme,
-  ) {
-    return [
-      // 有选中行时：「复制选中」是主操作，菜单里是它的变体「复制全部」，
-      // 合并成一个 split button（原来的独立 ⋮ 只有这一条菜单项）。
-      if (_hasSelectedLyrics())
-        M3ESplitButton<String>(
-          key: const Key('lyricsSelectionCopy'),
-          label: l10n.copyButtonText,
-          leadingIcon: Icons.copy_rounded,
-          style: M3EButtonStyle.outlined,
-          enabled: !_isLoading,
-          onPressed: _copySelectedLyrics,
-          items: [
-            M3ESplitButtonItem<String>(
-              value: 'copyAll',
-              child: Text('${l10n.copyButtonText} · ${l10n.lyricsTitle}'),
-            ),
-          ],
-          onSelected: (value) {
-            if (value == 'copyAll') {
-              _copyAllOriginalLyrics();
-            }
-          },
-        )
-      // 未选中任何行：没有主操作可拆，保留 ⋮（复制全部原文歌词）。
-      else
-        M3EMenu.entries(
-          position: M3EMenuAnchorPosition.bottomEnd,
-          anchorBuilder: (context, open) => M3EIconButton(
-            variant: M3EIconButtonVariant.standard,
-            icon: Icon(Icons.more_vert_rounded),
-            onPressed: open,
-            semanticLabel: l10n.copyButtonText,
-          ),
-          onSelected: (value) {
-            if (value == 'copyAll') {
-              _copyAllOriginalLyrics();
-            }
-          },
-          entries: [
-            M3EMenuEntry(
-              label: '${l10n.copyButtonText} · ${l10n.lyricsTitle}',
-              value: 'copyAll',
-            ),
-          ],
-        ),
-      if (_hasSelectedLyrics())
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                // 超过 15 行是「数量超限」提醒，走统一警告语义色；
-                // 未超限为普通选中计数。
-                color: _selectedIndices.length > 15
-                    ? AppSemanticColors.of(context).warningContainer
-                    : theme.colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '${_selectedIndices.length}/15',
-                style: context.typeScale.labelMedium.copyWith(
-                  color: _selectedIndices.length > 15
-                      ? AppSemanticColors.of(context).onWarningContainer
-                      : theme.colorScheme.onPrimaryContainer,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ),
-    ];
-  }
-
   Future<void> _copySelectedLyrics() async {
     HapticsService.lightImpact();
     final l10n = AppLocalizations.of(context)!;
@@ -259,6 +240,14 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
     }
   }
 
+  /// 展示封面（自定义 > 原始 > 默认）的唯一解析入口。
+  ///
+  /// 页头与海报输入都从这里取同一个 URL：两处各自再解析一次会在自定义
+  /// 封面切换的瞬间出现「页头已经换了、海报还是旧图」的分叉。
+  String? _displayCoverUrl(CoverResolver covers) => covers
+      .displayForId(widget.trackId, originalUrl: widget.albumCoverUrl)
+      .url;
+
   Future<void> _shareAsPoster() async {
     HapticsService.lightImpact();
     final l10n = AppLocalizations.of(context)!;
@@ -268,15 +257,6 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
         context,
         listen: false,
       ).showSnackBar(l10n.noLyricsSelected);
-      return;
-    }
-
-    // 行数限制：超过 15 行不能生成海报
-    if (selectedLyrics.length > 15) {
-      Provider.of<NotificationService>(
-        context,
-        listen: false,
-      ).showSnackBar(l10n.posterLyricsLimitExceeded);
       return;
     }
 
@@ -296,7 +276,8 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
         posterLyricLines: posterLyricLines,
         trackTitle: widget.trackTitle,
         artistName: widget.artistName,
-        albumCoverUrl: widget.albumCoverUrl,
+        // 页头与海报共用同一份展示封面（自定义封面必须两处一致）。
+        albumCoverUrl: _displayCoverUrl(coverResolverOf(context)),
         trackId: widget.trackId,
       ),
     );
@@ -322,15 +303,6 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
       builder: (context, currentLineIndex) {
         return Column(
           children: [
-            // 侧边弹层没有 AppBar：顶栏操作下沉到正文顶部，右侧对齐。
-            if (widget.embedded)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: _selectionActions(context, l10n, theme),
-                ),
-              ),
             Expanded(
               child: ResponsivePageContainer(
                 pageType: ResponsivePageType.detail,
@@ -341,67 +313,71 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                   itemCount: _lyricLines.length + 1,
                   itemBuilder: (context, index) {
                     if (index == 0) {
-                      // 列表首项固定为歌曲信息头部（itemCount = 歌词数 + 1）
-                      return Container(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .secondaryContainer,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            TrackArtwork(
-                              trackId: widget.trackId,
-                              originalUrl: widget.albumCoverUrl,
-                              width: 60,
-                              height: 60,
-                              borderRadius: BorderRadius.circular(8),
-                              memCacheWidth:
-                                  (60 * MediaQuery.of(context).devicePixelRatio)
-                                      .round(),
+                      // 列表首项固定为歌曲信息头部（itemCount = 歌词数 + 1）。
+                      // 封面走 CoverChangeBuilder：自定义封面替换后页头立即
+                      // 更新，且与海报输入共用同一个展示封面 URL。
+                      return CoverChangeBuilder(
+                        builder: (context, covers) {
+                          final scheme = Theme.of(context).colorScheme;
+                          final coverUrl = _displayCoverUrl(covers);
+                          return Container(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    widget.trackTitle,
-                                    style: context.typeScale.titleMedium
-                                        .copyWith(
-                                          // 卡片底为 secondaryContainer：
-                                          // 前景必须配 onSecondaryContainer。
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSecondaryContainer,
-                                        ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    widget.artistName,
-                                    style: context.typeScale.bodyMedium
-                                        .copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSecondaryContainer
-                                              .withValues(alpha: 0.8),
-                                        ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: scheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(16),
                             ),
-                          ],
-                        ),
+                            child: Row(
+                              children: [
+                                TrackArtwork(
+                                  // 已经解析好的展示封面：不再按 trackId 二次
+                                  // 解析，页头画的就是海报会用的那一张。
+                                  originalUrl: coverUrl,
+                                  width: 72,
+                                  height: 72,
+                                  borderRadius: BorderRadius.circular(12),
+                                  memCacheWidth:
+                                      (72 *
+                                              MediaQuery.of(context)
+                                                  .devicePixelRatio)
+                                          .round(),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        widget.trackTitle,
+                                        style: context.typeScale.titleMedium
+                                            .copyWith(
+                                              color: scheme.onSurface,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        widget.artistName,
+                                        style: context.typeScale.bodyMedium
+                                            .copyWith(
+                                              color: scheme.onSurfaceVariant,
+                                            ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       );
                     } else {
                       final lyricIndex = index - 1;
@@ -426,6 +402,11 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                         extended: _extendedOf(lyricIndex),
                         isSelected: _selectedIndices.contains(lyricIndex),
                         onTap: () => _toggleLineSelection(lyricIndex),
+                        onLongPress: () => _onLineLongPress(lyricIndex),
+                        // 选中过行之后，长按才表示「选中到这里」。
+                        longPressSemanticLabel: _hasSelectedLyrics()
+                            ? l10n.selectionRangeToHere
+                            : null,
                         isFirstInGroup: isFirstInGroup,
                         isLastInGroup: isLastInGroup,
                         isCurrentlyPlaying: lyricIndex == currentLineIndex,
@@ -456,7 +437,6 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
       appBar: M3EAppBar.top(
         title: Text(l10n.selectLyrics),
         automaticallyImplyLeading: true,
-        actions: _selectionActions(context, l10n, theme),
       ),
       body: pageBody,
       bottomNavigationBar: bottomBar,
@@ -494,47 +474,72 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
           ),
         ),
       ),
-      child: SizedBox(
-        height: 56.0,
+      // 最小高度而不是固定 56：200% 字号下按钮 / 文案可以撑高，不裁切。
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 56),
         child: _isLoading
             ? const Center(child: M3ELoadingIndicator())
             : _hasSelectedLyrics()
             ? Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 取消全选：普通 tonal 图标键；动作不做额外着色
-                  //（特殊色语义只留给状态），禁用态交给 M3E 默认值。
                   M3EIconButton(
+                    key: const Key('lyricsDeselectAll'),
                     variant: M3EIconButtonVariant.tonal,
                     size: M3EIconButtonSize.md,
                     visualSize: const Size(56, 56),
-                    onPressed: _isLoading ? null : _deselectAllLines,
+                    onPressed: _deselectAllLines,
                     icon: const Icon(Icons.close_rounded),
                     semanticLabel: l10n.deselectAll,
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
+                  M3EIconButton(
+                    key: const Key('lyricsSelectAll'),
+                    variant: M3EIconButtonVariant.tonal,
+                    size: M3EIconButtonSize.md,
+                    visualSize: const Size(56, 56),
+                    // 全选只负责选中；已全选时禁用，清空走 ✕。
+                    onPressed: _allSelectableSelected ? null : _selectAllLines,
+                    icon: const Icon(Icons.select_all_rounded),
+                    semanticLabel: l10n.selectAllItems,
+                  ),
+                  const Spacer(),
+                  M3EButton.text(
+                    key: const Key('lyricsCopySelected'),
+                    onPressed: _copySelectedLyrics,
+                    child: Text(
+                      l10n.copySelectedLines(_selectedIndices.length),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: M3EButton.tonal(
-                      onPressed: _selectedIndices.length > 15 || _isLoading
-                          ? null
-                          : _shareAsPoster,
+                    flex: 3,
+                    child: M3EButton.filled(
+                      // 行数不设上限：海报按选中行数计算高度。
+                      onPressed: _shareAsPoster,
                       icon: const Icon(Icons.image_rounded),
                       label: Text(l10n.posterButtonLabel),
                     ),
                   ),
                 ],
               )
-            : Center(
-                child: Text(
-                  l10n.tapToSelectLyrics,
-                  style: context.typeScale.bodyMedium.copyWith(
-                    // 操作引导是次要文本，不用强调色。
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
+            : Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      l10n.lyricsSelectionHint,
+                      style: context.typeScale.bodyMedium.copyWith(
+                        // 操作引导是次要文本，不用强调色。
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  M3EButton.text(
+                    key: const Key('lyricsCopyAll'),
+                    onPressed: _copyAllOriginalLyrics,
+                    child: Text(l10n.copyAll),
+                  ),
+                ],
               ),
       ),
     );
@@ -549,6 +554,8 @@ class _LyricTile extends StatelessWidget {
   final (String translation, String roma) extended;
   final bool isSelected;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final String? longPressSemanticLabel;
   final bool isFirstInGroup;
   final bool isLastInGroup;
   final bool isCurrentlyPlaying;
@@ -559,6 +566,8 @@ class _LyricTile extends StatelessWidget {
     required this.extended,
     required this.isSelected,
     required this.onTap,
+    required this.onLongPress,
+    this.longPressSemanticLabel,
     this.isFirstInGroup = false,
     this.isLastInGroup = false,
     this.isCurrentlyPlaying = false,
@@ -600,7 +609,7 @@ class _LyricTile extends StatelessWidget {
           : theme.colorScheme.onSurfaceVariant,
     );
 
-    return Padding(
+    final card = Padding(
       padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 16),
       child: M3ECard(
         variant: M3ECardVariant.filled,
@@ -611,6 +620,7 @@ class _LyricTile extends StatelessWidget {
             : theme.colorScheme.surface, // 当前播放行不改变背景色
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         onPressed: onTap,
+        onLongPress: onLongPress,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -633,6 +643,14 @@ class _LyricTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+    final semanticLabel = longPressSemanticLabel;
+    if (semanticLabel == null) return card;
+    return Semantics(
+      customSemanticsActions: {
+        CustomSemanticsAction(label: semanticLabel): onLongPress,
+      },
+      child: card,
     );
   }
 }

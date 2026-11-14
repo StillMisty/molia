@@ -250,6 +250,25 @@
   "selectLyrics": "Select Lyrics",
   "lyricsPosterAction": "Lyrics poster",
   "deselectAll": "Deselect All",
+  "selectionCountSelected": "{count} selected",
+  "@selectionCountSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectionRangeToHere": "Select range to here",
+  "lyricsSelectionHint": "Tap to select, long-press to select a range",
+  "copyAll": "Copy all",
+  "copySelectedLines": "Copy {count} lines",
+  "@copySelectedLines": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "noLyricsSelected": "Please select some lyrics first",
   "sharePoster": "Share Poster",
   "selectedLyricsCopied": "Copied {count} lines of lyrics",
@@ -269,8 +288,6 @@
     }
   },
   "noLyricsToSelect": "No lyrics available to select",
-  "posterLyricsLimitExceeded": "Maximum 10 lines of lyrics can be selected for poster generation",
-  "tapToSelectLyrics": "Tap lyric line to select",
   "nowPlayingLabel": "Playing",
   "libraryLabel": "Discover",
   "libraryTabSearch": "Search",
@@ -283,8 +300,7 @@
   "languageEnglish": "English",
   "languageSimplifiedChinese": "简体中文",
   "noItemsFound": "No items found",
-  "copyButtonText": "Copy",
-  "posterButtonLabel": "Poster",
+  "posterButtonLabel": "Generate poster",
   "retryButton": "Retry",
   "backToLibraryTooltip": "Back to library",
   "loadingGenerating": "Generating poster...",
@@ -534,6 +550,7 @@
   "favoritesSwitchTitle": "Switch collection",
   "shufflePlay": "Shuffle",
   "sortTooltip": "Sort",
+  "moreActions": "More actions",
   "trackActionsTooltip": "Track actions",
   "sortDefaultOrder": "Default order",
   "tableColumnArtist": "Artist",

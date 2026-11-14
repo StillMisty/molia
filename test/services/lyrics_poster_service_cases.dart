@@ -126,6 +126,28 @@ void main() {
     extendedImage.dispose();
   });
 
+  test('超过 15 行仍完整渲染：海报高度随行数增长', () async {
+    final short = await render([
+      for (var i = 0; i < 15; i++) PosterLyricLine(text: 'Line $i'),
+    ]);
+    final long = await render([
+      for (var i = 0; i < 30; i++) PosterLyricLine(text: 'Line $i'),
+    ]);
+
+    expect(short, isNotEmpty);
+    expect(long, isNotEmpty);
+
+    final shortImage = await decode(short);
+    final longImage = await decode(long);
+    addTearDown(shortImage.dispose);
+    addTearDown(longImage.dispose);
+    expect(
+      longImage.height,
+      greaterThan(shortImage.height),
+      reason: '行数不设上限，高度由选中行数决定',
+    );
+  });
+
   test('本地封面按有界尺寸解码后仍生成海报', () async {
     final dir = await Directory.systemTemp.createTemp('molia_poster_cover');
     addTearDown(() => dir.delete(recursive: true));

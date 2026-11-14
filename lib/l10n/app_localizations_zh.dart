@@ -543,6 +543,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deselectAll => '取消全选';
 
   @override
+  String selectionCountSelected(int count) {
+    return '已选 $count';
+  }
+
+  @override
+  String get selectionRangeToHere => '选中到这里';
+
+  @override
+  String get lyricsSelectionHint => '轻点选中，长按选中一段';
+
+  @override
+  String get copyAll => '复制全部';
+
+  @override
+  String copySelectedLines(int count) {
+    return '复制 $count 行';
+  }
+
+  @override
   String get noLyricsSelected => '请先选择一些歌词';
 
   @override
@@ -560,12 +579,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noLyricsToSelect => '没有可选择的歌词';
-
-  @override
-  String get posterLyricsLimitExceeded => '最多只能选择10行歌词生成海报';
-
-  @override
-  String get tapToSelectLyrics => '轻点歌词行以选中';
 
   @override
   String get nowPlayingLabel => '播放';
@@ -604,10 +617,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noItemsFound => '未找到项目';
 
   @override
-  String get copyButtonText => '复制';
-
-  @override
-  String get posterButtonLabel => '海报';
+  String get posterButtonLabel => '生成海报';
 
   @override
   String get retryButton => '重试';
@@ -1084,6 +1094,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sortTooltip => '排序';
+
+  @override
+  String get moreActions => '更多操作';
 
   @override
   String get trackActionsTooltip => '曲目操作';

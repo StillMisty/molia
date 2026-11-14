@@ -375,6 +375,16 @@ class CollectionSession extends ChangeNotifier {
   void selectAllVisible(CollectionView view) =>
       _selection.selectAll([for (final row in view.visibleRows) row.key]);
 
+  /// 范围选择（触摸端长按端点 / 桌面 Shift）：选中锚点到 [key] 的闭区间。
+  ///
+  /// 锚点由上一次普通点击 / 长按落下（见 [selectRow] / [handleRowTap]）；
+  /// 没有锚点或目标行不在当前可见列表时不做任何事。
+  void selectRangeTo(CollectionView view, String key) => _selection
+      .selectRangeTo(key, [for (final row in view.visibleRows) row.key]);
+
+  /// 当前范围锚点；长按第二段手势只在有锚点时解释为区间。
+  String? get selectionAnchorKey => _selection.anchorKey;
+
   /// 某一行是否选中（行渲染读取，生产代码不直接碰选择状态机）。
   bool isSelected(String key) => _selection.isSelected(key);
 
