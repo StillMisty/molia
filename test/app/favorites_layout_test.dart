@@ -1,10 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/widgets/track_table_header.dart';
 
 import '../support/perf_app_harness.dart';
 
-/// 收藏页收敛：标题只留随机 / 搜索 / ⋮，不再有模式切换行、表格列或合集左栏。
+/// 收藏页收敛：单一入口（标题弹层 + ⋮），窄屏双行列表，宽屏恢复表格列。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -24,6 +25,8 @@ void main() {
     expect(find.byKey(const Key('libraryBrowseModeSwitch')), findsNothing);
     expect(find.byIcon(Icons.ios_share_rounded), findsNothing);
     expect(find.text(l10n.collectionModeAlbums), findsNothing);
+    // 窄窗口保持双行列表：没有表格表头。
+    expect(find.byType(TrackTableHeader), findsNothing);
 
     await tester.tap(find.byKey(const Key('favoritesHeaderOverflow')));
     await tester.pumpAndSettle();
@@ -45,9 +48,16 @@ void main() {
     expect(find.byIcon(Icons.drag_handle_rounded), findsNothing);
   });
 
-  testWidgets('840 宽也只用标题弹层，不再出合集左栏或表格头', (tester) async {
+  testWidgets('840 宽按阈值显示表格列，仍只用标题弹层', (tester) async {
     await pumpFavorites(tester, size: const Size(840, 900));
 
+    expect(find.byType(TrackTableHeader), findsOneWidget);
+    expect(find.text(l10n.tableColumnArtist), findsOneWidget);
+    expect(find.text(l10n.tableColumnAlbum), findsOneWidget);
+    expect(find.text(l10n.tableColumnDuration), findsOneWidget);
+    // 收藏页没有「播放时间」列（只有播放历史集合才有）。
+    expect(find.text(l10n.tableColumnPlayedAt), findsNothing);
+    // 宽屏表格列不恢复合集左栏与常驻模式切换行。
     expect(find.byKey(const Key('collectionSplitView')), findsNothing);
     expect(find.byKey(const Key('favoritesHeaderOverflow')), findsOneWidget);
     expect(find.byKey(const Key('favoritesModeSwitch')), findsNothing);

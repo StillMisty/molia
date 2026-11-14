@@ -62,3 +62,15 @@
 - 回归钉子：`test/app/favorites_layout_test.dart`、`test/local_library_ui_test.dart`、
   `test/playlist_experience_test.dart`、`test/services/custom_cover_store_test.dart`、
   `test/sync_cover_adapter_test.dart`。
+
+## 修订：桌面宽屏恢复表格列（2026-11-14）
+
+单一入口、无合集左栏与标题 ⋮ 的决策保持不变；用户反馈宽屏双行列表在标题与
+行尾时长之间留下大片空白，因此收回「不再有收藏页的宽屏表格列 / 表头」这一条：
+
+- 内容宽 ≥ `TrackRowColumnSpec` 阈值时，收藏 / 历史 / 本地歌曲 / 自建列表 /
+  智能列表显示表头与列（标题 / 歌手 / 专辑 / 时长；播放历史多一列播放时间，
+  窄屏仍在副标题里保留播放时间）；
+- 窄窗口继续用简洁双行列表，行高与列构成仍由 `TrackRowSurface` 单一来源决定；
+- 新增列不改变合集的播放、多选、重排、右键菜单与行尾缓存标记语义，也不恢复
+  宽屏合集左栏或常驻模式切换行。

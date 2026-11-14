@@ -67,6 +67,7 @@ import '../widgets/collection_scroll_bookkeeping.dart';
 import '../widgets/collection_spine.dart';
 import '../widgets/collection_track_list.dart';
 import '../widgets/cover_picker_sheet.dart';
+import '../widgets/desktop_layout.dart';
 import '../widgets/library_browse_view.dart';
 import '../widgets/download_data_saver_guard.dart';
 import '../widgets/empty_state.dart';
@@ -82,6 +83,7 @@ import '../widgets/shell_page_visibility.dart';
 import '../widgets/shell_reselect.dart';
 import '../widgets/track_row.dart';
 import '../widgets/track_row_actions.dart';
+import '../widgets/track_table_header.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
 /// 此时回退到简体中文（与 lxmc_import / 其他页面同一约定）。
@@ -127,7 +129,7 @@ IconData _smartListIcon(String id) => switch (id) {
 ///   并提供「导入收藏」：.lxmc 文件 / 平台歌单 / 收藏夹链接）；
 ///   默认落在有曲目的收藏，收藏为空时回退到第一个非空列表；
 /// - 宽屏表格列：内容宽（窗口宽 − 栏宽）够时曲目 / 历史 / 本地歌曲列表
-///   显示表头与列（播放历史多一列「播放时间」），窄窗口回落单列；
+///   显示表头与列（播放历史多一列「播放时间」），窄窗口回落双行列表；
 /// - 曲目行：点击播放；行尾显示歌曲时长；⋮ 菜单（桌面右键）提供
 ///   （「加入列表」含我的收藏 / 播放历史 / 自建列表）；长按进入多选；
 /// - 标题右侧提供随机播放 / 搜索两个图标（播放/暂停在顶栏迷你条，
@@ -2186,11 +2188,19 @@ class _FavoritesPageState extends State<FavoritesPage> {
     CollectionView view, {
     required bool reorderActive,
   }) {
+    // 行 / 表头同一份列规范：只有播放历史多一列「播放时间」，其余合集与
+    // 搜索 / 发现详情同档；判定按规范取阈值（行高也从同一份 spec 派生）。
+    final spec = view.isHistory
+        ? TrackRowColumnSpec.history
+        : TrackRowColumnSpec.standard;
+    final columnSpec = DesktopLayout.of(context).tableColumnsFor(spec)
+        ? spec
+        : null;
     // 智能列表按展示层重复聚类：代表行 + 展开后的版本行；不删除任何记录。
     final rows = view.isSmartList ? _smartDisplayRows(view) : view.visibleRows;
-    // 收藏 / 历史 / 本地歌曲 / 自建列表共用同一种简洁双行列表：
-    // 不再按宽屏叠表格列，历史播放时间进副标题。
-    return CollectionTrackList<CollectionRow>(
+    // 窄窗口：简洁双行列表（历史播放时间进副标题）。宽窗口：表格列填满
+    // 行中段，避免标题与行尾时长之间留出大片空白。
+    final body = CollectionTrackList<CollectionRow>(
       controller: _scrollControllerForKey(view.collectionKey),
       rows: rows,
       keyOf: (row) => ValueKey<String>(row.key),
@@ -2201,6 +2211,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
       onReorder: reorderActive
           ? (from, to) => unawaited(_reorderTracks(view, from, to))
           : null,
+      // 行高与行渲染同档（表格 56 / 双行 72）：同一份 surface 同时决定
+      // itemExtent 与行内版式，差一档滚动条拇指与拖动定位就落在错误位置。
+      surface: TrackRowSurface(tableSpec: columnSpec),
       itemBuilder: (context, row, index) => _buildRow(
         context,
         l10n,
@@ -2208,8 +2221,24 @@ class _FavoritesPageState extends State<FavoritesPage> {
         row,
         index,
         reorderActive: reorderActive,
+        columnSpec: columnSpec,
         totalRows: rows.length,
       ),
+    );
+    // 表头固定在滚动区之上（与搜索页同一口径）：列标题不随列表滚走，
+    // 列与行内列同宽同左缘。空列表（含被搜索过滤空）不给表头。
+    if (columnSpec == null || view.visibleCount == 0) return body;
+    final horizontalPadding = context
+        .layoutType(ResponsivePageType.browse)
+        .horizontalPadding;
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          child: TrackTableHeader(spec: columnSpec),
+        ),
+        Expanded(child: body),
+      ],
     );
   }
 
@@ -2238,8 +2267,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
     CollectionRow row,
     int index, {
     required bool reorderActive,
+    required TrackRowColumnSpec? columnSpec,
     int? totalRows,
   }) {
+    final table = columnSpec != null;
+    final playedAtText = row is HistoryCollectionRow
+        ? syncTimeText(row.playedAt)
+        : '';
     // 行尾缓存标签统一用紧凑图标，不再占一整段文字。多选 / 排序模式
     // 不渲染 ⋮（见 CollectionTrackRow）。
     final cached = switch (row) {
@@ -2280,21 +2314,26 @@ class _FavoritesPageState extends State<FavoritesPage> {
               row.artist.isEmpty
                   ? l10n.localFileMissing
                   : '${row.artist} · ${l10n.localFileMissing}',
-            // 历史行的播放时间从表格列移到副标题，信息不丢、列表更简单。
-            HistoryCollectionRow(:final playedAt) =>
+            // 宽屏表格把播放时间放回独立列；窄屏双行仍塞进副标题，信息不丢。
+            HistoryCollectionRow() when table => row.artist,
+            HistoryCollectionRow() =>
               row.artist.isEmpty
-                  ? syncTimeText(playedAt)
-                  : '${row.artist} · ${syncTimeText(playedAt)}',
+                  ? playedAtText
+                  : '${row.artist} · $playedAtText',
             _ => row.artist,
           },
           coverUrl: row.artworkUrl,
           album: row.album,
+          // 播放时间 = 毫秒时间戳的紧凑文案（与同步日志同一格式）；只有
+          // 历史表格档渲染这一列，其余合集 / 双行档不读。
+          time: playedAtText,
           durationMs: row.durationMs,
           // 收藏键与播放 TrackId 同源（`sourceKey:songId`）；本地下载副本用
           // local 源键，缓存行 / 历史行保留原曲键。
           trackId: TrackId(row.favoriteKey.sourceKey, row.favoriteKey.songId),
           selected: _session.isSelected(row.key),
         ),
+        surface: TrackRowSurface(tableSpec: columnSpec),
         trailing: reorderActive
             ? Icon(
                 Icons.drag_handle_rounded,
