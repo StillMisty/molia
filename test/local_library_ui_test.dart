@@ -193,6 +193,7 @@ void main() {
       bool twoPane = false,
       String signature = 'songs||added',
       Future<void> Function(List<BrowseTrack>)? onAdd,
+      Future<void> Function(BrowseTrack)? onPlayTrack,
     }) => host(
       withCoverStore(
         LibraryBrowseView(
@@ -207,7 +208,7 @@ void main() {
           twoPane: twoPane,
           isFavorite: (_) => false,
           onPlay: (_, _, {shuffle = false}) async {},
-          onPlayTrack: (_) async {},
+          onPlayTrack: onPlayTrack ?? (_) async {},
           onAdd: onAdd ?? (_) async {},
           onToggleFavorite: (_) async {},
           canRefreshLocal: (_) => false,
@@ -276,8 +277,9 @@ void main() {
       expect(find.text('Song'), findsOneWidget);
       expect(find.text('选择一个专辑'), findsNothing);
     });
-    testWidgets('多选后批量加入列表只带选中行', (tester) async {
+    testWidgets('多选：选中栏显示已选 N，加入列表只带选中行；行点击仍是播放', (tester) async {
       final added = <String>[];
+      final played = <String>[];
       final groups = [
         LibraryBrowseGroup(
           key: 'a',
@@ -295,17 +297,43 @@ void main() {
           onAdd: (tracks) async {
             added.addAll(tracks.map((track) => track.songId));
           },
+          onPlayTrack: (track) async => played.add(track.songId),
         ),
       );
       await tester.tap(find.text('Album A'));
       await tester.pumpAndSettle();
-      await tester.longPress(find.text('Song').first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Song').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.playlist_add_rounded).first);
+
+      // 普通状态：加入列表 = 整组代表行（不随隐藏选中态改变含义）。
+      await tester.tap(find.byIcon(Icons.playlist_add_rounded));
       await tester.pumpAndSettle();
       expect(added, ['1', '2']);
+      added.clear();
+
+      // 长按进入多选：工具栏换成 [✕] 已选 N [加入列表]。
+      await tester.longPress(find.text('Song').first);
+      await tester.pumpAndSettle();
+      expect(find.text('已选 1'), findsOneWidget);
+      expect(find.byIcon(Icons.close_rounded), findsOneWidget);
+
+      // 行点击始终播放，不再偷偷切换选中。
+      await tester.tap(find.text('Song B'));
+      await tester.pumpAndSettle();
+      expect(played, ['2']);
+      expect(find.text('已选 1'), findsOneWidget);
+
+      // 再长按第二行加入选中，然后批量加入。
+      await tester.longPress(find.text('Song B'));
+      await tester.pumpAndSettle();
+      expect(find.text('已选 2'), findsOneWidget);
+      await tester.tap(find.text('加入列表'));
+      await tester.pumpAndSettle();
+      expect(added, ['1', '2']);
+
+      // 关闭清空选中，回到普通工具栏。
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('已选'), findsNothing);
+      expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
     });
   });
 

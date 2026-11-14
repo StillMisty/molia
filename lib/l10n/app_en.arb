@@ -276,6 +276,14 @@
   "libraryTabSearch": "Search",
   "libraryTabLeaderboards": "Charts",
   "libraryTabPlaylists": "Playlists",
+  "librarySelectedCount": "{count} selected",
+  "@librarySelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "libraryChannelSelect": "Select channel",
   "libraryNoChannels": "All channels are disabled. Enable channels in Source Management.",
   "discoverChannelUnavailable": "Nothing is available on this channel. Try another channel.",

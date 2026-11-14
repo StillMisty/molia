@@ -583,6 +583,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryTabPlaylists => '歌单';
 
   @override
+  String librarySelectedCount(int count) {
+    return '已选 $count';
+  }
+
+  @override
   String get libraryChannelSelect => '选择渠道';
 
   @override
