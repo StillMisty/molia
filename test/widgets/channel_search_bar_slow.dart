@@ -69,8 +69,8 @@ void main() {
     return (controller: controller, focusNode: focusNode);
   }
 
-  Finder menuRow(String label) => find
-      .ancestor(of: find.text(label).last, matching: find.byType(M3EMenuItem))
+  Finder itemCard(String label) => find
+      .ancestor(of: find.text(label).last, matching: find.byType(M3ECard))
       .first;
 
   testWidgets('单渠道：不渲染渠道选择，保留标准搜索栏与搜索图标', (tester) async {
@@ -119,21 +119,26 @@ void main() {
     final context = tester.element(find.byType(ChannelSearchBar));
     final scheme = M3ETheme.of(context).colorScheme;
     final barRect = tester.getRect(find.byType(M3ECard).first);
-    final chipFinder = find.byKey(ChannelSearchBar.channelPickerKey);
-    final chipRect = tester.getRect(chipFinder);
     final selectedText = find.text('酷我音乐');
-    final text = tester.widget<Text>(selectedText);
-    final surface = find
-        .descendant(of: chipFinder, matching: find.byType(AnimatedContainer))
+    final chipFinder = find
+        .ancestor(of: selectedText, matching: find.byType(Material))
         .first;
-    final decoration =
-        tester.widget<AnimatedContainer>(surface).decoration! as BoxDecoration;
-    final border = decoration.border! as Border;
+    final chip = tester.widget<Material>(chipFinder);
+    final chipRect = tester.getRect(chipFinder);
+    final text = tester.widget<Text>(selectedText);
 
-    expect(decoration.color, Colors.transparent, reason: '露出外层搜索胶囊底色');
+    expect(chip.color, Colors.transparent, reason: '露出外层搜索胶囊底色');
     expect(text.style?.color, scheme.onSurface);
-    expect(border.top.color, scheme.outlineVariant);
-    expect(border.top.width, greaterThan(0));
+    expect(
+      chip.shape,
+      isA<RoundedRectangleBorder>()
+          .having(
+            (shape) => shape.side.color,
+            'side color',
+            scheme.outlineVariant,
+          )
+          .having((shape) => shape.side.width, 'side width', greaterThan(0)),
+    );
     expect(chipRect.left - barRect.left, greaterThanOrEqualTo(5));
     expect(chipRect.top - barRect.top, greaterThanOrEqualTo(5));
     expect(barRect.bottom - chipRect.bottom, greaterThanOrEqualTo(5));
@@ -208,7 +213,7 @@ void main() {
     expect(escaped, 1);
   });
 
-  testWidgets('渠道菜单：长名称单行、选中项与未选中项行高一致', (tester) async {
+  testWidgets('渠道下拉：长名称单行、不再预留右侧打勾槽', (tester) async {
     const longName = '一个非常非常长、窄弹窗里必须省略而不能换行的渠道名称';
     await pumpBar(
       tester,
@@ -225,13 +230,29 @@ void main() {
     expect(longText.overflow, TextOverflow.ellipsis);
     expect(tester.takeException(), isNull);
     expect(
-      tester.getSize(menuRow(longName)).height,
-      tester.getSize(menuRow('酷我音乐')).height,
-      reason: '选中项前置 check 不能改变菜单行高',
+      tester.getSize(itemCard(longName)).height,
+      tester.getSize(itemCard('酷我音乐')).height,
+      reason: '选中项不能改变行高',
+    );
+    expect(
+      find.descendant(
+        of: itemCard(longName),
+        matching: find.byIcon(Icons.check_rounded),
+      ),
+      findsOneWidget,
+      reason: '选中行显示勾',
+    );
+    expect(
+      find.descendant(
+        of: itemCard('酷我音乐'),
+        matching: find.byIcon(Icons.check_rounded),
+      ),
+      findsNothing,
+      reason: '未选中行不再预留右侧打勾槽',
     );
   });
 
-  testWidgets('渠道菜单：点选后关闭并回调', (tester) async {
+  testWidgets('渠道下拉：点选后关闭并回调', (tester) async {
     String? selected;
     await pumpBar(
       tester,
@@ -241,16 +262,11 @@ void main() {
 
     await tester.tap(find.byKey(ChannelSearchBar.channelPickerKey));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.descendant(
-        of: find.byType(M3EMenuItem),
-        matching: find.text('QQ音乐'),
-      ),
-    );
+    await tester.tap(find.text('QQ音乐').last);
     await tester.pumpAndSettle();
 
     expect(selected, 'tx');
-    expect(find.byType(M3EMenuItem), findsNothing, reason: '点选后菜单关闭');
+    expect(find.text('QQ音乐'), findsOneWidget, reason: '点选后弹层关闭，只剩触发框');
   });
 
   testWidgets('窄窗 + 1.5× 字体不溢出', (tester) async {

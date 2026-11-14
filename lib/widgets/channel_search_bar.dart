@@ -159,6 +159,8 @@ class ChannelSearchBar extends StatelessWidget {
                                     onChannelSelected?.call(key),
                                 maxWidth: chipMaxWidth,
                                 surface: ChannelPickerSurface.outlined,
+                                hintText: l10n.searchSourcesLabel,
+                                noItemsFoundText: l10n.noItemsFound,
                               ),
                             ),
                           ),

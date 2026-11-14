@@ -1,7 +1,11 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/source.dart' show SourceDescriptor;
+import '../l10n/app_localizations.dart';
 import 'channel_picker.dart';
+
+AppLocalizations _l10n(BuildContext context) =>
+    AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
 /// 启用渠道（顺序不变）。
 List<SourceDescriptor> _enabledOf(List<SourceDescriptor> channels) {
@@ -15,8 +19,8 @@ List<SourceDescriptor> _enabledOf(List<SourceDescriptor> channels) {
 ///
 /// 只接收纯数据（[channels] + [selectedKey]）；渠道的顺序与启停由
 /// 「音源管理」页维护（`SourcesProvider.reorderChannel / setChannelEnabled`）。
-/// 触发框宽度由 [ChannelPicker] 按当前渠道名实测，[maxWidth] 由顶部工具行
-/// 扣掉可见 tab 槽位后传入。
+/// 字段宽度由 [ChannelPicker] 按最长启用渠道名实测，[maxWidth] 由顶部
+/// 工具行扣掉可见 tab 槽位后传入。
 class LibraryChannelSelector extends StatelessWidget {
   const LibraryChannelSelector({
     super.key,
@@ -38,19 +42,22 @@ class LibraryChannelSelector extends StatelessWidget {
   /// 选择渠道（不会回调停用项）。
   final ValueChanged<String> onSelected;
 
-  /// 触发框宽度上限（顶部工具行剩余空间）。
+  /// 字段宽度上限（顶部工具行剩余空间）。
   final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
     final entries = _enabledOf(channels);
     if (entries.length < 2) return const SizedBox.shrink();
+    final l10n = _l10n(context);
     return ChannelPicker(
       triggerKey: triggerKey,
       channels: entries,
       selectedKey: selectedKey,
       onSelected: onSelected,
       maxWidth: maxWidth,
+      hintText: l10n.libraryChannelSelect,
+      noItemsFoundText: l10n.noItemsFound,
     );
   }
 }

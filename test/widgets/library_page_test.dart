@@ -323,7 +323,7 @@ void main() {
       expect(find.byKey(ChannelSearchBar.channelPickerKey), findsNothing);
     });
 
-    testWidgets('窄屏：渠道名在触发框与菜单里都完整显示', (tester) async {
+    testWidgets('窄屏：渠道名在触发框与下拉弹层里都完整显示', (tester) async {
       final searchSources = _SearchSources();
       addTearDown(searchSources.dispose);
       await pump(tester, 360, sourcesOverride: searchSources);
@@ -345,24 +345,21 @@ void main() {
       await tester.pumpAndSettle();
 
       for (final name in ['网易云音乐', '哔哩哔哩', 'QQ音乐']) {
-        final itemText = find.descendant(
-          of: find.byType(M3EMenuItem),
-          matching: find.text(name),
-        );
-        expect(itemText, findsOneWidget, reason: '$name 应出现在渠道菜单里');
+        final itemText = find.text(name).last;
         expect(
           tester.renderObject<RenderParagraph>(itemText).didExceedMaxLines,
           isFalse,
-          reason: '$name 在菜单里应完整显示',
+          reason: '$name 在下拉弹层里应完整显示',
         );
       }
 
-      await tester.tap(
-        find.descendant(
-          of: find.byType(M3EMenuItem),
-          matching: find.text('哔哩哔哩'),
-        ),
+      expect(
+        find.byIcon(Icons.check_rounded),
+        findsOneWidget,
+        reason: '只有选中行显示勾，未选中行不预留右侧槽位',
       );
+
+      await tester.tap(find.text('哔哩哔哩').last);
       await tester.pumpAndSettle();
 
       final selectedText = find.descendant(
