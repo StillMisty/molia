@@ -1718,6 +1718,28 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   收藏页多选栏也走这套收口：浮层缩放是 spatial 弹簧、透明度从同一进度截断
   0..1；多选栏与页头同高交叉淡入淡出（effects 时长 + 曲线，离场层
   `IgnorePointer`）。
+- 滚动边缘渐隐：唯一实现是 `lib/widgets/scroll_edge_fade.dart`
+  （`FadeEdge.top` / `bottom`，surface 覆盖层，**不是** `ShaderMask`——后者会给
+  整块内容建 saveLayer）。使用点：播放页顶部圆点带、歌词页顶部 chrome、歌词页
+  底部（画在 `M3EFabMenu` 之前，只压歌词不压可点胶囊）、钉住表头下缘
+  （`paged_track_collection.dart`，12dp 同时就是表头与首行的间距；layering 理由
+  见 `docs/pitfalls.md` #106 / #107）。调用点不要再手写 `LinearGradient`。
+- 内容身份切换（曲目文本块 / 骨架 / 失败态 / 正文）统一走
+  `lib/widgets/cross_fade_swap.dart`：effects 时长 + emphasized 曲线，保留离场层
+  做同进度交叉淡化（离场层 `IgnorePointer` + `ExcludeSemantics`，落下即丢弃）。
+  不要在调用点写 `AnimatedSwitcher`（只给 `icon_swap.dart` 的图标切换用）。
+- 加载骨架：`lib/widgets/skeleton.dart` 是唯一实现（`SkeletonPulse` /
+  `SliverSkeletonPulse` + `SkeletonBlock` / `SkeletonRow` / `SkeletonGridTile`）。
+  网络优先的首屏（发现详情、歌单 tab）用骨架而不是居中转圈；骨架的列数 / 行高
+  必须取与真实版式同一份计算，加载完成后不跳版式。
+- 下载任务行（`downloads_manage_page.dart`）运行中用
+  `M3EProgressIndicator.linearWavy`；总长未知（服务端无 `Content-Length`）时不出条
+  （避免 0% 空轨道被读成卡住），减弱动效回落 `linear`。百分比文案仍由
+  `downloadTaskStatusLabel` 唯一生成，进度条自身 `ExcludeSemantics`（不重复播报）。
+- 形状：圆角只用 `M3EShapes` 档位（xs 4 / sm 8 / md 12 / lg 16 / xl 28 / full）；
+  胶囊写 `const BorderRadius.all(Radius.circular(M3EShapes.full))`（包内没有
+  `radiusFull` 常量）。由尺寸推导的圆角（`height / 2` 等）不受限；护栏
+  `test/architecture/shape_usage_test.dart`。
 - 设置页：首屏 9 个语义分区（外观〔含封面〕/ 播放〔含播放细节〕/ 歌词 /
   音源与在线服务 / 曲库与存储 / 数据与备份 / 通用 / 桌面〔仅桌面〕/
   关于与更新），不设纯目录子页；同一域只在一张卡，卡内按「常用 → 少用、

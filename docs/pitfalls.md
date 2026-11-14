@@ -1062,3 +1062,16 @@
     原生 `resolve`**，完整取链交给用户安装的 LX 音源脚本，与网易渠道同一模式。
     评论接口的 `group_type` 必须是数字 `1`（传 `track` 会 `ERR_INVALID_PARAM`），
     搜索的 `count` 被忽略（平台固定每页 20 条，只能按 `cursor` 偏移翻页）。
+
+106. **内容边缘渐隐必须画在可点浮层之下**：`ScrollEdgeFade` 是 surface 渐变覆盖层，
+    叠在页面级 Stack 上会盖住整块内容——播放页底部那条会把右下 `M3EFabMenu` 的
+    下缘刷成半透明 surface（FAB 在 `LyricsWidget` 内部，页面级覆盖层永远在它上面）。
+    底部渐隐因此放在 `lyrics.dart` 的 Stack 里、快捷操作 `Positioned` **之前**
+    （先绘制），只压歌词不压胶囊；不要在 `nowplaying.dart` 再叠一条页面级底部渐隐。
+
+107. **钉住表头的下缘渐隐要做在表头盒子里**：viewport 里先注册的 sliver 后绘制，
+    `SliverPersistentHeader(pinned)` 因此盖在后面的列表之上；把 `extent + 12` 里的
+    12dp 留给 `ScrollEdgeFade(edge: top)` 放在盒子底部，行滑进表头下方时正好淡出，
+    未钉住时这条带子压在页面 surface 上不可见。不要改成页面级 overlay：未钉住
+    （封面头还在视口里）时 overlay 会压住封面头，靠 `overlapsContent` 回传再驱动
+    overlay 又需要额外一层 post-frame 通知，收益不值。
