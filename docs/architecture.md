@@ -1035,11 +1035,12 @@
 上限；任务队列、命名 / 放置、任务产物、记录装配、记录写入、文件维护、提交
 日志与通知 presenter 是独立 module（见下）：
 
-- **下载意图**：`lib/services/download/download_intent.dart` 的
-  `DownloadLauncher` 是「能不能下 + 开始下 + 结果怎么回执」的唯一入口
-  （`started` / `alreadyDownloaded` / `active` / `unsupported`）；曲目菜单 /
-  分享 / 本地数据页 / 批量管理只表达意图并按类型化结果渲染，资格规则与失败
-  文案不再散在四个调用点。下载队列、记录与文件布局仍是既有管道。
+- **下载请求**：`lib/services/download/download_requests.dart` 的
+  `DownloadRequests` 是「能不能下 + 开始下 + 结果怎么回执」的唯一入口
+  （`completed` / `failed` / `cancelled` / `alreadyDownloaded` / `active` /
+  `unsupported`）；曲目菜单 / 分享 / 本地数据页（音频 + 歌词 + 封面）/ 批量
+  管理只表达请求并按类型化结果渲染，资格规则、等待方式与失败文案不再散在
+  调用点。下载队列、记录与文件布局仍是既有管道。
 - **模块拆分**：`DownloadService` 只做编排，各 module 各有一份唯一实现——
   `lib/services/download/download_records.dart`（记录只读面：记录表 / 排序
   列表 / `initialized` / `supported` / `revision` 的唯一持有者；收藏、单曲

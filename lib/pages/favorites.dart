@@ -35,10 +35,9 @@ import '../providers/sync_provider.dart';
 import '../pages/source_swap_page.dart';
 import '../services/cache_service.dart';
 import '../services/save_as.dart';
-import '../services/download/download_intent.dart';
+import '../services/download/download_requests.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_records.dart';
-import '../services/download/download_service.dart' show LocalRelocateResult;
 import '../services/library/playlist_folder_prefs.dart';
 import '../services/local/local_metadata_service.dart';
 import '../services/playlist/playlist_export_builder.dart';
@@ -1093,8 +1092,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 选中行里「现在就能下载」的曲目（本地 / 已下载 / 进行中都不算）。
   List<Track> _selectedDownloadableTracks(CollectionView view) {
     if (!view.isCustom && !view.isFavorites) return const [];
-    final launcher = context.read<DownloadLauncher?>();
-    if (launcher == null) return const [];
+    final requests = context.read<DownloadRequests?>();
+    if (requests == null) return const [];
     final provider = context.read<LibraryProvider>();
     final selectedRows = [
       for (final row in _selectedRows(view))
@@ -1103,19 +1102,19 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final actionable = PlaylistBatchDownloadAction.downloadableRows(
       selectedRows,
       toTrack: provider.trackFromPlaylistTrack,
-      statusOf: launcher.statusOf,
+      statusOf: requests.statusOf,
     );
     return [for (final row in actionable) provider.trackFromPlaylistTrack(row)];
   }
 
   Future<void> _downloadSelected(CollectionView view) async {
     final tracks = _selectedDownloadableTracks(view);
-    final launcher = context.read<DownloadLauncher?>();
-    if (tracks.isEmpty || launcher == null) return;
+    final requests = context.read<DownloadRequests?>();
+    if (tracks.isEmpty || requests == null) return;
     final l10n = _l10n(context);
     await _runBatchDownload(
       l10n,
-      launcher,
+      requests,
       tracks,
       onSucceeded: () {
         if (mounted) _session.clearSelection();
@@ -1644,7 +1643,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           leading: const Icon(Icons.file_upload_rounded, size: 20),
         ),
       if (currentPlaylist != null &&
-          context.read<DownloadLauncher?>() != null &&
+          context.read<DownloadRequests?>() != null &&
           view.tracks.isNotEmpty)
         M3EMenuEntry(
           label: l10n.downloadAll,
@@ -1765,17 +1764,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
     AppLocalizations l10n,
     CollectionView view,
   ) async {
-    final launcher = context.read<DownloadLauncher?>();
+    final requests = context.read<DownloadRequests?>();
     final provider = context.read<LibraryProvider>();
-    if (launcher == null || view.tracks.isEmpty) return;
-    await _runBatchDownload(l10n, launcher, [
+    if (requests == null || view.tracks.isEmpty) return;
+    await _runBatchDownload(l10n, requests, [
       for (final track in view.tracks) provider.trackFromPlaylistTrack(track),
     ]);
   }
 
   Future<bool> _runBatchDownload(
     AppLocalizations l10n,
-    DownloadLauncher launcher,
+    DownloadRequests requests,
     List<Track> tracks, {
     void Function()? onSucceeded,
   }) async {
@@ -1783,7 +1782,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       final result = await const PlaylistBatchDownloadAction().run(
         tracks: tracks,
         confirm: () => confirmDownloadOnDataSaver(context),
-        startBatch: launcher.startBatch,
+        startBatch: requests.startBatch,
         onSucceeded: onSucceeded,
         onEnqueued: (enqueued) {
           if (!mounted) return;
