@@ -73,7 +73,18 @@ class ArtworkCache {
   Future<CacheManager?>? _managerOrNullFuture;
   CacheManager? _resolvedManager;
   DateTime _lastSweep = DateTime.fromMillisecondsSinceEpoch(0);
-  bool _sweeping = false;
+  Future<void>? _sweepInFlight;
+
+  /// 等待 manager 解析与启动 sweep 完成（测试 / 诊断入口）。
+  ///
+  /// 启动 sweep 是 fire-and-forget：正常启动不为它阻塞首帧。测试刚写入封面
+  /// 就读取元数据时，必须先等这轮 sweep 落定，否则 sweep 可能在写入与读取
+  /// 之间把文件清掉，造成偶发 null。
+  Future<void> get ready async {
+    await manager;
+    final sweep = _sweepInFlight;
+    if (sweep != null) await sweep;
+  }
 
   /// 共享 CacheManager（测试可注入 [managerOverride] 走内存实现）。
   Future<CacheManager> get manager {
@@ -392,22 +403,26 @@ class ArtworkCache {
   /// 退回逐条探测兜底；自动触发（启动 / 节流 / 策略变更）跳过，避免把
   /// 「没扫到」误判成「全部缺失」清空索引。分区被 UI 清理走
   /// [_onPartitionCleared]。
-  Future<void> _sweepNow({bool forcePrune = false}) async {
-    if (_sweeping) return;
-    _sweeping = true;
+  Future<void> _sweepNow({bool forcePrune = false}) {
+    final inFlight = _sweepInFlight;
+    if (inFlight != null) return inFlight;
+    final future = _runSweep(forcePrune: forcePrune);
+    _sweepInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_sweepInFlight, future)) _sweepInFlight = null;
+    });
+  }
+
+  Future<void> _runSweep({required bool forcePrune}) async {
     _lastSweep = DateTime.now();
-    try {
-      final result = await _cacheService.enforceArtworkPolicy();
-      final surviving = result.remainingRelativePaths;
-      if (surviving != null) {
-        // sweep 直接删文件（不经过 manager）：同步清理索引中的失效条目，
-        // 否则命中会返回指向缺失文件的 FileInfo（封面失败且不再回源）。
-        await _pruneMissingEntries(surviving: surviving);
-      } else if (forcePrune) {
-        await _pruneMissingEntries();
-      }
-    } finally {
-      _sweeping = false;
+    final result = await _cacheService.enforceArtworkPolicy();
+    final surviving = result.remainingRelativePaths;
+    if (surviving != null) {
+      // sweep 直接删文件（不经过 manager）：同步清理索引中的失效条目，
+      // 否则命中会返回指向缺失文件的 FileInfo（封面失败且不再回源）。
+      await _pruneMissingEntries(surviving: surviving);
+    } else if (forcePrune) {
+      await _pruneMissingEntries();
     }
   }
 

@@ -465,8 +465,8 @@ void main() {
             repo.getAllCalls == 1 &&
             await repo.get('https://p1.music.126.net/missing.jpg') == null,
       );
-      // 等 _sweepNow 的 finally 复位 _sweeping 再走显式入口。
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      // 等策略变更触发的 sweep 落定，再走显式入口。
+      await cache.ready;
       expect(storage.deletedFiles, 0, reason: '本次 sweep 没删任何文件');
       expect(repo.getAllCalls, 1, reason: 'clean sweep 也要对齐索引');
       // 只复核不在快照里的条目：外部删除的 missing + 竞态新增的 fresh。
@@ -685,6 +685,7 @@ void main() {
       );
 
       final manager = await cache.manager;
+      await cache.ready;
       expect(manager, isA<ArtworkCacheManager>());
       expect(
         manager.config.repo.getObjectsOverCapacity(0),
@@ -818,6 +819,7 @@ void main() {
       );
       const url = 'https://p1.music.126.net/info.jpg';
       final manager = await cache.manager;
+      await cache.ready;
       final file = await manager.putFile(
         url,
         Uint8List.fromList([1, 2, 3, 4, 5]),
@@ -898,6 +900,7 @@ void main() {
       );
       const url = 'https://p1.music.126.net/single.jpg';
       final manager = await cache.manager;
+      await cache.ready;
       final file = await manager.putFile(
         url,
         Uint8List.fromList([1, 2, 3, 4, 5]),
