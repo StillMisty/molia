@@ -26,7 +26,6 @@ import 'package:molia/widgets/playlist_header_overflow.dart';
 import 'package:molia/widgets/playlist_sheets.dart';
 import 'package:molia/widgets/queue.dart';
 
-import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
 
 Widget host(
@@ -520,111 +519,7 @@ void main() {
     expect(collapse.isCollapsed('Office'), isFalse);
   });
 
-  testWidgets('队列存为列表：一次新建 + 批量加入，重复项合并', (tester) async {
-    final l10n = lookupAppLocalizations(const Locale('zh'));
-    final repo = FakeLibraryRepository();
-    final facade = FakePlaybackFacade();
-    final playback = buildTestPlaybackProvider(
-      facade: facade,
-      libraryRepository: repo,
-    );
-    final library = LibraryProvider(
-      repository: repo,
-      playbackProvider: playback,
-    );
-    final controller = ScrollController();
-    addTearDown(() {
-      controller.dispose();
-      library.dispose();
-      playback.dispose();
-    });
-    final first = Track(
-      id: const TrackId('wy', '1'),
-      title: 'One',
-      origin: TrackOrigin.builtin,
-    );
-    final second = Track(
-      id: const TrackId('wy', '2'),
-      title: 'Two',
-      origin: TrackOrigin.builtin,
-    );
-    facade.emit(
-      PlaybackSnapshot(
-        current: first,
-        queue: [first, first, second],
-        currentIndex: 0,
-      ),
-    );
-    await tester.pumpWidget(
-      host(
-        QueueDisplay(controller: controller),
-        playback: playback,
-        library: library,
-      ),
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('queueOverflow')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(l10n.queueSaveAsPlaylist));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(EditableText).last, '队列 A');
-    await tester.tap(find.text(l10n.playlistCreateConfirm));
-    await tester.pumpAndSettle();
-    final saved = await repo.findPlaylistByName('队列 A');
-    expect(saved, isNotNull);
-    expect((await repo.listPlaylistTracks(saved!.id)).length, 2);
-    expect(
-      find.textContaining(l10n.queueSavedAsPlaylist('队列 A', 2, 1)),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('队列存为列表：批量加入失败删除新列表', (tester) async {
-    final l10n = lookupAppLocalizations(const Locale('zh'));
-    final repo = FakeLibraryRepository()..failTrackWrites = true;
-    final facade = FakePlaybackFacade();
-    final playback = buildTestPlaybackProvider(
-      facade: facade,
-      libraryRepository: repo,
-    );
-    final library = LibraryProvider(
-      repository: repo,
-      playbackProvider: playback,
-    );
-    final controller = ScrollController();
-    addTearDown(() {
-      controller.dispose();
-      library.dispose();
-      playback.dispose();
-    });
-    final track = Track(
-      id: const TrackId('wy', '1'),
-      title: 'One',
-      origin: TrackOrigin.builtin,
-    );
-    facade.emit(
-      PlaybackSnapshot(current: track, queue: [track], currentIndex: 0),
-    );
-    await tester.pumpWidget(
-      host(
-        QueueDisplay(controller: controller),
-        playback: playback,
-        library: library,
-      ),
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('queueOverflow')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(l10n.queueSaveAsPlaylist));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(EditableText).last, '失败队列');
-    await tester.tap(find.text(l10n.playlistCreateConfirm));
-    await tester.pumpAndSettle();
-    expect(await repo.findPlaylistByName('失败队列'), isNull);
-    expect(find.text(l10n.queueSaveFailed), findsOneWidget);
-  });
-
-  testWidgets('队列：空队列不出现溢出，有队列才出现', (tester) async {
+  testWidgets('队列页不再有顶部溢出菜单（存为列表移入播放器「更多」）', (tester) async {
     final facade = FakePlaybackFacade();
     final playback = buildTestPlaybackProvider(facade: facade);
     final controller = ScrollController();
@@ -632,12 +527,6 @@ void main() {
       controller.dispose();
       playback.dispose();
     });
-    await tester.pumpWidget(
-      host(QueueDisplay(controller: controller), playback: playback),
-    );
-    await tester.pump();
-    expect(find.byKey(const Key('queueOverflow')), findsNothing);
-
     final track = Track(
       id: const TrackId('wy', '1'),
       title: 'Song',
@@ -646,8 +535,13 @@ void main() {
     facade.emit(
       PlaybackSnapshot(current: track, queue: [track], currentIndex: 0),
     );
+    await tester.pumpWidget(
+      host(QueueDisplay(controller: controller), playback: playback),
+    );
     await tester.pump();
-    expect(find.byKey(const Key('queueOverflow')), findsOneWidget);
+    expect(find.byKey(const Key('queueOverflow')), findsNothing);
+    // 队列行自己的 ⋮ 保留（只有一行且是当前曲目时没有可编辑动作，因此不出现）。
+    expect(find.byIcon(Icons.more_vert_rounded), findsNothing);
   });
 }
 

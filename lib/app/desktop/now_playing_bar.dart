@@ -2,7 +2,7 @@
 ///
 /// 左：封面 + 歌名/作者 + 收藏（点击进播放页，封面与播放页共享元素飞行）；
 /// 中：上一首 / 播放暂停 / 下一首 + 可拖波浪进度 + 时间；
-/// 右：播放模式 + 音量（图标 + 弹出滑杆）+ 队列。
+/// 右：音量（图标 + 弹出滑杆）+ 队列。
 ///
 /// 只在非播放页出现：播放页是沉浸主场，整条由壳层让位（见
 /// `app/desktop/desktop_shell.dart` 的 `bottomNavigationBar`）。
@@ -162,10 +162,11 @@ class _BarControls extends StatelessWidget {
   }
 }
 
-/// 右区：播放模式 + 音量 + 队列入口。
+/// 右区：音量 + 队列入口。
 ///
-/// 按内容宽收口（不吃 Expanded）：底栏的余量让给中区进度排，见
-/// [DesktopNowPlayingBar.build]。
+/// 播放模式不在这条底栏：它是会话偏好，播放页的「更多」菜单是唯一入口
+/// （底栏与播放页各放一个模式按钮只是重复）。按内容宽收口（不吃 Expanded）：
+/// 底栏的余量让给中区进度排，见 [DesktopNowPlayingBar.build]。
 class _BarActions extends StatelessWidget {
   const _BarActions({required this.onOpenQueue});
 
@@ -177,8 +178,6 @@ class _BarActions extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 模式图标 / 标签 / 触感 / 命令在共享传输模块，播放页进度排同源。
-        const PlaybackModeButton(),
         VolumeControl(
           buttonKey: DesktopNowPlayingBar.volumeButtonKey,
           panelKey: DesktopNowPlayingBar.volumePanelKey,
