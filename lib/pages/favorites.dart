@@ -62,6 +62,7 @@ import '../widgets/collection_scroll_bookkeeping.dart';
 import '../widgets/collection_spine.dart';
 import '../widgets/collection_track_list.dart';
 import '../widgets/cover_picker_sheet.dart';
+import '../widgets/cross_fade_swap.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/library_browse_view.dart';
 import '../widgets/download_data_saver_guard.dart';
@@ -84,6 +85,12 @@ import '../widgets/track_table_header.dart';
 /// 此时回退到简体中文（与 lxmc_import / 其他页面同一约定）。
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
+
+/// 收藏页正文区的四态标识：只喂给 [CrossFadeSwap] 做「值变才过渡」判断。
+///
+/// 用 enum 而不是 `(bool, bool, bool)` record：四态互斥，多一个 `isLoading &&
+/// hasFailed` 组合会让过渡的 key 可能落到不存在的分支上。
+enum _CollectionSurface { loading, failed, libraryBrowse, body }
 
 /// 曲库摘要：没有可浏览内容时不显示「0 张专辑 · 0 位歌手」。
 String? _libraryBrowseSummary(
@@ -1141,6 +1148,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final view = sessionView.view;
     final reorderActive = sessionView.reorderActive;
 
+    // 正文四态：加载骨架 / 读取失败 / 曲库浏览 / 合集正文。骨架 / 失败 /
+    // 正文原本是硬切，现在统一走同一套 effects 时长交叉淡化。
+    final surface = sessionView.isLoading
+        ? _CollectionSurface.loading
+        : sessionView.hasFailed
+        ? _CollectionSurface.failed
+        : view.isLibraryBrowse
+        ? _CollectionSurface.libraryBrowse
+        : _CollectionSurface.body;
+
     // 合集切换只有标题行弹层一个入口：条目不额外解析一份，弹层打开时按
     // 当下 provider 状态现算。
     final content = Column(
@@ -1162,13 +1179,31 @@ class _FavoritesPageState extends State<FavoritesPage> {
           selection: _buildSelectionBar(context, l10n, view),
         ),
         Expanded(
-          child: sessionView.isLoading
-              ? const Center(child: M3ELoadingIndicator())
-              : sessionView.hasFailed
-              ? _buildReadFailed(context, l10n, sessionView.frame)
-              : view.isLibraryBrowse
-              ? _buildLibraryBrowse(context, l10n)
-              : _buildBody(context, l10n, view, reorderActive: reorderActive),
+          // 状态标识只看「哪一态」：同一态内的刷新（列表数据、选择、排序）
+          // 不换 key、不重播过渡。
+          child: CrossFadeSwap(
+            value: surface,
+            child: switch (surface) {
+              _CollectionSurface.loading => const Center(
+                child: M3ELoadingIndicator(),
+              ),
+              _CollectionSurface.failed => _buildReadFailed(
+                context,
+                l10n,
+                sessionView.frame,
+              ),
+              _CollectionSurface.libraryBrowse => _buildLibraryBrowse(
+                context,
+                l10n,
+              ),
+              _CollectionSurface.body => _buildBody(
+                context,
+                l10n,
+                view,
+                reorderActive: reorderActive,
+              ),
+            },
+          ),
         ),
       ],
     );

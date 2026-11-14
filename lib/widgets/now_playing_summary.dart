@@ -32,6 +32,7 @@ import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
 import '../utils/playback_cover_decode.dart';
 import 'cover_appearance.dart';
+import 'cross_fade_swap.dart';
 import 'favorite_action.dart';
 import 'icon_swap.dart';
 import 'track_artwork.dart';
@@ -169,13 +170,28 @@ class NowPlayingTrackText extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!_bar) return _buildPageText(context);
 
-    final info = context.select<PlaybackProvider, (String?, String?)>((
+    // 曲目身份（`TrackId.uri`）与标题 / 作者一起取：同一首的进度刷新、
+    // 封面飞行只更新内容不重播过渡，换曲才换 `value`。
+    final info = context.select<PlaybackProvider, (String?, String?, String?)>((
       provider,
     ) {
       final track = provider.snapshot.current;
-      return (track?.title, track?.artistLabel);
+      return (track?.id.uri, track?.title, track?.artistLabel);
     });
-    final (name, artists) = info;
+    final (id, name, artists) = info;
+    // 只做 effects 交叉淡化，不叠加位移 / 缩放：顶栏是固定高度槽，任何
+    // 缩放都会让共享飞行的封面锚点在过渡期间抖动。
+    return CrossFadeSwap(
+      value: id ?? '',
+      child: _buildBarText(context, name, artists),
+    );
+  }
+
+  /// 迷你位正文：无曲目回退应用名，否则常规两行 / 大字号单行。
+  ///
+  /// 三种叶子形状保持原样，只在外面套 [CrossFadeSwap]：换曲是「同一位置
+  /// 换一屏字」，不是版式变化。
+  Widget _buildBarText(BuildContext context, String? name, String? artists) {
     if (name == null || name.isEmpty) return const NowPlayingAppTitle();
     // 顶栏是固定高度槽：大字号下只保留歌名，作者行让位，避免标题块被裁。
     final double textScale = MediaQuery.textScalerOf(context).scale(1);
