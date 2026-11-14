@@ -130,11 +130,12 @@ class ChannelSearchBar extends StatelessWidget {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   // 输入区至少留 100、清除键 48、间距 12：渠道 chip 再长
-                  // 也不能把搜索输入挤到不可用；上限 200 防止桌面窗口里
-                  // chip 过宽。
+                  // 也不能把搜索输入挤到不可用。Ctrl+F 是输入优先的场景，
+                  // chip 上限固定 148（旧下拉框的宽度）；超长脚本名在 chip /
+                  // 弹层里省略，4 字内置渠道名仍完整显示。
                   final chipMaxWidth = math.max(
                     104.0,
-                    math.min(200.0, constraints.maxWidth - 160),
+                    math.min(148.0, constraints.maxWidth - 160),
                   );
                   return Row(
                     children: [
