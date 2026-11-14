@@ -44,8 +44,8 @@ void main() {
     });
 
     test('结构判据只由宽度档位决定', () {
-      expect(collectionsUseSplitLayout(WindowSizeClass.medium), isFalse);
-      expect(collectionsUseSplitLayout(WindowSizeClass.expanded), isTrue);
+      expect(libraryBrowseUsesSplitLayout(WindowSizeClass.medium), isFalse);
+      expect(libraryBrowseUsesSplitLayout(WindowSizeClass.expanded), isTrue);
       expect(usesWideNowPlayingLayout(WindowSizeClass.medium), isFalse);
       expect(usesWideNowPlayingLayout(WindowSizeClass.expanded), isTrue);
     });
@@ -86,25 +86,16 @@ void main() {
     });
   });
 
-  group('合集分栏', () {
-    testWidgets('840 宽收藏页出合集左栏', (tester) async {
+  group('收藏页合集入口', () {
+    testWidgets('840 宽也只用标题弹层，不再出合集左栏', (tester) async {
       await pumpPerfApp(
         tester,
         desktopShell: false,
         favoritesCount: 3,
         size: const Size(840, 900),
       );
-      expect(find.byKey(const Key('collectionSplitView')), findsOneWidget);
-    });
-
-    testWidgets('839 宽保持单栏', (tester) async {
-      await pumpPerfApp(
-        tester,
-        desktopShell: false,
-        favoritesCount: 3,
-        size: const Size(839, 900),
-      );
       expect(find.byKey(const Key('collectionSplitView')), findsNothing);
+      expect(find.byKey(const Key('favoritesHeaderOverflow')), findsOneWidget);
     });
   });
 

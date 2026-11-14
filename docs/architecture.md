@@ -504,9 +504,9 @@
   封面。重新开启类别时控制面把各传输的快照发布覆盖置为未发布，下一轮强制重发
   全量快照补传已有封面——开启后的**第一次**收集只登记这些已有封面、不逐张追加
   增量；此后的首次登记 / 真实变化 / 删除 / 墓碑后重设才写日志。远端 LWW 落盘走
-  `CustomCoverStore` 的 `applySynced*` 接缝（不触发本地变更回调），只接受归一化
-  JPEG（PNG / GIF / WebP 与损坏载荷跳过）；单张超限（> 500KB）只跳过，接收侧在
-  base64 解码前先按长度拒绝。类别默认开启、不进蜂窝小类别；封面字节不进入
+  `CustomCoverStore` 的 `applySynced*` 接缝（不触发本地变更回调），接受
+  JPEG / GIF / WebP 并校验记录 MIME 与实际字节一致（PNG 等未支持格式与损坏载荷
+  跳过）；单张上限 2MB（与选图阶段同一值），接收侧在 base64 解码前先按长度拒绝。类别默认开启、不进蜂窝小类别；封面字节不进入
   非封面轮次，自动同步按类别开关执行，手动完整备份不受该开关限制。
   协议自始为 v3（帧带版本与 nonce，载荷是列式二进制；见 ADR-0003 §1）：对端快照直接
   合并，备份只做结构性校验（不是 Molia 备份 / 结构无效才拒绝），都没有按版本号
@@ -964,7 +964,7 @@
   （`lib/providers/local_songs_collection.dart`）拥有本地歌曲的历史 × 下载 /
   导入 × 完整音频缓存联结、下载优先去重、输入签名、在途令牌 / 过期丢弃与
   加载态 · 弹层计数；`CollectionPresenter`（`lib/providers/collection_presenter.dart`）
-  拥有合集身份（kind / 落库 id / 展示名 / 合集键 / 列规范）、可见行投影（过滤 /
+  拥有合集身份（kind / 落库 id / 展示名 / 合集键）、可见行投影（过滤 /
   排序）与行动作构成。`CollectionView.visibleRows` 是统一的 `CollectionRow` 联合
   （列表曲目 / 播放历史 / 本地歌曲），`rowActionsFor` 按行变体给动作规格；收藏页
   每帧只把资料库读取端口 + 下载 / 缓存快照交给会话，消费一个
@@ -1531,12 +1531,15 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   接 Esc（与登记同源、不依赖焦点位置；收藏页多选与音量弹层都是 `HardwareKeyboard`
   处理器）。
   内容版式（结构判据统一在 `AdaptiveLayoutScope`；宽度来源仍是窗口宽 /
-  窗口宽 − 侧栏折叠宽，页面不自己量窗口）：宽屏表格列（`TrackRowModel` / `TrackRowSurface` /
-  `TrackTableHeader`；`tableColumns` / `tableColumnsFor`，阈值 = 内容宽 ≥ 720
-  （播放历史档 812），**只看宽度，不看桌面平台标记**；使用点：搜索 / 发现详情
-  （收藏页在分栏时右栏宽度不足，不再叠表格列）；行高两档走 `TrackRow.extentOf`（M3E token 为最小值，按系统文字
-  缩放动态增长；1.0× 仍是表格单行 56 / 列表双行 72）；发现页表头为 pinned sliver
-  （封面头部滚走后列标题仍在），搜索 / 收藏页表头固定在滚动区之上）、
+  窗口宽 − 侧栏折叠宽，页面不自己量窗口）：宽屏表格列（`TrackRowModel` /
+  `TrackRowSurface` / `TrackTableHeader`；`tableColumns` / `tableColumnsFor`，
+  阈值 = 内容宽 ≥ 720（播放历史档 812），**只看宽度，不看桌面平台标记**；
+  使用点：搜索 / 发现详情。收藏页统一用简洁双行列表（历史播放时间进副标题），
+  不再按宽屏叠表格列，也没有合集左栏：所有宽度都从标题点进合集弹层；曲库的
+  专辑 / 歌手浏览在 expanded 档用左右分栏（`libraryBrowseUsesSplitLayout`）。
+  行高两档走 `TrackRow.extentOf`（M3E token 为最小值，按系统文字缩放动态增长；
+  1.0× 仍是表格单行 56 / 列表双行 72）；发现页表头为 pinned sliver（封面头部
+  滚走后列标题仍在），搜索页表头固定在滚动区之上）、
   设置首屏两列（宽度档位 expanded，即 ≥ 840；弹层内容经
   `AdaptiveLayoutScope.local` 按弹层自身宽度解析，窗口 1200 / 弹层 880 时不会
   误判；列优先瀑布式，分区按内容量显式分列，短卡不再按行留空）、设置弹层
@@ -1746,7 +1749,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   morph；分段列表用 `cardList.gap`（2dp）行距、
   `itemExtent = TrackRow.extentOf(context, tableColumns: …) + gap`，
   列表一律懒构建（发现详情滚到底自动加载下一页）。不要改回 `M3EListItem`（原因见 pitfalls #20）。
-  收藏页四个合集共用一份列表脚手架 `lib/widgets/collection_track_list.dart`
+  收藏 / 历史 / 本地歌曲 / 自建列表 / 智能列表共用一份列表脚手架
+  `lib/widgets/collection_track_list.dart`
   （顺序列表 / 重排模式、搜索空态、行动作入口：触摸端行尾 ⋮ / 桌面右键菜单，
   动作词汇 `RowAction`）；行高与 `itemExtent` 同源走共享
   `lib/widgets/row_extent.dart`（大字体按字阶行高增长，M3E token 为最小值）；

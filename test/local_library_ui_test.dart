@@ -44,8 +44,8 @@ Widget host(Widget child) => M3EMaterialApp(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('模式开关：歌曲 / 专辑 / 歌手，默认歌曲，可切换', (tester) async {
-    var mode = CollectionMode.songs;
+  testWidgets('曲库模式开关：只有专辑 / 歌手，默认专辑，可切换', (tester) async {
+    var mode = CollectionMode.albums;
     await tester.pumpWidget(
       host(
         StatefulBuilder(
@@ -56,17 +56,17 @@ void main() {
         ),
       ),
     );
-    expect(find.byKey(const Key('favoritesModeSwitch')), findsOneWidget);
-    expect(find.text('歌曲'), findsOneWidget);
+    expect(find.byKey(const Key('libraryBrowseModeSwitch')), findsOneWidget);
+    expect(find.text('歌曲'), findsNothing);
     expect(find.text('专辑'), findsOneWidget);
     expect(find.text('歌手'), findsOneWidget);
 
-    await tester.tap(find.text('专辑'));
+    await tester.tap(find.text('歌手'));
     await tester.pumpAndSettle();
-    expect(mode, CollectionMode.albums);
+    expect(mode, CollectionMode.artists);
   });
 
-  testWidgets('合集弹层：智能列表独立分组，点选返回虚拟哨兵', (tester) async {
+  testWidgets('合集弹层：智能列表默认收起，点开后可选中', (tester) async {
     CollectionPickerOutcome? outcome;
     await tester.pumpWidget(
       host(
@@ -84,6 +84,16 @@ void main() {
                     icon: Icons.favorite_rounded,
                     trackCount: 2,
                     selected: true,
+                    pinned: true,
+                  ),
+                  const CollectionPickerEntry(
+                    key: 'playlist:1',
+                    id: 1,
+                    name: '自建列表',
+                    icon: Icons.queue_music_rounded,
+                    trackCount: 1,
+                    selected: false,
+                    playlistId: 1,
                   ),
                 ],
                 smartEntries: [
@@ -95,6 +105,7 @@ void main() {
                     trackCount: 0,
                     selected: false,
                     isHeader: true,
+                    isCollapsibleHeader: true,
                   ),
                   CollectionPickerEntry(
                     key: SmartListIds.missingFiles,
@@ -122,9 +133,13 @@ void main() {
     await tester.tap(find.text('打开'));
     await tester.pumpAndSettle();
     expect(find.text('智能列表'), findsOneWidget);
-    expect(find.text('文件不见'), findsOneWidget);
-    // 智能列表 / 分组标题没有拖动把手：只有普通合集参与排序。
+    expect(find.text('文件不见'), findsNothing, reason: '智能列表默认收起');
+    // 固定入口没有拖动把手；只有自建列表参与排序。
     expect(find.byIcon(Icons.drag_handle_rounded), findsOneWidget);
+
+    await tester.tap(find.text('智能列表'));
+    await tester.pumpAndSettle();
+    expect(find.text('文件不见'), findsOneWidget);
     await tester.tap(find.text('文件不见'));
     await tester.pumpAndSettle();
     expect(

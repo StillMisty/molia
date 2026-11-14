@@ -4943,7 +4943,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get localTitleFailed => '没有改成，请再试一次';
 
   @override
-  String get collectionModeSongs => '歌曲';
+  String get libraryBrowseTitle => '曲库';
+
+  @override
+  String libraryBrowseSummary(int albums, int artists) {
+    return '$albums 张专辑 · $artists 位歌手';
+  }
 
   @override
   String get collectionModeAlbums => '专辑';
@@ -5016,12 +5021,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get playlistDetails => '列表详情';
 
   @override
-  String get playlistDescription => '描述';
-
-  @override
-  String get playlistDescriptionHint => '说说这个列表用来做什么';
-
-  @override
   String get playlistFolder => '分组';
 
   @override
@@ -5047,17 +5046,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get playlistCoverRestored => '已移除列表封面';
-
-  @override
-  String get playlistShare => '分享列表';
-
-  @override
-  String get playlistShareEmpty => '这个列表还没有曲目';
-
-  @override
-  String playlistShareMore(int count) {
-    return '还有 $count 首';
-  }
 
   @override
   String get playlistExport => '导出列表';

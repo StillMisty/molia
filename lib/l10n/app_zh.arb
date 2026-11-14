@@ -2436,7 +2436,18 @@
       }
     }
   },
-  "collectionModeSongs": "歌曲",
+  "libraryBrowseTitle": "曲库",
+  "libraryBrowseSummary": "{albums} 张专辑 · {artists} 位歌手",
+  "@libraryBrowseSummary": {
+    "placeholders": {
+      "albums": {
+        "type": "int"
+      },
+      "artists": {
+        "type": "int"
+      }
+    }
+  },
   "collectionModeAlbums": "专辑",
   "collectionModeArtists": "歌手",
   "unknownAlbum": "未知专辑",
@@ -2473,8 +2484,6 @@
     }
   },
   "playlistDetails": "列表详情",
-  "playlistDescription": "描述",
-  "playlistDescriptionHint": "说说这个列表用来做什么",
   "playlistFolder": "分组",
   "playlistFolderHint": "留空表示不分组",
   "playlistEditDetails": "编辑详情",
@@ -2484,16 +2493,6 @@
   "playlistCoverReset": "移除封面",
   "playlistCoverUpdated": "列表封面已更新",
   "playlistCoverRestored": "已移除列表封面",
-  "playlistShare": "分享列表",
-  "playlistShareEmpty": "这个列表还没有曲目",
-  "playlistShareMore": "还有 {count} 首",
-  "@playlistShareMore": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "playlistExport": "导出列表",
   "playlistExportM3u8": "播放列表文件（M3U8）",
   "playlistExportM3u8Subtitle": "其它播放器也能打开",

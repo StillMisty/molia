@@ -22,8 +22,8 @@ abstract final class WindowSizeClassResolver {
   }
 }
 
-/// 收藏 / 曲库的合集分栏只在 expanded 启用（medium 保持单栏）。
-bool collectionsUseSplitLayout(WindowSizeClass sizeClass) =>
+/// 曲库专辑 / 歌手浏览的左右分栏只在 expanded 启用（medium 保持单栏）。
+bool libraryBrowseUsesSplitLayout(WindowSizeClass sizeClass) =>
     sizeClass == WindowSizeClass.expanded;
 
 /// 播放页宽版式（封面/控制 + 队列/歌词/信息）只在 expanded 启用。

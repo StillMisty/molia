@@ -5,9 +5,10 @@ import '../l10n/app_localizations.dart';
 import '../providers/collection_mode.dart';
 import '../services/haptics.dart';
 
-/// 收藏 / 曲库页顶部的展示模式切换（歌曲 / 专辑 / 歌手）。
+/// 曲库合集内的展示模式切换（专辑 / 歌手）。
 ///
-/// 单行分段控件，放在内容区标题之下；不放进左侧列表，也不新增导航入口。
+/// 只在「曲库」视图出现：收藏 / 历史 / 本地歌曲 / 自建列表是纯列表，
+/// 不再有模式行。控件按内容宽度左对齐，不横跨整行。
 class CollectionModeSwitch extends StatelessWidget {
   const CollectionModeSwitch({
     super.key,
@@ -21,15 +22,11 @@ class CollectionModeSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return SizedBox(
-      width: double.infinity,
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
       child: M3ESegmentedButton<CollectionMode>(
-        key: const Key('favoritesModeSwitch'),
+        key: const Key('libraryBrowseModeSwitch'),
         segments: [
-          M3ESegment(
-            value: CollectionMode.songs,
-            label: l10n.collectionModeSongs,
-          ),
           M3ESegment(
             value: CollectionMode.albums,
             label: l10n.collectionModeAlbums,

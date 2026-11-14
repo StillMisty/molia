@@ -31,9 +31,12 @@ class CollectionPickerEntry {
     this.playlistId,
     this.isSmart = false,
     this.isHeader = false,
+    this.isCollapsibleHeader = false,
     this.folder = '',
     this.isFolderHeader = false,
     this.folderCollapsed = false,
+    this.pinned = false,
+    this.supportingText,
   });
 
   /// 顺序持久化键：`favorites` / `history` / `downloads` / `playlist:<id>`。
@@ -58,6 +61,15 @@ class CollectionPickerEntry {
   /// 分组标题行（不可选、不可拖）。
   final bool isHeader;
 
+  /// 可展开 / 收起的组标题（当前用于智能列表）。
+  final bool isCollapsibleHeader;
+
+  /// 固定入口（收藏 / 历史 / 本地歌曲 / 曲库）：不参与拖动排序。
+  final bool pinned;
+
+  /// 第二行说明（曲库用它显示专辑 / 歌手数量）；null = 单行。
+  final String? supportingText;
+
   /// 所属分组（空串 = 未分组）。
   final String folder;
 
@@ -77,9 +89,12 @@ class CollectionPickerEntry {
     playlistId: playlistId,
     isSmart: isSmart,
     isHeader: isHeader,
+    isCollapsibleHeader: isCollapsibleHeader,
     folder: folder,
     isFolderHeader: isFolderHeader,
     folderCollapsed: folderCollapsed,
+    pinned: pinned,
+    supportingText: supportingText,
   );
 }
 
@@ -165,10 +180,19 @@ class _CollectionPickerSheet extends StatefulWidget {
 }
 
 class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
+  /// 固定入口 → 智能列表 → 自建列表：曲库是固定入口的最后一项，
+  /// 智能列表紧跟其后（默认收起），自建列表留在最后参与排序。
   late final List<CollectionPickerEntry> _entries = [
-    ...widget.entries,
+    ...widget.entries.where((entry) => entry.pinned),
     ...widget.smartEntries,
+    ...widget.entries.where((entry) => !entry.pinned),
   ];
+
+  /// 智能列表组是否收起：默认收起；当前正停在智能列表时展开，避免
+  /// 选中项藏在折叠组里。
+  late bool _smartCollapsed = !widget.smartEntries.any(
+    (entry) => entry.isSmart && entry.selected,
+  );
 
   /// 分组收起状态的唯一持有者（注入时与页面 / 侧栏共享）。
   late final PlaylistFolderCollapseController _collapse =
@@ -206,15 +230,21 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
 
   bool get _hasFolders => widget.entries.any((entry) => entry.isFolderHeader);
 
-  /// 普通合集条目数量（其后是智能列表分组，不参与拖动排序）。
-  int get _reorderableCount => widget.entries.length;
-
   /// 收起的分组隐藏组内列表，分组标题本身仍可见（用于展开）。
+  /// 智能列表整组收起时只留组标题。
   List<CollectionPickerEntry> get _visibleEntries {
-    if (!_hasFolders) return _entries;
     final result = <CollectionPickerEntry>[];
     String? hiddenFolder;
     for (final entry in _entries) {
+      if (entry.isCollapsibleHeader) {
+        result.add(entry);
+        continue;
+      }
+      if (entry.isSmart) {
+        if (_smartCollapsed) continue;
+        result.add(entry);
+        continue;
+      }
       if (entry.isFolderHeader) {
         hiddenFolder = _collapse.isCollapsed(entry.folder)
             ? entry.folder
@@ -229,25 +259,50 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
   }
 
   void _onReorder(int oldIndex, int newIndex) {
+    // 固定入口 / 智能列表 / 分组标题不参与排序；有分组时不支持拖动。
+    // onReorderItem 的 newIndex 已按「移除后」调整（Flutter 3.50）：
+    // 先移除，再在移除后的可见列表里找落点，避免「拖到末尾却插在倒数
+    // 第二项」这类下标错位。
+    final visible = _visibleEntries;
     if (_hasFolders ||
-        oldIndex >= _reorderableCount ||
-        newIndex >= _reorderableCount) {
-      // 分组存在时不允许跨分组拖动；智能列表 / 分组标题不参与排序：
-      // 把视觉上的移动恢复原状。
-      setState(() {
-        _entries
-          ..clear()
-          ..addAll([...widget.entries, ...widget.smartEntries]);
-      });
+        oldIndex < 0 ||
+        oldIndex >= visible.length ||
+        newIndex < 0) {
       return;
     }
+    final moved = visible[oldIndex];
+    if (moved.pinned || moved.isSmart || moved.isCollapsibleHeader) return;
+    final oldFull = _entries.indexOf(moved);
+    if (oldFull < 0) return;
+    var accepted = false;
     setState(() {
-      final moved = _entries.removeAt(oldIndex);
-      _entries.insert(newIndex, moved);
+      _entries.removeAt(oldFull);
+      final remaining = _visibleEntries;
+      final target = newIndex >= remaining.length ? null : remaining[newIndex];
+      if (target == null) {
+        _entries.add(moved);
+        accepted = true;
+        return;
+      }
+      if (target.pinned || target.isSmart || target.isCollapsibleHeader) {
+        // 落点在固定入口 / 智能列表：恢复到原位置，不跨段排序。
+        _entries.insert(oldFull, moved);
+        return;
+      }
+      _entries.insert(_entries.indexOf(target), moved);
+      accepted = true;
     });
+    if (!accepted) return;
+    assert(_entries.contains(moved));
     widget.onOrderChanged([
-      for (var i = 0; i < _reorderableCount; i++) _entries[i].key,
+      for (final entry in _entries)
+        if (!entry.pinned && !entry.isSmart && !entry.isCollapsibleHeader)
+          entry.key,
     ]);
+  }
+
+  void _toggleSmartGroup() {
+    setState(() => _smartCollapsed = !_smartCollapsed);
   }
 
   void _toggleFolder(String folder) {
@@ -582,6 +637,45 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                     ),
                   );
                 }
+                if (entry.isCollapsibleHeader) {
+                  // 智能列表只有一行组标题：默认收起，不显示数量，保持克制。
+                  return KeyedSubtree(
+                    key: ValueKey<String>(entry.key),
+                    child: M3ECard(
+                      variant: M3ECardVariant.filled,
+                      color: Colors.transparent,
+                      elevation: 0,
+                      borderRadius: BorderRadius.circular(12),
+                      padding: EdgeInsets.zero,
+                      onPressed: _toggleSmartGroup,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 10, 24, 6),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _smartCollapsed
+                                  ? Icons.chevron_right_rounded
+                                  : Icons.expand_more_rounded,
+                              size: 20,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              entry.name,
+                              style: context.typeScale.labelLarge.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
                 if (entry.isHeader) {
                   return KeyedSubtree(
                     key: ValueKey<String>(entry.key),
@@ -600,14 +694,18 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                   key: ValueKey<String>(entry.key),
                   leading: Icon(entry.icon),
                   headline: entry.name,
+                  supportingText: entry.supportingText,
                   // 数量走 M3E 元文本槽（选中态自带配色）；当前合集只靠
-                  // selected 高亮（选中容器），不叠对号图标。
-                  trailingText: l10n.playlistTrackCount(entry.trackCount),
+                  // selected 高亮（选中容器），不叠对号图标。曲库用第二行
+                  // 说明专辑 / 歌手数量，不再重复显示曲目数。
+                  trailingText: entry.supportingText != null
+                      ? null
+                      : l10n.playlistTrackCount(entry.trackCount),
                   selected: entry.selected,
                   onTap: () =>
                       Navigator.of(context)
                           .pop(CollectionPickerOutcome.select(entry.id)),
-                  trailing: entry.isSmart
+                  trailing: entry.isSmart || entry.pinned
                       ? null
                       : Row(
                           mainAxisSize: MainAxisSize.min,

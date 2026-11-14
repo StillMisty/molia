@@ -27,6 +27,7 @@ void main() {
     favoritesName: '我的收藏',
     historyName: '播放历史',
     localSongsName: '本地歌曲',
+    libraryBrowseName: '曲库',
   );
 
   PlaylistTrack track(String id, {String title = '', String artist = ''}) =>
@@ -73,24 +74,31 @@ void main() {
   );
 
   group('合集身份', () {
-    test('收藏：落库 id = 收藏列表 id，键 / 列规范为收藏档', () {
+    test('收藏：落库 id = 收藏列表 id，键为收藏档', () {
       final identity = identityFor(LibraryCollections.favoritesSentinel);
 
       expect(identity.kind, CollectionKind.favorites);
       expect(identity.playlistId, 1);
       expect(identity.displayName, '我的收藏');
       expect(identity.collectionKey, LibraryCollections.favoritesOrderKey);
-      expect(identity.columnLayout, CollectionColumnLayout.standard);
     });
 
-    test('播放历史：无落库 id，独有历史列规范', () {
+    test('播放历史：无落库 id，键为历史档', () {
       final identity = identityFor(LibraryCollections.historySentinel);
 
       expect(identity.kind, CollectionKind.history);
       expect(identity.playlistId, isNull);
       expect(identity.displayName, '播放历史');
       expect(identity.collectionKey, LibraryCollections.historyOrderKey);
-      expect(identity.columnLayout, CollectionColumnLayout.history);
+    });
+
+    test('曲库：无落库 id，键为曲库档', () {
+      final identity = identityFor(LibraryCollections.libraryBrowseSentinel);
+
+      expect(identity.kind, CollectionKind.libraryBrowse);
+      expect(identity.playlistId, isNull);
+      expect(identity.displayName, '曲库');
+      expect(identity.collectionKey, LibraryCollections.libraryBrowseOrderKey);
     });
 
     test('本地歌曲：无落库 id，键走下载合集键', () {

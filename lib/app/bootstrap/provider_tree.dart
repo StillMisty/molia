@@ -149,7 +149,7 @@ List<SingleChildWidget> buildAppProviders({
     ChangeNotifierProvider<LocalLibraryProvider>.value(
       value: localLibraryProvider,
     ),
-    // 歌曲 / 专辑 / 歌手模式：设备本地 UI 状态。
+    // 曲库的专辑 / 歌手浏览模式：设备本地 UI 状态，只服务「曲库」合集。
     ChangeNotifierProvider<CollectionModeStore>.value(value: collectionMode),
     // 跨页面「打开某个智能列表」请求（下载维护 → 收藏 › 文件不见）。
     ChangeNotifierProvider<LibraryCollectionRequest>.value(

@@ -47,12 +47,13 @@ void main() {
     String key,
     Uint8List bytes, {
     required SyncVersion version,
+    String mime = 'image/jpeg',
   }) => SyncRecord(
     key: key,
     version: version,
     data: {
       'image': base64Encode(bytes),
-      'mime': 'image/jpeg',
+      'mime': mime,
       'hash': sha256.convert(bytes).toString(),
       'updatedAt': version.physical,
     },
@@ -500,6 +501,58 @@ void main() {
     });
     expect(deleted.applied, 1);
     expect(store.playlistEntry(key), isNull);
+  });
+
+  test('动图封面：GIF / WebP 以实际 MIME 同步，接收端按字节落盘', () async {
+    Uint8List gif() => Uint8List.fromList([...'GIF89a'.codeUnits, 0, 0, 0, 0]);
+    Uint8List webp() => Uint8List.fromList([
+      ...'RIFF'.codeUnits,
+      4,
+      0,
+      0,
+      0,
+      ...'WEBP'.codeUnits,
+      0,
+      0,
+    ]);
+
+    await store.setTrackCover(const TrackId('wy', 'gif'), gif());
+    final record = (await adapter.collect())[SyncCategory.covers]!.firstWhere(
+      (item) => item.key == 'wy:gif',
+    );
+    expect(record.data!['mime'], 'image/gif');
+    expect(base64Decode(record.data!['image'] as String), gif());
+
+    final outcome = await adapter.apply({
+      SyncCategory.covers: [
+        imageRecord(
+          'wy:2',
+          webp(),
+          version: const SyncVersion(physical: 9000, deviceId: 'devB'),
+          mime: 'image/webp',
+        ),
+      ],
+    });
+    expect(outcome.applied, 1);
+    final received = const TrackId('wy', '2');
+    expect(store.trackCoverPath(received), endsWith('.webp'));
+    expect(await store.readTrackCover(received), webp());
+  });
+
+  test('MIME 与字节不一致：拒绝远端记录', () async {
+    final gif = Uint8List.fromList([...'GIF89a'.codeUnits, 0, 0, 0, 0]);
+    final outcome = await adapter.apply({
+      SyncCategory.covers: [
+        imageRecord(
+          'wy:3',
+          gif,
+          version: const SyncVersion(physical: 9000, deviceId: 'devB'),
+          mime: 'image/jpeg',
+        ),
+      ],
+    });
+    expect(outcome.applied, 0);
+    expect(store.trackCoverPath(const TrackId('wy', '3')), isNull);
   });
 
   test('store 未加载时 ready=false，collect 为空', () async {

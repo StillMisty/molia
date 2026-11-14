@@ -99,13 +99,16 @@ class AppNetworkImage extends StatelessWidget {
     if (localProvider != null) {
       final bounds = _decodeBounds(context);
       return Image(
-        // FileImage 自身不认 memCacheWidth；不包 ResizeImage 时列表里的
-        // 下载封面会按原图解码（1k 封面 = 数 MB），与远端缩略图路径不一致。
-        image: ResizeImage.resizeIfNeeded(
-          bounds.width,
-          bounds.height,
-          localProvider,
-        ),
+        // 动图不能套 ResizeImage：重编码后的解码路径可能只保留首帧。
+        // 静态图仍按目标尺寸解码（FileImage 自身不认 memCacheWidth，
+        // 1k 封面按原图解码会占数 MB）。
+        image: _isAnimatedLocalImage(imageUrl)
+            ? localProvider
+            : ResizeImage.resizeIfNeeded(
+                bounds.width,
+                bounds.height,
+                localProvider,
+              ),
         width: width,
         height: height,
         fit: fit,
@@ -170,6 +173,13 @@ class AppNetworkImage extends StatelessWidget {
         return _errorFallback(context, isFallback: isFallback);
       },
     );
+  }
+
+  /// 本地封面是否为动图：扩展名来自 `CustomCoverStore` 落盘时的真实字节，
+  /// 这里只认它写入的两个后缀；其它未知后缀按静态图处理。
+  static bool _isAnimatedLocalImage(String url) {
+    final lower = url.toLowerCase();
+    return lower.endsWith('.gif') || lower.endsWith('.webp');
   }
 
   /// 解码边界：**只给一个轴**，另一个轴由原图比例决定。
