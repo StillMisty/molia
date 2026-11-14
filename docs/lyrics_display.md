@@ -494,7 +494,7 @@ abstract class LyricsOutput {
 
 ## 9. 风险与开放问题
 
-1. **Flutter 官方多窗口**：stable 3.47.6 的 `flutter config --help` 明确标注
+1. **Flutter 官方多窗口**：stable 3.50.0 的 `flutter config --help` 明确标注
    `--enable-windowing` "applies only to the master channel"；框架源码标注 production 禁用、
    随时破坏性变更，且现属性面（size/title/min/max/fullscreen/resizable）**不含**
    置顶 / 透明 / 无边框 / 点击穿透 / 不占任务栏。桌面输出实现时大概率仍需平台逃逸口代码，
