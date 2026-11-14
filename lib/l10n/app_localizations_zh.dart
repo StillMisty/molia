@@ -543,6 +543,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deselectAll => '取消全选';
 
   @override
+  String get selectionRangeAction => '范围选择';
+
+  @override
+  String get selectionRangeHint => '点选结束位置';
+
+  @override
+  String get selectionRangeCancel => '取消范围选择';
+
+  @override
   String get noLyricsSelected => '请先选择一些歌词';
 
   @override

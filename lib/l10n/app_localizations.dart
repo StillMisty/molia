@@ -1118,6 +1118,24 @@ abstract class AppLocalizations {
   /// **'Deselect All'**
   String get deselectAll;
 
+  /// No description provided for @selectionRangeAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Select range'**
+  String get selectionRangeAction;
+
+  /// No description provided for @selectionRangeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the end item'**
+  String get selectionRangeHint;
+
+  /// No description provided for @selectionRangeCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel range selection'**
+  String get selectionRangeCancel;
+
   /// No description provided for @noLyricsSelected.
   ///
   /// In en, this message translates to:

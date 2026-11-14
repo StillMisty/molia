@@ -562,6 +562,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deselectAll => 'Deselect All';
 
   @override
+  String get selectionRangeAction => 'Select range';
+
+  @override
+  String get selectionRangeHint => 'Tap the end item';
+
+  @override
+  String get selectionRangeCancel => 'Cancel range selection';
+
+  @override
   String get noLyricsSelected => 'Please select some lyrics first';
 
   @override

@@ -87,6 +87,7 @@ import '../widgets/playlist_folder_dialog.dart';
 import '../widgets/playlist_header_overflow.dart';
 import '../widgets/playlist_sheets.dart';
 import '../widgets/row_actions.dart';
+import '../widgets/selection_range_action.dart';
 import '../widgets/settings/settings_tiles.dart';
 import '../widgets/shell_page_visibility.dart';
 import '../widgets/shell_reselect.dart';
@@ -206,6 +207,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 上次观察到的壳层可见性：隐藏 → 可见 = 重新进入收藏页，刷新播放历史
   /// 顺序（顺序在停留期间冻结，见 LibraryProvider）。未挂壳层的单测按可见。
   bool _pageVisible = true;
+
+  /// 一次性范围选择模式：true = 下一次行点击选中锚点到该行的区间，
+  /// 而不是切换该行。任何退出多选 / 全选 / 再次点击入口都会关掉它。
+  bool _rangeMode = false;
 
   /// 智能列表的重复版本展开（按代表行 key）与当前计数。
   final Set<String> _expandedSmartVersions = {};
@@ -332,7 +337,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   /// 会话状态（选择 / 模式 / 恢复完成）变化：页面重建。
   void _onSessionChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {
+      // 选择被清空（关闭 / Esc / 批量写入成功）时范围模式一并退出：
+      // 否则下一次进入多选会继承一个没有起点的待命状态。
+      if (!_session.selecting) _rangeMode = false;
+    });
   }
 
   void _onCollectionRequest() {
@@ -409,7 +419,23 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   void _enterSelection(String key) {
     HapticsService.lightImpact();
+    setState(() => _rangeMode = false);
     _session.selectRow(key);
+  }
+
+  /// 底部右侧「范围选择」：进入 / 取消一次性范围模式。
+  ///
+  /// 只切页面状态，不动选择集：起点由用户先长按 / 点选的那一行（选择
+  /// 状态机的锚点）决定，终点由下一次行点击决定。
+  void _toggleRangeMode() {
+    HapticsService.selectionClick();
+    if (_rangeMode) {
+      setState(() => _rangeMode = false);
+      M3ESnackbar.defaultController.dismiss();
+      return;
+    }
+    setState(() => _rangeMode = true);
+    M3ESnackbar.show(context, message: _l10n(context).selectionRangeHint);
   }
 
   /// 此刻 Esc 是否由本页接管：多选生效 + 页面可见 + 输入框未聚焦。
@@ -455,6 +481,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
     bool shift = false,
   }) {
     final row = view.visibleRows[index];
+    if (_rangeMode) {
+      // 范围模式是两段式手势的第二段：这次点击只定终点，不切换该行、
+      // 也不点播；完成后立刻退回普通多选。
+      setState(() => _rangeMode = false);
+      _session.selectRangeTo(view, row.key);
+      M3ESnackbar.defaultController.dismiss();
+      return;
+    }
     if (_session.handleRowTap(row.key, view, ctrl: ctrl, shift: shift)) {
       return;
     }
@@ -1244,6 +1278,24 @@ class _FavoritesPageState extends State<FavoritesPage> {
             ],
           )
         : body;
+    // 范围选择入口是列表上的浮动动作，不新增工具栏：只在多选态出现，
+    // 页面正文本身已止于壳层底栏 / 播放条上缘，bottom 留白就是「在它们上面」。
+    final contentWithRangeAction = Stack(
+      fit: StackFit.expand,
+      children: [
+        content,
+        if (_selecting && _session.selectedCount > 0)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: SelectionRangeAction(
+              key: const Key('collectionSelectionRangeAction'),
+              active: _rangeMode,
+              onPressed: _toggleRangeMode,
+            ),
+          ),
+      ],
+    );
     return PopScope(
       canPop: !_selecting && !_session.searching && !reorderActive,
       onPopInvokedWithResult: (didPop, _) {
@@ -1261,7 +1313,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       child: ResponsivePageContainer(
         pageType: ResponsivePageType.browse,
         alignment: Alignment.topCenter,
-        child: content,
+        child: contentWithRangeAction,
       ),
     );
   }
@@ -2371,8 +2423,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final selectionTheme = m3e.selectionTheme;
     final foreground = selectionTheme.contextualForeground(m3e.colorScheme);
     final allSelected = _session.allSelected(view) == true;
-    return ColoredBox(
-      color: selectionTheme.contextualBackground(m3e.colorScheme),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: selectionTheme.contextualBackground(m3e.colorScheme),
+        // 选中栏只在多选时出现：圆底 + 一条低对比分隔线把它与列表分开，
+        // 不抢标题行的层级，也不用阴影（M3E 列表表面本来就没有阴影）。
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+        border: Border(
+          bottom: BorderSide(color: foreground.withValues(alpha: 0.12)),
+        ),
+      ),
       // 与标题行 / 搜索行同一套垂直留白：进入 / 退出多选头部不跳高。
       child: Padding(
         padding: const EdgeInsets.only(
@@ -2392,12 +2452,26 @@ class _FavoritesPageState extends State<FavoritesPage> {
                   semanticLabel: l10n.cancel,
                   onPressed: _session.clearSelection,
                 ),
-                Expanded(
+                // 计数胶囊只显示数量（没有上限，也就没有 /N 的分子分母）。
+                Container(
+                  key: const Key('collectionSelectionCount'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: foreground.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                   child: Text(
                     '${_session.selectedCount}',
-                    style: m3e.typeScale.titleLarge.copyWith(color: foreground),
+                    style: m3e.typeScale.labelLarge.copyWith(
+                      color: foreground,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
+                const Spacer(),
                 M3EIconButton(
                   variant: M3EIconButtonVariant.standard,
                   icon: const Icon(Icons.select_all_rounded),
@@ -2405,6 +2479,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
                       ? l10n.deselectAll
                       : l10n.selectAllItems,
                   onPressed: () {
+                    setState(() => _rangeMode = false);
                     if (allSelected) {
                       _session.clearSelection();
                     } else {

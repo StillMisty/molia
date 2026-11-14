@@ -252,6 +252,29 @@ void main() {
       expect(session.selection.selectedCount, 1);
     });
 
+    test('范围选择：长按起点落锚，目标行选中闭区间', () async {
+      final library = _FakeLibrary(
+        playlists: [favorites(trackCount: 4)],
+        tracks: {
+          1: [track('a'), track('b'), track('c'), track('d')],
+        },
+      );
+      final session = buildSession();
+      addTearDown(session.dispose);
+      await session.start();
+      final view = session.sync(inputFor(library));
+
+      // 长按进入多选 = 范围起点。
+      session.selectRow('wy:b');
+      session.selectRangeTo(view.view, 'wy:d');
+      expect(session.selectedRows(view.view).map((row) => row.key), [
+        'wy:b',
+        'wy:c',
+        'wy:d',
+      ]);
+      expect(session.selection.anchorKey, 'wy:d');
+    });
+
     test('收藏视图不受历史写入影响：视图原样复用，选择保持', () async {
       final library = _FakeLibrary(
         playlists: [favorites(trackCount: 2)],

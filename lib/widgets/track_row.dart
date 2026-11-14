@@ -586,19 +586,43 @@ class TrackRow extends StatelessWidget {
     // 表格列随之左移（表头仍按封面尺寸预留）。固定槽宽让切换不影响行内网格。
     return SizedBox.square(
       dimension: surface.coverSize,
-      child: AnimatedSwitcher(
-        // 封面 ⇄ 勾选是 effects 交叉淡入淡出：入减速、出加速；减弱动效时硬切。
-        duration: effectDurationOf(context, M3EMotion.short4),
-        switchInCurve: M3EMotion.emphasizedDecelerate,
-        switchOutCurve: M3EMotion.emphasizedAccelerate,
-        child: model.selected
-            ? Icon(
-                Icons.check_circle_rounded,
-                key: const ValueKey<String>('selected'),
-                size: surface.coverSize * 0.7,
-                color: scheme.onSecondaryContainer,
-              )
-            : KeyedSubtree(key: const ValueKey<String>('cover'), child: cover),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          AnimatedSwitcher(
+            // 封面 ⇄ 勾选是 effects 交叉淡入淡出：入减速、出加速；
+            // 减弱动效时硬切。
+            duration: effectDurationOf(context, M3EMotion.short4),
+            switchInCurve: M3EMotion.emphasizedDecelerate,
+            switchOutCurve: M3EMotion.emphasizedAccelerate,
+            child: model.selected
+                ? Icon(
+                    Icons.check_circle_rounded,
+                    key: const ValueKey<String>('selected'),
+                    size: surface.coverSize * 0.7,
+                    color: scheme.onSecondaryContainer,
+                  )
+                : KeyedSubtree(
+                    key: const ValueKey<String>('cover'),
+                    child: cover,
+                  ),
+          ),
+          // 选中态的前导槽加一圈主色细环：勾选图标本身已经表达了状态，
+          // 环只是让多选行在整行底色之外多一个不依赖颜色的锚点。
+          // 环画在槽的内缘（不参与布局），表格 / 双行的封面网格不变。
+          if (showsCheck)
+            IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: scheme.primary.withValues(alpha: 0.55),
+                    width: 1.5,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

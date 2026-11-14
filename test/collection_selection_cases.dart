@@ -111,6 +111,35 @@ void main() {
     expect(selection.selectedKeys, {'a'});
   });
 
+  test('范围选择：锚点到目标的闭区间，锚点随终点移动', () {
+    selection.select('b');
+    expect(selection.anchorKey, 'b');
+
+    selection.selectRangeTo('d', visible());
+    expect(selection.selectedKeys, {'b', 'c', 'd'});
+    expect(selection.anchorKey, 'd');
+
+    // 连续范围选择从新锚点起算，并替换上一段区间。
+    selection.selectRangeTo('a', visible());
+    expect(selection.selectedKeys, {'a', 'b', 'c', 'd'});
+    expect(selection.anchorKey, 'a');
+  });
+
+  test('范围选择：锚点 / 目标不在可见行时保持原选择', () {
+    selection.select('b');
+    selection.selectRangeTo('c', visible(['a', 'c']));
+    expect(selection.selectedKeys, {'b'}, reason: '锚点 b 已不可见');
+    expect(selection.anchorKey, 'b');
+
+    selection.selectRangeTo('x', visible());
+    expect(selection.selectedKeys, {'b'}, reason: '目标行不存在');
+    expect(selection.anchorKey, 'b');
+
+    selection.clearAnchor();
+    selection.selectRangeTo('e', visible());
+    expect(selection.selectedKeys, {'b'}, reason: '没有锚点');
+  });
+
   test('全选三态与 selectAll', () {
     expect(selection.allSelectedFor(visible()), isFalse);
     selection.select('a');
