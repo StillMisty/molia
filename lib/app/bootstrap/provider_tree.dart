@@ -35,7 +35,7 @@ import '../../services/ai/ai_settings_store.dart';
 import '../../services/artwork_palette_service.dart';
 import '../../services/cache_service.dart';
 import '../../services/covers/custom_cover_store.dart';
-import '../../services/download/download_intent.dart';
+import '../../services/download/download_requests.dart';
 import '../../services/download/download_maintenance.dart';
 import '../../services/diagnostics/diagnostics_export.dart';
 import '../../services/diagnostics/diagnostics_service.dart';
@@ -223,10 +223,10 @@ List<SingleChildWidget> buildAppProviders({
     // 下载命令面：管理页 / 本地数据页 / 分享弹层 / 导入流程只依赖窄接口。
     // 队列 / 提交日志 / 文件放置仍只有 DownloadService 一份实现。
     ChangeNotifierProvider<DownloadManager>.value(value: downloadService),
-    // 下载意图：曲目菜单 / 来源分享 / 本地数据页 / 批量下载共用同一份资格
-    // 判定与默认音质；页面只按类型化结果渲染，不再各自查记录 / 活动任务。
-    ChangeNotifierProvider<DownloadLauncher>(
-      create: (_) => DownloadLauncher(
+    // 下载请求：曲目菜单 / 来源分享 / 本地数据页 / 批量下载共用同一份资格
+    // 判定、入队等待与类型化结果；页面只按结果渲染，不再自己拿任务句柄。
+    ChangeNotifierProvider<DownloadRequests>(
+      create: (_) => DownloadRequests(
         downloads: downloadService,
         records: downloadService.records,
       ),

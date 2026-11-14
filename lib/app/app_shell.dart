@@ -184,7 +184,10 @@ class MyApp extends StatefulWidget {
   /// macOS 走桌面骨架），true / false 强制指定。真机永远走平台判定。
   final bool? desktopShell;
 
-  /// 首帧是否渲染首次引导（组合根在 runApp 前读设备本地标记决定）。
+  /// 启动时是否还没完成首次引导（组合根在 runApp 前读设备本地标记决定）。
+  ///
+  /// 只代表启动那一刻；托盘休眠后的壳层重建还要叠加进程内完成态，
+  /// 见 [OnboardingStore.completedInSession]。
   final bool showOnboarding;
 
   /// 完成标记写入器（测试注入；生产为默认 prefs 实现）。
@@ -326,7 +329,10 @@ class _MyAppState extends State<MyApp>
   @override
   void initState() {
     super.initState();
-    _showOnboarding = widget.showOnboarding;
+    // 托盘休眠会卸载并重建整棵界面，重建时拿到的仍是启动时的
+    // `showOnboarding`；本次进程已完成 / 跳过时不能再引导一次。
+    _showOnboarding =
+        widget.showOnboarding && !OnboardingStore.completedInSession;
     WidgetsBinding.instance.addObserver(this);
     _morphAnimation.addListener(_onMorphTick);
     // 启动首页：导航偏好在首帧前已就绪（组合根 await 过 preferencesReady），

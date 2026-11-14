@@ -3,7 +3,7 @@ library;
 
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
-import '../services/download/download_intent.dart';
+import '../services/download/download_requests.dart';
 
 class PlaylistBatchDownloadAction {
   const PlaylistBatchDownloadAction();

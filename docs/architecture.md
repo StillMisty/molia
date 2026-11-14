@@ -1018,6 +1018,11 @@
   （context 适配在 `widgets/collection_handoff.dart`）；本地删除返回
   `CollectionLocalDeleteOutcome` 逐项状态，失败不再逃进 `unawaited`。收藏页
   不再出现 `as ...Row` 强转。
+- **合集 I/O 命令**：`lib/providers/collection_io_commands.dart` 是收藏页文件导入 /
+  链接导入 / 导出 / 批量下载的唯一编排层。选文件、读文本、复核回调、链接拉取、
+  另存、导出所需的资料库读取与批量入口都是窄端口，返回 sealed 结果（取消 / 空 /
+  失败 / 部分成功可区分）；生产适配器同文件，模块不读 BuildContext、不 import
+  widgets。页面只留弹层、文案映射、触感与选择清空。
 - **链接导入**：收藏页合集弹层的「导入收藏」有文件 / 链接两条路径；链接路径
   `showLinkImportDialog` 的平台列表来自 `SongChannels` 的 `discover` 声明
   （七渠道），`DiscoverProvider.playlistDetail` 拉详情后写入本地列表。
@@ -1038,11 +1043,12 @@
 上限；任务队列、命名 / 放置、任务产物、记录装配、记录写入、文件维护、提交
 日志与通知 presenter 是独立 module（见下）：
 
-- **下载意图**：`lib/services/download/download_intent.dart` 的
-  `DownloadLauncher` 是「能不能下 + 开始下 + 结果怎么回执」的唯一入口
-  （`started` / `alreadyDownloaded` / `active` / `unsupported`）；曲目菜单 /
-  分享 / 本地数据页 / 批量管理只表达意图并按类型化结果渲染，资格规则与失败
-  文案不再散在四个调用点。下载队列、记录与文件布局仍是既有管道。
+- **下载请求**：`lib/services/download/download_requests.dart` 的
+  `DownloadRequests` 是「能不能下 + 开始下 + 结果怎么回执」的唯一入口
+  （`completed` / `failed` / `cancelled` / `alreadyDownloaded` / `active` /
+  `unsupported`）；曲目菜单 / 分享 / 本地数据页（音频 + 歌词 + 封面）/ 批量
+  管理只表达请求并按类型化结果渲染，资格规则、等待方式与失败文案不再散在
+  调用点。下载队列、记录与文件布局仍是既有管道。
 - **模块拆分**：`DownloadService` 只做编排，各 module 各有一份唯一实现——
   `lib/services/download/download_records.dart`（记录只读面：记录表 / 排序
   列表 / `initialized` / `supported` / `revision` 的唯一持有者；收藏、单曲
@@ -1328,6 +1334,19 @@ provider 不再持有第二份 key；
 歌词页可见性门控：播放页内部再包一层 `ShellPageVisibility`（nearest scope =
 壳层可见 && 当前 tab），隐藏时 `PositionLineIndexBuilder(enabled: false)` 不订阅
 position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一次当前行。
+
+### 歌词页视图会话（lyrics view session）
+
+- **模块**：`lib/widgets/lyrics_view_session.dart`（`LyricsViewSession` 状态机 +
+  `LyricsViewHost` 播放事实接口 + `LyricsViewScheduler` 定时注入）、
+  `lyrics.dart`（渲染 + 会话宿主：行 key / 逐字渲染 / 布局 / `ScrollController`
+  测量与换源、选择页导航）。
+- **归属**：自动跟随、手动滚动后的 350ms 抑制窗口与 3s 恢复（复制模式 / 未同步 /
+  空歌词不恢复）、目标行未布局的按帧重试（上限 8 帧）、快捷操作栏手动 3s 可见、
+  复制模式与播放模式保存 / 恢复、隐藏页的滚动门控都在会话里；滚动几何仍是
+  `lyrics_scroll_policy` 纯函数，组件只测量与执行。
+- **通知**：只发离散迁移（跟随 / 复制模式 / 操作栏 / 可滚性）；逐帧进度与抑制
+  窗口结束不通知。宿主注入 `LyricsViewScheduler`，测试手动推进时长，不真实等待。
 
 ### 播放页封面堆叠（cover deck）
 
@@ -1703,7 +1722,10 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   音源与在线服务 / 曲库与存储 / 数据与备份 / 通用 / 桌面〔仅桌面〕/
   关于与更新），不设纯目录子页；同一域只在一张卡，卡内按「常用 → 少用、
   开关 → 入口」排序，低频长表单下沉子页（底部导航拖拽列表、备份与恢复）
-  （分组与排序口径见 ADR-0027）；
+  （分组与排序口径见 ADR-0027）；各卡的可选子系统与平台能力（同步 / 统计 /
+  歌词输出 / 托盘…）由
+  `lib/widgets/settings/settings_section_availability.dart::SettingsSectionAvailability`
+  一次解析成不可变快照，卡片只读行可见性，值订阅仍留在行内；
   分组标题 + 分段卡片行：行表面统一走共享的
   `lib/widgets/card_list_surface.dart`
   （`CardListSurface`：静止内 4dp / 首末外侧 16dp、hover 12dp、press 16dp，

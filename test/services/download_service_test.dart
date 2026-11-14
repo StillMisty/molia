@@ -18,6 +18,7 @@ import 'package:molia/services/cache_storage.dart';
 import 'package:molia/data/downloads/downloads_publisher.dart';
 import 'package:molia/services/covers/cover_resolution.dart';
 import 'package:molia/services/download/download_journal.dart';
+import 'package:molia/services/download/download_manager.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/download/download_settings.dart';
 import 'package:molia/services/download/missing_file_probe.dart';

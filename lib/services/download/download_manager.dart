@@ -12,7 +12,20 @@ import 'package:flutter/foundation.dart';
 import '../../domain/models/download.dart';
 import '../../domain/models/track.dart';
 import 'download_queue.dart';
-import 'download_service.dart' show LocalRelocateResult;
+
+/// 重定位结果（UI 只按这些分支提示）。
+///
+/// 放在端口文件而不是实现文件：命令面 [DownloadManager.relocate] 的返回值
+/// 属于契约，调用方不应为了一个枚举 import 整个 `DownloadService`。
+enum LocalRelocateResult {
+  relocated,
+
+  /// 后缀不在音频集合内。
+  unsupportedFormat,
+
+  /// 新路径不存在 / 不可读。
+  fileMissing,
+}
 
 /// 下载命令面（由 `DownloadService` 实现）。
 ///
@@ -65,8 +78,8 @@ abstract class DownloadManager extends ChangeNotifier {
 
   /// 入队音频下载并立即返回任务对象（不等待任务完成）。
   ///
-  /// 下载意图层用它拿 `DownloadStarted(task)`；[download] 是「入队并等完成」
-  /// 的便捷形态。已有同 key 活动任务时返回队列里的那个任务。
+  /// 请求层用它等待终态；[download] 是「入队并等完成」的便捷形态。
+  /// 已有同 key 活动任务时返回队列里的那个任务。
   Future<DownloadTask> enqueueDownload(
     Track track, {
     String? quality,

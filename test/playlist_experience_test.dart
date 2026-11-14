@@ -9,7 +9,7 @@ import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playlist_folders.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/playlist_batch_download.dart';
-import 'package:molia/services/download/download_intent.dart';
+import 'package:molia/services/download/download_requests.dart';
 import 'package:molia/services/playlist/playlist_export_builder.dart';
 import 'package:molia/services/playlist/playlist_file_codec.dart';
 import 'package:molia/services/playlist/playlist_import_service.dart';

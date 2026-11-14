@@ -57,6 +57,7 @@ class AiDjProvider extends ChangeNotifier {
       playbackProvider: _playbackProvider,
       libraryProvider: _libraryProvider,
       onSkip: _feedback.recordSkip,
+      onRoundReset: _feedback.resetRound,
     );
     _history = AiDjHistoryController(
       store: recommendationStore ?? AiRecommendationStore(),
@@ -413,8 +414,12 @@ class AiDjProvider extends ChangeNotifier {
     }
     final batch = recommendations;
     if (batch == null || batch.items.isEmpty) return;
-    final clamped = fromIndex.clamp(0, batch.items.length - 1).toInt();
-    final uri = batch.items[clamped].track.id.uri;
+    final takeover = AiRadioTakeOver(
+      items: batch.items,
+      startIndex: fromIndex,
+      contextName: kAiDjContextName,
+    );
+    final uri = batch.items[takeover.clampedIndex].track.id.uri;
     _radio.clearStoppedByUser();
     if (_radio.isQueued(uri)) {
       await _playbackProvider.playLocalQueueItemById(uri);
@@ -422,29 +427,13 @@ class AiDjProvider extends ChangeNotifier {
       return;
     }
 
-    _radio.beginQueueOperation();
     _lastError = null;
-    _radio.markPreparing();
+    // 同步前缀已落「准备中 + 互斥位」，这里按原时点补一次通知。
+    final transition = _radio.takeOver(takeover);
     notifyListeners();
-    try {
-      _feedback.resetRound();
-      _radio.start();
-      await _playbackProvider.playDomainTracks(
-        [for (final item in batch.items) item.track],
-        clamped,
-        contextName: kAiDjContextName,
-      );
-      _radio.registerTracks(batch.items);
-      _radio.markPlaying();
-      _lastError = null;
-    } catch (e) {
-      _lastError = _failureOf(e);
-      _radio.markError();
-      _logger.severe('AI 推歌：起播失败', e);
-    } finally {
-      _radio.endQueueOperation();
-      notifyListeners();
-    }
+    final result = await transition;
+    _reportTakeOverFailure(result, '起播失败');
+    notifyListeners();
   }
 
   /// 播放推荐中的某一首：已在队列则跳转，否则从该首接管队列。
@@ -615,28 +604,29 @@ class AiDjProvider extends ChangeNotifier {
     _radio.clearStoppedByUser();
     _feedback.clearUndo();
     await _history.setActive(id);
-    _radio.beginQueueOperation();
+    final takeover = AiRadioTakeOver(
+      items: batch.items,
+      contextName: _enabled ? kAiDjContextName : null,
+      adopt: _enabled,
+      // 历史播放不是生成准备；失败也只写 lastError，不改电台状态。
+      enterPreparing: false,
+      errorOnFailure: false,
+    );
+    final transition = _radio.takeOver(takeover);
     notifyListeners();
-    try {
-      _feedback.resetRound();
-      _radio.reset();
-      await _playbackProvider.playDomainTracks(
-        [for (final item in batch.items) item.track],
-        0,
-        contextName: _enabled ? kAiDjContextName : null,
-      );
-      _radio.registerTracks(batch.items);
-      if (_enabled) {
-        _radio.markPlaying();
-      } else {
-        _radio.markOff();
-      }
-    } catch (e) {
-      _lastError = _failureOf(e);
-      _logger.severe('AI 推歌：播放历史批次失败', e);
-    } finally {
-      _radio.endQueueOperation();
-      notifyListeners();
+    final result = await transition;
+    _reportTakeOverFailure(result, '播放历史批次失败');
+    notifyListeners();
+  }
+
+  /// 接管失败的统一出口：会话只管状态，错误映射与日志仍归门面。
+  void _reportTakeOverFailure(AiRadioTakeOverResult result, String label) {
+    switch (result) {
+      case AiRadioTakeOverSuccess():
+        return;
+      case AiRadioTakeOverFailure(:final error):
+        _lastError = _failureOf(error);
+        _logger.severe('AI 推歌：$label', error);
     }
   }
 

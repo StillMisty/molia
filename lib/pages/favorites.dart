@@ -1,10 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
-import 'package:path/path.dart' as p;
 
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -17,6 +14,8 @@ import '../domain/models/playlist_folders.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/collection_actions.dart';
+import '../providers/collection_batch_download_adapter.dart';
+import '../providers/collection_io_commands.dart';
 import '../providers/collection_mode.dart';
 import '../providers/collection_presenter.dart';
 import '../providers/collection_session.dart';
@@ -35,14 +34,11 @@ import '../providers/sync_provider.dart';
 import '../pages/source_swap_page.dart';
 import '../services/cache_service.dart';
 import '../services/save_as.dart';
-import '../services/download/download_intent.dart';
+import '../services/download/download_requests.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_records.dart';
-import '../services/download/download_service.dart' show LocalRelocateResult;
 import '../services/library/playlist_folder_prefs.dart';
 import '../services/local/local_metadata_service.dart';
-import '../services/playlist/playlist_export_builder.dart';
-import '../services/playlist/playlist_file_codec.dart';
 import '../services/playlist/playlist_import_service.dart';
 import '../services/escape_claims.dart';
 import '../services/haptics.dart';
@@ -54,7 +50,6 @@ import '../utils/responsive.dart';
 import '../widgets/adaptive_layout.dart';
 import '../utils/collection_row_query.dart';
 import '../utils/download_failure_label.dart';
-import '../utils/file_name.dart';
 import '../utils/save_as_label.dart';
 import '../utils/scroll_to_top.dart';
 import '../utils/smart_list_rows.dart';
@@ -739,6 +734,44 @@ class _FavoritesPageState extends State<FavoritesPage> {
     ),
   );
 
+  /// 合集 I/O 命令：端口按此刻 context 组装，编排 / 类型化结果都在模块。
+  ///
+  /// 弹层确认、文案映射、触感与选择清空仍在本页；这里只接线。
+  CollectionIoCommands _ioCommands({
+    DiscoverProvider? discover,
+    DownloadRequests? requests,
+    SyncProvider? sync,
+    SaveAs? saveAs,
+  }) {
+    final provider = context.read<LibraryProvider>();
+    final records = context.read<DownloadRecords?>();
+    const files = FilePickerCollectionPlaylistFiles();
+    return CollectionIoCommands(
+      filePicker: files,
+      fileReader: files,
+      importService: PlaylistImportService(
+        localImporter: DownloadRecordsPlaylistLocalImporter(
+          records,
+          context.read<DownloadManager?>(),
+        ),
+        resolver: LibraryPlaylistKeyResolver(provider, records),
+      ),
+      importTarget: LibraryProviderPlaylistImportTarget(provider),
+      playlistNames: () => [for (final item in provider.playlists) item.name],
+      reviewImport: (plan) async =>
+          (await showPlaylistImportReviewSheet(context, plan: plan)) == true,
+      linkImporter: discover == null
+          ? null
+          : DiscoverCollectionLinkImporter(discover),
+      exportLibrary: LibraryProviderCollectionExportLibrary(provider, records),
+      backup: sync == null ? null : SyncCollectionPlaylistBackup(sync),
+      saver: saveAs == null ? null : SaveAsCollectionExportSaver(saveAs),
+      downloader: requests == null
+          ? null
+          : RequestsCollectionBatchDownloader(requests),
+    );
+  }
+
   /// 从当前合集可见行的 [index] 起播（随机播放传 [shuffle]）。
   ///
   /// 播放队列组装 / 洗牌 / 上下文名 / 触感都在 TrackHandoff；页面只说「从
@@ -818,73 +851,31 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   /// M3U / M3U8 / PLS 导入：解析 → 本机解析 → 复核 → 才创建列表。
+  ///
+  /// 流程与结果类型在 [CollectionIoCommands]，这里只留提示 / 选中新列表。
   Future<void> _importPlaylistFile(AppLocalizations l10n) async {
-    final provider = context.read<LibraryProvider>();
-    final records = context.read<DownloadRecords?>();
-    final downloads = context.read<DownloadManager?>();
-    final List<PlatformFile> files;
-    try {
-      files = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['m3u', 'm3u8', 'pls'],
-        dialogTitle: l10n.playlistImport,
-      );
-    } catch (_) {
-      if (mounted) {
-        M3ESnackbar.show(context, message: l10n.playlistImportFailed);
-      }
-      return;
-    }
-    final path = files.isEmpty ? null : files.first.path;
-    if (path == null || !mounted) return;
-    final String text;
-    try {
-      final bytes = await File(path).readAsBytes();
-      text = utf8.decode(bytes, allowMalformed: true);
-    } catch (_) {
-      if (mounted) {
-        M3ESnackbar.show(context, message: l10n.playlistImportFailed);
-      }
-      return;
-    }
-    if (!mounted) return;
-    final parsed = parsePlaylistFile(
-      text,
-      fileName: p.basename(path),
-      baseDirectory: p.dirname(path),
-    );
-    if (parsed.entries.isEmpty && parsed.problems.isEmpty) {
-      M3ESnackbar.show(context, message: l10n.playlistImportEmpty);
-      return;
-    }
-    final service = PlaylistImportService(
-      localImporter: _PagePlaylistLocalImporter(records, downloads),
-      resolver: _PagePlaylistKeyResolver(provider, records),
-    );
-    final plan = await service.plan(
-      parsed,
-      fallbackName: p.basenameWithoutExtension(path),
-      addedAt: DateTime.now().millisecondsSinceEpoch,
+    final outcome = await _ioCommands().importPlaylistFile(
+      dialogTitle: l10n.playlistImport,
+      isActive: () => mounted,
     );
     if (!mounted) return;
-    final confirmed = await showPlaylistImportReviewSheet(context, plan: plan);
-    if (confirmed != true || !mounted) return;
-    try {
-      final result = await service.commit(
-        plan: plan,
-        target: _PagePlaylistImportTarget(provider),
-        existingNames: [for (final item in provider.playlists) item.name],
-      );
-      if (!mounted) return;
-      _selectCollection(result.playlistId);
-      M3ESnackbar.show(
-        context,
-        message: l10n.playlistImportDone(result.added, result.skipped),
-      );
-    } catch (_) {
-      if (mounted) {
+    switch (outcome) {
+      case CollectionPlaylistImportDone(
+        :final playlistId,
+        :final added,
+        :final skipped,
+      ):
+        _selectCollection(playlistId);
+        M3ESnackbar.show(
+          context,
+          message: l10n.playlistImportDone(added, skipped),
+        );
+      case CollectionPlaylistImportEmpty():
+        M3ESnackbar.show(context, message: l10n.playlistImportEmpty);
+      case CollectionPlaylistImportFailed():
         M3ESnackbar.show(context, message: l10n.playlistImportFailed);
-      }
+      case CollectionPlaylistImportCancelled():
+        break;
     }
   }
 
@@ -897,32 +888,22 @@ class _FavoritesPageState extends State<FavoritesPage> {
     ];
     final input = await showLinkImportDialog(context, channels: channels);
     if (input == null || !mounted) return;
-    try {
-      final result = await discover.importPlaylistFromLink(
-        input.sourceKey,
-        input.rawId,
-        fallbackName: l10n.playlistImportedName,
-      );
-      if (!mounted) return;
-      if (result.total == 0) {
+    final outcome = await _ioCommands(discover: discover).importFromLink(
+      sourceKey: input.sourceKey,
+      rawId: input.rawId,
+      fallbackName: l10n.playlistImportedName,
+    );
+    if (!mounted) return;
+    switch (outcome) {
+      case CollectionLinkImportDone(:final playlistId, :final added):
+        _selectCollection(playlistId);
+        M3ESnackbar.show(context, message: l10n.libraryImportSuccess(added));
+      case CollectionLinkImportEmpty():
         M3ESnackbar.show(context, message: l10n.playlistImportEmpty);
-        return;
-      }
-      if (result.added == 0) {
+      case CollectionLinkImportAlreadyContains():
         M3ESnackbar.show(context, message: l10n.playlistAlreadyContains);
-        return;
-      }
-      _selectCollection(result.playlistId);
-      M3ESnackbar.show(
-        context,
-        message: l10n.libraryImportSuccess(result.added),
-      );
-    } on DiscoverFailure {
-      if (!mounted) return;
-      M3ESnackbar.show(context, message: l10n.discoverLoadFailed);
-    } catch (_) {
-      if (!mounted) return;
-      M3ESnackbar.show(context, message: l10n.discoverLoadFailed);
+      case CollectionLinkImportFailed():
+        M3ESnackbar.show(context, message: l10n.discoverLoadFailed);
     }
   }
 
@@ -1093,8 +1074,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 选中行里「现在就能下载」的曲目（本地 / 已下载 / 进行中都不算）。
   List<Track> _selectedDownloadableTracks(CollectionView view) {
     if (!view.isCustom && !view.isFavorites) return const [];
-    final launcher = context.read<DownloadLauncher?>();
-    if (launcher == null) return const [];
+    final requests = context.read<DownloadRequests?>();
+    if (requests == null) return const [];
     final provider = context.read<LibraryProvider>();
     final selectedRows = [
       for (final row in _selectedRows(view))
@@ -1103,19 +1084,19 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final actionable = PlaylistBatchDownloadAction.downloadableRows(
       selectedRows,
       toTrack: provider.trackFromPlaylistTrack,
-      statusOf: launcher.statusOf,
+      statusOf: requests.statusOf,
     );
     return [for (final row in actionable) provider.trackFromPlaylistTrack(row)];
   }
 
   Future<void> _downloadSelected(CollectionView view) async {
     final tracks = _selectedDownloadableTracks(view);
-    final launcher = context.read<DownloadLauncher?>();
-    if (tracks.isEmpty || launcher == null) return;
+    final requests = context.read<DownloadRequests?>();
+    if (tracks.isEmpty || requests == null) return;
     final l10n = _l10n(context);
     await _runBatchDownload(
       l10n,
-      launcher,
+      requests,
       tracks,
       onSucceeded: () {
         if (mounted) _session.clearSelection();
@@ -1644,7 +1625,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           leading: const Icon(Icons.file_upload_rounded, size: 20),
         ),
       if (currentPlaylist != null &&
-          context.read<DownloadLauncher?>() != null &&
+          context.read<DownloadRequests?>() != null &&
           view.tracks.isNotEmpty)
         M3EMenuEntry(
           label: l10n.downloadAll,
@@ -1765,51 +1746,53 @@ class _FavoritesPageState extends State<FavoritesPage> {
     AppLocalizations l10n,
     CollectionView view,
   ) async {
-    final launcher = context.read<DownloadLauncher?>();
+    final requests = context.read<DownloadRequests?>();
     final provider = context.read<LibraryProvider>();
-    if (launcher == null || view.tracks.isEmpty) return;
-    await _runBatchDownload(l10n, launcher, [
+    if (requests == null || view.tracks.isEmpty) return;
+    await _runBatchDownload(l10n, requests, [
       for (final track in view.tracks) provider.trackFromPlaylistTrack(track),
     ]);
   }
 
-  Future<bool> _runBatchDownload(
+  Future<void> _runBatchDownload(
     AppLocalizations l10n,
-    DownloadLauncher launcher,
+    DownloadRequests requests,
     List<Track> tracks, {
     void Function()? onSucceeded,
   }) async {
-    try {
-      final result = await const PlaylistBatchDownloadAction().run(
-        tracks: tracks,
-        confirm: () => confirmDownloadOnDataSaver(context),
-        startBatch: launcher.startBatch,
-        onSucceeded: onSucceeded,
-        onEnqueued: (enqueued) {
-          if (!mounted) return;
-          M3ESnackbar.show(
-            context,
-            message: enqueued == 0
-                ? l10n.downloadsNothingToAdd
-                : l10n.downloadsQueued(enqueued),
-          );
-        },
-      );
-      if (!mounted || result == null || result.enqueued == 0) {
-        return result != null;
-      }
-      M3ESnackbar.show(
-        context,
-        message: l10n.downloadsBatchDone(result.done, result.failed),
-      );
-      return true;
-    } catch (error) {
-      if (!mounted) return false;
-      final message = downloadFailureMessage(l10n, error);
-      if (message != null) {
-        M3ESnackbar.show(context, message: message);
-      }
-      return false;
+    final outcome = await _ioCommands(requests: requests).downloadTracks(
+      tracks: tracks,
+      confirm: () => confirmDownloadOnDataSaver(context),
+      onStarted: onSucceeded,
+      onEnqueued: (enqueued) {
+        if (!mounted) return;
+        M3ESnackbar.show(
+          context,
+          message: enqueued == 0
+              ? l10n.downloadsNothingToAdd
+              : l10n.downloadsQueued(enqueued),
+        );
+      },
+    );
+    if (!mounted) return;
+    switch (outcome) {
+      case CollectionBatchDownloadFinished(
+        :final enqueued,
+        :final done,
+        :final failed,
+      ):
+        if (enqueued == 0) return;
+        M3ESnackbar.show(
+          context,
+          message: l10n.downloadsBatchDone(done, failed),
+        );
+      case CollectionBatchDownloadFailed(:final error):
+        final message = downloadFailureMessage(l10n, error);
+        if (message != null) {
+          M3ESnackbar.show(context, message: message);
+        }
+      case CollectionBatchDownloadCancelled():
+        break;
     }
   }
 
@@ -1824,78 +1807,38 @@ class _FavoritesPageState extends State<FavoritesPage> {
       moliaAvailable: sync != null,
     );
     if (!mounted || format == null) return;
-    final saveAs = context.read<SaveAs?>();
-    if (saveAs == null) {
-      M3ESnackbar.show(context, message: l10n.playlistExportFailed);
-      return;
-    }
-    final provider = context.read<LibraryProvider>();
-    final records = context.read<DownloadRecords?>();
-    try {
-      if (format == PlaylistExportFormat.m3u8) {
-        final export = await PlaylistExportBuilder(
-          pageUrlOf: (track) =>
-              provider.trackFromPlaylistTrack(track).platformPageUrl,
-          downloadedRecordOf: (track) =>
-              records?.recordFor(track.sourceKey, track.songId),
-          fileExists: (path) => File(path).exists(),
-        ).buildM3u8(name: view.displayName, tracks: view.tracks);
-        final result = await saveAs.saveBytes(
-          fileName:
-              '${sanitizeFileName(view.displayName, fallback: 'playlist')}.m3u8',
-          bytes: Uint8List.fromList(utf8.encode(export.text)),
-          mimeType: 'audio/x-mpegurl',
-          relativeDir: saveAsExportsDirName,
-          dialogTitle: l10n.playlistExportM3u8,
+    final outcome =
+        await _ioCommands(
+          sync: sync,
+          saveAs: context.read<SaveAs?>(),
+        ).exportPlaylist(
+          playlist: playlist,
+          displayName: view.displayName,
+          tracks: view.tracks,
+          format: switch (format) {
+            PlaylistExportFormat.m3u8 => CollectionExportFormat.m3u8,
+            PlaylistExportFormat.molia => CollectionExportFormat.molia,
+          },
+          dialogTitle: switch (format) {
+            PlaylistExportFormat.m3u8 => l10n.playlistExportM3u8,
+            PlaylistExportFormat.molia => l10n.playlistExportMolia,
+          },
         );
-        if (!mounted) return;
-        _showExportResult(l10n, result, missingFiles: export.missingFiles);
-      } else {
-        final coverKey = await provider.ensurePlaylistCoverKey(playlist.id);
-        if (coverKey == null || sync == null) {
-          if (mounted) {
-            M3ESnackbar.show(context, message: l10n.playlistExportFailed);
-          }
-          return;
-        }
-        final syncId = playlistSyncIdFromCoverKey(coverKey) ?? coverKey;
-        final json = await sync.commands.backup.exportPlaylistJson(
-          playlistSyncId: syncId,
-          coverKey: playlist.effectiveCoverKey ?? coverKey,
-        );
-        final result = await saveAs.saveBytes(
-          fileName:
-              '${sanitizeFileName(view.displayName, fallback: 'playlist')}.molia.json',
-          bytes: Uint8List.fromList(utf8.encode(json)),
-          mimeType: 'application/json',
-          relativeDir: saveAsExportsDirName,
-          dialogTitle: l10n.playlistExportMolia,
-        );
-        if (!mounted) return;
-        _showExportResult(l10n, result);
-      }
-    } catch (_) {
-      if (mounted) {
-        M3ESnackbar.show(context, message: l10n.playlistExportFailed);
-      }
-    }
-  }
-
-  void _showExportResult(
-    AppLocalizations l10n,
-    SaveAsResult result, {
-    int missingFiles = 0,
-  }) {
-    switch (result) {
-      case SaveAsSaved(:final displayPath, :final kind):
+    if (!mounted) return;
+    switch (outcome) {
+      case CollectionExportSaved(
+        :final displayPath,
+        :final kind,
+        :final missingFiles,
+      ):
         M3ESnackbar.show(
           context,
           message: playlistExportMessage(l10n, kind, displayPath, missingFiles),
         );
-      case SaveAsCancelled():
-        break;
-      case SaveAsFailed():
+      case CollectionExportFailed():
         M3ESnackbar.show(context, message: l10n.playlistExportFailed);
+      case CollectionExportCancelled():
+        break;
     }
   }
 
@@ -2628,79 +2571,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
         ),
       ),
     );
-  }
-}
-
-/// 本机路径导入端口：复用下载服务的导入路径与稳定身份。
-class _PagePlaylistLocalImporter implements PlaylistLocalImporter {
-  _PagePlaylistLocalImporter(this._records, this._downloads);
-
-  final DownloadRecords? _records;
-  final DownloadManager? _downloads;
-
-  @override
-  Future<PlaylistTrack?> importPath(String path) async {
-    final normalized = p.normalize(path);
-    final existing = _records?.importedRecordForPath(normalized);
-    if (existing != null) {
-      return existing.toPlaylistTrack(
-        addedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-    }
-    final downloads = _downloads;
-    if (downloads == null) return null;
-    final (imported, _) = await downloads.importLocalFiles([normalized]);
-    if (imported == 0) return null;
-    final record = _records?.importedRecordForPath(normalized);
-    return record?.toPlaylistTrack(
-      addedAt: DateTime.now().millisecondsSinceEpoch,
-    );
-  }
-}
-
-/// `#MOLIA` 键解析：下载记录 → 播放历史 → 库内列表，全部只查本机。
-class _PagePlaylistKeyResolver implements PlaylistKeyResolver {
-  _PagePlaylistKeyResolver(this._provider, this._records);
-
-  final LibraryProvider _provider;
-  final DownloadRecords? _records;
-
-  @override
-  Future<PlaylistTrack?> resolve(String moliaKey) async {
-    final split = moliaKey.indexOf(':');
-    if (split <= 0 || split >= moliaKey.length - 1) return null;
-    final sourceKey = moliaKey.substring(0, split);
-    final songId = moliaKey.substring(split + 1);
-    final record = _records?.recordFor(sourceKey, songId);
-    if (record != null) {
-      return record.toPlaylistTrack(
-        addedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-    }
-    return _provider.findTrackByKey(sourceKey, songId);
-  }
-}
-
-/// 导入执行端口：只经 provider 的公开写入口；失败交给服务清理空列表。
-class _PagePlaylistImportTarget implements PlaylistImportTarget {
-  _PagePlaylistImportTarget(this._provider);
-
-  final LibraryProvider _provider;
-
-  @override
-  Future<int> createPlaylist(String name) => _provider.createPlaylist(name);
-
-  @override
-  Future<int> addTracks(int playlistId, List<PlaylistTrack> tracks) async {
-    final outcome = await _provider.addTracksToPlaylist(playlistId, tracks);
-    if (outcome.isFailure) throw outcome.error ?? StateError('add failed');
-    return outcome.changed;
-  }
-
-  @override
-  Future<void> deletePlaylist(int playlistId) async {
-    final outcome = await _provider.deletePlaylist(playlistId);
-    if (outcome.isFailure) throw outcome.error ?? StateError('delete failed');
   }
 }
 

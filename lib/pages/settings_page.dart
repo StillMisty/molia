@@ -7,14 +7,19 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../models/play_mode.dart';
 import '../providers/lyrics_display_provider.dart';
+import '../providers/nav_provider.dart';
 import '../providers/playback_provider.dart';
 import '../providers/sources_provider.dart';
-import '../services/scrobble/scrobble_service.dart';
+import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/update_provider.dart';
 import '../services/audio_focus_settings.dart';
 import '../services/data_saver_service.dart';
-import '../services/lyrics_display/lyrics_output.dart';
+import '../services/library/library_add_settings.dart';
+import '../services/play_statistics_service.dart';
+import '../services/scrobble/scrobble_service.dart';
 import '../services/source_swap/source_swap_settings.dart';
+import '../services/window/tray_settings.dart';
 import '../theme/m3e_context.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/color_hex.dart';
@@ -31,6 +36,7 @@ import '../widgets/settings/desktop_settings_section.dart';
 import '../widgets/settings/general_settings_section.dart';
 import '../widgets/settings/library_storage_section.dart';
 import '../widgets/settings/playback_details_section.dart';
+import '../widgets/settings/settings_section_availability.dart';
 import '../widgets/settings/settings_section_grid.dart';
 import '../widgets/settings/settings_tiles.dart';
 import '../widgets/track_artwork.dart';
@@ -94,12 +100,25 @@ class _SettingsPageState extends State<SettingsPage>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // 以下 provider 在测试等场景可能缺省：缺省时隐藏对应行，不报错。
-    final dataSaver = context.watch<DataSaverService?>();
-    final sourceSwapSettings = context.watch<SourceSwapSettings?>();
-    final audioFocusSettings = context.watch<AudioFocusSettings?>();
-    final sources = context.read<SourcesProvider?>();
-    final lyricsDisplay = context.watch<LyricsDisplayProvider?>();
+    // 可选服务分两类取用：
+    // - 值会直接改本页某一行（省流 / 换源 / 音频焦点 / 歌词能力 / 导航 / 托盘 /
+    //   更新）→ watch：它们变化时整页要重算行；
+    // - 只决定「有没有」的服务 → read：挂载关系由组合根在启动时固定，不值得
+    //   为同步进度之类的通知重建九张卡。
+    final availability = SettingsSectionAvailability(
+      dataSaver: context.watch<DataSaverService?>(),
+      sourceSwap: context.watch<SourceSwapSettings?>(),
+      audioFocus: context.watch<AudioFocusSettings?>(),
+      lyricsDisplay: context.watch<LyricsDisplayProvider?>(),
+      nav: context.watch<NavProvider?>(),
+      tray: context.watch<TraySettings?>(),
+      update: context.watch<UpdateProvider?>(),
+      sources: context.read<SourcesProvider?>(),
+      scrobble: context.read<ScrobbleService?>(),
+      libraryAdd: context.read<LibraryAddSettings?>(),
+      statistics: context.read<PlayStatisticsService?>(),
+      sync: context.read<SyncProvider?>(),
+    );
     // 两列流式需要比单列舒适行宽（`maxWidth`）更宽的画布：上限取设置弹层
     // 宽度，两列各占约半宽；单列沿用 `maxWidth` 不变。判据只由宽度档位
     // （expanded）给出，不看桌面平台标记。
@@ -132,24 +151,15 @@ class _SettingsPageState extends State<SettingsPage>
                 startColumn: const {0, 2, 4, 6},
                 children: [
                   _appearanceSection(context, l10n),
-                  _playbackSection(
-                    context,
-                    l10n,
-                    audioFocusSettings: audioFocusSettings,
-                  ),
-                  _lyricsSection(context, l10n, lyricsDisplay),
-                  _networkSection(
-                    context,
-                    l10n,
-                    dataSaver: dataSaver,
-                    sourceSwapSettings: sourceSwapSettings,
-                    sources: sources,
-                  ),
-                  const LibraryStorageSection(),
-                  const DataBackupSection(),
-                  const GeneralSettingsSection(),
-                  if (isDesktopPlatform()) const DesktopSettingsSection(),
-                  const AboutSettingsSection(),
+                  _playbackSection(context, l10n, availability: availability),
+                  _lyricsSection(context, l10n, availability: availability),
+                  _networkSection(context, l10n, availability: availability),
+                  LibraryStorageSection(availability: availability),
+                  DataBackupSection(availability: availability),
+                  GeneralSettingsSection(availability: availability),
+                  if (isDesktopPlatform())
+                    DesktopSettingsSection(availability: availability),
+                  AboutSettingsSection(availability: availability),
                 ],
               ),
             ],
@@ -335,7 +345,7 @@ class _SettingsPageState extends State<SettingsPage>
   Widget _playbackSection(
     BuildContext context,
     AppLocalizations l10n, {
-    required AudioFocusSettings? audioFocusSettings,
+    required SettingsSectionAvailability availability,
   }) {
     return SettingsSectionCard(
       title: l10n.settingsPlaybackTitle,
@@ -373,7 +383,7 @@ class _SettingsPageState extends State<SettingsPage>
           ),
         ),
         // 其他应用播放声音时是否继续播放：桌面没有音频焦点实现，不显示。
-        if (audioFocusSettings != null && !isDesktopPlatform())
+        if (availability.audioFocusRowVisible)
           Selector<AudioFocusSettings, bool>(
             selector: (context, settings) => settings.playWithOtherApps,
             builder: (context, playWithOtherApps, _) => SettingsSwitchTile(
@@ -382,7 +392,7 @@ class _SettingsPageState extends State<SettingsPage>
               title: l10n.settingsPlayWithOtherApps,
               subtitle: l10n.settingsPlayWithOtherAppsSubtitle,
               value: playWithOtherApps,
-              onChanged: audioFocusSettings.setPlayWithOtherApps,
+              onChanged: availability.audioFocus!.setPlayWithOtherApps,
             ),
           ),
         // 播放细节同挂在这一张卡（淡入淡出 / 智能随机都是设备本地值）。
@@ -398,26 +408,16 @@ class _SettingsPageState extends State<SettingsPage>
   /// 及共享项相关，与输出能力无关，始终可见。
   Widget _lyricsSection(
     BuildContext context,
-    AppLocalizations l10n,
-    LyricsDisplayProvider? lyricsDisplay,
-  ) {
-    final LyricsOutputCapability desktopCapability = lyricsDisplay == null
-        ? LyricsOutputCapability.unsupported
-        : lyricsDisplay.capabilityOf(LyricsOutputIds.desktop);
-    final LyricsOutputCapability mediaCapability = lyricsDisplay == null
-        ? LyricsOutputCapability.unsupported
-        : lyricsDisplay.capabilityOf(LyricsOutputIds.media);
-    final bool desktopSupported =
-        desktopCapability != LyricsOutputCapability.unsupported;
-    final bool mediaSupported =
-        mediaCapability != LyricsOutputCapability.unsupported;
+    AppLocalizations l10n, {
+    required SettingsSectionAvailability availability,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SettingsSectionCard(
           title: l10n.settingsLyricsSection,
           children: [
-            if (desktopSupported)
+            if (availability.desktopLyricsVisible)
               SettingsNavTile(
                 key: const Key('settingsDesktopLyricsItem'),
                 icon: Icons.picture_in_picture_alt_rounded,
@@ -438,7 +438,7 @@ class _SettingsPageState extends State<SettingsPage>
                 const LyricsContentSettingsPage(),
               ),
             ),
-            if (mediaSupported)
+            if (availability.systemMediaLyricsVisible)
               SettingsNavTile(
                 key: const Key('settingsSystemMediaLyricsItem'),
                 icon: Icons.notifications_active_rounded,
@@ -453,11 +453,11 @@ class _SettingsPageState extends State<SettingsPage>
         ),
         // 桌面歌词与系统媒体两路输出都不可用：给一句解释，而不是静默只剩一条
         // 入口。
-        if (!desktopSupported && !mediaSupported)
+        if (availability.noLyricsOutputs)
           _lyricsSectionHint(context, l10n.lyricsDisplayUnsupported),
         // 平台支持但媒体会话初始化失败（音频服务 init 返回 null）：
         // 给出可见提示——否则系统媒体入口消失、只剩日志，用户无法自查。
-        if (mediaSupported && lyricsDisplay?.mediaSessionInitFailed == true)
+        if (availability.mediaSessionLyricsHintVisible)
           _lyricsSectionHint(context, l10n.lyricsMediaSessionUnavailable),
       ],
     );
@@ -484,10 +484,11 @@ class _SettingsPageState extends State<SettingsPage>
   Widget _networkSection(
     BuildContext context,
     AppLocalizations l10n, {
-    required DataSaverService? dataSaver,
-    required SourceSwapSettings? sourceSwapSettings,
-    required SourcesProvider? sources,
+    required SettingsSectionAvailability availability,
   }) {
+    final dataSaver = availability.dataSaver;
+    final sourceSwapSettings = availability.sourceSwap;
+    final sources = availability.sources;
     return SettingsSectionCard(
       title: l10n.settingsNetworkSourcesTitle,
       children: [
@@ -579,7 +580,7 @@ class _SettingsPageState extends State<SettingsPage>
           onTap: () => openSettingsSubPage(context, const AiDjPage()),
         ),
         // 听歌同步：一个入口覆盖 ListenBrainz / Last.fm，默认关闭。
-        if (context.watch<ScrobbleService?>() != null)
+        if (availability.hasScrobble)
           SettingsNavTile(
             key: const Key('settingsListeningSyncItem'),
             icon: Icons.sync_rounded,

@@ -20,7 +20,7 @@ import '../domain/models/download.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../services/notification_service.dart';
-import '../services/download/download_intent.dart';
+import '../services/download/download_requests.dart';
 import '../services/download/download_records.dart';
 import '../utils/download_failure_label.dart';
 import '../utils/responsive.dart';
@@ -51,7 +51,7 @@ class _TrackShareSheet extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final notifications = context.read<NotificationService?>();
     final records = context.read<DownloadRecords?>();
-    final launcher = context.read<DownloadLauncher?>();
+    final requests = context.read<DownloadRequests?>();
     final pageUrl = track.platformPageUrl;
     final record = records?.recordForTrack(track);
     final trackIdLabel = track.id.uri.isEmpty
@@ -122,7 +122,7 @@ class _TrackShareSheet extends StatelessWidget {
                 pageContext,
                 record: record,
                 records: records,
-                launcher: launcher,
+                requests: requests,
                 message: message,
               ),
             );
@@ -149,13 +149,13 @@ class _TrackShareSheet extends StatelessWidget {
     BuildContext context, {
     required DownloadedTrack? record,
     required DownloadRecords? records,
-    required DownloadLauncher? launcher,
+    required DownloadRequests? requests,
     required void Function(String) message,
   }) async {
     final l10n = AppLocalizations.of(context)!;
     var target = record;
     if (target == null) {
-      if (launcher == null) {
+      if (requests == null) {
         message(l10n.downloadUnsupported);
         return;
       }
@@ -163,42 +163,28 @@ class _TrackShareSheet extends StatelessWidget {
       // 页面上，不依赖已销毁的 sheet context。
       if (!await confirmDownloadOnDataSaver(context)) return;
       if (!context.mounted) return;
-      final DownloadStartResult result;
-      try {
-        result = await launcher.start(track);
-      } catch (error) {
-        final failure = downloadFailureMessage(l10n, error);
-        if (failure != null) message(failure);
-        return;
-      }
-      switch (result) {
+      final outcome = await requests.requestAudio(
+        track,
+        onStarted: (task, {required joined}) => message(l10n.shareDownloading),
+      );
+      switch (outcome) {
         case DownloadAlreadyDownloaded(:final record):
           // 弹层打开后、点按前已由别的入口下完：直接分享现成文件。
           target = record;
+        case DownloadCompleted(:final record):
+          target = record ?? records?.recordForTrack(track);
+        case DownloadActive():
+          // 默认等待活动任务，不会走到这里；保留兜底不重复分享未知文件。
+          target = records?.recordForTrack(track);
+        case DownloadCancelled():
+          return;
         case DownloadUnsupported(:final reason):
           message(downloadFailureLabel(l10n, reason));
           return;
-        case DownloadStarted(:final task):
-          message(l10n.shareDownloading);
-          try {
-            await task.done;
-          } catch (error) {
-            final failure = downloadFailureMessage(l10n, error);
-            if (failure != null) message(failure);
-            return;
-          }
-          target = records?.recordForTrack(track);
-        case DownloadAlreadyActive(:final task):
-          // 已有任务：等它结束再分享，不重复入队。
-          message(l10n.shareDownloading);
-          try {
-            await task.done;
-          } catch (error) {
-            final failure = downloadFailureMessage(l10n, error);
-            if (failure != null) message(failure);
-            return;
-          }
-          target = records?.recordForTrack(track);
+        case DownloadFailed(:final error):
+          final failure = downloadFailureMessage(l10n, error);
+          if (failure != null) message(failure);
+          return;
       }
       if (target == null) {
         message(l10n.downloadFailed(''));

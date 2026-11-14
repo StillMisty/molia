@@ -15,6 +15,56 @@ import '../services/ai/ai_text.dart';
 import 'library_provider.dart';
 import 'playback_provider.dart';
 
+/// 一次「用这批推荐接管播放队列」的意图。
+///
+/// 起点 / 上下文 / 状态口径由调用方决定；会话按同一顺序落状态：
+/// 占互斥位 →（可选）准备态 → 清本轮反馈与曲目跟踪 → 替换队列 →
+/// 登记曲目 → 落定（playing / off）→ 释放互斥位。
+class AiRadioTakeOver {
+  AiRadioTakeOver({
+    required List<ResolvedRecommendation> items,
+    this.startIndex = 0,
+    this.contextName,
+    this.adopt = true,
+    this.enterPreparing = true,
+    this.errorOnFailure = true,
+  }) : assert(items.isNotEmpty),
+       items = List.unmodifiable(items);
+
+  final List<ResolvedRecommendation> items;
+  final int startIndex;
+
+  /// 写入播放上下文的名称；历史批次在功能关闭时为 null（按普通队列播放）。
+  final String? contextName;
+
+  /// 是否真正进入电台：false 时成功后归到 off。
+  final bool adopt;
+
+  /// 是否显示「准备中」：历史播放从来不是生成准备，不能借 [adopt] 推断。
+  final bool enterPreparing;
+
+  /// 播放失败是否落 error：历史失败保留接管前状态，只写门面的 lastError。
+  final bool errorOnFailure;
+
+  /// 起点按实际曲目数夹取，越界输入不抛给播放层。
+  int get clampedIndex => startIndex.clamp(0, items.length - 1).toInt();
+}
+
+/// 接管结果：失败只带原始错误，[SourceFailure] 映射与日志仍归 provider。
+sealed class AiRadioTakeOverResult {
+  const AiRadioTakeOverResult();
+}
+
+final class AiRadioTakeOverSuccess extends AiRadioTakeOverResult {
+  const AiRadioTakeOverSuccess();
+}
+
+final class AiRadioTakeOverFailure extends AiRadioTakeOverResult {
+  const AiRadioTakeOverFailure(this.error);
+
+  final Object error;
+}
+
 /// 会话内一首 AI 曲目的跟踪状态（跳过 / 喜欢判定）。
 class AiSessionTrack {
   AiSessionTrack({
@@ -43,6 +93,7 @@ class AiRadioSession {
     required this._playbackProvider,
     required this._libraryProvider,
     required this._onSkip,
+    required this._onRoundReset,
   });
 
   /// 队列剩余曲目 ≤ 此值时静默补歌。
@@ -57,6 +108,9 @@ class AiRadioSession {
   final PlaybackProvider _playbackProvider;
   final LibraryProvider _libraryProvider;
   final void Function(String label) _onSkip;
+
+  /// 新一轮接管的反馈清空；反馈账本归 provider，会话只发信号。
+  final void Function() _onRoundReset;
 
   final Map<String, AiSessionTrack> _sessionTracks = {};
 
@@ -103,14 +157,8 @@ class AiRadioSession {
     Iterable<ResolvedRecommendation> items,
   ) => _radioQueue.missing(items, (item) => item.track.id.uri);
 
-  /// 开始一次接管：清空曲目跟踪并进入准备态（本轮反馈由反馈账本清）。
-  void start() {
-    reset();
-    _status = AiDjStatus.preparing;
-  }
-
-  /// 清空当前会话的曲目跟踪（起播 / 播放历史批次前）。
-  void reset() {
+  /// 清空当前会话的曲目跟踪（接管 / 播放历史批次前）。
+  void _resetTracks() {
     _sessionTracks.clear();
     _trackedUri = null;
   }
@@ -121,9 +169,7 @@ class AiRadioSession {
     _trackedUri = null;
   }
 
-  void markPreparing() => _status = AiDjStatus.preparing;
   void markPlaying() => _status = AiDjStatus.playing;
-  void markError() => _status = AiDjStatus.error;
   void markOff() => _status = AiDjStatus.off;
 
   void clearTracked() => _trackedUri = null;
@@ -136,6 +182,34 @@ class AiRadioSession {
 
   void beginQueueOperation() => _queueBusy = true;
   void endQueueOperation() => _queueBusy = false;
+
+  /// 用一批推荐接管播放队列（起播 / 播放历史批次的唯一实现）。
+  ///
+  /// 同步前缀（占互斥位、可选准备态）在第一个 await 之前完成，调用方可在
+  /// 这之后统一发一次通知，再等结果落定后发第二次；本类不持有监听器。
+  /// 失败不抛出：返回 [AiRadioTakeOverFailure]，错误映射与日志仍归 provider。
+  Future<AiRadioTakeOverResult> takeOver(AiRadioTakeOver intent) async {
+    beginQueueOperation();
+    if (intent.enterPreparing) _status = AiDjStatus.preparing;
+    try {
+      _onRoundReset();
+      _resetTracks();
+      await _playbackProvider.playDomainTracks(
+        [for (final item in intent.items) item.track],
+        intent.clampedIndex,
+        contextName: intent.contextName,
+      );
+      registerTracks(intent.items);
+      _status = intent.adopt ? AiDjStatus.playing : AiDjStatus.off;
+      return const AiRadioTakeOverSuccess();
+    } catch (error) {
+      // 历史批次失败保留接管前状态（与 startRadio 的 error 口径不同）。
+      if (intent.errorOnFailure) _status = AiDjStatus.error;
+      return AiRadioTakeOverFailure(error);
+    } finally {
+      endQueueOperation();
+    }
+  }
 
   /// 冷启动 / 切回 AI 队列时接管电台；返回是否接管（含登记整条队列）。
   ///

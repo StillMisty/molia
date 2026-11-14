@@ -25,10 +25,10 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../services/audio_cache_platform.dart';
 import '../services/cache_service.dart';
-import '../services/download/download_intent.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_queue.dart';
 import '../services/download/download_records.dart';
+import '../services/download/download_requests.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
@@ -183,95 +183,64 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   /// 下载 / 转存音频（缓存命中时由下载服务直接拷贝，不触网）。
   ///
   /// 只入队，不占用整页 `_busy`：任务进度经 [DownloadTask] 单独更新，页面
-  /// 在排队 / 下载期间仍可操作。省流生效时先确认。
+  /// 在排队 / 下载期间仍可操作。省流生效时先确认；已有活动任务只提示一句，
+  /// 不在这里等它（与入口原来的非阻塞语义一致）。
   Future<void> _downloadAudio() async {
-    final launcher = context.read<DownloadLauncher?>();
-    if (launcher == null) return;
+    final requests = context.read<DownloadRequests?>();
+    if (requests == null) return;
     final l10n = AppLocalizations.of(context)!;
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
     final quality = _selectedQualityFor(_controller?.value.data);
-    await _runDownloadIntent(
-      () => launcher.start(
+    await _runDownloadOutcome(
+      () => requests.requestAudio(
         widget.track,
         quality: quality.isEmpty ? null : quality,
+        waitForActive: false,
       ),
       done: l10n.downloadCompleted,
     );
   }
 
-  /// 单独下载 / 转存歌词或封面（缓存优先，同样不触网）。
+  /// 单独下载 / 转存歌词或封面（缓存优先，同样不触网），终态与音频同一套。
   Future<void> _downloadPart({required bool lyrics}) async {
-    final downloads = _downloads;
-    if (downloads == null || _busy) return;
+    final requests = context.read<DownloadRequests?>();
+    if (requests == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
-    await _runDownload(
+    await _runDownloadOutcome(
       () => lyrics
-          ? downloads.downloadLyrics(widget.track)
-          : downloads.downloadCover(widget.track),
+          ? requests.requestLyrics(widget.track)
+          : requests.requestCover(widget.track),
       done: lyrics ? l10n.downloadLyricsDone : l10n.downloadCoverDone,
     );
   }
 
-  /// 等待任务结果并提示；页面不锁，进度 / 状态由任务监听驱动。
-  Future<void> _runDownload(
-    Future<void> Function() action, {
+  /// 请求终态 → 页面回执：已下载 / 进行中 / 不支持 / 失败 / 取消各按
+  /// 类型化结果渲染，不再在这里判断资格或等待任务句柄。
+  Future<void> _runDownloadOutcome(
+    Future<DownloadOutcome> Function() action, {
     required String done,
   }) async {
     final l10n = AppLocalizations.of(context)!;
     HapticsService.lightImpact();
-    try {
-      await action();
-      if (!mounted) return;
-      _showMessage(done);
-      await _controller?.refreshNow();
-    } catch (error) {
-      if (!mounted) return;
-      final message = downloadFailureMessage(l10n, error);
-      if (message != null) _showMessage(message);
-    }
-  }
-
-  /// 下载意图 → 页面回执：开始后等任务结束，已下载 / 进行中 / 不支持按
-  /// 类型化结果各给一句，不再在这里判断资格或翻译异常。
-  Future<void> _runDownloadIntent(
-    Future<DownloadStartResult> Function() action, {
-    required String done,
-  }) async {
-    final l10n = AppLocalizations.of(context)!;
-    HapticsService.lightImpact();
-    final DownloadStartResult result;
-    try {
-      result = await action();
-    } catch (error) {
-      if (!mounted) return;
-      final message = downloadFailureMessage(l10n, error);
-      if (message != null) _showMessage(message);
-      return;
-    }
-    switch (result) {
-      case DownloadStarted(:final task):
-        try {
-          await task.done;
-        } catch (error) {
-          if (!mounted) return;
-          final message = downloadFailureMessage(l10n, error);
-          if (message != null) _showMessage(message);
-          return;
-        }
-        if (!mounted) return;
+    final outcome = await action();
+    if (!mounted) return;
+    switch (outcome) {
+      case DownloadCompleted():
         _showMessage(done);
         await _controller?.refreshNow();
       case DownloadAlreadyDownloaded():
-        if (!mounted) return;
         _showMessage(l10n.downloadAlreadyExists);
         await _controller?.refreshNow();
-      case DownloadAlreadyActive():
-        if (!mounted) return;
+      case DownloadActive():
         _showMessage(l10n.downloadStatusDownloading);
       case DownloadUnsupported(:final reason):
-        if (!mounted) return;
         _showMessage(downloadFailureLabel(l10n, reason));
+      case DownloadFailed(:final error):
+        final message = downloadFailureMessage(l10n, error);
+        if (message != null) _showMessage(message);
+      case DownloadCancelled():
+        break;
     }
   }
 
