@@ -15,6 +15,11 @@ analyzer:
     - linux/**
     - windows/**
     - macos/**
+    # gen-l10n 生成物：Flutter 3.50 的模板仍在用 flutter_localizations 里已弃用的
+    # Global*Localizations，重新生成必然带 deprecated_member_use；等 SDK 模板更新后
+    # 删掉这两行，改由分析器继续覆盖。
+    - lib/l10n/app_localizations.dart
+    - lib/l10n/app_localizations_*.dart
 include: package:flutter_lints/flutter.yaml
 
 linter:

@@ -14,10 +14,14 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "top.stillmisty.molia"
     compileSdk = 37
+    // 37.2 是当前稳定版 Android 17 SDK；targetSdk 仍取主版本 37。
+    compileSdkMinor = 2
+    buildToolsVersion = "37.0.0"
     ndkVersion = "30.0.16248370"
 
-    // Java/Kotlin 目标取工具链上限：KGP 2.4.21 最高支持 JVM_26（JvmTarget 枚举上限），
-    // 由 JDK 27 编译出 target 26 字节码，D8 正常脱糖。
+    // Java 27 字节码本身可编译（JDK 27 / Gradle 9.9.1 / D8 9.5.29 接受 class 71），
+    // 但 KGP 2.4.21 的 JvmTarget 上限是 JVM_26；等 Kotlin 2.5 稳定后再把
+    // compileOptions 与 jvmTarget 一起提到 27，避免 Java/Kotlin 目标不一致。
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_26
         targetCompatibility = JavaVersion.VERSION_26

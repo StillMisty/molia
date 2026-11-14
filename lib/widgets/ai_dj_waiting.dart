@@ -1,7 +1,7 @@
 /// AI 生成等待态：脉冲骨架、细进度条、阶段进度。
 ///
 /// 只在显式生成时使用；静默补歌不创建任何可见等待态。动画尊重系统
-/// `MediaQuery.disableAnimations`（减弱动效时静态显示）。
+/// `MediaQuery.disableAnimations` / `reduceMotion`（减弱动效时静态显示）。
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -9,6 +9,7 @@ import 'package:material_ui/material_ui.dart';
 import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 import 'skeleton.dart';
 
 /// 生成阶段步进：整理偏好 → AI 选歌 → 本地找歌。
@@ -158,7 +159,7 @@ class _AiDjThinProgressState extends State<AiDjThinProgress>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final disabled = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final disabled = reduceMotionOf(context);
     if (widget.value != null || disabled) {
       _controller.stop();
     } else if (!_controller.isAnimating) {
@@ -169,7 +170,7 @@ class _AiDjThinProgressState extends State<AiDjThinProgress>
   @override
   void didUpdateWidget(covariant AiDjThinProgress oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final disabled = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final disabled = reduceMotionOf(context);
     if (widget.value != null || disabled) {
       _controller.stop();
     } else if (!_controller.isAnimating) {
@@ -187,7 +188,7 @@ class _AiDjThinProgressState extends State<AiDjThinProgress>
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final fraction = (widget.value ?? 0).clamp(0.0, 1.0);
-    final disabled = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final disabled = reduceMotionOf(context);
     final bar = ClipRRect(
       borderRadius: BorderRadius.circular(2),
       child: SizedBox(

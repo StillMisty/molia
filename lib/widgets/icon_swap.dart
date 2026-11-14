@@ -1,13 +1,15 @@
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../theme/motion_policy.dart';
+
 /// 图标按钮的状态图标切换（同一按钮槽位换图标）：交叉淡入 + 轻微缩放。
 ///
 /// 配方集中在这里，调用点只声明「状态 → 图标」：
 /// - 入 `emphasizedDecelerate`、出 `emphasizedAccelerate`（`short3` 150ms）；
 /// - 缩放只做 0.85→1 的轻微收放，避免与 [M3EIconButton] 自身的按压缩放
 ///   （`morphSpring`）叠成两段明显的动效；
-/// - `disableAnimations`（系统减弱动效）时直接跳变，不播过渡。
+/// - 系统减弱动效（`disableAnimations` / `reduceMotion`）时直接跳变，不播过渡。
 ///
 /// 用 [AnimatedSwitcher] 而不是自绘驱动器，是为了白拿三条既有语义：
 /// 首次挂载不播（页面入场时图标不会一起做缩放入场）；父级每帧重建
@@ -24,10 +26,8 @@ class IconSwap<T extends Object> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     return AnimatedSwitcher(
-      duration: reduceMotion ? Duration.zero : M3EMotion.short3,
+      duration: reduceMotionOf(context) ? Duration.zero : M3EMotion.short3,
       switchInCurve: M3EMotion.emphasizedDecelerate,
       switchOutCurve: M3EMotion.emphasizedAccelerate,
       transitionBuilder: (child, animation) => FadeTransition(

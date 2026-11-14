@@ -38,7 +38,11 @@ class _FakeLyricsProvider extends LyricsProvider {
   LyricsState get state => _state;
 }
 
-Widget _app(Widget child, {bool disableAnimations = false}) {
+Widget _app(
+  Widget child, {
+  bool disableAnimations = false,
+  bool reduceMotion = false,
+}) {
   return M3EMaterialApp(
     data: M3EThemeData.fromMaterial(ThemeData.light()),
     theme: ThemeData.light(),
@@ -50,8 +54,10 @@ Widget _app(Widget child, {bool disableAnimations = false}) {
     supportedLocales: const [Locale('zh')],
     home: Builder(
       builder: (context) => MediaQuery(
-        data: MediaQuery.of(context)
-            .copyWith(disableAnimations: disableAnimations),
+        data: MediaQuery.of(context).copyWith(
+          disableAnimations: disableAnimations,
+          reduceMotion: reduceMotion,
+        ),
         child: Scaffold(body: child),
       ),
     ),
@@ -143,6 +149,26 @@ void main() {
             wavy: true,
           ),
           disableAnimations: true,
+        ),
+      );
+      await tester.pump();
+      expect(find.byKey(const ValueKey<String>('seekBarFlat')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('seekBarWavy')), findsNothing);
+    });
+
+    testWidgets('系统减弱动态效果（reduceMotion）时波浪滑杆同样回落平直', (tester) async {
+      await tester.pumpWidget(
+        _app(
+          SeekBar(
+            controller: controller,
+            position: position,
+            durationMs: 180000,
+            isPlaying: true,
+            hasTrack: true,
+            timeLabels: SeekTimeLabels.inline,
+            wavy: true,
+          ),
+          reduceMotion: true,
         ),
       );
       await tester.pump();

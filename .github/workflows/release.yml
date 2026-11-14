@@ -69,21 +69,36 @@ jobs:
           distribution: temurin
           java-version: "27"
       - uses: android-actions/setup-android@v4
-      - name: SDK 许可 + NDK
+      - name: 安装 Android CLI（latest）
         run: |
           set -euo pipefail
-          # 与 android/app/build.gradle 的 ndkVersion / AGENTS.md 工具链表一致。
+          curl -fsSL https://dl.google.com/android/cli/latest/linux_x86_64/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: SDK 许可 + 平台 / build-tools / NDK
+        run: |
+          set -euo pipefail
+          # 与 android/app/build.gradle 的 compileSdkMinor / buildToolsVersion /
+          # ndkVersion 以及 AGENTS.md 工具链表一致。用 Android CLI 管理。
+          compile_sdk_platform=platforms/android-37.2
+          build_tools_version=37.0.0
           ndk_version=30.0.16248370
           # path_provider_android / shared_preferences_android 经 jni 在 Gradle 里
-          # 构建 libdartjni，那个模块用 flutter.ndkVersion，即 Flutter 3.47.9 的
+          # 构建 libdartjni，那个模块用 flutter.ndkVersion，即 Flutter 3.50.0 的
           # 默认 28.2.13676358。runner 镜像不保证预装它，缺了 AGP 会在配置期临时
           # 下载，网络抖动就直接失败（beta.37 的 Premature EOF）；显式安装，
           # 让构建只依赖本步骤。
           jni_ndk_version=28.2.13676358
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager --install "ndk;$ndk_version" "ndk;$jni_ndk_version"
-          for v in "$ndk_version" "$jni_ndk_version"; do
-            test -d "$ANDROID_HOME/ndk/$v" || { echo "::error::NDK $v 未安装"; exit 1; }
+          android sdk install --ignore-outdated-xmls \
+            "$compile_sdk_platform" \
+            "build-tools/$build_tools_version" \
+            "ndk/$ndk_version" \
+            "ndk/$jni_ndk_version"
+          for path in \
+            "$ANDROID_HOME/platforms/android-37.2" \
+            "$ANDROID_HOME/build-tools/$build_tools_version" \
+            "$ANDROID_HOME/ndk/$ndk_version" \
+            "$ANDROID_HOME/ndk/$jni_ndk_version"; do
+            test -d "$path" || { echo "::error::缺少 $path"; exit 1; }
           done
           # 原生资产（hook）构建由 native_toolchain_c 解析 NDK，优先读 ANDROID_NDK /
           # ANDROID_NDK_HOME；runner 镜像预置的这两项指向默认 NDK 27.x，其 armv7
@@ -94,7 +109,7 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ndk_version" >> "$GITHUB_ENV"
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.9
+          flutter-version: 3.50.0
           channel: stable
           cache: true
       - name: 还原签名（Secrets，见 .agents/skills/molia-release/SKILL.md）
@@ -193,7 +208,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.9
+          flutter-version: 3.50.0
           channel: stable
           cache: true
       - name: pub get
@@ -254,7 +269,7 @@ jobs:
           packages: libsecret-1-dev binutils file zip
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.9
+          flutter-version: 3.50.0
           channel: stable
           cache: true
       - name: pub get
@@ -305,7 +320,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.9
+          flutter-version: 3.50.0
           channel: stable
           cache: true
       - name: pub get
@@ -338,7 +353,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.47.9
+          flutter-version: 3.50.0
           channel: stable
           cache: true
       - name: pub get
