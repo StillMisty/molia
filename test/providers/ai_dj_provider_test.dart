@@ -5,6 +5,7 @@ import 'package:molia/domain/models/ai_dj.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/ai_dj_provider.dart';
+import 'package:molia/providers/ai_radio_session.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/ai/ai_recommendation_store.dart';
@@ -263,6 +264,109 @@ void main() {
     expect(backend.lastRequest?.context?.name, kAiDjContextName);
     expect(provider.queuedCount, 2);
     expect(provider.recommendations?.items, hasLength(3));
+  });
+
+  test('接管意图：起播进入准备态，历史播放保持原状态', () async {
+    await enableWithList();
+    final batchId = provider.activeBatchId!;
+
+    final radio = <(AiDjStatus, bool)>[];
+    void recordRadio() => radio.add((provider.status, provider.queueBusy));
+    provider.addListener(recordRadio);
+    await provider.startRadio();
+    provider.removeListener(recordRadio);
+
+    // 回到 off 再播历史：历史接管不应经过 preparing。
+    await provider.stop();
+    expect(provider.status, AiDjStatus.off);
+
+    final history = <(AiDjStatus, bool)>[];
+    void recordHistory() => history.add((provider.status, provider.queueBusy));
+    provider.addListener(recordHistory);
+    await provider.playHistoryBatch(batchId);
+    provider.removeListener(recordHistory);
+
+    expect(radio, [(AiDjStatus.preparing, true), (AiDjStatus.playing, false)]);
+    expect(history, [(AiDjStatus.off, true), (AiDjStatus.playing, false)]);
+  });
+
+  test('会话接管：夹取起点、可选准备态与失败状态', () async {
+    final facade = FakePlaybackFacade();
+    final playback = buildTestPlaybackProvider(facade: facade);
+    await playback.preferencesReady;
+    final library = LibraryProvider(
+      repository: FakeLibraryRepository(),
+      playbackProvider: playback,
+    );
+    var roundResets = 0;
+    final session = AiRadioSession(
+      playbackProvider: playback,
+      libraryProvider: library,
+      onSkip: (_) {},
+      onRoundReset: () => roundResets++,
+    );
+    addTearDown(() {
+      library.dispose();
+      playback.dispose();
+    });
+
+    final transition = session.takeOver(
+      AiRadioTakeOver(
+        items: _batch(0, 3).items,
+        startIndex: 99,
+        contextName: kAiDjContextName,
+        enterPreparing: false,
+      ),
+    );
+
+    expect(session.queueBusy, isTrue);
+    expect(session.status, AiDjStatus.off, reason: '历史口径不进入准备态');
+    await transition;
+
+    expect(roundResets, 1);
+    expect(session.queueBusy, isFalse);
+    expect(session.status, AiDjStatus.playing);
+    expect(facade.lastRequest?.startIndex, 2);
+    expect(facade.lastRequest?.context?.name, kAiDjContextName);
+
+    // 失败不落 error 时保留接管前状态，互斥位仍要释放。
+    facade.playError = StateError('boom');
+    final failed = session.takeOver(
+      AiRadioTakeOver(
+        items: _batch(3, 3).items,
+        enterPreparing: false,
+        errorOnFailure: false,
+      ),
+    );
+    expect(session.status, AiDjStatus.playing, reason: '失败前不改准备态');
+    final failure = await failed;
+
+    expect(failure, isA<AiRadioTakeOverFailure>());
+    expect(session.status, AiDjStatus.playing, reason: '失败保留原状态');
+    expect(session.queueBusy, isFalse);
+  });
+
+  test('接管失败：起播落 error，历史保留原状态', () async {
+    await enableWithList();
+    final batchId = provider.activeBatchId!;
+    backend.playError = StateError('boom');
+
+    final transition = provider.startRadio();
+    expect(provider.status, AiDjStatus.preparing);
+    expect(provider.queueBusy, isTrue);
+    await transition;
+
+    expect(provider.status, AiDjStatus.error);
+    expect(provider.queueBusy, isFalse);
+    expect(provider.lastError, isNotNull);
+
+    // 历史失败只写 lastError：off 保持不变，互斥位照常释放。
+    await provider.stop();
+    expect(provider.status, AiDjStatus.off);
+    await provider.playHistoryBatch(batchId);
+    expect(provider.status, AiDjStatus.off);
+    expect(provider.queueBusy, isFalse);
+    expect(provider.lastError, isNotNull);
   });
 
   test('enqueueRecommendations：只追加未入队曲目，不重复追加', () async {

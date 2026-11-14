@@ -47,6 +47,9 @@ class FakePlaybackFacade implements PlaybackFacade {
   PlaybackRequest? lastRequest;
   List<Track>? lastEnqueued;
 
+  /// 注入装载失败（AI 接管失败路径）；抛出后不记录请求。
+  Object? playError;
+
   /// 「播完当前歌曲后停止」标志的最近值（与真实引擎一样由定时关闭下发）。
   bool? stopAfterCurrentTrack;
   final List<bool> stopAfterCurrentTrackCalls = [];
@@ -89,6 +92,8 @@ class FakePlaybackFacade implements PlaybackFacade {
 
   @override
   Future<void> playTracks(PlaybackRequest request) async {
+    final error = playError;
+    if (error != null) throw error;
     calls.add('load');
     lastRequest = request;
   }
