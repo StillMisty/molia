@@ -57,7 +57,7 @@ class CommentListView extends StatelessWidget {
       return const DetailPageLoading();
     }
     // 空态 / 错误态也要能下拉刷新：内容不满一屏时包一层可滚动的状态容器。
-    // 错误态只保留下拉手势，不再放「重试」按钮。
+    // 错误态只保留下拉手势。
     final Widget content;
     if (state.failed) {
       content = _RefreshableStatus(

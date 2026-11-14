@@ -28,7 +28,7 @@ class TrayDormantGate extends StatelessWidget {
   ///
   /// 不能传 `child`：Widget 实参在调用 build 前就会求值，托盘隐藏期间任何
   /// 上层重建（语言、主题、同步提示）都会把整棵 MaterialApp 配置重新构造
-  /// 一遍，即使它不会被挂载。改成 builder 后隐藏期间只保留占位。
+  /// 一遍，即使它不会被挂载。用 builder 后隐藏期间只保留占位。
   final WidgetBuilder childBuilder;
 
   @override

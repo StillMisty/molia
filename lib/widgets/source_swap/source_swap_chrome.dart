@@ -229,8 +229,8 @@ class SourceSwapSectionHeader extends StatelessWidget {
 
 /// 底部操作条：全宽确认按钮。
 ///
-/// 未选中时 [onConfirm] 为空，按钮保持禁用；选中状态由列表行内勾选反馈，
-/// 不再重复显示摘要。底部补 [MediaQuery.padding] 的安全区；忙碌时按钮内
+/// 未选中时 [onConfirm] 为空，按钮保持禁用；选中状态由列表行内勾选反馈。
+/// 底部补 [MediaQuery.padding] 的安全区；忙碌时按钮内
 /// 显示小 spinner 并禁用，防止重复点击（换源 / 取词都是一次性副作用）。
 class SourceSwapActionBar extends StatelessWidget {
   const SourceSwapActionBar({

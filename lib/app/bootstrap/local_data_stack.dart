@@ -6,7 +6,7 @@
 /// 本地曲目取词要读下载的离线歌词（`LyricsService.trackLyricLoader` →
 /// `readDownloadedLyrics`）。把「读离线歌词」收在存储级函数里、并让歌词服务
 /// 先于下载服务构建，两个方向都变成普通参数：没有前向引用，也没有跨 builder
-/// 回填（原组合根是 `late final lyricsService` + 六十行后回填）。
+/// 回填。
 library;
 
 import 'dart:async';

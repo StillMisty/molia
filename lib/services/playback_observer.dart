@@ -5,7 +5,7 @@
 /// 任何页面与后台切歌都走同一条链路，单测可用假 facade / 假副作用入口
 /// 脚本化驱动。
 ///
-/// 承担的副作用（顺序与节流与从 PlaybackProvider 抽出前逐一对应）：
+/// 承担的副作用（顺序与节流固定）：
 /// - 最后播放信息（SharedPreferences 单 JSON 键；UI 经 provider getter 读取）；
 /// - 桌面小组件（[PlaybackWidgetUpdater]，默认实现仅 Android 生效）；
 /// - 封面预取（[ImagePreloadManager]）；
@@ -96,8 +96,8 @@ class PlaybackObserver {
 
   /// 最后播放信息单键：三项放进一份 JSON，一次 `setString` 完成。
   ///
-  /// prefs 每次写都会重写整个文件（`docs/pitfalls.md` #93），原先三个键
-  /// 在切歌时最多触发三次整文件重写；合并后每首歌最多一次。
+  /// prefs 每次写都会重写整个文件（`docs/pitfalls.md` #93）：三项合并成一份
+  /// JSON 后，切歌时最多触发一次整文件重写。
   static const String _lastPlayedTrackKey = 'last_played_track_v1';
 
   // v1 前的旧三键：只读一次做一次迁移，之后删除。

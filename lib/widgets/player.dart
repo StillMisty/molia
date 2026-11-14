@@ -561,7 +561,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// `PlaybackSeekBar` 内，这里只决定版式与时间标签档位。波浪只在这一处
   /// （播放页主场）开启，底栏 / 迷你条默认平直，避免全局 60fps 装饰动画。
   ///
-  /// 播放模式不再常显：它连同「存为列表 / 歌词显示设置」收进「更多」，
+  /// 播放模式收进「更多」（连同「存为列表 / 歌词显示设置」），
   /// 进度排只保留收藏、进度与一个菜单入口（见 ADR-0023 的版式意图）。
   Widget _buildSeekBar() {
     return Padding(
@@ -776,7 +776,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 极窄屏退化为仅播放键。
   ///
   /// 三个传输键走共享模块：无曲目（含冷启动恢复态）一律禁用，与桌面底栏 /
-  /// 顶栏 / 播放页传输排同一契约（此前迷你条在无曲目时仍可点，是唯一的漂移）。
+  /// 顶栏 / 播放页传输排同一契约。
   Widget _buildResponsiveControlButtons(BuildContext context) {
     if (context.isCompact) {
       return const PlaybackPlayPauseButton(

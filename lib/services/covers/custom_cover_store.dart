@@ -131,7 +131,7 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
   static const String prefsKey = 'custom_cover_index_v1';
   static const String directoryName = 'custom_covers';
 
-  /// 单张封面可进入同步记录的字节上限（Phase 1 归一化产物通常远小于此）。
+  /// 单张封面可进入同步记录的字节上限（归一化产物通常远小于此）。
   ///
   /// base64 后约 667KB，仍远低于增量日志 4MB 窗口；超限只跳过同步，本地
   /// 封面继续可用。接收侧用同一上限拒绝异常远端记录。

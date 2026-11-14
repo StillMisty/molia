@@ -1,7 +1,7 @@
 /// 本地资料库数据仓库：播放历史 / 用户列表 / 收藏 / `.lxmc` 导入。
 ///
-/// 数据操作走 drift（简单读写用 DSL，JOIN / 聚合 / rowid 语句保留原 SQL
-/// 文本），返回 [PlayHistoryEntry] / [PlaylistInfo] / [PlaylistTrack] 等领域
+/// 数据操作走 drift（简单读写用 DSL，JOIN / 聚合 / rowid 语句直接写 SQL），
+/// 返回 [PlayHistoryEntry] / [PlaylistInfo] / [PlaylistTrack] 等领域
 /// 模型；**不持久化播放直链**（只存元数据 + raw 取链参数），播放时由上层按
 /// 需重新取链（对齐 LX Music 的设计）。
 ///
@@ -157,7 +157,7 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   @override
   Future<List<PlaylistInfo>> listPlaylists() async {
     final db = _db;
-    // 列表 + 曲目数 + 收藏置顶排序是一个整体口径，保留原 SQL 文本。
+    // 列表 + 曲目数 + 收藏置顶排序是一个整体口径（同一份 SQL 出三者）。
     final rows = await db
         .customSelect(
           '''
@@ -418,8 +418,8 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     final playlistId =
         existingPlaylist?.id ?? await createPlaylist(decoded.name);
 
-    // 导入的 `addedAt` 是内容时间，既有口径由调用侧取（导入不是一个播放/
-    // 收藏动作，时间口径随 .lxmc 这条路径，见网关内说明）。
+    // 导入的 `addedAt` 是内容时间，由调用侧取（导入不是播放 / 收藏动作，
+    // 时间口径随 .lxmc 这条路径）。
     final addedAt = DateTime.now().millisecondsSinceEpoch;
     final imported = await _writeEngine.importPlaylistTracks(playlistId, [
       for (final track in decoded.tracks)
@@ -521,7 +521,6 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   Future<List<PlaylistTrackSyncRecord>> syncExportPlaylistTracks() async {
     final db = _db;
     await _writeEngine.ensurePlaylistSyncIds(db);
-    // 两表 JOIN 的投影口径保留原 SQL 文本。
     final rows = await db.customSelect('''
       SELECT p.syncId AS playlistSyncId, t.sourceKey, t.songId, t.title,
              t.artist, t.album, t.coverUrl, t.durationMs, t.raw, t.addedAt,

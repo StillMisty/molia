@@ -132,10 +132,10 @@ class SettingsRegistry implements SettingsAccess, SettingsSyncSurface {
     onWrite?.call(key);
   }
 
-  /// 同步面：读原始值（按 kind 解释；secure 盒保持旧的字符串语义）。
+  /// 同步面：读原始值（按 kind 解释；secure 盒按字符串语义读写）。
   ///
-  /// 存储不可用（测试环境无插件 / 平台存储损坏）按默认值处理，不阻塞启动 ——
-  /// 与各模块迁移前的行为一致；写入失败仍抛出，由调用方决定兜底策略。
+  /// 存储不可用（测试环境无插件 / 平台存储损坏）按默认值处理，不阻塞启动；
+  /// 写入失败仍抛出，由调用方决定兜底策略。
   @override
   Future<Object?> readRaw(SettingsKey<Object?> key) async {
     try {

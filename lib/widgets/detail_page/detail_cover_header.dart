@@ -80,7 +80,7 @@ class DetailCoverHeader extends StatelessWidget {
 
   /// 非空时封面参与路由共享元素（来源卡片用同一个 tag）。
   ///
-  /// 专辑 / 歌手入口不传，行为与加入 Hero 之前一致。
+  /// 专辑 / 歌手入口不传。
   final Object? heroTag;
 
   @override
@@ -136,8 +136,8 @@ class DetailCoverHeader extends StatelessWidget {
 
 /// 详情页封面视觉：96dp 方 / 圆 + 占位 + 可选共享元素。
 ///
-/// 从 [DetailCoverHeader] 抽出，详情页加载骨架与加载完成后的头部共用同一份
-/// 尺寸 / 占位 / 解码口径；各写一份时 Hero 落位会看到圆角或占位图标跳变。
+/// 详情页加载骨架与加载完成后的头部共用同一份尺寸 / 占位 / 解码口径；
+/// 各写一份时 Hero 落位会看到圆角或占位图标跳变。
 class DetailCoverArtwork extends StatelessWidget {
   const DetailCoverArtwork({
     super.key,

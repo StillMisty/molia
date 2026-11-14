@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 ///
 /// UI 必须走 `M3E*` 组件（`package:material_3_expressive`），裸 Material
 /// 组件会绕过 M3E 的形状 / 状态层 / 动效 / 无障碍约定——最典型的是
-/// `InkWell` 没有键盘激活语义、`SnackBar` 走的是另一套观感。迁移已完成，
+/// `InkWell` 没有键盘激活语义、`SnackBar` 走的是另一套观感。
 /// 剩余未替换的调用点都是长期例外，按「文件 → 标识符」逐条登记在本文件；
 /// 禁止在调用点就地开洞，否则口径会一处一处地回潮。
 ///

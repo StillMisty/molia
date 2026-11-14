@@ -126,7 +126,7 @@ class _SettingsPageState extends State<SettingsPage>
               SettingsSectionGrid(
                 twoColumn: twoColumn,
                 // 宽屏按内容量分列：外观 / 歌词 / 数据在左，播放 / 内容 /
-                // 通用与关于在右；六张卡按「同一类事情」聚合，不再有目录页。
+                // 通用与关于在右；六张卡按「同一类事情」聚合。
                 startColumn: const {0, 2, 4},
                 children: [
                   _appearanceSection(context, l10n),
@@ -270,8 +270,7 @@ class _SettingsPageState extends State<SettingsPage>
                   ),
                   onTap: () => _showAppFontPicker(context, l10n, appFontFamily),
                 ),
-                // 封面：播放时跟随封面取色 / 默认封面。原先独立的「封面」卡
-                // 并进外观，首屏只留六张语义卡。
+                // 封面：播放时跟随封面取色 / 默认封面。
                 Selector<ThemeProvider, bool>(
                   selector: (context, provider) =>
                       provider.followArtworkEnabled,
@@ -481,7 +480,7 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ],
         ],
-        // 播放细节并入同一张卡（淡入淡出 / 智能随机都是设备本地值）。
+        // 播放细节同挂在这一张卡（淡入淡出 / 智能随机都是设备本地值）。
         ...PlaybackDetailsSection.rows(context),
       ],
     );

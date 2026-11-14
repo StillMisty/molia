@@ -109,7 +109,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const DesktopTextAlignX defaultDesktopTextAlignX =
       DesktopTextAlignX.center;
 
-  /// 默认跟随演唱（与历史行为一致）；匀速作为可选项。
+  /// 默认跟随演唱；匀速作为可选项。
   static const DesktopScrollMode defaultDesktopScrollMode =
       DesktopScrollMode.followSinging;
   static const bool defaultDesktopLock = false;
@@ -807,7 +807,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
     try {
       await _settings.write(kLyricsDisplaySettings, payload);
     } catch (_) {
-      // 存储不可用不阻塞 UI（与迁移前一致）；下一次提交会重试。
+      // 存储不可用不阻塞 UI；下一次提交会重试。
     }
   }
 

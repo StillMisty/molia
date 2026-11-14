@@ -202,7 +202,7 @@ class NavProvider extends ChangeNotifier {
 
   Future<void> _persist() async {
     try {
-      // 一次 setString 替代旧版三次写：桌面偏好每次写入都会重写整个文件。
+      // 一次 setString 写完整布局：桌面偏好每次写入都会重写整个文件。
       await _settings.write(
         kShellNavLayout,
         jsonEncode({

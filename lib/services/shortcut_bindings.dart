@@ -337,8 +337,8 @@ class ShortcutBindings {
 /// `LogicalKeyboardKey` 稳定名 → 键：只收可绑定的键（字母 / 数字 / 方向 /
 /// 功能键与常见编辑键），其余按键不参与录制与解析。
 ///
-/// 名字不能直接用 `keyLabel`（空格是 `' '`、方向键是 `''`），改为「字母数字
-/// 用 keyLabel，其余走显式表」的规范名，编码与解析共用同一张表。
+/// 名字不能直接用 `keyLabel`（空格是 `' '`、方向键是 `''`），因此用「字母数字
+/// 用 keyLabel，其余走显式表」的规范名；编码与解析共用同一张表。
 final Map<String, LogicalKeyboardKey> _keyByName = {
   for (final key in _bindableKeys) _canonicalName(key): key,
 };

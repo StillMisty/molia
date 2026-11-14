@@ -22,13 +22,13 @@ class WindowBoundsStore {
   WindowBoundsStore({this._prefs});
 
   /// 几何合并成一个 JSON 字符串：桌面 shared_preferences 每次 set* 都会
-  /// 重写整个偏好文件，原来四个 double 就是四次整文件写入。最大化标记独立
+  /// 重写整个偏好文件，四个 double 分开写就是四次整文件写入。最大化标记独立
   /// 保留（事件驱动、不参与几何防抖，合并会让两条写入路径互相覆盖）。
   static const String keyBounds = 'window_bounds';
 
   static const String keyMaximized = 'window_maximized';
 
-  // 旧版四键：只读兜底，升级后首次启动仍能恢复上次窗口；不再写入。
+  // 旧版四键：只读兜底，升级后首次启动仍能恢复上次窗口。
   static const String _legacyKeyX = 'window_bounds_x';
   static const String _legacyKeyY = 'window_bounds_y';
   static const String _legacyKeyWidth = 'window_bounds_width';

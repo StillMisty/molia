@@ -103,8 +103,8 @@ class ArtworkPaletteService {
   /// 本地文件字节读取入口（系统壁纸用；测试注入固定字节）。
   final Future<Uint8List?> Function(String path) _localFileBytesFor;
 
-  /// 封面 seed 的设备本地持久缓存；null = 不启用（保持只按 URL 索引的旧
-  /// 行为，现有测试也不需要触碰平台）。
+  /// 封面 seed 的设备本地持久缓存；null = 不启用（只按 URL 索引，现有测试
+  /// 也不需要触碰平台）。
   final ArtworkPaletteSeedStore? _seedStore;
 
   /// 封面内容身份解析（默认只读本地文件元数据，不读图片字节）。
@@ -168,7 +168,7 @@ class ArtworkPaletteService {
   /// 封面读取的统一入口：先解析内容身份，再按身份 key 查 LRU / 合并并发，
   /// 最后才决定读 seed、本地缓存字节还是取图。
   ///
-  /// 没启用 seed 缓存时完全走旧路径（URL 索引、不查文件元数据），避免测试
+  /// 没启用 seed 缓存时完全走 URL 索引路径（不查文件元数据），避免测试
   /// 和不需要持久化的调用方触碰平台。
   Future<ArtworkPalette?> _resolveCover(
     String url, {

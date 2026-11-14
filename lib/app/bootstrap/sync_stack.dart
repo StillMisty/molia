@@ -304,7 +304,7 @@ Future<SyncStack> buildSyncStack({
     networkChanges: dataSaver.networkEvents,
     peerSightings: syncEngine.peerSightings,
   );
-  // 局域网一键配对（Phase 2a 后端）：与局域网传输同生命周期。前台 + 非省电
+  // 局域网一键配对：与局域网传输同生命周期。前台 + 非省电
   // 才应答探测 / 弹接受窗；口令写入必须经控制面（缓存与安全存储一起更新）。
   final pairing = LanPairingService(
     runtime: lanRuntime,
@@ -396,7 +396,7 @@ Future<SyncStack> buildSyncStack({
 
 /// 首帧后的同步启动：引擎 init（安全存储读口令）→ 调度器启动。
 ///
-/// 为什么拆出来（组合根在 `post_frame_init.dart` 调用）：这两步在启动装配
+/// 组合根在 `post_frame_init.dart` 调用：这两步在启动装配
 /// 里最重（桌面 release 中位数 ~38ms），而同步状态面（设置页开关 / 口令）
 /// 在首帧后才有机会被看到。失败不阻断启动（见 docs/pitfalls.md #31）。
 Future<void> startSync(SyncStack sync) async {

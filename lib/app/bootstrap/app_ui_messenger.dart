@@ -2,8 +2,7 @@
 /// scaffoldMessengerKey 的提示出口，把领域失败映射为 l10n 文案。
 ///
 /// 错误提示统一经此注入；provider 不 import `main.dart`
-/// （docs/architecture.md §2.1）。实现随组合根拆 stack builders 从
-/// `main.dart` 原样搬到这里（行为不变）。
+/// （docs/architecture.md §2.1）。
 library;
 
 import '../../domain/models/failure.dart';

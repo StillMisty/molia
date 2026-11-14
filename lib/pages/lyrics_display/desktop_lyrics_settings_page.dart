@@ -132,7 +132,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                   settings.setDesktopWidthPercent(value, persist: false),
               onChangeEnd: (_) => unawaited(settings.flushPersistence()),
             ),
-            // 显示行数（默认 1 = 只显示当前行；旧的「仅显示当前行」开关已合并到这里）。
+            // 显示行数（默认 1 = 只显示当前行）。
             // 保持 dropdown：选项多、文案是纯数字，下拉比分段更省横向空间。
             SettingsDropdownRow<int>(
               icon: Icons.format_list_numbered_rounded,

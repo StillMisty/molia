@@ -4,9 +4,8 @@ import 'package:molia/domain/models/device_sync.dart';
 
 /// 名册模块测试：单轮移除抑制、换口令清空观测、端点校验 / 淘汰 / 保留上限。
 ///
-/// 这些规则原先埋在 `SyncStateStore` 里，只能经 SharedPreferences 验证；
-/// 直接构造名册后，边界条件（保留条数 / 保留期）可以用小参数跑，不必造
-/// 几十轮真实状态。
+/// 名册可独立构造，边界条件（保留条数 / 保留期）用小参数就能跑，不必经
+/// SharedPreferences 造几十轮真实状态。
 void main() {
   SyncRoster roster({
     int peerLimit = 20,

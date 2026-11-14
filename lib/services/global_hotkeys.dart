@@ -15,7 +15,7 @@
 /// `ShortcutManager` 提供门户的异步注册、取消与注册丢失事件，本层只需要
 /// 「命令名 ↔ 回调」的薄映射；hotkey_manager 0.3.0 也基于它，再包一层只会
 /// 多一个依赖和一套错误码。注册失败原因由 nativeapi 的 errorMessage 直接
-/// 透传（不再有 system_hotkeys 的 conflict/unsupported/declined 枚举）。
+/// 透传。
 library;
 
 import 'dart:async';

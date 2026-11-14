@@ -1,6 +1,6 @@
 /// runApp 前挂载的 Provider 树：所有子系统产物在这里一次性暴露给 UI。
 ///
-/// provider 的**构造顺序即依赖顺序**（与原组合根一致）：
+/// provider 的**构造顺序即依赖顺序**：
 /// 上面的 `create:` provider 会 `context.read` 下面已有的实例
 /// （PlaybackProvider / LibraryProvider / SearchProvider …），顺序不能随意调整。
 library;

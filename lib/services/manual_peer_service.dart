@@ -46,8 +46,8 @@ class ManualPeerService {
   }) async {
     final normalized = normalizePeerHost(host);
     final trimmedName = name.trim();
-    // 与旧弹层的 `_isKnownPairedHost` 同一判据：编辑态自身已认领身份，
-    // 或地址簿里同一地址已有 deviceId（重复添加已配对设备）。
+    // 编辑态自身已认领身份，或地址簿里同一地址已有 deviceId（重复添加
+    // 已配对设备）。
     final paired =
         (editing?.deviceId.isNotEmpty ?? false) ||
         _manualPeers().any(

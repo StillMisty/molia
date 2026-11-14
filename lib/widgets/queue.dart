@@ -61,7 +61,7 @@ String _emptyQueueText({
 ///
 /// 恢复态（冷启动未真正加载）同样可用：点击条目会从该曲目恢复播放。
 ///
-/// 列表不再分「正在播放 / 接下来」两段小标题：面板本身就是队列
+/// 列表不设「正在播放 / 接下来」两段小标题：面板本身就是队列
 /// （tab 文案已说明分组），标题只会把首行往下推。
 class QueueDisplay extends StatelessWidget {
   const QueueDisplay({
@@ -138,7 +138,7 @@ class QueueDisplay extends StatelessWidget {
       child: CustomScrollView(
         controller: controller,
         slivers: [
-          // 队列页不再有顶部溢出菜单：「存为列表」是队列级动作，入口收进
+          // 队列页不设顶部溢出菜单：「存为列表」是队列级动作，入口收进
           // 播放器「更多」（队列行自己的 ⋮ 保持不变）。
           // 「正在播放」小节（无当前曲目时整段不存在）。
           if (current != null)

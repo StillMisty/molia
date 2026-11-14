@@ -5,7 +5,7 @@ import 'package:molia/services/manual_peer_service.dart';
 /// 手动地址表单的编排：地址入簿 → 附近设备探测 → 立即接触。
 ///
 /// 只断言 [ManualPeerService] 的顺序与结果映射；地址簿 / 探测 / 轮次都是
-/// 内存假实现，不再需要搭真 `SyncEngine` + `SyncStateStore`。
+/// 内存假实现，用例不必搭真 `SyncEngine` + `SyncStateStore`。
 void main() {
   test('新增 + 探测成功：只提示已发出探测，不再跑接触轮', () async {
     final harness = _buildHarness()..probe.result = true;

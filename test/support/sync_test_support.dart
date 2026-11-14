@@ -399,9 +399,9 @@ class FakeJournalStore implements SyncJournalStore {
 
 /// 测试用附近设备配对端口：候选 / 请求 / 确认码都由用例手动驱动。
 ///
-/// 默认 `probeAddress` 返回 false（手动地址回退到旧的「立即接触」路径），
-/// 避免不关心配对的既有用例被新路径改变行为；需要验证附近设备的用例
-/// 自行打开 [probeResult] 并 emit 候选项。
+/// 默认 `probeAddress` 返回 false（走立即接触路径），避免不关心配对的用例
+/// 被探测路径改变行为；需要验证附近设备的用例自行打开 [probeResult] 并
+/// emit 候选项。
 class FakeSyncPairingPort implements SyncPairingPort {
   final StreamController<List<SyncNearbyDevice>> _nearby =
       StreamController<List<SyncNearbyDevice>>.broadcast();

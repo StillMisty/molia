@@ -266,7 +266,7 @@ typedef _CacheDirScan = ({int bytes, int count, Map<String, int> files});
 /// 值。捕获 `this` 会连同 method channel / `path_provider` 状态一起带进子
 /// isolate，而子 isolate 没有平台通道，调用会直接失败。
 ///
-/// 失败语义与原先主 isolate 上的串行实现一致：
+/// 失败语义：
 /// - 目录不存在或不可读：按空结果处理；
 /// - 单个文件取大小失败（正被删除 / 替换）：跳过该文件；
 /// - 某个子目录不可读：跳过它，保留其它已扫描到的文件。
@@ -286,7 +286,7 @@ _CacheDirScan _scanCacheDir(String dirPath, {bool withFiles = true}) {
       bytes += length;
       if (withFiles) sizes[file.uri.pathSegments.last] = length;
     } catch (_) {
-      // 文件可能正被删除/替换：忽略单个文件错误（仍计入 count，沿用旧口径）。
+      // 文件可能正被删除/替换：忽略单个文件错误（仍计入 count）。
     }
   }
   return (bytes: bytes, count: files.length, files: sizes);
@@ -295,7 +295,7 @@ _CacheDirScan _scanCacheDir(String dirPath, {bool withFiles = true}) {
 /// 递归列举 [root] 下的全部文件（在短命 isolate 中执行）。
 ///
 /// 逐目录列举而不是 `listSync(recursive: true)`：子目录不可读时前者能保留
-/// 其它已扫描到的文件，与原异步流「返回已扫描部分」的语义一致。
+/// 其它已扫描到的文件，不因单个目录失败整体丢弃。
 ///
 /// `rootReadable` 单独标记根目录能否枚举：空目录与「根目录不可读」都返回
 /// 空文件表，但后者不能被当作「缓存里一个文件都没有」（否则索引会被全删）。
@@ -330,7 +330,7 @@ String _normalizeRelativePath(String path) => path.replaceAll('\\', '/');
 
 /// 封面缓存 sweep（在短命 isolate 中执行，必须是顶层函数）。
 ///
-/// 顺序与原主 isolate 实现一致：
+/// 顺序：
 /// 1. 删除 mtime 早于 `now - staleDays` 的过期文件；
 /// 2. 剩余文件按 mtime 从旧到新删到不超过 [maxObjects]。
 /// `staleDays` / `maxObjects` 为 0 表示对应维度不限制。

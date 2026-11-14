@@ -24,7 +24,7 @@ import 'window_chrome.dart';
 /// `{"pid","port"}` 写到 sidecar `single_instance.json`，并监听 loopback；
 /// 后来进程读 metadata、请主实例 `show` 后退出。
 ///
-/// **为什么不再用 `File.create(exclusive: true)`**：创建与写内容是两步；
+/// **为什么不用 `File.create(exclusive: true)`**：创建与写内容是两步；
 /// 第二进程可能在内容写入前读到空文件，把「活锁」误判成陈旧锁并删除，
 /// 造成两个 primary。文件锁把「所有权」和「metadata」同步分开，锁冲突本身
 /// 就是既有实例存在的证据。

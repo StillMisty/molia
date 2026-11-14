@@ -198,8 +198,8 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
 
   /// 多选上下文栏：`[✕] 已选 N [加入列表]`。
   ///
-  /// 选中态是**可见**模式：栏出现时按钮含义明确（加入选中的 N 首），不会
-  /// 像旧版那样同一个「加入列表」图标在隐藏选中集合时悄悄换成另一批歌。
+  /// 选中态是**可见**模式：栏出现时按钮含义明确（加入选中的 N 首），
+  /// 按钮始终作用于选中集合，不会随隐藏选中集合换成另一批歌。
   /// 行点击始终播放，长按进入 / 退出选中。
   Widget _buildSelectionBar(
     BuildContext context,

@@ -258,7 +258,7 @@ class LocalSongsCollection extends ChangeNotifier {
 /// 缓存行保留原曲身份（`sourceKey` / `songId` / `raw`），播放走正常解析
 /// （命中缓存即 `file://` 离线播放）；删除是「清缓存」，不动下载记录。
 ///
-/// 归属从列表脚手架移到本模块：行形状是合集的领域联合，不该由渲染层定义。
+/// 行形状由本模块定义：它是合集的领域联合，渲染层不持有。
 class CollectionLocalSong {
   const CollectionLocalSong.download(this.record) : history = null;
 

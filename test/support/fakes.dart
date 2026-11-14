@@ -32,9 +32,9 @@ typedef TestPlaybackFrame = ({PlaybackSnapshot snapshot, Duration position});
 
 /// 记录调用与最后一次 load 请求的假播放引擎。
 ///
-/// 实现 [PlaybackFacade]（单快照 + 独立 position 通道）而不是旧的双快照
-/// 后端：测试与生产走同一套接口，`emit` 只接受 [PlaybackSnapshot]，
-/// 进度通过独立参数推进，避免测试重新长出一套 position 快照。
+/// 实现 [PlaybackFacade]（单快照 + 独立 position 通道）：测试与生产走同一套
+/// 接口，`emit` 只接受 [PlaybackSnapshot]，进度通过独立参数推进，避免测试
+/// 重新长出一套 position 快照。
 class FakePlaybackFacade implements PlaybackFacade {
   final TestListenable<PlaybackSnapshot> _notifier = TestListenable(
     PlaybackSnapshot.empty,

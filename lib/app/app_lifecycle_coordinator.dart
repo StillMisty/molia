@@ -25,7 +25,7 @@ class AppLifecycleCoordinator {
     _participants.add(participant);
   }
 
-  /// 回前台：并发启动所有回调（保持旧接线「不互相等待」的语义）。
+  /// 回前台：并发启动所有回调（各子系统互不等待）。
   Future<void> resumed() => _fanOut((p) => p.onResumed);
 
   /// 进入后台（paused）：只通知显式注册了 pause 动作的子系统。

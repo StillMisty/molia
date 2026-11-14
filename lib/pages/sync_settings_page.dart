@@ -241,7 +241,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   ///
   /// 用传输中性的「已同步」而不是「已连接」：WebDAV 设备只是云端同步过，
   /// 不代表在线（行内状态另有「云端已同步 / 云端未同步」）。这是设备区自己
-  /// 的状态，不做全局 App 状态条。空名册且从未跑过一轮时保留原来的配对引导；
+  /// 的状态，不做全局 App 状态条。空名册且从未跑过一轮时保留配对引导；
   /// 有名册但没有报告时只能说「还没有连接记录」，不能断言本轮没连上。
   static String _peersFooter(
     SyncUiState state,

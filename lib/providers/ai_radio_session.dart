@@ -103,8 +103,6 @@ class AiRadioSession {
     Iterable<ResolvedRecommendation> items,
   ) => _radioQueue.missing(items, (item) => item.track.id.uri);
 
-  // ---- 状态机 ----
-
   /// 开始一次接管：清空曲目跟踪并进入准备态（本轮反馈由反馈账本清）。
   void start() {
     reset();
@@ -196,8 +194,6 @@ class AiRadioSession {
     return AiRadioQueue.of(snapshot).upcoming <= lowWatermark;
   }
 
-  // ---- 队列与跟踪 ----
-
   /// 生成批次追加：只入队缺失项；整批登记跟踪（即使全在队，也要用本批标签）。
   ///
   /// 返回实际追加的项，供「补歌完成时队列已播完」的静默续播判断。
@@ -259,8 +255,6 @@ class AiRadioSession {
       if (pending.contains(entry.label)) entry.likedReported = true;
     }
   }
-
-  // ---- 静默补歌失败计数 ----
 
   /// 记录一次静默补歌失败；返回累计次数供日志使用。
   int recordAutoFeedFailure(SourceFailure failure) {

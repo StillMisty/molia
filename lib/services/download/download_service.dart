@@ -228,8 +228,7 @@ class DownloadService extends DownloadManager
   /// 记录加载只做一次（幂等）；首帧后的启动尾巴与按需调用共用同一 Future。
   Future<void>? _initFuture;
 
-  /// 下载目录是否可用（无文件系统 / 目录解析失败时为 false，UI 隐藏下载
-  /// 入口）。
+  /// 下载目录是否可用（口径见 [DownloadRecords.supported]）。
   @override
   bool get supported => _recordStore.records.supported;
 
@@ -624,7 +623,7 @@ class DownloadService extends DownloadManager
   }) async {
     await _ensureReady();
     // supported 不在这里判：根目录可能在初始化后失效，统一由 _requireRoot
-    // 给出与旧行为一致的 downloadUnsupported。
+    // 给出 downloadUnsupported。
     final status = downloadIntentStatusOf(
       track,
       records: _recordStore.records,
@@ -1246,7 +1245,7 @@ class DownloadService extends DownloadManager
     for (final candidate in qualities) {
       final cached = await _completeAudioCachePath(track, candidate);
       if (cached == null) continue;
-      // 与原先的缓存命中口径一致：零字节文件不算可播放副本。
+      // 零字节文件不算可播放副本。
       if (await _storage.fileSize(cached) <= 0) continue;
       return Uri.file(cached);
     }

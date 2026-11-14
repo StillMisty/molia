@@ -77,7 +77,7 @@ class WindowChrome {
   static bool _restoreMaximized = false;
 
   /// 关闭请求策略（顶栏关闭键 / 系统关闭按钮）：由组合根注入
-  /// （最小化到托盘 / 真正退出）。未注入时保持历史行为——直接退出。
+  /// （最小化到托盘 / 真正退出）。未注入时直接退出。
   static FutureOr<void> Function()? _onCloseRequested;
 
   /// 当前窗口是否最大化：窗口按钮用它切换「最大化 / 还原」图标。
@@ -118,8 +118,8 @@ class WindowChrome {
     }
     _window = window;
     try {
-      // 与 0.5.x 的 waitUntilReadyToShow 对齐：先把窗口从全屏 / 最大化 /
-      // 最小化态拉回普通态，再套用本次启动的尺寸与几何。
+      // 先把窗口从全屏 / 最大化 / 最小化态拉回普通态，再套用本次启动的
+      // 尺寸与几何。
       if (window.isFullScreen) window.isFullScreen = false;
       if (window.isMaximized) window.unmaximize();
       if (window.isMinimized) window.restore();
@@ -507,7 +507,7 @@ class WindowChrome {
   /// 原生窗口事件 → 最大化标记 / 几何落盘 / 关闭策略。
   ///
   /// nativeapi 用同一个 [WindowRestoredEvent] 表示「退出最大化」和「从最小化
-  /// 恢复」，只能靠事件前的状态区分（与 0.5.x 兼容层同一口径）。
+  /// 恢复」，只能靠事件前的状态区分。
   static void _onWindowEvent(WindowEvent event) {
     switch (event) {
       case WindowCloseRequestedEvent():

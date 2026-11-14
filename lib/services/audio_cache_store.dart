@@ -1,12 +1,12 @@
 /// 音频缓存目录约定的唯一实现：文件名、完整判据、索引、命中、清扫。
 ///
-/// 为什么单独成模块：这些约定过去散落在 `CacheService`（命名 / 索引 / 清扫）、
-/// `TrackLocalDataService`（命中音质）与 `DownloadService`（命中探测）
-/// 三处，任何一处改动都可能让写入侧与读取侧再次分叉。历史上写入侧把
-/// `SourceTrack.id`（`{sourceKey}:{songId}` 复合 id）当成 songId 写文件名，
-/// 读取侧按 `TrackId.id`（raw songId）查找——两侧永不同名，「缓存 = 已下载」
-/// 整条链（信息页状态、下载弹层标记、转存、离线取链、本地歌曲缓存行）静默
-/// 失效（见 ADR-0008 背景）。现在文件名只有 [keyForSource]（写入侧）与
+/// 为什么单独成模块：命名 / 索引 / 清扫、命中音质与命中探测若分散在
+/// `CacheService`、`TrackLocalDataService` 与 `DownloadService` 三处，任何
+/// 一处改动都可能让写入侧与读取侧分叉。写入侧若把 `SourceTrack.id`
+/// （`{sourceKey}:{songId}` 复合 id）当成 songId 写文件名，读取侧按
+/// `TrackId.id`（raw songId）查找，两侧永不同名，「缓存 = 已下载」整条链
+/// （信息页状态、下载弹层标记、转存、离线取链、本地歌曲缓存行）会静默失效
+/// （见 ADR-0008 背景）。文件名只有 [keyForSource]（写入侧）与
 /// [keyForTrack]（读取侧）两个出口，两侧同名是硬约束，由回归测试断言。
 ///
 /// 与 `CacheService` 的分工：本模块只承接磁盘约定，**策略面**（音频开关、

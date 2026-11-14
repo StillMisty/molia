@@ -88,7 +88,7 @@ typedef BuiltinLyricSearchAdapter = Future<LyricSearchPage> Function(
 /// 原生取词适配器：曲目 raw → 统一歌词结果（无字段 / 失败返回 null）。
 ///
 /// 能力位 `SourceCapabilities.lyrics` 只认这个适配器（或脚本声明的 lyric
-/// action），不再按「是不是内置平台」一刀切。
+/// action），与平台是否内置无关。
 typedef BuiltinLyricAdapter = Future<BuiltinLyricResult?> Function(
   Map<String, dynamic> raw,
 );

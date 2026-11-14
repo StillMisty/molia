@@ -26,10 +26,8 @@ class _PositionNotifier extends ValueNotifier<Duration>
 /// 播放引擎：把 [LocalPlaybackService] 的队列 / 播放态映射为领域快照，
 /// 并直接实现 [PlaybackFacade] 的全部命令。
 ///
-/// 为什么只剩这一层：服务已经拥有队列、播放顺序与投影，旧后端只是把服务
-/// 状态重新包一遍，facade 又把后端的快照再映射一遍。两层纯转发既让每个
-/// 命令改三处，也让 position 在两种快照里各走一遍。现在命令、快照映射与
-/// 高频进度通道只在这里实现一次；协调者与 provider 仍只依赖领域端口。
+/// 为什么只有这一层：服务已经拥有队列、播放顺序与投影，命令、快照映射与
+/// 高频进度通道都在这里只实现一次；协调者与 provider 只依赖领域端口。
 class PlaybackEngine implements PlaybackFacade {
   PlaybackEngine({required this._service}) {
     _service.addListener(_onServiceChanged);

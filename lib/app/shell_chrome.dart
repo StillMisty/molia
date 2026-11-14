@@ -76,8 +76,8 @@ class ShellChrome {
   /// 顶栏槽：工具行（M3E compact，56dp）+ 骨架自己的前置动作 / 底部槽。
   ///
   /// [actions] 是骨架自己的前置动作（移动骨架的迷你播放 / 下一首）；
-  /// [bottom] 是骨架自己的底部槽（移动骨架的波浪进度条）。标题留白 / 拖动区 /
-  /// 状态栏明暗由 [ShellAppBar] 统一处理，两套骨架不再各配自己的一份。
+  /// [bottom] 是骨架自己的底部槽（移动骨架的顶栏进度条）。标题留白 / 拖动区 /
+  /// 状态栏明暗由 [ShellAppBar] 统一处理，两套骨架共用这一份。
   PreferredSizeWidget appBar({
     required BuildContext context,
     required Widget title,

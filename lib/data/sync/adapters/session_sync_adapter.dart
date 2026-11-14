@@ -25,7 +25,7 @@ const int _sessionCursorVersion = 1;
 ///   远端更新的会话（版本更大）到达时仍会重新填充；
 /// - 应用后经 [onChanged] 让播放器重载恢复态（仅在没有真实播放时生效）。
 /// - **游标增量**：队列内容未变时只追加「下标 / 进度 / 模式 / 上下文」，
-///   不再把含每首 raw payload 的整份 JSON 重复写进日志（大队列下 MB 级）；
+///   不重复写含每首 raw payload 的整份 JSON（大队列下 MB 级）；
 ///   本地整份记录仍由首次同步、队列变化与全量快照负责。
 class SessionSyncAdapter implements SyncAdapter {
   SessionSyncAdapter({
@@ -150,7 +150,7 @@ class SessionSyncAdapter implements SyncAdapter {
   ///
   /// 合并窗口内的高频进度保存只登记一次：会话载荷是整份队列（体积远大于其它
   /// 类别），每次保存都追加会把日志硬上限撑爆；窗口外的变更由下一轮统一登记
-  /// （哈希检测），两者互为兜底。同队列的保存追加游标增量，不再重写整份队列。
+  /// （哈希检测），两者互为兜底。同队列的保存只追加游标增量，不重写整份队列。
   Future<void> noteLocalSave() async {
     final now = _state.nowMs();
     if (_lastImmediateAppendAt > 0 &&

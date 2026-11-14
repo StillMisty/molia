@@ -1,8 +1,7 @@
 /// 资料库读侧的内存策略：播放历史顺序 / 收藏计数的唯一实现。
 ///
-/// 这些规则此前散在 `LibraryProvider` 里，和仓库的 SQL 真值（
-/// `ORDER BY playedAt DESC, rowid DESC`、列表 COUNT）各写一份；本模块把它们
-/// 收成纯函数，provider 只负责持有状态并调用。
+/// 这些规则收成纯函数，provider 只负责持有状态并调用；SQL 真值由仓库负责，
+/// 内存侧只做与之等价的合并 / 计数。
 ///
 /// 纯 Dart：不依赖 Flutter / drift，表驱动单测直接覆盖。
 library;

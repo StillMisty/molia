@@ -3,7 +3,7 @@
 ///
 /// 为什么单独成模块：统计仓库只该关心「事件怎么采集、怎么查询」，而
 /// `syncKey` / 版本列 / 增量日志 / 导出缓存是同步协议的形状。把它们收在
-/// 这里，适配器只映射类型化记录，仓库不再 import 同步模型。
+/// 这里，适配器只映射类型化记录，仓库不 import 同步模型。
 ///
 /// 写入点约定：
 /// - 本机收尾在**数据写入的同一事务**里调 [stampFinishedEvent] /
@@ -247,7 +247,7 @@ class SqliteStatisticsSyncStore
   /// 收尾事件：在数据写入的同一事务里补版本戳并追加增量日志。
   ///
   /// 调用前事件内容（`endedAt` / 进度 / 原因）已写好；这里只碰同步列，
-  /// 让统计仓库不再 import 发号器与日志模型。
+  /// 让统计仓库不 import 发号器与日志模型。
   @override
   Future<void> stampFinishedEvent(
     DatabaseConnectionUser executor,

@@ -154,7 +154,7 @@ void main() {
     adapter
       ..releaseCaches()
       ..releaseCaches();
-    // 文件已删除：不再有内存缓存可复用，本轮读不到封面 → 不产出记录。
+    // 文件已删除：无内存缓存可复用，本轮读不到封面 → 不产出记录。
     final after = (await adapter.collect())[SyncCategory.covers]!;
     expect(after, isEmpty, reason: '释放后重新读盘（文件已删）');
   });

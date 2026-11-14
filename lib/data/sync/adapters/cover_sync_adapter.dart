@@ -47,7 +47,7 @@ class CoverSyncAdapter
     _wasEnabled = _enabled();
   }
 
-  /// 线上图片 MIME（Phase 1 归一化产物固定是 JPEG）。
+  /// 线上图片 MIME（归一化产物固定是 JPEG）。
   static const String _mime = 'image/jpeg';
 
   /// [CustomCoverStore.maxSyncBytes] 上限对应的 base64 文本长度。

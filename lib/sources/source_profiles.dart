@@ -172,7 +172,7 @@ class SourceProfiles {
       disabledChannels,
     );
 
-    // 4. 渠道候选顺序与迁移前一致：脚本可搜索源 → 内置可搜索平台 →
+    // 4. 渠道候选顺序：脚本可搜索源 → 内置可搜索平台 →
     //    any-listen → 仅发现的内置平台（避免发现入口排到搜索源前面）。
     //    内置 key 的脚本声明已在第 1 步合并，不在这里重复出现。
     final candidateKeys = <String>[];

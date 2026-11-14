@@ -53,7 +53,7 @@ List<RowAction> trackRowActionMenu(
 const TrackHandoff _handoff = TrackHandoff();
 
 /// 领域曲目（队列 / 搜索结果等自建行）：收藏态订阅与写入流程（收藏切换 +
-/// snackbar、加入列表走统一目标弹层）收在这里，自建行不再各抄一份。
+/// snackbar、加入列表走统一目标弹层）收在这里。
 ///
 /// 订阅是逐行的（每行一个 `select`，只影响本行）——调用方按行调用即可，
 /// 不要在列表层调用后透传。

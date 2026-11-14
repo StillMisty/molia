@@ -24,7 +24,7 @@ import '../widgets/shell_reselect.dart';
 /// 当前渠道是否具备任一搜索能力（单曲 / 歌手 / 按歌词搜歌）。
 ///
 /// 能力位 → 搜索类型的映射在 `SourceCapabilities.searchKinds` 唯一实现；
-/// 这里只消费聚合事实，不再自己重复 search || artist || lyricSearch。
+/// 这里只消费聚合事实。
 bool sourceSupportsAnySearch(SourceDescriptor source) =>
     source.capabilities.supportsAnySearch;
 
@@ -199,12 +199,11 @@ class _LibraryState extends State<Library> {
       });
     }
 
-    // 全部渠道停用：没有任何可展示的渠道，保留原来的设置引导。
+    // 全部渠道停用：没有任何可展示的渠道，保留设置引导。
     if (enabledChannels.isEmpty) {
       _currentSupportsSearch = false;
       return ResponsivePageContainer(
         pageType: ResponsivePageType.browse,
-        // 发现页全宽自适应：不再受 browse 的 1600 桌面上限约束。
         maxWidth: double.infinity,
         alignment: Alignment.topCenter,
         child: Center(
@@ -253,7 +252,6 @@ class _LibraryState extends State<Library> {
       // 渠道），正文只提示当前渠道没有内容，不误报「所有渠道都已停用」。
       return ResponsivePageContainer(
         pageType: ResponsivePageType.browse,
-        // 发现页全宽自适应：不再受 browse 的 1600 桌面上限约束。
         maxWidth: double.infinity,
         alignment: Alignment.topCenter,
         child: Column(
@@ -297,7 +295,7 @@ class _LibraryState extends State<Library> {
 
     return ResponsivePageContainer(
       pageType: ResponsivePageType.browse,
-      // 发现页全宽自适应：不再受 browse 的 1600 桌面上限约束。
+      // 发现页全宽：browse 版式的 1600 桌面上限不适用。
       maxWidth: double.infinity,
       alignment: Alignment.topCenter,
       child: Column(
@@ -480,9 +478,9 @@ class _LibraryState extends State<Library> {
 
   void _selectChannel(String key) {
     if (key.isEmpty) return;
-    // 不再用 build 时捕获的 enabledChannels 做二次查找：脚本渠道可能在
-    // 页面 build 之后才加入列表，旧快照会找不到 entry 而静默忽略选择。
-    // 渠道只有一份状态，发现内容与搜索都随 ChannelSelection 更新。
+    // 选择直接交给 ChannelSelection：脚本渠道可能在页面 build 之后才加入
+    // 列表，用 build 快照查找会静默忽略选择。渠道只有一份状态，发现内容与
+    // 搜索都随 ChannelSelection 更新。
     context.read<ChannelSelection>().select(key);
   }
 

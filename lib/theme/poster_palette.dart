@@ -47,6 +47,6 @@ class PosterPalette {
   /// 底部水印（图标 + 品牌名）。
   final Color watermark;
 
-  /// 分隔线（当前版本预留，canvas 层未使用）。
+  /// 分隔线色（歌词海报画布未单独绘制；年度海报用作弱化色）。
   final Color separator;
 }

@@ -2,14 +2,13 @@
 /// PlaybackEngine → PlaybackSessionCoordinator → PlaybackProvider，
 /// 含播放副作用观察者与系统媒体会话。
 ///
-/// **前向引用如何消失**：
-/// - 服务 ↔ 后端互为依赖（服务要解析直链、后端要控制服务）。原组合根用
-///   `late final playbackBackend` 让服务解析回调提前引用后端；这里「取链」是
-///   一条解析函数（`LocalPlaybackChain`），两个消费者都不引用对方实例。
+/// **前向引用如何拆开**：
+/// - 服务 ↔ 后端互为依赖（服务要解析直链、后端要控制服务）。「取链」是一条
+///   解析函数（`LocalPlaybackChain`），两个消费者都不引用对方实例，无需
+///   `late final` 式的前置引用。
 /// - 系统媒体会话在会话模块建好之后装配：恢复态切歌键与系统控制落盘都落到
-///   `PlaybackSessionCoordinator`，原组合根的 `restoredControlsTarget` 可变槽位
-///   （先建 handler 再回填）消失。会话仍由注入的 [buildPlaybackStack] 参数构建，
-///   调用点仍在 `runApp` 之前。
+///   `PlaybackSessionCoordinator`，不需要可变的回填槽位。会话仍由注入的
+///   [buildPlaybackStack] 参数构建，调用点仍在 `runApp` 之前。
 library;
 
 import '../../domain/ports/playback_facade.dart';

@@ -4,7 +4,7 @@
 /// 为什么留到首帧：托盘图标资源此时可读；更新读包信息/偏好、同步引擎读安全
 /// 存储口令、调度器电量/网络探针都不参与首帧内容（见各自 start 的注释）；
 /// 音源脚本加载与更新检查同理；同步传输启动要过局域网权限门（Android 系统
-/// 对话框）并绑套接字，早于首帧会让窗口等一个用户看不见的对话框（顺序不变）。
+/// 对话框）并绑套接字，早于首帧会让窗口等一个用户看不见的对话框。
 library;
 
 import 'dart:async';
@@ -79,8 +79,8 @@ void initAfterFirstFrame({
     await CacheService.instance.cleanupAudioPartials();
   }());
 
-  // 同步身份的安全存储备份：正常启动 prefs 已一致时是空操作；首装把
-  // Keystore 写入从首帧路径挪到这里（读取仍留在 init，身份恢复需要）。
+  // 同步身份的安全存储备份：正常启动 prefs 已一致时是空操作；首装的
+  // Keystore 写入放在首帧后（读取仍留在 init，身份恢复需要）。
   unawaited(library.syncState.backupDeviceId());
 
   // 资料库启动尾巴：全库最大戳种子 → 统计收尾/裁剪

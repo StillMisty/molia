@@ -296,7 +296,7 @@ void main() {
 
     timer.setExitApp(true);
     timer.startAfterCurrentTrack();
-    // 没有完成事件（旧后端 / 位置回退路径）：曲末后播放停止。
+    // 没有完成事件（退化为按位置判定）：曲末后播放停止。
     backend.emitFrame(
       _snapshot(
         current: a,

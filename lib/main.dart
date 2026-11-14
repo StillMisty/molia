@@ -302,8 +302,8 @@ void main() async {
     },
     defaultKey: () => BuiltinDiscover.sourceKeys.first,
   );
-  // 搜索 provider 由组合根创建（原先在 Provider 树里懒建）：只为了在创建时
-  // 注册托盘期的缓存释放回调；挂树仍是同一个实例（`provider_tree.dart`）。
+  // 搜索 provider 由组合根创建：创建时要注册托盘期的缓存释放回调；
+  // 挂树仍是同一个实例（`provider_tree.dart`）。
   final searchHistoryStore = SearchHistoryStore();
   await searchHistoryStore.ready();
   final searchProvider = SearchProvider(
@@ -454,7 +454,7 @@ void main() async {
   );
 
   // 应用生命周期扇出的唯一 owner：main 只把系统事件转进来，同步 / 会话 /
-  // 统计 / 网络 / 更新的反应由各子系统注册，不再由 main 与 app_shell
+  // 统计 / 网络 / 更新的反应由各子系统注册，避免 main 与 app_shell
   // 各持一份 WidgetsBindingObserver 分散触发。
   final appLifecycle = AppLifecycleCoordinator()
     ..register(

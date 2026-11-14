@@ -3,7 +3,7 @@ import '../source_track.dart';
 
 /// 解析 LX 脚本扩展搜索的返回数据（社区约定，字段兼容性尽力而为）。
 ///
-/// 从 `SourceManager` 拆出的纯函数（无宿主状态）：优先识别
+/// 纯函数（无宿主状态）：优先识别
 /// isEnd / hasMore / total，兼容 `{ data: { list: [...], total: n } }`
 /// 之类的两层结构；无法识别的条目跳过。
 SourceSearchResult parseLxSearchResult(

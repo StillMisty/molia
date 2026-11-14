@@ -255,8 +255,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  // 「全部」是清空筛选的唯一出口（原标签行上的独立 chip 已并入
-                  // 本弹层）；返回空串 = 无标签。
+                  // 「全部」是清空筛选的唯一出口；返回空串 = 无标签。
                   M3EChip(
                     key: const Key('discoverAllTagsChip'),
                     type: M3EChipType.filter,
@@ -404,8 +403,8 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
   /// 标签行：一个「标签」筛选 chip + 热门标签 + 行尾「打开歌单」溢出。
   ///
   /// 「全部 / 全部标签」合并成一个入口：清空筛选也是标签弹层里的「全部」，
-  /// chip 不再随筛选状态增减；「打开歌单」从搜索栏尾部移到这一行末尾，
-  /// 搜索栏只负责搜索。热门标签为空时仍保留筛选 chip 与溢出，入口不消失。
+  /// chip 不随筛选状态增减；「打开歌单」在行末尾，搜索栏只负责搜索。
+  /// 热门标签为空时仍保留筛选 chip 与溢出，入口不消失。
   Widget _buildTagRow(AppLocalizations l10n, double gutter) {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: gutter),

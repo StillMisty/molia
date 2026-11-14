@@ -7,18 +7,19 @@ import '../data/settings/settings_keys.dart';
 
 /// 全局当前渠道的唯一持有者（发现内容与搜索共用）。
 ///
-/// 为什么单独成模块：渠道偏好原来在 `DiscoverProvider` 与 `SearchProvider`
-/// 各存一份，靠组合根 / 资料页 / Ctrl+F 在多个时机手工同步；任何一处漏同步
-/// 都会让「热榜渠道」和「搜索渠道」分叉。这里只保留一个 key，两个消费方都读
-/// 同一个实例，切换渠道只经 [select]。
+/// 为什么单独成模块：渠道偏好若在 `DiscoverProvider` 与 `SearchProvider`
+/// 各存一份，只能靠组合根 / 资料页 / Ctrl+F 在多个时机手工同步；任何一处漏
+/// 同步都会让「热榜渠道」和「搜索渠道」分叉。这里只保留一个 key，两个消费方
+/// 都读同一个实例，切换渠道只经 [select]。
 ///
 /// 校验（停用 / 删除后的回退）规则也在本模块：调用方只提供「当前有效 key」
 /// 的快照，[ensureValid] 负责在快照非空时把失效 key 换到第一个有效项。音源
 /// 尚未初始化 / 脚本仍在激活时快照为空——此时绝不回退，避免覆盖用户保存的
 /// 脚本渠道偏好。
 ///
-/// **不自动订阅音源状态**：旧行为是资料页在渠道缺失且音源就绪时触发纠偏，
-/// 搜索侧保持失效 key、只清空结果。模块只提供规则，触发时机仍留给页面。
+/// **不自动订阅音源状态**：资料页在渠道缺失且音源就绪后触发 [ensureValid]，
+/// 搜索侧保持失效 key、只清空结果——两种处理都留在页面。模块只提供规则，
+/// 触发时机仍留给页面。
 class ChannelSelection extends ChangeNotifier {
   ChannelSelection({
     SettingsAccess? settings,
@@ -47,8 +48,7 @@ class ChannelSelection extends ChangeNotifier {
   final List<String> Function() _validKeys;
   final String Function() _defaultKey;
 
-  /// 显式初始值（测试 / 恢复）优先于异步读盘，与旧 DiscoverProvider 的
-  /// `initialChannelKey` 语义一致。
+  /// 显式初始值（测试 / 恢复）优先于异步读盘。
   bool _explicitInitialKey = false;
 
   /// 用户选择的代际：读盘 / reload 在 await 前抓取，返回时代际不同即丢弃。
@@ -64,7 +64,7 @@ class ChannelSelection extends ChangeNotifier {
   /// 切换渠道：空白或同值忽略；先通知（UI 立即响应），再异步落盘。
   ///
   /// 写失败静默：渠道偏好是可重建的 UI 状态，不值得为一次 prefs 写入失败
-  /// 打断用户操作（与旧实现一致）。
+  /// 打断用户操作。
   void select(String key) {
     final normalized = key.trim();
     if (normalized.isEmpty || normalized == _key) return;
@@ -108,8 +108,8 @@ class ChannelSelection extends ChangeNotifier {
       }
       _key = value;
       notifyListeners();
-      // 读回的值可能已被停用 / 删除：保持旧时序，不在这里自动纠偏；由资料页
-      // 在音源就绪后触发 [ensureValid]。
+      // 读回的值可能已被停用 / 删除：不在这里自动纠偏，由资料页在音源就绪后
+      // 触发 [ensureValid]。
     } catch (_) {
       // 读取失败保持当前渠道（默认值 / 用户选择）。
     }

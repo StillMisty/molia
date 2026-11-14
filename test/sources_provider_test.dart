@@ -146,8 +146,8 @@ void main() {
       'bili',
     ]);
 
-    // provider 视图与 manager 的画像快照逐项一致（canSearch / enabled 不再
-    // 在两层各算一份）。
+    // provider 视图与 manager 的画像快照逐项一致（canSearch / enabled
+    // 只在 manager 算一次）。
     final channelProfiles = f.manager.sourceProfiles.channels;
     expect(
       f.provider.channels.map((o) => o.capabilities.search),
@@ -239,7 +239,7 @@ void main() {
         domain.SourceKind.builtin,
       );
 
-      // provider 视图与 manager 完全一致（不再各复制一份字段）。
+      // provider 视图与 manager 完全一致（字段只在 manager 存一份）。
       expect(channels, f.manager.channels);
       expect(searchable, f.manager.searchableSources);
       expect(searchable.every((d) => d.enabled), isTrue);

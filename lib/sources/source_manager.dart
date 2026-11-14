@@ -39,7 +39,7 @@ import '../domain/ports/music_source.dart' show PlayableStream;
 export 'lx/lx_engine_types.dart' show LxEngineException;
 export 'lx/lx_script_update.dart'
     show ScriptUpdateCheck, ScriptUpdateError, ScriptUpdateException;
-// SourceKind 搬到 sources/source_profiles.dart（画像模块的唯一事实），
+// SourceKind 定义在 sources/source_profiles.dart（画像模块的唯一事实），
 // 这里 re-export 保持既有 import 路径与调用方不变。
 export 'source_profiles.dart' show SourceKind, SourceProfile, SourceProfiles;
 
@@ -569,7 +569,7 @@ class SourceManager extends ChangeNotifier {
     int limit = kArtistPageSize,
   }) async {
     // 详情路由只看适配器：画像的 `artist` 还叠了搜索门（UI 入口），但已保存
-    // 曲目的歌手 id 在无激活脚本时仍可直接取详情（与迁移前一致）。
+    // 曲目的歌手 id 在无激活脚本时仍可直接取详情。
     if (BuiltinPlatforms.artistFor(sourceKey) == null) {
       throw SourceFailure(
         kind: FailureKind.unsupported,

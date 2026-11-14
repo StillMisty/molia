@@ -311,9 +311,7 @@ class CacheService {
     required String songId,
   }) => _audioStore.usageForTrack(sourceKey: sourceKey, songId: songId);
 
-  /// 单曲音频缓存「写入中」占用（半成品 / 边车）。
-  ///
-  /// 只用于占用展示解释（「有占用、但还不能离线播放」）；命中判定不看它。
+  /// 单曲音频缓存「写入中」占用（口径见 [AudioCacheStore.writingUsageForTrack]）。
   Future<CacheUsage> audioWritingUsageForTrack({
     required String sourceKey,
     required String songId,

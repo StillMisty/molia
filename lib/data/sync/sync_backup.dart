@@ -13,8 +13,8 @@ import 'sync_stamp.dart';
 /// 启用同步或轮次。
 ///
 /// 为什么独立于引擎：备份是「本地文件 ↔ 本地数据」的转换，和「跑一轮、拉
-/// 传输、写报告」没有共享的可变状态。拆开后导出 / 导入测试不必构造传输与
-/// 轮次；引擎的 interface 也不再为备份留两个方法。记录层的收集 / 合并 /
+/// 传输、写报告」没有共享的可变状态，因此导出 / 导入测试不必构造传输与
+/// 轮次，引擎的 interface 也不必为备份留方法。记录层的收集 / 合并 /
 /// 登记仍走 [SyncRecordPipeline]（与一轮同步同一实例），两条应用路径不会
 /// 各自维护一套合并规则。
 class SyncBackup {
@@ -147,8 +147,8 @@ class SyncBackup {
     final local = await _pipeline.collect(categories);
     final filtered = _filterCategories(envelope, categories);
     // 备份不是「权威对端」：把载荷里的全部键作为强制交付，让合并跳过登记
-    // 过滤、逐键交给适配器按 LWW 判定（与导入前的行为一致，陈旧记录由
-    // 适配器 / 库内版本比较跳过）。
+    // 过滤、逐键交给适配器按 LWW 判定（陈旧记录由适配器 / 库内版本比较
+    // 跳过）。
     final forcedKeys = <SyncKnownKey>{
       for (final entry in filtered.records.entries)
         for (final record in entry.value)

@@ -746,7 +746,7 @@ void main() {
       expect(record.sizeBytes, storage.files['/music/歌手 - 歌名.mp3']!.length);
       expect(record.localTrack?.id.sourceKey, kLocalSourceKey);
       expect(record.localTrack?.payload['path'], '/music/歌手 - 歌名.mp3');
-      // 领域身份是稳定 localKey（file:<uuid>），不是旧路径身份。
+      // 领域身份是稳定 localKey（file:<uuid>），与文件路径解耦。
       expect(record.localKey, startsWith('file:'));
       expect(record.localSongId, record.localKey);
       expect(record.localTrack?.id.id, record.localKey);

@@ -56,7 +56,7 @@ class CoverImageIdentity {
       );
     } catch (_) {
       // 文件消失 / URI 异常 / 缓存未就绪：按「没有身份」处理，不读也不写
-      // seed；调用方继续走原来的取色链路。
+      // seed；调用方继续按 URL 取色。
       return null;
     }
   }

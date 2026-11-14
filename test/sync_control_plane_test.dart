@@ -280,7 +280,7 @@ void main() {
     expect(control.manualPeers, isEmpty, reason: '地址簿条目一并移除');
     expect(notifications, 1);
 
-    // 未启用传输不动作（与旧引擎语义一致：没有通道就没有远端可清）。
+    // 未启用传输不动作：没有通道就没有远端可清。
     expect((await control.cleanupRemote('ghost')).removed, isFalse);
     expect(lan.deletedRemotes, isEmpty);
 

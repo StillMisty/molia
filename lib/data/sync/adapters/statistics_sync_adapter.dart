@@ -5,8 +5,8 @@ import '../sync_adapter.dart';
 /// 听歌统计适配器：类型化事件 ↔ `SyncRecord` 的薄映射。
 ///
 /// 导出 / 合并语义与导出变更计数都在 [StatisticsSyncStore] 里；指纹缓存 /
-/// fresh 绕过由 `ChangeDetectingAdapter` 装饰器统一拥有；适配器不再认识
-/// `play_events` 的列，也不再直接依赖统计仓库。
+/// fresh 绕过由 `ChangeDetectingAdapter` 装饰器统一拥有；适配器不感知
+/// `play_events` 的列，也不直接依赖统计仓库。
 ///
 /// append-only 语义：记录键 = `syncKey`（跨设备去重的唯一键），版本 =
 /// 发号器给的三元组（收尾时取号）；`endedAt`（何时结束）是内容时间、

@@ -72,7 +72,7 @@ class BiliSearch {
   /// 适配器签名。
   ///
   /// 与视频搜索同一套会话 / 风控策略（[BiliClient] 的 session 口径），
-  /// 不再出现「视频搜索会刷新、用户搜索不会」的分叉。
+  /// 两处行为一致。
   static Future<ArtistSearchPage> searchUsers(
     String keyword, {
     int page = 1,

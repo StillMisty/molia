@@ -44,7 +44,7 @@ class LyricsSelectionPage extends StatefulWidget {
   final bool showRoma;
 
   /// 作为二级页正文挂进外层 chrome（侧边弹层 / 全屏路由的 AppBar）时为
-  /// true：不再自带 Scaffold + AppBar，避免双层标题栏。
+  /// true：不自带 Scaffold + AppBar，避免双层标题栏。
   final bool embedded;
 
   const LyricsSelectionPage({
@@ -102,7 +102,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
     notificationService.showSnackBar(l10n.copiedToClipboard(l10n.lyricsTitle));
   }
 
-  // 获取当前播放行的索引（与播放页歌词共用同一时间策略：同一 200ms 提前量）
+  // 当前播放行按播放页歌词同一时间策略（同一 200ms 提前量）计算
   int _getCurrentLineIndex(Duration currentPosition) => LyricTimingPolicy.page
       .lineIndexAt(_lyricLines, currentPosition, isSynced: widget.isSynced);
 

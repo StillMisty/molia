@@ -1,17 +1,12 @@
 /// 一轮同步的阶段编排：输入 / 每阶段产物都是显式值，阶段之间不共享可变上下文。
 ///
-/// 为什么拆出来：`SyncEngine._runRound` 曾在一个方法里做十二件事（口令、
-/// 传输启动、收集、anti-entropy、拉取、游标消费、缺口兜底、合并、应用、
-/// 裁日志、构建快照、推送、五态报告）。任何一步的局部变量都要在几百行里
-/// 传递，阶段之间靠大段注释维持顺序，既难改也难单测。
-///
-/// 现在 [SyncRoundRunner.runRound] 只顺序调用六个阶段并组装报告；每个阶段
-/// 返回一个结果值（[SyncRoundCollected] / [SyncRoundPulled] /
+/// 为什么拆成阶段：[SyncRoundRunner.runRound] 只顺序调用六个阶段并组装报告；
+/// 每个阶段返回一个结果值（[SyncRoundCollected] / [SyncRoundPulled] /
 /// [SyncRoundConsumed] / [SyncRoundApplied] / [SyncRoundPublished]），下一阶段
 /// 只读这些值，不读上一阶段写过的共享字段。阶段入口私有：生产与测试都只经
 /// [SyncRoundRunner.runRound] 驱动，测试不能绕过「先 collect 后 apply」。
 /// 同步语义（应用成功才推进游标、forced delivery、缺口二次拉取、
-/// anti-entropy、入站轮、名册失败记账、报告五态）逐条保留。
+/// anti-entropy、入站轮、名册失败记账、报告五态）逐条由阶段实现。
 library;
 
 import 'dart:async';

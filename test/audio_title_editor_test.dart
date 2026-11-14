@@ -16,8 +16,6 @@ void main() {
     storage = FakeDownloadStorage();
   });
 
-  // --- MP3 fixtures --------------------------------------------------------
-
   Uint8List frame(String id, List<int> body, {int version = 3}) {
     final size = body.length;
     final header = <int>[...ascii.encode(id)];

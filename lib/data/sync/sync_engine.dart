@@ -315,7 +315,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   ///   同一个在途轮内到达的多个请求仍只补跑一轮，全部等待者收到同一份报告；
   /// - 同步关闭（未启用任何传输）：返回 null（本轮没有真正跑）。
   ///
-  /// 排队合并语义沿用既有行为：触发原因按「手动优先」合并、[antiEntropy]
+  /// 排队合并语义：触发原因按「手动优先」合并、[antiEntropy]
   /// 取或；[push] 与 [onlyCategories] 属于整段轮次链的外发范围，由发起
   /// 请求决定（补跑轮不会因为排队请求而改变外发 / 类别范围）。
   ///

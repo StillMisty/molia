@@ -44,8 +44,8 @@ abstract interface class DownloadNotifications {
   /// （歌手 / 版本号，可为空）；[index] / [total] 为批量位置（从 1 起；
   /// 单任务与应用更新传 null）；[progress] / [max] 为已接收 / 总字节，
   /// [max] 为 null 或 ≤ 0 表示总大小未知（不确定进度条）。
-  /// [channel] 选择系统通知渠道：歌曲下载用 `downloads`（默认，旧调用保持
-  /// 原行为），应用更新用 `update`。
+  /// [channel] 选择系统通知渠道：歌曲下载用 `downloads`（默认），
+  /// 应用更新用 `update`。
   Future<void> start({
     required String id,
     required String title,

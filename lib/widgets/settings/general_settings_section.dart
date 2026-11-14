@@ -24,8 +24,7 @@ import 'settings_tiles.dart';
 /// 设置首屏「通用与关于」卡：启动页 / 底栏 / 语言 / 震动 / 桌面行为 /
 /// 快捷键 / 更新。
 ///
-/// 原先独立的「通用设置」子页收进首屏，目录入口不再单开子页。托盘、窗口与
-/// 震动反馈是设备本地键，卡底给一句说明。
+/// 托盘、窗口与震动反馈是设备本地键，卡底给一句说明。
 class GeneralSettingsSection extends StatefulWidget {
   const GeneralSettingsSection({super.key});
 

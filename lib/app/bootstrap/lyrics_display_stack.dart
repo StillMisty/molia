@@ -1,7 +1,7 @@
 /// 歌词显示与主题栈：主题 / 导航偏好 / 封面取色服务 → 歌词显示调度
 /// （桌面歌词 / 通知·锁屏 / 蓝牙）→ 取色接线 → 启动预解析（首帧配色）。
 ///
-/// 顺序与原组合根一致：主题实例先建（桌面歌词「跟随主题」「跟随封面」的颜色
+/// 顺序：主题实例先建（桌面歌词「跟随主题」「跟随封面」的颜色
 /// 都从 ThemeProvider 取），显示调度随后接线，最后 `await preferencesReady`
 /// 做 runApp 前的启动预解析。
 library;
@@ -196,7 +196,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   );
 
   // 下一首歌词预载接线：紧跟歌词显示接线之后、取色接线之前
-  // （与原组合根同一顺序：显示 → 预载 → 取色 → 启动预解析）。
+  // （顺序：显示 → 预载 → 取色 → 启动预解析）。
   wireNextTrackLyricsPreload(
     playback: playback,
     lyricsProvider: lyricsProvider,

@@ -33,9 +33,9 @@ enum FavoriteFeedback { confirmation, failureOnly }
 
 /// 收藏心形契约：图标 / 语义标签 / 颜色三处的唯一映射。
 ///
-/// 播放页心形按钮、曲目菜单与 AI 推荐菜单此前各写一遍
-/// `favorite ? favorite_rounded : favorite_border_rounded`；图标或配色改一次
-/// 就得追所有调用点。这里让「已收藏」只有一个定义（实心 + primary），
+/// 播放页心形按钮、曲目菜单与 AI 推荐菜单都用这一份映射
+/// `favorite ? favorite_rounded : favorite_border_rounded`：图标或配色改一次
+/// 就覆盖所有调用点。这里让「已收藏」只有一个定义（实心 + primary），
 /// 未收藏只有一个定义（空心 + onSurfaceVariant）。
 @immutable
 class FavoriteHeart {

@@ -1,9 +1,8 @@
 /// 内置平台「曲目 raw → 原生封面」适配器集合。
 ///
-/// 与 `builtin_lyric_adapters.dart` 同一思路：原先字段派发在
-/// `BuiltinPicDispatch._fetchFor` 的六路 switch 里，能力位只能按
-/// 「是不是内置平台」笼统为真。现在每个实现登记进 [BuiltinPlatforms]，
-/// `capabilities.artwork` 与派发读取同一条目。
+/// 与 `builtin_lyric_adapters.dart` 同一思路：每个实现登记进
+/// [BuiltinPlatforms]，`capabilities.artwork` 与派发读取同一条目——
+/// 能力位按平台实际实现为真，不按「是不是内置平台」笼统判定。
 ///
 /// 适配器只挑选 raw 字段（或直接复用搜索响应里的封面），失败返回 null；
 /// 缓存与异常归一仍由 `BuiltinPicDispatch` 负责。

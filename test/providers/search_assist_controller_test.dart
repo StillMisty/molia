@@ -174,7 +174,7 @@ void main() {
     expect(provider.songResults.items, isEmpty);
     expect(assist.value.correction, '晴天之歌');
 
-    // 有结果时不再有纠错。
+    // 有结果时不触发纠错。
     provider.submitSearch('稻香');
     await _waitUntil(() => !provider.isSearchBusy);
     expect(assist.value.correction, isNull);

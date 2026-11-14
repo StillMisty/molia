@@ -1,8 +1,8 @@
 /// 应用壳（App Shell）：导航栏 / 顶栏 / 迷你播放条 / 页面层。
 ///
-/// main.dart 是唯一 composition root 且禁止被测试 import，壳层独立成文件后
-/// 测试可直接挂载。composition root 仍负责创建 provider 与主题，本文件只
-/// 消费注入的 provider。
+/// main.dart 是唯一 composition root 且禁止被测试 import；壳层独立成
+/// 文件，测试可直接挂载。composition root 仍负责创建 provider 与主题，
+/// 本文件只消费注入的 provider。
 library;
 
 import 'dart:async';
@@ -59,16 +59,15 @@ import 'tray_dormant_gate.dart';
 
 /// 顶栏进度条槽高。
 ///
-/// 进度条本体只有 4dp；槽固定为 10dp，顶栏总高与历史版式 / 播放页锚点保持
-/// 一致，不随播放态或进度条形态变化（避免 play/pause 时整条顶栏跳变）。
+/// 进度条本体只有 4dp；槽固定为 10dp，顶栏总高与播放页锚点保持一致，
+/// 不随播放态或进度条形态变化（避免 play/pause 时整条顶栏跳变）。
 const double _shellBarProgressHeight = 10;
 
 /// 顶栏底部进度条：恒为平直形态。
 ///
 /// 顶栏在列表 / 收藏等页面常驻，波浪是 60fps 无限动画，不应在用户读列表时
-/// 持续出帧；波浪只留给播放页主场的进度滑杆。
-///
-/// 槽高固定为 [_shellBarProgressHeight]，与旧版波浪容器同槽心。
+/// 持续出帧；波浪只留给播放页主场的进度滑杆。槽高固定为
+/// [_shellBarProgressHeight]。
 class ProgressIndicator extends StatefulWidget {
   /// 当前进度（来自 provider.position 单一时钟，无自外推）。
   final Duration position;
@@ -157,7 +156,6 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
             : null;
 
         // 顶栏恒用平直进度条：波浪只留给播放页，避免列表常驻时持续出帧。
-        // 槽高见 [_shellBarProgressHeight]，与旧版波浪容器同槽心。
         return SizedBox(
           height: _shellBarProgressHeight,
           child: M3EProgressIndicator.linear(
@@ -215,7 +213,7 @@ class _MyAppState extends State<MyApp>
   /// 弹簧只负责时间曲线（快出、缓落定）；透明度 / 缩放的形状仍由
   /// `shellPageLayerPresentation` 内的 Curves 决定，两者不重复缓动。
   ///
-  /// 用 bounded 控制器：`forward(from: 0)` 的语义与旧的 320ms 控制器一致，
+  /// 用 bounded 控制器：`forward(from: 0)` 从 0 重新起播，
   /// 显式设值被夹在 0..1。字段类型必须写具体的 bounded 类：工厂
   /// `SingleMotionController.bounded` 的静态返回类型是基类，拿不到 `forward`。
   ///
@@ -418,7 +416,7 @@ class _MyAppState extends State<MyApp>
       return;
     }
     // 重复点击是一次真实的点按（列表回顶 / 播放器折叠都是肉眼可见的动作），
-    // 给一次轻震：壳层统一在此触发 —— 页面侧对重复点击的响应不再自带触感，
+    // 给一次轻震：壳层统一在此触发 —— 页面侧的重复点击响应不带触感，
     // 避免同一次点击两次震动（命中忽略分支时不震动）。
     HapticsService.lightImpact();
     _reselect[destination]?.trigger();
@@ -630,8 +628,8 @@ class _MyAppState extends State<MyApp>
 
   /// 打开搜索遮罩（顶栏品牌区点击 / 全局快捷键 Ctrl+F 同一条路径）。
   ///
-  /// 宽窄窗不再分流：遮罩自体全屏呈现、搜索条居中，任何窗口宽下都是同一个
-  /// 落点（宽度判定只服务遮罩内的布局，不再决定入口形态）。
+  /// 遮罩自体全屏呈现、搜索条居中，任何窗口宽下都是同一个落点
+  /// （宽度判定只服务遮罩内的布局，不决定入口形态）。
   void _openGlobalSearch() => _globalSearch.focus();
 
   /// 打开资料库搜索：发一次「显示搜索 tab」意图再切目的地。
@@ -709,7 +707,8 @@ class _MyAppState extends State<MyApp>
     );
 
     // 桌面骨架：顶栏瘦身 + 恒折叠侧栏 + 页面栈（底栏播放条在非播放页出现）
-    // （结构见 `desktop/desktop_shell.dart`）；移动 / 平板骨架保持原结构。
+    // （结构见 `desktop/desktop_shell.dart`）；移动 / 平板骨架保持
+    // PageView + 底栏版式。
     // 桌面布局值在这里解析一次（窗口宽 / 平台位），页面与骨架只消费
     // （见 `widgets/desktop_layout.dart`）。
     if (_desktopShell) {
@@ -741,7 +740,7 @@ class _MyAppState extends State<MyApp>
 
     // 顶栏由 ShellChrome 统一构造（标题 / 动作 / 拖动区装配在 ShellAppBar）：
     // 整条顶栏是窗口拖动区（隐藏标题栏后唯一的拖动入口），高度 = 56 工具行
-    // + 10 波浪进度，非桌面平台 WindowDragArea 是纯透传。
+    // + 10 进度条槽，非桌面平台 WindowDragArea 是纯透传。
     final appBar = chrome.appBar(
       context: context,
       title: WindowDoubleTapMaximize(
@@ -764,7 +763,7 @@ class _MyAppState extends State<MyApp>
         ],
       ],
       bottom: PreferredSize(
-        // 顶栏进度条槽高（见 `_shellBarProgressHeight`）；波浪只留给播放页。
+        // 顶栏进度条槽高（见 `_shellBarProgressHeight`）。
         preferredSize: const Size.fromHeight(_shellBarProgressHeight),
         child: _ShellBarProgress(morph: _morph),
       ),

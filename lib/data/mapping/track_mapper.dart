@@ -43,7 +43,7 @@ Track trackFromSourceTrack(SourceTrack source) {
   );
 }
 
-/// 平台专辑 id：只读 raw 的稳定字段（与旧 `platformAlbumId` 同口径）。
+/// 平台专辑 id：只读 raw 的稳定字段。
 String? _platformAlbumIdOf(SourceTrack source) {
   String rawText(String key) => source.raw[key]?.toString() ?? '';
   switch (source.sourceKey) {

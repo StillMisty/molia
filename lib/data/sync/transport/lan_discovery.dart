@@ -851,7 +851,7 @@ class LanDiscovery {
   ///
   /// v4 除了主 wildcard socket，还从每个按接口 socket 各发一遍：多网卡 /
   /// 全隧道 VPN 下默认路由未必指向对端所在链路，任一接口成功即算发出；
-  /// 接口 socket 全部不可用时仍保留主 socket 的旧行为。
+  /// 接口 socket 全部不可用时仍保留主 socket。
   bool _sendBroadcast(Uint8List packet, {bool trackAvailability = true}) {
     var sent = false;
     final broadcast = InternetAddress('255.255.255.255');
@@ -1009,7 +1009,7 @@ class LanDiscovery {
   }
 
   /// 对外探测端口只有一格（协议限制）：绑定 / 关闭后立即回填运行时，
-  /// 配对服务不再向发现层借闭包读端口。
+  /// 配对服务不向发现层借闭包读端口。
   void _syncRuntimeProbePort() => runtime.bindProbePort(advertisedProbePort);
 
   /// 按 [_interfaceIpv4Addresses] 重建接口 socket；调用串行化，地址连续

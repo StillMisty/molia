@@ -114,8 +114,8 @@ Future<dynamic> lxHttpPost(
 
 /// 平台业务拒绝 / 缺少字段的统一失败（可重试：多为平台抖动或字段缺失）。
 ///
-/// 专辑 / 歌手 / 歌词等内置平台接口共用同一口径；各模块的旧助手
-/// （`albumPlatformFailure` / `artistPlatformFailure`）保留名字并委托到这里。
+/// 专辑 / 歌手 / 歌词等内置平台接口共用同一口径；各模块的
+/// `albumPlatformFailure` / `artistPlatformFailure` 仍委托到这里。
 SourceFailure builtinPlatformFailure(String platform, String reason) =>
     SourceFailure(
       kind: FailureKind.unknown,

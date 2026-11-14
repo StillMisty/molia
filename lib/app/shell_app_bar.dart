@@ -1,4 +1,4 @@
-/// 壳层顶栏：M3EAppBar.top（compact 档）+ 可选底部槽（移动骨架的波浪进度）。
+/// 壳层顶栏：M3EAppBar.top（compact 档）+ 可选底部槽（移动骨架的顶栏进度条）。
 ///
 /// 为什么不是裸 `AppBar`：壳层顶栏也要吃 M3E 的形状 / 状态层 / 动效口径，
 /// 并把「工具行 56dp + 底部槽 + 状态栏明暗 + 窗口拖动」收在一个组件里，
@@ -33,7 +33,7 @@ class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
   /// `ShellChrome._trailingActions`）。
   final List<Widget> actions;
 
-  /// 底部槽（移动骨架的波浪进度条）；桌面骨架不传。
+  /// 底部槽（移动骨架的顶栏进度条）；桌面骨架不传。
   final PreferredSizeWidget? bottom;
 
   /// M3E compact 档内容高度（`M3EAppBarTheme.defaults` 的 64 − 8）。
@@ -79,8 +79,8 @@ class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
         bar,
         if (bottom != null)
           SizedBox(
-            // 高度由底部槽自己声明，这里同样钉住：平直进度条（4dp）与波浪态
-            // （10dp）必须同槽心，play/pause 切换时整条不跳。
+            // 高度由底部槽自己声明，这里同样钉住：进度条本体 4dp 固定在 10dp
+            // 槽内，play/pause 切换时整条不跳。
             height: bottom!.preferredSize.height,
             child: bottom,
           ),

@@ -16,7 +16,7 @@ import 'sync_peer_dialogs.dart';
 
 /// 同步高级设置子页：设备身份 / 口令 / 网络地址与端口 / 地址簿。
 ///
-/// 这些是排障与手工接入才用得到的底层信息，从首屏搬到子页——首屏只留用户
+/// 这些是排障与手工接入才用得到的底层信息，放在子页——首屏只留用户
 /// 真正要做的事：传输方式、配对与设备（见 `sync_settings_page.dart` 的信息
 /// 架构说明）。
 class SyncAdvancedPage extends StatefulWidget {

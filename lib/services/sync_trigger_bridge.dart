@@ -29,9 +29,9 @@ typedef SyncChangeSink = void Function({
 
 /// 同步触发桥：**唯一**持有「数据变更 → 调度器」订阅与回调钩子的 owner。
 ///
-/// 原先组合根分散订阅资料库 / 统计流、音源 `ChangeNotifier`、设置写入钩子、
-/// 脚本导入 / 删除钩子、会话落盘与封面写入，且没有任何释放点。这里把注册与
-/// 注销收在一处；`dispose()` 取消流订阅并把所有回调钩子恢复为绑前值。
+/// 资料库 / 统计流、音源 `ChangeNotifier`、设置写入钩子、脚本导入 / 删除钩子、
+/// 会话落盘与封面写入的注册都收在这一处；`dispose()` 取消流订阅，并把所有
+/// 回调钩子恢复为绑前值。
 ///
 /// 只转发变更事实，不决定何时跑轮次（仍是 [SyncScheduler] 的策略）。
 class SyncTriggerBridge {
@@ -93,8 +93,7 @@ class SyncTriggerBridge {
   }
 
   /// 脚本导入 / 删除回调：先调用绑前回调，再交给调用方追加增量日志；
-  /// 音源类别标记由 [bindSourceManager] 的监听统一发出（与旧接线保持同一次
-  /// 事件语义）。
+  /// 音源类别标记由 [bindSourceManager] 的监听统一发出。
   void bindScriptWrites(
     SourceManager sourceManager, {
     required void Function(String id) onScriptWritten,

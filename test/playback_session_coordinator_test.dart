@@ -95,7 +95,7 @@ class _RecordingSessionStore extends PlaybackSessionStore {
   /// 提交落盘的会话（payload / cursor 由 store 决定）。
   final List<PlaybackSession> saves = [];
 
-  /// 旧进度直写入口（已不再被协调者调用；保留用于断言“没有周期写”）。
+  /// 进度直写入口（协调者不调用；保留用于断言“没有周期写”）。
   final List<int> positions = [];
 
   @override

@@ -6,7 +6,7 @@
 ///   flutter_secure_storage），口令即信任根（见 ADR-0003）；
 /// - 变更登记（设置键哈希、脚本 / 自定义封面墓碑、激活脚本指针）与发号器
 ///   由 `sync_stamp_book.dart` 持有：settings 写入方分散在多个服务，同步层用
-///   「上次登记值 vs 当前值」判定本地修改，避免改造全部写入方。
+///   「上次登记值 vs 当前值」判定本地修改，写入方无需各自上报。
 /// - 名册 / 地址簿 / 端点与轮次流水各有自己的容器（`sync_roster.dart` /
 ///   `sync_activity_log.dart`）：这里只拼装持久化快照并决定提交时机。
 /// - 持久化只有一个出口 [commit]：所有写入先改内存并标脏，用户命令 / 轮末
@@ -512,7 +512,7 @@ class SyncStateStore
   ///
   /// 返回 false 表示该地址已存在（本次按用户输入更新名称与端口）。
   Future<bool> addManualPeer(ManualPeer peer) async {
-    // 空 host 不入簿也不落盘（与旧行为一致）；同址合并仍提交一次。
+    // 空 host 不入簿也不落盘；同址合并仍提交一次。
     if (peer.host.trim().isEmpty) return false;
     final added = _roster.addManualPeer(peer);
     await commit();

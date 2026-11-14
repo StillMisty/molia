@@ -23,7 +23,7 @@ abstract interface class SyncRecordSource {
 /// 约定：
 /// - [collect] 允许做「变化检测」副作用（登记设置键哈希、补脚本墓碑），
 ///   同一轮内先 collect 后 apply；行表类适配器的廉价指纹缓存与 fresh 绕过
-///   由 `ChangeDetectingAdapter` 装饰器统一拥有，适配器不再各写一份；
+///   由 `ChangeDetectingAdapter` 装饰器统一拥有，适配器不必各写一份；
 /// - [apply] 只处理自己认识的键，遇到未知记录计入 skipped，不抛异常；
 /// - 写入必须幂等：重复应用同一份合并结果不得产生新的本地变更；
 /// - 引擎只把启用类别的记录交给适配器；普通适配器在关闭期间仍可持续登记

@@ -78,7 +78,7 @@ class SourceSwapPage extends StatefulWidget {
   final SourceSwapTab initialTab;
 
   /// 作为二级页正文挂进外层 chrome（侧边弹层 / 全屏路由的 AppBar）时为
-  /// true：不再自带 Scaffold + AppBar，避免双层标题栏。
+  /// true：不自带 Scaffold + AppBar，避免双层标题栏。
   final bool embedded;
 
   /// 测试注入歌词来源（缺省走标准歌词来源注册表）。

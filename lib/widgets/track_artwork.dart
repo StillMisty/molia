@@ -6,8 +6,8 @@
 /// - 把展示封面拆成「真实主图 + 默认回退」交给 [AppNetworkImage]，保持原有
 ///   网络 / 本地文件、占位与失败回退语义不变。
 ///
-/// 消费方不再各自 `ValueListenableBuilder(revision)` + `resolve...`：列表行、
-/// 顶栏、播放器、AI DJ、歌曲信息页都通过 [TrackArtwork] 渲染。
+/// 列表行、顶栏、播放器、AI DJ、歌曲信息页都通过 [TrackArtwork] 渲染，
+/// 不各自订阅封面变更。
 ///
 /// 方形缩略图一律按 `BoxFit.cover` 裁切；「查看原图」是独立的全屏
 /// `CoverViewer`（`contain`），不要在这里改成 contain 来兼顾两种语义。
@@ -24,7 +24,7 @@ import 'app_network_image.dart';
 
 /// 当前 Provider 树里的封面存储（组合根注入的唯一实例）。
 ///
-/// 没有 Provider 视为组合根接线错误：`read` 直接抛错，不再回退进程级单例。
+/// 没有 Provider 视为组合根接线错误：`read` 直接抛错。
 CustomCoverStore coverStoreOf(BuildContext context) =>
     context.read<CustomCoverStore>();
 

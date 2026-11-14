@@ -49,7 +49,7 @@ typedef PairingPacketSender = Future<bool> Function(
 /// 配对服务的时序与限流参数。
 ///
 /// 这些旋钮属于配对协议自己的节拍，不与发现层的公告 burst / 传输的请求
-/// 预算共享；集中成一个值后构造点只表达依赖，不再摊开 13 个默认值。
+/// 预算共享；集中成一个值后构造点只表达依赖，不必摊开 13 个默认值。
 class LanPairingPolicy {
   const LanPairingPolicy({
     this.requestTtl = const Duration(seconds: 60),

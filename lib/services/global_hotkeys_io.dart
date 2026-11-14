@@ -52,8 +52,8 @@ class NativeGlobalHotkeyRegistrar implements GlobalHotkeyRegistrar {
           scope: ShortcutScope.global,
           enabled: true,
         ),
-        // 与旧 system_hotkeys 的 portal id 一致：桌面保存的绑定可以沿用，
-        // 升级后不必重新授权一遍。
+        // portal id 与既有 system_hotkeys 绑定表一致：桌面保存的绑定可以
+        // 沿用，升级后不必重新授权一遍。
         spec.id,
       );
       if (id == 0) {

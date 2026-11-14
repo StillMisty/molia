@@ -2495,7 +2495,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     // 智能列表按展示层重复聚类：代表行 + 展开后的版本行；不删除任何记录。
     final rows = view.isSmartList ? _smartDisplayRows(view) : view.visibleRows;
     // 三种合集的可见行已是同一份有序联合：列表脚手架只搭一次，行内展示与
-    // 行动作按行变体分派，不再按合集类型选列表形状。
+    // 行动作按行变体分派，不按合集类型分叉列表形状。
     final body = CollectionTrackList<CollectionRow>(
       controller: _scrollControllerForKey(view.collectionKey),
       rows: rows,

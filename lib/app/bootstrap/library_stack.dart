@@ -180,7 +180,7 @@ Future<void> _seedStampBaseline(LibraryStack library) async {
 /// 播放内核）。与歌词显示同一模式：composition root 只做两根监听。
 ///
 /// 与 [buildLibraryStack] 分开：统计服务需要 provider 才能接线，
-/// 而 provider 属于播放栈（两者顺序由 `main()` 决定，与原组合根一致）。
+/// 而 provider 属于播放栈（两者顺序由 `main()` 决定）。
 void wirePlayStatistics({
   required PlaybackProvider playback,
   required PlayStatisticsService service,

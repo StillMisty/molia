@@ -12,7 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// - R4 `lib/main.dart` 是唯一 composition root：不被任何其他 lib 文件 import；
 /// - R5 `lib/widgets/**`、`lib/pages/**` 禁止 import sources/playback。
 ///
-/// 白名单已清空：违规必须修复，不接受新豁免；
+/// 白名单为空：违规必须修复，不接受新豁免；
 /// 仍保留「陈旧条目失败」检查，防止条目复活掩盖违规。
 const Map<String, Set<String>> _whitelist = {};
 

@@ -19,7 +19,7 @@ class PlaybackVolumeStore {
   /// 都会重写整个偏好文件，两次写入就是两次整文件 I/O。
   static const String keyState = 'playback_volume_state_v1';
 
-  // 旧版两键：只读兜底；不再写入。
+  // 旧版两键：只读兜底，新键缺失时读取。
   static const String keyVolume = 'playback_volume';
   static const String keyMuted = 'playback_muted';
 

@@ -64,7 +64,7 @@ Future<void> showSleepTimerSheet(BuildContext context) {
   return ResponsiveNavigation.showSimpleModal<void>(
     context: context,
     title: AppLocalizations.of(context)!.sleepTimerTitle,
-    // 顶栏不再放关闭按钮：下滑 / 点遮罩 / 系统返回关闭。
+    // 顶栏不放关闭按钮：下滑 / 点遮罩 / 系统返回关闭。
     showCloseButton: false,
     child: _SleepTimerSheet(playback: playback),
   );
@@ -286,7 +286,7 @@ class _SleepTimerOptionsRow extends StatelessWidget {
   }
 }
 
-/// 紧凑勾选：标题行已不再放勾选，正文并排时也需要更小的槽与标签间距。
+/// 紧凑勾选：正文并排时需要更小的槽与标签间距。
 class _SleepTimerCheckbox extends StatelessWidget {
   const _SleepTimerCheckbox({
     this.checkboxKey,

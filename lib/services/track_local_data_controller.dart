@@ -1,9 +1,9 @@
 /// 单曲本地数据的刷新控制器：把「加载 [TrackLocalData] + 跟着下载记录 /
 /// 缓存修订重算」的时序收敛到一处，供播放页信息 tab 与「本地数据」页共用。
 ///
-/// 为什么需要这层：两个消费面原本各写了一套监听 / 防抖 / 单飞逻辑，其中
-/// 「本地数据」页会并发发起目录扫描，也没有切歌后的过期结果守卫。刷新规则
-/// 一旦分叉，同一首歌在信息行与页内就会出现不同的「已下载 / 已缓存」结论。
+/// 为什么需要这层：两个消费面共用同一份监听 / 防抖 / 单飞逻辑——「本地数据」
+/// 页会并发发起目录扫描，切歌后的过期结果也需要守卫。刷新规则一旦分叉，同一
+/// 首歌在信息行与页内就会出现不同的「已下载 / 已缓存」结论。
 ///
 /// 三条时序规则（唯一实现）：
 /// - **下载记录变化**：防抖（默认 300ms）合并同批通知——一次重算要递归列举
@@ -57,7 +57,7 @@ String selectLocalDataQuality({
     return explicitChoice;
   }
   if (downloadedQuality.isNotEmpty) return downloadedQuality;
-  // 与旧页面口径一致：命中列表非空就取第一条，不再二次过滤。
+  // 命中列表非空就取第一条，不做二次过滤。
   if (cachedQualities.isNotEmpty) return cachedQualities.first;
   if (preferredQuality.isNotEmpty) return preferredQuality;
   if (availableQualities.isNotEmpty) return availableQualities.first;

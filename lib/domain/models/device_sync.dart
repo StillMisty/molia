@@ -672,7 +672,7 @@ class LanPeerSighting {
   final int observedAt;
 }
 
-/// 已通过「MAC 验证 + HTTP 解密成功」的持久化端点（#42 落库）。
+/// 已通过「MAC 验证 + HTTP 解密成功」的持久化端点。
 ///
 /// 地址只存可路由字面量；[verifiedAt] 用于 180 天淘汰，[probePort] 用于
 /// 广播被隔离时的单播兜底。

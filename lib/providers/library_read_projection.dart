@@ -1,10 +1,10 @@
 /// 资料库读投影：一个视图的「读快照 vs 写 / 其它读」唯一仲裁。
 ///
-/// 为什么单独一层：收藏键、播放历史、列表清单、列表曲目原先各写一套
-/// generation / in-flight / pending 状态机，规则相同但散在 provider 的
-/// 不同方法里。一次读取落地时到底该写回、合并、丢弃，还是等最后一个读取
-/// 结束再重放缓冲写入，需要和写入路径一起看；收进这里后，`LibraryProvider`
-/// 只负责扇出与业务补丁。
+/// 为什么单独一层：收藏键、播放历史、列表清单、列表曲目的 generation /
+/// in-flight / pending 状态机规则相同，散在 provider 的不同方法里就难以对齐。
+/// 一次读取落地时到底该写回、合并、丢弃，还是等最后一个读取结束再重放缓冲
+/// 写入，需要和写入路径一起看；收进这里后，`LibraryProvider` 只负责扇出与
+/// 业务补丁。
 ///
 /// 这个类不知道资料库的领域形状：值、quiet 合并、写缓冲重放、失败阶段都由
 /// 持有方注入，因此四个视图可以各持一份，而不是长成一个 God object。
@@ -289,7 +289,7 @@ class ReadReconciliation<T, W> {
     if (intent == LibraryReadIntent.explicit &&
         !_disposed &&
         generation == _generation) {
-      // 与原来的 loading 集合一致：每个显式请求落地都回收自己那份标记。
+      // 每个显式请求落地都回收自己那份标记。
       _explicitLoading = false;
     }
     _drainPending();

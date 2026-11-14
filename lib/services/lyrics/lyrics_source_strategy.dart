@@ -1,8 +1,8 @@
 /// 一个歌词来源的策略声明：渠道 key + 取词实现 + 是否参与自动回退 + 可用性。
 ///
-/// 之前「换源页有哪些来源」和「`LyricsService` 自动回退用哪些 provider」
-/// 是两份写死的列表，新增一个内置渠道要同时改 UI 与服务。现在两边都从
-/// 同一份 `LyricsSourceRegistry` 派生，本文件只描述单个来源的事实。
+/// 换源页的来源列表与 `LyricsService` 自动回退的 provider 列表都从同一份
+/// `LyricsSourceRegistry` 派生，新增内置渠道只改注册表；本文件只描述单个
+/// 来源的事实。
 library;
 
 import 'lyric_provider.dart';

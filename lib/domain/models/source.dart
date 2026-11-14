@@ -51,7 +51,7 @@ class SourceCapabilities {
   /// 当前能力位支持的全部搜索类型（顺序 = 搜索页分段顺序）。
   ///
   /// 能力位 → [SearchKind] 的唯一映射：搜索会话、资料库 tab 显隐与类型
-  /// 分段都读这里，不再各自维护 `_supports` / `sourceSupportsAnySearch`。
+  /// 分段都读这里。
   List<SearchKind> get searchKinds => [
     if (search) SearchKind.song,
     if (artist) SearchKind.artist,

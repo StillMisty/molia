@@ -2,10 +2,10 @@
 /// 变更事件）的唯一实现。
 ///
 /// 为什么独立成模块：资料库每条本地写路径都要走同一套仪式，散在各写方法里
-/// 会漏步——已经出现过「补 syncId 不发号、靠指纹条款补偿」与「收藏切换绕开
-/// 注入时钟」。仪式与「写行」收进这里的意图方法
+/// 容易漏步（例如补 syncId 不发号、靠指纹条款补偿，或收藏切换绕开注入
+/// 时钟）。仪式与「写行」收进这里的意图方法
 /// （[addHistoryEntry] / [replacePlaylistTrack] / [deletePlaylist]…），
-/// `LibraryRepository` 的公开写方法只做委托：漏步在结构上不再可能，
+/// `LibraryRepository` 的公开写方法只做委托：漏步在结构上不可能发生，
 /// 新写路径 = 一个意图方法。
 ///
 /// 边界：本类型是 data 层内部实现，只为 `LibraryRepository` 与测试所用；
@@ -45,7 +45,7 @@ class LibraryWriteEngine {
   /// 日志条目，对端按游标只拉变更。
   ///
   /// [_addToTop] 是「加入列表」的位置偏好（设置页，默认放开头）：true 时新曲目
-  /// 排到列表开头。缺省 = 追加到末尾——测试与未接线场景保持旧口径，生产由
+  /// 排到列表开头。缺省 = 追加到末尾——测试与未接线场景的默认值，生产由
   /// 组合根注入 `LibraryAddSettings.addToTop`。
   LibraryWriteEngine({
     required this._databaseProvider,
@@ -63,7 +63,7 @@ class LibraryWriteEngine {
   final bool Function()? _addToTop;
 
   /// 写入前的就绪门（发号器基线种子）：首帧后 DB 最大戳查询完成前，
-  /// 本机写入不得取号。null = 不需要等待（测试 / 旧调用点）。
+  /// 本机写入不得取号。null = 不需要等待（测试 / 无同步场景）。
   final Future<void> Function()? _beforeWrite;
 
   Future<void> _ensureReady() async {
@@ -798,8 +798,8 @@ class LibraryWriteEngine {
   /// 调用方据此直接预置缓存，不必再做一次去重与排序位分配。
   ///
   /// 与 [importPlaylistTracks]（`.lxmc` 整批导入、不追 journal）不同：本路径
-  /// 保持 `LibraryRepository.importTracks` 的既有口径（常规五步仪式 + 列表
-  /// 曲目变更事件）。
+  /// 与 `LibraryRepository.importTracks` 口径一致（常规五步仪式 + 列表曲目
+  /// 变更事件）。
   Future<({int added, List<PlaylistTrack> rows})> importTracks(
     int playlistId,
     List<PlaylistTrack> tracks,
@@ -1191,8 +1191,7 @@ class LibraryWriteEngine {
 
   /// 批量导入列表曲目（跳过重复、追加到末尾；返回实际新增数）。
   ///
-  /// 导入路径的既有口径与本模块其余写入不同，逐条保留（本候选只搬仪式、
-  /// 不动语义）：
+  /// 导入路径的口径与本模块其余写入不同，逐条列明：
   /// - `addedAt` 由调用方给（一次导入一个时刻，`.lxmc` 导入在调用侧取）；
   /// - **不追 journal**：导入是「整批落库」，增量日志的覆盖范围属同步协议
   ///   议题（见 ADR-0003 v2 §5），改动待独立评审；
@@ -1292,8 +1291,8 @@ class LibraryWriteEngine {
 
   /// 补齐缺失 syncId 的行（收藏固定值；其余随机生成，只补一次）。
   ///
-  /// **不发版本戳**（既有口径：导出前的就地补齐靠 syncId 计数条款补偿，
-  /// 见 `syncFingerprints`；改动属同步协议议题）。
+  /// **不发版本戳**：导出前的就地补齐靠 syncId 计数条款补偿（见
+  /// `syncFingerprints`）；改动属同步协议议题。
   Future<void> ensurePlaylistSyncIds(DatabaseConnectionUser executor) async {
     final rows = await (executor.select(
       _db.playlists,
@@ -1636,7 +1635,7 @@ class LibraryWriteEngine {
               ..addColumns([minSortOrder])
               ..where(db.playlistTracks.playlistId.equals(playlistId)))
             .getSingle();
-    // 空列表（min 为空）从 0 开始，保持「首行 sortOrder = 0」的旧口径。
+    // 空列表（min 为空）从 0 开始，保证首行 sortOrder = 0。
     return (row.read(minSortOrder) ?? count) - count;
   }
 

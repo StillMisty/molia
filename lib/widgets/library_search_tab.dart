@@ -107,7 +107,7 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    // 拆分 Consumer 监听，提高性能
+    // Consumer 只订阅搜索会话；AI 开关与 gutter 用 select 单独订阅，避免整页跟随重建。
     return Consumer<SearchProvider>(
       builder: (context, searchProvider, child) {
         final session = searchProvider.session;

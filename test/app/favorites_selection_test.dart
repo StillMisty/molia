@@ -7,7 +7,7 @@ import 'package:molia/widgets/collection_track_list.dart';
 import '../support/perf_app_harness.dart';
 
 /// 收藏页多选：范围选择走长按（桌面等价 Shift 点击），多选栏只保留
-/// 计数 / 全选 / 两个高频动作 / ⋮，不再有浮动的范围模式入口。
+/// 计数 / 全选 / 两个高频动作 / ⋮。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

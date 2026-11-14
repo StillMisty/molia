@@ -5,8 +5,8 @@
 /// **不持久化直链**。
 ///
 /// 简单读写走 drift DSL；跨行聚合（汇总 / 首播时间 / 榜单 / 来源分布 /
-/// 已听曲目名）保留 `customSelect`：SQL 语义逐字保留，
-/// 口径常量（[_qualifiedPredicate] / [_countablePredicate]）仍是唯一来源。
+/// 已听曲目名）走 `customSelect`，口径常量（[_qualifiedPredicate] /
+/// [_countablePredicate]）是唯一来源。
 ///
 /// 口径（查询时计算，常量见 [PlayStatisticsLimits]）：
 /// - 有效播放：`listenedMs ≥ min(30s, 50% × duration)`；

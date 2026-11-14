@@ -1,10 +1,10 @@
 /// 资料库读取 / 写入的结果类型。
 ///
-/// 为什么单独一层：页面原先只能看到「空列表」与静默失败的 debugPrint，
-/// 分不清「这里本来就没有」和「根本没加载成功」；批量写入抛进
-/// `unawaited` 的 Future 后既没有结果也没有反馈。这里把两种结果都变成
-/// 类型：读取是 loading / ready / failed（failed 保留原始异常供日志与
-/// 测试，UI 只展示 l10n 文案），写入是 applied / unchanged / failed。
+/// 为什么单独一层：页面只能看到「空列表」与静默失败的 debugPrint 时，分不清
+/// 「这里本来就没有」和「根本没加载成功」；批量写入抛进 `unawaited` 的 Future
+/// 后既没有结果也没有反馈。这里把两种结果都变成类型：读取是 loading /
+/// ready / failed（failed 保留原始异常供日志与测试，UI 只展示 l10n 文案），
+/// 写入是 applied / unchanged / failed。
 library;
 
 /// 资料库读取阶段。

@@ -178,7 +178,7 @@ class AiFeedbackBook {
     await _persist(_memory);
   }
 
-  /// 成功生成后消费种子；不改偏好版本（与旧行为一致）。
+  /// 成功生成后消费种子；不改偏好版本。
   Future<void> consumeSeeds() async {
     if (_memory.seeds.isEmpty) return;
     _memory = _memory.withSeeds(const []);
@@ -187,7 +187,7 @@ class AiFeedbackBook {
 
   void _addLiked(String label) {
     // 保留重复标签（同一首歌来自不同会话项）：合并输出会去重，但本轮列表
-    // 的原始顺序与旧实现一致。
+    // 保留原始顺序。
     _liked.add(label);
     _memory = _memory.addLiked(label);
   }

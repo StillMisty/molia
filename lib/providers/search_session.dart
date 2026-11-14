@@ -87,7 +87,7 @@ class SearchPreviewSession extends ChangeNotifier {
 
   String? get highlightedKey => _highlightedKey;
 
-  /// 当前高亮条目；存储的 key 已不在列表里时回退第一条（与旧遮罩一致）。
+  /// 当前高亮条目；存储的 key 已不在列表里时回退第一条。
   SearchPreviewItem? get highlightedItem {
     for (final item in _value.items) {
       if (item.key == _highlightedKey) return item;

@@ -26,8 +26,7 @@ import 'settings_tiles.dart';
 /// 设置首屏「数据与存储」卡：缓存、下载、音乐文件夹、统计、导入导出、
 /// 同步与问题排查。
 ///
-/// 原先独立的「数据与存储」子页收进首屏；子页入口与 key 保持不变，避免
-/// 既有深链与测试失效。
+/// 这里的子页入口与 key 和既有深链、测试保持一致，改动会打断它们。
 class DataSettingsSection extends StatelessWidget {
   const DataSettingsSection({super.key});
 

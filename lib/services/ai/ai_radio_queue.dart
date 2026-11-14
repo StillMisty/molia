@@ -35,8 +35,9 @@ class AiRadioQueue {
 
   /// [uris] 中还在队列「当前及之后」的数量。
   ///
-  /// 页面展示「队列中还有 N 首推荐」：已经播过的 AI 曲目不再算作排队中，
-  /// 队列被替换 / 曲目被移除时也会自然减少——这正是旧计数器漂移的地方。
+  /// 页面展示「队列中还有 N 首推荐」：已经播过的 AI 曲目不算作排队中，
+  /// 队列被替换 / 曲目被移除时也会自然减少——计数从 live 快照派生，不依赖
+  /// 独立计数器。
   int queuedAmong(Iterable<String> uris) {
     final members = uris is Set<String> ? uris : uris.toSet();
     if (members.isEmpty) return 0;

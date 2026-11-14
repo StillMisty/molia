@@ -97,7 +97,7 @@ class ResolvedRecommendation {
   final AiRecommendation source;
   final Track track;
 
-  /// 命中的找歌渠道展示名（历史恢复保留；AI 页面不再展示）。
+  /// 命中的找歌渠道展示名（只用于恢复历史记录；AI 页面不展示）。
   final String sourceName;
 
   const ResolvedRecommendation({

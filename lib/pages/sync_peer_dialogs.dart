@@ -477,7 +477,7 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
     });
     final editing = widget.editing;
     // 只有 unreachable 分支需要「重复添加」提示；命令的成功结果已能区分
-    // added / updated，这里提前记下同址条目，保持旧弹层的提示语义。
+    // added / updated，这里提前记下同址条目，保持「重复添加」的提示语义。
     final duplicate =
         editing == null &&
         widget.provider.state.manualPeers.any((entry) => entry.host == host);

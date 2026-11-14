@@ -41,7 +41,7 @@ class SongCommentsPage extends StatefulWidget {
   final Track track;
 
   /// 作为二级页正文挂进外层 chrome（侧边弹层 / 全屏路由的 AppBar）时为
-  /// true：不再自带 Scaffold + AppBar，避免双层标题栏。
+  /// true：不自带 Scaffold + AppBar，避免双层标题栏。
   final bool embedded;
 
   @override

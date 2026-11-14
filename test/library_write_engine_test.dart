@@ -205,7 +205,7 @@ void main() {
     await engine.addHistoryEntry(history('1', playedAt: 100));
     final head = await journal.headSeq();
 
-    // 旧键不存在：返回 false，不写日志（既有行为）。
+    // 旧键不存在：返回 false，不写日志。
     expect(
       await engine.replaceHistoryEntry((
         sourceKey: 'wy',
@@ -421,7 +421,7 @@ void main() {
     // 增量载荷带实际排序位与加入时间，provider 可直接插入缓存列表。
     expect(added.toggle?.track?.sortOrder, 0);
     expect(added.toggle?.track?.addedAt, clockMs);
-    // 加入时间是内容时间：经注入时钟（曾经走 DateTime.now()，无法钉住）。
+    // 加入时间是内容时间：经注入时钟钉住。
     expect((await db.select(db.playlistTracks).get()).single.addedAt, clockMs);
 
     events.clear();

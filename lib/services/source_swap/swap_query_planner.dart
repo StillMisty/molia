@@ -68,7 +68,7 @@ class _KeywordPolicy {
 
   /// 换源关键词：默认「标题 + 歌手」；UP 主型种子只用标题。
   ///
-  /// 空段过滤（标题为空 / 歌手名为空）与历史行为一致。
+  /// 空段（标题为空 / 歌手名为空）不参与关键词。
   String keywordFor(Track seed) => [
     seed.title,
     if (!seedArtistIsUploader) ...seed.artists.map((artist) => artist.name),

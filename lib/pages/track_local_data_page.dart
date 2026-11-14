@@ -68,7 +68,7 @@ class TrackLocalDataPage extends StatefulWidget {
   final Track track;
 
   /// 作为二级页正文挂进外层 chrome（侧边弹层 / 全屏路由的 AppBar）时为
-  /// true：不再自带 Scaffold + AppBar，避免双层标题栏。
+  /// true：不自带 Scaffold + AppBar，避免双层标题栏。
   final bool embedded;
 
   @override
@@ -428,7 +428,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
         final body = ListView(
           padding: EdgeInsets.fromLTRB(horizontal, 0, horizontal, 24),
           children: [
-            // 曲目身份条取代原来的单行信息卡：与评论 / 换源页共用同一形态。
+            // 曲目身份条与评论 / 换源页共用同一形态。
             DetailPageTrackHeader(
               track: widget.track,
               padding: const EdgeInsets.only(top: 12, bottom: 8),

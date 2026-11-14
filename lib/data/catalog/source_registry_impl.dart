@@ -13,7 +13,7 @@ import 'manager_catalog_source.dart';
 ///
 /// 职责：
 /// - `descriptors`：由 `manager.sourceProfiles.searchable` 映射（顺序即用户
-///   排序结果，`order` 为列表下标，0 起；能力位直接取画像，不再二次推导）；
+///   排序结果，`order` 为列表下标，0 起；能力位直接取画像，不二次推导）；
 ///   `lx_source_order` 的读写完全由 manager 承担；
 /// - `byKey`/`forTrack`：懒创建并缓存 [SourceManagerMusicSource]（按 key 单例）；
 ///   `local` key 特殊路由到 [LocalMusicSource]（本地下载副本，manager 不认识）；

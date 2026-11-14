@@ -233,9 +233,8 @@ class LibraryProvider extends ChangeNotifier {
 
   /// 超出上限时从最久未访问开始淘汰；当前展示列表跳过。
   ///
-  /// 只统计已有值的条目：失败 / 在途的投影不占 LRU 名额（对应原来的
-  /// 错误表 / loading 集合）。跳过当前列表时把它移到队尾再继续，最多多转
-  /// 一圈（条目数 ≤ 上限 + 1），不会死循环。
+  /// 只统计已有值的条目：失败 / 在途的投影不占 LRU 名额。跳过当前列表时
+  /// 把它移到队尾再继续，最多多转一圈（条目数 ≤ 上限 + 1），不会死循环。
   void _evictOverflowPlaylistTracks() {
     while (_cachedPlaylistTracksCount > kPlaylistTracksCacheLimit) {
       int? oldest;
@@ -626,9 +625,9 @@ class LibraryProvider extends ChangeNotifier {
 
   /// 全量失效时清掉列表曲目值，但保留仍在途的投影。
   ///
-  /// 原实现只清值 / 错误、不动 loading 集合：在途读取落地后仍会写回，新的
-  /// ensure 也不能绕过它重开。投影自己的代际不动，让这些读取继续完成；没有
-  /// 在途的条目直接丢掉（下一次页面访问重新读）。
+  /// 只在没有在途读取时直接丢掉条目：若只清值 / 错误、不动 loading 集合，
+  /// 在途读取落地后仍会写回，新的 ensure 也不能绕过它重开。投影自己的代际
+  /// 不动，让这些读取继续完成（下一次页面访问重新读）。
   void _invalidatePlaylistTracksReads() {
     _playlistTracksReads.removeWhere((_, read) {
       if (!read.reading && !read.explicitLoading) return true;

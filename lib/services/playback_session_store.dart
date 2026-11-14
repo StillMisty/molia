@@ -95,11 +95,11 @@ class PlaybackSession {
 
 /// 播放会话持久化：主库两张表（payload + cursor），动作落盘、无周期写。
 ///
-/// 为什么拆两张表（不再用 SharedPreferences）：会话 JSON 含整份队列（每首都有
-/// raw payload，大队列下是 MB 级），而切歌 / 暂停 / seek 只改下标与进度。prefs
-/// 任何一次 `setString` 都会整文件重写，1Hz 进度写会把整份队列按 MB/s 写盘；
-/// 现在进度只写 cursor 单行，队列 / 模式 / 上下文变化才写 payload 行（且
-/// payload + cursor 在同一事务）。
+/// 为什么拆两张表：会话 JSON 含整份队列（每首都有 raw payload，大队列下是
+/// MB 级），而切歌 / 暂停 / seek 只改下标与进度。prefs 任何一次 `setString`
+/// 都会整文件重写，1Hz 进度写会把整份队列按 MB/s 写盘；进度只写 cursor
+/// 单行，队列 / 模式 / 上下文变化才写 payload 行（且 payload + cursor 在同一
+/// 事务）。
 ///
 /// 写请求仍经 [pendingWrite] 串行：后一个写不会先于前一个落盘，`clear()` 也
 /// 不会被在途的保存「复活」；系统控制路径 await 它，保证动作返回前已写回。

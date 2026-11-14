@@ -1,16 +1,15 @@
 /// 发现页「今日推荐」区：搜索框下方的推荐流。
 ///
 /// - 展示 [AiDjProvider.recommendations]（持久化的今日推荐列表）：封面卡 +
-///   歌名/歌手（用 carousel 原生槽位，保证每张卡都常显，不再把文字塞进
-///   图片层被槽位裁掉）；
+///   歌名/歌手（用 carousel 原生槽位，保证每张卡都常显，不被槽位裁掉）；
 /// - 浏览：桌面端开 freeScroll 且允许鼠标拖动（跟手拖拽、松手吸附最近的
 ///   卡）；横向滚动视图只吃 dx，纵向滚轮的 dy 到不了它手里，所以在外层
 ///   自接指针信号、攒够一格翻一张。触屏维持 carousel 默认的一步一张，
 ///   避免与发现页的竖向滚动手势互抢；
 /// - 点卡即从该首起播、AI 接管队列（`playRecommendation`），并把该卡滚到
 ///   焦点位：拖动/滚轮之后焦点未必在点中的卡上，滚过去信息区才落到这首；
-/// - 卡片流下方是推荐理由信息区：只显示焦点卡（carousel 最大槽位）的理由，
-///   歌名 / 歌手由卡片承担、不在信息区重复；理由为空或焦点越界（「换一批」卡、
+/// - 卡片流下方是推荐理由信息区：只显示焦点卡（carousel 最大槽位）的理由；
+///   理由为空或焦点越界（「换一批」卡、
 ///   换批后的过期索引）时整区不渲染——留一个空块比不显示更突兀；
 /// - 尾部「换一批」卡只留刷新图标、不写字（读屏靠语义标签），整卡仍是
 ///   可点按钮（推歌中只换"下一批来源"，不打断播放）；
@@ -455,8 +454,8 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
     final artwork = TrackArtwork(
       track: item.track,
       fit: BoxFit.cover,
-      // 卡片流以前按原图解码（大封面一次就是数 MB）：这里只给解码
-      // 上界，宽高交给 carousel 槽位，视觉布局不变。
+      // 卡片流只给解码上界（原图一次就是数 MB），宽高交给 carousel 槽位，
+      // 视觉布局不变。
       memCacheWidth: AiDjCarousel.coverMemCacheWidth(context),
       fallbackColor: Theme.of(context).colorScheme.surfaceContainerHighest,
       fallbackIconSize: 32,
@@ -477,8 +476,8 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
 
   /// 推荐理由信息区：显示焦点卡（carousel 最大槽位）的推荐理由。
   ///
-  /// 歌名 / 歌手不再在这里重复一遍——卡片流上的槽位文字就是这首的标识，信息区
-  /// 只留 AI 的理由。焦点不在推荐卡上（「换一批」卡，或换批后越界的过期索引）
+  /// 歌名 / 歌手只出现在卡片流的槽位文字里，信息区只留 AI 的理由。
+  /// 焦点不在推荐卡上（「换一批」卡，或换批后越界的过期索引）
   /// 或该卡没有理由时整区不渲染——留一个空块比不显示更突兀。
   Widget _reasonPanel(BuildContext context, AiDjBatch batch) {
     if (_focalIndex < 0 || _focalIndex >= batch.items.length) {

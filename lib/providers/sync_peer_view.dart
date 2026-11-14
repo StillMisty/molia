@@ -57,8 +57,8 @@ class SyncPeerView {
     required SyncRoundReport? lastReport,
     required int nowMs,
   }) {
-    // 与设置页旧逻辑一致：以 deviceId 关联地址簿条目；未认领（deviceId 为空）
-    // 的地址没有名册行，不参与命名。
+    // 以 deviceId 关联地址簿条目；未认领（deviceId 为空）的地址没有名册行，
+    // 不参与命名。
     final manualByDevice = <String, ManualPeer>{
       for (final entry in manualPeers)
         if (entry.deviceId.isNotEmpty) entry.deviceId: entry,

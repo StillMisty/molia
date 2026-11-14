@@ -450,7 +450,7 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 标题行：合集名 + 右侧两个小按钮（新建 / 导入不再占用列表行）。
+          // 标题行：合集名 + 右侧两个小按钮。
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 8, 12, 8),
             child: Row(
