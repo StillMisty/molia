@@ -27,6 +27,8 @@
 | Issue、标签、领域文档约定 | `docs/agents/` | GitHub issues 为规格来源 |
 | 决策记录（ADR） | `docs/adr/` | 只追加，不重写历史 |
 | 投屏 / Android Auto 范围 | `docs/adr/0025-cast-and-auto-out-of-scope.md` | 生产入口保持缺席 |
+| 收藏页密度 / 封面口径 | `docs/adr/0028-favorites-convergence.md` | 单一列表形态、书脊、动图封面 |
+| 凭据存储 | `docs/adr/0029-credentials-in-local-database.md` | 本机明文 SQLite，不依赖钥匙串 |
 | 界面截图 | `docs/images/` | 只被 `README.md` 引用 |
 
 ## 维护规则
