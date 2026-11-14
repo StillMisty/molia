@@ -96,7 +96,7 @@ class _SearchSources extends _FakeSources {
   List<SourceDescriptor> get channels => const [
     SourceDescriptor(
       key: 'kw',
-      displayName: '网易云音乐',
+      displayName: '网易音乐',
       kind: SourceKind.builtin,
       discoverable: true,
       capabilities: SourceCapabilities(search: true),
@@ -333,7 +333,7 @@ void main() {
 
       final triggerText = find.descendant(
         of: trigger,
-        matching: find.text('网易云音乐'),
+        matching: find.text('网易音乐'),
       );
       expect(
         tester.renderObject<RenderParagraph>(triggerText).didExceedMaxLines,
@@ -344,7 +344,7 @@ void main() {
       await tester.tap(trigger);
       await tester.pumpAndSettle();
 
-      for (final name in ['网易云音乐', '哔哩哔哩', 'QQ音乐']) {
+      for (final name in ['网易音乐', '哔哩哔哩', 'QQ音乐']) {
         final itemText = find.text(name).last;
         expect(
           tester.renderObject<RenderParagraph>(itemText).didExceedMaxLines,

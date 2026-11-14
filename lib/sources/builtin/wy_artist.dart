@@ -8,7 +8,7 @@ import 'builtin_transport.dart';
 import 'crypto_utils.dart';
 import 'wy_music_detail.dart';
 
-/// 网易云音乐歌手（搜索 `api/search/get/web?type=100`；详情 weapi）。
+/// 网易音乐歌手（搜索 `api/search/get/web?type=100`；详情 weapi）。
 ///
 /// - 搜索：`GET api/search/get/web?s=&type=100&offset=&limit=`
 ///   （`result.artists` + `result.artistCount`，免签名）；

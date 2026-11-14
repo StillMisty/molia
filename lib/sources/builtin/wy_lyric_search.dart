@@ -6,7 +6,7 @@ import 'crypto_utils.dart';
 import 'lyric_hit.dart';
 import 'wy_music_detail.dart';
 
-/// 网易云音乐「按歌词搜歌」（`api/search/get/web?type=1006`，免签名）。
+/// 网易音乐「按歌词搜歌」（`api/search/get/web?type=1006`，免签名）。
 ///
 /// 搜索响应是**旧版字段**（`artists` / `album` / `duration`）且不带音质，
 /// 因此与歌手歌曲同一流程：取 song id → [WyMusicDetail.getList]

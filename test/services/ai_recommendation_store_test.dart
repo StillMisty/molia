@@ -131,7 +131,7 @@ void main() {
           artist: 'Artist',
           album: '',
           reason: 'reason',
-          sourceName: '网易云音乐',
+          sourceName: '网易音乐',
           raw: {'songmid': '$id-$i'},
         ),
     ],
@@ -165,7 +165,7 @@ void main() {
       isNull,
       reason: '批次只进文件，prefs 只保留索引',
     );
-    expect((await store.loadBatch('b'))!.items.single.sourceName, '网易云音乐');
+    expect((await store.loadBatch('b'))!.items.single.sourceName, '网易音乐');
   });
 
   test('LLM 原始返回 / 提示词不进入持久化 JSON', () async {

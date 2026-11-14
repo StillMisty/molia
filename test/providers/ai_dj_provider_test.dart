@@ -38,7 +38,7 @@ AiDjBatch _batch(int from, int count) => AiDjBatch(
       ResolvedRecommendation(
         source: AiRecommendation(title: 'Song ${from + i}', artist: 'Artist'),
         track: _track(from + i),
-        sourceName: '网易云音乐',
+        sourceName: '网易音乐',
       ),
   ],
   unresolved: const [AiRecommendation(title: 'Ghost', artist: 'X')],
@@ -834,7 +834,7 @@ void main() {
             reason: '补回',
           ),
           track: _track(77),
-          sourceName: '网易云音乐',
+          sourceName: '网易音乐',
         ),
       ],
       unresolved: const [],

@@ -833,14 +833,14 @@ void main() {
 
     test('不再把可用渠道写入提示词', () async {
       service = buildService([
-        _FakeSource('wy', const [], displayName: '网易云音乐'),
+        _FakeSource('wy', const [], displayName: '网易音乐'),
         _FakeSource('tx', const [], displayName: 'QQ音乐'),
       ]);
 
       final prompt = await service.buildPromptPreview(count: 10);
 
       expect(prompt.userPrompt, isNot(contains('可用渠道')));
-      expect(prompt.userPrompt, isNot(contains('网易云音乐')));
+      expect(prompt.userPrompt, isNot(contains('网易音乐')));
     });
 
     test('额外排除键在本地兜底过滤（即使模型返回同一首）', () async {

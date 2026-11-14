@@ -4,7 +4,7 @@ import 'builtin_search_runner.dart';
 import 'crypto_utils.dart';
 import 'wy_music_detail.dart';
 
-/// 网易云音乐搜索（移植自 lx-music-mobile `wy/musicSearch.js`，eapi 协议）。
+/// 网易音乐搜索（移植自 lx-music-mobile `wy/musicSearch.js`，eapi 协议）。
 class WySearch {
   static const _limit = 30;
 
