@@ -19,11 +19,10 @@ import '../../utils/responsive.dart';
 /// 设置首屏各卡的「这一行现在能不能出现」：可选子系统是否已挂载、平台能力
 /// 是否具备，都在这里一次解析。
 ///
-/// **为什么需要它**：可选服务（同步 / 统计 / 听歌同步 / 更新 / 托盘…）在
-/// 组合根按构建形态挂载，设置页的九张卡此前各自 `context.watch<X?>()`：
-/// 同一个「缺省就隐藏」的决定散落在六个文件里，测试要搭整棵 widget 树才能
-/// 验证，也不容易看出某张卡到底依赖哪些子系统。把探针收成一份不可变快照，
-/// 卡片只问「行可见吗」，探针本身可在无 widget 树时构造与断言。
+/// **为什么需要它**：九张卡依赖的可选子系统与平台能力各不相同，但「缺省就
+/// 隐藏入口」必须是同一套判断。把探针收成一份不可变快照，卡片只需问
+/// 「这一行可见吗」，不用各自拼 `null` 检查与平台分支；快照可在无 widget 树时
+/// 构造与断言，行可见性也能直接测。
 ///
 /// **边界**：本类只回答「有没有」，不持有值的订阅。值仍由消费行的
 /// `Selector` / `watch` / `ValueListenable` 订阅——否则任意可选服务的通知
@@ -45,8 +44,8 @@ class SettingsSectionAvailability {
     this.nav,
     TargetPlatform? platform,
     bool? traySupported,
-  }) : platform = platform ?? defaultTargetPlatform,
-       traySupported = traySupported ?? AppTray.isSupported;
+  }) : _platform = platform ?? defaultTargetPlatform,
+       _traySupported = traySupported ?? AppTray.isSupported;
 
   /// 省流模式（可选：测试 / 精简挂载时缺省）。
   final DataSaverService? dataSaver;
@@ -85,13 +84,13 @@ class SettingsSectionAvailability {
   final NavProvider? nav;
 
   /// 平台判据；测试可显式传入，避免依赖运行测试的宿主平台。
-  final TargetPlatform platform;
+  final TargetPlatform _platform;
 
   /// 宿主是否提供托盘能力；测试可显式传入。
-  final bool traySupported;
+  final bool _traySupported;
 
   /// 桌面平台（与 `isDesktopPlatform()` 同口径，平台可注入）。
-  bool get isDesktop => isDesktopPlatform(platform);
+  bool get isDesktop => isDesktopPlatform(_platform);
 
   bool get hasDataSaver => dataSaver != null;
 
@@ -115,7 +114,7 @@ class SettingsSectionAvailability {
   bool get audioFocusRowVisible => audioFocus != null && !isDesktop;
 
   /// 音乐文件夹行：iOS 没有可浏览的共享目录，入口不出现。
-  bool get musicFoldersRowVisible => platform != TargetPlatform.iOS;
+  bool get musicFoldersRowVisible => _platform != TargetPlatform.iOS;
 
   /// 桌面歌词入口：输出端报告支持（能力就绪或待授权）才显示。
   bool get desktopLyricsVisible =>
@@ -138,11 +137,11 @@ class SettingsSectionAvailability {
       (lyricsDisplay?.mediaSessionInitFailed ?? false);
 
   /// 托盘与窗口行：平台有托盘且有偏好实例（Linux 精简桌面可能没有托盘）。
-  bool get trayRowsVisible => traySupported && tray != null;
+  bool get trayRowsVisible => _traySupported && tray != null;
 
   /// Linux 桌面卡底的托盘说明：只在真有托盘的平台提示。
   bool get trayLinuxHintVisible =>
-      traySupported && platform == TargetPlatform.linux;
+      _traySupported && _platform == TargetPlatform.linux;
 
   LyricsOutputCapability _lyricsCapability(String outputId) =>
       lyricsDisplay?.capabilityOf(outputId) ??

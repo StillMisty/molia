@@ -1,8 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/settings/settings_access.dart';
-import 'package:molia/data/settings/settings_key.dart';
-import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
@@ -16,7 +13,6 @@ import 'package:molia/services/play_statistics_service.dart';
 import 'package:molia/services/scrobble/scrobble_service.dart';
 import 'package:molia/services/source_swap/source_swap_settings.dart';
 import 'package:molia/services/window/tray_settings.dart';
-import 'package:molia/widgets/settings/library_storage_section_model.dart';
 import 'package:molia/widgets/settings/settings_section_availability.dart';
 
 import '../support/settings_test_support.dart';
@@ -86,17 +82,22 @@ void main() {
       );
     });
 
-    test('音乐文件夹行在 iOS 隐藏', () {
-      expect(
-        SettingsSectionAvailability(platform: TargetPlatform.iOS)
-            .musicFoldersRowVisible,
-        isFalse,
+    test('音乐文件夹行在 iOS 隐藏，加入位置行只看服务是否挂载', () {
+      final addSettings = LibraryAddSettings(settings: testSettingsRegistry());
+      addTearDown(addSettings.dispose);
+
+      final ios = SettingsSectionAvailability(
+        platform: TargetPlatform.iOS,
+        libraryAdd: addSettings,
       );
-      expect(
-        SettingsSectionAvailability(platform: TargetPlatform.android)
-            .musicFoldersRowVisible,
-        isTrue,
+      expect(ios.musicFoldersRowVisible, isFalse);
+      expect(ios.hasLibraryAdd, isTrue);
+
+      final android = SettingsSectionAvailability(
+        platform: TargetPlatform.android,
       );
+      expect(android.musicFoldersRowVisible, isTrue);
+      expect(android.hasLibraryAdd, isFalse);
     });
 
     test('歌词入口按输出能力显隐，两路都不可用时给解释', () {
@@ -176,100 +177,6 @@ void main() {
       );
     });
   });
-
-  group('LibraryStorageSectionModel', () {
-    late _MemorySettingsAccess access;
-    late LibraryAddSettings addSettings;
-
-    setUp(() async {
-      access = _MemorySettingsAccess();
-      addSettings = LibraryAddSettings(settings: access);
-      await addSettings.init();
-    });
-
-    tearDown(() => addSettings.dispose());
-
-    test('值从服务读：加入位置解析持久化值', () async {
-      access.values[kLibraryAddPosition.name] = LibraryAddPosition.bottom.name;
-      await addSettings.init();
-
-      final model = LibraryStorageSectionModel(
-        addSettings: addSettings,
-        platform: TargetPlatform.android,
-      );
-      expect(model.addPositionAvailable, isTrue);
-      expect(model.addPosition, LibraryAddPosition.bottom);
-    });
-
-    test('写入落到登记键（持久化不搬进模型）', () async {
-      final model = LibraryStorageSectionModel(
-        addSettings: addSettings,
-        platform: TargetPlatform.android,
-      );
-
-      await model.setAddPosition(LibraryAddPosition.bottom);
-
-      expect(model.addPosition, LibraryAddPosition.bottom);
-      expect(
-        access.values[kLibraryAddPosition.name],
-        LibraryAddPosition.bottom.name,
-      );
-    });
-
-    test('重载读回外部写入值（应用远端值后的路径）', () async {
-      final model = LibraryStorageSectionModel(
-        addSettings: addSettings,
-        platform: TargetPlatform.android,
-      );
-      expect(model.addPosition, LibraryAddPosition.top);
-
-      access.values[kLibraryAddPosition.name] = LibraryAddPosition.bottom.name;
-      await model.reload();
-
-      expect(model.addPosition, LibraryAddPosition.bottom);
-    });
-
-    test('服务缺省：加入位置行隐藏，读 / 写 / 重载安全', () async {
-      final model = LibraryStorageSectionModel(
-        addSettings: null,
-        platform: TargetPlatform.android,
-      );
-
-      expect(model.addPositionAvailable, isFalse);
-      expect(model.addPosition, LibraryAddPosition.top);
-      expect(model.visibleRows, isNot(contains(LibraryStorageRow.addPosition)));
-
-      await model.setAddPosition(LibraryAddPosition.bottom);
-      await model.reload();
-      expect(model.addPosition, LibraryAddPosition.top, reason: '缺省时没有可写的家');
-    });
-
-    test('行集合与行序：iOS 去掉音乐文件夹，其余入口保持顺序', () {
-      const remaining = [
-        LibraryStorageRow.addPosition,
-        LibraryStorageRow.downloadSettings,
-        LibraryStorageRow.downloadsManage,
-        LibraryStorageRow.cacheManagement,
-      ];
-
-      final ios = LibraryStorageSectionModel(
-        addSettings: addSettings,
-        platform: TargetPlatform.iOS,
-      );
-      expect(ios.musicFoldersAvailable, isFalse);
-      expect(ios.visibleRows, remaining);
-
-      final android = LibraryStorageSectionModel(
-        addSettings: addSettings,
-        platform: TargetPlatform.android,
-      );
-      expect(android.visibleRows, [
-        LibraryStorageRow.addPosition,
-        LibraryStorageRow.musicFolders,
-        ...remaining.skip(1),
-      ]);
-    });
-  });
 }
 
 /// 全量可用性快照：只用于断言「都挂上时」的行决定。
@@ -294,25 +201,6 @@ SettingsSectionAvailability _allAvailable({
     platform: platform,
     traySupported: traySupported,
   );
-}
-
-/// 内存设置访问面：记录写入并模拟持久化（binding 测试不碰 prefs）。
-class _MemorySettingsAccess implements SettingsAccess {
-  final Map<String, Object?> values = {};
-
-  @override
-  Future<T> read<T extends Object?>(SettingsKey<T> key) async =>
-      (values[key.name] ?? key.defaultValue) as T;
-
-  @override
-  Future<void> write<T extends Object?>(SettingsKey<T> key, T value) async {
-    values[key.name] = value;
-  }
-
-  @override
-  Future<void> clear(SettingsKey<Object?> key) async {
-    values.remove(key.name);
-  }
 }
 
 /// 探针只关心是否存在；重服务的成员用 noSuchMethod 兜底，避免为一次
