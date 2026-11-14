@@ -5203,7 +5203,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsListeningSyncTitle => '听歌同步';
 
   @override
-  String get settingsListeningSyncSubtitle => '把正在播放和播放记录发送到 ListenBrainz';
+  String get settingsListeningSyncSubtitle =>
+      '把正在播放和播放记录发送到 ListenBrainz 或 Last.fm';
 
   @override
   String get listeningSyncTitle => '听歌同步';
@@ -5297,7 +5298,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get listeningSyncTokenUnreachable => '暂时连不上 ListenBrainz，请检查网络后重试';
 
   @override
+  String get listeningSyncLastFmNotConfigured => '这个版本没有内置 Last.fm 应用密钥，暂时无法连接';
+
+  @override
+  String get listeningSyncLastFmBegin => '在浏览器中授权';
+
+  @override
+  String get listeningSyncLastFmWaiting => '在浏览器完成授权后，回到这里确认';
+
+  @override
+  String get listeningSyncLastFmConfirm => '我已完成授权';
+
+  @override
+  String get listeningSyncLastFmFailed => '授权没有完成，请重试';
+
+  @override
   String get listeningSyncLearnMoreListenBrainz => '了解 ListenBrainz';
+
+  @override
+  String get listeningSyncLearnMoreLastFm => '了解 Last.fm';
 
   @override
   String get listeningSyncUnavailable => '听歌同步还没有准备好，请稍后再试';

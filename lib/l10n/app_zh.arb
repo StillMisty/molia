@@ -2606,7 +2606,7 @@
   "localFileRelocated": "文件已重新关联",
   "localInfoUpdated": "信息已更新",
   "settingsListeningSyncTitle": "听歌同步",
-  "settingsListeningSyncSubtitle": "把正在播放和播放记录发送到 ListenBrainz",
+  "settingsListeningSyncSubtitle": "把正在播放和播放记录发送到 ListenBrainz 或 Last.fm",
   "listeningSyncTitle": "听歌同步",
   "listeningSyncIntro": "默认关闭。连接后，只有你在这里开启的服务会收到播放记录。",
   "listeningSyncMaster": "总开关",
@@ -2634,7 +2634,13 @@
   "listeningSyncTokenHint": "在 ListenBrainz 的设置页复制",
   "listeningSyncTokenInvalid": "访问密码无效，请检查后重试",
   "listeningSyncTokenUnreachable": "暂时连不上 ListenBrainz，请检查网络后重试",
+  "listeningSyncLastFmNotConfigured": "这个版本没有内置 Last.fm 应用密钥，暂时无法连接",
+  "listeningSyncLastFmBegin": "在浏览器中授权",
+  "listeningSyncLastFmWaiting": "在浏览器完成授权后，回到这里确认",
+  "listeningSyncLastFmConfirm": "我已完成授权",
+  "listeningSyncLastFmFailed": "授权没有完成，请重试",
   "listeningSyncLearnMoreListenBrainz": "了解 ListenBrainz",
+  "listeningSyncLearnMoreLastFm": "了解 Last.fm",
   "@listeningSyncDisconnectTitle": {
     "placeholders": {
       "name": {

@@ -18,6 +18,7 @@ import '../../domain/models/scrobble.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/scrobble_sink.dart';
 import '../../domain/scrobble/scrobble_rules.dart';
+import 'lastfm_sink.dart';
 import 'scrobble_outbox.dart';
 import 'scrobble_preferences.dart';
 
@@ -29,17 +30,32 @@ class ScrobbleService extends ChangeNotifier {
     required this.preferences,
     required this.outbox,
     required ScrobbleSink listenBrainzSink,
+    required ScrobbleSink lastFmSink,
+    required LastFmApiConfig lastFmConfig,
     Future<bool> Function(Uri uri)? openBrowser,
+    LastFmAuth Function()? lastFmAuthBuilder,
     DateTime Function()? clock,
     this.autoDeliver = true,
-  }) : _sinks = {ScrobbleTarget.listenBrainz: listenBrainzSink},
+  }) : _sinks = {
+         ScrobbleTarget.listenBrainz: listenBrainzSink,
+         ScrobbleTarget.lastFm: lastFmSink,
+       },
+       _lastFmConfig = lastFmConfig,
        _openBrowser = openBrowser ?? ((_) async => false),
+       _lastFmAuthBuilder =
+           lastFmAuthBuilder ??
+           (() => LastFmAuth(
+             config: lastFmConfig,
+             openBrowser: openBrowser ?? ((_) async => false),
+           )),
        _clock = clock ?? DateTime.now;
 
   final ScrobblePreferences preferences;
   final ScrobbleOutbox outbox;
   final Map<ScrobbleTarget, ScrobbleSink> _sinks;
+  final LastFmApiConfig _lastFmConfig;
   final Future<bool> Function(Uri uri) _openBrowser;
+  final LastFmAuth Function() _lastFmAuthBuilder;
   final DateTime Function() _clock;
 
   /// 生产为 true；单测关掉后手动调用 [pumpNow]，避免真实计时器。
@@ -49,6 +65,7 @@ class ScrobbleService extends ChangeNotifier {
 
   final Map<ScrobbleTarget, ScrobbleTargetStatus> _statuses = {
     ScrobbleTarget.listenBrainz: ScrobbleTargetStatus.disconnected,
+    ScrobbleTarget.lastFm: ScrobbleTargetStatus.disconnected,
   };
   final Map<ScrobbleTarget, String> _credentials = {};
   final Set<ScrobbleTarget> _inFlight = {};
@@ -60,14 +77,21 @@ class ScrobbleService extends ChangeNotifier {
   PlaybackSnapshot _snapshot = PlaybackSnapshot.empty;
   ScrobbleSession? _session;
   String? _sessionIdentity;
+  LastFmAuth? _lastFmAuth;
 
   bool get ready => _ready;
 
   bool get masterEnabled => preferences.masterEnabled;
 
-  /// 打开外部页面（项目主页 / 授权说明）走组合根注入的浏览器端口，
+  bool get lastFmConfigured => _lastFmConfig.isConfigured;
+
+  /// 打开外部页面（项目主页 / Last.fm 授权）走组合根注入的浏览器端口，
   /// 页面不再直接 import url_launcher。
   Future<bool> openExternal(Uri uri) => _openBrowser(uri);
+
+  LastFmAuthStage get lastFmStage => _lastFmAuth?.stage ?? LastFmAuthStage.idle;
+
+  Uri? get lastFmAuthorizationUri => _lastFmAuth?.authorizationUri;
 
   ScrobbleTargetStatus statusOf(ScrobbleTarget target) =>
       _statuses[target] ?? ScrobbleTargetStatus.disconnected;
@@ -181,6 +205,48 @@ class ScrobbleService extends ChangeNotifier {
     return ScrobbleConnectResult.connected;
   }
 
+  /// 开始 Last.fm 浏览器授权；返回 null 表示本版本未内置应用凭证。
+  Future<LastFmAuthStage> beginLastFmAuthorization() async {
+    _lastFmAuth = _lastFmAuthBuilder();
+    final stage = await _lastFmAuth!.begin();
+    _notify();
+    return stage;
+  }
+
+  /// 用户从浏览器回来后确认完成，用临时令牌换会话密钥。
+  Future<LastFmAuthStage> completeLastFmAuthorization() async {
+    final auth = _lastFmAuth;
+    if (auth == null) return LastFmAuthStage.failed;
+    final stage = await auth.complete();
+    if (stage != LastFmAuthStage.connected) {
+      _notify();
+      return stage;
+    }
+    final key = auth.takeSessionKey();
+    if (key == null || key.isEmpty) {
+      _notify();
+      return LastFmAuthStage.failed;
+    }
+    await preferences.writeCredential(ScrobbleTarget.lastFm, key);
+    _credentials[ScrobbleTarget.lastFm] = key;
+    await preferences.recordConsent(ScrobbleTarget.lastFm);
+    await preferences.setEnabled(ScrobbleTarget.lastFm, true);
+    await preferences.setAccount(ScrobbleTarget.lastFm, auth.accountName ?? '');
+    await preferences.setMasterEnabled(true);
+    _statuses[ScrobbleTarget.lastFm] = ScrobbleTargetStatus.connected;
+    _lastFmAuth = null;
+    _spawnSessionIfNeeded();
+    _schedule();
+    _notify();
+    return LastFmAuthStage.connected;
+  }
+
+  void cancelLastFmAuthorization() {
+    _lastFmAuth?.cancel();
+    _lastFmAuth = null;
+    _notify();
+  }
+
   /// 断开：清凭据、清该服务的待发送事件、关闭该服务的开关。
   Future<void> disconnect(ScrobbleTarget target) async {
     await preferences.clearCredential(target);
@@ -189,6 +255,9 @@ class ScrobbleService extends ChangeNotifier {
     await preferences.setAccount(target, '');
     await outbox.discardTarget(target);
     _statuses[target] = ScrobbleTargetStatus.disconnected;
+    if (_lastFmAuth != null && target == ScrobbleTarget.lastFm) {
+      _lastFmAuth = null;
+    }
     final anyEnabled = ScrobbleTarget.values.any(preferences.enabledFor);
     if (!anyEnabled) {
       await preferences.setMasterEnabled(false);

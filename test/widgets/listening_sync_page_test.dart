@@ -5,6 +5,7 @@ import 'package:molia/domain/models/scrobble.dart';
 import 'package:molia/domain/ports/scrobble_sink.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/listening_sync_page.dart';
+import 'package:molia/services/scrobble/lastfm_sink.dart';
 import 'package:molia/services/scrobble/scrobble_outbox.dart';
 import 'package:molia/services/scrobble/scrobble_preferences.dart';
 import 'package:molia/services/scrobble/scrobble_service.dart';
@@ -50,6 +51,8 @@ void main() {
       ),
       outbox: ScrobbleOutbox(prefs: prefs),
       listenBrainzSink: _FakeSink(ScrobbleTarget.listenBrainz),
+      lastFmSink: _FakeSink(ScrobbleTarget.lastFm),
+      lastFmConfig: LastFmApiConfig.none,
       autoDeliver: false,
     );
     await service.init();
@@ -82,7 +85,7 @@ void main() {
 
     expect(find.byKey(const Key('listeningSyncMasterSwitch')), findsOneWidget);
     expect(find.textContaining('不会发送本地文件路径'), findsOneWidget);
-    expect(find.text('未连接'), findsOneWidget);
+    expect(find.text('未连接'), findsNWidgets(2));
 
     await tester.tap(find.text('连接').first);
     await tester.pumpAndSettle();
@@ -116,6 +119,16 @@ void main() {
     expect(find.textContaining('已连接：listener'), findsOneWidget);
   });
 
+  testWidgets('Last.fm 未内置密钥时给出明确提示', (tester) async {
+    await pumpPage(tester);
+    final lastFmConnect = find.text('连接').last;
+    await tester.ensureVisible(lastFmConnect);
+    await tester.pumpAndSettle();
+    await tester.tap(lastFmConnect);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('没有内置 Last.fm 应用密钥'), findsOneWidget);
+  });
+
   testWidgets('断开确认清空凭证与队列', (tester) async {
     await pumpPage(tester);
     await tester.tap(find.text('连接').first);
@@ -138,6 +151,6 @@ void main() {
       ScrobbleTargetStatus.disconnected,
     );
     expect(service.credentialFor(ScrobbleTarget.listenBrainz), isEmpty);
-    expect(find.text('未连接'), findsOneWidget);
+    expect(find.text('未连接'), findsNWidgets(2));
   });
 }

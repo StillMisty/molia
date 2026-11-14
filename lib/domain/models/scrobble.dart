@@ -4,11 +4,8 @@
 /// 与组合根共用这一份口径。
 library;
 
-/// 支持的外部服务。
-///
-/// 目前只有 ListenBrainz；保留枚举而不是直接写死单个实现，是为了让发件箱 /
-/// 调度 / 设置页仍按「目标」工作，新增服务时不用改投递骨架。
-enum ScrobbleTarget { listenBrainz }
+/// 支持的两个外部服务。
+enum ScrobbleTarget { listenBrainz, lastFm }
 
 /// 事件类型：正在播放（一次性提示）与已播完（计入收听历史）。
 enum ScrobbleEventKind { nowPlaying, scrobble }
@@ -202,4 +199,25 @@ class ScrobbleCredentialCheck {
   final bool isValid;
   final bool reachable;
   final String? accountName;
+}
+
+/// Last.fm 浏览器授权状态。
+enum LastFmAuthStage {
+  /// 未开始。
+  idle,
+
+  /// 已拿到请求令牌，等待用户在浏览器授权。
+  awaitingUser,
+
+  /// 正在换取会话密钥。
+  exchanging,
+
+  /// 已连接。
+  connected,
+
+  /// 用户取消 / 令牌过期。
+  cancelled,
+
+  /// 交换失败。
+  failed,
 }

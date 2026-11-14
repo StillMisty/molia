@@ -3002,7 +3002,7 @@
   "localFileRelocated": "File re-linked",
   "localInfoUpdated": "Info updated",
   "settingsListeningSyncTitle": "Listening sync",
-  "settingsListeningSyncSubtitle": "Send what you play to ListenBrainz",
+  "settingsListeningSyncSubtitle": "Send what you play to ListenBrainz or Last.fm",
   "listeningSyncTitle": "Listening sync",
   "listeningSyncIntro": "Off by default. After connecting, only the services you enable here receive your listening history.",
   "listeningSyncMaster": "Master switch",
@@ -3030,7 +3030,13 @@
   "listeningSyncTokenHint": "Copy it from your ListenBrainz settings",
   "listeningSyncTokenInvalid": "That access password did not work. Check it and try again.",
   "listeningSyncTokenUnreachable": "Cannot reach ListenBrainz right now. Check your network and try again.",
+  "listeningSyncLastFmNotConfigured": "This build has no Last.fm application key, so it cannot connect yet",
+  "listeningSyncLastFmBegin": "Authorize in browser",
+  "listeningSyncLastFmWaiting": "Finish in the browser, then confirm here",
+  "listeningSyncLastFmConfirm": "I finished authorizing",
+  "listeningSyncLastFmFailed": "Authorization did not finish. Try again.",
   "listeningSyncLearnMoreListenBrainz": "About ListenBrainz",
+  "listeningSyncLearnMoreLastFm": "About Last.fm",
   "@listeningSyncDisconnectTitle": {
     "placeholders": {
       "name": {

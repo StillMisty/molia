@@ -5428,7 +5428,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsListeningSyncSubtitle =>
-      'Send what you play to ListenBrainz';
+      'Send what you play to ListenBrainz or Last.fm';
 
   @override
   String get listeningSyncTitle => 'Listening sync';
@@ -5530,7 +5530,28 @@ class AppLocalizationsEn extends AppLocalizations {
       'Cannot reach ListenBrainz right now. Check your network and try again.';
 
   @override
+  String get listeningSyncLastFmNotConfigured =>
+      'This build has no Last.fm application key, so it cannot connect yet';
+
+  @override
+  String get listeningSyncLastFmBegin => 'Authorize in browser';
+
+  @override
+  String get listeningSyncLastFmWaiting =>
+      'Finish in the browser, then confirm here';
+
+  @override
+  String get listeningSyncLastFmConfirm => 'I finished authorizing';
+
+  @override
+  String get listeningSyncLastFmFailed =>
+      'Authorization did not finish. Try again.';
+
+  @override
   String get listeningSyncLearnMoreListenBrainz => 'About ListenBrainz';
+
+  @override
+  String get listeningSyncLearnMoreLastFm => 'About Last.fm';
 
   @override
   String get listeningSyncUnavailable =>

@@ -1,6 +1,6 @@
 /// 设置 › 内容与来源 › 听歌同步。
 ///
-/// 一个入口：总开关 + 隐私说明 + ListenBrainz 服务行。连接前先看同意书；
+/// 一个入口覆盖两个服务：总开关 + 隐私说明 + 两个服务行。连接前先看同意书；
 /// 状态只反映本机（设备本地开关 / 凭证是否存在），不外泄口令或请求内容。
 library;
 
@@ -26,9 +26,10 @@ class ListeningSyncPage extends StatefulWidget {
 class _ListeningSyncPageState extends State<ListeningSyncPage> {
   bool _busy = false;
 
-  /// 服务名的唯一来源：设置行、同意书与断开确认共用。
+  /// 服务名的唯一来源：设置行、同意书、断开确认与 Last.fm 对话框共用。
   String _targetName(ScrobbleTarget target) => switch (target) {
     ScrobbleTarget.listenBrainz => 'ListenBrainz',
+    ScrobbleTarget.lastFm => 'Last.fm',
   };
 
   @override
@@ -100,6 +101,17 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
         onConnect: _connectListenBrainz,
         projectUrl: Uri.parse('https://listenbrainz.org'),
         learnMore: l10n.listeningSyncLearnMoreListenBrainz,
+      ),
+      const SizedBox(height: kSettingsSectionSpacing),
+      _targetSection(
+        context,
+        l10n,
+        service,
+        target: ScrobbleTarget.lastFm,
+        icon: Icons.radio_rounded,
+        onConnect: _connectLastFm,
+        projectUrl: Uri.parse('https://www.last.fm'),
+        learnMore: l10n.listeningSyncLearnMoreLastFm,
       ),
     ];
   }
@@ -217,6 +229,36 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
     }
   }
 
+  Future<void> _connectLastFm(ScrobbleService service) async {
+    final l10n = AppLocalizations.of(context)!;
+    if (!service.lastFmConfigured) {
+      M3ESnackbar.show(context, message: l10n.listeningSyncLastFmNotConfigured);
+      return;
+    }
+    if (!await _ensureConsent(service, ScrobbleTarget.lastFm)) return;
+    if (!mounted) return;
+    setState(() => _busy = true);
+    final stage = await service.beginLastFmAuthorization();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (stage != LastFmAuthStage.awaitingUser) {
+      M3ESnackbar.show(context, message: l10n.listeningSyncLastFmFailed);
+      return;
+    }
+    if (!await _confirmLastFm()) return;
+    if (!mounted) return;
+    setState(() => _busy = true);
+    final completed = await service.completeLastFmAuthorization();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    M3ESnackbar.show(
+      context,
+      message: completed == LastFmAuthStage.connected
+          ? l10n.listeningSyncConnected
+          : l10n.listeningSyncLastFmFailed,
+    );
+  }
+
   Future<bool> _ensureConsent(
     ScrobbleService service,
     ScrobbleTarget target,
@@ -292,6 +334,33 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
         ],
       ),
     ).whenComplete(controller.dispose);
+  }
+
+  Future<bool> _confirmLastFm() async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await M3EDialog.show<bool>(
+      context,
+      dialog: M3EDialog(
+        title: _targetName(ScrobbleTarget.lastFm),
+        content: SizedBox(
+          width: settingsDialogWidth(context),
+          child: Text(l10n.listeningSyncLastFmWaiting),
+        ),
+        actions: [
+          M3EButton.text(
+            onPressed: () =>
+                Navigator.of(context, rootNavigator: true).pop(false),
+            child: Text(l10n.listeningSyncCancel),
+          ),
+          M3EButton.filled(
+            onPressed: () =>
+                Navigator.of(context, rootNavigator: true).pop(true),
+            child: Text(l10n.listeningSyncLastFmConfirm),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
   }
 
   Future<void> _disconnect(
