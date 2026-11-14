@@ -16,7 +16,7 @@ void main() {
     image.fill(source, color: image.ColorRgb8(30, 120, 200));
     final png = image.encodePng(source);
 
-    final normalized = CoverImageCodec.normalizeSync(png);
+    final normalized = CoverImageCodec.normalizeImageSync(png);
     final info = CoverImageFormats.detect(normalized.bytes);
 
     expect(info, isNotNull);
@@ -42,7 +42,7 @@ void main() {
     );
     final png = image.encodePng(source);
 
-    final normalized = CoverImageCodec.normalizeSync(png);
+    final normalized = CoverImageCodec.normalizeImageSync(png);
     final decoded = image.decodeWebP(normalized.bytes);
     expect(decoded, isNotNull);
     expect(decoded!.getPixel(0, 0).a, 0);
@@ -51,7 +51,7 @@ void main() {
 
   test('动图 GIF：转动画 WebP，保留帧数与循环时长，Flutter 可解码多帧', () async {
     final gif = _animatedGif(frameCount: 6, edge: 96, frameMs: 80);
-    final normalized = CoverImageCodec.normalizeSync(gif);
+    final normalized = CoverImageCodec.normalizeImageSync(gif);
     final info = CoverImageFormats.detect(normalized.bytes);
 
     expect(info, isNotNull);
@@ -72,7 +72,7 @@ void main() {
 
   test('超长动图：抽帧到上限且不截断循环', () {
     final gif = _animatedGif(frameCount: 120, edge: 32, frameMs: 40);
-    final normalized = CoverImageCodec.normalizeSync(gif);
+    final normalized = CoverImageCodec.normalizeImageSync(gif);
     final decoded = image.decodeWebP(normalized.bytes);
 
     expect(decoded, isNotNull);
@@ -88,8 +88,8 @@ void main() {
     image.fill(source, color: image.ColorRgb8(10, 200, 30));
     final png = image.encodePng(source);
 
-    final first = CoverImageCodec.normalizeSync(png);
-    final second = CoverImageCodec.normalizeSync(png);
+    final first = CoverImageCodec.normalizeImageSync(png);
+    final second = CoverImageCodec.normalizeImageSync(png);
     expect(first.bytes, second.bytes);
   });
 
@@ -124,7 +124,7 @@ void main() {
     ]);
     expect(CoverImageFormats.detect(avif), isNull);
     expect(
-      () => CoverImageCodec.normalizeSync(avif),
+      () => CoverImageCodec.normalizeImageSync(avif),
       throwsA(isA<CoverImageException>()),
     );
   });
