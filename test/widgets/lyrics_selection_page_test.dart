@@ -89,57 +89,49 @@ void main() {
     await tester.pump();
   }
 
-  Finder countPill(String value) => find.descendant(
-    of: find.byKey(const Key('lyricsSelectionCount')),
-    matching: find.text(value),
-  );
-
-  testWidgets('全选只选非空行；再点一次与取消全选同义', (tester) async {
+  testWidgets('空选择：底栏是提示 + 复制全部，没有顶栏动作行', (tester) async {
     await pumpPage(tester);
 
-    await tester.tap(find.byKey(const Key('lyricsSelectAll')));
-    await tester.pump();
-    expect(countPill('4'), findsOneWidget, reason: '空行不参与全选');
-
-    await tester.tap(find.byKey(const Key('lyricsSelectAll')));
-    await tester.pump();
-    expect(find.byKey(const Key('lyricsSelectionCount')), findsNothing);
+    expect(find.text(l10n.lyricsSelectionHint), findsOneWidget);
+    expect(find.byKey(const Key('lyricsCopyAll')), findsOneWidget);
+    expect(find.byKey(const Key('lyricsSelectAll')), findsNothing);
+    expect(find.byType(M3ESplitButton<String>), findsNothing);
   });
 
-  testWidgets('范围选择：最后一次点选为锚点，点终点选中闭区间', (tester) async {
+  testWidgets('全选只选中非空行；✕ 清空并回到空态', (tester) async {
+    await pumpPage(tester);
+
+    // 先选中一行，底栏才进入非空态（全选只在非空态出现）。
+    await tester.tap(find.text('A'));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('lyricsSelectAll')));
+    await tester.pump();
+    expect(find.text(l10n.copySelectedLines(4)), findsOneWidget);
+
+    // 再次点击全选不会清空（已全选时按钮禁用）。
+    await tester.tap(find.byKey(const Key('lyricsSelectAll')));
+    await tester.pump();
+    expect(find.text(l10n.copySelectedLines(4)), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('lyricsDeselectAll')));
+    await tester.pump();
+    expect(find.text(l10n.lyricsSelectionHint), findsOneWidget);
+  });
+
+  testWidgets('长按终点：从最后一次点选的行选中闭区间', (tester) async {
     await pumpPage(tester);
 
     await tester.tap(find.text('B'));
     await tester.pump();
-    expect(countPill('1'), findsOneWidget);
+    expect(find.text(l10n.copySelectedLines(1)), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('lyricsRangeAction')));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text(l10n.selectionRangeHint), findsOneWidget);
-    expect(find.text(l10n.selectionRangeCancel), findsOneWidget);
-
-    await tester.tap(find.text('D'));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(countPill('3'), findsOneWidget, reason: 'B / C / D 含两端');
-    expect(find.text(l10n.selectionRangeAction), findsOneWidget);
-  });
-
-  testWidgets('再次点击范围选择取消：下一次点行恢复普通切换', (tester) async {
-    await pumpPage(tester);
-
-    await tester.tap(find.text('B'));
+    await tester.longPress(find.text('D'));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('lyricsRangeAction')));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text(l10n.selectionRangeCancel), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('lyricsRangeAction')));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text(l10n.selectionRangeAction), findsOneWidget);
-
-    await tester.tap(find.text('D'));
-    await tester.pump();
-    expect(countPill('2'), findsOneWidget, reason: '普通切换：B + D');
+    expect(
+      find.text(l10n.copySelectedLines(3)),
+      findsOneWidget,
+      reason: 'B / C / D 含两端',
+    );
   });
 
   testWidgets('页头与海报输入共用同一份自定义展示封面', (tester) async {

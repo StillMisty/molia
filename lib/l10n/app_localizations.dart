@@ -1130,23 +1130,23 @@ abstract class AppLocalizations {
   /// **'Select range to here'**
   String get selectionRangeToHere;
 
-  /// No description provided for @selectionRangeAction.
+  /// No description provided for @lyricsSelectionHint.
   ///
   /// In en, this message translates to:
-  /// **'Select range'**
-  String get selectionRangeAction;
+  /// **'Tap to select, long-press to select a range'**
+  String get lyricsSelectionHint;
 
-  /// No description provided for @selectionRangeHint.
+  /// No description provided for @copyAll.
   ///
   /// In en, this message translates to:
-  /// **'Tap the end item'**
-  String get selectionRangeHint;
+  /// **'Copy all'**
+  String get copyAll;
 
-  /// No description provided for @selectionRangeCancel.
+  /// No description provided for @copySelectedLines.
   ///
   /// In en, this message translates to:
-  /// **'Cancel range selection'**
-  String get selectionRangeCancel;
+  /// **'Copy {count} lines'**
+  String copySelectedLines(int count);
 
   /// No description provided for @noLyricsSelected.
   ///
@@ -1177,12 +1177,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No lyrics available to select'**
   String get noLyricsToSelect;
-
-  /// No description provided for @tapToSelectLyrics.
-  ///
-  /// In en, this message translates to:
-  /// **'Tap lyric line to select'**
-  String get tapToSelectLyrics;
 
   /// No description provided for @nowPlayingLabel.
   ///
@@ -1256,16 +1250,10 @@ abstract class AppLocalizations {
   /// **'No items found'**
   String get noItemsFound;
 
-  /// No description provided for @copyButtonText.
-  ///
-  /// In en, this message translates to:
-  /// **'Copy'**
-  String get copyButtonText;
-
   /// No description provided for @posterButtonLabel.
   ///
   /// In en, this message translates to:
-  /// **'Poster'**
+  /// **'Generate poster'**
   String get posterButtonLabel;
 
   /// No description provided for @retryButton.

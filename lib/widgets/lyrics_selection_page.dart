@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -18,7 +19,6 @@ import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'lyrics_poster_preview_page.dart';
 import 'playback_selectors.dart';
-import 'selection_range_action.dart';
 import 'track_artwork.dart';
 
 class LyricsSelectionPage extends StatefulWidget {
@@ -73,10 +73,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
   /// 选中行下标（模型不可变，选中态属于页面状态）。
   final Set<int> _selectedIndices = {};
 
-  /// 一次性范围选择：true = 下一次行点击选中锚点到该行的区间。
-  bool _rangeMode = false;
-
-  /// 范围起点（最后一次点选的行；空行不会成为起点，因为点不到）。
+  /// 范围起点（最后一次点选的行；长按另一行时从这里起算区间）。
   int? _rangeAnchor;
 
   final _scrollController = ScrollController();
@@ -113,7 +110,6 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
     HapticsService.lightImpact();
     setState(() {
       _selectedIndices.clear();
-      _rangeMode = false;
       _rangeAnchor = null;
     });
   }
@@ -130,41 +126,19 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
     return selectable.isNotEmpty && selectable.every(_selectedIndices.contains);
   }
 
-  /// 全选非空行；已经全选时与底栏「取消全选」同义（同一个动作的往返）。
-  void _toggleSelectAll() {
+  /// 全选非空行。全选只负责选中；清空 / 退出只走底栏 ✕。
+  void _selectAllLines() {
     HapticsService.selectionClick();
-    if (_allSelectableSelected) {
-      _deselectAllLines();
-      return;
-    }
     setState(() {
       _selectedIndices
         ..clear()
         ..addAll(_selectableIndices);
-      // 全选不是「点选起点」：范围入口等下一次点行落下锚点后再出现。
-      _rangeMode = false;
+      // 全选不是「点选起点」：长按区间要等下一次点行落下锚点。
       _rangeAnchor = null;
     });
   }
 
-  /// 底部右侧「范围选择」：进入 / 取消一次性范围模式。
-  void _toggleRangeMode() {
-    HapticsService.selectionClick();
-    if (_rangeMode) {
-      setState(() => _rangeMode = false);
-      M3ESnackbar.defaultController.dismiss();
-      return;
-    }
-    if (_rangeAnchor == null) return;
-    setState(() => _rangeMode = true);
-    M3ESnackbar.show(
-      context,
-      message: AppLocalizations.of(context)!.selectionRangeHint,
-    );
-  }
-
-  /// 范围选择第二段：选中锚点到 [index] 的闭区间（与合集多选同一语义），
-  /// 不切换终点行本身，完成后退出范围模式。
+  /// 范围选择：选中锚点到 [index] 的闭区间（与合集多选同一语义）。
   void _selectRangeTo(int index) {
     final anchor = _rangeAnchor;
     if (anchor == null) return;
@@ -176,22 +150,32 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
         ..clear()
         ..addAll([for (var i = start; i <= end; i++) i]);
       _rangeAnchor = index;
-      _rangeMode = false;
     });
-    M3ESnackbar.defaultController.dismiss();
   }
 
   void _toggleLineSelection(int index) {
     if (index < 0 || index >= _lyricLines.length) return;
-    if (_rangeMode) {
-      _selectRangeTo(index);
-      return;
-    }
 
     HapticsService.selectionClick();
     setState(() {
       if (!_selectedIndices.remove(index)) _selectedIndices.add(index);
       // 范围起点 = 最后一次点选的行（无论这次是选中还是取消）。
+      _rangeAnchor = index;
+    });
+  }
+
+  /// 行长按：已经选中过行时把这一行作为区间终点；否则先选中它。
+  ///
+  /// 触摸端没有 Shift，长按承担桌面 Shift 点击的第二段手势。
+  void _onLineLongPress(int index) {
+    if (index < 0 || index >= _lyricLines.length) return;
+    if (_selectedIndices.isNotEmpty && _rangeAnchor != null) {
+      _selectRangeTo(index);
+      return;
+    }
+    HapticsService.selectionClick();
+    setState(() {
+      _selectedIndices.add(index);
       _rangeAnchor = index;
     });
   }
@@ -230,95 +214,6 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
   }
 
   bool _hasSelectedLyrics() => _selectedIndices.isNotEmpty;
-
-  /// 顶栏操作：复制 split button / ⋮ 菜单 + 选中计数胶囊。
-  ///
-  /// embedded（侧边弹层没有 AppBar）时渲染在正文顶部，与窄屏 AppBar 的
-  /// actions 共用同一份控件与状态，避免两套入口行为漂移。
-  List<Widget> _selectionActions(
-    BuildContext context,
-    AppLocalizations l10n,
-    ThemeData theme,
-  ) {
-    return [
-      // 全选 / 取消全选：与非空行口径同源（空行没有内容可复制 / 进海报）。
-      M3EIconButton(
-        key: const Key('lyricsSelectAll'),
-        variant: M3EIconButtonVariant.standard,
-        icon: const Icon(Icons.select_all_rounded),
-        semanticLabel: _allSelectableSelected
-            ? l10n.deselectAll
-            : l10n.selectAllItems,
-        onPressed: _toggleSelectAll,
-      ),
-      // 有选中行时：「复制选中」是主操作，菜单里是它的变体「复制全部」，
-      // 合并成一个 split button（原来的独立 ⋮ 只有这一条菜单项）。
-      if (_hasSelectedLyrics())
-        M3ESplitButton<String>(
-          key: const Key('lyricsSelectionCopy'),
-          label: l10n.copyButtonText,
-          leadingIcon: Icons.copy_rounded,
-          style: M3EButtonStyle.outlined,
-          enabled: !_isLoading,
-          onPressed: _copySelectedLyrics,
-          items: [
-            M3ESplitButtonItem<String>(
-              value: 'copyAll',
-              child: Text('${l10n.copyButtonText} · ${l10n.lyricsTitle}'),
-            ),
-          ],
-          onSelected: (value) {
-            if (value == 'copyAll') {
-              _copyAllOriginalLyrics();
-            }
-          },
-        )
-      // 未选中任何行：没有主操作可拆，保留 ⋮（复制全部原文歌词）。
-      else
-        M3EMenu.entries(
-          position: M3EMenuAnchorPosition.bottomEnd,
-          anchorBuilder: (context, open) => M3EIconButton(
-            variant: M3EIconButtonVariant.standard,
-            icon: Icon(Icons.more_vert_rounded),
-            onPressed: open,
-            semanticLabel: l10n.copyButtonText,
-          ),
-          onSelected: (value) {
-            if (value == 'copyAll') {
-              _copyAllOriginalLyrics();
-            }
-          },
-          entries: [
-            M3EMenuEntry(
-              label: '${l10n.copyButtonText} · ${l10n.lyricsTitle}',
-              value: 'copyAll',
-            ),
-          ],
-        ),
-      if (_hasSelectedLyrics())
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: Center(
-            child: Container(
-              key: const Key('lyricsSelectionCount'),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                // 只有选中数量，没有上限：海报高度随行数增长。
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                '${_selectedIndices.length}',
-                style: context.typeScale.labelLarge.copyWith(
-                  color: theme.colorScheme.onPrimaryContainer,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ),
-    ];
-  }
 
   Future<void> _copySelectedLyrics() async {
     HapticsService.lightImpact();
@@ -408,15 +303,6 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
       builder: (context, currentLineIndex) {
         return Column(
           children: [
-            // 侧边弹层没有 AppBar：顶栏操作下沉到正文顶部，右侧对齐。
-            if (widget.embedded)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: _selectionActions(context, l10n, theme),
-                ),
-              ),
             Expanded(
               child: ResponsivePageContainer(
                 pageType: ResponsivePageType.detail,
@@ -516,6 +402,11 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                         extended: _extendedOf(lyricIndex),
                         isSelected: _selectedIndices.contains(lyricIndex),
                         onTap: () => _toggleLineSelection(lyricIndex),
+                        onLongPress: () => _onLineLongPress(lyricIndex),
+                        // 选中过行之后，长按才表示「选中到这里」。
+                        longPressSemanticLabel: _hasSelectedLyrics()
+                            ? l10n.selectionRangeToHere
+                            : null,
                         isFirstInGroup: isFirstInGroup,
                         isLastInGroup: isLastInGroup,
                         isCurrentlyPlaying: lyricIndex == currentLineIndex,
@@ -532,30 +423,11 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
 
     final bottomBar = _buildBottomBar(context, l10n, theme, detailLayout);
 
-    // 范围选择入口浮动在正文右下角（底栏之上）：不新增工具栏，只有已经
-    // 选中过至少一行、且有起点时才出现。
-    final pageBodyWithRange = Stack(
-      fit: StackFit.expand,
-      children: [
-        pageBody,
-        if (_hasSelectedLyrics() && _rangeAnchor != null)
-          Positioned(
-            right: 16,
-            bottom: 16,
-            child: SelectionRangeAction(
-              key: const Key('lyricsRangeAction'),
-              active: _rangeMode,
-              onPressed: _toggleRangeMode,
-            ),
-          ),
-      ],
-    );
-
     if (widget.embedded) {
       // 侧边弹层里没有 Scaffold：正文 + 底部操作条自己拼成一列。
       return Column(
         children: [
-          Expanded(child: pageBodyWithRange),
+          Expanded(child: pageBody),
           bottomBar,
         ],
       );
@@ -565,9 +437,8 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
       appBar: M3EAppBar.top(
         title: Text(l10n.selectLyrics),
         automaticallyImplyLeading: true,
-        actions: _selectionActions(context, l10n, theme),
       ),
-      body: pageBodyWithRange,
+      body: pageBody,
       bottomNavigationBar: bottomBar,
     );
   }
@@ -603,46 +474,72 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
           ),
         ),
       ),
-      child: SizedBox(
-        height: 56.0,
+      // 最小高度而不是固定 56：200% 字号下按钮 / 文案可以撑高，不裁切。
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 56),
         child: _isLoading
             ? const Center(child: M3ELoadingIndicator())
             : _hasSelectedLyrics()
             ? Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 取消全选：普通 tonal 图标键；动作不做额外着色
-                  //（特殊色语义只留给状态），禁用态交给 M3E 默认值。
                   M3EIconButton(
+                    key: const Key('lyricsDeselectAll'),
                     variant: M3EIconButtonVariant.tonal,
                     size: M3EIconButtonSize.md,
                     visualSize: const Size(56, 56),
-                    onPressed: _isLoading ? null : _deselectAllLines,
+                    onPressed: _deselectAllLines,
                     icon: const Icon(Icons.close_rounded),
                     semanticLabel: l10n.deselectAll,
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
+                  M3EIconButton(
+                    key: const Key('lyricsSelectAll'),
+                    variant: M3EIconButtonVariant.tonal,
+                    size: M3EIconButtonSize.md,
+                    visualSize: const Size(56, 56),
+                    // 全选只负责选中；已全选时禁用，清空走 ✕。
+                    onPressed: _allSelectableSelected ? null : _selectAllLines,
+                    icon: const Icon(Icons.select_all_rounded),
+                    semanticLabel: l10n.selectAllItems,
+                  ),
+                  const Spacer(),
+                  M3EButton.text(
+                    key: const Key('lyricsCopySelected'),
+                    onPressed: _copySelectedLyrics,
+                    child: Text(
+                      l10n.copySelectedLines(_selectedIndices.length),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: M3EButton.tonal(
+                    flex: 3,
+                    child: M3EButton.filled(
                       // 行数不设上限：海报按选中行数计算高度。
-                      onPressed: _isLoading ? null : _shareAsPoster,
+                      onPressed: _shareAsPoster,
                       icon: const Icon(Icons.image_rounded),
                       label: Text(l10n.posterButtonLabel),
                     ),
                   ),
                 ],
               )
-            : Center(
-                child: Text(
-                  l10n.tapToSelectLyrics,
-                  style: context.typeScale.bodyMedium.copyWith(
-                    // 操作引导是次要文本，不用强调色。
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
+            : Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      l10n.lyricsSelectionHint,
+                      style: context.typeScale.bodyMedium.copyWith(
+                        // 操作引导是次要文本，不用强调色。
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  M3EButton.text(
+                    key: const Key('lyricsCopyAll'),
+                    onPressed: _copyAllOriginalLyrics,
+                    child: Text(l10n.copyAll),
+                  ),
+                ],
               ),
       ),
     );
@@ -657,6 +554,8 @@ class _LyricTile extends StatelessWidget {
   final (String translation, String roma) extended;
   final bool isSelected;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final String? longPressSemanticLabel;
   final bool isFirstInGroup;
   final bool isLastInGroup;
   final bool isCurrentlyPlaying;
@@ -667,6 +566,8 @@ class _LyricTile extends StatelessWidget {
     required this.extended,
     required this.isSelected,
     required this.onTap,
+    required this.onLongPress,
+    this.longPressSemanticLabel,
     this.isFirstInGroup = false,
     this.isLastInGroup = false,
     this.isCurrentlyPlaying = false,
@@ -708,7 +609,7 @@ class _LyricTile extends StatelessWidget {
           : theme.colorScheme.onSurfaceVariant,
     );
 
-    return Padding(
+    final card = Padding(
       padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 16),
       child: M3ECard(
         variant: M3ECardVariant.filled,
@@ -719,6 +620,7 @@ class _LyricTile extends StatelessWidget {
             : theme.colorScheme.surface, // 当前播放行不改变背景色
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         onPressed: onTap,
+        onLongPress: onLongPress,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -741,6 +643,14 @@ class _LyricTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+    final semanticLabel = longPressSemanticLabel;
+    if (semanticLabel == null) return card;
+    return Semantics(
+      customSemanticsActions: {
+        CustomSemanticsAction(label: semanticLabel): onLongPress,
+      },
+      child: card,
     );
   }
 }

@@ -570,13 +570,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get selectionRangeToHere => 'Select range to here';
 
   @override
-  String get selectionRangeAction => 'Select range';
+  String get lyricsSelectionHint =>
+      'Tap to select, long-press to select a range';
 
   @override
-  String get selectionRangeHint => 'Tap the end item';
+  String get copyAll => 'Copy all';
 
   @override
-  String get selectionRangeCancel => 'Cancel range selection';
+  String copySelectedLines(int count) {
+    return 'Copy $count lines';
+  }
 
   @override
   String get noLyricsSelected => 'Please select some lyrics first';
@@ -596,9 +599,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noLyricsToSelect => 'No lyrics available to select';
-
-  @override
-  String get tapToSelectLyrics => 'Tap lyric line to select';
 
   @override
   String get nowPlayingLabel => 'Playing';
@@ -639,10 +639,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noItemsFound => 'No items found';
 
   @override
-  String get copyButtonText => 'Copy';
-
-  @override
-  String get posterButtonLabel => 'Poster';
+  String get posterButtonLabel => 'Generate poster';
 
   @override
   String get retryButton => 'Retry';
