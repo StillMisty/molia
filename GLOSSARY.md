@@ -917,6 +917,13 @@
   提供，随机 / 列表循环回绕行只允许移除。live 改 facade 后提交会话；恢复态
   改保存的会话并重新发布快照（会话内洗牌排列同步移除 / 扩展，避免 upNextIndices
   指到已移除曲目或漏掉追加曲目）。
+- **Queue edit policy（队列编辑策略）** — `lib/playback/queue_edit_policy.dart`：
+  移动 / 移除的合法边界（随机模式禁止移动、当前曲目不可编辑、越界 / 原地
+  no-op）与编辑后的当前下标平移的唯一实现；`planQueueMove` /
+  `planQueueRemove` 返回是否允许与编辑后的 currentIndex。
+  `PlaybackSessionCoordinator`（恢复态改保存会话）与 `LocalPlaybackService`
+  （live 改内存队列）共用它；实际列表增删及 `PlaybackOrder` /
+  `PlaybackShuffleOrder` 下标重映射仍归调用方。
 
 ## 听歌同步（scrobble）
 
