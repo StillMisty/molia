@@ -10,24 +10,19 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../domain/models/library.dart';
 import '../domain/models/playlist_folders.dart';
 import '../l10n/app_localizations.dart';
-import '../services/notification_service.dart';
 import '../services/playlist/playlist_import_service.dart';
 import '../services/poster/playlist_poster_layout.dart';
 import '../services/poster/playlist_poster_renderer.dart';
-import '../services/poster/poster_share_file.dart';
-import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
 import '../theme/poster_palette.dart';
 import '../utils/file_name.dart';
 import '../utils/responsive.dart';
-import '../utils/save_as_label.dart';
 import 'empty_state.dart';
+import 'poster_share_sheet.dart';
 import 'simple_modal_body.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -217,7 +212,9 @@ class _PlaylistDetailsSheetState extends State<PlaylistDetailsSheet> {
 
 // 分享
 
-/// 分享弹层：图片 / 文本两个 section（同一层，不做 tabs）。
+/// 列表分享弹层：与听歌统计 / 年度报告共用统一结构。
+///
+/// 预览海报在弹层内生成；主操作只有分享，保存图片与复制文本是次要输出。
 Future<void> showPlaylistShareSheet(
   BuildContext context, {
   required PlaylistShareContent content,
@@ -225,278 +222,31 @@ Future<void> showPlaylistShareSheet(
   required PosterPalette palette,
   String? fontFamily,
   List<String>? fontFamilyFallback,
+  PosterFileShare? shareFile,
 }) {
-  return ResponsiveNavigation.showSimpleModal<void>(
-    context: context,
-    title: _l10n(context).playlistShare,
-    child: PlaylistShareSheet(
-      content: content,
-      loadCovers: loadCovers,
-      palette: palette,
-      fontFamily: fontFamily,
-      fontFamilyFallback: fontFamilyFallback,
-    ),
-  );
-}
-
-class PlaylistShareSheet extends StatefulWidget {
-  const PlaylistShareSheet({
-    super.key,
-    required this.content,
-    required this.loadCovers,
-    required this.palette,
-    this.fontFamily,
-    this.fontFamilyFallback,
-    this.autoGenerate = true,
-  });
-
-  final PlaylistShareContent content;
-
-  /// 打开即生成图片；测试可关闭以只验证 section 结构。
-  final bool autoGenerate;
-
-  /// 读取本机封面字节（顺序即马赛克槽位）；不返回任何路径。
-  final Future<List<Uint8List?>> Function() loadCovers;
-
-  final PosterPalette palette;
-  final String? fontFamily;
-  final List<String>? fontFamilyFallback;
-
-  @override
-  State<PlaylistShareSheet> createState() => _PlaylistShareSheetState();
-}
-
-class _PlaylistShareSheetState extends State<PlaylistShareSheet> {
-  Uint8List? _image;
-  bool _generating = false;
-  bool _failed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // 生成会读 l10n；首帧后启动，避免在 initState 里依赖 InheritedWidget。
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && widget.autoGenerate && widget.content.tracks.isNotEmpty) {
-        unawaited(_generate());
-      }
-    });
-  }
-
-  Future<void> _generate() async {
-    if (_generating) return;
-    setState(() {
-      _generating = true;
-      _failed = false;
-    });
-    final watermark = _l10n(context).appName;
-    try {
-      final covers = await widget.loadCovers();
-      final bytes = await const PlaylistPosterRenderer().render(
-        content: widget.content,
+  final l10n = _l10n(context);
+  return showPosterShareSheet(
+    context,
+    title: l10n.playlistShare,
+    renderPoster: () async {
+      if (content.tracks.isEmpty) return null;
+      final covers = await loadCovers();
+      return const PlaylistPosterRenderer().render(
+        content: content,
         covers: covers,
-        palette: widget.palette,
-        fontFamily: widget.fontFamily,
-        fontFamilyFallback: widget.fontFamilyFallback,
-        watermarkText: watermark,
+        palette: palette,
+        fontFamily: fontFamily,
+        fontFamilyFallback: fontFamilyFallback,
+        watermarkText: l10n.appName,
       );
-      if (mounted) setState(() => _image = bytes);
-    } catch (_) {
-      if (mounted) setState(() => _failed = true);
-    } finally {
-      if (mounted) setState(() => _generating = false);
-    }
-  }
-
-  NotificationService? get _notifications =>
-      context.read<NotificationService?>();
-
-  void _message(String text) {
-    final service = _notifications;
-    if (service != null) {
-      service.showSnackBar(text);
-    } else {
-      M3ESnackbar.show(context, message: text);
-    }
-  }
-
-  Future<void> _shareImage() async {
-    final bytes = _image;
-    if (bytes == null) return;
-    try {
-      await withTemporaryPosterPng(bytes, (file) async {
-        await SharePlus.instance.share(
-          ShareParams(files: [XFile(file.path)], text: widget.content.name),
-        );
-      });
-    } catch (_) {
-      if (mounted) _message(_l10n(context).playlistShareFailed);
-    }
-  }
-
-  Future<void> _saveImage() async {
-    final bytes = _image;
-    final saveAs = context.read<SaveAs?>();
-    if (bytes == null || saveAs == null) return;
-    final l10n = _l10n(context);
-    final result = await saveAs.saveBytes(
-      fileName:
-          '${sanitizeFileName(widget.content.name, fallback: 'playlist')}.png',
-      bytes: bytes,
-      mimeType: 'image/png',
-      relativeDir: saveAsPostersDirName,
-      dialogTitle: l10n.playlistShareImage,
-    );
-    if (!mounted) return;
-    switch (result) {
-      case SaveAsSaved(:final displayPath, :final kind):
-        _message(savedLocationMessage(l10n, kind, displayPath));
-      case SaveAsCancelled():
-        break;
-      case SaveAsFailed():
-        _message(l10n.playlistShareFailed);
-    }
-  }
-
-  Future<void> _shareText() async {
-    try {
-      await SharePlus.instance.share(
-        ShareParams(text: widget.content.toShareText()),
-      );
-    } catch (_) {
-      if (mounted) _message(_l10n(context).playlistExportFailed);
-    }
-  }
-
-  Future<void> _copyText() async {
-    await Clipboard.setData(ClipboardData(text: widget.content.toShareText()));
-    if (mounted) _message(_l10n(context).playlistShareCopied);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = _l10n(context);
-    final hasTracks = widget.content.tracks.isNotEmpty;
-    return SafeArea(
-      child: SimpleModalBody(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        children: [
-          if (!hasTracks)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: EmptyState(
-                icon: Icons.queue_music_rounded,
-                message: l10n.playlistShareEmpty,
-              ),
-            )
-          else ...[
-            _SectionTitle(l10n.playlistShareImage),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                l10n.playlistShareImageSubtitle,
-                style: context.typeScale.bodySmall.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (_generating)
-              Row(
-                children: [
-                  const SizedBox.square(
-                    dimension: 18,
-                    child: M3EProgressIndicator.circular(
-                      size: 18,
-                      strokeWidth: 2,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(l10n.playlistShareGenerating),
-                ],
-              )
-            else if (_failed)
-              Row(
-                children: [
-                  Expanded(child: Text(l10n.playlistShareFailed)),
-                  M3EButton.text(
-                    onPressed: () => unawaited(_generate()),
-                    child: Text(l10n.retryButton),
-                  ),
-                ],
-              ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: M3EButton.filled(
-                    key: const Key('playlistShareImageAction'),
-                    onPressed: _image == null
-                        ? null
-                        : () => unawaited(_shareImage()),
-                    child: Text(l10n.playlistShareImage),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: M3EButton.outlined(
-                    key: const Key('playlistShareSaveImage'),
-                    onPressed: _image == null
-                        ? null
-                        : () => unawaited(_saveImage()),
-                    child: Text(l10n.playlistShareSaveImage),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            _SectionTitle(l10n.playlistShareText),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                l10n.playlistShareTextSubtitle,
-                style: context.typeScale.bodySmall.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: M3EButton.outlined(
-                    key: const Key('playlistShareTextAction'),
-                    onPressed: () => unawaited(_shareText()),
-                    child: Text(l10n.playlistShareText),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: M3EButton.outlined(
-                    onPressed: () => unawaited(_copyText()),
-                    child: Text(l10n.playlistShareCopyText),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Text(text, style: context.typeScale.titleMedium),
-    );
-  }
+    },
+    shareText: content.name,
+    fileName: '${sanitizeFileName(content.name, fallback: 'playlist')}.png',
+    saveDialogTitle: l10n.shareSaveImage,
+    emptyMessage: l10n.playlistShareEmpty,
+    copyText: content.tracks.isEmpty ? null : content.toShareText(),
+    shareFile: shareFile,
+  );
 }
 
 // 导出

@@ -568,6 +568,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sharePoster => 'Share Poster';
 
   @override
+  String get shareAction => 'Share';
+
+  @override
+  String get shareSaveImage => 'Save image';
+
+  @override
+  String get shareCopyText => 'Copy text';
+
+  @override
+  String get shareCopied => 'Text copied';
+
+  @override
+  String get shareExportData => 'Export data';
+
+  @override
+  String get shareGenerating => 'Creating image…';
+
+  @override
+  String get shareFailed => 'Couldn\'t share. Try again.';
+
+  @override
+  String get shareGenerateFailed => 'Couldn\'t create the image. Try again.';
+
+  @override
+  String get shareSaveFailed => 'Couldn\'t save the image. Try again.';
+
+  @override
+  String get moreActions => 'More actions';
+
+  @override
+  String get posterStyle => 'Style';
+
+  @override
   String selectedLyricsCopied(int count) {
     return 'Copied $count lines of lyrics';
   }
@@ -2060,21 +2093,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get annualReportSharePoster => 'Share poster';
 
   @override
-  String get annualReportPosterGenerating => 'Making your poster…';
-
-  @override
-  String get annualReportShareFailed => 'Couldn\'t make the poster. Try again.';
-
-  @override
-  String get annualReportSaveImage => 'Save image';
-
-  @override
-  String get annualReportSaveFailed => 'Couldn\'t save the image. Try again.';
-
-  @override
-  String get annualReportMoreActions => 'More actions';
-
-  @override
   String get annualReportLoadFailed => 'Couldn\'t load the report';
 
   @override
@@ -2177,30 +2195,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statsExport => 'Export listening data';
 
   @override
-  String statsExportSubtitle(int limit) {
-    return 'JSON file (summary + last $limit events)';
-  }
-
-  @override
   String get statsExportFailed => 'Export failed';
 
   @override
   String get statsShareTitle => 'Share listening stats';
 
   @override
-  String get statsShareImage => 'Share image';
-
-  @override
-  String get statsSaveImage => 'Save image';
-
-  @override
   String get statsPosterTitle => 'Listening stats';
-
-  @override
-  String get statsPosterShareFailed => 'Couldn\'t make the image. Try again.';
-
-  @override
-  String get statsPosterSaveFailed => 'Couldn\'t save the image. Try again.';
 
   @override
   String get statsPosterEmpty => 'No listening data to turn into an image yet';
@@ -5249,33 +5250,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistShare => 'Share playlist';
-
-  @override
-  String get playlistShareImage => 'Image';
-
-  @override
-  String get playlistShareImageSubtitle => 'Cover mosaic and playlist info';
-
-  @override
-  String get playlistShareText => 'Text';
-
-  @override
-  String get playlistShareTextSubtitle => 'Plain track list';
-
-  @override
-  String get playlistShareSaveImage => 'Save image';
-
-  @override
-  String get playlistShareCopyText => 'Copy text';
-
-  @override
-  String get playlistShareCopied => 'Text copied';
-
-  @override
-  String get playlistShareGenerating => 'Creating image…';
-
-  @override
-  String get playlistShareFailed => 'Couldn\'t create the image. Try again.';
 
   @override
   String get playlistShareEmpty => 'This playlist has no tracks yet';

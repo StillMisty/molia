@@ -78,11 +78,10 @@ PlaylistInfo playlist(int id, String name, {String folder = ''}) =>
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('列表头部溢出：详情 / 封面 / 分享 / 导出 / 全部下载', (tester) async {
+  testWidgets('列表头部溢出：详情 / 封面 / 导出 / 全部下载', (tester) async {
     final l10n = lookupAppLocalizations(const Locale('zh'));
     var details = 0;
     var cover = 0;
-    var share = 0;
     var export = 0;
     var download = 0;
     await tester.pumpWidget(
@@ -90,7 +89,6 @@ void main() {
         PlaylistHeaderOverflow(
           onEditDetails: () => details++,
           onChangeCover: () => cover++,
-          onShare: () => share++,
           onExport: () => export++,
           onDownloadAll: () => download++,
         ),
@@ -101,8 +99,7 @@ void main() {
     for (final label in [
       l10n.playlistEditDetails,
       l10n.playlistCoverChange,
-      l10n.playlistShare,
-      l10n.playlistExport,
+      l10n.shareExportData,
       l10n.downloadAll,
     ]) {
       expect(find.text(label), findsWidgets);
@@ -119,13 +116,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('playlistHeaderOverflow')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text(l10n.playlistShare).last);
-    await tester.pumpAndSettle();
-    expect(share, 1);
-
-    await tester.tap(find.byKey(const Key('playlistHeaderOverflow')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(l10n.playlistExport).last);
+    await tester.tap(find.text(l10n.shareExportData).last);
     await tester.pumpAndSettle();
     expect(export, 1);
 
@@ -136,6 +127,30 @@ void main() {
     expect(download, 1);
   });
 
+  testWidgets('列表头部：分享是独立主入口，不在溢出菜单里', (tester) async {
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+    var share = 0;
+    await tester.pumpWidget(
+      host(PlaylistShareButton(onPressed: () => share++)),
+    );
+    expect(find.byIcon(Icons.ios_share_rounded), findsOneWidget);
+    await tester.tap(find.byKey(const Key('playlistShareButton')));
+    expect(share, 1);
+
+    await tester.pumpWidget(
+      host(
+        PlaylistHeaderOverflow(
+          onEditDetails: () {},
+          onChangeCover: () {},
+          onExport: () {},
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('playlistHeaderOverflow')));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.playlistShare), findsNothing);
+  });
+
   testWidgets('列表头部溢出：不可下载时不出现全部下载', (tester) async {
     final l10n = lookupAppLocalizations(const Locale('zh'));
     await tester.pumpWidget(
@@ -143,7 +158,6 @@ void main() {
         PlaylistHeaderOverflow(
           onEditDetails: () {},
           onChangeCover: () {},
-          onShare: () {},
           onExport: () {},
         ),
       ),
@@ -218,35 +232,91 @@ void main() {
     expect(find.byIcon(Icons.queue_music_rounded), findsOneWidget);
   });
 
-  testWidgets('分享弹层：图片 / 文本两个 section 同层展示', (tester) async {
+  testWidgets('分享弹层：预览 + 分享主操作 + 保存 / 复制', (tester) async {
     final l10n = lookupAppLocalizations(const Locale('zh'));
     await tester.pumpWidget(
       host(
-        PlaylistShareSheet(
-          content: PlaylistShareContent(
-            name: 'Trip',
-            description: '说明',
-            trackCountLabel: l10n.playlistTrackCount(2),
-            andMoreLabel: l10n.playlistShareMore,
-            tracks: const [
-              PlaylistShareTrack(title: 'A', artist: 'X'),
-              PlaylistShareTrack(title: 'B', artist: 'Y'),
-            ],
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showPlaylistShareSheet(
+              context,
+              content: PlaylistShareContent(
+                name: 'Trip',
+                description: '说明',
+                trackCountLabel: l10n.playlistTrackCount(2),
+                andMoreLabel: l10n.playlistShareMore,
+                tracks: const [
+                  PlaylistShareTrack(title: 'A', artist: 'X'),
+                  PlaylistShareTrack(title: 'B', artist: 'Y'),
+                ],
+              ),
+              loadCovers: () async => const [],
+              palette: PosterPalette.fromScheme(
+                ColorScheme.fromSeed(seedColor: const Color(0xFF2196F3)),
+              ),
+            ),
+            child: const Text('open'),
           ),
-          loadCovers: () async => const [],
-          palette: PosterPalette.fromScheme(
-            ColorScheme.fromSeed(seedColor: const Color(0xFF2196F3)),
-          ),
-          autoGenerate: false,
         ),
       ),
     );
+    await tester.tap(find.text('open'));
     await tester.pump();
-    expect(find.text(l10n.playlistShareImage), findsWidgets);
-    expect(find.text(l10n.playlistShareText), findsWidgets);
-    expect(find.byKey(const Key('playlistShareImageAction')), findsOneWidget);
-    expect(find.byKey(const Key('playlistShareTextAction')), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 400));
+    for (var i = 0; i < 100; i++) {
+      if (find.byKey(const Key('posterSharePreview')).evaluate().isNotEmpty) {
+        break;
+      }
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    expect(find.byKey(const Key('posterSharePreview')), findsOneWidget);
+    expect(find.text(l10n.shareAction), findsOneWidget);
+    expect(find.text(l10n.shareSaveImage), findsOneWidget);
+    expect(find.text(l10n.shareCopyText), findsOneWidget);
+    expect(find.text(l10n.shareExportData), findsNothing);
     expect(find.textContaining('/tmp'), findsNothing);
+  });
+
+  testWidgets('空列表分享：诚实空态，不出现分享按钮', (tester) async {
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+    await tester.pumpWidget(
+      host(
+        Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showPlaylistShareSheet(
+              context,
+              content: PlaylistShareContent(
+                name: 'Empty',
+                description: '',
+                trackCountLabel: l10n.playlistTrackCount(0),
+                andMoreLabel: l10n.playlistShareMore,
+                tracks: const [],
+              ),
+              loadCovers: () async => const [],
+              palette: PosterPalette.fromScheme(
+                ColorScheme.fromSeed(seedColor: const Color(0xFF2196F3)),
+              ),
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    for (var i = 0; i < 100; i++) {
+      if (find.text(l10n.playlistShareEmpty).evaluate().isNotEmpty) break;
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    expect(find.text(l10n.playlistShareEmpty), findsOneWidget);
+    expect(find.byKey(const Key('posterShareAction')), findsNothing);
   });
 
   testWidgets('分组命名对话框：空白 / 超长 / 控制字符都拒绝', (tester) async {

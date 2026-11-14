@@ -27,6 +27,7 @@ import '../utils/save_as_label.dart';
 import 'app_color_picker.dart';
 import 'cover_picker_sheet.dart';
 import 'font_picker_sheet.dart';
+import 'poster_style_sheet.dart';
 import 'track_artwork.dart';
 
 class LyricsPosterPreviewPage extends StatefulWidget {
@@ -97,9 +98,6 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
 
   /// 当前曲目是否带真实封面（「跟随封面」来源可用性）。
   bool get _hasArtwork => (_paletteCoverUrl ?? '').isNotEmpty;
-
-  /// 底部设置行里值控件的统一宽度：右值成一列，行与行之间不参差。
-  static const double _settingValueWidth = 190;
 
   /// 预览解码宽度上限：海报成品是 1440 宽，预览区通常不超过 3x 手机宽度；
   /// 限制到 1080 可覆盖高清屏，又不把整张 PNG（1440×N）解码进 ImageCache。
@@ -498,114 +496,59 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     return l10n.coverDefaultTitle;
   }
 
-  /// 封面设置行：缩略图 + 状态 + 展开图标，点开同一封面弹层。
-  Widget _buildCoverPicker(AppLocalizations l10n, ColorScheme scheme) {
+  /// 样式弹层里的封面缩略图（订阅换封面信号，与歌曲信息页同一套组件）。
+  Widget? _coverThumbnail() {
     final trackId = widget.trackId;
     return CoverChangeBuilder(
-      builder: (context, _) => M3EButton(
-        key: const Key('posterCoverPickerButton'),
-        style: M3EButtonStyle.text,
-        onPressed: trackId == null ? null : _changeCover,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TrackArtwork(
-              // 缩略图主图只认真实封面；默认封面仅作加载失败回退。海报
-              // 生成仍走 [_displayCoverUrl]（含默认封面占位）。
-              listenForChanges: false,
-              trackId: trackId,
-              originalUrl: widget.albumCoverUrl,
-              width: 28,
-              height: 28,
-              borderRadius: BorderRadius.circular(6),
-              memCacheWidth: (28 * MediaQuery.of(context).devicePixelRatio)
-                  .round(),
-              fallbackIconSize: 16,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                _coverStateLabel(l10n),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.expand_more_rounded,
-              size: 18,
-              color: scheme.onSurfaceVariant,
-            ),
-          ],
-        ),
+      builder: (context, _) => TrackArtwork(
+        // 缩略图主图只认真实封面；默认封面仅作加载失败回退。海报生成仍走
+        // [_displayCoverUrl]（含默认封面占位）。
+        listenForChanges: false,
+        trackId: trackId,
+        originalUrl: widget.albumCoverUrl,
+        width: 28,
+        height: 28,
+        borderRadius: BorderRadius.circular(6),
+        memCacheWidth: (28 * MediaQuery.of(context).devicePixelRatio).round(),
+        fallbackIconSize: 16,
       ),
     );
   }
 
-  /// 设置行：左标签 + 右值控件（值控件同宽 [_settingValueWidth]、右对齐成一列）。
-  Widget _settingRow({required String label, required Widget value}) {
-    return Row(
-      children: [
-        Expanded(child: Text(label)),
-        SizedBox(
-          width: _settingValueWidth,
-          child: Align(alignment: Alignment.centerRight, child: value),
-        ),
-      ],
-    );
-  }
+  /// 样式弹层：字体 / 取色来源 / 封面 / 自定义色，改动即时重生成海报。
+  Future<void> _openStyleSheet() async {
+    if (_isLoading || _isOperating) return;
+    final l10n = AppLocalizations.of(context)!;
+    await ResponsiveNavigation.showSimpleModal<void>(
+      context: context,
+      title: l10n.posterStyle,
+      child: StatefulBuilder(
+        builder: (sheetContext, setSheetState) {
+          Future<void> run(Future<void> Function() action) async {
+            await action();
+            if (sheetContext.mounted) setSheetState(() {});
+          }
 
-  /// 取色来源选择控件（跟随应用主题 / 跟随封面 / 自定义色）。
-  Widget _buildColorSourcePicker(AppLocalizations l10n) {
-    return M3EDropdownMenu<PosterColorSource>(
-      items: [
-        M3EDropdownItem<PosterColorSource>(
-          label: l10n.posterColorSourceAppTheme,
-          value: PosterColorSource.appTheme,
-          selected: _colorSource == PosterColorSource.appTheme,
-        ),
-        M3EDropdownItem<PosterColorSource>(
-          label: l10n.posterColorSourceArtwork,
-          value: PosterColorSource.artwork,
-          selected: _colorSource == PosterColorSource.artwork,
-          // 无封面：置灰并提示（tooltip 不可用于 item，副文案由页面
-          // 状态保证：选中态不会被置灰项污染）。
-          disabled: !_hasArtwork,
-        ),
-        M3EDropdownItem<PosterColorSource>(
-          label: l10n.posterColorSourceCustom,
-          value: PosterColorSource.custom,
-          selected: _colorSource == PosterColorSource.custom,
-        ),
-      ],
-      singleSelect: true,
-      showChipAnimation: false,
-      onSelectionChanged: (items) {
-        if (items.isNotEmpty) _changeColorSource(items.first.value);
-      },
-    );
-  }
-
-  /// 自定义色控件：色块 + Hex，点击打开任意取色器。
-  Widget _buildCustomColorButton(ColorScheme scheme) {
-    return M3EButton(
-      style: M3EButtonStyle.text,
-      onPressed: _isBusy ? null : _pickPosterColor,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Color(_customSeed),
-              border: Border.all(color: scheme.outlineVariant),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(_hexOf(_customSeed), style: context.typeScale.bodyMedium),
-        ],
+          return PosterStyleSheet(
+            fontLabel: l10n.posterFontLabel,
+            fontValue: _posterFontLabel(l10n),
+            onPickFont: () => unawaited(run(_changePosterFont)),
+            colorSource: _colorSource,
+            hasArtwork: _hasArtwork,
+            onColorSourceChanged: (source) =>
+                unawaited(run(() => _changeColorSource(source))),
+            customColorLabel: l10n.posterColorCustomLabel,
+            customColorHex: _hexOf(_customSeed),
+            customColor: _customSeed,
+            onPickCustomColor: () => unawaited(run(_pickPosterColor)),
+            coverLabel: l10n.coverLabel,
+            coverValue: _coverStateLabel(l10n),
+            coverThumbnail: _coverThumbnail(),
+            onPickCover: widget.trackId == null
+                ? null
+                : () => unawaited(run(_changeCover)),
+          );
+        },
       ),
     );
   }
@@ -658,74 +601,44 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                     ),
                   ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                child: Row(
                   children: [
-                    // 版式：设置项统一成「左标签 + 右值控件」的行，值控件同宽
-                    // 190 并右对齐成一列（字体不再是一个占满整宽、看起来像
-                    // CTA 的 text 按钮）；动作收成底部两个带文案的按钮——
-                    // 原来两个撑满半屏、只有图标的按钮看不出「保存 / 分享」。
-                    _settingRow(
-                      label: l10n!.posterFontLabel,
-                      value: M3EButton(
-                        style: M3EButtonStyle.text,
-                        onPressed: _isLoading || _isOperating
-                            ? null
-                            : _changePosterFont,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                _posterFontLabel(l10n),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(Icons.expand_more_rounded, size: 18),
-                          ],
-                        ),
+                    Expanded(
+                      child: M3EButton.filled(
+                        key: const Key('posterShareButton'),
+                        onPressed: _isOperating ? null : _sharePoster,
+                        icon: const Icon(Icons.share_rounded),
+                        label: Text(l10n!.sharePoster),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    _settingRow(
-                      label: l10n.posterColorSource,
-                      value: _buildColorSourcePicker(l10n),
-                    ),
-                    const SizedBox(height: 4),
-                    _settingRow(
-                      label: l10n.coverLabel,
-                      value: _buildCoverPicker(l10n, theme.colorScheme),
-                    ),
-                    if (_colorSource == PosterColorSource.custom) ...[
-                      const SizedBox(height: 4),
-                      _settingRow(
-                        label: l10n.posterColorCustomLabel,
-                        value: _buildCustomColorButton(theme.colorScheme),
+                    const SizedBox(width: 8),
+                    M3EMenu.entries(
+                      position: M3EMenuAnchorPosition.bottomEnd,
+                      anchorBuilder: (context, open) => M3EIconButton(
+                        key: const Key('posterOverflow'),
+                        variant: M3EIconButtonVariant.standard,
+                        icon: const Icon(Icons.more_vert_rounded),
+                        semanticLabel: l10n.moreActions,
+                        onPressed: _isOperating ? null : open,
                       ),
-                    ],
-                    const SizedBox(height: 12),
-                    M3EDivider(color: theme.colorScheme.outlineVariant),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: M3EButton.tonal(
-                            key: const Key('posterSaveButton'),
-                            onPressed: _isOperating ? null : _savePoster,
-                            icon: const Icon(Icons.download_rounded),
-                            label: Text(l10n.saveChanges),
-                          ),
+                      onSelected: (value) {
+                        switch (value) {
+                          case 'style':
+                            unawaited(_openStyleSheet());
+                          case 'save':
+                            unawaited(_savePoster());
+                        }
+                      },
+                      entries: [
+                        M3EMenuEntry(
+                          label: l10n.posterStyle,
+                          value: 'style',
+                          leading: const Icon(Icons.tune_rounded),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: M3EButton.filled(
-                            key: const Key('posterShareButton'),
-                            onPressed: _isOperating ? null : _sharePoster,
-                            icon: const Icon(Icons.share_rounded),
-                            label: Text(l10n.sharePoster),
-                          ),
+                        M3EMenuEntry(
+                          label: l10n.shareSaveImage,
+                          value: 'save',
+                          leading: const Icon(Icons.download_rounded),
                         ),
                       ],
                     ),
