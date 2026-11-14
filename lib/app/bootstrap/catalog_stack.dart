@@ -87,8 +87,9 @@ CatalogStack buildCatalogStack({FailureRecorder? failures}) {
     ),
   );
   biliAccount = BiliAccountService(settings: biliSettings);
-  // 凭据在安全存储里，启动路径不读：B 站账号页 / 登录动作会显式 init；
-  // 之前先按匿名会话工作（无钥匙串环境里 libsecret 会直接终止进程）。
+  // 凭据在安全存储里，装配路径不读：B 站账号页 / 登录动作会显式 init；
+  // 首帧后只在 prefs 提示「登录过」时补读一次（见 post_frame_init），
+  // 从未登录过的环境保持匿名，不碰钥匙串。
 
   // 音源管理器的按键作用域：any-listen 连接 3 键 + 渠道偏好 3 键。两组
   // 重载路径不同（连接配置回读 / 渠道偏好整表重读），但同属一个挂载点。
