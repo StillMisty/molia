@@ -10,6 +10,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
@@ -163,10 +164,14 @@ class PagedListFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (isLoadingMore) {
+      // 滚到底后的等待属于「表达性」场景：波浪形态比经典转圈更贴 M3E。
+      // 减弱动效下波浪会持续起伏，反而成了干扰，回落经典静态转圈。
       return Padding(
         padding: padding,
-        child: const Center(
-          child: M3EProgressIndicator.circular(size: 28, strokeWidth: 2.5),
+        child: Center(
+          child: reduceMotionOf(context)
+              ? const M3EProgressIndicator.circular(size: 28, strokeWidth: 2.5)
+              : const M3EProgressIndicator.circularWavy(size: 28),
         ),
       );
     }

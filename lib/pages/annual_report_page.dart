@@ -23,6 +23,7 @@ import '../providers/playback_provider.dart';
 import '../services/annual_poster_service.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 import '../utils/listened_duration.dart';
 import '../utils/poster_render_style.dart';
 import '../utils/responsive.dart';
@@ -239,9 +240,8 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
               Expanded(
                 child: Text(
                   '${report.year}',
-                  style: context.typeScale.displaySmall.copyWith(
+                  style: context.emphasizedTypeScale.displaySmall.copyWith(
                     color: scheme.onPrimaryContainer,
-                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -260,9 +260,8 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
           const SizedBox(height: 8),
           Text(
             formatListenedDuration(l10n, report.totalListenedMs),
-            style: context.typeScale.headlineMedium.copyWith(
+            style: context.emphasizedTypeScale.headlineMedium.copyWith(
               color: scheme.onPrimaryContainer,
-              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 2),
@@ -287,22 +286,22 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
       _NumberTile(
         icon: Icons.headphones_rounded,
         label: l10n.statsPlays,
-        value: '${report.qualifiedPlayCount}',
+        value: report.qualifiedPlayCount,
       ),
       _NumberTile(
         icon: Icons.library_music_rounded,
         label: l10n.annualReportStatTracks,
-        value: '${report.uniqueTrackCount}',
+        value: report.uniqueTrackCount,
       ),
       _NumberTile(
         icon: Icons.person_rounded,
         label: l10n.annualReportStatArtists,
-        value: '${report.uniqueArtistCount}',
+        value: report.uniqueArtistCount,
       ),
       _NumberTile(
         icon: Icons.local_fire_department_rounded,
         label: l10n.annualReportStreakCaption,
-        value: '${report.streak.days}',
+        value: report.streak.days,
       ),
     ];
     if (wide) {
@@ -825,7 +824,7 @@ class _NumberTile extends StatelessWidget {
 
   final IconData icon;
   final String label;
-  final String value;
+  final int value;
 
   @override
   Widget build(BuildContext context) {
@@ -843,13 +842,19 @@ class _NumberTile extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.typeScale.titleLarge.copyWith(
-                      color: scheme.onSurface,
-                      fontWeight: FontWeight.w700,
+                  // 一次性入场：从 0 滚到目标值，落定后停在目标数字（不是常驻
+                  // ticker）；减弱动效零时长，直接硬切到目标值。
+                  TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0, end: value.toDouble()),
+                    duration: effectDurationOf(context, M3EMotion.short4),
+                    curve: M3EMotion.emphasizedDecelerate,
+                    builder: (context, current, _) => Text(
+                      '${current.round()}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.emphasizedTypeScale.titleLarge.copyWith(
+                        color: scheme.onSurface,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 2),

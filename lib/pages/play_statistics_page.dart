@@ -927,9 +927,8 @@ class _StatBlock extends StatelessWidget {
                     value,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: type.titleLarge.copyWith(
+                    style: context.emphasizedTypeScale.titleLarge.copyWith(
                       color: scheme.onSurface,
-                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 2),
