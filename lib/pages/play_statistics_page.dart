@@ -20,7 +20,6 @@ import 'dart:typed_data';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../domain/models/annual_report_entry.dart';
 import '../domain/models/play_statistics.dart';
@@ -32,7 +31,6 @@ import '../providers/play_statistics_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/listening_stats_poster_service.dart';
 import '../services/notification_service.dart';
-import '../services/poster/poster_share_file.dart';
 import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
@@ -40,15 +38,13 @@ import '../utils/listened_duration.dart';
 import '../utils/poster_render_style.dart';
 import '../utils/responsive.dart';
 import '../utils/save_as_label.dart';
+import '../widgets/poster_share_sheet.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 import '../widgets/statistics/annual_report_entry_card.dart';
 import '../widgets/statistics/listening_heatmap.dart';
 import '../widgets/track_row.dart';
 import 'annual_report_page.dart';
-
-/// 分享海报文件：参数是临时 PNG 路径与分享文案。仅测试替换。
-typedef PosterFileShare = Future<void> Function(String path, String shareText);
 
 class PlayStatisticsPage extends StatefulWidget {
   const PlayStatisticsPage({super.key, this.sharePoster});
@@ -66,8 +62,8 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   /// 日历热力图选中的一天（弹层打开期间保持放大 + 描边）。
   DateTime? _selectedDay;
 
-  /// 海报生成 / 分享 / 保存进行中：阻止重复点击。
-  bool _posterBusy = false;
+  /// 分享弹层打开期间禁用入口，避免叠出第二层。
+  bool _shareSheetOpen = false;
 
   @override
   void initState() {
@@ -98,21 +94,31 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
         M3EIconButton(
           variant: M3EIconButtonVariant.standard,
           icon: const Icon(Icons.ios_share_rounded),
-          semanticLabel: l10n.statsShareTitle,
-          onPressed: _posterBusy ? null : _openShareMenu,
+          semanticLabel: l10n.shareAction,
+          onPressed: _shareSheetOpen ? null : _openShareSheet,
         ),
         M3EMenu.entries(
           position: M3EMenuAnchorPosition.bottomEnd,
           anchorBuilder: (context, open) => M3EIconButton(
             variant: M3EIconButtonVariant.standard,
             icon: const Icon(Icons.more_vert_rounded),
-            semanticLabel: l10n.statsClear,
+            semanticLabel: l10n.moreActions,
             onPressed: open,
           ),
           onSelected: (value) {
-            if (value == 'clear') unawaited(_confirmClear());
+            switch (value) {
+              case 'export':
+                unawaited(_export());
+              case 'clear':
+                unawaited(_confirmClear());
+            }
           },
           entries: [
+            M3EMenuEntry(
+              label: l10n.shareExportData,
+              value: 'export',
+              leading: const Icon(Icons.file_upload_rounded),
+            ),
             M3EMenuEntry(
               label: l10n.statsClear,
               value: 'clear',
@@ -744,55 +750,25 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     }
   }
 
-  /// 一个分享菜单承载三种输出：分享图片 / 保存图片 / 导出 JSON。
-  Future<void> _openShareMenu() async {
+  /// 统一分享弹层：预览 + 分享；导出数据在页面 ⋮ 里。
+  Future<void> _openShareSheet() async {
+    if (_shareSheetOpen) return;
     final l10n = AppLocalizations.of(context)!;
-    final choice = await M3EBottomSheet.show<String>(
-      context,
-      initialValue: M3EBottomSheetValue.expanded,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-              child: Text(
-                l10n.statsShareTitle,
-                style: sheetContext.typeScale.titleMedium,
-              ),
-            ),
-            M3EListItem(
-              leading: const Icon(Icons.image_rounded),
-              headline: l10n.statsShareImage,
-              onTap: () => Navigator.of(sheetContext).pop('share'),
-            ),
-            M3EListItem(
-              leading: const Icon(Icons.download_rounded),
-              headline: l10n.statsSaveImage,
-              onTap: () => Navigator.of(sheetContext).pop('save'),
-            ),
-            M3EListItem(
-              leading: const Icon(Icons.file_upload_rounded),
-              headline: l10n.statsExport,
-              supportingText: l10n.statsExportSubtitle(
-                PlayStatisticsLimits.exportEventLimit,
-              ),
-              onTap: () => Navigator.of(sheetContext).pop('json'),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-    if (choice == null || !mounted) return;
-    switch (choice) {
-      case 'share':
-        await _shareImage();
-      case 'save':
-        await _saveImage();
-      case 'json':
-        await _export();
+    final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+    setState(() => _shareSheetOpen = true);
+    try {
+      await showPosterShareSheet(
+        context,
+        title: l10n.statsShareTitle,
+        renderPoster: () => _renderPoster(_provider),
+        shareText: l10n.statsPosterTitle,
+        fileName: 'molia_listening_stats_${_provider.range.name}_$stamp.png',
+        saveDialogTitle: l10n.shareSaveImage,
+        emptyMessage: l10n.statsPosterEmpty,
+        shareFile: widget.sharePoster,
+      );
+    } finally {
+      if (mounted) setState(() => _shareSheetOpen = false);
     }
   }
 
@@ -837,6 +813,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   }
 
   Future<Uint8List?> _renderPoster(PlayStatisticsProvider provider) async {
+    if (!_hasPosterData(provider)) return null;
     final l10n = AppLocalizations.of(context)!;
     final data = _posterData(l10n, provider);
     final style = await resolvePosterRenderStyle(context);
@@ -852,76 +829,6 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
 
   bool _hasPosterData(PlayStatisticsProvider provider) =>
       provider.snapshot != null && !provider.isEmpty;
-
-  Future<void> _shareImage() async {
-    if (_posterBusy) return;
-    final l10n = AppLocalizations.of(context)!;
-    final notifications = context.read<NotificationService?>();
-    if (!_hasPosterData(_provider)) {
-      notifications?.showSnackBar(l10n.statsPosterEmpty);
-      return;
-    }
-    final sharePoster =
-        widget.sharePoster ??
-        (path, shareText) => SharePlus.instance.share(
-          ShareParams(files: [XFile(path)], text: shareText),
-        );
-    setState(() => _posterBusy = true);
-    try {
-      final bytes = await _renderPoster(_provider);
-      if (!mounted || bytes == null) return;
-      await withTemporaryPosterPng(
-        bytes,
-        (file) => sharePoster(file.path, l10n.statsPosterTitle),
-      );
-    } catch (_) {
-      if (mounted) {
-        notifications?.showErrorSnackBar(l10n.statsPosterShareFailed);
-      }
-    } finally {
-      if (mounted) setState(() => _posterBusy = false);
-    }
-  }
-
-  Future<void> _saveImage() async {
-    if (_posterBusy) return;
-    final l10n = AppLocalizations.of(context)!;
-    final notifications = context.read<NotificationService?>();
-    final saveAs = context.read<SaveAs?>();
-    if (!_hasPosterData(_provider)) {
-      notifications?.showSnackBar(l10n.statsPosterEmpty);
-      return;
-    }
-    setState(() => _posterBusy = true);
-    try {
-      if (saveAs == null) throw StateError('SaveAs 未装配');
-      final bytes = await _renderPoster(_provider);
-      if (!mounted || bytes == null) return;
-      final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      final result = await saveAs.saveBytes(
-        fileName: 'molia_listening_stats_${_provider.range.name}_$stamp.png',
-        bytes: bytes,
-        mimeType: 'image/png',
-        relativeDir: saveAsPostersDirName,
-        dialogTitle: l10n.statsSaveImage,
-      );
-      if (!mounted) return;
-      switch (result) {
-        case SaveAsSaved(:final displayPath, :final kind):
-          notifications?.showSuccessSnackBar(
-            savedLocationMessage(l10n, kind, displayPath),
-          );
-        case SaveAsCancelled():
-          return;
-        case SaveAsFailed():
-          notifications?.showErrorSnackBar(l10n.statsPosterSaveFailed);
-      }
-    } catch (_) {
-      if (mounted) notifications?.showErrorSnackBar(l10n.statsPosterSaveFailed);
-    } finally {
-      if (mounted) setState(() => _posterBusy = false);
-    }
-  }
 
   Future<void> _export() async {
     final l10n = AppLocalizations.of(context)!;

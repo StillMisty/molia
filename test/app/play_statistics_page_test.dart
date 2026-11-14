@@ -115,11 +115,6 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> openShareMenu(WidgetTester tester) async {
-    await tester.tap(find.byIcon(Icons.ios_share_rounded));
-    await tester.pumpAndSettle();
-  }
-
   /// 海报渲染 / 写临时文件走真实异步：交替让出真实时间与刷新微任务。
   Future<void> waitFor(WidgetTester tester, bool Function() done) async {
     for (var i = 0; i < 100 && !done(); i++) {
@@ -131,39 +126,54 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('分享菜单提供分享图片 / 保存图片 / 导出 JSON', (tester) async {
+  Future<void> openShareSheet(WidgetTester tester) async {
+    await tester.tap(find.byIcon(Icons.ios_share_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await waitFor(
+      tester,
+      () =>
+          find.byKey(const Key('posterShareAction')).evaluate().isNotEmpty ||
+          find.text('还没有可以做成图片的记录').evaluate().isNotEmpty,
+    );
+  }
+
+  Future<void> openOverflow(WidgetTester tester) async {
+    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('分享弹层：预览 + 分享 / 保存，导出数据不在里面', (tester) async {
     await pumpPage(tester);
     expect(provider.snapshot, isNotNull);
     expect(provider.isEmpty, isFalse);
-    await openShareMenu(tester);
-    expect(find.text('分享图片'), findsOneWidget);
+    await openShareSheet(tester);
+    expect(find.byKey(const Key('posterSharePreview')), findsOneWidget);
+    expect(find.text('分享'), findsOneWidget);
     expect(find.text('保存图片'), findsOneWidget);
-    expect(find.text('导出听歌数据'), findsOneWidget);
+    expect(find.text('导出数据'), findsNothing);
   });
 
-  testWidgets('没有数据时分享图片给出友好提示', (tester) async {
+  testWidgets('没有数据时分享弹层给出友好空态', (tester) async {
     await repository.clearAll();
     await pumpPage(tester);
     expect(provider.isEmpty, isTrue);
 
-    await openShareMenu(tester);
-    await tester.tap(find.widgetWithText(M3EListItem, '分享图片'));
-    await tester.pumpAndSettle();
-
+    await openShareSheet(tester);
+    expect(find.text('还没有可以做成图片的记录'), findsOneWidget);
+    expect(find.byKey(const Key('posterShareAction')), findsNothing);
     expect(sharedPaths, isEmpty);
-    expect(notifications.last, '还没有可以做成图片的记录');
   });
 
   testWidgets('分享图片经临时文件交给系统分享', (tester) async {
     await pumpPage(tester);
-    await openShareMenu(tester);
-    await tester.tap(find.widgetWithText(M3EListItem, '分享图片'));
+    await openShareSheet(tester);
+    await tester.tap(find.byKey(const Key('posterShareAction')));
     await waitFor(
       tester,
       () => sharedPaths.isNotEmpty && !File(sharedPaths.single).existsSync(),
     );
 
-    expect(find.text('分享图片'), findsNothing);
     expect(notifications.messages, isEmpty);
     expect(sharedPaths, hasLength(1));
     expect(sharedTexts.single, '听歌记录');
@@ -175,8 +185,10 @@ void main() {
 
   testWidgets('保存图片写入海报目录', (tester) async {
     await pumpPage(tester);
-    await openShareMenu(tester);
-    await tester.tap(find.text('保存图片'));
+    await openShareSheet(tester);
+    final saveAction = find.byKey(const Key('posterSaveImageAction'));
+    await tester.ensureVisible(saveAction);
+    await tester.tap(saveAction);
     await waitFor(tester, () => saveAs.saves.isNotEmpty);
 
     expect(saveAs.saves, hasLength(1));
@@ -188,10 +200,12 @@ void main() {
     expect(notifications.last, contains('posters/'));
   });
 
-  testWidgets('导出 JSON 仍写入 exports 目录', (tester) async {
+  testWidgets('导出数据在页面 ⋮ 里，仍写入 exports 目录', (tester) async {
     await pumpPage(tester);
-    await openShareMenu(tester);
-    await tester.tap(find.text('导出听歌数据'));
+    await openOverflow(tester);
+    expect(find.text('导出数据'), findsOneWidget);
+    expect(find.text('清空统计'), findsOneWidget);
+    await tester.tap(find.text('导出数据'));
     await waitFor(tester, () => saveAs.saves.isNotEmpty);
 
     expect(saveAs.saves, hasLength(1));

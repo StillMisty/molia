@@ -14,14 +14,12 @@ class PlaylistHeaderOverflow extends StatelessWidget {
     super.key,
     required this.onEditDetails,
     required this.onChangeCover,
-    required this.onShare,
     required this.onExport,
     this.onDownloadAll,
   });
 
   final VoidCallback onEditDetails;
   final VoidCallback onChangeCover;
-  final VoidCallback onShare;
   final VoidCallback onExport;
 
   /// 不可下载 / 没有曲目时为 null（入口隐藏）。
@@ -45,8 +43,6 @@ class PlaylistHeaderOverflow extends StatelessWidget {
             onEditDetails();
           case 'cover':
             onChangeCover();
-          case 'share':
-            onShare();
           case 'export':
             onExport();
           case 'download':
@@ -65,12 +61,7 @@ class PlaylistHeaderOverflow extends StatelessWidget {
           leading: const Icon(Icons.image_rounded, size: 20),
         ),
         M3EMenuEntry(
-          label: l10n.playlistShare,
-          value: 'share',
-          leading: const Icon(Icons.ios_share_rounded, size: 20),
-        ),
-        M3EMenuEntry(
-          label: l10n.playlistExport,
+          label: l10n.shareExportData,
           value: 'export',
           leading: const Icon(Icons.file_upload_rounded, size: 20),
         ),
@@ -81,6 +72,27 @@ class PlaylistHeaderOverflow extends StatelessWidget {
             leading: const Icon(Icons.download_rounded, size: 20),
           ),
       ],
+    );
+  }
+}
+
+/// 列表头部的主分享入口。
+///
+/// 与 [PlaylistHeaderOverflow] 分开：分享是常驻主操作，编辑 / 换封面 / 导出 /
+/// 全部下载仍收在溢出菜单里，避免同一动作出现两个入口。
+class PlaylistShareButton extends StatelessWidget {
+  const PlaylistShareButton({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return M3EIconButton(
+      key: const Key('playlistShareButton'),
+      variant: M3EIconButtonVariant.standard,
+      semanticLabel: _l10n(context).playlistShare,
+      icon: const Icon(Icons.ios_share_rounded),
+      onPressed: onPressed,
     );
   }
 }

@@ -1860,14 +1860,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
             ),
             if (isRealPlaylist && currentPlaylist != null) ...[
               const SizedBox(width: 4),
+              PlaylistShareButton(
+                onPressed: () =>
+                    unawaited(_sharePlaylist(l10n, currentPlaylist!, view)),
+              ),
+              const SizedBox(width: 4),
               PlaylistHeaderOverflow(
                 onEditDetails: () => unawaited(
                   _editPlaylistDetails(l10n, currentPlaylist!, playlists),
                 ),
                 onChangeCover: () =>
                     unawaited(_changePlaylistCover(l10n, currentPlaylist!)),
-                onShare: () =>
-                    unawaited(_sharePlaylist(l10n, currentPlaylist!, view)),
                 onExport: () =>
                     unawaited(_exportPlaylist(l10n, currentPlaylist!, view)),
                 onDownloadAll:

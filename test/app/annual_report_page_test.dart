@@ -75,7 +75,17 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('有数据：年份、分享主操作与存歌单入口', (tester) async {
+  Future<void> waitFor(WidgetTester tester, bool Function() done) async {
+    for (var i = 0; i < 100 && !done(); i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('有数据：年份、顶栏分享与存歌单入口', (tester) async {
     final start = DateTime(2026, 3, 1, 12);
     await insertPlayEvent(
       db,
@@ -91,7 +101,9 @@ void main() {
     );
     await pumpPage(tester, years: [2026], featuredYear: 2026);
     expect(find.text('2026'), findsWidgets);
-    expect(find.text('分享海报'), findsOneWidget);
+    expect(find.byIcon(Icons.ios_share_rounded), findsOneWidget);
+    expect(find.text('分享海报'), findsNothing);
+    expect(find.byIcon(Icons.more_vert_rounded), findsNothing);
     expect(find.text('晴天'), findsOneWidget);
     expect(find.text('截至今天'), findsWidgets);
     await tester.scrollUntilVisible(
@@ -104,7 +116,7 @@ void main() {
     expect(find.textContaining('数据范围：'), findsOneWidget);
   });
 
-  testWidgets('保存图片写入海报目录，分享主操作仍在', (tester) async {
+  testWidgets('顶栏分享弹层：预览 + 保存图片写入海报目录', (tester) async {
     final start = DateTime(2026, 4, 1, 12);
     await insertPlayEvent(
       db,
@@ -129,18 +141,20 @@ void main() {
       notifications: notifications,
     );
 
-    expect(find.text('分享海报'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.more_vert_rounded));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('保存图片'));
-    // 保存中会显示不确定进度条：不能 pumpAndSettle，交替让出真实异步直到落盘。
-    for (var i = 0; i < 100 && saveAs.saves.isEmpty; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 20)),
-      );
-      await tester.pump();
-    }
-    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.ios_share_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await waitFor(
+      tester,
+      () => find.byKey(const Key('posterShareAction')).evaluate().isNotEmpty,
+    );
+    expect(find.byKey(const Key('posterSharePreview')), findsOneWidget);
+    expect(find.text('分享'), findsOneWidget);
+    expect(find.text('保存图片'), findsOneWidget);
+    final saveAction = find.byKey(const Key('posterSaveImageAction'));
+    await tester.ensureVisible(saveAction);
+    await tester.tap(saveAction);
+    await waitFor(tester, () => saveAs.saves.isNotEmpty);
 
     expect(saveAs.saves, hasLength(1));
     final call = saveAs.saves.single;
@@ -154,7 +168,7 @@ void main() {
   testWidgets('空年份：诚实空态，隐藏分享与歌单', (tester) async {
     await pumpPage(tester, years: [2020], featuredYear: 2020);
     expect(find.text('这一年还没有听歌记录'), findsOneWidget);
-    expect(find.text('分享海报'), findsNothing);
+    expect(find.byIcon(Icons.ios_share_rounded), findsNothing);
     expect(find.text('存成歌单'), findsNothing);
   });
 }

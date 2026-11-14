@@ -1160,6 +1160,72 @@ abstract class AppLocalizations {
   /// **'Share Poster'**
   String get sharePoster;
 
+  /// No description provided for @shareAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get shareAction;
+
+  /// No description provided for @shareSaveImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Save image'**
+  String get shareSaveImage;
+
+  /// No description provided for @shareCopyText.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy text'**
+  String get shareCopyText;
+
+  /// No description provided for @shareCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Text copied'**
+  String get shareCopied;
+
+  /// No description provided for @shareExportData.
+  ///
+  /// In en, this message translates to:
+  /// **'Export data'**
+  String get shareExportData;
+
+  /// No description provided for @shareGenerating.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating image…'**
+  String get shareGenerating;
+
+  /// No description provided for @shareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t share. Try again.'**
+  String get shareFailed;
+
+  /// No description provided for @shareGenerateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t create the image. Try again.'**
+  String get shareGenerateFailed;
+
+  /// No description provided for @shareSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the image. Try again.'**
+  String get shareSaveFailed;
+
+  /// No description provided for @moreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get moreActions;
+
+  /// No description provided for @posterStyle.
+  ///
+  /// In en, this message translates to:
+  /// **'Style'**
+  String get posterStyle;
+
   /// No description provided for @selectedLyricsCopied.
   ///
   /// In en, this message translates to:
@@ -3854,36 +3920,6 @@ abstract class AppLocalizations {
   /// **'Share poster'**
   String get annualReportSharePoster;
 
-  /// No description provided for @annualReportPosterGenerating.
-  ///
-  /// In en, this message translates to:
-  /// **'Making your poster…'**
-  String get annualReportPosterGenerating;
-
-  /// No description provided for @annualReportShareFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Couldn\'t make the poster. Try again.'**
-  String get annualReportShareFailed;
-
-  /// No description provided for @annualReportSaveImage.
-  ///
-  /// In en, this message translates to:
-  /// **'Save image'**
-  String get annualReportSaveImage;
-
-  /// No description provided for @annualReportSaveFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Couldn\'t save the image. Try again.'**
-  String get annualReportSaveFailed;
-
-  /// No description provided for @annualReportMoreActions.
-  ///
-  /// In en, this message translates to:
-  /// **'More actions'**
-  String get annualReportMoreActions;
-
   /// No description provided for @annualReportLoadFailed.
   ///
   /// In en, this message translates to:
@@ -4070,12 +4106,6 @@ abstract class AppLocalizations {
   /// **'Export listening data'**
   String get statsExport;
 
-  /// No description provided for @statsExportSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'JSON file (summary + last {limit} events)'**
-  String statsExportSubtitle(int limit);
-
   /// No description provided for @statsExportFailed.
   ///
   /// In en, this message translates to:
@@ -4088,35 +4118,11 @@ abstract class AppLocalizations {
   /// **'Share listening stats'**
   String get statsShareTitle;
 
-  /// No description provided for @statsShareImage.
-  ///
-  /// In en, this message translates to:
-  /// **'Share image'**
-  String get statsShareImage;
-
-  /// No description provided for @statsSaveImage.
-  ///
-  /// In en, this message translates to:
-  /// **'Save image'**
-  String get statsSaveImage;
-
   /// No description provided for @statsPosterTitle.
   ///
   /// In en, this message translates to:
   /// **'Listening stats'**
   String get statsPosterTitle;
-
-  /// No description provided for @statsPosterShareFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Couldn\'t make the image. Try again.'**
-  String get statsPosterShareFailed;
-
-  /// No description provided for @statsPosterSaveFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Couldn\'t save the image. Try again.'**
-  String get statsPosterSaveFailed;
 
   /// No description provided for @statsPosterEmpty.
   ///
@@ -9387,60 +9393,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Share playlist'**
   String get playlistShare;
-
-  /// No description provided for @playlistShareImage.
-  ///
-  /// In en, this message translates to:
-  /// **'Image'**
-  String get playlistShareImage;
-
-  /// No description provided for @playlistShareImageSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Cover mosaic and playlist info'**
-  String get playlistShareImageSubtitle;
-
-  /// No description provided for @playlistShareText.
-  ///
-  /// In en, this message translates to:
-  /// **'Text'**
-  String get playlistShareText;
-
-  /// No description provided for @playlistShareTextSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Plain track list'**
-  String get playlistShareTextSubtitle;
-
-  /// No description provided for @playlistShareSaveImage.
-  ///
-  /// In en, this message translates to:
-  /// **'Save image'**
-  String get playlistShareSaveImage;
-
-  /// No description provided for @playlistShareCopyText.
-  ///
-  /// In en, this message translates to:
-  /// **'Copy text'**
-  String get playlistShareCopyText;
-
-  /// No description provided for @playlistShareCopied.
-  ///
-  /// In en, this message translates to:
-  /// **'Text copied'**
-  String get playlistShareCopied;
-
-  /// No description provided for @playlistShareGenerating.
-  ///
-  /// In en, this message translates to:
-  /// **'Creating image…'**
-  String get playlistShareGenerating;
-
-  /// No description provided for @playlistShareFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Couldn\'t create the image. Try again.'**
-  String get playlistShareFailed;
 
   /// No description provided for @playlistShareEmpty.
   ///

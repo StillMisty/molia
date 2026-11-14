@@ -271,6 +271,17 @@
   },
   "noLyricsSelected": "Please select some lyrics first",
   "sharePoster": "Share Poster",
+  "shareAction": "Share",
+  "shareSaveImage": "Save image",
+  "shareCopyText": "Copy text",
+  "shareCopied": "Text copied",
+  "shareExportData": "Export data",
+  "shareGenerating": "Creating image…",
+  "shareFailed": "Couldn't share. Try again.",
+  "shareGenerateFailed": "Couldn't create the image. Try again.",
+  "shareSaveFailed": "Couldn't save the image. Try again.",
+  "moreActions": "More actions",
+  "posterStyle": "Style",
   "selectedLyricsCopied": "Copied {count} lines of lyrics",
   "@selectedLyricsCopied": {
     "placeholders": {
@@ -1027,11 +1038,6 @@
   "annualReportEmpty": "No listening in this year",
   "annualReportEmptyHint": "Try another year, or play a few songs and come back.",
   "annualReportSharePoster": "Share poster",
-  "annualReportPosterGenerating": "Making your poster…",
-  "annualReportShareFailed": "Couldn't make the poster. Try again.",
-  "annualReportSaveImage": "Save image",
-  "annualReportSaveFailed": "Couldn't save the image. Try again.",
-  "annualReportMoreActions": "More actions",
   "annualReportLoadFailed": "Couldn't load the report",
   "annualReportSavePlaylist": "Save as playlist",
   "annualReportPlaylistName": "Most played in {year}",
@@ -1087,21 +1093,9 @@
   "statsEmpty": "No listening history yet",
   "statsEmptyHint": "Play some songs and come back",
   "statsExport": "Export listening data",
-  "statsExportSubtitle": "JSON file (summary + last {limit} events)",
-  "@statsExportSubtitle": {
-    "placeholders": {
-      "limit": {
-        "type": "int"
-      }
-    }
-  },
   "statsExportFailed": "Export failed",
   "statsShareTitle": "Share listening stats",
-  "statsShareImage": "Share image",
-  "statsSaveImage": "Save image",
   "statsPosterTitle": "Listening stats",
-  "statsPosterShareFailed": "Couldn't make the image. Try again.",
-  "statsPosterSaveFailed": "Couldn't save the image. Try again.",
   "statsPosterEmpty": "No listening data to turn into an image yet",
   "statsClear": "Clear stats",
   "statsClearConfirm": "This will delete all listening stat events. This cannot be undone.",
@@ -2901,15 +2895,6 @@
   "playlistCoverUpdated": "Playlist cover updated",
   "playlistCoverRestored": "Playlist cover removed",
   "playlistShare": "Share playlist",
-  "playlistShareImage": "Image",
-  "playlistShareImageSubtitle": "Cover mosaic and playlist info",
-  "playlistShareText": "Text",
-  "playlistShareTextSubtitle": "Plain track list",
-  "playlistShareSaveImage": "Save image",
-  "playlistShareCopyText": "Copy text",
-  "playlistShareCopied": "Text copied",
-  "playlistShareGenerating": "Creating image…",
-  "playlistShareFailed": "Couldn't create the image. Try again.",
   "playlistShareEmpty": "This playlist has no tracks yet",
   "playlistShareMore": "and {count} more",
   "@playlistShareMore": {

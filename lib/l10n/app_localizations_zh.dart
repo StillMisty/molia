@@ -568,6 +568,39 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sharePoster => '分享海报';
 
   @override
+  String get shareAction => '分享';
+
+  @override
+  String get shareSaveImage => '保存图片';
+
+  @override
+  String get shareCopyText => '复制文本';
+
+  @override
+  String get shareCopied => '文本已复制';
+
+  @override
+  String get shareExportData => '导出数据';
+
+  @override
+  String get shareGenerating => '正在生成图片…';
+
+  @override
+  String get shareFailed => '分享失败，再试一次';
+
+  @override
+  String get shareGenerateFailed => '图片没有生成，再试一次';
+
+  @override
+  String get shareSaveFailed => '图片没有保存，再试一次';
+
+  @override
+  String get moreActions => '更多操作';
+
+  @override
+  String get posterStyle => '样式';
+
+  @override
   String selectedLyricsCopied(int count) {
     return '已复制 $count 行歌词';
   }
@@ -2001,21 +2034,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get annualReportSharePoster => '分享海报';
 
   @override
-  String get annualReportPosterGenerating => '正在生成海报…';
-
-  @override
-  String get annualReportShareFailed => '海报没有生成，再试一次';
-
-  @override
-  String get annualReportSaveImage => '保存图片';
-
-  @override
-  String get annualReportSaveFailed => '图片没有保存，再试一次';
-
-  @override
-  String get annualReportMoreActions => '更多操作';
-
-  @override
   String get annualReportLoadFailed => '报告没有加载出来';
 
   @override
@@ -2115,30 +2133,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statsExport => '导出听歌数据';
 
   @override
-  String statsExportSubtitle(int limit) {
-    return 'JSON 文件（汇总 + 最近 $limit 条明细）';
-  }
-
-  @override
   String get statsExportFailed => '导出失败';
 
   @override
   String get statsShareTitle => '分享听歌统计';
 
   @override
-  String get statsShareImage => '分享图片';
-
-  @override
-  String get statsSaveImage => '保存图片';
-
-  @override
   String get statsPosterTitle => '听歌记录';
-
-  @override
-  String get statsPosterShareFailed => '图片没有生成，再试一次';
-
-  @override
-  String get statsPosterSaveFailed => '图片没有保存，再试一次';
 
   @override
   String get statsPosterEmpty => '还没有可以做成图片的记录';
@@ -5048,33 +5049,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get playlistShare => '分享列表';
-
-  @override
-  String get playlistShareImage => '图片';
-
-  @override
-  String get playlistShareImageSubtitle => '封面拼图 + 列表信息';
-
-  @override
-  String get playlistShareText => '文本';
-
-  @override
-  String get playlistShareTextSubtitle => '纯文字曲目列表';
-
-  @override
-  String get playlistShareSaveImage => '保存图片';
-
-  @override
-  String get playlistShareCopyText => '复制文本';
-
-  @override
-  String get playlistShareCopied => '文本已复制';
-
-  @override
-  String get playlistShareGenerating => '正在生成图片…';
-
-  @override
-  String get playlistShareFailed => '图片生成失败，请重试';
 
   @override
   String get playlistShareEmpty => '这个列表还没有曲目';
