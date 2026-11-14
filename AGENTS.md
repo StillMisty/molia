@@ -1,6 +1,6 @@
 # AGENTS.md
 
-**Molia** 是 Flutter 音乐播放器：LX 音源脚本 + 六平台内置搜索/发现（五个音乐平台 +
+**Molia** 是 Flutter 音乐播放器：LX 音源脚本 + 七渠道内置搜索/发现（六个音乐平台 +
 哔哩哔哩）、本地与网络播放
 （桌面 media_kit/libmpv）、歌词（含桌面歌词与海报）、省流模式、听歌同步（可选）、
 AI 推歌（可选）、跨设备同步（WebDAV / 局域网，可选）。目前处于内部快速迭代状态，
@@ -37,7 +37,8 @@ python3 tool/agent/check_docs.py               # 文档引用 / 工具链一致�
 生成物（改对应源码后必跑，产物提交进仓库）：
 
 - 改 `tool/lx_prelude/` → `node tool/build_lx_prelude.mjs`（`assets/lx/lx_prelude.js` 是 terser 产物，勿手改）
-  + `node tool/lx_prelude_harness.mjs`（应输出 PROTOCOL OK）；重抓平台响应 → `node tool/gen_{search,artist,lyric_search}_fixtures.mjs`；
+  + `node tool/lx_prelude_harness.mjs`（应输出 PROTOCOL OK）；重抓平台响应 →
+  `node tool/gen_{search,album,artist,lyric_search,qs}_fixtures.mjs`；
 - 改 `lib/data/molia_database.dart` → `dart run build_runner build`；当前基线是
   `molia_database_v2.sqlite` / `schemaVersion = 2`（v2 新增播放会话两表），旧库不迁移、
   不读取；以后改表结构提 `schemaVersion`，用 `dart run drift_dev make-migrations`

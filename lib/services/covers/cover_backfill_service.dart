@@ -6,7 +6,7 @@
 ///
 /// 为什么需要跨渠道：本渠道原生取图依赖曲目 raw 字段，字段缺失 / 接口失败
 /// 时即使平台搜索能返回同一首歌的封面也拿不到。跨渠道阶段按歌名 + 歌手
-/// 搜索五个音乐平台，并用 `song_match.dart` 的严格匹配挡住版本 / 时长不符
+/// 搜索六个音乐平台，并用 `song_match.dart` 的严格匹配挡住版本 / 时长不符
 /// 的候选——宁可不补，也不贴错封面。
 library;
 
@@ -17,7 +17,7 @@ import 'package:logging/logging.dart';
 import '../../data/cache/request_cache.dart';
 import '../../domain/models/download.dart' show kLocalSourceKey;
 import '../../domain/models/track.dart';
-import '../../sources/builtin/builtin_platforms.dart';
+import '../../sources/builtin/channel/channels.dart';
 import '../song_match.dart';
 
 /// 渠道搜索：按关键词返回候选曲目（生产实现走内置平台搜索）。
@@ -88,13 +88,13 @@ class CoverBackfillService {
 
     final sourceKey = track.id.sourceKey;
     final sourceAllowed =
-        BuiltinPlatforms.musicKeys.contains(sourceKey) &&
+        SongChannels.musicKeys.contains(sourceKey) &&
         isChannelEnabled(sourceKey);
     final sourceFuture = sourceAllowed
         ? _searchCover(sourceKey, keyword, track)
         : Future<String?>.value(null);
     final otherKeys = [
-      for (final channelKey in BuiltinPlatforms.musicKeys)
+      for (final channelKey in SongChannels.musicKeys)
         if (channelKey != sourceKey && isChannelEnabled(channelKey)) channelKey,
     ];
     final otherFutures = [

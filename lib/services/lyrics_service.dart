@@ -44,7 +44,8 @@ class LyricsService {
   final Duration sameSourceTimeout;
 
   /// [providers] 只用于测试注入；缺省取 [LyricsSourceRegistry.standard] 的
-  /// 自动回退来源（五个音乐平台 + LRCLIB，B 站字幕不在其中）。
+  /// 自动回退来源（五个专用 provider 的音乐平台 + LRCLIB；
+  /// 汽水 / B 站字幕只进手动换源）。
   ///
   /// 注册表是 static final（延迟初始化），这里只读列表，不创建实例、不发
   /// 请求；provider 的网络调用仍只发生在真正取词时。`standard` 的 B 站

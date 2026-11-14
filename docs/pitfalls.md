@@ -1051,3 +1051,14 @@
     `AppQuitController` 的 saving / exiting / done 三段 + 单一 in-flight
     future；提交失败复位到 idle 允许重试。回归见
     `test/app/bootstrap/desktop_stack_test.dart`。
+
+105. **汽水音乐（qs）的匿名接口会「200 + 空 body」和「只给试听流」**：
+    `/luna/search/track`、`/luna/search/artist` 等 PC 接口实测约半数请求返回
+    `200` + `Content-Length: 0`，这不是「没有结果」；`BuiltinTransport` 对空 body
+    抛 `BuiltinHttpException` 且不重试，所以 `QsApi` 自己按重试预算重试（搜索 5 次，
+    其余 3 次），正常的空结果（`extra.empty_search`）仍按「平台返回空」处理。
+    另外匿名播放只有试听：`/luna/h5/seo_track` 的 `track_player.video_model` 对会员
+    曲目只给 30 秒变体（`video_duration` ≈ 30s），免费曲目才是整首；渠道因此**不声明
+    原生 `resolve`**，完整取链交给用户安装的 LX 音源脚本，与网易渠道同一模式。
+    评论接口的 `group_type` 必须是数字 `1`（传 `track` 会 `ERR_INVALID_PARAM`），
+    搜索的 `count` 被忽略（平台固定每页 20 条，只能按 `cursor` 偏移翻页）。

@@ -1,6 +1,6 @@
 /// 内置平台原生取词的派发入口（wy / tx / kg / kw / mg / bili）。
 ///
-/// 平台矩阵只在 [BuiltinPlatforms] 声明：本文件按 `lyric` 适配器查表，
+/// 平台矩阵只在 `SongChannels` 声明：本文件按 `lyric` 适配器查表，
 /// `SourceCapabilities.lyrics` 与真实派发共用同一条目——平台没登记取词
 /// 适配器时，能力位为 false，派发返回 null。
 ///
@@ -16,7 +16,7 @@ library;
 import '../../data/cache/request_cache.dart';
 import '../lx/lx_engine_types.dart';
 import '../source_track.dart';
-import 'builtin_platforms.dart';
+import 'channel/channels.dart';
 
 class BuiltinLyricDispatch {
   BuiltinLyricDispatch({RequestCache? cache})
@@ -30,7 +30,7 @@ class BuiltinLyricDispatch {
   /// 内置平台原生歌词回退（不支持 / 失败返回 null）。
   Future<LxLyricResult?> fetch(SourceTrack track) async {
     // 注册表同时承担「是不是内置平台」判定：没有取词适配器的 key 直接退出。
-    final adapter = BuiltinPlatforms.lyricFor(track.sourceKey);
+    final adapter = SongChannels.forKey(track.sourceKey)?.lyric;
     if (adapter == null) return null;
     try {
       return await _cache.getOrCreate<LxLyricResult?>(

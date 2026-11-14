@@ -6,6 +6,7 @@ import 'package:molia/sources/builtin/builtin_cover_urls.dart';
 import 'package:molia/sources/builtin/kg_search.dart';
 import 'package:molia/sources/builtin/kw_search.dart';
 import 'package:molia/sources/builtin/mg_search.dart';
+import 'package:molia/sources/builtin/qs_search.dart';
 import 'package:molia/sources/builtin/tx_search.dart';
 import 'package:molia/sources/builtin/wy_search.dart';
 import 'package:molia/sources/raw_track.dart';
@@ -87,6 +88,21 @@ void main() {
       expect((tracks.first.raw['songmid'] as String).isNotEmpty, isTrue);
       expect(tracks.first.artist, isNotEmpty);
       expect(tracks.first.coverUrl, isNotNull);
+    });
+
+    test('qs: 汽水音乐搜索响应解析（结果组 / 音质档位 / 64 位 id）', () {
+      final json = _fixture('qs') as Map;
+      final group = QsSearch.tracksGroupOf(json)!;
+      final tracks = QsSearch.parseItems(group);
+      expect(tracks, isNotEmpty);
+      _assertCommon(tracks.first, 'qs');
+      expect((tracks.first.raw['track_id'] as String).isNotEmpty, isTrue);
+      expect(tracks.first.raw['id'], tracks.first.raw['track_id']);
+      expect(tracks.first.raw['albumId'], isNotNull);
+      expect(tracks.first.duration, isNotNull);
+      expect(tracks.first.qualities, isNotEmpty);
+      expect(tracks.first.coverUrl, contains('douyinpic.com'));
+      expect(group['has_more'], isTrue, reason: '平台固定每页 20 条');
     });
 
     test('mg: 咪咕搜索响应解析', () {

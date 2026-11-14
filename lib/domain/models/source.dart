@@ -109,7 +109,8 @@ class SourceDescriptor {
   /// 用户开关 / 登录态。
   final bool enabled;
 
-  /// 是否具备内置「发现」能力（热榜 / 歌单 / 热搜：五个音乐平台 + B 站；
+  /// 是否具备内置「发现」能力（热榜 / 歌单 / 热搜：六个音乐平台 + B 站；
+  /// 汽水只有歌单，没有匿名榜单目录与热搜词；
   /// B 站没有歌单浏览）。
   final bool discoverable;
 

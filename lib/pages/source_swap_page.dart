@@ -121,9 +121,9 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
     final swapProvider = context.read<SourceSwapProvider>();
     final sourceDescriptors = swapProvider.searchableSources;
     // 歌词来源跟随渠道停用：取「已启用渠道」而不是「可搜索渠道」，
-    // 五个音乐平台没有 LX 脚本时仍能用歌词来源。
+    // 六个音乐平台没有 LX 脚本时仍能用歌词来源。
     final enabledChannelKeys = swapProvider.enabledChannelKeys;
-    // chips 顺序取渠道管理的全部渠道顺序：五个音乐平台即使当前不可搜索，
+    // chips 顺序取渠道管理的全部渠道顺序：六个音乐平台即使当前不可搜索，
     // 仍可能作为歌词来源出现，不能按 searchableSources 排到后面。
     final channelOrder = swapProvider.orderedChannelKeys;
     // 曲目条副标题保留「歌手 · 当前来源」：换源对象是这首歌，来源名让

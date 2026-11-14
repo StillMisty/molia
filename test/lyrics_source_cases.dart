@@ -75,6 +75,7 @@ void main() {
         'kg',
         'kw',
         'mg',
+        'qs',
         'bili',
         'lrclib',
       ]);
@@ -94,7 +95,7 @@ void main() {
       expect(lrclib.isChannel, isFalse, reason: 'LRCLIB 不是音源渠道');
 
       // 自动回退仍是五个音乐平台 + LRCLIB：B 站字幕要登录，且视频结果
-      // 不是「歌曲」，不参与并行竞速。
+      // 不是「歌曲」；汽水走通用适配器，先只进手动换源。
       expect(registry.autoProviders.map((provider) => provider.name), [
         'qq',
         'netease',

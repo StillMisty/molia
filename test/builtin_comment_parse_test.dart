@@ -3,10 +3,12 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/comment.dart';
+import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/builtin/comment_utils.dart';
 import 'package:molia/sources/builtin/kg_comment.dart';
 import 'package:molia/sources/builtin/kw_comment.dart';
 import 'package:molia/sources/builtin/mg_comment.dart';
+import 'package:molia/sources/builtin/qs_comment.dart';
 import 'package:molia/sources/builtin/tx_comment.dart';
 import 'package:molia/sources/builtin/wy_comment.dart';
 
@@ -22,6 +24,45 @@ dynamic _fixture(String name) =>
     jsonDecode(File('test/fixtures/comments/$name.json').readAsStringSync());
 
 void main() {
+  group('qs 汽水音乐', () {
+    test('最新：正文 / 昵称 / 头像 / 点赞 / 秒级时间 / 总数', () {
+      final page = QsComment.parse(
+        _fixture('qs'),
+        kind: CommentKind.latest,
+        page: 1,
+        limit: 5,
+      );
+      expect(page.items, hasLength(5));
+      final first = page.items.first;
+      expect(first.id, isNotEmpty);
+      expect(first.text, isNotEmpty);
+      expect(first.authorName, isNotEmpty);
+      expect(first.avatarUrl, startsWith('https://'));
+      expect(first.createdAt, isNotNull);
+      expect(page.total, greaterThan(0));
+      expect(page.hasMore, isTrue);
+    });
+
+    test('热门：同一页按点赞数降序（平台没有跨页热门游标）', () {
+      final page = QsComment.parse(
+        _fixture('qs'),
+        kind: CommentKind.hot,
+        page: 1,
+        limit: 5,
+      );
+      final likes = [for (final item in page.items) item.likedCount ?? 0];
+      expect(likes, orderedEquals([...likes]..sort((a, b) => b - a)));
+    });
+
+    test('结构不符：失败', () {
+      expect(
+        () =>
+            QsComment.parse(null, kind: CommentKind.latest, page: 1, limit: 5),
+        throwsA(isA<SourceFailure>()),
+      );
+    });
+  });
+
   group('评论图片地址归一化', () {
     test('trim / 协议相对 / 非法值', () {
       expect(commentUrlOf('  http://img/a.jpg '), 'http://img/a.jpg');

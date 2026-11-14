@@ -12,7 +12,7 @@ library;
 
 import '../../domain/models/artist.dart';
 import '../../domain/models/failure.dart';
-import 'builtin_platforms.dart';
+import 'channel/channels.dart';
 import 'builtin_search.dart';
 
 /// 歌手搜索的一页结果（对齐 `SearchResult` 语义的源层变体）。
@@ -41,9 +41,9 @@ SourceFailure artistPlatformFailure(String platform, String reason) =>
 class BuiltinArtists {
   BuiltinArtists._();
 
-  /// 平台矩阵与实现集中在 [BuiltinPlatforms]；这里只保留失败语义。
+  /// 平台矩阵与实现集中在 `SongChannels`；这里只保留失败语义。
   static bool isSupported(String sourceKey) =>
-      BuiltinPlatforms.artistFor(sourceKey) != null;
+      SongChannels.forKey(sourceKey)?.artist != null;
 
   /// 歌手搜索（搜索页「歌手」类型）；失败抛 [SourceFailure]。
   static Future<ArtistSearchPage> search(
@@ -52,7 +52,7 @@ class BuiltinArtists {
     int page = 1,
     int limit = 30,
   }) async {
-    final adapter = BuiltinPlatforms.artistFor(sourceKey);
+    final adapter = SongChannels.forKey(sourceKey)?.artist;
     if (adapter == null) {
       throw SourceFailure(
         kind: FailureKind.unsupported,
@@ -76,7 +76,7 @@ class BuiltinArtists {
         retryable: true,
       );
     }
-    final adapter = BuiltinPlatforms.artistFor(sourceKey);
+    final adapter = SongChannels.forKey(sourceKey)?.artist;
     if (adapter == null) {
       throw SourceFailure(
         kind: FailureKind.unsupported,

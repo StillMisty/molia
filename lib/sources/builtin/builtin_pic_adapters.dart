@@ -1,7 +1,7 @@
 /// 内置平台「曲目 raw → 原生封面」适配器集合。
 ///
 /// 与 `builtin_lyric_adapters.dart` 同一思路：每个实现登记进
-/// [BuiltinPlatforms]，`capabilities.artwork` 与派发读取同一条目——
+/// `SongChannels`，`capabilities.artwork` 与派发读取同一条目——
 /// 能力位按平台实际实现为真，不按「是不是内置平台」笼统判定。
 ///
 /// 适配器只挑选 raw 字段（或直接复用搜索响应里的封面），失败返回 null；
@@ -13,6 +13,7 @@ import 'builtin_cover_urls.dart';
 import 'kg_pic.dart';
 import 'kw_pic.dart';
 import 'mg_lyric.dart';
+import 'qs_pic.dart';
 import 'wy_music_detail.dart';
 
 /// 网易云：歌曲详情 `al.picUrl`。
@@ -68,3 +69,6 @@ Future<String?> mgBuiltinPic(Map<String, dynamic> raw) {
 /// B 站：搜索 / 收藏夹自带封面，只做 `//` 补协议，不再发请求。
 Future<String?> biliBuiltinPic(Map<String, dynamic> raw) =>
     Future.value(biliCoverUrl(raw['pic'] ?? raw['cover'] ?? raw['img']));
+
+/// 汽水音乐：实体自带专辑封面，缺封面时按 track_id 取 H5 详情。
+Future<String?> qsBuiltinPic(Map<String, dynamic> raw) => QsPic.fetch(raw);

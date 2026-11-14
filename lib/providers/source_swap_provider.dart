@@ -201,7 +201,7 @@ class SourceSwapProvider extends ChangeNotifier {
 
   /// 已启用的渠道 key（含当前不可搜索的内置平台）。
   ///
-  /// 歌词来源跟随渠道停用开关：五个音乐平台没有 LX 脚本时不在
+  /// 歌词来源跟随渠道停用开关：六个音乐平台没有 LX 脚本时不在
   /// `descriptors` 里，但用户没有停用它们，歌词来源仍应保留。
   Set<String> get enabledChannelKeys => _sourceRegistry.enabledChannelKeys;
 

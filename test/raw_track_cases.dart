@@ -28,6 +28,14 @@ void main() {
       expect(rawIdOf({'bvid': 'BV1', 'aid': 9, 'id': 9}), 'BV1');
       expect(rawIdOf({'aid': 9, 'id': 9}), '9');
     });
+
+    test('qs：只有 track_id 时也能取到（历史 / 导出数据）', () {
+      expect(
+        rawIdOf({'track_id': '7079108541549643812'}),
+        '7079108541549643812',
+      );
+      expect(rawIdOf({'id': '1', 'track_id': '2'}), '1');
+    });
   });
 
   group('platformRawIdOf', () {
@@ -37,10 +45,14 @@ void main() {
       expect(platformRawIdOf('wy', {'songmid': 'm'}), 'm');
     });
 
-    test('tx 优先 songmid；kg 优先 hash；mg 优先 copyrightId', () {
+    test('tx 优先 songmid；kg 优先 hash；mg 优先 copyrightId；qs 优先 track_id', () {
       expect(platformRawIdOf('tx', {'songmid': 'm', 'songId': 's'}), 'm');
       expect(platformRawIdOf('kg', {'hash': 'h', 'songmid': 'm'}), 'h');
       expect(platformRawIdOf('mg', {'copyrightId': 'c', 'songId': 's'}), 'c');
+      expect(
+        platformRawIdOf('qs', {'track_id': 't', 'id': 'i', 'songId': 's'}),
+        't',
+      );
     });
 
     test('未登记平台按默认顺序（songId 优先）', () {
@@ -74,6 +86,20 @@ void main() {
       expect(
         withCanonicalId(sourceKey: 'mg', raw: {'songId': 's'})['copyrightId'],
         's',
+      );
+    });
+
+    test('补齐 qs 的 track_id（脚本取链读取）', () {
+      expect(
+        withCanonicalId(sourceKey: 'qs', raw: {'id': 'i'})['track_id'],
+        'i',
+      );
+      expect(
+        withCanonicalId(
+          sourceKey: 'qs',
+          raw: {'id': 'i', 'track_id': 't'},
+        )['track_id'],
+        't',
       );
     });
 

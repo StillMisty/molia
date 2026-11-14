@@ -1,13 +1,13 @@
 /// 歌词来源注册表：「有哪些歌词来源」的唯一事实来源。
 ///
 /// 自动回退（`LyricsService` 的并行竞速）与换源页的「歌词」tab 都从这里
-/// 派生。新加一个内置渠道时，只要在 `BuiltinPlatforms` 同时登记 `search` +
-/// `lyric` 适配器，就会自动出现在手动换源里，不需要再改 UI 或服务。
+/// 派生。新加一个内置渠道时，只要在自己的渠道声明里同时给出 `search` +
+/// `lyric`，就会自动出现在手动换源里，不需要再改 UI 或服务。
 library;
 
 import '../../sources/builtin/bili_lyric.dart';
 import '../../sources/builtin/bili_session.dart';
-import '../../sources/builtin/builtin_platforms.dart';
+import '../../sources/builtin/channel/channels.dart';
 import 'builtin_lyric_provider.dart';
 import 'kugou_provider.dart';
 import 'kuwo_provider.dart';
@@ -37,7 +37,7 @@ class LyricsSourceRegistry {
       if (strategy.autoFallback) strategy.provider,
   ];
 
-  /// 标准来源集合（渠道顺序取 [BuiltinPlatforms.keys]，LRCLIB 兜底放最后）。
+  /// 标准来源集合（渠道顺序取 `SongChannels.keys`，LRCLIB 兜底放最后）。
   ///
   /// static final 延迟初始化：只在首次访问时创建 provider（含 Dio），
   /// 组合根构造 [LyricsService] 不额外产生网络请求。B 站可用性闭包绑定
@@ -60,11 +60,11 @@ class LyricsSourceRegistry {
     };
 
     final strategies = <LyricsSourceStrategy>[];
-    for (final platform in BuiltinPlatforms.searchCandidates) {
-      final existing = covered[platform.key];
+    for (final channel in SongChannels.all) {
+      final existing = covered[channel.key];
       if (existing != null) {
         strategies.add(
-          LyricsSourceStrategy(channelKey: platform.key, provider: existing),
+          LyricsSourceStrategy(channelKey: channel.key, provider: existing),
         );
         continue;
       }
@@ -72,14 +72,14 @@ class LyricsSourceRegistry {
       // 通用渠道：搜索 + 取词适配器缺一不可（没搜索拿不到 raw，没取词
       // 拿到了也没用）。已覆盖的五个音乐平台不会走到这里，未来新增的
       // 平台只要两件套齐全就自动具备歌词换源。
-      if (platform.search == null || platform.lyric == null) continue;
+      if (channel.search == null || channel.lyric == null) continue;
 
       strategies.add(
         LyricsSourceStrategy(
-          channelKey: platform.key,
+          channelKey: channel.key,
           provider: BuiltinLyricProvider(
-            platform.key,
-            adapter: platform.key == 'bili'
+            channel.key,
+            adapter: channel.key == 'bili'
                 ? BiliLyric(session: session).fetch
                 : null,
           ),
@@ -88,7 +88,7 @@ class LyricsSourceRegistry {
           // 这类平台的歌词也不一定对得上「这首歌」。手动换源里用户看得见
           // 标题与 UP 主，选错了自己换回来，代价可控。
           autoFallback: false,
-          unavailable: _unavailableOf(platform.key, session),
+          unavailable: _unavailableOf(channel.key, session),
         ),
       );
     }

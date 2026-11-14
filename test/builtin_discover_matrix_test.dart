@@ -1225,4 +1225,165 @@ void main() {
       await _expectStateError(bad, () => source.hotSearches(), attempts: 1);
     });
   });
+
+  group('汽水发现矩阵', () {
+    final source = BuiltinDiscover.of('qs');
+
+    test('榜单与热搜：平台没有匿名入口，能力位显式为假', () async {
+      expect(source.leaderboards, isEmpty);
+      expect(source.supportsLeaderboards, isFalse);
+      expect(await source.hotSearches(), isEmpty);
+      expect(source.supportsHotSearch, isFalse);
+      expect(source.supportsPlaylists, isTrue);
+      expect(source.supportsPlaylistSearch, isTrue);
+    });
+
+    test('标签：固定分类目录（不发请求）', () async {
+      final tags = await source.tags();
+      expect(tags.hotTags.first.id, '0');
+      expect(
+        tags.categories.map((category) => category.name),
+        containsAll(<String>['推荐', '曲风', '场景']),
+      );
+      expect(
+        tags.categories
+            .expand((category) => category.tags)
+            .map((tag) => tag.id),
+        contains('14'),
+      );
+    });
+
+    test('推荐歌单：POST discover/mix，解析歌单与无限下拉', () async {
+      final body = jsonEncode({
+        'has_more': true,
+        'inner_block': [
+          {
+            'type': 'discover_playlist',
+            'title': '推荐歌单',
+            'inner_block_id': '1',
+            'resources': [
+              {
+                'resource_id': '1',
+                'type': 'playlist',
+                'entity': {
+                  'playlist': {
+                    'id': '7096700219496368135',
+                    'title': '酷女孩',
+                    'desc': '简介',
+                    'count_tracks': 22,
+                    'create_time': 1652669156,
+                    'owner': {'nickname': '作者'},
+                    'stats': {'count_collected': 81},
+                    'url_cover': {
+                      'uri': 'tos-cn-i/cover',
+                      'urls': ['https://p3-luna.douyinpic.com/img/'],
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      });
+      final stub = _Stub({'luna/discover/mix': body});
+      stub.install();
+      final page = await source.playlists('0', 1);
+      expect(page.playlists.single.id, '7096700219496368135');
+      expect(page.playlists.single.name, '酷女孩');
+      expect(page.playlists.single.author, '作者');
+      expect(page.playlists.single.trackCount, 22);
+      expect(page.playlists.single.playCount, 81);
+      expect(page.playlists.single.coverUrl, contains('douyinpic.com'));
+      expect(page.playlists.single.createdAt, '2022-05-16');
+      expect(page.playlists.single.playCountText, '81');
+      expect(page.hasMore, isTrue);
+      expect(stub.requests.single.path, '/luna/discover/mix');
+    });
+
+    test('歌单搜索 / 详情：游标分页 + media_resources 曲目', () async {
+      final searchBody = jsonEncode({
+        'result_groups': [
+          {
+            'id': 'playlists',
+            'has_more': true,
+            'data': [
+              {
+                'entity': {
+                  'playlist': {
+                    'id': '1',
+                    'title': '搜索歌单',
+                    'count_tracks': 2,
+                    'url_cover': {
+                      'uri': 'c',
+                      'urls': ['https://p3-luna.douyinpic.com/img/'],
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      });
+      final detailBody = jsonEncode({
+        'playlist': {
+          'id': '1',
+          'title': '搜索歌单',
+          'count_tracks': 2,
+          'url_cover': {
+            'uri': 'c',
+            'urls': ['https://p3-luna.douyinpic.com/img/'],
+          },
+        },
+        'media_resources': [
+          {
+            'type': 'track',
+            'entity': {
+              'track_wrapper': {
+                'track': {
+                  'id': '7079108541549643812',
+                  'name': '小半',
+                  'duration': 297240,
+                  'artists': [
+                    {'id': '6776144869279664130', 'name': '陈粒'},
+                  ],
+                  'album': {
+                    'id': '7079108425841379335',
+                    'name': '小梦大半',
+                    'url_cover': {
+                      'uri': 'c',
+                      'urls': ['https://p3-luna.douyinpic.com/img/'],
+                    },
+                  },
+                  'bit_rates': [
+                    {'quality': 'highest', 'size': 5454176},
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      });
+      final stub = _Stub({
+        'luna/search/playlist': searchBody,
+        'luna/playlist/detail': detailBody,
+      });
+      stub.install();
+
+      final page = await source.searchPlaylists('夏日', 2);
+      expect(page.playlists.single.name, '搜索歌单');
+      expect(page.hasMore, isTrue);
+      expect(
+        stub.requests.first.queryParameters['cursor'],
+        '20',
+        reason: '平台按偏移量分页',
+      );
+
+      final detail = await source.playlistDetail('1', 1);
+      expect(detail.info.name, '搜索歌单');
+      expect(detail.info.trackCount, 2, reason: '详情页按总数判断是否还有下一页');
+      expect(detail.tracks.single.title, '小半');
+      expect(detail.tracks.single.songId, '7079108541549643812');
+      expect(detail.tracks.single.artist, '陈粒');
+    });
+  });
 }

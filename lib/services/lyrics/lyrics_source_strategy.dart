@@ -34,7 +34,8 @@ class LyricsSourceStrategy {
 
   /// 是否参与 `LyricsService` 的名字搜索回退（并行竞速）。
   ///
-  /// 五个音乐平台 + LRCLIB 为 true；视频站 / 通用平台适配器为 false：
+  /// 五个有专用 provider 的音乐平台 + LRCLIB 为 true；汽水 / 视频站 /
+  /// 通用平台适配器为 false：
   /// 它们的结果不是「歌曲」实体（B 站结果是一条视频），自动竞速容易在
   /// 音乐平台返回前抢到翻唱 / 搬运的错匹配，只放进手动换源让用户自己选。
   final bool autoFallback;

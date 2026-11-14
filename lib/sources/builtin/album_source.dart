@@ -4,21 +4,21 @@
 /// 产出领域模型 `Album`（曲目为领域 `Track`，payload 经 track_mapper 原样
 /// 透传），不再经 sources → data 的额外映射层。
 ///
-/// 平台矩阵与各平台实现集中在 [BuiltinPlatforms]；本文件只保留参数校验与
-/// 「不支持」的失败语义（抛 [SourceFailure]）。
+/// 平台矩阵与各平台实现集中在 `SongChannels`（每个渠道一个声明文件）；
+/// 本文件只保留参数校验与「不支持」的失败语义（抛 [SourceFailure]）。
 ///
 /// 端点均已在开发环境抓到真实响应（test/fixtures/albums/），仍需真机复验。
 library;
 
 import '../../domain/models/album.dart';
 import '../../domain/models/failure.dart';
-import 'builtin_platforms.dart';
+import 'channel/channels.dart';
 
 class BuiltinAlbums {
   BuiltinAlbums._();
 
   static bool isSupported(String sourceKey) =>
-      BuiltinPlatforms.albumFor(sourceKey) != null;
+      SongChannels.forKey(sourceKey)?.album != null;
 
   /// 取一页专辑；[albumId] 为平台内专辑 id（wy 数字 id / tx albumMid / kg/kw/mg albumId）。
   ///
@@ -37,7 +37,7 @@ class BuiltinAlbums {
         retryable: true,
       );
     }
-    final adapter = BuiltinPlatforms.albumFor(sourceKey);
+    final adapter = SongChannels.forKey(sourceKey)?.album;
     if (adapter == null) {
       throw SourceFailure(
         kind: FailureKind.unsupported,

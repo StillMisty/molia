@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/source.dart' as domain;
 import 'package:molia/sources/any_listen/any_listen_source.dart';
-import 'package:molia/sources/builtin/builtin_platforms.dart';
+import 'package:molia/sources/builtin/channel/channels.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 import 'package:molia/sources/source_profiles.dart';
 
@@ -9,7 +9,7 @@ import 'package:molia/sources/source_profiles.dart';
 /// [SourceProfiles.build] 的同一份输入推导；能力位必须与注册表 / 路由门
 /// 一致，不允许出现「能力为真但路由必然失败」的条目。
 void main() {
-  const musicKeys = ['tx', 'wy', 'kg', 'kw', 'mg'];
+  const musicKeys = ['tx', 'wy', 'kg', 'kw', 'mg', 'qs'];
 
   LxSourceDecl decl(String key, List<String> actions, {String? name}) =>
       LxSourceDecl(
@@ -22,11 +22,11 @@ void main() {
   group('无脚本矩阵', () {
     final profiles = SourceProfiles.build();
 
-    test('六平台能力位逐项等于注册表适配器（不再按「内置平台」一刀切）', () {
-      expect(BuiltinPlatforms.keys, ['tx', 'wy', 'kg', 'kw', 'mg', 'bili']);
+    test('七渠道能力位逐项等于渠道自述（不再按「内置平台」一刀切）', () {
+      expect(SongChannels.keys, ['tx', 'wy', 'kg', 'kw', 'mg', 'qs', 'bili']);
 
-      for (final key in BuiltinPlatforms.keys) {
-        final platform = BuiltinPlatforms.maybeOf(key)!;
+      for (final key in SongChannels.keys) {
+        final platform = SongChannels.forKey(key)!;
         final profile = profiles.forKey(key)!;
 
         expect(profile.key, key, reason: key);
@@ -106,6 +106,7 @@ void main() {
         'kg',
         'kw',
         'mg',
+        'qs',
       ], reason: '可搜索平台在前，仅发现的平台按规范顺序追加');
       expect(profiles.searchable.map((profile) => profile.key).toList(), [
         'bili',
@@ -234,6 +235,7 @@ void main() {
         'kg',
         'kw',
         'mg',
+        'qs',
       ]);
       expect(profiles.searchable.map((profile) => profile.key).toList(), [
         'custom',
@@ -263,6 +265,7 @@ void main() {
         'kg',
         'kw',
         'mg',
+        'qs',
       ], reason: '顺序表优先，未列出的保持候选相对顺序');
       expect(profiles.forKey('custom')!.enabled, isFalse);
       expect(profiles.forKey('tx')!.enabled, isFalse);
@@ -294,6 +297,7 @@ void main() {
         'kg',
         'kw',
         'mg',
+        'qs',
       ]);
       expect(usable.searchable.map((profile) => profile.key).toList(), [
         'bili',
@@ -327,8 +331,8 @@ void main() {
 
     for (final entry in scenarios.entries) {
       final profiles = SourceProfiles.build(activeSources: entry.value);
-      for (final key in BuiltinPlatforms.keys) {
-        final platform = BuiltinPlatforms.maybeOf(key)!;
+      for (final key in SongChannels.keys) {
+        final platform = SongChannels.forKey(key)!;
         final script = entry.value[key];
         final scriptResolve = script?.canResolveUrl ?? false;
         final profile = profiles.forKey(key)!;

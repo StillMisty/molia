@@ -10,6 +10,7 @@ import 'package:molia/sources/builtin/kg_album.dart';
 import 'package:molia/sources/builtin/kw_album.dart';
 import 'package:molia/sources/builtin/kw_discover.dart';
 import 'package:molia/sources/builtin/mg_album.dart';
+import 'package:molia/sources/builtin/qs_album.dart';
 import 'package:molia/sources/builtin/tx_album.dart';
 import 'package:molia/sources/builtin/wy_album.dart';
 
@@ -240,6 +241,43 @@ void main() {
               .having((f) => f.kind, 'kind', FailureKind.unknown)
               .having((f) => f.retryable, 'retryable', isTrue),
         ),
+      );
+    });
+  });
+
+  group('qs 汽水音乐', () {
+    test('专辑解析：分享页 album_page / 秒级发布时间 / 曲目与音质', () {
+      final album = QsAlbum.parse(
+        _fixture('qs'),
+        albumId: '7079108425841379335',
+      );
+      expect(album.id, '7079108425841379335');
+      expect(album.name, '小梦大半');
+      expect(album.artist, '陈粒');
+      expect(album.coverUrl, contains('douyinpic.com'));
+      expect(album.year, 2016);
+      expect(album.hasMore, isFalse, reason: '分享页一次返回整张专辑');
+
+      expect(album.tracks, hasLength(3), reason: 'fixture 截断到 3 首');
+      final first = album.tracks.first;
+      expect(first.title, '芳草地');
+      expect(first.artists.single.name, '陈粒');
+      expect(first.album, '小梦大半');
+      expect(first.duration, const Duration(milliseconds: 237147));
+      expect(first.payload['track_id'], '7079108424620836900');
+      expect(first.payload['albumId'], '7079108425841379335');
+      expect(first.qualities, isNotEmpty);
+      expect(first.platformAlbumId, '7079108425841379335');
+    });
+
+    test('结构不符：失败', () {
+      expect(
+        () => QsAlbum.parse(null, albumId: '1'),
+        throwsA(isA<SourceFailure>()),
+      );
+      expect(
+        () => QsAlbum.parse(<String, dynamic>{}, albumId: '1'),
+        throwsA(isA<SourceFailure>()),
       );
     });
   });

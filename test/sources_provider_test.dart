@@ -130,6 +130,7 @@ void main() {
       'kg',
       'kw',
       'mg',
+      'qs',
     ]);
     // bili 原生搜索 + 发现（音乐榜 / 热搜）都可用，与其它发现平台同列。
     expect(f.provider.channels.where((o) => o.discoverable).map((o) => o.key), [
@@ -139,6 +140,7 @@ void main() {
       'kg',
       'kw',
       'mg',
+      'qs',
     ]);
     expect(f.provider.searchableSources.map((o) => o.key).toList(), [
       'a',
@@ -169,6 +171,7 @@ void main() {
       'kg',
       'kw',
       'mg',
+      'qs',
     ]);
     expect(f.provider.searchableSources.map((o) => o.key).toList(), [
       'b',

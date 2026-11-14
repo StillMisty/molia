@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/failure.dart';
-import 'package:molia/sources/builtin/builtin_platforms.dart';
+import 'package:molia/sources/builtin/channel/channels.dart';
 import 'package:molia/sources/builtin/kg_lyric_search.dart';
 import 'package:molia/sources/builtin/kw_lyric_search.dart';
 import 'package:molia/sources/builtin/lyric_search.dart';
@@ -154,10 +154,10 @@ void main() {
     });
 
     test('支持矩阵与内置平台一致', () {
-      expect(
-        BuiltinPlatforms.lyricSearchKeys,
-        containsAll(<String>['kw', 'kg', 'tx', 'wy', 'mg']),
-      );
+      expect([
+        for (final channel in SongChannels.all)
+          if (channel.lyricSearch != null) channel.key,
+      ], containsAll(<String>['kw', 'kg', 'tx', 'wy', 'mg']));
       expect(BuiltinLyricSearch.isSupported('script-source'), isFalse);
     });
   });

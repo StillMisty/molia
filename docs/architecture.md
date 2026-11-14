@@ -241,7 +241,7 @@
   `lib/models/lyric_line.dart`：`hasLyricTimestamps` 与 `parseLyrics` 共用同一正则
   （兼容 1–3 位分钟与行内多标签）。
   **取词顺序**：缓存 → 曲目原生（`SourceManager.fetchLyric`：脚本 `lyric` action →
-  any-listen → 内置平台原生实现（五个音乐平台 + B 站 CC/AI 字幕，B 站需扫码
+  any-listen → 内置平台原生实现（六个音乐平台 + B 站 CC/AI 字幕，B 站需扫码
   登录，见 ADR-0016），用曲目 raw 的精确平台 ID）→ **本渠道名字搜索**
   （`LyricProvider.channelKey` 与曲目来源渠道一致；3s 同源预算，命中即用）→
   其它渠道并行竞速兜底（netease / qq / kugou / kuwo / migu / lrclib；
@@ -300,7 +300,7 @@
   唯一取数入口（经 `CachedPageService`：single-flight + LRU + TTL 5min，
   key=`comments:{source}:{songId}:{kind}:{page}`，失败不缓存，`invalidateTrack`
   供下拉刷新）。取数经 `MusicSource.comments`
-  （能力位 `capabilities.comment`：五个音乐平台 + B 站视频）→ `SourceManager.fetchComments`
+  （能力位 `capabilities.comment`：六个音乐平台 + B 站视频）→ `SourceManager.fetchComments`
   → `lib/sources/builtin/{wy,tx,kg,kw,mg}_comment.dart` + `bili_comment.dart`
   （移植 LX：热门 / 最新、分页、表情还原、引用 / 楼中楼归一化；B 站用
   `pagination_str` 游标，缺 `is_end` 时按下一页游标决定 `hasMore`）。
@@ -718,26 +718,34 @@
   复用同一份封面缓存；封面未就绪不阻塞曲目首屏。搜索 tab 空态使用共享
   `EmptyState`，AI 推歌轮播的 gutter 与内容栏同源。
 - **内置发现**：`lib/sources/builtin/discover_source.dart` 的渠道与能力位从
-  `BuiltinPlatforms.discoverSources` 派生（六平台同一份注册表）。B 站
+  各渠道自述的 `discover` 字段派生（七渠道同一份 `SongChannels` 注册表）。B 站
   （`bili_discover.dart`）只有音乐榜（`bili__music_3d` / bangid `3:3`）+ 热搜 +
   收藏夹详情：`supportsPlaylists` / `supportsPlaylistSearch` 恒为 false（UI 隐藏
   歌单 tab），`playlistDetail` 接受收藏夹链接 / ID 并按 `media_count` 拉全。
+  汽水（`qs_discover.dart`）只有推荐歌单 / 分类 / 歌单搜索与详情：没有匿名榜单
+  目录与热搜词（`leaderboards` 为空、`supportsHotSearch` 为 false）。
 - **Mapping**：`track_mapper`（`SourceTrack` ↔ `Track`，payload 同一引用往返）。
 - **内置平台**：搜索/发现共用 `BuiltinSearch.transport`
   （`lib/sources/builtin/builtin_transport.dart`）——客户端可注入、统一请求头/超时、
   响应级重试（`retryIf`）与结果缓存（`transport.cached`，single-flight + LRU +
   TTL 5min）；平台适配器只保留 URL 构造与解析，不再各自持有静态 `RequestCache`。
-  fetch 路径测试通过注入 `MockClient` 覆盖。取词 / 取图适配器登记在
-  `BuiltinPlatforms`，派发（`builtin_lyric_dispatch.dart` /
+  fetch 路径测试通过注入 `MockClient` 覆盖。取词 / 取图适配器登记在各渠道自述里，
+  派发（`builtin_lyric_dispatch.dart` /
   `builtin_pic_dispatch.dart`）只查表 + 结果缓存，不再维护平台 switch；渠道偏好
   （音质 / 顺序 / 停用）在 `lib/sources/source_preferences.dart`，
   `SourceManager` 同名方法为其委托。
-- **内置平台注册表**：`lib/sources/builtin/builtin_platforms.dart` 的
-  `BuiltinPlatforms` 是六平台 × 能力族的唯一声明（规范键 `wy / tx / kg / kw / mg / bili`、
-  展示名、搜索候选排序位、类型化适配器：搜索 / 原生取链 / 原生取词 / 原生取图 /
-  歌词搜索 / 评论 / 专辑 / 歌手 / 发现）；能力位由适配器是否存在推导，新增平台只改
-  这一处（不再维护七份 `supportedKeys` 与 switch）。B 站只注册搜索 / 原生取链 /
-  评论 / 歌手 / 发现（无专辑、无按歌词搜歌）。
+- **渠道声明（song channel）**：`lib/sources/builtin/channel/` 下每个渠道一个
+  `{key}_channel.dart`，**渠道自己声明**身份（key / 展示名）与能力实现（搜索 /
+  原生取链 / 歌词搜索 / 原生取词 / 原生取图 / 评论 / 专辑 / 歌手 / 发现）；
+  `channels.dart` 的 `SongChannels` 只按规范顺序聚合（`tx → wy → kg → kw → mg →
+  qs → bili`），能力位由「适配器是否存在」推导，UI 只消费派生结果、不认平台 key。
+  曲目页地址与专辑 id 也由渠道声明（`pageUrl` / `albumId`），`track_mapper`
+  不再维护按 key 的 switch。新增渠道 = 一个声明文件 + `all` 里一行，
+  facade / 派发 / 发现注册表 / 映射层都不再改。
+  B 站只声明搜索 / 原生取链 / 评论 / 歌手 / 发现（无专辑、无按歌词搜歌）；
+  汽水音乐（`qs`）声明搜索 / 取词 / 取图 / 评论 / 专辑 / 歌手 / 发现，**取链由
+  LX 脚本提供**（匿名接口只给会员曲目的 30 秒试听流），没有按歌词搜歌、榜单目录
+  与热搜词。
 - **音源画像**：`lib/sources/source_profiles.dart` 的 `SourceProfiles.build` 把
   注册表 × 激活脚本 × any-listen × 渠道偏好合成每个 key 一份不可变
   `SourceProfile`（身份 / 启用 / 可发现 / `SourceCapabilities`），
@@ -874,8 +882,8 @@
   冷启动恢复会话同步替换并落盘）。
   **歌词 tab**：来源来自 `LyricsSourceRegistry`
   （`lib/services/lyrics/lyrics_source_registry.dart`）——五个音乐平台 + LRCLIB
-  参与自动名字回退；`BuiltinPlatforms` 中同时有 `search` + `lyric` 适配器的渠道
-  自动获得通用 `BuiltinLyricProvider`（当前为 B 站 CC/AI 字幕），新增渠道无需改
+  参与自动名字回退；`SongChannels` 中同时声明 `search` + `lyric` 的渠道自动获得
+  通用 `BuiltinLyricProvider`（当前为 B 站 CC/AI 字幕与汽水），新增渠道无需改
   UI。B 站字幕需登录：未登录时该来源不发搜索请求，登录提示挂在 B 站分组标题
   右侧（单源筛选到 B 站且无结果时放进空态提示）；且只进手动换源，不参与自动
   回退。停用渠道从其歌词来源中隐藏（LRCLIB 不是渠道，不受影响）。
@@ -991,8 +999,8 @@
   `CollectionLocalDeleteOutcome` 逐项状态，失败不再逃进 `unawaited`。收藏页
   不再出现 `as ...Row` 强转。
 - **链接导入**：收藏页合集弹层的「导入收藏」有文件 / 链接两条路径；链接路径
-  `showLinkImportDialog` 的平台列表来自 `BuiltinPlatforms.discoverSources`
-  （六平台），`DiscoverProvider.playlistDetail` 拉详情后写入本地列表。
+  `showLinkImportDialog` 的平台列表来自 `SongChannels` 的 `discover` 声明
+  （七渠道），`DiscoverProvider.playlistDetail` 拉详情后写入本地列表。
   B 站收藏夹由 `bili_favorites.dart` 解析数字 / `fid` / `media_id` / `ml<id>` /
   `space...favlist` / `b23.tv` 短链并按 `media_count` 全量拉取（上限 50 页 /
   1000 条），只收公开视频；私密 / 失效收藏夹归一为 `notFound`。

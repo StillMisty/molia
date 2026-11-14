@@ -9,6 +9,7 @@ import 'package:molia/sources/builtin/crypto_utils.dart';
 import 'package:molia/sources/builtin/kg_artist.dart';
 import 'package:molia/sources/builtin/kw_artist.dart';
 import 'package:molia/sources/builtin/mg_artist.dart';
+import 'package:molia/sources/builtin/qs_artist.dart';
 import 'package:molia/sources/builtin/tx_artist.dart';
 import 'package:molia/sources/builtin/wy_artist.dart';
 import 'package:molia/sources/builtin/wy_music_detail.dart';
@@ -226,6 +227,27 @@ void main() {
       expect(first.payload['copyrightId'], isNotEmpty);
       expect(first.artists.first.id, '112');
       expect(first.qualities, isNotEmpty);
+    });
+  });
+
+  group('qs 汽水音乐', () {
+    test('歌手搜索：分享页同源 id / 显示名 / 头像 / 歌曲数 / 分页', () {
+      final page = QsArtist.parseSearch(_fixture('qs_search.json'));
+      expect(page.items, hasLength(3));
+      final first = page.items.first;
+      expect(first.id, '6776144869279664130');
+      expect(first.name, '陈粒');
+      expect(first.avatarUrl, contains('douyinpic.com'));
+      expect(first.songCount, 156);
+      expect(page.hasMore, isTrue);
+    });
+
+    test('结构不符：失败', () {
+      expect(() => QsArtist.parseSearch(null), throwsA(isA<SourceFailure>()));
+      expect(
+        () => QsArtist.parseSearch(<String, dynamic>{}),
+        throwsA(isA<SourceFailure>()),
+      );
     });
   });
 

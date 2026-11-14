@@ -1,6 +1,6 @@
-/// 内置平台原生取图的派发入口（五个音乐平台 + B 站：wy / tx / kg / kw / mg / bili）。
+/// 内置平台原生取图的派发入口（六个音乐平台 + B 站：wy / tx / kg / kw / mg / qs / bili）。
 ///
-/// 平台矩阵只在 [BuiltinPlatforms] 声明：本文件按 `pic` 适配器查表；
+/// 平台矩阵只在 `SongChannels` 声明：本文件按 `pic` 适配器查表；
 /// `SourceCapabilities.artwork` 与真实派发读取同一条目。
 ///
 /// 结果归一化与 5 分钟 TTL 缓存（key `{track.id}:pic`）仍只在这里实现；
@@ -14,7 +14,7 @@ library;
 
 import '../../data/cache/request_cache.dart';
 import '../source_track.dart';
-import 'builtin_platforms.dart';
+import 'channel/channels.dart';
 
 class BuiltinPicDispatch {
   BuiltinPicDispatch({RequestCache? cache})
@@ -33,7 +33,7 @@ class BuiltinPicDispatch {
 
   /// 内置平台原生封面回退（不支持 / 失败返回 null）。
   Future<String?> fetch(SourceTrack track) async {
-    final adapter = BuiltinPlatforms.picFor(track.sourceKey);
+    final adapter = SongChannels.forKey(track.sourceKey)?.pic;
     if (adapter == null) return null;
     try {
       return await _cache.getOrCreate<String?>(

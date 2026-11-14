@@ -1,0 +1,210 @@
+{
+  "status_info": {
+    "log_id": "20261114164002ABAC0FC78ABFE74CF68B",
+    "now": 1794645603,
+    "now_ts_ms": 1794645603150
+  },
+  "result_groups": [
+    {
+      "id": "artists",
+      "next_cursor": "20",
+      "has_more": true,
+      "data": [
+        {
+          "meta": {
+            "item_type": "artist",
+            "quick_play_info": {
+              "quick_play_deeplink_url": "luna://luna.com/play_source?queue_id=6776144869279664130&queue_type=artist&queue_name=%E9%99%88%E7%B2%92",
+              "landing_page_type": "artist"
+            }
+          },
+          "entity": {
+            "artist": {
+              "id": "6776144869279664130",
+              "name": "陈粒",
+              "count_albums": 51,
+              "count_tracks": 156,
+              "stats": {
+                "count_collected": 985758
+              },
+              "state": {
+                "blocked_by_me": false
+              },
+              "url_avatar": {
+                "uri": "tos-cn-v-2774c002/efe235431e9847428d8ecc8573fa6b8c",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "user": {
+                "id": "97557223451",
+                "nickname": "陈粒_",
+                "medium_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-avt-0015_82ce6c68cd910123b485c95b7cc0ef82",
+                  "urls": [
+                    "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_82ce6c68cd910123b485c95b7cc0ef82.jpeg?from=3782654143",
+                    "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_82ce6c68cd910123b485c95b7cc0ef82.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_82ce6c68cd910123b485c95b7cc0ef82.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "thumb_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-avt-0015_82ce6c68cd910123b485c95b7cc0ef82",
+                  "urls": [
+                    "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_82ce6c68cd910123b485c95b7cc0ef82.jpeg?from=3782654143",
+                    "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_82ce6c68cd910123b485c95b7cc0ef82.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_82ce6c68cd910123b485c95b7cc0ef82.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "artist_id": "6776144869279664130",
+                "secret": false,
+                "test_tag": 0,
+                "vip_stage": "",
+                "is_vip": false,
+                "is_luna_user": true
+              },
+              "simple_display_name": "陈粒",
+              "full_display_name": "陈粒",
+              "user_artist_type": 2
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "artist",
+            "quick_play_info": {
+              "quick_play_deeplink_url": "luna://luna.com/play_source?queue_id=6818076092889303041&queue_type=artist&queue_name=%E9%9E%A0%E5%A9%A7%E7%A5%8E",
+              "landing_page_type": "artist"
+            }
+          },
+          "entity": {
+            "artist": {
+              "id": "6818076092889303041",
+              "name": "鞠婧祎",
+              "count_albums": 14,
+              "count_tracks": 21,
+              "stats": {
+                "count_collected": 22647306
+              },
+              "state": {
+                "blocked_by_me": false
+              },
+              "url_avatar": {
+                "uri": "tos-cn-v-2774c002/3e6e9efd69a04724b7b468a1dfde2879",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "user": {
+                "id": "4199772083203972",
+                "nickname": "鞠婧祎",
+                "medium_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-avt-0015_0e8bc0c597848ae74f273befb4f1f7dc",
+                  "urls": [
+                    "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_0e8bc0c597848ae74f273befb4f1f7dc.jpeg?from=3782654143",
+                    "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_0e8bc0c597848ae74f273befb4f1f7dc.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_0e8bc0c597848ae74f273befb4f1f7dc.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "thumb_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-avt-0015_0e8bc0c597848ae74f273befb4f1f7dc",
+                  "urls": [
+                    "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_0e8bc0c597848ae74f273befb4f1f7dc.jpeg?from=3782654143",
+                    "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_0e8bc0c597848ae74f273befb4f1f7dc.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_0e8bc0c597848ae74f273befb4f1f7dc.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "artist_id": "6818076092889303041",
+                "secret": false,
+                "test_tag": 0,
+                "vip_stage": "",
+                "is_vip": false,
+                "is_luna_user": true
+              },
+              "simple_display_name": "鞠婧祎",
+              "full_display_name": "鞠婧祎",
+              "user_artist_type": 2
+            }
+          }
+        },
+        {
+          "meta": {
+            "item_type": "artist",
+            "quick_play_info": {
+              "quick_play_deeplink_url": "luna://luna.com/play_source?queue_id=7670129794114406435&queue_type=artist&queue_name=U%E3%80%82U",
+              "landing_page_type": "artist"
+            }
+          },
+          "entity": {
+            "artist": {
+              "id": "7670129794114406435",
+              "name": "U。U",
+              "count_albums": 2,
+              "count_tracks": 2,
+              "stats": {
+                "count_collected": 94
+              },
+              "state": {
+                "blocked_by_me": false
+              },
+              "url_avatar": {
+                "uri": "tos-cn-v-2774c002/owglA1OA3uViWgis4TEAimBhHyQfIs7xABOEtB",
+                "urls": [
+                  "https://p3-luna.douyinpic.com/img/",
+                  "https://p6-luna.douyinpic.com/img/"
+                ],
+                "template_prefix": "tplv-b829550vbb"
+              },
+              "user": {
+                "id": "7570225808116712506",
+                "nickname": "U。U_",
+                "medium_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-i-0813c000-ce_oEeEc7vABX3Dsc4pAAA9L9fSAWEFxdEqwE5Ie1",
+                  "urls": [
+                    "https://p26.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813c000-ce_oEeEc7vABX3Dsc4pAAA9L9fSAWEFxdEqwE5Ie1.jpeg?from=3782654143",
+                    "https://p11.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813c000-ce_oEeEc7vABX3Dsc4pAAA9L9fSAWEFxdEqwE5Ie1.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-i-0813c000-ce_oEeEc7vABX3Dsc4pAAA9L9fSAWEFxdEqwE5Ie1.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "thumb_avatar_url": {
+                  "uri": "aweme-avatar/tos-cn-i-0813c000-ce_oEeEc7vABX3Dsc4pAAA9L9fSAWEFxdEqwE5Ie1",
+                  "urls": [
+                    "https://p11.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813c000-ce_oEeEc7vABX3Dsc4pAAA9L9fSAWEFxdEqwE5Ie1.jpeg?from=3782654143",
+                    "https://p26.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813c000-ce_oEeEc7vABX3Dsc4pAAA9L9fSAWEFxdEqwE5Ie1.jpeg?from=3782654143",
+                    "https://p3.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-i-0813c000-ce_oEeEc7vABX3Dsc4pAAA9L9fSAWEFxdEqwE5Ie1.jpeg?from=3782654143"
+                  ],
+                  "need_complete_url": true
+                },
+                "artist_id": "7670129794114406435",
+                "secret": false,
+                "test_tag": 0,
+                "vip_stage": "",
+                "is_vip": false,
+                "is_luna_user": true
+              },
+              "simple_display_name": "U。U",
+              "full_display_name": "U。U",
+              "user_artist_type": 2
+            }
+          }
+        }
+      ],
+      "display_view_all": false,
+      "display_title": "",
+      "description": "",
+      "bottom_desc": "",
+      "display_type": ""
+    }
+  ],
+  "extra": {
+    "log_extra": "{\"query_intention_type\":\"music_related\"}"
+  }
+}

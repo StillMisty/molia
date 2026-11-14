@@ -6,20 +6,20 @@
 /// 与搜索/歌词的差异：评论没有「脚本回传」需求（LX 的 comment 只在内置实现），
 /// 因此解析直接产出领域模型，不再经 sources → data 的映射层。
 ///
-/// 平台矩阵、评论 ID 字段与各平台实现集中在 [BuiltinPlatforms]；本文件只做
+/// 平台矩阵、评论 ID 字段与各平台实现集中在 `SongChannels`；本文件只做
 /// raw 字段解析与「不支持」的失败语义（抛 [SourceFailure]）。
 library;
 
 import '../../domain/models/comment.dart';
 import '../../domain/models/failure.dart';
-import 'builtin_platforms.dart';
+import 'channel/channels.dart';
 import 'comment_utils.dart';
 
 class BuiltinComments {
   BuiltinComments._();
 
   static bool isSupported(String sourceKey) =>
-      BuiltinPlatforms.commentsFor(sourceKey) != null;
+      SongChannels.forKey(sourceKey)?.comments != null;
 
   /// 取一页评论；[raw] 为 `SourceTrack.raw`（平台字段原样，禁改写）。
   ///
@@ -32,7 +32,7 @@ class BuiltinComments {
     int page = 1,
     int limit = kCommentPageSize,
   }) async {
-    final adapter = BuiltinPlatforms.commentsFor(sourceKey);
+    final adapter = SongChannels.forKey(sourceKey)?.comments;
     if (adapter == null) {
       throw SourceFailure(
         kind: FailureKind.unsupported,

@@ -1,7 +1,7 @@
 /// 音源画像（SourceProfiles）：一次回答「这个源能做什么」。
 ///
 /// 每个 key 一份不可变 [SourceProfile]，由四类输入组合而成：
-/// [BuiltinPlatforms]（内置平台适配器）、激活脚本的 `LxSourceDecl`
+/// `SongChannels`（内置渠道自述）、激活脚本的 `LxSourceDecl`
 /// （action 声明）、`AnyListenSource.isUsable`，以及渠道可见性与路由门。
 /// 能力位 / 渠道 / 搜索门 / 歌词与封面派发读同一份画像，不会各自再算一遍。
 /// - 身份：key / 显示名 / kind；
@@ -20,7 +20,7 @@ library;
 
 import '../domain/models/source.dart' as domain;
 import 'any_listen/any_listen_source.dart';
-import 'builtin/builtin_platforms.dart';
+import 'builtin/channel/channels.dart';
 import 'lx/lx_script_info.dart';
 
 /// 搜索结果来源类型（sources 层；领域层另有同义的 `domain.SourceKind`）。
@@ -148,10 +148,10 @@ class SourceProfiles {
 
     // 1. 每个内置平台一份画像；同名脚本声明只作为该平台的补充（脚本可取链 /
     //    取词 / 取图），不生成第二个同 key 的 LX 源——一个 key 只能有一个答案。
-    for (final platform in BuiltinPlatforms.searchCandidates) {
-      profiles[platform.key] = _builtinProfile(
-        platform,
-        activeSources[platform.key],
+    for (final channel in SongChannels.all) {
+      profiles[channel.key] = _builtinProfile(
+        channel,
+        activeSources[channel.key],
         disabledChannels,
       );
     }
@@ -182,18 +182,18 @@ class SourceProfiles {
     }
 
     for (final decl in activeSources.values) {
-      if (BuiltinPlatforms.isSupported(decl.key) ||
+      if (SongChannels.isSupported(decl.key) ||
           decl.key == AnyListenSource.sourceKey) {
         continue;
       }
       if (profiles[decl.key]!.searchable) add(decl.key);
     }
-    for (final platform in BuiltinPlatforms.searchCandidates) {
-      if (profiles[platform.key]!.searchable) add(platform.key);
+    for (final channel in SongChannels.all) {
+      if (profiles[channel.key]!.searchable) add(channel.key);
     }
     if (anyListenUsable) add(AnyListenSource.sourceKey);
-    for (final platform in BuiltinPlatforms.searchCandidates) {
-      if (profiles[platform.key]!.discoverable) add(platform.key);
+    for (final channel in SongChannels.all) {
+      if (profiles[channel.key]!.discoverable) add(channel.key);
     }
 
     final orderedKeys = applyOrder(candidateKeys, sourceOrder);
@@ -219,7 +219,7 @@ class SourceProfiles {
   }
 
   static SourceProfile _builtinProfile(
-    BuiltinPlatform platform,
+    SongChannel platform,
     LxSourceDecl? script,
     Set<String> disabledChannels,
   ) {

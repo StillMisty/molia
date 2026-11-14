@@ -53,7 +53,7 @@ class LyricsSourceSearchView extends StatefulWidget {
   /// 已启用的渠道 key（停用的渠道不显示歌词来源）；null = 不过滤。
   ///
   /// 由换源页从 `SourceRegistry` 取「已启用渠道」而不是「可搜索渠道」：
-  /// 五个音乐平台在没有 LX 脚本时不可搜索，但歌词来源仍然可用。
+  /// 六个音乐平台在没有 LX 脚本时不可搜索，但歌词来源仍然可用。
   final Set<String>? enabledChannelKeys;
 
   /// 渠道管理里的全部渠道顺序（含停用 / 不可搜索项）。

@@ -12,7 +12,7 @@ import 'builtin/album_source.dart';
 import 'builtin/artist_source.dart';
 import 'builtin/builtin_lyric_dispatch.dart';
 import 'builtin/builtin_pic_dispatch.dart';
-import 'builtin/builtin_platforms.dart';
+import 'builtin/channel/channels.dart';
 import 'builtin/builtin_search.dart';
 import 'builtin/comment_source.dart';
 import 'builtin/lyric_hit.dart';
@@ -349,12 +349,12 @@ class SourceManager extends ChangeNotifier {
       }
     }
     final decl = _activeSources[sourceKey];
-    if (BuiltinPlatforms.isSupported(sourceKey)) {
+    if (SongChannels.isSupported(sourceKey)) {
       // 搜索门直接读画像（与能力位同一事实）：能力位为 false 时这里必然
       // 拒绝，避免 UI 显示可搜索但路由报错。
       if (sourceProfiles.forKey(sourceKey)?.searchable != true) {
         throw LxEngineException(
-          '当前环境不支持 ${BuiltinPlatforms.displayName(sourceKey)} 的搜索与播放',
+          '当前环境不支持 ${SongChannels.displayName(sourceKey)} 的搜索与播放',
         );
       }
       return BuiltinSearch.searchWithMeta(
@@ -410,7 +410,7 @@ class SourceManager extends ChangeNotifier {
     );
     // 原生取链优先：B 站等平台的搜索与播放不依赖脚本，走注册表里的解析器
     // 才能保留直链要求的 headers / 有效期。
-    final nativeResolve = BuiltinPlatforms.resolveFor(track.sourceKey);
+    final nativeResolve = SongChannels.forKey(track.sourceKey)?.resolve;
     if (nativeResolve != null) {
       try {
         return await nativeResolve(track.raw, quality: picked);
@@ -570,7 +570,7 @@ class SourceManager extends ChangeNotifier {
   }) async {
     // 详情路由只看适配器：画像的 `artist` 还叠了搜索门（UI 入口），但已保存
     // 曲目的歌手 id 在无激活脚本时仍可直接取详情。
-    if (BuiltinPlatforms.artistFor(sourceKey) == null) {
+    if (SongChannels.forKey(sourceKey)?.artist == null) {
       throw SourceFailure(
         kind: FailureKind.unsupported,
         message: '音源 $sourceKey 不支持歌手',

@@ -118,6 +118,21 @@ void main() {
       'https://i1.hdslb.com/bfs/archive/cover.jpg',
       reason: 'bili 直接用搜索响应封面，只补协议头',
     );
+    expect(
+      await dispatch.fetch(
+        track('qs', {
+          'id': '1',
+          'album': {
+            'url_cover': {
+              'uri': 'tos-cn-v-2774c002/cover',
+              'urls': ['https://p3-luna.douyinpic.com/img/'],
+            },
+          },
+        }),
+      ),
+      'https://p3-luna.douyinpic.com/img/tos-cn-v-2774c002/cover~c5_375x375.jpg',
+      reason: 'qs 用响应里的专辑封面模板，不发请求',
+    );
 
     expect(
       requests.map((uri) => uri.host).toSet(),
@@ -150,6 +165,7 @@ void main() {
     expect(await dispatch.fetch(track('kw', const {})), isNull);
     expect(await dispatch.fetch(track('mg', const {})), isNull);
     expect(await dispatch.fetch(track('bili', const {})), isNull);
+    expect(await dispatch.fetch(track('qs', const {})), isNull);
     expect(
       await dispatch.fetch(track('custom-source', {'songmid': '1'})),
       isNull,

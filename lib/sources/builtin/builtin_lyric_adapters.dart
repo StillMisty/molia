@@ -1,6 +1,6 @@
 /// 内置平台「曲目 raw → 原生歌词」适配器集合。
 ///
-/// 每个平台实现登记成 [BuiltinPlatforms] 的注册表条目，能力位与派发共用
+/// 每个平台实现登记成 `SongChannels` 的渠道条目，能力位与派发共用
 /// 同一份事实：平台有没有取词实现，`SourceCapabilities.lyrics` 与派发结果
 /// 不会分叉。
 ///
@@ -13,6 +13,7 @@ import 'kg_lyric.dart';
 import 'kw_lyric.dart';
 import 'lyric_result.dart';
 import 'mg_lyric.dart';
+import 'qs_lyric.dart';
 import 'tx_lyric.dart';
 import 'wy_lyric.dart';
 
@@ -69,6 +70,10 @@ Future<BuiltinLyricResult?> mgBuiltinLyric(Map<String, dynamic> raw) =>
 /// B 站：CC 字幕轨（中文优先）。
 Future<BuiltinLyricResult?> biliBuiltinLyric(Map<String, dynamic> raw) =>
     BiliLyric.shared.fetch(raw);
+
+/// 汽水音乐：track_id → H5 SEO 详情的 KRC（转行级 LRC + LX 逐字）。
+Future<BuiltinLyricResult?> qsBuiltinLyric(Map<String, dynamic> raw) =>
+    QsLyric.fetch(raw);
 
 /// 曲目时长（秒）：优先 `_interval`，否则解析 `mm:ss` 文本。
 int _intervalSecondsOf(Map<String, dynamic> raw) {

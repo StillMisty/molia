@@ -1,5 +1,5 @@
-/// 通用内置平台歌词 provider：平台在 [BuiltinPlatforms] 同时登记 `search` +
-/// `lyric` 适配器即可按名字搜歌并取词。
+/// 通用内置平台歌词 provider：渠道在 `SongChannels` 同时声明 `search` +
+/// `lyric` 即可按名字搜歌并取词。
 ///
 /// 五个音乐平台有各自的专用 provider（QQ / 网易 / 酷狗 / 酷我 / 咪咕：
 /// 搜索后要把 `hash` / `mrcUrl` / 数字 songId 等平台字段放进
@@ -9,7 +9,7 @@ library;
 
 import 'package:logging/logging.dart';
 
-import '../../sources/builtin/builtin_platforms.dart';
+import '../../sources/builtin/channel/channels.dart';
 import '../../sources/builtin/builtin_search.dart';
 import '../../sources/source_track.dart';
 import 'lyric_provider.dart';
@@ -17,14 +17,14 @@ import 'lyric_provider.dart';
 class BuiltinLyricProvider extends LyricProvider {
   BuiltinLyricProvider(this.key, {this.adapter});
 
-  /// 内置平台 key（`BuiltinPlatforms.byKey` 的键，如 `bili`）。
+  /// 内置渠道 key（`SongChannels.byKey` 的键，如 `bili`）。
   final String key;
 
-  /// 平台特定取词适配器；null = 使用 [BuiltinPlatforms] 的静态注册。
+  /// 渠道特定取词适配器；null = 使用 `SongChannels` 的静态声明。
   ///
   /// 需要账号会话的渠道（B 站字幕）由注册表注入会话绑定的适配器，
   /// 本类不按平台 key 另开分支。
-  final BuiltinLyricAdapter? adapter;
+  final SongChannelLyric? adapter;
 
   final Logger _logger = Logger('molia.builtin_lyric_provider');
 
@@ -53,7 +53,7 @@ class BuiltinLyricProvider extends LyricProvider {
       final tracks = <SourceTrack>[];
       // 平台支持「按歌词搜歌」时优先用它：歌词片段命中的结果比整首标题
       // 关键词更准，且命中项同样自带取词所需的 raw。
-      final lyricSearch = BuiltinPlatforms.lyricSearchFor(key);
+      final lyricSearch = SongChannels.forKey(key)?.lyricSearch;
       if (lyricSearch != null) {
         final page = await lyricSearch(keyword, limit: limit);
         tracks.addAll(page.hits.map((hit) => hit.track));
@@ -97,7 +97,7 @@ class BuiltinLyricProvider extends LyricProvider {
   @override
   Future<LyricsPayload?> fetchForMatch(SongMatch match) async {
     // 注入的适配器优先（B 站字幕的账号会话由注册表绑定）；否则查静态注册表。
-    final adapter = this.adapter ?? BuiltinPlatforms.lyricFor(key);
+    final adapter = this.adapter ?? SongChannels.forKey(key)?.lyric;
     if (adapter == null) return null;
     try {
       final info = await adapter(match.extra);

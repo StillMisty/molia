@@ -4,11 +4,12 @@ import 'dart:typed_data';
 import '../../domain/models/failure.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
-import 'builtin_platforms.dart';
+import 'channel/channels.dart';
 import 'builtin_transport.dart';
 
-/// 内置平台搜索调度（五个音乐平台与 lx-music 内置音源一致：tx/wy/kg/kw/mg；
-/// 第六个平台 bili 是原生搜索，同样登记在 [BuiltinPlatforms]）。
+/// 内置平台搜索调度（六个音乐平台与 lx-music 内置音源一致：tx/wy/kg/kw/mg；
+/// 第六个平台 bili 是原生搜索；第七个 qs 是汽水音乐，同样登记在
+/// `SongChannels`）。
 ///
 /// 说明：官方 LX 自定义源只负责取链（musicUrl/lyric/pic），搜索由宿主内置实现，
 /// 因此这里把 lx-music 的平台搜索接口移植为 Dart，产出与 LX `musicInfo` 一致的
@@ -17,10 +18,10 @@ class BuiltinSearch {
   BuiltinSearch._();
 
   static bool isBuiltin(String sourceKey) =>
-      BuiltinPlatforms.isSupported(sourceKey);
+      SongChannels.isSupported(sourceKey);
 
   static String displayName(String sourceKey) =>
-      BuiltinPlatforms.displayName(sourceKey);
+      SongChannels.displayName(sourceKey);
 
   /// 内置请求传输：测试注入 `MockClient` 覆盖 fetch 路径（唯一入口）。
   static BuiltinTransport transport = BuiltinTransport();
@@ -38,7 +39,7 @@ class BuiltinSearch {
     int page = 1,
     int limit = 30,
   }) {
-    final adapter = BuiltinPlatforms.searchFor(sourceKey);
+    final adapter = SongChannels.forKey(sourceKey)?.search;
     if (adapter == null) {
       throw UnsupportedError('不支持的内置音源: $sourceKey');
     }

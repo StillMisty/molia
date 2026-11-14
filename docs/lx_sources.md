@@ -14,11 +14,13 @@
 - **搜索**：全局只有一个当前渠道（发现页顶部渠道下拉同时决定热榜 / 歌单与搜索，
   Ctrl+F 搜索条内也能切换）——
   - 内置平台（与 LX 一致，Dart 移植）：酷我 `kw`、酷狗 `kg`、QQ 音乐 `tx`、网易云 `wy`、咪咕 `mg`；
+    汽水音乐 `qs` 是本仓自建的匿名端点（搜索 / 歌手 / 专辑 / 评论 / 逐字歌词 / 推荐歌单）；
   - 脚本扩展搜索：声明了 `search` / `musicSearch` 的第三方音源；
   - 当前渠道不支持搜索时，发现页隐藏搜索 tab，Ctrl+F 显示「当前渠道不支持搜索」空态；
   - 搜索经 `CatalogService`（single-flight + LRU，5min TTL），分页由 `hasMore/total` 驱动；
   - **结果类型分段**（内置平台按能力位显示）：**单曲 / 歌手 / 歌词**
-    （歌手条目进歌手页；歌词为按歌词搜歌，行副标题显示命中片段）；
+    （歌手条目进歌手页；歌词为按歌词搜歌，行副标题显示命中片段；
+    汽水没有匿名歌词搜索，不显示「歌词」分段）；
     脚本源只有单曲（无稳定的平台歌手 id 与歌词检索约定）。
 - **歌手页**（歌曲信息页「歌手」行 / 搜索结果行内歌手名 / 歌手条目进入）：
   头像 / 简介 + 歌手歌曲分页（曲目行与搜索结果行同款：操作菜单收藏 / 加入列表，
@@ -26,12 +28,15 @@
   + 播放全部 / 加入列表，取数走 `ArtistService`（10min 缓存）；
   - 歌手 id 来自曲目 payload 的 `_artists`（内置平台解析时注入），与平台歌手接口同体系；
     没有平台歌手 id 的曲目（脚本源 / 本地导入）歌手行只读，不按名字回退检索；
-  - 平台降级：kg 歌手搜索单页、tx 歌手歌曲单页约 60 首、mg 无歌手简介。
+  - 平台降级：kg 歌手搜索单页、tx 歌手歌曲单页约 60 首、mg 无歌手简介、
+    qs 只有分享页公开的热门作品样本（按歌手名再搜一页过滤补齐，`hasMore` 恒为 false）。
 - **发现**（资料页，底部「资料」）：
   - 顶部「搜索 / 热榜 / 歌单」三个可左右滑动的 tab；顶部渠道下拉在所有 tab 左侧常显，
     页面全宽自适应（不再有 960 / 1600 内容栏上限），列数随可用宽度增长（最多 6 列）；
-  - 热榜与歌单页内可切换平台：网易云 `wy` / QQ `tx` / 酷狗 `kg` / 酷我 `kw` / 咪咕 `mg`，
-    各自为 lx-music-mobile `*/leaderboard.js`、`*/songList.js`、`*/hotSearch.js` 的 Dart 移植
+  - 热榜与歌单页内可切换平台：网易云 `wy` / QQ `tx` / 酷狗 `kg` / 酷我 `kw` / 咪咕 `mg` /
+    汽水 `qs`，各自为 lx-music-mobile `*/leaderboard.js`、`*/songList.js`、
+    `*/hotSearch.js` 的 Dart 移植，或本仓自建的匿名端点（`qs`：推荐歌单 / 分类 /
+    歌单搜索与详情；平台没有匿名榜单目录与热搜，热榜 tab 与热搜词自动隐藏）
     （`lib/sources/builtin/*_discover.dart`，统一的 `DiscoverSource` 注册表）；
   - 热榜磁贴带 56dp 封面：平台榜单接口有轻量封面时直接取（wy `coverImgUrl`、
     tx `topInfo` 的 `headPicUrl` / `frontPicUrl`、kg `rank/info` 的 `imgurl`、
@@ -44,8 +49,10 @@
 - **播放**：点击结果后由 App 本地播放（`just_audio`，桌面端经 `media_kit` 后端），
   NowPlaying / 歌词 / 海报等界面自动复用；取链结果有 10min 缓存（key 含音源/payload hash/音质）。
 - **歌词 / 封面**：脚本声明 `lyric` / `pic` 时优先使用脚本返回；否则走内置平台
-  原生实现（wy/tx/kg/kw/mg/bili 的精确 ID 取词取图，含逐字 / 翻译 / 罗马音），
-  全部失败时回退 QQ / 网易 / 酷狗 / 酷我 / 咪咕 / LRCLIB 名字搜索歌词源；
+  原生实现（wy/tx/kg/kw/mg/qs/bili 的精确 ID 取词取图，含逐字 / 翻译 / 罗马音；
+  qs 是 KRC 逐字转 LX 格式，无翻译 / 罗马音），
+  全部失败时回退 QQ / 网易 / 酷狗 / 酷我 / 咪咕 / LRCLIB 名字搜索歌词源
+  （qs 走通用适配器，只进手动换源）；
   曲目起播无封面时自动补取并回写队列（省流模式不发请求）。
 
 ## 使用流程
@@ -69,8 +76,10 @@ lib/sources/
     kg_lyric.dart kg_pic.dart    # 酷狗 KRC 取词 / get_res_privilege 取图
     kw_lyric.dart kw_pic.dart    # 酷我 LRCX 取词（H5 兜底）/ pic.web 取图
     mg_lyric.dart                # 咪咕 MRC（TEA）取词 / 资源封面
+    qs_*.dart                    # 汽水音乐：PC 搜索 / 分享页 SSR / 评论 / KRC 逐字
     tx_lyric.dart tx_qrc.dart    # QQ PlayLyricInfo + QRC（定制 3DES）解码
     wy_lyric.dart wy_music_detail.dart  # 网易云 eapi + yrc / 歌曲详情
+    channel/                     # 每个渠道一个声明文件；SongChannels 只做聚合
   lx/
     lx_script_info.dart      # 脚本元信息（@name/@version/@updateUrl...）与源声明解析
     lx_script_repository.dart# 脚本持久化（应用支持目录 lx_sources.json；replace 原地更新）
@@ -148,6 +157,9 @@ lib/playback/
   更新 `test/fixtures/artists/*`（kw 的 wbd 响应存密文，测试里跑解密）。
 - `node tool/gen_lyric_search_fixtures.mjs`：重新抓取五平台歌词搜索响应，更新
   `test/fixtures/lyric_search/*`（列表截断到 3 条；wy 另抓歌曲详情用于补规范 raw）。
+- `node tool/gen_qs_fixtures.mjs`：重新抓取汽水真实响应（搜索 / 专辑 / 歌手 /
+  评论），更新 `test/fixtures/qs.json`、`albums/qs.json`、`artists/qs_*.json`、
+  `comments/qs.json`（列表截断；匿名接口概率性返回 `200` + 空 body，脚本内重试）。
 - 构建环境（WSL/Arch 参考）：
   - Linux 桌面：`sudo pacman -S --needed base-devel ninja cmake clang pkgconf gtk3 mesa-utils`
     - 本地播放依赖 libmpv：`sudo pacman -S --needed mpv`（media_kit 后端需要）
@@ -187,4 +199,7 @@ lib/playback/
 - 歌手 / 歌词检索为内置平台的非官方接口：tx 歌手歌曲无分页（约 60 首）、
   kg 歌手搜索无总数、mg 歌手无简介、kw 歌词搜索为模糊匹配、mg 歌词排序偏翻唱
   （按平台排序原样展示）；
+- 汽水音乐（qs）的匿名接口只给会员曲目的 30 秒试听流，完整取链由 LX 脚本提供
+  （渠道声明里没有 `resolve`）；没有匿名的按歌词搜歌、榜单目录与热搜词；
+  搜索接口会概率性返回 `200` + 空 body，适配器按重试预算重试；
 - iOS/Android 后台播放与通知/耳机键需真机验证。

@@ -54,6 +54,7 @@ const List<String> _rawIdFields = [
   'hash',
   'songId',
   'id',
+  'track_id',
   'mid',
 ];
 
@@ -75,6 +76,8 @@ const Map<String, String> _canonicalIdFields = {
   'kg': 'hash',
   'kw': 'songmid',
   'mg': 'copyrightId',
+  // 汽水：脚本取链读取 track_id（内置解析同时保留原始 id）。
+  'qs': 'track_id',
 };
 
 /// `.lxmc` 导出 / 持久化 raw 的平台优先取键顺序（比通用优先级更贴近导出）。
@@ -84,6 +87,7 @@ const Map<String, List<String>> _platformIdFields = {
   'kg': ['hash', 'songmid', 'id'],
   'kw': ['songmid', 'musicId', 'id'],
   'mg': ['copyrightId', 'songId', 'songmid', 'id'],
+  'qs': ['track_id', 'id', 'songId'],
   // B 站取链优先 bvid；收藏夹条目没有 bvid 时用 aid（导入时已归一为 aid）。
   'bili': ['bvid', 'aid', 'id'],
 };
@@ -120,6 +124,7 @@ const List<String> _aliasIdFields = [
   'copyrightId',
   'mid',
   'id',
+  'track_id',
 ];
 
 /// 补齐平台规范 id 字段（**只增不删**）：缺少 `_canonicalIdFields[sourceKey]`

@@ -1,5 +1,5 @@
 import '../../domain/models/discover.dart';
-import 'builtin_platforms.dart';
+import 'channel/channels.dart';
 
 /// 内置平台「发现」能力抽象：热榜 / 歌单（标签浏览、搜索、详情）/ 热搜词。
 ///
@@ -54,25 +54,26 @@ abstract class DiscoverSource {
 
 /// 内置平台发现注册表。
 ///
-/// 平台顺序/实现由 [BuiltinPlatforms] 的同一份条目提供：发现族不再单独维护
+/// 平台顺序/实现由 `SongChannels` 的同一份条目提供：发现族不再单独维护
 /// 一份平台表，避免与搜索/评论等能力族静默漂移。
 class BuiltinDiscover {
   BuiltinDiscover._();
 
-  /// 平台顺序与内置搜索一致（QQ 在前）。
-  static Map<String, DiscoverSource> get sources =>
-      BuiltinPlatforms.discoverSources;
+  /// 平台顺序与内置搜索一致（QQ 在前）。只含真的声明了 `discover` 的渠道。
+  static final Map<String, DiscoverSource> sources = Map.unmodifiable({
+    for (final channel in SongChannels.all)
+      if (channel.discover != null) channel.key: channel.discover!,
+  });
 
-  /// 只列真正有发现适配器的平台：能力矩阵以 [BuiltinPlatforms] 的注册表为准，
+  /// 只列真正有发现适配器的渠道：能力矩阵以 `SongChannels` 的自述为准，
   /// 不存在「可搜索但还没有发现页」的隐式例外。
-  static List<String> get sourceKeys =>
-      List.unmodifiable(BuiltinPlatforms.discoverSources.keys);
+  static final List<String> sourceKeys = List.unmodifiable(sources.keys);
 
   static bool isSupported(String sourceKey) =>
-      BuiltinPlatforms.discoverFor(sourceKey) != null;
+      SongChannels.forKey(sourceKey)?.discover != null;
 
   static DiscoverSource of(String sourceKey) {
-    final source = BuiltinPlatforms.discoverFor(sourceKey);
+    final source = SongChannels.forKey(sourceKey)?.discover;
     if (source == null) {
       throw UnsupportedError('不支持的内置发现平台: $sourceKey');
     }

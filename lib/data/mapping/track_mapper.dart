@@ -1,4 +1,5 @@
 import '../../domain/models/track.dart';
+import '../../sources/builtin/channel/channels.dart';
 import '../../sources/raw_track.dart';
 import '../../sources/source_track.dart';
 
@@ -38,66 +39,17 @@ Track trackFromSourceTrack(SourceTrack source) {
         ),
     ],
     payload: source.raw,
-    platformPageUrl: _platformPageUrlOf(source),
-    platformAlbumId: _platformAlbumIdOf(source),
+    // 平台网页地址 / 专辑 id 是渠道自述的一部分（渠道文件里声明），
+    // 映射层不再维护按 key 的 switch。`Track.payload` 的契约仍是 UI 禁读：
+    // 页面需要的派生数据在这里算一次并随 `Track` 传递。
+    platformPageUrl: _channelOf(source)?.pageUrl?.call(source.raw),
+    platformAlbumId: _channelOf(source)?.albumId?.call(source.raw),
   );
 }
 
-/// 平台专辑 id：只读 raw 的稳定字段。
-String? _platformAlbumIdOf(SourceTrack source) {
-  String rawText(String key) => source.raw[key]?.toString() ?? '';
-  switch (source.sourceKey) {
-    case 'wy':
-    case 'kg':
-    case 'kw':
-    case 'mg':
-      final id = rawText('albumId');
-      return id.isEmpty ? null : id;
-    case 'tx':
-      final mid = rawText('albumMid');
-      final id = mid.isEmpty ? rawText('albumId') : mid;
-      return id.isEmpty ? null : id;
-    default:
-      return null;
-  }
-}
-
-/// 平台网页地址：只读 raw 的稳定平台字段，不猜测。
-///
-/// 放在 data 层而不是 UI：`Track.payload` 的契约是 UI 禁读，页面地址又是
-/// 展示动作需要的派生数据，由映射层算一次并随 `Track` 传递。
-String? _platformPageUrlOf(SourceTrack source) {
-  String rawText(String key) => source.raw[key]?.toString() ?? '';
-  switch (source.sourceKey) {
-    case 'wy':
-      return source.songId.isEmpty
-          ? null
-          : 'https://music.163.com/#/song?id=${source.songId}';
-    case 'tx':
-      final mid = rawText('songmid');
-      return mid.isEmpty ? null : 'https://y.qq.com/n/ryqq/songDetail/$mid';
-    case 'kg':
-      final hash = rawText('hash');
-      return hash.isEmpty ? null : 'https://www.kugou.com/song/#hash=$hash';
-    case 'kw':
-      final rid = rawText('songmid').isEmpty
-          ? source.songId
-          : rawText('songmid');
-      return rid.isEmpty ? null : 'https://www.kuwo.cn/play_detail/$rid';
-    case 'mg':
-      final copyrightId = rawText('copyrightId');
-      return copyrightId.isEmpty
-          ? null
-          : 'https://music.migu.cn/v3/music/song/$copyrightId';
-    case 'bili':
-      final bvid = rawText('bvid');
-      if (bvid.isNotEmpty) return 'https://www.bilibili.com/video/$bvid';
-      final aid = rawText('aid');
-      return aid.isEmpty ? null : 'https://www.bilibili.com/video/av$aid';
-    default:
-      return null;
-  }
-}
+/// 内置渠道自述（脚本源 / any-listen / local 没有渠道声明）。
+SongChannel? _channelOf(SourceTrack source) =>
+    SongChannels.forKey(source.sourceKey);
 
 /// 领域 `Track` → `SourceTrack`（供 `LocalPlaybackService` / `SourceManager` 使用）。
 SourceTrack sourceTrackFromTrack(Track track) {
