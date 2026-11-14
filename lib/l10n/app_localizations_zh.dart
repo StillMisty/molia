@@ -118,9 +118,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAppearanceTitle => '外观';
 
   @override
-  String get settingsCoversSection => '封面';
-
-  @override
   String get settingsThemeMode => '主题模式';
 
   @override
@@ -286,6 +283,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPlaybackDetailsTitle => '播放细节';
 
   @override
+  String get settingsPlaybackDetailsDeviceLocalHint => '播放细节只保存在本机，不随跨设备同步。';
+
+  @override
   String get settingsFadeTitle => '淡入淡出';
 
   @override
@@ -376,7 +376,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsContentSection => '内容与来源';
 
   @override
-  String get settingsLyricsSection => '歌词与展示';
+  String get settingsLyricsSection => '歌词';
 
   @override
   String get settingsBottomNavTitle => '底部导航';
@@ -414,34 +414,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get playModeSingleRepeat => '单曲循环';
 
   @override
-  String get generalTitle => '通用';
-
-  @override
   String get settingsHapticsTitle => '震动反馈';
 
   @override
   String get settingsHapticsSubtitle => '点按导航、播放等操作时给出轻震动';
 
   @override
-  String get settingsGeneralTitle => '通用设置';
+  String get settingsGeneralAboutTitle => '通用与关于';
 
   @override
-  String get settingsGeneralSubtitle => '语言、应用名称与底部导航';
+  String get settingsGeneralDeviceLocalHint => '托盘、窗口与震动反馈只保存在本机，不随跨设备同步。';
 
   @override
-  String get settingsDataSection => '数据';
+  String get settingsAutoSaveHint => '改动即时生效';
+
+  @override
+  String get settingsMoreActions => '更多操作';
 
   @override
   String get dataManagementTitle => '数据与存储';
-
-  @override
-  String get settingsDataSubtitle => '缓存、下载与数据导入导出';
-
-  @override
-  String get settingsDataStorageSection => '存储与统计';
-
-  @override
-  String get settingsDataPortabilitySection => '导入与导出';
 
   @override
   String get exportDataTitle => '导出数据';
@@ -809,9 +800,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get anyListenEnableSubtitle => '关闭后不出现在搜索页，也不会联网';
-
-  @override
-  String get anyListenSave => '保存';
 
   @override
   String get anyListenTest => '连接测试';
@@ -1616,6 +1604,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cacheClearPartition => '清理';
 
   @override
+  String cacheClearPartitionNamed(String part) {
+    return '清理$part';
+  }
+
+  @override
+  String get cacheUsageTitle => '已用空间';
+
+  @override
   String get cacheClearAll => '清理全部缓存';
 
   @override
@@ -2274,13 +2270,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjTestSaved => '连接成功，配置已保存';
 
   @override
-  String get aiDjSaveConfig => '保存配置';
-
-  @override
   String get aiDjClearConfig => '清除配置';
-
-  @override
-  String get aiDjConfigSaved => '已保存';
 
   @override
   String aiDjQueued(int count) {
@@ -2774,6 +2764,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjPrefsDataScope => '发送范围';
 
   @override
+  String aiDjScopeSentCount(int count) {
+    return '已发送 $count 项';
+  }
+
+  @override
+  String get aiDjScopeSheetHint => '开启后会把这些内容发送给 AI 服务，用来避免重复推荐。';
+
+  @override
   String get aiDjScopeSummary => '汇总统计';
 
   @override
@@ -2857,6 +2855,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncPassphraseTrustHint => '知道口令的设备可以读写全部同步数据；怀疑泄露请重置。';
+
+  @override
+  String get syncPassphraseDeviceLocalHint => '同步口令只保存在本机，不会上传。';
 
   @override
   String get syncPassphraseCopy => '复制口令';
@@ -4386,7 +4387,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get downloadsMaintenanceSection => '文件维护';
+  String get downloadsMaintenanceSection => '高级';
 
   @override
   String get downloadsCleanupParts => '清理未完成的下载文件';
@@ -4706,9 +4707,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get providerBilibili => '哔哩哔哩';
-
-  @override
-  String get settingsTroubleshootingSection => '问题排查';
 
   @override
   String get diagnosticsTitle => '问题排查';

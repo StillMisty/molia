@@ -10,9 +10,7 @@ import '../providers/lyrics_display_provider.dart';
 import '../providers/playback_provider.dart';
 import '../providers/sources_provider.dart';
 import '../services/scrobble/scrobble_service.dart';
-import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
-import '../providers/update_provider.dart';
 import '../services/audio_focus_settings.dart';
 import '../services/data_saver_service.dart';
 import '../services/library/library_add_settings.dart';
@@ -28,22 +26,18 @@ import '../widgets/adaptive_layout.dart';
 import '../widgets/app_color_picker.dart';
 import '../widgets/cover_picker_sheet.dart';
 import '../widgets/font_picker_sheet.dart';
+import '../widgets/settings/data_settings_section.dart';
+import '../widgets/settings/general_settings_section.dart';
 import '../widgets/settings/playback_details_section.dart';
 import '../widgets/settings/settings_section_grid.dart';
 import '../widgets/settings/settings_tiles.dart';
 import '../widgets/track_artwork.dart';
 import 'ai_dj_page.dart';
-import 'data_settings_page.dart';
-import 'general_settings_page.dart';
 import 'lyrics_display/desktop_lyrics_settings_page.dart';
 import 'lyrics_display/lyrics_content_settings_page.dart';
 import 'lyrics_display/system_media_lyrics_settings_page.dart';
-import 'play_statistics_page.dart';
-import 'shortcut_settings_page.dart';
 import 'listening_sync_page.dart';
 import 'sources_page.dart';
-import 'sync_settings_page.dart';
-import 'update_settings_page.dart';
 
 /// 宽屏设置弹层宽度（首屏两列画布上限）。
 ///
@@ -100,8 +94,6 @@ class _SettingsPageState extends State<SettingsPage>
     final l10n = AppLocalizations.of(context)!;
     // 以下 provider 在测试等场景可能缺省：缺省时隐藏对应行，不报错。
     final dataSaver = context.watch<DataSaverService?>();
-    final syncProvider = context.watch<SyncProvider?>();
-    final updateProvider = context.watch<UpdateProvider?>();
     final sourceSwapSettings = context.watch<SourceSwapSettings?>();
     final libraryAddSettings = context.watch<LibraryAddSettings?>();
     final audioFocusSettings = context.watch<AudioFocusSettings?>();
@@ -133,12 +125,11 @@ class _SettingsPageState extends State<SettingsPage>
             children: [
               SettingsSectionGrid(
                 twoColumn: twoColumn,
-                // 宽屏按内容量分列：外观 / 封面 / 歌词 / 通用在左，
-                // 播放 / 播放细节 / 内容 / 数据在右；左列约 13 行、右列约 14 行。
-                startColumn: const {0, 1, 4, 6},
+                // 宽屏按内容量分列：外观 / 歌词 / 数据在左，播放 / 内容 /
+                // 通用与关于在右；六张卡按「同一类事情」聚合，不再有目录页。
+                startColumn: const {0, 2, 4},
                 children: [
                   _appearanceSection(context, l10n),
-                  _coversSection(context, l10n),
                   _playbackSection(
                     context,
                     l10n,
@@ -148,15 +139,10 @@ class _SettingsPageState extends State<SettingsPage>
                     audioFocusSettings: audioFocusSettings,
                     sources: sources,
                   ),
-                  const PlaybackDetailsSection(),
                   _lyricsSection(context, l10n, lyricsDisplay),
                   _contentSection(context, l10n),
-                  _generalSection(
-                    context,
-                    l10n,
-                    updateProvider: updateProvider,
-                  ),
-                  _dataSection(context, l10n, syncProvider: syncProvider),
+                  const DataSettingsSection(),
+                  const GeneralSettingsSection(),
                 ],
               ),
             ],
@@ -284,58 +270,52 @@ class _SettingsPageState extends State<SettingsPage>
                   ),
                   onTap: () => _showAppFontPicker(context, l10n, appFontFamily),
                 ),
+                // 封面：播放时跟随封面取色 / 默认封面。原先独立的「封面」卡
+                // 并进外观，首屏只留六张语义卡。
+                Selector<ThemeProvider, bool>(
+                  selector: (context, provider) =>
+                      provider.followArtworkEnabled,
+                  builder: (context, followArtworkEnabled, _) =>
+                      SettingsSwitchTile(
+                        switchKey: const Key('settingsFollowArtworkSwitch'),
+                        icon: Icons.album_rounded,
+                        title: l10n.settingsFollowArtwork,
+                        subtitle: l10n.settingsFollowArtworkSubtitle,
+                        value: followArtworkEnabled,
+                        onChanged: (value) => context
+                            .read<ThemeProvider>()
+                            .setFollowArtworkEnabled(value),
+                      ),
+                ),
+                // 默认封面：只作用于没有封面 / 远端加载失败的歌曲封面，
+                // 不参与取色、下载与标签。
+                CoverChangeBuilder(
+                  builder: (context, _) => SettingsNavTile(
+                    key: const Key('settingsDefaultCoverItem'),
+                    icon: Icons.image_rounded,
+                    title: l10n.coverDefaultTitle,
+                    subtitle: l10n.coverDefaultSubtitle,
+                    trailing: TrackArtwork(
+                      // 只显示全局默认封面（没有曲目身份）；外层已订阅。
+                      listenForChanges: false,
+                      size: 40,
+                      borderRadius: BorderRadius.circular(10),
+                      memCacheWidth:
+                          (40 * MediaQuery.of(context).devicePixelRatio)
+                              .round(),
+                      fallbackIconSize: 20,
+                    ),
+                    onTap: () => unawaited(
+                      showCoverPickerSheet(
+                        context,
+                        fileNameBase: l10n.coverDefaultTitle,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             );
           },
-        ),
-      ],
-    );
-  }
-
-  /// 封面：播放时跟随封面取色 / 默认封面。
-  ///
-  /// 「同步自定义封面」不在这里：同步类别状态只有「跨设备同步 › 同步内容」
-  /// 一处入口，外观页不再放第二份快捷开关。
-  Widget _coversSection(BuildContext context, AppLocalizations l10n) {
-    return SettingsSectionCard(
-      title: l10n.settingsCoversSection,
-      children: [
-        Selector<ThemeProvider, bool>(
-          selector: (context, provider) => provider.followArtworkEnabled,
-          builder: (context, followArtworkEnabled, _) => SettingsSwitchTile(
-            switchKey: const Key('settingsFollowArtworkSwitch'),
-            icon: Icons.album_rounded,
-            title: l10n.settingsFollowArtwork,
-            subtitle: l10n.settingsFollowArtworkSubtitle,
-            value: followArtworkEnabled,
-            onChanged: (value) =>
-                context.read<ThemeProvider>().setFollowArtworkEnabled(value),
-          ),
-        ),
-        // 默认封面：只作用于没有封面 / 远端加载失败的歌曲封面，
-        // 不参与取色、下载与标签。
-        CoverChangeBuilder(
-          builder: (context, _) => SettingsNavTile(
-            key: const Key('settingsDefaultCoverItem'),
-            icon: Icons.image_rounded,
-            title: l10n.coverDefaultTitle,
-            subtitle: l10n.coverDefaultSubtitle,
-            trailing: TrackArtwork(
-              // 只显示全局默认封面（没有曲目身份）；外层已订阅。
-              listenForChanges: false,
-              size: 40,
-              borderRadius: BorderRadius.circular(10),
-              memCacheWidth: (40 * MediaQuery.of(context).devicePixelRatio)
-                  .round(),
-              fallbackIconSize: 20,
-            ),
-            onTap: () => unawaited(
-              showCoverPickerSheet(
-                context,
-                fileNameBase: l10n.coverDefaultTitle,
-              ),
-            ),
-          ),
         ),
       ],
     );
@@ -357,6 +337,9 @@ class _SettingsPageState extends State<SettingsPage>
   }) {
     return SettingsSectionCard(
       title: l10n.settingsPlaybackTitle,
+      footer: SettingsSectionHint(
+        text: l10n.settingsPlaybackDetailsDeviceLocalHint,
+      ),
       children: [
         Selector<PlaybackProvider, PlayMode>(
           selector: (context, provider) => provider.defaultPlayMode,
@@ -498,11 +481,13 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ],
         ],
+        // 播放细节并入同一张卡（淡入淡出 / 智能随机都是设备本地值）。
+        ...PlaybackDetailsSection.rows(context),
       ],
     );
   }
 
-  /// 歌词与展示：桌面歌词 / 歌词与输出 / 系统媒体歌词（三条叶子入口）。
+  /// 歌词：桌面歌词 / 歌词与输出 / 系统媒体歌词（三条叶子入口）。
   ///
   /// 输出入口按平台能力显隐（桌面歌词＝悬浮窗能力、系统媒体＝媒体会话能力；
   /// 不支持的平台隐藏入口，避免开关撒谎）；「歌词与输出」与应用内歌词页
@@ -618,100 +603,6 @@ class _SettingsPageState extends State<SettingsPage>
         ),
       ],
     );
-  }
-
-  /// 通用与数据：通用子页 / 快捷键 / 听歌统计 / 数据子页 / 同步 / 更新。
-  ///
-  /// 两部分各自成卡（原来的「通用与数据」一张卡内容太长）：快捷键（桌面）与
-  /// 听歌统计从通用 / 数据子页提到首屏——两者是高频入口，原先要找两步。
-  Widget _generalSection(
-    BuildContext context,
-    AppLocalizations l10n, {
-    required UpdateProvider? updateProvider,
-  }) {
-    return SettingsSectionCard(
-      title: l10n.generalTitle,
-      children: [
-        SettingsNavTile(
-          key: const Key('settingsGeneralItem'),
-          icon: Icons.tune_rounded,
-          title: l10n.settingsGeneralTitle,
-          subtitle: l10n.settingsGeneralSubtitle,
-          onTap: () =>
-              openSettingsSubPage(context, const GeneralSettingsPage()),
-        ),
-        // 快捷键：软件内 / 全局两组的总开关与绑定自定义。只在桌面平台显示
-        // （移动端软件内快捷键与全局热键都不注册）。
-        if (isDesktopPlatform())
-          SettingsNavTile(
-            key: const Key('settingsShortcutsItem'),
-            icon: Icons.keyboard_rounded,
-            title: l10n.settingsShortcutsTitle,
-            subtitle: l10n.settingsShortcutsSubtitle,
-            onTap: () =>
-                openSettingsSubPage(context, const ShortcutSettingsPage()),
-          ),
-        // 关于与更新：版本 / 渠道 / 自动检查 / 下载安装。
-        if (updateProvider != null)
-          SettingsNavTile(
-            key: const Key('settingsUpdateItem'),
-            icon: Icons.system_update_alt_rounded,
-            title: l10n.settingsUpdateTitle,
-            subtitle: _updateSubtitle(l10n, updateProvider),
-            onTap: () =>
-                openSettingsSubPage(context, const UpdateSettingsPage()),
-          ),
-      ],
-    );
-  }
-
-  /// 数据：数据子页 / 听歌统计 / 跨设备同步。
-  Widget _dataSection(
-    BuildContext context,
-    AppLocalizations l10n, {
-    required SyncProvider? syncProvider,
-  }) {
-    return SettingsSectionCard(
-      title: l10n.settingsDataSection,
-      children: [
-        SettingsNavTile(
-          key: const Key('settingsDataItem'),
-          icon: Icons.sd_storage_rounded,
-          title: l10n.dataManagementTitle,
-          subtitle: l10n.settingsDataSubtitle,
-          onTap: () => openSettingsSubPage(context, const DataSettingsPage()),
-        ),
-        // 听歌统计：事件级采集（本机），播放次数 / 热力图 / 导出。
-        // 采集开关留在数据子页（与缓存 / 导入导出同一处）。
-        SettingsNavTile(
-          key: const Key('settingsPlayStatisticsItem'),
-          icon: Icons.insights_rounded,
-          title: l10n.statsTitle,
-          subtitle: l10n.statsSettingsSubtitle,
-          onTap: () => openSettingsSubPage(context, const PlayStatisticsPage()),
-        ),
-        if (syncProvider != null)
-          SettingsNavTile(
-            key: const Key('settingsSyncItem'),
-            icon: Icons.sync_rounded,
-            title: l10n.settingsSyncTitle,
-            subtitle: l10n.settingsSyncItemSubtitle,
-            onTap: () => openSettingsSubPage(context, const SyncSettingsPage()),
-          ),
-      ],
-    );
-  }
-
-  /// 更新入口副标题：上次安装未完成优先，其次「可更新至 x.y.z」，否则当前版本。
-  String _updateSubtitle(AppLocalizations l10n, UpdateProvider provider) {
-    if (provider.installResult == UpdateInstallResult.incomplete) {
-      return l10n.updateInstallIncomplete;
-    }
-    final version = provider.release?.version;
-    if (provider.updateAvailable && version != null && version.isNotEmpty) {
-      return l10n.settingsUpdateAvailable(version);
-    }
-    return l10n.settingsUpdateSubtitle(provider.currentVersionLabel);
   }
 
   /// 基础配色副标题：壁纸档三态（壁纸 / 强调色 / 都不可用）或当前自定义色 hex。

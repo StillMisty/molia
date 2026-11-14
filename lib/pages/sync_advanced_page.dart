@@ -84,7 +84,14 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
     final passphrase = state.passphrase;
     return SettingsSectionCard(
       title: l10n.syncLocalSection,
-      footer: SettingsSectionHint(text: l10n.syncLocalSectionHint),
+      footer: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SettingsSectionHint(text: l10n.syncLocalSectionHint),
+          const SizedBox(height: 4),
+          SettingsSectionHint(text: l10n.syncPassphraseDeviceLocalHint),
+        ],
+      ),
       children: [
         SettingsNavTile(
           key: const Key('settingsSyncDeviceNameItem'),

@@ -47,11 +47,15 @@ class _AiDjPageState extends State<AiDjPage> {
   /// 分区间距（分区标题之间）。
   static const double _sectionGap = 24;
 
+  /// 配置文本落盘防抖：逐字写安全存储既慢又没有必要。
+  static const Duration _configSaveDelay = Duration(milliseconds: 400);
+
   late final AiDjProvider _provider;
   final TextEditingController _baseUrlController = TextEditingController();
   final TextEditingController _apiKeyController = TextEditingController();
   final TextEditingController _modelController = TextEditingController();
   final FocusNode _baseUrlFocus = FocusNode();
+  Timer? _configSaveTimer;
 
   /// 配置表单展开态：未配置时默认展开。
   bool _editingConfig = false;
@@ -79,6 +83,18 @@ class _AiDjPageState extends State<AiDjPage> {
 
   @override
   void dispose() {
+    _configSaveTimer?.cancel();
+    // 防抖窗口内退出：三项齐全时补写一次（不完整就不落盘，保留旧配置）。
+    final pending = _formConfig();
+    final saved = _provider.config;
+    final changed =
+        saved == null ||
+        saved.baseUrl != pending.baseUrl ||
+        saved.apiKey != pending.apiKey ||
+        saved.model != pending.model;
+    if (pending.isComplete && changed) {
+      unawaited(_provider.saveConfig(pending));
+    }
     _baseUrlController.dispose();
     _apiKeyController.dispose();
     _modelController.dispose();
@@ -90,6 +106,22 @@ class _AiDjPageState extends State<AiDjPage> {
     _baseUrlController.text = config?.baseUrl ?? '';
     _apiKeyController.text = config?.apiKey ?? '';
     _modelController.text = config?.model ?? '';
+  }
+
+  LlmConfig _formConfig() => LlmConfig(
+    baseUrl: _baseUrlController.text.trim(),
+    apiKey: _apiKeyController.text.trim(),
+    model: _modelController.text.trim(),
+  );
+
+  /// 配置输入变化：三项齐全才落盘（半填状态保留旧配置，避免功能被误关）。
+  void _onConfigChanged() {
+    _configSaveTimer?.cancel();
+    _configSaveTimer = Timer(_configSaveDelay, () {
+      final config = _formConfig();
+      if (!config.isComplete) return;
+      unawaited(_provider.saveConfig(config));
+    });
   }
 
   @override
@@ -585,6 +617,8 @@ class _AiDjPageState extends State<AiDjPage> {
           }
         },
       ),
+      const SizedBox(height: 8),
+      SettingsSectionHint(text: l10n.settingsAutoSaveHint),
     ];
   }
 
@@ -621,7 +655,10 @@ class _AiDjPageState extends State<AiDjPage> {
           label: l10n.aiDjBaseUrl,
           placeholder: 'https://api.deepseek.com',
           leading: const Icon(Icons.link_rounded),
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) {
+            setState(() {});
+            _onConfigChanged();
+          },
         ),
         const SizedBox(height: 12),
         M3ETextField(
@@ -631,6 +668,7 @@ class _AiDjPageState extends State<AiDjPage> {
           obscureText: true,
           showPasswordToggle: true,
           leading: const Icon(Icons.key_rounded),
+          onChanged: (_) => _onConfigChanged(),
         ),
         const SizedBox(height: 12),
         M3ETextField(
@@ -639,13 +677,7 @@ class _AiDjPageState extends State<AiDjPage> {
           label: l10n.aiDjModel,
           placeholder: 'deepseek-chat',
           leading: const Icon(Icons.smart_toy_rounded),
-        ),
-        const SizedBox(height: 12),
-        M3EButton.filled(
-          key: const Key('aiDjSaveConfigButton'),
-          onPressed: _busy ? null : _saveConfig,
-          icon: const Icon(Icons.check_rounded),
-          label: Text(l10n.aiDjSaveConfig),
+          onChanged: (_) => _onConfigChanged(),
         ),
       ],
     );
@@ -686,6 +718,7 @@ class _AiDjPageState extends State<AiDjPage> {
       _baseUrlController.text = preset.baseUrl;
       _modelController.text = preset.model;
     });
+    _onConfigChanged();
   }
 
   /// 子页 push 到最近的 Navigator：设置入口下是设置弹层的内部 Navigator，
@@ -774,28 +807,6 @@ class _AiDjPageState extends State<AiDjPage> {
     final after = provider.recommendations?.unresolved.length ?? 0;
     if (after < before) {
       _notify(AppLocalizations.of(context)!.aiDjUnresolvedRetried);
-    }
-  }
-
-  Future<void> _saveConfig() async {
-    final l10n = AppLocalizations.of(context)!;
-    final config = LlmConfig(
-      baseUrl: _baseUrlController.text,
-      apiKey: _apiKeyController.text,
-      model: _modelController.text,
-    );
-    if (!config.isComplete) {
-      _notify(l10n.aiDjNotConfigured, error: true);
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      await _provider.saveConfig(config);
-      if (!mounted) return;
-      setState(() => _editingConfig = false);
-      _notify(l10n.aiDjConfigSaved);
-    } finally {
-      if (mounted) setState(() => _busy = false);
     }
   }
 

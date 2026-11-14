@@ -74,7 +74,6 @@
   "playlist": "Playlist",
   "operationFailed": "Operation failed",
   "settingsAppearanceTitle": "Appearance",
-  "settingsCoversSection": "Covers",
   "settingsThemeMode": "Theme mode",
   "themeModeSystem": "System",
   "themeModeLight": "Light",
@@ -130,6 +129,7 @@
   "colorTeal": "Teal",
   "settingsPlaybackTitle": "Playback",
   "settingsPlaybackDetailsTitle": "Playback details",
+  "settingsPlaybackDetailsDeviceLocalHint": "Playback details stay on this device and are not synced.",
   "settingsFadeTitle": "Fade in and out",
   "settingsFadeSubtitle": "Smooths the volume when you play or pause. Track changes stay instant.",
   "settingsFadeOff": "Off",
@@ -160,7 +160,7 @@
   "settingsDataSaverCoversSubtitle": "Stop loading new artwork; show a placeholder when not cached",
   "settingsSourcesItemSubtitle": "Import LX Music source scripts to search more platforms",
   "settingsContentSection": "Content & sources",
-  "settingsLyricsSection": "Lyrics & display",
+  "settingsLyricsSection": "Lyrics",
   "settingsBottomNavTitle": "Bottom navigation",
   "settingsBottomNavHint": "Drag to reorder; toggle to show or hide a tab (at least one stays visible)",
   "settingsBottomNavKeepOne": "Keep at least one tab visible",
@@ -182,16 +182,13 @@
   "playModeSequential": "Sequential",
   "playModeShuffle": "Shuffle",
   "playModeSingleRepeat": "Single repeat",
-  "generalTitle": "General",
   "settingsHapticsTitle": "Vibration feedback",
   "settingsHapticsSubtitle": "Light vibration on taps such as navigation and playback",
-  "settingsGeneralTitle": "General settings",
-  "settingsGeneralSubtitle": "Language, app name and bottom navigation",
-  "settingsDataSection": "Data",
+  "settingsGeneralAboutTitle": "General & about",
+  "settingsGeneralDeviceLocalHint": "Tray, window and vibration settings stay on this device and are not synced.",
+  "settingsAutoSaveHint": "Changes take effect immediately",
+  "settingsMoreActions": "More actions",
   "dataManagementTitle": "Data & storage",
-  "settingsDataSubtitle": "Cache, downloads and data import/export",
-  "settingsDataStorageSection": "Storage & stats",
-  "settingsDataPortabilitySection": "Import & export",
   "exportDataTitle": "Export data",
   "exportDataSubtitle": "Full backup: playlists, sources, settings, stats, history, sign-in info and keys (keep the file safe)",
   "importDataTitle": "Import data",
@@ -371,7 +368,6 @@
   "anyListenTokenHide": "Hide access password",
   "anyListenEnable": "Enable any-listen source",
   "anyListenEnableSubtitle": "When off, it is hidden from search and makes no network requests",
-  "anyListenSave": "Save",
   "anyListenTest": "Test connection",
   "anyListenSaveFailed": "Save failed: cannot write local storage",
   "sourcesNoneActive": "No source enabled",
@@ -869,6 +865,15 @@
     }
   },
   "cacheClearPartition": "Clear",
+  "cacheClearPartitionNamed": "Clear {part}",
+  "@cacheClearPartitionNamed": {
+    "placeholders": {
+      "part": {
+        "type": "String"
+      }
+    }
+  },
+  "cacheUsageTitle": "Used space",
   "cacheClearAll": "Clear all caches",
   "cacheClearAllConfirm": "Clear all caches (audio, lyrics and artwork)? This cannot be undone.",
   "lyricsContentTitle": "Lyrics & outputs",
@@ -1194,9 +1199,7 @@
   "aiDjTestConnection": "Test connection",
   "aiDjTestSucceeded": "Connected",
   "aiDjTestSaved": "Connected — config saved",
-  "aiDjSaveConfig": "Save",
   "aiDjClearConfig": "Clear",
-  "aiDjConfigSaved": "Saved",
   "aiDjQueued": "{count} recommendations left in the queue",
   "@aiDjQueued": {
     "placeholders": {
@@ -1515,6 +1518,15 @@
   "aiDjPrefsResetBody": "Styles, scenes and sending scope return to defaults; saved recommendations are not affected.",
   "aiDjPrefsResetDone": "Default preferences restored",
   "aiDjPrefsDataScope": "What gets sent",
+  "aiDjScopeSentCount": "{count} categories sent",
+  "@aiDjScopeSentCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjScopeSheetHint": "These are sent to the AI service to avoid repeat recommendations.",
   "aiDjScopeSummary": "Listening summary",
   "aiDjScopeTopArtists": "Frequent artists",
   "aiDjScopeTopTracks": "Frequent tracks",
@@ -1549,6 +1561,7 @@
   "syncPassphraseTitle": "Sync passphrase",
   "syncPassphraseNotSet": "Not set",
   "syncPassphraseTrustHint": "Any device that knows the passphrase can read and write all synced data; reset it if leaked.",
+  "syncPassphraseDeviceLocalHint": "The sync passphrase stays on this device and is never uploaded.",
   "syncPassphraseCopy": "Copy passphrase",
   "syncPassphraseReset": "Reset passphrase",
   "syncPassphraseResetConfirm": "All devices must re-enter the new passphrase. Continue?",
@@ -2525,7 +2538,7 @@
       }
     }
   },
-  "downloadsMaintenanceSection": "File maintenance",
+  "downloadsMaintenanceSection": "Advanced",
   "downloadsCleanupParts": "Remove unfinished downloads",
   "downloadsCleanupPartsSubtitle": "Remove temporary files left by interrupted downloads; finished downloads are untouched",
   "downloadsCleanupPartsDone": "Removed {count} unfinished file(s)",
@@ -2719,7 +2732,6 @@
   "biliAccountPrivacyHint": "Sign-in info is kept in secure storage. If sync is on, it is encrypted and synced to paired devices. It is only used to read Bilibili captions.",
   "biliAccountQrSemantics": "Bilibili sign-in QR code",
   "providerBilibili": "Bilibili",
-  "settingsTroubleshootingSection": "Troubleshooting",
   "diagnosticsTitle": "Troubleshooting",
   "diagnosticsSubtitle": "Export run records and device details to help with playback or source problems",
   "diagnosticsOverviewSection": "Overview",
