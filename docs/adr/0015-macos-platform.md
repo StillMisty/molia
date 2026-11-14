@@ -105,7 +105,8 @@
 - 2026-10-30：iOS 同样切到 Swift Package Manager——`ios/Podfile` / `Podfile.lock`
   与 `Pods/` 工程接线全部移除，Runner 通过本地包
   `FlutterGeneratedPluginSwiftPackage` 链接插件。iOS 侧插件（`audio_session`、
-  `file_picker_darwin`、`flutter_secure_storage_darwin`、`just_audio`、
-  `quickjs_engine` 等）均已提供 `Package.swift`，仓库不再依赖 CocoaPods；
+  `file_picker_darwin`、`just_audio`、`quickjs_engine` 等）均已提供
+  `Package.swift`，仓库不再依赖 CocoaPods（`flutter_secure_storage` 已于
+  2026-11-14 移除，见 ADR-0016 修订）；
   原先由 `file_picker` 经 CocoaPods 带入的 DKImagePickerController / SDWebImage /
   SwiftyGif 也随之消失。

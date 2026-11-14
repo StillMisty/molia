@@ -470,10 +470,8 @@ class SyncProvider extends ChangeNotifier
   Future<void> init() async {
     await _controlPlane.init();
     await _engine.init();
-    // 启动阶段不碰安全存储：口令只在用户真正开启传输 / 配对时按需生成
-    // （见 `_applyTransportEnabled`）。没有系统钥匙串的桌面 / 容器里，
-    // libsecret 的原生异常会直接终止进程，try/catch 兜不住，因此不能把
-    // 口令读写放进应用启动路径。
+    // 启动阶段不主动读写口令：口令只在用户真正开启传输 / 配对时按需生成
+    // （见 `_applyTransportEnabled`），凭据库读写留在对应动作里。
     notifyListeners();
   }
 

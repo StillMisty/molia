@@ -209,7 +209,7 @@ void main() {
     expect(prefs.getString('theme_mode'), 'light');
   });
 
-  test('安全存储键：远端写入与读取（ai key 组）', () async {
+  test('凭据键：远端写入与读取（ai key 组）', () async {
     await adapter.collect();
     final result = await adapter.apply({
       SyncCategory.credentials: [

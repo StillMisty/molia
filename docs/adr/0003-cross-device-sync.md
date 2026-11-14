@@ -321,12 +321,12 @@
   > 重新发现它。真正停止与某台设备同步只有更换口令（对所有设备生效），
   > 因此不再提供「本地忽略」这一伪撤销机制。
 
-  > **2026-11-14 修订（启动路径与安全存储解耦）**：应用启动不再读写安全
-  > 存储。口令 / WebDAV 密码仍走 `SecureSettingsSecretStore`，但只在用户
-  > 真正开启传输、配对或打开相关设置时按需读写；设备身份只保留
-  > `sync_device_id_v2` prefs 小键，不再做安全存储备份。原因是
-  > 无钥匙串的桌面 / 容器里 libsecret 抛的是原生 C++ 异常，Dart 层
-  > try/catch 兜不住，会直接终止进程。
+  > **2026-11-14 修订（凭据落地到本机数据库）**：同步口令 / WebDAV 密码与
+  > 其它凭证统一存 `molia_credentials_v1.sqlite`（明文 SQLite，见 ADR-0016
+  > 修订），不再依赖系统安全存储；启动路径可以安全读取，但仍只在用户真正
+  > 开启传输、配对或读取设置时按需生成 / 读取。设备身份只保留
+  > `sync_device_id_v2` prefs 小键，不做安全存储备份。同步载荷仍由口令
+  > 加密；代价是能读本机数据目录的人也能读到口令。
 
 ### 4. 触发策略与省电（移动端）
 
@@ -638,7 +638,7 @@ body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
   128-bit，状态轮询必须带同一个 id。
 - **加密**：临时 ECDH（PointyCastle P-256）+ HKDF-SHA256 + AES-256-GCM
   （`lib/data/sync/pairing/pairing_crypto.dart`）；校验公钥在曲线上。AAD 绑定
-  requestId / intent / 双方 deviceId，防替换。口令只进安全存储，不进日志、
+  requestId / intent / 双方 deviceId，防替换。口令只进本机凭据库，不进日志、
   错误详情、分析事件；pending 密钥与载荷过期即清。
 - **确认码**：6 位数字由双方公钥、nonce、requestId 派生，发起方与接收方显示
   同一个码；用户核对，不一致必须拒绝。

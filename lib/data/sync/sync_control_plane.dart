@@ -38,8 +38,8 @@ class SyncControlPlane extends ChangeNotifier {
   final SyncTransportRuntime _runtime;
   final Logger _logger = Logger('molia.sync');
 
-  /// 口令缓存：设置页 / 附近设备配对要同步读取，不能每次都碰安全存储。写入路径
-  /// 与安全存储保持一致（[readPassphrase] 是唯一的重新加载入口）。
+  /// 口令缓存：设置页 / 附近设备配对要同步读取，不能每次都碰凭据库。写入路径
+  /// 与凭据库保持一致（[readPassphrase] 是唯一的重新加载入口）。
   String? _passphrase;
 
   bool _initialized = false;
@@ -280,7 +280,7 @@ class SyncControlPlane extends ChangeNotifier {
     return chars.join();
   }
 
-  /// 从安全存储重新加载口令缓存（初始化 / 外部写入后调用）。
+  /// 从凭据库重新加载口令缓存（初始化 / 外部写入后调用）。
   Future<String?> readPassphrase() async {
     _passphrase = await _state.readPassphrase();
     return _passphrase;

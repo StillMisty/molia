@@ -5,7 +5,7 @@
 /// 状态模块后：
 /// - 键名、条件字段、容错默认值与保留上限只有一处实现，存储层只维护内存
 ///   状态与写入时机；
-/// - 测试可以直接对形状做往返断言，不必构造 SharedPreferences 与安全存储；
+/// - 测试可以直接对形状做往返断言，不必构造 SharedPreferences 与凭据库；
 /// - 格式变更集中出现在本文件，评审能一眼看到对旧状态的兼容影响。
 ///
 /// 解码是**宽容**的：字段类型不符按默认值、非法条目丢弃、超限截断，只有载荷
@@ -19,7 +19,7 @@ import 'sync_activity.dart';
 import 'sync_book.dart' show syncPeerLimit;
 import 'sync_stamp.dart';
 
-/// WebDAV 传输配置（密码单独走安全存储，不在此结构内）。
+/// WebDAV 传输配置（密码单独走凭据库，不在此结构内）。
 class WebDavConfig {
   final String baseUrl;
   final String username;

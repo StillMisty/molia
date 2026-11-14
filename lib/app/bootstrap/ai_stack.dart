@@ -1,4 +1,4 @@
-/// AI 推歌栈：配置（安全存储）+ OpenAI-compatible 客户端 + 画像/生成服务 +
+/// AI 推歌栈：配置（本机凭据库）+ OpenAI-compatible 客户端 + 画像/生成服务 +
 /// 模式控制器（AiDjProvider）。
 ///
 /// 组合根把播放快照 / 进度接进控制器（跳过判定与低水位续推都在控制器里）；
@@ -83,8 +83,8 @@ AiStack buildAiStack({
     recommendationService: aiRecommendationService,
     settingsStore: aiSettingsStore,
   );
-  // init 读安全存储 / 历史批次，由 AI 页面打开时触发（幂等）：
-  // 启动路径不碰钥匙串；AI 页与推荐流不在首帧内容里。
+  // init 读本机凭据库 / 历史批次，由首帧后的 post_frame_init 触发；
+  // 页面直接打开时也会再调一次（幂等）。
   playback.addListener(aiDjProvider.onPlaybackChanged);
   playback.position.addListener(aiDjProvider.onPositionChanged);
 

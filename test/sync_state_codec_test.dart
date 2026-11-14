@@ -10,7 +10,7 @@ import 'package:molia/domain/models/device_sync.dart';
 /// 损坏载荷的丢弃规则。
 ///
 /// 行为口径以 `test/sync_state_store_test.dart` 为准：这里是同一套规则在纯
-/// 编解码层的直接断言，不启动存储、不碰 SharedPreferences 与安全存储。
+/// 编解码层的直接断言，不启动存储、不碰 SharedPreferences 与凭据库。
 void main() {
   test('完整状态往返：键、条件字段与嵌套值原样保留', () {
     final state = _populatedState();

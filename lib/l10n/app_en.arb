@@ -2731,7 +2731,7 @@
   "biliAccountLogoutAction": "Sign out",
   "biliAccountLogoutConfirm": "After signing out, Bilibili captions will no longer be read. Cached lyrics stay.",
   "biliAccountLogoutFailed": "Sign-out failed. Try again.",
-  "biliAccountPrivacyHint": "Sign-in info is kept in secure storage. If sync is on, it is encrypted and synced to paired devices. It is only used to read Bilibili captions.",
+  "biliAccountPrivacyHint": "Sign-in info is kept in the local credential database. If sync is on, it is encrypted and synced to paired devices. It is only used to read Bilibili captions.",
   "biliAccountQrSemantics": "Bilibili sign-in QR code",
   "providerBilibili": "Bilibili",
   "diagnosticsTitle": "Troubleshooting",

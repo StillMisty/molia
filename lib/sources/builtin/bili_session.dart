@@ -24,7 +24,7 @@ class BiliSession {
   bool _expired = false;
 
   /// 账号服务初始化 Future：`BiliLyric` / 账号请求先 await 再判断登录态，
-  /// 避免首个 B 站曲目在安全存储读完前误走匿名路径。
+  /// 避免首个 B 站曲目在凭据库读完前误走匿名路径。
   Future<void> _ready = Future<void>.value();
 
   String? get cookieHeader => _cookieHeader;

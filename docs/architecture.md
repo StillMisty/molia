@@ -634,7 +634,7 @@
   引擎轮次 / 入站接收 / 调度器一并停摆（新 key `sync_state_v2` 缺失即全新
   安装：旧状态不读，升级后 transports 为空、同步保持关闭，需重新开启并
   配对）。设备身份 `deviceId` 独立持久化在 `sync_device_id_v2`（只走 prefs
-  小键，启动路径不碰安全存储），`sync_state_v2` 损坏时从小键恢复旧身份而不是
+  小键，启动路径不碰凭据库），`sync_state_v2` 损坏时从小键恢复旧身份而不是
   重新生成（否则重启 / 换 IP 后对端会多出一台新设备）。口令在用户真正开启
   传输 / 配对时按需生成（信任根），首次开启同步不弹口令窗（附近设备配对确认
   后由协议交给对端）。**首次连通
@@ -770,10 +770,9 @@
   字幕 CDN 继续匿名；凭据是凭证类别设置键，默认随同步与完整备份。`BiliSession`
   是 Cookie / 账号 / 就绪 Future 的唯一持有者（账号服务只保留 UI 状态），
   `BiliClient` / `BiliLyric` 接受注入会话；账号请求与字幕取词都在读取 Cookie
-  前 await `ready`，过期标记由会话持有。启动路径不读安全存储：
-  `bili_cookie_present_v1` prefs 提示为 true 时首帧后补一次账号服务 `init()`
-  （登录用户的字幕照常可用），从未登录过的环境保持匿名，账号页 / 登录动作
-  再显式 init。决策与边界见 ADR-0014 / ADR-0016。
+  前 await `ready`，过期标记由会话持有。凭据存本机凭据库（明文 SQLite），
+  启动时读取；读取失败按匿名会话降级，不阻断播放。决策与边界见
+  ADR-0014 / ADR-0016。
 - **内置尝试循环 / 发现执行器**：`builtin_transport.dart::runBuiltinAttempts` 是
   「`attempt` 返回 null 即重试、异常直接上抛、耗尽抛 `StateError`」的唯一循环，
   `cachedRetry` 与无缓存的发现端点共用；`BuiltinRetryBudget` 集中命名
@@ -938,10 +937,10 @@
 - **发件箱**：`lib/services/scrobble/scrobble_outbox.dart` 按服务隔离、有界、持久，只存事件与重试
   状态（不存令牌），429 优先 `Retry-After`；进程被杀时最多重发一条；
 - **开关与凭证**：`scrobble_preferences.dart` 把总开关 / 单服务开关 / 同意版本留在设备本地
-  SharedPreferences（不登记同步）；`kListenBrainzToken` / `kLastFmSessionKey` 是 secure 凭证键，
+  SharedPreferences（不登记同步）；`kListenBrainzToken` / `kLastFmSessionKey` 是凭据键（生产落本机凭据库），
   随凭证同步（ADR-0016）；断开连接清空该服务凭证与队列；
 - **组合根与入口**：`lib/app/bootstrap/scrobble_stack.dart` 只做纯构造；
-  服务在「听歌同步」页打开时 `init()`（幂等），启动路径不读安全存储。
+  服务在首帧后 `init()`（幂等），页面打开时再补一次；凭据存本机凭据库。
   `SettingsModule` 挂两个凭证键并在远端应用后重读；设置 › 内容与来源的
   「听歌同步」页（lib/pages/listening_sync_page.dart）负责同意、连接与断开。
 
@@ -1235,7 +1234,7 @@
 `lib/data/settings/`（键声明 / 模块访问面 / 注册表 / 密钥盒端口）：
 
 - `settings_keys.dart`：登记键总表 —— 键名、默认值、同步类别（跟人走 / 音源 /
-  凭证）、存放盒（prefs / secure）的唯一声明处；设备本地键（省流、缓存策略、
+  凭证）、存放盒（prefs / 凭据库）的唯一声明处；设备本地键（省流、缓存策略、
   全局字体、桌面歌词悬浮窗、托盘与关闭行为、播放会话、曲库数据…）
   不登记，留在各自模块（只有一位消费者，收进来只增加门房面积）。快捷键开关 /
   绑定四键（`kShortcutsEnabled` / `kGlobalShortcutsEnabled` /

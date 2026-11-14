@@ -12,7 +12,6 @@ import 'package:molia/sources/builtin/bili_client.dart';
 import 'package:molia/sources/builtin/bili_login.dart';
 import 'package:molia/sources/builtin/bili_session.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/mock_dio.dart';
 import 'support/settings_test_support.dart';
@@ -234,7 +233,6 @@ void main() {
     late BiliSession session;
 
     setUp(() {
-      SharedPreferences.setMockInitialValues({});
       secrets = MemorySettingsSecretStore();
       settings = testSettingsRegistry(
         keys: [kBiliAccountCookie],
@@ -261,14 +259,12 @@ void main() {
       expect(service.session, same(session));
       expect(service.isLoggedIn, isTrue);
       expect(session.isLoggedIn, isTrue);
-      expect(await service.hasStoredCookieHint(), isTrue);
 
       await settings.clear(kBiliAccountCookie);
       await service.reloadFromSettings();
       expect(service.status, BiliAccountStatus.loggedOut);
       expect(service.isLoggedIn, isFalse);
       expect(session.isLoggedIn, isFalse);
-      expect(await service.hasStoredCookieHint(), isFalse);
       expect(loggedInCount, 0, reason: '初始化恢复不算新登录');
 
       await settings.write(kBiliAccountCookie, 'SESSDATA=remote; DedeUserID=6');
@@ -277,20 +273,6 @@ void main() {
       expect(service.status, BiliAccountStatus.loggedIn);
       expect(service.account?.userId, '6');
       expect(loggedInCount, 1);
-    });
-
-    test('首帧补读只由 prefs 提示触发：无提示不碰安全存储', () async {
-      await settings.write(kBiliAccountCookie, 'SESSDATA=stored; DedeUserID=5');
-      final service = serviceWith(_FakeBiliQrLogin());
-
-      await service.initIfStored();
-      expect(service.status, BiliAccountStatus.unknown, reason: '无提示时不 init');
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(BiliAccountService.cookieHintKey, true);
-      await service.initIfStored();
-      expect(service.status, BiliAccountStatus.loggedIn);
-      expect(service.account?.userId, '5');
     });
 
     test('扫码成功：写凭据、更新状态、触发 onLoggedIn', () async {
@@ -328,7 +310,6 @@ void main() {
         await settings.read(kBiliAccountCookie),
         contains('SESSDATA=login'),
       );
-      expect(await service.hasStoredCookieHint(), isTrue);
       expect(loggedInCount, 1);
     });
 
@@ -375,7 +356,6 @@ void main() {
       expect(service.status, BiliAccountStatus.loggedOut);
       expect(session.isLoggedIn, isFalse);
       expect(secrets.data.containsKey(kBiliAccountCookie.name), isFalse);
-      expect(await service.hasStoredCookieHint(), isFalse);
     });
 
     test('资料 -101：清凭据并标记登录过期', () async {

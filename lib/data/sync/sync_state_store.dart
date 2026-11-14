@@ -2,8 +2,8 @@
 ///
 /// - 非敏感状态走 SharedPreferences 单 JSON 键（`sync_state_v2`），字段 ↔
 ///   JSON 的映射在 `sync_state_codec.dart`（本类只管内存状态与写入时机）；
-/// - 敏感项（同步口令、WebDAV 密码）走 [SettingsSecretStore]（生产 =
-///   flutter_secure_storage），口令即信任根（见 ADR-0003）；
+/// - 敏感项（同步口令、WebDAV 密码）走 [SettingsSecretStore]（生产 = 本机
+///   凭据库，明文 SQLite；取舍见 ADR-0016 修订）。口令仍是同步载荷的信任根；
 /// - 变更登记（设置键哈希、脚本 / 自定义封面墓碑、激活脚本指针）与发号器
 ///   由 `sync_stamp_book.dart` 持有：settings 写入方分散在多个服务，同步层用
 ///   「上次登记值 vs 当前值」判定本地修改，写入方无需各自上报。
@@ -54,7 +54,7 @@ class SyncStateStore
     Random? random,
     String? deviceId,
     int Function()? clock,
-  }) : _secrets = secrets ?? const SecureSettingsSecretStore(),
+  }) : _secrets = secrets ?? const DatabaseSettingsSecretStore(),
        _random = random ?? Random.secure(),
        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
        _deviceId = deviceId ?? '';
@@ -64,7 +64,7 @@ class SyncStateStore
   /// 旧键不读、不删、不迁移：新键缺失即全新安装行为，旧数据当从未存在。
   static const String stateKey = 'sync_state_v2';
 
-  /// 设备身份的独立持久化键（只走 prefs 小键，不碰安全存储）。
+  /// 设备身份的独立持久化键（只走 prefs 小键，不碰凭据库）。
   ///
   /// 身份不能只放在 `sync_state_v2` 里：那份 JSON 体积大、写入频繁，损坏时
   /// 若连身份一起丢，对端就会把同一台设备当成新设备（换 IP / 重启后尤其明显）。
@@ -376,8 +376,8 @@ class SyncStateStore
 
   /// 把身份写进独立 prefs 键（首帧前；只在缺失 / 不一致时写）。
   ///
-  /// 设备身份只走 prefs 小键，不碰安全存储：在没有系统钥匙串的桌面 /
-  /// 容器里，libsecret 原生异常会直接终止进程，身份备份不值得阻断启动。
+  /// 设备身份只走 prefs 小键，不碰凭据库：凭据库只存敏感值，
+  /// 身份这种恢复性数据留在更小、更稳定的 prefs 键里。
   Future<void> _persistDeviceIdToPrefs() async {
     final current = (_prefs!.getString(deviceIdKey) ?? '').trim();
     if (current == _deviceId) return;

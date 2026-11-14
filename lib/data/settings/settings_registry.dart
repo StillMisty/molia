@@ -22,7 +22,7 @@ class SettingsRegistry implements SettingsAccess, SettingsSyncSurface {
     SettingsSecretStore? secrets,
   }) : keys = List.unmodifiable(keys),
        _preferencesOverride = preferences,
-       _secrets = secrets ?? const SecureSettingsSecretStore() {
+       _secrets = secrets ?? const DatabaseSettingsSecretStore() {
     final names = <String>{};
     for (final key in this.keys) {
       assert(names.add(key.name), '设置键重复登记：${key.name}');

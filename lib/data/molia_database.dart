@@ -18,7 +18,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
-import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite3;
@@ -433,7 +433,8 @@ class MoliaDatabase extends _$MoliaDatabase {
   ///
   /// `sqlite3.tempDirectory` 必须在主 isolate 和后台 isolate 各设一次：
   /// 两者不共享全局变量，Android 的默认 `/tmp` 又不可写。
-  @visibleForTesting
+  ///
+  /// 资料库与独立的凭据库共用这一份打开参数（WAL / busy_timeout / 临时表）。
   static DatabaseConnection openAt(File file, Directory tempDirectory) {
     sqlite3.sqlite3.tempDirectory = tempDirectory.path;
     return NativeDatabase.createBackgroundConnection(

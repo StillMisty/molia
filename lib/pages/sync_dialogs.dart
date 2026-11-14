@@ -16,7 +16,7 @@ import 'sync_labels.dart';
 import 'sync_notices.dart';
 import 'sync_peer_dialogs.dart';
 
-/// WebDAV 配置弹层（设置页与日志子页共用；密码单独走安全存储）。
+/// WebDAV 配置弹层（设置页与日志子页共用；密码单独走凭据库）。
 Future<void> showWebdavConfigDialog(
   BuildContext context,
   SyncProvider provider,

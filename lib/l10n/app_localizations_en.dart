@@ -4914,7 +4914,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get biliAccountPrivacyHint =>
-      'Sign-in info is kept in secure storage. If sync is on, it is encrypted and synced to paired devices. It is only used to read Bilibili captions.';
+      'Sign-in info is kept in the local credential database. If sync is on, it is encrypted and synced to paired devices. It is only used to read Bilibili captions.';
 
   @override
   String get biliAccountQrSemantics => 'Bilibili sign-in QR code';

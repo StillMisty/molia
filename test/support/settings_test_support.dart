@@ -7,7 +7,7 @@ import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/settings/settings_secret_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 测试用内存密钥盒（替代 flutter_secure_storage）。
+/// 测试用内存密钥盒（替代生产凭据库）。
 class MemorySettingsSecretStore implements SettingsSecretStore {
   final Map<String, String> data = {};
 

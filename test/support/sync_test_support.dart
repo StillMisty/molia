@@ -47,7 +47,7 @@ SyncRecordPipeline testRecordPipeline({
   deviceId: () => deviceId,
 );
 
-/// 测试用内存密钥存储（替代 flutter_secure_storage）。
+/// 测试用内存密钥存储（替代生产凭据库）。
 class MemorySyncSecretStore implements SettingsSecretStore {
   final Map<String, String> values = {};
 

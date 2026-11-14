@@ -13,7 +13,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
@@ -42,13 +41,6 @@ class BiliAccountService extends ChangeNotifier {
 
   BiliAccountStatus _status = BiliAccountStatus.unknown;
   bool _lastLoginPersisted = true;
-
-  /// 「安全存储里可能有 Cookie」的 prefs 提示。
-  ///
-  /// 启动路径不能无条件读安全存储（无钥匙串环境里 libsecret 会直接终止
-  /// 进程）。登录成功 / 收到远端凭据时置 true，退出 / 登录失效时置 false；
-  /// 只有 true 才在首帧后补一次 `init()`，让登录用户的字幕链路照常工作。
-  static const String cookieHintKey = 'bili_cookie_present_v1';
 
   Future<void>? _initFuture;
   String? _pendingQrKey;
@@ -87,37 +79,9 @@ class BiliAccountService extends ChangeNotifier {
     return future;
   }
 
-  /// 安全存储里是否可能有 Cookie（只读 prefs，不碰钥匙串）。
-  Future<bool> hasStoredCookieHint() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getBool(cookieHintKey) ?? false;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// 首帧后调用：只有登录过的用户才补读安全存储，恢复字幕可用性。
-  ///
-  /// 没有 Cookie 提示时不调用 [init]，避免无钥匙串环境在启动路径上触发
-  /// libsecret 原生异常。
-  Future<void> initIfStored() async {
-    if (await hasStoredCookieHint()) await init();
-  }
-
-  Future<void> _setCookieHint(bool value) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(cookieHintKey, value);
-    } catch (_) {
-      // 提示写失败只影响下次启动是否自动补读，不影响本次登录态。
-    }
-  }
-
   Future<void> _loadFromSettings() async {
     final cookie = await _readCookie();
     _applyCookie(cookie);
-    await _setCookieHint(cookie.isNotEmpty);
     notifyListeners();
   }
 
@@ -126,7 +90,6 @@ class BiliAccountService extends ChangeNotifier {
     await init();
     final cookie = await _readCookie();
     final changed = _applyCookie(cookie);
-    await _setCookieHint(cookie.isNotEmpty);
     if (!changed) return;
     notifyListeners();
     if (cookie.isNotEmpty) {
@@ -257,7 +220,6 @@ class BiliAccountService extends ChangeNotifier {
   Future<void> logout() async {
     await init();
     await _settings.clear(kBiliAccountCookie);
-    await _setCookieHint(false);
     _qrGeneration++;
     _pendingQrKey = null;
     _session.clear();
@@ -281,7 +243,6 @@ class BiliAccountService extends ChangeNotifier {
   Future<bool> _persistCookie(String cookie) async {
     try {
       await _settings.write(kBiliAccountCookie, cookie);
-      await _setCookieHint(true);
       return true;
     } catch (e) {
       _logger.warning('B 站登录信息保存失败: ${e.runtimeType}');
@@ -292,7 +253,6 @@ class BiliAccountService extends ChangeNotifier {
   Future<void> _clearCookie() async {
     try {
       await _settings.clear(kBiliAccountCookie);
-      await _setCookieHint(false);
     } catch (e) {
       _logger.warning('B 站登录信息清除失败: ${e.runtimeType}');
     }
