@@ -12,6 +12,7 @@ import '../providers/paged_list_controller.dart';
 import '../utils/responsive.dart';
 import 'detail_page/detail_page_chrome.dart';
 import 'paged_list_auto_load.dart';
+import 'scroll_edge_fade.dart';
 import 'track_row.dart';
 import 'track_table_header.dart';
 
@@ -243,7 +244,9 @@ class _PagedTrackCollectionBodyState<R>
               SliverPersistentHeader(
                 pinned: true,
                 delegate: _PinnedTableHeaderDelegate(
-                  extent: TrackTableHeader.extentOf(context),
+                  extent:
+                      TrackTableHeader.extentOf(context) +
+                      _pinnedHeaderFadeExtent,
                   background: Theme.of(context).colorScheme.surface,
                   horizontalPadding: horizontalPadding,
                 ),
@@ -288,12 +291,20 @@ class _PagedTrackCollectionBodyState<R>
   }
 }
 
+/// 钉住表头下缘的渐隐带高度（dp）：同时就是表头与首行之间的间距。
+const double _pinnedHeaderFadeExtent = 12;
+
 /// 钉住的表格表头：列标题固定在滚动视口顶部，封面头部滚走后行内列仍有
 /// 标题可对照；[ColoredBox] 用页面表面色遮挡滚过其下的行。
 ///
 /// extent 由 [TrackTableHeader.extentOf] 按主题 + 系统文字缩放算出，不写死
-/// 行高（大字号下不裁切）。子组件在 [build] 内按可比较的字段构造：
-/// widget 实例比较恒不相等，起不到去重作用。
+/// 行高（大字号下不裁切），再补 [_pinnedHeaderFadeExtent] 的渐隐带。子组件在
+/// [build] 内按可比较的字段构造：widget 实例比较恒不相等，起不到去重作用。
+///
+/// 为什么渐变做在表头盒子下缘：viewport 里先注册的 sliver 后绘制，钉住表头
+/// 因此盖在后面的列表之上，把渐隐带放在表头盒子下缘，正好是「行滑进表头
+/// 下方时淡出」；未钉住时这条带子压在页面 surface 上，不可见。这 12dp 同时
+/// 就是表头与首行之间的间距，不是布局回归。
 class _PinnedTableHeaderDelegate extends SliverPersistentHeaderDelegate {
   const _PinnedTableHeaderDelegate({
     required this.extent,
@@ -318,12 +329,26 @@ class _PinnedTableHeaderDelegate extends SliverPersistentHeaderDelegate {
     BuildContext context,
     double shrinkOffset,
     bool overlapsContent,
-  ) => ColoredBox(
-    color: background,
-    child: Padding(
-      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-      child: const TrackTableHeader(),
-    ),
+  ) => Column(
+    children: [
+      SizedBox(
+        height: extent - _pinnedHeaderFadeExtent,
+        child: ColoredBox(
+          color: background,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+            child: const TrackTableHeader(),
+          ),
+        ),
+      ),
+      const SizedBox(
+        height: _pinnedHeaderFadeExtent,
+        child: ScrollEdgeFade(
+          edge: FadeEdge.top,
+          extent: _pinnedHeaderFadeExtent,
+        ),
+      ),
+    ],
   );
 
   @override

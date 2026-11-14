@@ -26,6 +26,7 @@ import 'lyrics_selection_page.dart';
 import 'lyrics_source_search_view.dart';
 import 'lyrics_view_session.dart';
 import 'playback_selectors.dart';
+import 'scroll_edge_fade.dart';
 import 'shell_page_visibility.dart';
 
 /// 歌词页 FAB 的固定动作序列（顺序即展示顺序）。
@@ -825,32 +826,30 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 );
               },
             ),
+            // 顶部渐隐：歌词行滑到屏顶 chrome 下时淡出，不是硬切。覆盖层
+            // 自带 IgnorePointer / ExcludeSemantics（不接收手势），颜色统一取
+            // colorScheme.surface，避免两处背景色来源漂移。
             Positioned(
               top: 0,
               left: 0,
               right: 0,
-              height: 40 + MediaQuery.of(context).padding.top,
-              child: IgnorePointer(
-                // 渐变层不接收手势。颜色统一取 colorScheme.surface
-                //（ThemeData.scaffoldBackgroundColor 的取值来源），
-                // 避免两处背景色来源漂移。
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Theme.of(context).colorScheme.surface,
-                        Theme.of(context).colorScheme.surface,
-                        Theme.of(context).colorScheme.surface
-                            .withValues(alpha: 0.8),
-                        Theme.of(context).colorScheme.surface
-                            .withValues(alpha: 0.0),
-                      ],
-                      stops: const [0.0, 0.3, 0.6, 1.0],
-                    ),
-                  ),
-                ),
+              height: 40 + MediaQuery.paddingOf(context).top,
+              child: ScrollEdgeFade(
+                edge: FadeEdge.top,
+                extent: 40 + MediaQuery.paddingOf(context).top,
+              ),
+            ),
+            // 底部渐隐：歌词行从右下快捷操作后面滚过时淡出，不是硬切。
+            // 必须排在 FAB 之前（先绘制）：渐隐只压歌词，不压住可点的
+            // 操作胶囊——页面级叠一层会把 FAB 下缘刷成半透明 surface。
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 40 + MediaQuery.paddingOf(context).bottom,
+              child: ScrollEdgeFade(
+                edge: FadeEdge.bottom,
+                extent: 40 + MediaQuery.paddingOf(context).bottom,
               ),
             ),
             // 底部快捷操作栏：M3EFabMenu（底部右侧 FAB → 带文字 label 的

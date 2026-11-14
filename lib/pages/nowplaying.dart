@@ -11,6 +11,7 @@ import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/now_playing_controller.dart';
 import 'package:molia/widgets/player_morph.dart';
+import 'package:molia/widgets/scroll_edge_fade.dart';
 import 'package:molia/widgets/shell_page_visibility.dart';
 import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/track_info_view.dart';
@@ -395,31 +396,17 @@ class _NowPlayingState extends State<NowPlaying>
 
   /// 内容顶部渐隐过渡：列表/歌词滑到圆点带下面时淡出（不是硬切）。
   ///
-  /// 顶部渐变的 surface 覆盖层（不是 ShaderMask + dstIn）：两者视觉等价
-  /// （页面背景就是 `colorScheme.surface`，mask 的 alpha 与覆盖层不透明度互补），
-  /// 但 ShaderMask 会给内容区整块建立 saveLayer —— 滚动歌词 / 队列时每帧都要
-  /// 重新合成整块区域；覆盖层只是一次普通渐变绘制。
+  /// 论证（为什么用覆盖层而不是 ShaderMask）见 [ScrollEdgeFade]。
   Widget _buildTopFade(BuildContext context, {required Widget child}) {
-    final scheme = Theme.of(context).colorScheme;
     return Stack(
       children: [
         Positioned.fill(child: child),
-        Positioned(
+        const Positioned(
           top: 0,
           left: 0,
           right: 0,
           height: _dotsBandHeight,
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [scheme.surface, scheme.surface.withValues(alpha: 0)],
-                ),
-              ),
-            ),
-          ),
+          child: ScrollEdgeFade(edge: FadeEdge.top, extent: _dotsBandHeight),
         ),
       ],
     );
