@@ -1,11 +1,9 @@
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../pages/shortcut_settings_page.dart';
-import '../../services/window/app_tray.dart';
-import '../../services/window/tray_settings.dart';
 import '../../services/window/window_settings.dart';
+import 'settings_section_availability.dart';
 import 'settings_tiles.dart';
 
 /// 设置首屏「桌面」卡：关闭到托盘 / 记住窗口位置 / 快捷键。
@@ -13,20 +11,21 @@ import 'settings_tiles.dart';
 /// 只在桌面平台出现（由首屏决定是否挂载）：移动端没有托盘与窗口，放一行
 /// 置灰的入口只会制造困惑。托盘与窗口是设备本地键，卡底给一句说明。
 class DesktopSettingsSection extends StatelessWidget {
-  const DesktopSettingsSection({super.key});
+  const DesktopSettingsSection({super.key, required this.availability});
+
+  final SettingsSectionAvailability availability;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // 托盘能力或设置缺省时隐藏托盘行（Linux 精简桌面可能没有托盘）。
-    final tray = context.watch<TraySettings?>();
-    final desktopTray = AppTray.isSupported && tray != null;
+    // 托盘能力或设置缺省时不显示托盘 / 窗口行（Linux 精简桌面可能没有托盘）。
+    final tray = availability.tray;
     return SettingsSectionCard(
       title: l10n.settingsDesktopSection,
       footer: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (AppTray.isLinuxDesktop) ...[
+          if (availability.trayLinuxHintVisible) ...[
             SettingsSectionHint(text: l10n.settingsTrayLinuxHint),
             const SizedBox(height: 4),
           ],
@@ -34,7 +33,7 @@ class DesktopSettingsSection extends StatelessWidget {
         ],
       ),
       children: [
-        if (desktopTray) ...[
+        if (availability.trayRowsVisible && tray != null) ...[
           SettingsSwitchTile(
             switchKey: const Key('settingsCloseToTraySwitch'),
             icon: Icons.desktop_windows_rounded,

@@ -32,12 +32,16 @@ abstract class Breakpoints {
 /// 与壳层骨架分流（`MyApp.desktopShell`）互补：生产路径两者一致；测试里可用
 /// 开关强制骨架，页面内的桌面增强（渠道栏 / 表格列 / 右键菜单）
 /// 仍按平台判定——它们只在桌面骨架里渲染，无需再逐层传开关。
-bool isDesktopPlatform() => switch (defaultTargetPlatform) {
-  TargetPlatform.linux ||
-  TargetPlatform.windows ||
-  TargetPlatform.macOS => true,
-  _ => false,
-};
+///
+/// [platform] 只给可注入平台的消费方（如设置可用性快照的测试）用；生产调用
+/// 一律省略，沿用 [defaultTargetPlatform]。
+bool isDesktopPlatform([TargetPlatform? platform]) =>
+    switch (platform ?? defaultTargetPlatform) {
+      TargetPlatform.linux ||
+      TargetPlatform.windows ||
+      TargetPlatform.macOS => true,
+      _ => false,
+    };
 
 /// 设备类型枚举
 enum DeviceType { compact, mobile, tablet, desktop }

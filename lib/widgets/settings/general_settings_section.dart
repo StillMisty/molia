@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../pages/bottom_nav_settings_page.dart';
@@ -11,6 +10,7 @@ import '../../services/app_branding_service.dart';
 import '../../services/haptics.dart';
 import '../../services/language_service.dart';
 import '../nav_destination_style.dart';
+import 'settings_section_availability.dart';
 import 'settings_tiles.dart';
 
 /// 设置首屏「通用」卡：启动页 / 底部导航 / 语言 / 震动 / 应用名称。
@@ -19,7 +19,9 @@ import 'settings_tiles.dart';
 /// 「关于与更新」卡；本卡只放平台无关的通用偏好。震动是设备本地键，卡底
 /// 给一句说明。
 class GeneralSettingsSection extends StatefulWidget {
-  const GeneralSettingsSection({super.key});
+  const GeneralSettingsSection({super.key, required this.availability});
+
+  final SettingsSectionAvailability availability;
 
   @override
   State<GeneralSettingsSection> createState() => _GeneralSettingsSectionState();
@@ -60,7 +62,7 @@ class _GeneralSettingsSectionState extends State<GeneralSettingsSection> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     // 测试等场景可能不提供 NavProvider：缺省时隐藏导航相关行。
-    final nav = context.watch<NavProvider?>();
+    final nav = widget.availability.nav;
 
     return SettingsSectionCard(
       title: l10n.settingsGeneralTitle,
