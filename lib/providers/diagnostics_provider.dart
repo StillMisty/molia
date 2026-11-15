@@ -1,4 +1,5 @@
-/// 诊断页状态：把服务快照、健康检查与导出动作收成一个 ChangeNotifier。
+/// 诊断页状态：把服务快照（失败 / 取链计数）、健康检查与导出动作收成一个
+/// ChangeNotifier。
 ///
 /// provider 挂在根 Provider 树、与应用同生命周期；页面关闭不会释放它。
 /// 服务本身由组合根持有，失败记录 / 文件日志在页面未打开时照常运行
@@ -13,6 +14,7 @@ import '../domain/models/diagnostics.dart';
 import '../services/diagnostics/diagnostics_bundle.dart';
 import '../services/diagnostics/diagnostics_export.dart';
 import '../services/diagnostics/diagnostics_service.dart';
+import '../services/diagnostics/resolve_metrics.dart';
 import '../services/save_as.dart';
 
 class DiagnosticsProvider extends ChangeNotifier {
@@ -36,6 +38,9 @@ class DiagnosticsProvider extends ChangeNotifier {
   bool _exporting = false;
 
   List<DiagnosticFailureRecord> get failures => service.failures.records;
+
+  /// 本次运行的取链计数（只读快照；变化经 service.changes 通知）。
+  ResolveMetricsSnapshot get resolveMetrics => service.metrics.snapshot();
 
   List<HealthRun> get healthRuns => service.healthRuns;
 

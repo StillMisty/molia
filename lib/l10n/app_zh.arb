@@ -2320,6 +2320,21 @@
   "diagnosticsFailureCancelled": "已取消",
   "diagnosticsFailurePlayback": "播放失败",
   "diagnosticsFailureUnknown": "未知原因",
+  "diagnosticsResolveSection": "播放链接（本次运行）",
+  "diagnosticsResolveHint": "只统计本次运行，重启应用后清零。",
+  "diagnosticsResolveCalls": "链接请求",
+  "diagnosticsResolveCacheHits": "缓存命中",
+  "diagnosticsResolveRetries": "重试",
+  "diagnosticsResolveFailures": "失败",
+  "diagnosticsResolveTimeouts": "超时",
+  "diagnosticsResolveCount": "{count} 次",
+  "@diagnosticsResolveCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "@diagnosticsVersionValue": {
     "placeholders": {
       "version": {

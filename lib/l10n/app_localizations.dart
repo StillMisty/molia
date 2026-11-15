@@ -8974,6 +8974,54 @@ abstract class AppLocalizations {
   /// **'Unknown reason'**
   String get diagnosticsFailureUnknown;
 
+  /// No description provided for @diagnosticsResolveSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback links (this session)'**
+  String get diagnosticsResolveSection;
+
+  /// No description provided for @diagnosticsResolveHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Counts only this session; they reset when the app restarts.'**
+  String get diagnosticsResolveHint;
+
+  /// No description provided for @diagnosticsResolveCalls.
+  ///
+  /// In en, this message translates to:
+  /// **'Link requests'**
+  String get diagnosticsResolveCalls;
+
+  /// No description provided for @diagnosticsResolveCacheHits.
+  ///
+  /// In en, this message translates to:
+  /// **'Cache hits'**
+  String get diagnosticsResolveCacheHits;
+
+  /// No description provided for @diagnosticsResolveRetries.
+  ///
+  /// In en, this message translates to:
+  /// **'Retries'**
+  String get diagnosticsResolveRetries;
+
+  /// No description provided for @diagnosticsResolveFailures.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get diagnosticsResolveFailures;
+
+  /// No description provided for @diagnosticsResolveTimeouts.
+  ///
+  /// In en, this message translates to:
+  /// **'Timed out'**
+  String get diagnosticsResolveTimeouts;
+
+  /// No description provided for @diagnosticsResolveCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}'**
+  String diagnosticsResolveCount(int count);
+
   /// No description provided for @diagnosticsLoading.
   ///
   /// In en, this message translates to:

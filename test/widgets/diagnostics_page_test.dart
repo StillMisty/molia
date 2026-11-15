@@ -15,6 +15,7 @@ import 'package:molia/services/diagnostics/diagnostics_bundle.dart';
 import 'package:molia/services/diagnostics/diagnostics_export.dart';
 import 'package:molia/services/diagnostics/diagnostics_service.dart';
 import 'package:molia/services/diagnostics/failure_ring_buffer.dart';
+import 'package:molia/services/diagnostics/resolve_metrics.dart';
 import 'package:molia/services/diagnostics/source_health_checker.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/save_as.dart';
@@ -31,7 +32,10 @@ void main() {
   late DiagnosticsProvider provider;
 
   setUp(() {
-    service = DiagnosticsService(failures: FailureRingBuffer());
+    service = DiagnosticsService(
+      failures: FailureRingBuffer(),
+      metrics: ResolveMetrics(),
+    );
     service.attachHealth(
       SourceHealthChecker(
         probe: _FakeProbe(),
@@ -138,6 +142,25 @@ void main() {
     expect(find.textContaining('酷我'), findsOneWidget);
     expect(find.text('网络问题'), findsOneWidget);
     expect(find.textContaining('raw-secret'), findsNothing);
+  });
+
+  testWidgets('播放链接统计只展示本次运行的计数与失败类别', (tester) async {
+    service.metrics
+      ..recordCall()
+      ..recordCall()
+      ..recordCacheHit()
+      ..recordRetry()
+      ..recordFailure(FailureKind.network)
+      ..recordTimeout();
+    await pumpPage(tester);
+    expect(find.text('播放链接（本次运行）'), findsOneWidget);
+    expect(find.text('链接请求'), findsOneWidget);
+    expect(find.text('2 次'), findsOneWidget);
+    expect(
+      find.byKey(const Key('diagnosticsResolveFailure-network')),
+      findsOneWidget,
+    );
+    expect(find.text('网络问题'), findsOneWidget);
   });
 
   testWidgets('导出走 fake Save As，成功提示且不泄露种子文本', (tester) async {

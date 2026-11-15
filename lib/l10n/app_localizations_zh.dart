@@ -4829,6 +4829,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsFailureUnknown => '未知原因';
 
   @override
+  String get diagnosticsResolveSection => '播放链接（本次运行）';
+
+  @override
+  String get diagnosticsResolveHint => '只统计本次运行，重启应用后清零。';
+
+  @override
+  String get diagnosticsResolveCalls => '链接请求';
+
+  @override
+  String get diagnosticsResolveCacheHits => '缓存命中';
+
+  @override
+  String get diagnosticsResolveRetries => '重试';
+
+  @override
+  String get diagnosticsResolveFailures => '失败';
+
+  @override
+  String get diagnosticsResolveTimeouts => '超时';
+
+  @override
+  String diagnosticsResolveCount(int count) {
+    return '$count 次';
+  }
+
+  @override
   String get diagnosticsLoading => '读取中…';
 
   @override

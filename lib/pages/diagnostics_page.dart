@@ -70,6 +70,11 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
         const SizedBox(height: kSettingsSectionSpacing),
         ListenableBuilder(
           listenable: provider,
+          builder: (context, _) => _resolveStats(context, l10n, provider),
+        ),
+        const SizedBox(height: kSettingsSectionSpacing),
+        ListenableBuilder(
+          listenable: provider,
           builder: (context, _) => _recentIssues(context, l10n, provider),
         ),
         const SizedBox(height: kSettingsSectionSpacing),
@@ -114,6 +119,56 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
           title: l10n.diagnosticsLogStatus,
           subtitle: _logStatusText(l10n, provider.logStatus),
         ),
+      ],
+    );
+  }
+
+  /// 本次运行的播放链接统计：只读计数，无按钮、无清空入口。
+  ///
+  /// 失败先给总数，再按类别分行（类别文案与「最近问题」共用同一映射）；
+  /// 计数为 0 的类别不出现，避免整卡片堆满「0 次」。
+  Widget _resolveStats(
+    BuildContext context,
+    AppLocalizations l10n,
+    DiagnosticsProvider provider,
+  ) {
+    final metrics = provider.resolveMetrics;
+    return SettingsSectionCard(
+      title: l10n.diagnosticsResolveSection,
+      footer: SettingsSectionHint(text: l10n.diagnosticsResolveHint),
+      children: [
+        SettingsInfoTile(
+          icon: Icons.bolt_rounded,
+          title: l10n.diagnosticsResolveCalls,
+          subtitle: l10n.diagnosticsResolveCount(metrics.calls),
+        ),
+        SettingsInfoTile(
+          icon: Icons.cached_rounded,
+          title: l10n.diagnosticsResolveCacheHits,
+          subtitle: l10n.diagnosticsResolveCount(metrics.cacheHits),
+        ),
+        SettingsInfoTile(
+          icon: Icons.replay_rounded,
+          title: l10n.diagnosticsResolveRetries,
+          subtitle: l10n.diagnosticsResolveCount(metrics.retries),
+        ),
+        SettingsInfoTile(
+          icon: Icons.error_outline_rounded,
+          title: l10n.diagnosticsResolveFailures,
+          subtitle: l10n.diagnosticsResolveCount(metrics.failures),
+        ),
+        SettingsInfoTile(
+          icon: Icons.timer_off_rounded,
+          title: l10n.diagnosticsResolveTimeouts,
+          subtitle: l10n.diagnosticsResolveCount(metrics.timeouts),
+        ),
+        for (final entry in metrics.failureKinds)
+          SettingsInfoTile(
+            key: ValueKey('diagnosticsResolveFailure-${entry.key.name}'),
+            icon: Icons.report_rounded,
+            title: diagnosticFailureReason(l10n, entry.key),
+            subtitle: l10n.diagnosticsResolveCount(entry.value),
+          ),
       ],
     );
   }

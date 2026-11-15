@@ -2744,6 +2744,21 @@
   "diagnosticsFailureCancelled": "Cancelled",
   "diagnosticsFailurePlayback": "Playback failed",
   "diagnosticsFailureUnknown": "Unknown reason",
+  "diagnosticsResolveSection": "Playback links (this session)",
+  "diagnosticsResolveHint": "Counts only this session; they reset when the app restarts.",
+  "diagnosticsResolveCalls": "Link requests",
+  "diagnosticsResolveCacheHits": "Cache hits",
+  "diagnosticsResolveRetries": "Retries",
+  "diagnosticsResolveFailures": "Failed",
+  "diagnosticsResolveTimeouts": "Timed out",
+  "diagnosticsResolveCount": "{count}",
+  "@diagnosticsResolveCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "@diagnosticsVersionValue": {
     "placeholders": {
       "version": {

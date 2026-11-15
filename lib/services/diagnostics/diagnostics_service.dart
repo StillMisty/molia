@@ -11,15 +11,26 @@ import '../../domain/models/diagnostics.dart';
 import '../../domain/models/failure.dart';
 import 'failure_ring_buffer.dart';
 import 'log_file_sink.dart';
+import 'resolve_metrics.dart';
 import 'source_health_checker.dart';
 
 class DiagnosticsService implements FailureRecorder {
-  DiagnosticsService({FailureRingBuffer? failures, this.logSink})
-    : failures = failures ?? FailureRingBuffer() {
+  DiagnosticsService({
+    FailureRingBuffer? failures,
+    ResolveMetrics? metrics,
+    this.logSink,
+  }) : failures = failures ?? FailureRingBuffer(),
+       metrics = metrics ?? ResolveMetrics.session {
     _failureSubscription = this.failures.changes.listen((_) => _notify());
+    // 取链指标与失败记录同属「本次运行」观测面：页面订阅同一个 changes，
+    // 计数变化即重建，不需要单独的 provider。
+    this.metrics.addListener(_notify);
   }
 
   final FailureRingBuffer failures;
+
+  /// 取链会话指标（与 CatalogService 共用同一实例，见 [ResolveMetrics.session]）。
+  final ResolveMetrics metrics;
   final RotatingFileLogSink? logSink;
 
   final StreamController<void> _changes = StreamController<void>.broadcast();
@@ -74,6 +85,7 @@ class DiagnosticsService implements FailureRecorder {
     await _health?.dispose();
     await _healthSubscription?.cancel();
     await _failureSubscription?.cancel();
+    metrics.removeListener(_notify);
     await failures.dispose();
     await logSink?.close();
     await _changes.close();

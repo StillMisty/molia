@@ -21,6 +21,7 @@ import 'package:molia/services/diagnostics/diagnostics_service.dart';
 import 'package:molia/services/diagnostics/failure_ring_buffer.dart';
 import 'package:molia/services/diagnostics/log_file_sink.dart';
 import 'package:molia/services/diagnostics/redaction.dart';
+import 'package:molia/services/diagnostics/resolve_metrics.dart';
 import 'package:molia/services/diagnostics/source_health_checker.dart';
 
 import '../support/fake_music_source.dart';
@@ -683,6 +684,73 @@ void main() {
     expect(counts.schemaVersion, greaterThanOrEqualTo(1));
     expect(counts.counts.keys, contains('favorites'));
     expect(counts.hasSavedSession, isFalse);
+  });
+
+  group('取链指标', () {
+    test('计数按类别累加，快照是拷贝（后续计数不改旧快照）', () {
+      final metrics = ResolveMetrics();
+      var notified = 0;
+      metrics.addListener(() => notified++);
+
+      metrics
+        ..recordCall()
+        ..recordCacheHit()
+        ..recordCall()
+        ..recordRetry()
+        ..recordSuccess()
+        ..recordFailure(FailureKind.network)
+        ..recordFailure(FailureKind.timeout)
+        ..recordTimeout();
+
+      final snapshot = metrics.snapshot();
+      expect(snapshot.calls, 2);
+      expect(snapshot.cacheHits, 1);
+      expect(snapshot.retries, 1);
+      expect(snapshot.successes, 1);
+      expect(snapshot.failures, 2);
+      expect(snapshot.timeouts, 1);
+      expect(snapshot.failuresByKind[FailureKind.network], 1);
+      expect(snapshot.failuresByKind[FailureKind.timeout], 1);
+      expect(notified, 8, reason: '每次计数都通知页面');
+
+      metrics.recordCall();
+      expect(snapshot.calls, 2, reason: '快照不随后续计数变化');
+      expect(
+        () => snapshot.failuresByKind[FailureKind.cancelled] = 1,
+        throwsUnsupportedError,
+      );
+
+      metrics.reset();
+      expect(metrics.snapshot().calls, 0);
+      expect(metrics.snapshot().failuresByKind, isEmpty);
+    });
+
+    test('失败类别按次数降序，同次数按枚举顺序', () {
+      final metrics = ResolveMetrics()
+        ..recordFailure(FailureKind.timeout)
+        ..recordFailure(FailureKind.network)
+        ..recordFailure(FailureKind.network);
+
+      final kinds = metrics.snapshot().failureKinds;
+      expect(kinds.first.key, FailureKind.network);
+      expect(kinds.first.value, 2);
+      expect(kinds.last.key, FailureKind.timeout);
+    });
+
+    test('DiagnosticsService 注入的指标实例与页面共享，变化并进 changes', () async {
+      final metrics = ResolveMetrics();
+      final service = DiagnosticsService(metrics: metrics);
+      addTearDown(service.dispose);
+      var changed = 0;
+      final subscription = service.changes.listen((_) => changed++);
+      addTearDown(subscription.cancel);
+
+      expect(identical(service.metrics, metrics), isTrue);
+      metrics.recordCall();
+      await _settle();
+      expect(changed, greaterThan(0));
+      expect(service.metrics.snapshot().calls, 1);
+    });
   });
 }
 

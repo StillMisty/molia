@@ -5043,6 +5043,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagnosticsFailureUnknown => 'Unknown reason';
 
   @override
+  String get diagnosticsResolveSection => 'Playback links (this session)';
+
+  @override
+  String get diagnosticsResolveHint =>
+      'Counts only this session; they reset when the app restarts.';
+
+  @override
+  String get diagnosticsResolveCalls => 'Link requests';
+
+  @override
+  String get diagnosticsResolveCacheHits => 'Cache hits';
+
+  @override
+  String get diagnosticsResolveRetries => 'Retries';
+
+  @override
+  String get diagnosticsResolveFailures => 'Failed';
+
+  @override
+  String get diagnosticsResolveTimeouts => 'Timed out';
+
+  @override
+  String diagnosticsResolveCount(int count) {
+    return '$count';
+  }
+
+  @override
   String get diagnosticsLoading => 'Loading…';
 
   @override
