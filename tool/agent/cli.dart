@@ -18,6 +18,7 @@ import 'src/commands/emu.dart';
 import 'src/commands/smoke.dart';
 import 'src/commands/test.dart';
 import 'src/context.dart';
+import 'src/data_report.dart';
 import 'src/docs_check.dart';
 import 'src/perf_report.dart';
 import 'src/timeline_report.dart';
@@ -40,6 +41,7 @@ molia 跨端工具（Linux / macOS / Windows 同一套命令）
   perf <子命令>             frames / startup / data / cpu / memory / size（后端 perf.sh）
   perf report [<目录>]      frames 结果汇总成 summary.md（本命令为 Dart 实现）
   perf timeline <json>      VM timeline 帧归因（--out 指定 markdown 路径）
+  perf home <prefs.json>    固定隔离 HOME 的窗口 bounds（data/cpu 前置）
   startup|cpu|memory|io|seed  采样与数据注入（平台后端：sh / ps1，参数原样透传）
   help [<命令>]             查看总用法或单个命令用法
 
@@ -124,7 +126,13 @@ Future<void> main(List<String> args) async {
     case 'size':
       await _runSize(context, rest);
     case 'perf':
-      if (rest.isEmpty || rest.first == 'report' || rest.first == 'timeline') {
+      if (rest.isEmpty ||
+          const {
+            'report',
+            'timeline',
+            'home',
+            'data-report',
+          }.contains(rest.first)) {
         await _runPerf(context, rest);
       } else {
         await _runBackend(context, 'perf', rest);
@@ -390,6 +398,14 @@ Future<void> _runPerf(ToolContext context, List<String> args) async {
     await _runTimeline(args.sublist(1));
     return;
   }
+  if (args.first == 'home') {
+    _runPerfHome(args.sublist(1));
+    return;
+  }
+  if (args.first == 'data-report') {
+    _runDataReport(args.sublist(1));
+    return;
+  }
   if (args.first != 'report') {
     stderr.writeln('[agent] 未知子命令：${args.first}（report / timeline）');
     exitCode = 2;
@@ -486,6 +502,43 @@ Future<void> _runBackend(
     default:
       return null;
   }
+}
+
+/// `perf home <prefs.json>`：把隔离 HOME 的窗口 bounds 固定成 1440×900。
+void _runPerfHome(List<String> args) {
+  if (args.isEmpty) {
+    stderr.writeln(
+      '用法: dart run tool/agent/cli.dart perf home <shared_preferences.json>',
+    );
+    exitCode = 2;
+    return;
+  }
+  resetPerfWindowBounds(args.first);
+}
+
+/// `perf data-report <目录>`：molia.perf 样本 → summary.md。
+void _runDataReport(List<String> args) {
+  if (args.isEmpty) {
+    stderr.writeln('用法: dart run tool/agent/cli.dart perf data-report <结果目录>');
+    exitCode = 2;
+    return;
+  }
+  final directory = Directory(args.first);
+  if (!directory.existsSync()) {
+    stderr.writeln('[agent] 目录不存在：${args.first}');
+    exitCode = 2;
+    return;
+  }
+  final report = renderDataReport(directory);
+  final summary = File('${directory.path}${Platform.pathSeparator}summary.md')
+    ..writeAsStringSync(report.markdown);
+  if (!report.hasSamples) {
+    stderr.writeln('[agent] 没有采到 molia.perf 样本（${directory.path}）');
+    exitCode = 1;
+    return;
+  }
+  stdout.write(report.markdown);
+  stderr.writeln('[agent] 已写入 ${summary.path}');
 }
 
 /// `perf timeline <timeline.json> [--out <summary.md>]`：VM timeline 帧归因。

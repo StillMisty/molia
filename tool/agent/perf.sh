@@ -257,26 +257,7 @@ prepare_perf_home() {
   # （曾出现 3492×3012）时，软件光栅 / 平台线程会被无谓拉满，帧与 CPU 数据
   # 全部失真。每次 perf 前固定到 1440×900，保证跨轮可比。
   local prefs="$PERF_HOME/.local/share/$APP_ID/shared_preferences.json"
-  python3 - "$prefs" <<'PY' || true
-import json
-import pathlib
-import sys
-
-path = pathlib.Path(sys.argv[1])
-if not path.exists():
-    raise SystemExit
-try:
-    data = json.loads(path.read_text())
-except Exception:
-    raise SystemExit
-if not isinstance(data, dict):
-    raise SystemExit
-data['flutter.window_bounds_x'] = 0.0
-data['flutter.window_bounds_y'] = 0.0
-data['flutter.window_bounds_width'] = 1440.0
-data['flutter.window_bounds_height'] = 900.0
-path.write_text(json.dumps(data, ensure_ascii=False))
-PY
+  dart run "$PROJECT_DIR/tool/agent/cli.dart" perf home "$prefs" || true
 }
 
 seed_mock_source() { # platform out_dir [serial]
@@ -444,64 +425,7 @@ run_data_android() { # out_dir [serial]
 
 report_data() { # 解析 molia.perf JSONL / 日志为 Markdown
   local dir="$1"
-  python3 - "$dir" <<'PY'
-import json, pathlib, statistics, sys
-from collections import OrderedDict
-
-root = pathlib.Path(sys.argv[1])
-rows = []
-for path in [root / 'run.log', root / 'data.log']:
-    if not path.exists():
-        continue
-    for line in path.read_text(errors='replace').splitlines():
-        if 'molia.perf: ' not in line:
-            continue
-        text = line.split('molia.perf: ', 1)[1].strip()
-        try:
-            rows.append(json.loads(text))
-        except json.JSONDecodeError:
-            pass
-
-if not rows:
-    print(f'没有采到 molia.perf 样本（{root}）', file=sys.stderr)
-    (root / 'summary.md').write_text('# 数据链路体检\n\n没有采到 `molia.perf` 样本。\n')
-    sys.exit(0)
-
-ops = OrderedDict()
-events = OrderedDict()
-for row in rows:
-    op = str(row.get('op', ''))
-    if op.startswith('scenario.'):
-        events[op] = row
-        continue
-    ops.setdefault(op, []).append(float(row.get('ms', 0)))
-
-def qs(values):
-    values = sorted(values)
-    def q(p):
-        rank = max(0, min(len(values) - 1, (p / 100 * len(values) + 0.999999) // 1 - 1))
-        return values[int(rank)]
-    return len(values), q(50), q(95), max(values)
-
-lines = ['# 数据链路体检（mock 音源）', '']
-lines.append('## 端到端（scenario 墙钟）')
-lines.append('')
-lines.append('| 阶段 | ms | 字段 |')
-lines.append('| --- | ---: | --- |')
-for op, row in events.items():
-    fields = {k: v for k, v in row.items() if k not in ('op', 'ms', 'ts')}
-    lines.append(f"| {op} | {row.get('ms', 0)} | {json.dumps(fields, ensure_ascii=False)} |")
-
-lines += ['', '## 分项耗时（ms）', '',
-          '| op | n | p50 | p95 | max |', '| --- | ---: | ---: | ---: | ---: |']
-for op, values in ops.items():
-    n, p50, p95, worst = qs(values)
-    lines.append(f'| {op} | {n} | {p50:.2f} | {p95:.2f} | {worst:.2f} |')
-
-summary = '\n'.join(lines) + '\n'
-(root / 'summary.md').write_text(summary)
-print(summary)
-PY
+  dart run "$PROJECT_DIR/tool/agent/cli.dart" perf data-report "$dir"
 }
 
 cpu_sample_linux() { # out_dir label pid
@@ -735,67 +659,7 @@ run_cpu_android() { # out_dir [serial]
 
 report() { # 解析 frames.jsonl / frames.log 输出 Markdown
   local dir="$1"
-  local out="$dir/summary.md"
-  python3 - "$dir" "$out" <<'PY'
-import json, pathlib, statistics, sys
-
-root = pathlib.Path(sys.argv[1])
-out = pathlib.Path(sys.argv[2])
-rows = []
-for path in sorted(root.glob('frames*.jsonl')):
-    for line in path.read_text(errors='replace').splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rows.append(json.loads(line))
-        except json.JSONDecodeError:
-            pass
-for path in sorted(root.glob('frames*.log')):
-    for line in path.read_text(errors='replace').splitlines():
-        payload = line.split('molia.frame:', 1)
-        if len(payload) != 2:
-            continue
-        text = payload[1].strip()
-        if text.startswith('molia.frame:'):
-            text = text.split(':', 1)[1].strip()
-        try:
-            rows.append(json.loads(text))
-        except json.JSONDecodeError:
-            pass
-
-if not rows:
-    out.write_text('# 性能体检\n\n没有采到 `molia.frame` 样本。\n')
-    print(f'没有帧样本 -> {out}')
-    sys.exit(0)
-
-keys = [
-    'scenario', 'label', 'frames', 'build_p50', 'build_p95', 'build_p99',
-    'raster_p50', 'raster_p95', 'raster_p99', 'work_p50', 'work_p95',
-    'work_p99', 'vsync_p95', 'total_p50', 'total_p95', 'total_p99',
-    'jank16', 'jank33', 'latency16', 'worst_ms', 'image_cache_mb',
-]
-summary = {}
-for row in rows:
-    scenario = row.get('scenario', 'app')
-    current = summary.get(scenario)
-    # 每个场景优先取显式 end；没有 end 时退回最后一条（启动期没机会打 end）。
-    if current is None or row.get('label') == 'end':
-        summary[scenario] = row
-
-lines = ['# 性能体检：帧样本', '', '## 场景汇总（每个场景取 end / 最后一条）', '',
-         '| ' + ' | '.join(keys) + ' |',
-         '| ' + ' | '.join('---' for _ in keys) + ' |']
-for row in summary.values():
-    lines.append('| ' + ' | '.join(str(row.get(k, '')) for k in keys) + ' |')
-lines += ['', '## 原始窗口', '',
-          '| ' + ' | '.join(keys) + ' |',
-          '| ' + ' | '.join('---' for _ in keys) + ' |']
-for row in rows:
-    lines.append('| ' + ' | '.join(str(row.get(k, '')) for k in keys) + ' |')
-out.write_text('\n'.join(lines) + '\n')
-print(f'{len(rows)} 条帧样本 -> {out}')
-PY
+  dart run "$PROJECT_DIR/tool/agent/cli.dart" perf report "$dir"
 }
 
 cmd="${1:-}"
