@@ -315,6 +315,30 @@ Linux microbenchmark（非端到端启动采样，绝对值只用于比较量级
 复测入口为 `tool/agent/perf.sh`（`frames` / `memory` / `size` / `startup` / `data` /
 `cpu`），Windows 真实窗口帧用 `tool/agent/perf.sh frames windows --real`。
 
+### 9.1 帧归因：`frames --timeline`（2026-11）
+
+默认 `frames` 只报每帧总耗时（应用内 `FrameTiming` 打点），够做跨场景 p50/p95/p99
+回归，但看不出「卡在哪个阶段」。需要定位时跑：
+
+```bash
+tool/agent/perf.sh frames linux --timeline     # Android 换成 android [serial]
+```
+
+这条路径换用 `integration_test/perf_timeline_test.dart`：`traceAction` 采一段
+VM service timeline（DevTools Performance 的同一数据源），场景仍是桌面壳收藏滚动。
+
+- 产物：`timeline.json`（原始 trace，可直接导入 DevTools Performance 或
+  ui.perfetto.dev 看火焰图）与 `summary.md`（UI 帧百分位、BUILD / LAYOUT / PAINT /
+  COMPOSITING / SEMANTICS / FINALIZE TREE 每帧耗时、最差 8 帧的主要子事件），
+  由 `tool/agent/timeline_report.py` 生成；
+- 不做长期基线：timeline 体积与采集开销都远大于默认路径，回归对比仍看 `frames`；
+- Linux 首测（Xvfb，1000 条收藏，10×12 帧滚动）两次：UI 帧 p50 2–4ms / p95 ≈5–6ms，
+  其中 LAYOUT 占 42–44%、SEMANTICS 占 36–39%。两次差距说明 instrument 环境噪声
+  不小，所以只用于「阶段占比」判断，不当基线；光栅列接近 0 是正常的：
+  `GPURasterizer::Draw` 只含 CPU 侧提交，Impeller 的 GPU 时间不进 trace；
+- SEMANTICS 占比受运行环境语义树状态影响（GTK/at-spi 或测试绑定的无障碍开关）；
+  跨平台 / 跨机器比较前先确认两边一致，否则看起来像性能差异其实是开关差异。
+
 ## 10. Linux 打包体积（2026-11）
 
 入口：`tool/agent/perf.sh size linux`。它先清 `build/flutter_assets`、

@@ -1,6 +1,3 @@
-import 'dart:math' as math;
-
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -15,6 +12,7 @@ import 'package:molia/widgets/player.dart';
 import 'package:motor/motor.dart';
 
 import '../test/support/perf_app_harness.dart';
+import '../test/support/perf_scenarios.dart';
 
 /// 帧体检场景：profile 模式下驱动真实壳层，FrameStats 按场景输出汇总。
 ///
@@ -29,24 +27,6 @@ void main() {
     initAppLogging();
     FrameStats.instance.install();
   });
-
-  Future<void> ctrlDigit(WidgetTester tester, int digit) async {
-    final (logical, physical) = switch (digit) {
-      1 => (LogicalKeyboardKey.digit1, PhysicalKeyboardKey.digit1),
-      2 => (LogicalKeyboardKey.digit2, PhysicalKeyboardKey.digit2),
-      _ => (LogicalKeyboardKey.digit3, PhysicalKeyboardKey.digit3),
-    };
-    await tester.sendKeyDownEvent(
-      LogicalKeyboardKey.controlLeft,
-      physicalKey: PhysicalKeyboardKey.controlLeft,
-    );
-    await tester.sendKeyEvent(logical, physicalKey: physical);
-    await tester.sendKeyUpEvent(
-      LogicalKeyboardKey.controlLeft,
-      physicalKey: PhysicalKeyboardKey.controlLeft,
-    );
-    await pumpFrames(tester);
-  }
 
   /// 移动骨架没有软件内快捷键（`DesktopShortcuts` 只包桌面骨架），切页要
   /// 走真实的底栏入口；播放页目的地用 Molia 标志图标（唯一的一颗）。
@@ -95,29 +75,6 @@ void main() {
       findsOneWidget,
       reason: '未到达收藏页',
     );
-  }
-
-  Future<void> scrollList(WidgetTester tester, {int times = 10}) async {
-    final finder = find
-        .descendant(
-          of: find.byWidgetPredicate((widget) => widget is CollectionTrackList),
-          matching: find.byType(Scrollable),
-        )
-        .first;
-    final position = tester.state<ScrollableState>(finder).position;
-    final before = position.pixels;
-    for (var i = 0; i < times; i++) {
-      // 逐帧推进而不是 fling：桌面壳的列表中心可能被固定表头 / 壳层 chrome
-      // 盖住，手势会命中不到；这里只测「滚动时列表构建 / 布局 / 光栅」的帧成本。
-      for (var step = 0; step < 12; step++) {
-        final pos = math.min(position.pixels + 50, position.maxScrollExtent);
-        position.jumpTo(pos);
-        await tester.pump(const Duration(milliseconds: 16));
-      }
-    }
-    if (position.pixels == before) {
-      fail('列表没有产生滚动位移（场景无效）');
-    }
   }
 
   /// 泵帧直到播放器高度满足条件：模拟器上动画/手势落定比桌面慢，

@@ -3,6 +3,7 @@
 #
 # 用法:
 #   tool/agent/perf.sh frames linux|android|windows
+#   tool/agent/perf.sh frames linux|android --timeline   # VM timeline 归因 + 原始 trace
 #   tool/agent/perf.sh frames windows --real   # release 真实窗口 + 滚轮，raster 可信
 #   tool/agent/perf.sh startup linux|android
 #   tool/agent/perf.sh data linux|android      # 搜索/起播/取词端到端时延（mock 音源）
@@ -26,6 +27,10 @@
 #   不可 run-as）；首次安装会先启动一次应用创建私有目录再 seed；
 # - frames 走 `flutter drive --profile` + integration_test/perf_flows_test.dart，
 #   只读 `molia.frame` 汇总行（FrameStats opt-in，正常包无开销）；
+# - `frames --timeline` 换 integration_test/perf_timeline_test.dart：用
+#   `traceAction` 采 VM timeline（DevTools Performance 的同一数据源），
+#   timeline.json 可直接导入 DevTools / Perfetto；summary.md 里按帧给出
+#   build / raster 拆分与最差帧归因，用于默认路径只报总耗时之后的定位；
 # - Windows 目标必须用 Windows 侧 Flutter（WSL 的 Flutter 不能构建 Windows）；
 #   默认从 Windows 用户目录推导构建目录（%USERPROFILE%\molia-perf）、从 %TEMP%
 #   推导采样输出、从 Windows PATH 取 flutter.bat，可用 MOLIA_WIN_FLUTTER /
@@ -33,8 +38,11 @@
 # - 启动 / 内存沿用已有专用脚本，避免两套口径（startup.sh / memory.sh / memory.ps1）；
 # - 结果落在 $RUN_DIR/perf-<平台>-<时间戳>/，原始日志与 frames.jsonl 都可复查。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
+handle_help "$@"
 
 FRAME_TEST_TARGET="integration_test/perf_flows_test.dart"
+FRAME_TIMELINE_TARGET="integration_test/perf_timeline_test.dart"
+FRAME_TIMELINE_DATA="$PROJECT_DIR/build/integration_response_data.json"
 FRAME_TEST_DRIVER="test_driver/integration_test.dart"
 # Windows 侧路径：优先环境变量；未设置时由 win_init 从 Windows 用户目录与
 # %TEMP% 推导，不假设任何用户名或 SDK 安装位置。
@@ -61,10 +69,6 @@ done
 set -- "${_global_args[@]}"
 unset _arg _global_args
 
-usage() {
-  sed -n '/^# 用法:/,/^# 说明:/p' "$0" | sed -e 's/^# \{0,1\}//' -e '$d' >&2
-  exit 2
-}
 
 new_out_dir() {
   local platform="$1"
@@ -134,7 +138,8 @@ windows_powershell() { # 传入 PowerShell 命令字符串
 
 run_frames_linux() {
   require_flutter
-  local out_dir="$1"
+  local out_dir="$1" timeline="${2:-0}" target="$FRAME_TEST_TARGET"
+  ((timeline)) && target="$FRAME_TIMELINE_TARGET"
   linux_run_prefix
   local out_file="$out_dir/frames.jsonl"
   log "帧场景（Linux / profile）：结果 $out_dir"
@@ -142,7 +147,7 @@ run_frames_linux() {
     flutter drive \
     --profile \
     --driver="$FRAME_TEST_DRIVER" \
-    --target="$FRAME_TEST_TARGET" \
+    --target="$target" \
     -d linux \
     --dart-define=MOLIA_PERF_TRACE=true \
     --dart-define="MOLIA_PERF_OUT=$out_file" \
@@ -153,7 +158,8 @@ run_frames_android() {
   require_flutter
   ensure_adb
   local serial="${1:-$DEVICE_ID}"
-  local out_dir="$2"
+  local out_dir="$2" timeline="${3:-0}" target="$FRAME_TEST_TARGET"
+  ((timeline)) && target="$FRAME_TIMELINE_TARGET"
   "$ADB" -s "$serial" get-state >/dev/null 2>&1 ||
     die "设备 $serial 未连接（先 tool/agent/emu.sh start）"
   log "帧场景（Android $serial / profile）：结果 $out_dir"
@@ -162,13 +168,27 @@ run_frames_android() {
     flutter drive \
     --profile \
     --driver="$FRAME_TEST_DRIVER" \
-    --target="$FRAME_TEST_TARGET" \
+    --target="$target" \
     -d "$serial" \
     --dart-define=MOLIA_PERF_TRACE=true \
     2>&1 | tee "$out_dir/drive.log"
+  if ((timeline)); then
+    return 0
+  fi
   "$ADB" -s "$serial" logcat -d -v time 2>/dev/null |
     grep -a 'molia.frame' >"$out_dir/frames.log" || true
   grep -a 'molia.frame' "$out_dir/drive.log" >>"$out_dir/frames.log" || true
+}
+
+# `frames --timeline` 的产物：traceAction 把 timeline 交给 driver，driver 落在
+# build/integration_response_data.json；这里收进结果目录并生成归因摘要。
+collect_timeline() {
+  local out_dir="$1"
+  [[ -f "$FRAME_TIMELINE_DATA" ]] ||
+    die "没有 timeline 产物：$FRAME_TIMELINE_DATA（看 $out_dir/drive.log 里 traceAction / VM service 的报错）"
+  cp "$FRAME_TIMELINE_DATA" "$out_dir/timeline.json"
+  python3 "$PROJECT_DIR/tool/agent/timeline_report.py" \
+    "$out_dir/timeline.json" "$out_dir/summary.md"
 }
 
 run_frames_windows() {
@@ -785,20 +805,32 @@ shift || true
 case "$cmd" in
   frames)
     ((PERF_NO_BUILD)) && die "frames 暂不支持 --no-build：flutter drive 会重建 profile 产物"
+    timeline=0
+    frame_args=()
+    for frame_arg in "$@"; do
+      case "$frame_arg" in
+        --timeline) timeline=1 ;;
+        *) frame_args+=("$frame_arg") ;;
+      esac
+    done
+    set -- "${frame_args[@]}"
+    unset frame_arg frame_args
     [[ $# -ge 1 ]] || usage
     platform="$1"; shift
     case "$platform" in
       linux)
         out_dir="$(new_out_dir linux)"
-        run_frames_linux "$out_dir" | tee "$out_dir/drive-console.log"
-        report "$out_dir"
+        run_frames_linux "$out_dir" "$timeline" | tee "$out_dir/drive-console.log"
+        if ((timeline)); then collect_timeline "$out_dir"; else report "$out_dir"; fi
         ;;
       android)
         out_dir="$(new_out_dir android)"
-        run_frames_android "${1:-}" "$out_dir" | tee "$out_dir/drive-console.log"
-        report "$out_dir"
+        run_frames_android "${1:-}" "$out_dir" "$timeline" | tee "$out_dir/drive-console.log"
+        if ((timeline)); then collect_timeline "$out_dir"; else report "$out_dir"; fi
         ;;
       windows)
+        ((timeline)) &&
+          die "Windows 不支持 --timeline：真实窗口帧走 frames windows --real（PowerShell 采样）"
         out_dir="$(new_out_dir windows)"
         if [[ "${1:-}" == "--real" ]]; then
           run_frames_windows_real "$out_dir" | tee "$out_dir/frames-console.log"
