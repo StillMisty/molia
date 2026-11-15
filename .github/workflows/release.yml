@@ -243,6 +243,14 @@ jobs:
           cache: true
       - name: pub get
         run: flutter pub get --enforce-lockfile
+      # 跨端工具 CLI（ADR-0031）：Windows 上验证入口与只读命令，防止只有
+      # Linux 能跑的老问题回归。
+      - name: 工具 CLI 冒烟
+        shell: pwsh
+        run: |
+          dart run tool/agent/cli.dart -h | Out-Null
+          dart run tool/agent/cli.dart info
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: 安装 Inno Setup（Windows 安装器编译器）
         shell: pwsh
         run: choco install innosetup -y --no-progress

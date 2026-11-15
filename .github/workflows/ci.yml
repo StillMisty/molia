@@ -49,3 +49,9 @@ jobs:
 
       - name: test
         run: flutter test --no-pub
+
+      # 跨端工具 CLI（ADR-0031）：Linux 侧至少保证入口与只读命令可用。
+      - name: 工具 CLI 冒烟
+        run: |
+          dart run tool/agent/cli.dart -h >/dev/null
+          dart run tool/agent/cli.dart info
