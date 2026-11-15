@@ -28,9 +28,10 @@ description: 优化或验证 Molia 的包体积、内存、APK 内容、Linux re
 tool/agent/worktree_prepare.sh /path/to/worktree perf/my-change
 ```
 
-它补：分支、`android/key.properties` + `*.jks`、`android/gradle` wrapper、
-`.dart_tool/hooks_runner/shared`（sqlite3 / cnativeapi 预编译缓存），并做首次
-`pub get`。缺签名时 release APK 会失败；缺 hooks 缓存时 Android build 会去
+它补：分支、签名（优先用户级 `~/.config/molia/android.properties`，没有时才复制
+`android/key.properties` + `*.jks`）、`.dart_tool/hooks_runner/shared`
+（sqlite3 / cnativeapi 预编译缓存），并做首次 `pub get`。Gradle wrapper 已入库，
+不再复制。缺签名时 release APK 会失败；缺 hooks 缓存时 Android build 会去
 GitHub 下载 sqlite3（受限网络会等 3 分钟以上）。细节见 `docs/pitfalls.md` #26。
 
 ## seed.sh

@@ -253,6 +253,7 @@ def toolchain_from_agents() -> dict[str, str]:
     grab("min_sdk", r"minSdk\s+([\d.]+)")
     grab("build_tools", r"build-tools\s+([\d.]+)")
     grab("ndk", r"NDK\s+([\d.]+)")
+    grab("android_cli", r"Android CLI\s+([\d.]+)")
     return values
 
 
@@ -336,6 +337,12 @@ def check_toolchain() -> list[str]:
             compare("build-tools", version, expected["build_tools"], rel(workflow))
         for version in re.findall(r"^\s*ndk_version=([\d.]+)", text, re.MULTILINE):
             compare("NDK", version, expected["ndk"], rel(workflow))
+        for version in re.findall(
+            r"^\s*ANDROID_CLI_VERSION:\s*[\"']?([\d.]+)", text, re.MULTILINE
+        ):
+            compare(
+                "Android CLI", version, expected["android_cli"], rel(workflow)
+            )
 
     # 文档不得复列当前版本；带日期的测量快照与 ADR 除外。
     version_tokens = {
@@ -346,6 +353,7 @@ def check_toolchain() -> list[str]:
         "Kotlin": expected["kotlin"],
         "build-tools": expected["build_tools"],
         "NDK": expected["ndk"],
+        "Android CLI": expected["android_cli"],
     }
     for path in iter_doc_files():
         if rel(path) == "AGENTS.md":

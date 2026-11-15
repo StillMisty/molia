@@ -10,9 +10,24 @@ AI 推歌（可选）、跨设备同步（WebDAV / 局域网，可选）。目�
 ## 工具链
 
 Flutter / Dart 3.50.0 / 3.14.0；JDK 27+；Gradle 9.9.1 / AGP 9.5.1 / Kotlin 2.4.21；
-compileSdk 37.2 / targetSdk 37，minSdk 35；build-tools 37.0.0；NDK 30.0.16248370。
+compileSdk 37.2 / targetSdk 37，minSdk 35；build-tools 37.0.0；NDK 30.0.16248370；
+Android CLI 1.1.16919734。
 这里是版本来源；其它文档与技能只引用本节、不复列版本号，改 CI / 发布工作流前先改本行。
 最低支持：iOS 18 / macOS 12（Xcode；macOS 走 just_audio 原生 AVPlayer，不需要 libmpv）。
+
+版本策略：本仓刻意跟最新 stable（工具链与依赖都是），不因“更稳妥”降级。
+升级门槛是 `flutter analyze` + `flutter test` + 发布矩阵 dry-run 全绿；确实要压制的
+告警必须在本节下面的「已知例外」登记，不接受隐式全局开关。
+
+已知例外（每项都要有移除条件，不能只留注释）：
+
+- `kotlin.jvm.target.validation.mode=warning`：app target 26 与常用插件 target 17/11
+  并存；插件跟上 26 或本仓把 target 降到 17 时删除。
+- `android/app/build.gradle` 剔除 `libcnativeapi.so`：nativeapi 的 Android C++ 核
+  运行期不用；上游按平台裁剪后删除。
+- `analysis_options.yaml` 排除 `lib/l10n/app_localizations*.dart`：Flutter 模板仍用
+  已弃用的 `Global*Localizations`；SDK 更新后删除。
+- `android.newDsl=false`：Flutter 3.50 尚未支持 AGP9 新 DSL；Flutter 支持后删除。
 
 ## 常用命令
 
@@ -21,6 +36,7 @@ compileSdk 37.2 / targetSdk 37，minSdk 35；build-tools 37.0.0；NDK 30.0.16248
 ```bash
 flutter analyze --no-pub   # 必须 0 error / 0 warning
 flutter test --no-pub      # 全量（默认集，本机 <30s）；单文件：flutter test test/lx_core_test.dart --no-pub
+dart run tool/agent/cli.dart -h          # 跨端工具入口（Linux/macOS/Windows；info/deps/size/perf report，见 ADR-0031）
 tool/agent/test.sh linux   # 端到端（真实引擎 + 设置页 + 窗口/托盘，不含播放）；Xvfb 无窗口，桌面看门狗勿删
 tool/agent/test.sh android # 同一套跑模拟器（先 emu.sh start）；--window / --timeout 见脚本
 tool/agent/smoke.sh linux  # 启动首帧烟测（真实 main + provider tree；Xvfb，抓 runApp 前崩溃）
@@ -32,7 +48,8 @@ tool/agent/memory.sh                     # 托盘内存采样（RSS 曲线 + mol
 tool/agent/io.sh                         # 磁盘写入采样（prefs mtime 计数 + DB/WAL 大小 + /proc IO 差分）
 tool/agent/memory.ps1                    # Windows 托盘内存采样（专用工作集 / 提交大小；见 docs/memory.md）
 tool/agent/hooks.sh                      # 启用 .githooks/pre-commit：格式化暂存 Dart + 文档/工具链检查
-tool/agent/worktree_prepare.sh <dir> [branch]  # 新 worktree：分支 / 签名 / Gradle / hooks 缓存
+tool/agent/deps.sh                       # 依赖/工具链体检：pub outdated + analyze suggestions + Gradle 实际版本
+tool/agent/worktree_prepare.sh <dir> [branch]  # 新 worktree：分支 / 签名 / hooks 缓存
 python3 tool/agent/apk_size.py --check <apk>   # APK 分组体积与 native 库约束（无需 unzip）
 python3 tool/agent/check_docs.py               # 文档引用 / 工具链一致性（CI 与 pre-commit 自动跑）
 ```

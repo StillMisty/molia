@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 为新 worktree 补齐本机构建前置：分支、Android 签名、Gradle wrapper、
-# native assets hooks 缓存。只用于本机/agent，不写任何受版本控制的文件。
+# 为新 worktree 补齐本机构建前置：分支、Android 签名、native assets hooks 缓存。
+# 只用于本机/agent，不写任何受版本控制的文件。
 #
 # 用法:
 #   tool/agent/worktree_prepare.sh <worktree-dir> [branch]
@@ -10,21 +10,16 @@
 #   cd /path/to/molia-wt && flutter analyze --no-pub
 #
 # 为什么需要：
-# - android/key.properties 与 *.jks 被 .gitignore 排除，新 worktree 的 release
-#   构建会缺签名；
-# - android/gradle/wrapper 也被排除，Flutter 可能生成与 AGP 不匹配的 wrapper；
+# - 签名：优先用用户级 ~/.config/molia/android.properties（storeFile 写绝对路径），
+#   所有 worktree 共用；没有时才从源工作区复制 android/key.properties / *.jks；
 # - .dart_tool/hooks_runner/shared 里是 sqlite3/cnativeapi 的预编译产物，受限
 #   网络下重新下载会卡住 Android build hooks；
 # - OpenCode 的 worktree_create 默认 detached HEAD，直接提交会丢分支。
 #
-# 脚本幂等；已存在的文件不覆盖。
+# Gradle wrapper 已入库，脚本不再复制。脚本幂等；已存在的文件不覆盖。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
+handle_help "$@"
 
-usage() {
-  sed -n '/^# 用法:/,/^# 为什么需要:/p' "$0" |
-    sed -e 's/^# \{0,1\}//' -e '$d' >&2
-  exit 2
-}
 
 [[ $# -ge 1 ]] || usage
 target_arg="$1"
@@ -64,24 +59,24 @@ else
   die "目标存在但不是 git worktree：$target"
 fi
 
-# Android 签名：key.properties 里的 storeFile 通常相对 android/，连 .jks 一起复制。
-copied_signing=0
-if [[ -f "$source_dir/android/key.properties" ]]; then
-  cp -a "$source_dir/android/key.properties" "$target/android/"
-  copied_signing=1
-fi
-for keystore in "$source_dir"/android/*.jks; do
-  [[ -f "$keystore" ]] || continue
-  cp -a "$keystore" "$target/android/"
-  copied_signing=1
-done
-(( copied_signing )) ||
-  log "警告：源工作区没有 android/key.properties 或 *.jks；release 构建仍会缺签名"
-
-# Gradle wrapper（版本见 AGENTS.md「工具链」与 gradle-wrapper.properties；不要让它按 SDK 模板生成旧版本）。
-if [[ -d "$source_dir/android/gradle" && ! -d "$target/android/gradle" ]]; then
-  cp -a "$source_dir/android/gradle" "$target/android/"
-  log "已复制 android/gradle wrapper"
+# Android 签名：优先用户级配置，所有 worktree 共用同一份。
+if [[ -f "$HOME/.config/molia/android.properties" ]]; then
+  log "使用用户级签名配置：~/.config/molia/android.properties"
+else
+  # 兼容旧布局：key.properties 里的相对 storeFile 以 app 模块为基准，
+  # 因此 key.properties 与 *.jks 必须放在目标 worktree 的 android/ 下。
+  copied_signing=0
+  if [[ -f "$source_dir/android/key.properties" ]]; then
+    cp -a "$source_dir/android/key.properties" "$target/android/"
+    copied_signing=1
+  fi
+  for keystore in "$source_dir"/android/*.jks; do
+    [[ -f "$keystore" ]] || continue
+    cp -a "$keystore" "$target/android/"
+    copied_signing=1
+  done
+  (( copied_signing )) ||
+    log "警告：没有用户级签名配置，源工作区也没有 android/key.properties / *.jks；release 构建仍会缺签名"
 fi
 
 # native assets hooks 缓存：sqlite3/cnativeapi 的预编译产物。只复制 shared，

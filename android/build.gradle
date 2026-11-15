@@ -1,3 +1,5 @@
+// 依赖仓库只在这里声明；Flutter 插件会追加 download.flutter.io 引擎仓库。
+// 不要在 app 模块或 settings.gradle 再复制一份。
 allprojects {
     repositories {
         google()

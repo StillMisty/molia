@@ -33,6 +33,14 @@ tool/agent/setup.sh               # 可选：Android 模拟器 / SDK 组件（�
 - **依赖**：`pubspec.lock` 必须提交。CI 与发布用 `flutter pub get --enforce-lockfile`；
   升级依赖用 `flutter pub upgrade <pkg>` 定点升级，不要全量 `flutter pub upgrade`
   （会让锁文件整体漂移），升级后跑全量测试。
+- **版本策略**：本仓保持最新 stable，不因“更稳妥”降级；升级必须过
+  `flutter analyze --no-pub` + `flutter test --no-pub` + 发布矩阵 dry-run。
+  被压制的告警与例外登记在 `AGENTS.md`「工具链」的「已知例外」。
+- **依赖体检**：`tool/agent/deps.sh` 汇总 `pub outdated`、`flutter analyze --suggestions`、
+  Gradle 的 KGP/AGP 实际版本与 Android CLI 版本；结果写到 `$RUN_DIR/deps-*`，升级前跑一次。
+- **跨端入口**：`dart run tool/agent/cli.dart <命令>` 是 Linux / macOS / Windows 同一套
+  工具入口（`-h` 看命令表）。已迁移：`info`、`deps`、`size apk`、`perf report`；其余
+  命令仍在 `tool/agent/*.sh`。迁移顺序、平台后端划分与旧实现的退役条件见 ADR-0031。
 - **平台依赖**：Linux 的 libmpv / X11 开发包 / 中文字体，macOS 的 Xcode + Swift Package
   Manager（仓库没有 Podfile），Android 的 SDK / NDK —— 见 `docs/dev_environment.md`。
 - **并行会话**：新 worktree 先跑 `tool/agent/worktree_prepare.sh <dir> [branch]`，
@@ -163,7 +171,7 @@ CI 红了的处理顺序：先本地复现同一条命令，不要先改 CI；�
 
 | 平台 | 命令 | 前置 / 校验 |
 | --- | --- | --- |
-| Android | `flutter build apk --release --split-per-abi` / `flutter build appbundle --release` | JDK + SDK + NDK；签名读 `android/key.properties`（不入库）；`python3 tool/agent/apk_size.py --check <apk>` 校验 native 库与分组体积 |
+| Android | `flutter build apk --release --split-per-abi` / `flutter build appbundle --release` | JDK + SDK + NDK；签名优先读 `android/key.properties`，没有时读 `~/.config/molia/android.properties`（都不入库）；`python3 tool/agent/apk_size.py --check <apk>` 校验 native 库与分组体积 |
 | Windows | `flutter build windows --release` | 必须在 Windows 侧 Flutter 构建（WSL 的 Flutter 不能出 Windows 包）；安装器用 `windows/installer/molia.iss` |
 | Linux | `flutter build linux --release` | 系统安装 `libmpv`；`tool/agent/check_linux_bundle.sh` 拒绝 debug 残留 / 非 release 引擎；`tool/strip_linux_bundle.sh` 只 strip 第三方插件库；桌面入口在 `linux/packaging/` |
 | iOS | `flutter build ios --release --no-codesign` | 必须在 macOS 构建；Swift Package Manager（无 Podfile）；产物仅供侧载与验证 |
@@ -189,6 +197,10 @@ tool/agent/check_linux_bundle.sh
 
 其它平台的参数组合与 `.github/workflows/release.yml` 完全一致。本地只验证「能不能
 出包 + 体积 / 资源是否达标」，签名与上传交给 CI，不在本地伪造发布环境。
+
+工具链升级后先跑发布矩阵 dry-run：GitHub Actions 手动触发 `Release`，`version`
+填 `pubspec.yaml` 的版本（不带 `v`），只构建并上传 artifacts，不创建 Release。
+dry-run 全绿再打 tag。
 
 ## 7. 发布
 

@@ -141,8 +141,9 @@ tool/agent/seed.sh android restore       # 用最近一次备份还原（第一�
   Linux `~/.local/share/top.stillmisty.molia/`（DB 同处）。
   同目录的旧 `molia_database.sqlite` 保留但不读。
 - 新 worktree 首次 Android / 体积构建先跑
-  `tool/agent/worktree_prepare.sh <worktree-dir> [branch]`：会补分支、签名、
-  Gradle wrapper 与 native assets hooks 缓存（受限网络下 sqlite3 下载会卡）。
+  `tool/agent/worktree_prepare.sh <worktree-dir> [branch]`：会补分支、签名
+  （优先用户级 `~/.config/molia/android.properties`）与 native assets hooks 缓存
+  （受限网络下 sqlite3 下载会卡）。Gradle wrapper 已入库，不需要复制。
 - APK 内容明细：`python3 tool/agent/apk_size.py [--check] <apk>`；不依赖 `unzip`。
   内存采样：`tool/agent/perf.sh memory android`（先 `adb root`）。
 

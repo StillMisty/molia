@@ -6,13 +6,13 @@
 # 做四件事：
 #   1. 检查/创建 ~/.androidrc（指定 SDK 路径）
 #   2. 确保 emulator 组件与 API 37 系统镜像（ps16k）已安装（约 2GB，仅首次）
-#   3. 补齐模拟器系统依赖 libxkbfile（无 root 的临时方案：塞进 emulator/lib64）
+#   3. 检查模拟器系统依赖 libxkbfile（缺失时只提示，不在 emulator/lib64 里打补丁）
 #   4. 确保 AVD 存在（ps16k 镜像）并写入调试友好的 config（swiftshader/4G/键盘）
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
+handle_help "$@"
 
-# Arch 官方镜像的 libxkbfile 包：只在 pacman 系统上走“解包塞进 emulator/lib64”
-# 的免 root 兜底；其它发行版直接提示用系统包管理器安装。
-LIBXKBFILE_URL="${LIBXKBFILE_URL:-https://geo.mirror.pkgbuild.com/extra/os/x86_64/libxkbfile-1.2.0-1-x86_64.pkg.tar.zst}"
+# AVD 仍用 avdmanager：Android CLI 的 `emulator create` 目前只按设备 profile
+# 创建，不能指定 ps16k 系统镜像与下面这些 config.ini 调试项。
 AVD_MANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/avdmanager"
 
 # 系统包管理器提示：按发行版给等价命令，避免只写 Arch 的 pacman。
@@ -29,9 +29,8 @@ pkg_hint() {
 }
 
 command -v "$ANDROID_CLI" >/dev/null ||
-  die "未找到 android CLI（$ANDROID_CLI）：Arch 用 paru -S android-cli；其它发行版可设 ANDROID_CLI 指向等价封装，或手动用 sdkmanager / avdmanager 完成安装"
-[[ -x "$AVD_MANAGER" ]] || die "未找到 avdmanager：$AVD_MANAGER（android sdk install \"cmdline-tools;latest\"）"
-command -v curl >/dev/null || die "缺少 curl"
+  die "未找到 android CLI（$ANDROID_CLI）：Arch 用 paru -S android-cli；其它发行版装官方 android-cli，或设 ANDROID_CLI 指向等价命令"
+[[ -x "$AVD_MANAGER" ]] || die "未找到 avdmanager：$AVD_MANAGER（android sdk install cmdline-tools/latest）"
 
 # 1. ~/.androidrc
 if [[ ! -f "$HOME/.androidrc" ]] || ! grep -q -- '--sdk=' "$HOME/.androidrc"; then
@@ -56,22 +55,11 @@ if ! "$ANDROID_CLI" sdk list 2>/dev/null | grep -q "$SYS_IMAGE_PATH"; then
   "$ANDROID_CLI" sdk install "$SYS_IMAGE"
 fi
 
-# 3. libxkbfile：系统级安装优先；否则把库文件放进 emulator/lib64（launcher 会把该目录加进
-#    qemu 的库搜索路径）。免 root 解包只对 Arch 包有效，其它发行版要求先装系统包。
+# 3. libxkbfile：模拟器 launcher 的 Qt xcb 依赖。只检查并给系统包安装命令，
+#    不再把发行版包解压后塞进 emulator/lib64（那种做法会随 emulator 升级丢失，
+#    也让问题从系统依赖变成脚本补丁）。
 if ! ldconfig -p 2>/dev/null | grep -q 'libxkbfile\.so'; then
-  if [[ ! -e "$ANDROID_SDK_ROOT/emulator/lib64/libxkbfile.so.1" ]]; then
-    if command -v pacman >/dev/null 2>&1 && command -v bsdtar >/dev/null 2>&1; then
-      log "系统缺少 libxkbfile，临时补丁到 emulator/lib64（建议 $(pkg_hint)）"
-      mkdir -p "$RUN_DIR"
-      pkg="$RUN_DIR/libxkbfile.pkg.tar.zst"
-      curl -fsSL "$LIBXKBFILE_URL" -o "$pkg"
-      bsdtar -xf "$pkg" -C "$RUN_DIR" usr/lib/
-      cp -a "$RUN_DIR"/usr/lib/libxkbfile.so.1* "$ANDROID_SDK_ROOT/emulator/lib64/"
-    else
-      die "系统缺少 libxkbfile：先执行 $(pkg_hint)，然后重跑本脚本"
-    fi
-  fi
-  log "libxkbfile 补丁就绪"
+  die "系统缺少 libxkbfile：先执行 $(pkg_hint)，然后重跑本脚本"
 fi
 
 # 4a. AVD：镜像不一致时重建（AVD 只存调试状态，可弃）

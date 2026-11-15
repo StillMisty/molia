@@ -24,8 +24,10 @@
    也不要在 isolate 里再开一条绕过桥接的网络通道。
 3. **`material_color_utilities` 被 Flutter SDK 固定为 0.13.0**，不要升级为 0.13.1（版本求解会失败）。
 4. **`encrypt` 已移除**：pointycastle 4.x 与其冲突；AES/RSA 统一走 `lx_native_utils.dart`。
-5. **maven.google.com 在部分网络不可达**：`android/app/build.gradle` 仓库显式使用
-   `https://dl.google.com/dl/android/maven2`，不要改回 `maven.google.com`。
+5. **maven.google.com 在部分网络不可达**：仓库统一在 `android/build.gradle` 的
+   `allprojects` 声明 `google()`；Gradle 的 `google()` 当前指向
+   `dl.google.com/dl/android/maven2`。不要在 app 模块再复制一份，也不要改回
+   项目级的 `maven.google.com` 仓库。
 6. **share_plus 13**：使用 `SharePlus.instance.share(ShareParams(files: ..., text: ...))`，
    `Share.shareXFiles` 已不存在。
 7. **（已解决 / 已移除）Web 平台**：项目不再构建 Web（音源引擎依赖 isolates 与原生库，
@@ -34,9 +36,11 @@
    `currentScriptInfo` 必须原样透传（部分脚本有防篡改校验，校验失败会死循环）。
 9. **ELECTRON 脚本兼容性**：脚本可能使用 `atob/btoa/TextEncoder/setTimeout/window/navigator`
    等 shim；扩展能力请加在 `lx_prelude.js` 而不是假设宿主提供。
-10. **插件 JVM target 校验**：部分插件的 Java target(11) 与 Kotlin target(1.8) 不一致，
-    AGP 9 默认按错误处理；已在 `android/gradle.properties` 设置
-    `kotlin.jvm.target.validation.mode=warning`，不要删除。
+10. **插件 JVM target 校验**：app 的 Java/Kotlin target 是 26，而部分插件仍是 17/11；
+    AGP 9 默认按错误处理，故在 `android/gradle.properties` 保留
+    `kotlin.jvm.target.validation.mode=warning`。这是「最新优先」策略下的登记例外，
+    不是普通临时补丁：只有在常用插件都跟上 26，或本仓决定把 target 降到 17 时才删除；
+    删除前先跑 `flutter build apk --release` 验证。
 11. **集成测试挂起保护（仅桌面）**：桌面端 LX 引擎 isolate / 原生平台通道未完全回收时，
     Flutter 测试进程会拒绝退出；`integration_test/lx_engine_integration_test.dart` 的
     `tearDownAll` 有 2s 上报窗口后 `exit(0)` 的看门狗（只在 Linux/Windows 注册），不要删除、
@@ -142,14 +146,13 @@
     item 还默认给右侧打勾预留 24dp；窄屏上长渠道名会只剩「前两个字 + 省略号」。
     要完整名称：字段宽按最长名实测、item 不预留槽（选中行才显示勾），或换
     M3EMenu / 底部弹层；只改 itemBuilder 不够。
-26. **新 worktree 的 Android 构建先对齐前置条件**：`android/gradle/`、`android/key.properties`、
-    `*.jks` 与 `.dart_tool/hooks_runner/` 都被 .gitignore 排除。新 worktree 里先跑
-    `tool/agent/worktree_prepare.sh <worktree-dir> [branch]`，它会补 Gradle wrapper
-    （版本以 `android/gradle/wrapper/gradle-wrapper.properties` 为准；Flutter 默认模板
-    可能生成更旧的 9.3.1，AGP 要求 ≥ 9.6）、release 签名和
-    sqlite3/cnativeapi 的 native assets hooks 缓存；另外它会把 OpenCode `worktree_create`
-    的 detached HEAD 切到分支。JDK 27 + Gradle 9.3.1 会因 class file 71 直接失败
-    （当前 wrapper 组合已验证可用）。
+26. **新 worktree 的 Android 构建先对齐前置条件**：Gradle wrapper 已入库，不需要复制；
+    需要处理的是 `android/key.properties`、`*.jks` 与 `.dart_tool/hooks_runner/`。
+    新 worktree 里先跑 `tool/agent/worktree_prepare.sh <worktree-dir> [branch]`：
+    优先使用用户级 `~/.config/molia/android.properties`（`storeFile` 写绝对路径），
+    没有时才从源工作区复制签名文件，并补 sqlite3/cnativeapi 的 native assets hooks 缓存；
+    另外它会把 OpenCode `worktree_create` 的 detached HEAD 切到分支。JDK 27 + Gradle 9.3.1
+    会因 class file 71 直接失败（当前 wrapper 组合已验证可用）。
 27. **16 KB 页对齐是发布硬条件，而且属于「依赖带进来的属性」**：Android 15+ 的 16 KB
     内核设备要求 64 位 .so 的 ELF 段按 16 KB 对齐（Google Play 自 2027-02 起强制）。
     构建侧已满足（AGP ≥ 8.5.1 管 zip 页对齐、NDK r28+ 默认 16 KB 段对齐），但本项目没有

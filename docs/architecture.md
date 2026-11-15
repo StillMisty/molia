@@ -1905,8 +1905,9 @@ flutter test --no-pub                    # 含 domain/catalog/playback/layering/
 tool/agent/test.sh linux                 # 集成测试（引擎/设置页/窗口/托盘；不含播放）；默认 Xvfb 无窗口
 tool/agent/test.sh android               # 同一份集成测试跑模拟器（跑完自动卸载）
 flutter build apk --debug
-flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate \
-  --extra-gen-snapshot-options=--strip   # 发布体积（APK 压缩打包见 android/app/build.gradle：~50%↓）
+flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate
+# 不要加 --extra-gen-snapshot-options=--strip：AAB 需要 libapp.so.sym，见 pitfalls #100。
+# APK 压缩打包见 android/app/build.gradle（~50%↓）。
 ```
 
 已兑现的性能收益：进度 tick 不再触发聚合通知（进度条/歌词行局部重建）；队列列表进度期 0

@@ -7,6 +7,12 @@ plugins {
 
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file('key.properties')
+if (!keystorePropertiesFile.exists()) {
+    // 多 worktree 共用一份签名：不要求每个 worktree 复制 key.properties / jks。
+    // storeFile 在这一路径下请写绝对路径。
+    keystorePropertiesFile = new File(
+        System.getProperty('user.home'), '.config/molia/android.properties')
+}
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
@@ -42,7 +48,10 @@ android {
         release {
             keyAlias keystoreProperties['keyAlias']
             keyPassword keystoreProperties['keyPassword']
-            storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+            // 相对路径沿用「相对 app 模块」的旧口径；用户级配置里的 storeFile
+            // 建议写绝对路径，避免基准目录随配置文件位置变化。
+            def storeFilePath = keystoreProperties['storeFile']
+            storeFile storeFilePath ? file(storeFilePath) : null
             storePassword keystoreProperties['storePassword']
         }
     }
@@ -95,12 +104,6 @@ dependencies {
 
     // Jetify annotations
     implementation 'androidx.annotation:annotation:1.11.0'
-}
-
-repositories {
-    maven { url 'https://dl.google.com/dl/android/maven2' }
-    google()
-    mavenCentral()
 }
 
 flutter {
