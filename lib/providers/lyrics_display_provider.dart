@@ -208,6 +208,11 @@ class LyricsDisplayProvider extends ChangeNotifier {
 
   void _dispatch({bool force = false}) {
     if (_disposed) return;
+    // 同一 tick 里所有输出共享同一份 presentation：桌面歌词 + 媒体会话都开
+    // 时，之前会在循环里把行跟踪 / 偏移计算跑两遍。只在真正有启用的输出时
+    // 才构建（首次需要才懒算），保持「全部关闭时不产生计算」。
+    LyricsPresentation? presentation;
+    var built = false;
     for (final output in _outputs) {
       if (!_isOutputEnabled(output.id)) {
         if (_applied.remove(output.id) != null) {
@@ -215,16 +220,20 @@ class LyricsDisplayProvider extends ChangeNotifier {
         }
         continue;
       }
-      final presentation = _buildPresentation();
-      if (presentation == null) {
+      if (!built) {
+        presentation = _buildPresentation();
+        built = true;
+      }
+      final current = presentation;
+      if (current == null) {
         if (_applied.remove(output.id) != null) {
           unawaited(_guard(output.clear()));
         }
         continue;
       }
-      if (!force && _applied[output.id] == presentation) continue;
-      _applied[output.id] = presentation;
-      unawaited(_guard(output.apply(presentation)));
+      if (!force && _applied[output.id] == current) continue;
+      _applied[output.id] = current;
+      unawaited(_guard(output.apply(current)));
     }
   }
 

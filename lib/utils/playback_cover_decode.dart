@@ -24,9 +24,12 @@ const double playbackCoverMaxLogicalEdge = 600;
 /// 精确布局宽，是为了让顶栏 / 迷你条 / 飞行副本共享同一个键时仍有足够像素，
 /// 飞行到最大也只会 1:1，不会放大糊图。
 int playbackCoverDecodeEdge(BuildContext context) {
-  final media = MediaQuery.maybeOf(context);
-  final dpr = media?.devicePixelRatio ?? 1.0;
-  final screenEdge = media?.size.shortestSide ?? playbackCoverMaxLogicalEdge;
+  // 按 aspect 订阅：播放封面在滚动 / 键盘弹收时不该跟着整份 MediaQueryData
+  // 一起重建。
+  final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+  final screenEdge =
+      MediaQuery.maybeSizeOf(context)?.shortestSide ??
+      playbackCoverMaxLogicalEdge;
   final logical = math.min(playbackCoverMaxLogicalEdge, screenEdge);
   return math.max(1, (logical * dpr).round());
 }

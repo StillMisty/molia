@@ -309,7 +309,7 @@ class NowPlayingFavoriteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final library = context.watch<LibraryProvider?>();
+    final library = context.read<LibraryProvider?>();
     final track = context.select<PlaybackProvider, Track?>(
       (provider) => provider.snapshot.current,
     );
@@ -318,7 +318,12 @@ class NowPlayingFavoriteButton extends StatelessWidget {
     final l10n =
         AppLocalizations.of(context) ??
         lookupAppLocalizations(const Locale('zh'));
-    final favorite = library.isFavorite(track.id.sourceKey, track.id.id);
+    // 只订阅「当前曲目是否已收藏」：顶栏 / 底栏 / 播放页三处常驻，整份
+    // LibraryProvider 的加载态与列表通知不该让心形按钮跟着重建。
+    final favorite = context.select<LibraryProvider?, bool>(
+      (provider) =>
+          provider?.isFavorite(track.id.sourceKey, track.id.id) ?? false,
+    );
     final heart = FavoriteHeart(favorite: favorite);
     return M3EIconButton(
       variant: M3EIconButtonVariant.standard,

@@ -49,7 +49,7 @@ class PlaylistCover extends StatelessWidget {
           fit: BoxFit.cover,
           borderRadius: BorderRadius.circular(borderRadius),
           errorWidget: _fallback(context),
-          memCacheWidth: (size * MediaQuery.of(context).devicePixelRatio)
+          memCacheWidth: (size * MediaQuery.devicePixelRatioOf(context))
               .round(),
         );
       },

@@ -106,6 +106,67 @@ void main() {
     });
   });
 
+  group('enforceAudioLimit', () {
+    test('超过上限按 mtime 从旧到新删除，protectAge 内的文件跳过', () async {
+      final dir = '${tempRoot.path}/audio_cache';
+      final oldest = await writeFile(
+        'audio_cache/oldest',
+        100,
+        age: const Duration(hours: 2),
+      );
+      final middle = await writeFile(
+        'audio_cache/middle',
+        100,
+        age: const Duration(minutes: 10),
+      );
+      final fresh = await writeFile('audio_cache/fresh', 100);
+
+      // 300 字节 > 200：只删最旧的 100 字节即可回到上限；fresh 在
+      // protectAge 内（正在写入），即使更旧也不能删。
+      final deleted = await storage.enforceAudioLimit(
+        dir,
+        maxBytes: 200,
+        protectAge: const Duration(minutes: 5),
+      );
+
+      expect(deleted, 1);
+      expect(await oldest.exists(), isFalse);
+      expect(await middle.exists(), isTrue);
+      expect(await fresh.exists(), isTrue);
+    });
+
+    test('未超上限 / 目录不存在 / maxBytes=0：不删除', () async {
+      final dir = '${tempRoot.path}/audio_cache';
+      final file = await writeFile('audio_cache/a', 100);
+
+      expect(
+        await storage.enforceAudioLimit(
+          dir,
+          maxBytes: 1000,
+          protectAge: Duration.zero,
+        ),
+        0,
+      );
+      expect(
+        await storage.enforceAudioLimit(
+          dir,
+          maxBytes: 0,
+          protectAge: Duration.zero,
+        ),
+        0,
+      );
+      expect(
+        await storage.enforceAudioLimit(
+          '${tempRoot.path}/missing',
+          maxBytes: 1,
+          protectAge: Duration.zero,
+        ),
+        0,
+      );
+      expect(await file.exists(), isTrue);
+    });
+  });
+
   group('sweepArtwork', () {
     test('先删过期（含嵌套目录），再按 mtime 从旧到新删超量', () async {
       final dir = '${tempRoot.path}/artwork_cache';

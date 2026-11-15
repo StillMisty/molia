@@ -6,10 +6,14 @@ library;
 
 import 'package:intl/intl.dart';
 
+/// 播放历史每行都会调用 [syncTimeText]；`DateFormat` 的构造（解析 pattern）
+/// 比一次格式化更贵，按模块复用同一个实例。
+final DateFormat _syncTimeFormat = DateFormat('MM-dd HH:mm');
+
 /// 时间戳 → `MM-dd HH:mm`（日志行、状态行与「最后成功于」共用）。
-String syncTimeText(int millisecondsSinceEpoch) =>
-    DateFormat('MM-dd HH:mm')
-        .format(DateTime.fromMillisecondsSinceEpoch(millisecondsSinceEpoch));
+String syncTimeText(int millisecondsSinceEpoch) => _syncTimeFormat.format(
+  DateTime.fromMillisecondsSinceEpoch(millisecondsSinceEpoch),
+);
 
 /// 字节数的紧凑展示（KB/MB 按 1024 进位；同步快照常用量级）。
 String syncBytesText(int bytes) {

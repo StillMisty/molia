@@ -165,6 +165,9 @@ class LibraryBrowseIndex {
   final List<ArtistGroup> artists;
 }
 
+/// 折叠连续空白（归一化每次调用都会用到；RegExp 构造比一次替换贵）。
+final RegExp _whitespaceRun = RegExp(r'\s+');
+
 /// 归一化：去首尾空白、小写、折叠空白、去零宽字符。无拼音 / 变音折叠。
 String normalizeBrowseText(String value) => value
     .replaceAll('\u200B', '')
@@ -173,7 +176,7 @@ String normalizeBrowseText(String value) => value
     .replaceAll('\uFEFF', '')
     .trim()
     .toLowerCase()
-    .replaceAll(RegExp(r'\s+'), ' ');
+    .replaceAll(_whitespaceRun, ' ');
 
 /// 歌手标签拆分（仓库规范分隔符 `, `）；不拆 `/` 与 `&`。
 List<String> splitArtistLabel(String label) {

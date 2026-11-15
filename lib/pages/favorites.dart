@@ -221,6 +221,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 记录 revision 随本地歌曲输入一起交给状态机做失效判定。
   DownloadRecords? _downloadRecords;
 
+  /// 曲库分组缓存：页面会因任意资料库通知（含每次写播放历史）重建，
+  /// 索引 / 模式 / 语言都没变时分组内容完全一致，不必重新分配 N 个组
+  /// 并逐组扫描首张封面。
+  LibraryBrowseIndex? _browseGroupsIndex;
+  CollectionMode? _browseGroupsMode;
+  String? _browseGroupsLocale;
+  List<LibraryBrowseGroup> _browseGroups = const [];
+
   /// 列表分组收起状态（设备本地；页面侧栏与合集弹层共用这一个持有者）。
   late final PlaylistFolderCollapseController _folderCollapse =
       PlaylistFolderCollapseController();
@@ -1267,29 +1275,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         .layoutType(ResponsivePageType.browse)
         .horizontalPadding;
     final query = _searchController.text;
-    final groups = mode == CollectionMode.albums
-        ? [
-            for (final album in index.albums)
-              LibraryBrowseGroup(
-                key: album.sortKey,
-                title: album.album.isEmpty ? l10n.unknownAlbum : album.album,
-                subtitle: album.primaryArtist,
-                coverUrl: _firstCover(album.tracks),
-                tracks: album.tracks,
-              ),
-          ]
-        : [
-            for (final artist in index.artists)
-              LibraryBrowseGroup(
-                key: artist.sortKey,
-                title: artist.artist.isEmpty
-                    ? l10n.unknownArtist
-                    : artist.artist,
-                subtitle: '',
-                icon: Icons.person_rounded,
-                tracks: artist.tracks,
-              ),
-          ];
+    final groups = _browseGroupsFor(index, mode, l10n);
     final twoPane = libraryBrowseUsesSplitLayout(
       AdaptiveLayoutScope.of(context).sizeClass,
     );
@@ -1365,6 +1351,49 @@ class _FavoritesPageState extends State<FavoritesPage> {
         ),
       ],
     );
+  }
+
+  /// 专辑 / 歌手分组：索引实例、模式与语言不变时直接复用。
+  ///
+  /// `LocalLibraryProvider` 的索引是不可变快照（重建时换新实例），因此
+  /// 引用相等就足以判断分组是否过期。
+  List<LibraryBrowseGroup> _browseGroupsFor(
+    LibraryBrowseIndex index,
+    CollectionMode mode,
+    AppLocalizations l10n,
+  ) {
+    if (identical(_browseGroupsIndex, index) &&
+        _browseGroupsMode == mode &&
+        _browseGroupsLocale == l10n.localeName) {
+      return _browseGroups;
+    }
+    final groups = mode == CollectionMode.albums
+        ? [
+            for (final album in index.albums)
+              LibraryBrowseGroup(
+                key: album.sortKey,
+                title: album.album.isEmpty ? l10n.unknownAlbum : album.album,
+                subtitle: album.primaryArtist,
+                coverUrl: _firstCover(album.tracks),
+                tracks: album.tracks,
+              ),
+          ]
+        : [
+            for (final artist in index.artists)
+              LibraryBrowseGroup(
+                key: artist.sortKey,
+                title: artist.artist.isEmpty
+                    ? l10n.unknownArtist
+                    : artist.artist,
+                subtitle: '',
+                icon: Icons.person_rounded,
+                tracks: artist.tracks,
+              ),
+          ];
+    _browseGroupsIndex = index;
+    _browseGroupsMode = mode;
+    _browseGroupsLocale = l10n.localeName;
+    return _browseGroups = groups;
   }
 
   DownloadedTrack? _localRecordOf(BrowseTrack track) {

@@ -36,10 +36,12 @@ class LocalLibraryProvider extends ChangeNotifier {
     required this.statistics,
     this.debounce = const Duration(milliseconds: 150),
   }) {
-    repository.changes.listen((_) => schedule());
-    downloads.addListener(schedule);
-    library.addListener(schedule);
-    statistics.changes.listen((_) => schedule());
+    _subscriptions = [
+      repository.changes.listen(_onLibraryChange),
+      statistics.changes.listen((_) => schedule(browse: false, stats: true)),
+    ];
+    downloads.addListener(_onDownloadsChanged);
+    library.addListener(_onLibraryProviderChanged);
     schedule();
   }
 
@@ -57,6 +59,7 @@ class LocalLibraryProvider extends ChangeNotifier {
   void setMostPlayedMetric(SmartListMetric metric) {
     if (_mostPlayedMetric == metric) return;
     _mostPlayedMetric = metric;
+    _rowsDirty = true;
     unawaited(refresh());
   }
 
@@ -67,67 +70,163 @@ class LocalLibraryProvider extends ChangeNotifier {
   bool _again = false;
   bool _disposed = false;
 
+  /// 已读入的输入：只有对应部分失效时才重读，其余直接复用。
+  LibraryBrowseIndex? _browseIndex;
+  List<PlayStatTrackEntry> _stats = const [];
+  List<PlayStatTrackEntry> _statsByTime = const [];
+  Set<String>? _playedKeys;
+
+  /// 上一次聚合时看到的列表清单 / 历史引用，用来过滤资料库 provider 的
+  /// 无关通知（加载态、收藏补丁、缓存释放都会 notify，但数据引用没变）。
+  List<PlayHistoryEntry>? _seenHistory;
+  List<PlaylistInfo>? _seenPlaylists;
+
+  bool _browseDirty = true;
+  bool _statsDirty = true;
+  bool _rowsDirty = true;
+
+  List<StreamSubscription<Object?>> _subscriptions = const [];
+
   LibraryBrowseSnapshot? get snapshot => _snapshot;
   Map<String, List<CollectionRow>> get smartRows => _smartRows;
 
-  /// 输入变化后防抖重建；旧快照在完成前保持可见。
-  void schedule() {
+  /// 按失效范围标记输入并防抖重建；旧快照在完成前保持可见。
+  ///
+  /// [browse] 是整库浏览索引（收藏 + 全部列表 + 下载，需重读
+  /// `playlist_tracks` 并解码 raw）；[stats] 是统计榜与已听曲目集合。
+  /// 单条播放历史只影响智能列表行，两者都可以不传。
+  void schedule({bool browse = true, bool stats = true}) {
+    if (_disposed) return;
+    if (browse) _browseDirty = true;
+    if (stats) _statsDirty = true;
+    _rowsDirty = true;
+    _armTimer();
+  }
+
+  void _armTimer() {
     _timer?.cancel();
     _timer = Timer(debounce, () => unawaited(refresh()));
   }
 
+  void _onLibraryChange(LibraryChange change) {
+    switch (change) {
+      case LibraryHistoryChange():
+        // 每一次曲目切换都会写一条历史。浏览索引与统计都不受影响，重读整库
+        // 只会把 raw 解码和两次统计榜塞进起播链路，收益为零。
+        schedule(browse: false, stats: false);
+      case LibraryImportChange():
+        schedule();
+      case LibraryFavoritesChange():
+      case LibraryPlaylistsChange():
+      case LibraryPlaylistTracksChange():
+        schedule(browse: true, stats: false);
+    }
+  }
+
+  void _onDownloadsChanged() => schedule(browse: true, stats: false);
+
+  /// 资料库 provider 的通知远多于真实数据变化：只有历史 / 列表清单的引用
+  /// 换了才需要重新聚合（懒加载完成后的首次数据也靠这条兜底）。
+  void _onLibraryProviderChanged() {
+    if (_disposed) return;
+    final history = library.history;
+    final playlists = library.playlists;
+    final playlistsChanged = !identical(playlists, _seenPlaylists);
+    final historyChanged = !identical(history, _seenHistory);
+    if (!playlistsChanged && !historyChanged) return;
+    _seenHistory = history;
+    _seenPlaylists = playlists;
+    schedule(browse: playlistsChanged, stats: false);
+  }
+
   Future<void> refresh() async {
+    if (_disposed) return;
     if (_running) {
       _again = true;
       return;
     }
     _running = true;
+    var needBrowse = false;
+    var needStats = false;
+    var needRows = false;
     try {
-      final browseTracks = await repository.loadBrowseTracks();
-      final downloadList = downloads.downloads;
-      final index = buildBrowseIndex(
-        BrowseSource(
-          favorites: browseTracks.favorites,
-          playlists: browseTracks.playlists,
-          downloads: downloadList,
-        ),
-      );
-      var stats = const <PlayStatTrackEntry>[];
-      var statsByTime = const <PlayStatTrackEntry>[];
-      Set<String>? playedKeys;
-      try {
-        stats = await statistics.topTracks(limit: 100);
-        statsByTime = await statistics.topTracks(limit: 100, byListening: true);
-        playedKeys = await statistics.playedTrackKeys();
-      } catch (e) {
-        debugPrint('[Molia] 读取听歌统计失败（智能列表降级）: $e');
-      }
-      final sources = SmartListSources(
-        downloads: downloadList,
-        history: library.history,
-        stats: _mostPlayedMetric == SmartListMetric.listeningTime
-            ? statsByTime
-            : stats,
-        browse: index,
-        playedKeys: playedKeys,
-      );
-      final smartRows = <String, List<CollectionRow>>{
-        for (final id in SmartListIds.all)
-          id: _rowsFor(id, sources, downloadList),
-      };
-      if (_disposed) return;
-      _snapshot = LibraryBrowseSnapshot(index: index);
-      _smartRows = smartRows;
-      notifyListeners();
+      needBrowse = _browseDirty;
+      needStats = _statsDirty;
+      needRows = _rowsDirty;
+      // 先清标记再读：读取期间到达的变化会重新置位，下一轮不会漏。
+      _browseDirty = false;
+      _statsDirty = false;
+      _rowsDirty = false;
+      if (needBrowse) await _reloadBrowse();
+      if (needStats) await _reloadStats();
+      if (needRows || needBrowse || needStats) _publish();
     } catch (e) {
+      // 读取失败保留失效标记：下一次事件 / 定时器再试，不留「永久缺一块」
+      // 的快照（旧快照仍继续展示）。
+      _browseDirty = _browseDirty || needBrowse;
+      _statsDirty = _statsDirty || needStats;
+      _rowsDirty = _rowsDirty || needRows;
       debugPrint('[Molia] 曲库聚合读取失败: $e');
     } finally {
       _running = false;
       if (_again && !_disposed) {
         _again = false;
-        schedule();
+        _armTimer();
       }
     }
+  }
+
+  Future<void> _reloadBrowse() async {
+    final browseTracks = await repository.loadBrowseTracks();
+    final downloadList = downloads.downloads;
+    _browseIndex = buildBrowseIndex(
+      BrowseSource(
+        favorites: browseTracks.favorites,
+        playlists: browseTracks.playlists,
+        downloads: downloadList,
+      ),
+    );
+  }
+
+  Future<void> _reloadStats() async {
+    try {
+      final (stats, statsByTime, playedKeys) = await (
+        statistics.topTracks(limit: 100),
+        statistics.topTracks(limit: 100, byListening: true),
+        statistics.playedTrackKeys(),
+      ).wait;
+      _stats = stats;
+      _statsByTime = statsByTime;
+      _playedKeys = playedKeys;
+    } catch (e) {
+      debugPrint('[Molia] 读取听歌统计失败（智能列表降级）: $e');
+      _stats = const [];
+      _statsByTime = const [];
+      _playedKeys = null;
+    }
+  }
+
+  void _publish() {
+    final index = _browseIndex;
+    if (_disposed || index == null) return;
+    final downloadList = downloads.downloads;
+    final sources = SmartListSources(
+      downloads: downloadList,
+      history: library.history,
+      stats: _mostPlayedMetric == SmartListMetric.listeningTime
+          ? _statsByTime
+          : _stats,
+      browse: index,
+      playedKeys: _playedKeys,
+    );
+    _smartRows = <String, List<CollectionRow>>{
+      for (final id in SmartListIds.all)
+        id: _rowsFor(id, sources, downloadList),
+    };
+    _snapshot = LibraryBrowseSnapshot(index: index);
+    _seenHistory = library.history;
+    _seenPlaylists = library.playlists;
+    notifyListeners();
   }
 
   List<CollectionRow> _rowsFor(
@@ -172,6 +271,11 @@ class LocalLibraryProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _timer?.cancel();
+    for (final subscription in _subscriptions) {
+      unawaited(subscription.cancel());
+    }
+    downloads.removeListener(_onDownloadsChanged);
+    library.removeListener(_onLibraryProviderChanged);
     super.dispose();
   }
 }

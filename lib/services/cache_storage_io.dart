@@ -188,34 +188,16 @@ class IoCacheStorage implements CacheStorage {
     required Duration protectAge,
   }) async {
     if (maxBytes <= 0) return 0; // 0 = 不限制
-    final files = await _listFiles(dirPath);
-    if (files.isEmpty) return 0;
-
-    final entries = <_FileEntry>[];
-    var total = 0;
-    for (final file in files) {
-      try {
-        final stat = await file.stat();
-        entries.add(_FileEntry(file, stat.modified, stat.size));
-        total += stat.size;
-      } catch (_) {}
-    }
-    if (total <= maxBytes) return 0;
-
-    entries.sort((a, b) => a.modified.compareTo(b.modified));
-    final now = DateTime.now();
-    var deleted = 0;
-    for (final entry in entries) {
-      if (total <= maxBytes) break;
-      // 正在写入（边播边缓存）的文件不能删。
-      if (now.difference(entry.modified) < protectAge) continue;
-      try {
-        await entry.file.delete();
-        total -= entry.size;
-        deleted++;
-      } catch (_) {}
-    }
-    return deleted;
+    // 递归列举 + 逐文件 stat / delete 是 O(文件数) 的串行 IO，且每次起播后
+    // 都可能触发；和封面 sweep 一样整体丢给短命 isolate，主 isolate 只等
+    // 删除数（删文件本身也是阻塞调用，没有理由留在 UI 线程）。
+    return Isolate.run(
+      () => _enforceAudioLimitSync(
+        dirPath,
+        maxBytes: maxBytes,
+        protectAge: protectAge,
+      ),
+    );
   }
 
   @override
@@ -327,6 +309,49 @@ typedef _CacheFileScan = ({List<File> files, bool rootReadable});
 /// 封面缓存相对路径统一用 `/`：Windows 的 `p.relative` 返回 `\`，而索引里的
 /// `relativePath` 可能写 `/`；比较前两边都要归一化，否则会误判整份索引缺失。
 String _normalizeRelativePath(String path) => path.replaceAll('\\', '/');
+
+/// 音频缓存 LRU（在短命 isolate 中执行，必须是顶层函数）。
+///
+/// 按 mtime 从旧到新删除，直到总量不超过 [maxBytes]；[protectAge] 内的文件
+/// 视为正在写入（`LockCachingAudioSource` 边下边播），跳过。目录不存在或
+/// 单文件 stat / 删除失败时按「无需处理 / 跳过该文件」降级，与主体逻辑一致。
+int _enforceAudioLimitSync(
+  String dirPath, {
+  required int maxBytes,
+  required Duration protectAge,
+}) {
+  final root = Directory(dirPath);
+  if (!root.existsSync()) return 0;
+
+  final entries = <_FileEntry>[];
+  var total = 0;
+  for (final file in _listCacheFilesSync(root).files) {
+    try {
+      final stat = file.statSync();
+      entries.add(_FileEntry(file, stat.modified, stat.size));
+      total += stat.size;
+    } catch (_) {
+      // 文件可能正被删除 / 替换：不计入总量。
+    }
+  }
+  if (total <= maxBytes) return 0;
+
+  entries.sort((a, b) => a.modified.compareTo(b.modified));
+  final now = DateTime.now();
+  var deleted = 0;
+  for (final entry in entries) {
+    if (total <= maxBytes) break;
+    if (now.difference(entry.modified) < protectAge) continue;
+    try {
+      entry.file.deleteSync();
+      total -= entry.size;
+      deleted++;
+    } catch (_) {
+      // 占用 / 权限：交给下次 LRU。
+    }
+  }
+  return deleted;
+}
 
 /// 封面缓存 sweep（在短命 isolate 中执行，必须是顶层函数）。
 ///

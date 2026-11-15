@@ -20,7 +20,7 @@ class LibraryCoverThumb extends StatelessWidget {
       width: size,
       height: size,
       borderRadius: M3EShapes.radiusMedium,
-      memCacheWidth: (size * MediaQuery.of(context).devicePixelRatio).round(),
+      memCacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
       fallbackColor: Theme.of(context).colorScheme.surfaceContainerHighest,
       fallbackIconSize: size * 0.5,
     );

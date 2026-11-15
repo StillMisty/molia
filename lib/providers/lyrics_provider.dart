@@ -92,6 +92,10 @@ class LyricsProvider extends ChangeNotifier {
   bool _retriedEmpty = false;
 
   /// 已成功预取 / 正在预取的曲目 id（避免重复取词）。
+  ///
+  /// 有界 LRU：预取只服务「当前 + 下一首」，长会话不应让 id 集合无限常驻。
+  /// 淘汰只影响去重判断（多预取一次），歌词本身仍由 [LyricsCache] 命中。
+  static const int _preloadedTrackIdLimit = 128;
   final Set<String> _preloadedTrackIds = {};
   final Set<String> _preloadingTrackIds = {};
 
@@ -243,6 +247,10 @@ class LyricsProvider extends ChangeNotifier {
       final result = await _fetch(track);
       if (result != null) {
         _preloadedTrackIds.add(trackId);
+        if (_preloadedTrackIds.length > _preloadedTrackIdLimit) {
+          // LinkedHashSet 的插入序即最旧在前：淘汰最早那条。
+          _preloadedTrackIds.remove(_preloadedTrackIds.first);
+        }
       }
     } catch (_) {
       // 预取失败不影响当前展示；切到该曲目时正常重试。

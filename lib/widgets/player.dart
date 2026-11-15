@@ -515,7 +515,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                             ignoring: t < 0.5,
                             child: Opacity(
                               opacity: fullOpacity,
-                              child: fullLayer,
+                              // 展开 / 收起逐帧只改这里的透明度与高度；播放器
+                              // 内容本身不脏，独立图层让每帧只做合成，不再
+                              // 重放整棵播放器（封面 / 阴影 / 进度）的绘制。
+                              child: RepaintBoundary(child: fullLayer),
                             ),
                           ),
                         ),
@@ -533,10 +536,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                           ignoring: t >= 0.5,
                           child: Opacity(
                             opacity: miniOpacity,
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: widget.onToggleExpand,
-                              child: miniLayer,
+                            child: RepaintBoundary(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: widget.onToggleExpand,
+                                child: miniLayer,
+                              ),
                             ),
                           ),
                         ),

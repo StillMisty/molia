@@ -7,6 +7,8 @@
 > 轮次：
 > - 2026-10-22 首轮：Linux / Windows / Android 模拟器
 > - 2026-11-07 复测：Linux（Xvfb 无头）/ Android 模拟器（Windows 未测）
+> - 2026-11-15 代码级低风险审查：静态审查 + 单测，补 Linux release 启动与
+>   帧场景同机 A/B（各 1 轮，Android / Windows 未测）
 
 ## 2026-10-22 首轮：全链路性能体检
 
@@ -763,3 +765,91 @@ Linux release（Xvfb，1440×900）：
 - **Linux 无头数据链路**：首搜 250ms 的根因是系统会话总线缺 keyring /
   NetworkManager，已由 `perf.sh` 的私有 `dbus-run-session` 修复；首播仍有
   ~243ms resolve 尾巴，等真实 GPU / 真机再决定是否做播放器预打开。
+
+## 2026-11-15 代码级低风险审查（同机 Linux 帧 A/B）
+
+> 本轮先做静态审查再改。首次构建时 `media_kit_libs_linux` 的
+> `mimalloc-2.1.2.tar.gz` 下载被重置、导致 release 构建失败；网络恢复后
+> 重新构建通过，补了 Linux release 启动采样与帧场景的同机 A/B。Android
+> 真机 / adb 仍不可用，Windows 未测。
+>
+> 口径限制：帧 A/B 各只跑 1 轮（profile + Xvfb，raster 恒 0），p99 在
+> 两边都有 15–22ms 的单帧离群；只把 p95 的方向当参考，不宣称绝对收益。
+
+### 1. 曲库聚合按失效范围拆开
+
+`LocalLibraryProvider` 之前在任何资料库事件后都重读整张 `playlist_tracks`
+（逐行 `jsonDecode(raw)`）、两次统计榜与全表 `playedTrackKeys()`，再重建
+专辑 / 歌手索引与智能列表。播放历史是最高频的写入（每次切歌一条），但它
+只影响「最近播放」这类行，不影响浏览索引与统计。
+
+现在按输入拆成三段：浏览索引（收藏 + 列表 + 下载）、统计（两榜 + 已听键）、
+智能列表行；`repository.changes` 的 `LibraryHistoryChange` 只重发行，收藏 /
+列表变化重读浏览索引，`statistics.changes` 才重读统计。
+
+- 资料库 provider 的通知很密（加载态、缓存释放都会 notify），改为只在
+  `history` / `playlists` 引用真的换了才排重建；
+- 两次 `topTracks` 从串行改 `Future.wait`；
+- 之前 `repository.changes` / `statistics.changes` 的订阅没有保存、`dispose`
+  也不取消，一并收口；
+- 读取失败保留失效标记，下一次事件重试（旧快照继续可见）。
+
+验证：新增 `test/local_library_provider_test.dart` 钉住「历史写入不重读整库 /
+统计」「收藏切换只重读浏览索引」「切换最常播放指标不读库」。
+
+### 2. 启动 / 高频路径的零散收敛
+
+- `MediaQuery.of → devicePixelRatioOf / sizeOf`（`track_row`、
+  `app_network_image`、`playback_cover_decode`、`library_cover`、
+  `playlist_cover`、`nowplaying`）：只订阅需要的 aspect，键盘 / 尺寸变化
+  不再让所有可见封面 / 列表行一起重建；
+- `now_playing_summary` 的收藏按钮从 `watch` 整份 `LibraryProvider` 改为
+  `select` 单个布尔；
+- `syncTimeText` 复用模块级 `DateFormat`（播放历史每行都会调用）；
+- 播放器展开 / 收起的 `Opacity` 内层加 `RepaintBoundary`，逐帧只合成，
+  不重放整棵播放器；
+- `normalizeBrowseText` 的空白 `RegExp` 提为顶层；曲库详情在无搜索时跳过
+  逐曲归一化，收藏页按「索引实例 + 模式 + 语言」缓存专辑 / 歌手分组；
+- 歌词显示：同一 tick 的多个输出共享一份 `LyricsPresentation`；预取曲目
+  去重集合改为 128 条有界 LRU；
+- 音频缓存 LRU（`enforceAudioLimit`）的目录列举 / stat / 删除整体移到
+  `Isolate.run`，与封面 sweep / 缓存用量扫描同一口径。
+
+### 3. 实测（同机，2 次构建各 1 轮帧场景）
+
+Linux release 冷启动（`tool/agent/startup.sh --runs 5`）：
+
+| 阶段 | 中位 | 范围 |
+| --- | ---: | ---: |
+| 首帧 | **133ms** | 132–483ms（首轮 483ms 为构建后首次冷读） |
+| 本地数据 / 资料库栈 | 66ms | 65–350ms |
+| 播放栈（含媒体会话） | 76ms | 74–361ms |
+| 主题 / 歌词显示 | 82ms | 79–369ms |
+
+帧场景（`tool/agent/perf.sh frames linux`，同一台机器、同样 1440×900；
+「改前」= 本轮改动 stash 后重新构建，profile / Xvfb，raster 不可用）：
+
+| 场景（end 窗口） | build p95 改前 → 改后 | build p99 改前 → 改后 | jank16 |
+| --- | ---: | ---: | ---: |
+| 收藏滚动 | 3.65 → **3.31** | 3.88 → 3.77 | 0 → 0 |
+| 切资料库 | 3.94 → **3.39** | 15.10 → 16.95 | 0 → 1 |
+| 连续切歌 | 1.30 → 1.31 | 15.57 → 16.04 | 1 → 1 |
+| 进播放页 | 2.03 → **1.86** | 3.81 → 22.64 | 0 → 1 |
+| 播放页切换 | 1.02 → **0.87** | 1.02 → 0.89 | 0 → 0 |
+| 播放页 ⇄ 收藏 | 2.81 → **1.79** | 4.63 → 8.45 | 0 → 0 |
+| 迷你条展开 | 6.48 → **5.69** | 6.48 → 5.69 | 0 → 0 |
+
+- p95 在 7 个场景里 6 个持平或略降，方向与本轮「减少重建 / 重读」一致；
+  单轮 + Xvfb，不足以证明因果。p99 的 15–22ms 单帧在改前（切资料库 /
+  切歌）与改后（进播放页）都出现过，按环境离群处理，不作为回归结论。
+- 原始结果：`/tmp/molia-agent/startup-linux-20261115-210536`、
+  `perf-linux-20261115-210725`（改后）、`perf-linux-20261115-210931`（改前）。
+
+### 4. 验证与未覆盖
+
+- `flutter analyze --no-pub`：0 issue；
+- `flutter test --no-pub`：3229 passed / 11 skipped（含新增 4 条曲库聚合 +
+  2 条音频缓存 LRU 用例）；
+- 未测：Android 真机 / 模拟器、Windows、托盘内存、APK / bundle 体积；
+  本轮也没有「切歌时按线程 CPU」的前后对比，下次优先补
+  `perf.sh cpu linux` 与真实设备上的启动 / 帧。

@@ -254,17 +254,19 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
     BuildContext context,
     AppLocalizations l10n,
     LibraryBrowseGroup group,
-    String query,
+    String normalized,
   ) {
-    final normalized = normalizeBrowseText(query);
-    final filtered = [
-      for (final track in group.tracks)
-        if (normalized.isEmpty ||
-            normalizeBrowseText(track.title).contains(normalized) ||
-            normalizeBrowseText(track.artist).contains(normalized) ||
-            normalizeBrowseText(track.album).contains(normalized))
-          track,
-    ];
+    // 无搜索时直接复用 group 的曲目列表：多选 / 展开等 setState 不再对每条
+    // 曲目的标题 / 歌手 / 专辑各跑一遍归一化。
+    final filtered = normalized.isEmpty
+        ? group.tracks
+        : [
+            for (final track in group.tracks)
+              if (normalizeBrowseText(track.title).contains(normalized) ||
+                  normalizeBrowseText(track.artist).contains(normalized) ||
+                  normalizeBrowseText(track.album).contains(normalized))
+                track,
+          ];
     final duplicates = groupDuplicates(filtered);
     final representativeOf = <String, String>{};
     final versionsByRep = <String, List<BrowseTrack>>{};

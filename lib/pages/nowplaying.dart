@@ -353,7 +353,7 @@ class _NowPlayingState extends State<NowPlaying>
   bool get wantKeepAlive => true;
 
   bool _getIsLargeScreen(BuildContext context) {
-    final currentSize = MediaQuery.of(context).size;
+    final currentSize = MediaQuery.sizeOf(context);
 
     // 尺寸变化时同时失效页面与布局缓存。
     if (_cachedScreenSize != currentSize) {

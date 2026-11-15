@@ -565,7 +565,7 @@ class TrackRow extends StatelessWidget {
             size: surface.coverSize,
             borderRadius: M3EShapes.radiusMedium,
             memCacheWidth:
-                (surface.coverSize * MediaQuery.of(context).devicePixelRatio)
+                (surface.coverSize * MediaQuery.devicePixelRatioOf(context))
                     .round(),
             fallbackColor: Theme.of(context)
                 .colorScheme

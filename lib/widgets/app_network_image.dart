@@ -199,7 +199,9 @@ class AppNetworkImage extends StatelessWidget {
     if (explicitWidth != null) return (width: explicitWidth, height: null);
     if (explicitHeight != null) return (width: null, height: explicitHeight);
 
-    final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
+    // 只依赖 DPR 这一个 aspect：整份 MediaQueryData 会把键盘 viewInsets
+    // 等逐帧变化也变成这里 rebuild 的依赖。
+    final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
     final boxWidth = (width != null && width!.isFinite && width! > 0)
         ? width!
         : 0.0;
