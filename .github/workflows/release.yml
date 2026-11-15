@@ -442,8 +442,23 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
-            -f tag_name="$GITHUB_REF_NAME" --jq .body > notes.md
+          # 手写公告优先：docs/releases/<tag>.md 作 Release 正文，同名
+          # `.summary.txt` 作 latest.json 的 notes（应用内是纯文本，只放短摘要；
+          # 正文链接由 notesUrl 提供）。没有手写正文时才退回 generate-notes——
+          # 它只按「上一个已发布 Release」比对，稳定版会把整个 beta 期的提交算丢。
+          body="docs/releases/$GITHUB_REF_NAME.md"
+          if [[ -f "$body" ]]; then
+            cp "$body" notes.md
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+              -f tag_name="$GITHUB_REF_NAME" --jq .body > notes.md
+          fi
+          summary="docs/releases/$GITHUB_REF_NAME.summary.txt"
+          if [[ -f "$summary" ]]; then
+            cp "$summary" summary.md
+          else
+            cp notes.md summary.md
+          fi
       - name: 生成更新清单 latest.json
         run: |
           set -euo pipefail
@@ -454,7 +469,7 @@ jobs:
             --build "${{ needs.prepare.outputs.build }}" \
             --channel "${{ needs.prepare.outputs.channel }}" \
             --published-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --notes-file notes.md \
+            --notes-file summary.md \
             --assets-dir dist \
             --output dist/latest.json
       - name: 校验和

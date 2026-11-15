@@ -29,7 +29,12 @@ description: 发布 Molia 版本，或改动发布产物 / 更新清单 / 平台
 1. `pubspec.yaml` 的 `version` 改成与 tag 同一个版本号（tag 即版本：稳定版 `v1.2.3`，
    测试版 `v1.2.3-beta.1` 发布为 prerelease）。对不上 `prepare` job 直接失败。
 2. 走完 PR 校验后合并到 `main`。
-3. 打签名 tag 并推送（稳定版 / 测试版二选一）：
+3. （可选，正式版建议写）公告放在 `docs/releases/<tag>.md`：它是 Release 正文；
+   同名 `<tag>.summary.txt` 是 `latest.json` 的 `notes`，也就是应用内「设置 › 更新」
+   显示的文字——纯文本、几行以内，不渲染 Markdown，需要细节时靠 `notesUrl` 指回正文。
+   两个文件都随 tag 提交。缺正文时流水线才退回 `generate-notes`，而它只跟「上一个
+   已发布 Release」比对，稳定版会把整个 beta 期的提交算丢。
+4. 打签名 tag 并推送（稳定版 / 测试版二选一）：
 
    ```bash
    git tag -s v1.2.3 -m "Molia 1.2.3" && git push origin v1.2.3
@@ -38,7 +43,7 @@ description: 发布 Molia 版本，或改动发布产物 / 更新清单 / 平台
 
    必须显式 `-s` + `-m`：签名只能挂在附注标签（tag 对象）上，裸 `git tag` 签不签取决于
    发布机的 `tag.gpgSign`（没配 → 未签名轻量标签；配了 → 附注签名标签并要求消息）；`-m` 免开编辑器。
-4. 看 `release.yml` 跑完：版本校验 → 矩阵构建 → 汇总产物 + sha256 + `latest.json`
+5. 看 `release.yml` 跑完：版本校验 → 矩阵构建 → 汇总产物 + sha256 + `latest.json`
    → GitHub Release；测试版为 prerelease，并原地覆盖滚动 `beta` release 的
    `latest.json`（不删除 release、不动 tag target），避免删除重建期间客户端取
    清单 404。
