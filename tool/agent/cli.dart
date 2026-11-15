@@ -33,7 +33,9 @@ molia 跨端工具（Linux / macOS / Windows 同一套命令）
   app <命令>               run / reload / restart / stop / log / status（--machine 控制通道）
   emu <命令>               start / stop / status（Android 模拟器）
   size apk [<apk>...]       APK 分组体积与 native 库约束
-  perf report [<目录>]      frames 结果汇总成 summary.md
+  perf <子命令>             frames / startup / data / cpu / memory / size（后端 perf.sh）
+  perf report [<目录>]      frames 结果汇总成 summary.md（本命令为 Dart 实现）
+  startup|cpu|memory|io|seed  采样与数据注入（平台后端：sh / ps1，参数原样透传）
   help [<命令>]             查看总用法或单个命令用法
 
 选项:
@@ -115,7 +117,17 @@ Future<void> main(List<String> args) async {
     case 'size':
       await _runSize(context, rest);
     case 'perf':
-      await _runPerf(context, rest);
+      if (rest.isEmpty || rest.first == 'report') {
+        await _runPerf(context, rest);
+      } else {
+        await _runBackend(context, 'perf', rest);
+      }
+    case 'startup':
+    case 'cpu':
+    case 'memory':
+    case 'io':
+    case 'seed':
+      await _runBackend(context, command, rest);
     default:
       stderr.writeln('[agent] 未知命令：$command（-h 看可用命令）');
       exitCode = 2;
@@ -390,6 +402,70 @@ Future<void> _runPerf(ToolContext context, List<String> args) async {
   final summary = File('${directory.path}/summary.md')
     ..writeAsStringSync(renderFrameSummary(rows));
   stdout.writeln('${rows.length} 条帧样本 -> ${summary.path}');
+}
+
+/// 平台后端：采样 / 注入类命令仍由 sh（Linux/macOS）或 ps1（Windows）实现。
+///
+/// ADR-0031 的分层里，这些命令依赖 /proc、Xvfb、dbus-run-session、adb root
+/// 或 Win32 采样，重写成 Dart 只会把同一堆平台假设搬个地方。这里统一的是
+/// **入口**：三端都从 cli.dart 进来，由本函数选后端并透传参数与退出码。
+Future<void> _runBackend(
+  ToolContext context,
+  String name,
+  List<String> args,
+) async {
+  if (context.isWindows) {
+    final backend = _windowsBackend(context, name, args);
+    if (backend == null) {
+      stderr.writeln(
+        '[agent] Windows 上还没有 `$name` 的等价实现（见 ADR-0031 第三层）：'
+        '这一步请在 Linux/WSL 侧执行，或先补 ps1 后端',
+      );
+      exitCode = 2;
+      return;
+    }
+    final code = await context.runInherit([
+      'powershell.exe',
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      backend.$1,
+      ...backend.$2,
+    ]);
+    if (code != 0) exitCode = code;
+    return;
+  }
+
+  final script = File('${context.repoRoot}/tool/agent/$name.sh');
+  if (!script.existsSync()) context.fail('找不到后端脚本：${script.path}');
+  final code = await context.runInherit(['bash', script.path, ...args]);
+  if (code != 0) exitCode = code;
+}
+
+/// Windows 侧已有的 ps1 后端；没有就返回 null（而不是假装支持）。
+(String, List<String>)? _windowsBackend(
+  ToolContext context,
+  String name,
+  List<String> args,
+) {
+  final agentDir = '${context.repoRoot}\\tool\\agent';
+  switch (name) {
+    case 'memory':
+      return ('$agentDir\\memory_windows.ps1', args);
+    case 'startup':
+      return ('$agentDir\\startup_windows.ps1', args);
+    case 'perf':
+      // Windows 只有「真实窗口帧」这一条采样路径。
+      if (args.length >= 2 &&
+          args.first == 'frames' &&
+          args.contains('--real')) {
+        return ('$agentDir\\frames_windows.ps1', const []);
+      }
+      return null;
+    default:
+      return null;
+  }
 }
 
 Directory? _latestPerfDir(ToolContext context) {
