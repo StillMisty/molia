@@ -63,13 +63,20 @@ class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: false,
       // M3E 的标题槽按动作行扣掉上下留白：给内容一个明确高度，字号放大时
       // 由行内文本自己省略，不让标题块撑破工具行。
+      //
+      // 左右安全区只补在内容层：M3EAppBar 只处理 top，横屏的刘海 / 侧边系统栏
+      // 会盖住品牌和右侧按钮；顶栏背景仍满宽绘制，不在挖孔两侧留色带。
       title: SizedBox(
         height: 44,
-        child: Row(
-          children: [
-            Expanded(child: title),
-            ...actions,
-          ],
+        child: SafeArea(
+          top: false,
+          bottom: false,
+          child: Row(
+            children: [
+              Expanded(child: title),
+              ...actions,
+            ],
+          ),
         ),
       ),
     );

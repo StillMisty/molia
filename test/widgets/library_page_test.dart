@@ -191,7 +191,7 @@ void main() {
           ],
           supportedLocales: const [Locale('zh')],
           home: AdaptiveLayoutScope(
-            layout: AdaptiveLayout.fromWidth(width),
+            layout: AdaptiveLayout.fromSize(width, 1000),
             child: Scaffold(body: Library(reselect: reselect)),
           ),
         ),

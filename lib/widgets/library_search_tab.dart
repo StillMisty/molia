@@ -7,6 +7,7 @@ import '../providers/ai_dj_provider.dart';
 import '../providers/discover_provider.dart';
 import '../providers/search_assist_controller.dart';
 import '../providers/search_provider.dart';
+import 'adaptive_layout.dart';
 import 'ai_dj_carousel.dart';
 import 'channel_search_bar.dart';
 import 'discover_layout.dart';
@@ -115,6 +116,10 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
         final aiDjEnabled = context.select<AiDjProvider?, bool>(
           (provider) => provider?.enabled ?? false,
         );
+        // 短横屏（手机横屏）纵向只够「搜索条 + 结果」：AI 推歌轮播固定
+        // 198 高，连头带间距 ~256，塞进来会把搜索页挤爆；此时不渲染轮播，
+        // AI 内容仍可从 AI 推歌页进入。
+        final shortViewport = AdaptiveLayoutScope.of(context).isShortViewport;
         final gutter = discoverGutterOf(context);
 
         return Focus(
@@ -149,8 +154,9 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
                 padding: EdgeInsets.symmetric(horizontal: gutter),
                 child: SearchAssistPanel(controller: _assist),
               ),
-              // 浏览态：AI 推歌推荐流（搜索激活时让位给结果区）。
-              if (!isSearchActive) const AiDjCarousel(),
+              // 浏览态：AI 推歌推荐流（搜索激活时让位给结果区；短横屏不渲染，
+              // 见上方 shortViewport 的纵向预算说明）。
+              if (!isSearchActive && !shortViewport) const AiDjCarousel(),
               Expanded(
                 child: RepaintBoundary(
                   child: isSearchActive
@@ -158,7 +164,7 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
                           controller: widget.controller,
                           assist: _assist,
                         )
-                      : (aiDjEnabled
+                      : (aiDjEnabled && !shortViewport
                             ? const SizedBox.shrink()
                             : _buildIdle(context)),
                 ),
