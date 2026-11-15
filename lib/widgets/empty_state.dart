@@ -15,6 +15,9 @@ import '../theme/m3e_context.dart';
 ///
 /// 定位留给调用方包一层：页面级空态用 `Center` + 24 内边距（页面里
 /// 无处可去），滚动内容（tab / sliver）里的空态用页面对齐的 16/16 内边距。
+///
+/// 高度受限时（横屏 + 键盘、200% 字号等）不硬塞完整配方：可用高装不下
+/// 图标与两行文案就退化为无图标、可滚动的短文案，避免 RenderFlex 溢出。
 class EmptyState extends StatelessWidget {
   const EmptyState({
     super.key,
@@ -26,6 +29,11 @@ class EmptyState extends StatelessWidget {
 
   /// 图标档：空态不占满全屏的统一口径。
   static const double iconSize = 40;
+
+  static const double _iconTextGap = 12;
+  static const double _hintGap = 6;
+  static const double _actionGap = 16;
+  static const double _actionReserve = 48;
 
   final IconData icon;
 
@@ -40,6 +48,31 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fullHeight = _fullHeightOf(context);
+        final short =
+            constraints.maxHeight.isFinite &&
+            constraints.maxHeight < fullHeight;
+        if (short) return _buildCompact(context);
+        return _buildFull(context);
+      },
+    );
+  }
+
+  /// 完整配方的保守高度预算：文案按两行估，行动按 48 估。
+  ///
+  /// 只用于判断「装不装得下」，不做精确布局；宁可早一档退化，也不要
+  /// 在键盘弹起 / 200% 字号时溢出。
+  double _fullHeightOf(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    var required = iconSize + _iconTextGap + scaler.scale(20) * 2;
+    if (hint != null) required += _hintGap + scaler.scale(16) * 2;
+    if (action != null) required += _actionGap + _actionReserve;
+    return required;
+  }
+
+  Widget _buildFull(BuildContext context) {
     final theme = Theme.of(context);
     final hint = this.hint;
     final action = this.action;
@@ -47,7 +80,7 @@ class EmptyState extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: iconSize, color: theme.colorScheme.onSurfaceVariant),
-        const SizedBox(height: 12),
+        const SizedBox(height: _iconTextGap),
         Text(
           message,
           textAlign: TextAlign.center,
@@ -56,7 +89,7 @@ class EmptyState extends StatelessWidget {
           ),
         ),
         if (hint != null) ...[
-          const SizedBox(height: 6),
+          const SizedBox(height: _hintGap),
           Text(
             hint,
             textAlign: TextAlign.center,
@@ -65,8 +98,28 @@ class EmptyState extends StatelessWidget {
             ),
           ),
         ],
-        if (action != null) ...[const SizedBox(height: 16), action],
+        if (action != null) ...[const SizedBox(height: _actionGap), action],
       ],
+    );
+  }
+
+  /// 矮高度退化：只留文案，装在滚动视图里，宿主再矮也不会溢出。
+  ///
+  /// 不保留图标 / 提示 / 行动：这几项在可见高度不足时本来也点不到，留着
+  /// 只会把真正要读的提示挤出屏幕。
+  Widget _buildCompact(BuildContext context) {
+    final theme = Theme.of(context);
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: context.typeScale.bodySmall.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
     );
   }
 }

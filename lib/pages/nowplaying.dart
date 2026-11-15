@@ -63,6 +63,16 @@ class _NowPlayingState extends State<NowPlaying>
   /// 歌曲信息页滚动控制器（同一判定的第三页）。
   late final ScrollController _infoScrollController;
 
+  /// 宽版式（左右两栏）/ 桌面版式的滚动控制器。
+  ///
+  /// 为什么不与单栏复用：旋转或跨断点时新旧版式会在同一帧里短暂共存，
+  /// 同一个 ScrollController 同时挂两个 ScrollView 会触发
+  /// `_positions.length == 1` 断言。两套控制器让切换自然交接；代价是
+  /// 切换版式后滚动位置归零（旋转本来也换了阅读区域）。
+  late final ScrollController _wideQueueScrollController;
+  late final ScrollController _wideLyricsScrollController;
+  late final ScrollController _wideInfoScrollController;
+
   /// 播放器展开进度：0 = 迷你条、1 = 完整播放器（小屏）。
   ///
   /// motor expressive spatial 弹簧（380/0.8）：拖动跟手直接写进度，松手按
@@ -70,9 +80,9 @@ class _NowPlayingState extends State<NowPlaying>
   late final SingleMotionController _expandController;
   bool _isMini = false;
 
-  /// 当前布局是否为大屏（两栏）：大屏播放器始终完整、没有迷你态，
-  /// 重复点击请求直接忽略（不能让 `_isMini` 在大屏被翻转）。布局期写入。
-  bool _isLargeScreen = false;
+  /// 当前布局是否走宽版式（左右两栏）：宽版式播放器始终完整、没有迷你态，
+  /// 重复点击请求直接忽略（不能让 `_isMini` 在宽版式被翻转）。布局期写入。
+  bool _usesWideLayout = false;
 
   /// 播放器区域可用的最大高度（跟手拖拽的行程基准）。
   double _playerMaxHeight = 340;
@@ -109,7 +119,11 @@ class _NowPlayingState extends State<NowPlaying>
 
   // 页面与屏幕尺寸缓存：避免 PageView 每次重建导致歌词/队列滚动状态丢失。
   List<PageData>? _cachedPages;
-  bool? _cachedIsLargeScreen;
+
+  /// 缓存页面对应的版式（单栏 / 宽版式）。版式变化必须重建页面，让两套
+  /// ScrollController 各自交接（见 [_wideQueueScrollController]）。
+  bool? _cachedPagesWide;
+  bool? _cachedUsesWideLayout;
   Size? _cachedScreenSize;
 
   @override
@@ -125,6 +139,9 @@ class _NowPlayingState extends State<NowPlaying>
     _queueScrollController = ScrollController();
     _lyricsScrollController = ScrollController();
     _infoScrollController = ScrollController();
+    _wideQueueScrollController = ScrollController();
+    _wideLyricsScrollController = ScrollController();
+    _wideInfoScrollController = ScrollController();
     _expandController = SingleMotionController(
       motion: const MaterialSpringMotion.expressiveSpatialDefault(
         snapToEnd: true,
@@ -160,6 +177,9 @@ class _NowPlayingState extends State<NowPlaying>
     _queueScrollController.dispose();
     _lyricsScrollController.dispose();
     _infoScrollController.dispose();
+    _wideQueueScrollController.dispose();
+    _wideLyricsScrollController.dispose();
+    _wideInfoScrollController.dispose();
     super.dispose();
   }
 
@@ -179,10 +199,10 @@ class _NowPlayingState extends State<NowPlaying>
 
   /// 壳层重复点击「播放」目的地：与迷你条点击 / 圆点点击 / 到顶下拉同一入口。
   ///
-  /// 大屏与桌面版式都没有迷你态（播放器始终完整），忽略请求。
+  /// 宽版式与桌面版式都没有迷你态（播放器始终完整），忽略请求。
   /// 触感由壳层对重复点击统一给出（见 [ShellReselectSignal]），此处不再补一次。
   void _handleReselect() {
-    if (widget.desktopLayout || _isLargeScreen) return;
+    if (widget.desktopLayout || _usesWideLayout) return;
     _animateToggleExpand();
   }
 
@@ -262,10 +282,20 @@ class _NowPlayingState extends State<NowPlaying>
     );
   }
 
-  List<PageData> _buildPages(BuildContext context) {
-    if (_cachedPages != null) {
+  List<PageData> _buildPages(BuildContext context, {required bool wide}) {
+    if (_cachedPages != null && _cachedPagesWide == wide) {
       return _cachedPages!;
     }
+    _cachedPagesWide = wide;
+    final queueController = wide
+        ? _wideQueueScrollController
+        : _queueScrollController;
+    final lyricsController = wide
+        ? _wideLyricsScrollController
+        : _lyricsScrollController;
+    final infoController = wide
+        ? _wideInfoScrollController
+        : _infoScrollController;
 
     _cachedPages = [
       PageData(
@@ -273,7 +303,7 @@ class _NowPlayingState extends State<NowPlaying>
         icon: Icons.queue_music_rounded,
         page: RepaintBoundary(
           child: QueueDisplay(
-            controller: _queueScrollController,
+            controller: queueController,
             // 顶部留出圆点过渡带，列表首项不被渐隐吃掉。
             topPadding: _dotsBandHeight + 2,
           ),
@@ -286,7 +316,7 @@ class _NowPlayingState extends State<NowPlaying>
           // 歌词快捷操作只在收起态（歌词区展开）显示。
           child: LyricsWidget(
             quickActionsEnabled: _isMini,
-            controller: _lyricsScrollController,
+            controller: lyricsController,
           ),
         ),
       ),
@@ -295,7 +325,7 @@ class _NowPlayingState extends State<NowPlaying>
         icon: Icons.info_rounded,
         page: RepaintBoundary(
           child: TrackInfoView(
-            controller: _infoScrollController,
+            controller: infoController,
             // 顶部留出圆点过渡带，内容首行不被渐隐吃掉（与队列页一致）。
             topPadding: _dotsBandHeight + 2,
           ),
@@ -307,12 +337,15 @@ class _NowPlayingState extends State<NowPlaying>
   }
 
   /// PageView 内容页：每页按「壳层可见 && 是当前 tab」套上可见性 scope。
+  ///
+  /// [wide] 决定页面缓存使用哪一套滚动控制器（见 [_wideQueueScrollController]）。
   List<Widget> _buildTabPages(
     BuildContext context, {
     required bool shellVisible,
     required int visibleTab,
+    required bool wide,
   }) {
-    final pages = _buildPages(context);
+    final pages = _buildPages(context, wide: wide);
     return [
       for (var index = 0; index < pages.length; index++)
         _withTabVisibility(
@@ -352,20 +385,20 @@ class _NowPlayingState extends State<NowPlaying>
   @override
   bool get wantKeepAlive => true;
 
-  bool _getIsLargeScreen(BuildContext context) {
+  bool _getUsesWideLayout(BuildContext context) {
     final currentSize = MediaQuery.sizeOf(context);
 
     // 尺寸变化时同时失效页面与布局缓存。
     if (_cachedScreenSize != currentSize) {
       _cachedScreenSize = currentSize;
-      _cachedIsLargeScreen = null;
+      _cachedUsesWideLayout = null;
       _cachedPages = null;
     }
 
-    _cachedIsLargeScreen ??= usesWideNowPlayingLayout(
-      AdaptiveLayoutScope.of(context).sizeClass,
+    _cachedUsesWideLayout ??= usesWideNowPlayingLayout(
+      AdaptiveLayoutScope.of(context),
     );
-    return _cachedIsLargeScreen!;
+    return _cachedUsesWideLayout!;
   }
 
   /// 圆点过渡带高度：内容顶部在这条带内渐隐，圆点浮于其中。
@@ -376,14 +409,15 @@ class _NowPlayingState extends State<NowPlaying>
 
   /// 歌词/队列小圆点切换行（常显；由父级 Positioned 撑满宽度）。
   ///
+  /// [wide] 与 [_buildTabPages] 同源：圆点标签页也读当前版式的页面缓存。
   /// [onActiveTap] 点击已激活圆点时触发（播放页 = 展开/收起切换）。
-  Widget _buildDotsRow({VoidCallback? onActiveTap}) {
+  Widget _buildDotsRow({VoidCallback? onActiveTap, required bool wide}) {
     return SizedBox(
       width: double.infinity,
       height: _dotsBandHeight,
       child: Center(
         child: LyricsQueueDots(
-          pages: _buildPages(context),
+          pages: _buildPages(context, wide: wide),
           pageController: _pageController,
           onActiveTap: onActiveTap,
         ),
@@ -505,6 +539,7 @@ class _NowPlayingState extends State<NowPlaying>
                             context,
                             shellVisible: shellVisible,
                             visibleTab: visibleTab,
+                            wide: true,
                           ),
                         ),
                       ),
@@ -517,7 +552,7 @@ class _NowPlayingState extends State<NowPlaying>
                   left: 0,
                   right: 0,
                   height: _dotsBandHeight,
-                  child: RepaintBoundary(child: _buildDotsRow()),
+                  child: RepaintBoundary(child: _buildDotsRow(wide: true)),
                 ),
               ],
             ),
@@ -602,7 +637,7 @@ class _NowPlayingState extends State<NowPlaying>
                         // 当前曲目由左侧播放器承载，队列页只列其后曲目
                         // （includeCurrent 保持 false，不重复展示）。
                         child: QueueDisplay(
-                          controller: _queueScrollController,
+                          controller: _wideQueueScrollController,
                           // tab 栏与内容之间留 16（M3E 口径）。
                           topPadding: _desktopContentTopPadding,
                         ),
@@ -618,7 +653,7 @@ class _NowPlayingState extends State<NowPlaying>
                           child: LyricsWidget(
                             // 桌面歌词区常展开（无迷你条可让位），快捷操作常显。
                             quickActionsEnabled: true,
-                            controller: _lyricsScrollController,
+                            controller: _wideLyricsScrollController,
                           ),
                         ),
                       ),
@@ -626,7 +661,7 @@ class _NowPlayingState extends State<NowPlaying>
                         // 分页左右没有圆点过渡带，顶部留白按 tab 栏下的内容间距；
                         // 内容左右边距由内容自带（16，与 tab 栏对齐）。
                         child: TrackInfoView(
-                          controller: _infoScrollController,
+                          controller: _wideInfoScrollController,
                           topPadding: _desktopContentTopPadding,
                         ),
                       ),
@@ -651,16 +686,16 @@ class _NowPlayingState extends State<NowPlaying>
 
     // 桌面版式由壳层启用：宽窗口用「左播放器 + 右队列/歌词/信息」两栏；
     // 窄窗口（compact / medium）退回单栏，480 窗口下两栏必然互相挤压。
-    if (widget.desktopLayout &&
-        AdaptiveLayoutScope.of(context).sizeClass == WindowSizeClass.expanded) {
+    final layout = AdaptiveLayoutScope.of(context);
+    if (widget.desktopLayout && layout.isExpanded) {
       return _buildDesktopLayout(context, shellVisible: shellVisible);
     }
 
-    final bool isLargeScreen = _getIsLargeScreen(context);
+    final bool usesWideLayout = _getUsesWideLayout(context);
     // 布局期写入（不触发重建）：壳层重复点击的忽略判定要读最新布局。
-    _isLargeScreen = isLargeScreen;
+    _usesWideLayout = usesWideLayout;
 
-    if (isLargeScreen) {
+    if (usesWideLayout) {
       return _buildCollapsedLargeLayout(context, shellVisible: shellVisible);
     }
 
@@ -718,6 +753,7 @@ class _NowPlayingState extends State<NowPlaying>
                                   context,
                                   shellVisible: shellVisible,
                                   visibleTab: visibleTab,
+                                  wide: false,
                                 ),
                               ),
                             ),
@@ -731,7 +767,10 @@ class _NowPlayingState extends State<NowPlaying>
                       right: 0,
                       height: _dotsBandHeight,
                       child: RepaintBoundary(
-                        child: _buildDotsRow(onActiveTap: _toggleExpand),
+                        child: _buildDotsRow(
+                          onActiveTap: _toggleExpand,
+                          wide: false,
+                        ),
                       ),
                     ),
                   ],

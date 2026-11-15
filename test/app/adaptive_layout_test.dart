@@ -31,6 +31,13 @@ void main() {
       expect(WindowSizeClassResolver.resolve(840), WindowSizeClass.expanded);
     });
 
+    test('短横屏只看窗口高：479 / 480', () {
+      expect(AdaptiveLayout.fromSize(800, 479).isShortViewport, isTrue);
+      expect(AdaptiveLayout.fromSize(800, 480).isShortViewport, isFalse);
+      expect(AdaptiveLayout.fromSize(915, 412).isShortViewport, isTrue);
+      expect(AdaptiveLayout.fromSize(915, 900).isShortViewport, isFalse);
+    });
+
     test('表格列只看内容宽，不看桌面平台标记', () {
       DesktopLayout layout({required bool desktop, required double width}) =>
           DesktopLayout(
@@ -48,8 +55,35 @@ void main() {
     test('结构判据只由宽度档位决定', () {
       expect(libraryBrowseUsesSplitLayout(WindowSizeClass.medium), isFalse);
       expect(libraryBrowseUsesSplitLayout(WindowSizeClass.expanded), isTrue);
-      expect(usesWideNowPlayingLayout(WindowSizeClass.medium), isFalse);
-      expect(usesWideNowPlayingLayout(WindowSizeClass.expanded), isTrue);
+    });
+
+    test('播放页宽版式：expanded，或 medium 短横屏', () {
+      // 竖屏照旧只看宽度档位。
+      expect(
+        usesWideNowPlayingLayout(AdaptiveLayout.fromSize(839, 900)),
+        isFalse,
+      );
+      expect(
+        usesWideNowPlayingLayout(AdaptiveLayout.fromSize(840, 900)),
+        isTrue,
+      );
+      // 手机横屏：medium 也走两栏，compact 仍单栏。
+      expect(
+        usesWideNowPlayingLayout(AdaptiveLayout.fromSize(915, 412)),
+        isTrue,
+      );
+      expect(
+        usesWideNowPlayingLayout(AdaptiveLayout.fromSize(800, 360)),
+        isTrue,
+      );
+      expect(
+        usesWideNowPlayingLayout(AdaptiveLayout.fromSize(640, 360)),
+        isTrue,
+      );
+      expect(
+        usesWideNowPlayingLayout(AdaptiveLayout.fromSize(480, 400)),
+        isFalse,
+      );
     });
 
     test('桌面播放页左栏：内容宽充足保持 480，不足优先保右栏 420', () {
@@ -140,6 +174,100 @@ void main() {
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.byKey(const Key('singlePaneNowPlaying')), findsOneWidget);
       expect(find.byKey(const Key('wideNowPlayingLayout')), findsNothing);
+    });
+  });
+
+  group('短横屏', () {
+    for (final size in const [Size(915, 412), Size(800, 360), Size(640, 360)]) {
+      testWidgets('${size.width.toInt()}×${size.height.toInt()} 播放页走两栏', (
+        tester,
+      ) async {
+        await pumpPerfApp(
+          tester,
+          desktopShell: false,
+          favoritesCount: 3,
+          size: size,
+        );
+        await tester.tap(find.text('播放').last);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(find.byKey(const Key('wideNowPlayingLayout')), findsOneWidget);
+        expect(find.byKey(const Key('singlePaneNowPlaying')), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('640×360 + 200% 字号：发现页空态不溢出', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await pumpPerfApp(
+        tester,
+        desktopShell: false,
+        favoritesCount: 3,
+        size: const Size(640, 360),
+      );
+      await tester.tap(find.text('发现').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('800×360 + 键盘 + 200% 字号：资料库搜索不溢出', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await pumpPerfApp(
+        tester,
+        desktopShell: false,
+        favoritesCount: 3,
+        size: const Size(800, 360),
+      );
+      await tester.tap(find.text('发现').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 180);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('左右安全区：导航轨与顶栏内容都让开', (tester) async {
+      tester.view.padding = const FakeViewPadding(left: 64, right: 64);
+      addTearDown(tester.view.resetPadding);
+      await pumpPerfApp(
+        tester,
+        desktopShell: false,
+        favoritesCount: 3,
+        size: const Size(915, 412),
+      );
+
+      expect(tester.getRect(find.byType(M3ENavigationRail)).left, 64);
+      // 品牌文字原本贴着顶栏左缘（16 + 标志宽 + 间距 = 68）；安全区补在
+      // 内容层后整体右移 64。
+      expect(tester.getRect(find.text('Molia').first).left, 132);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('竖屏旋转到横屏：播放页切两栏且无异常', (tester) async {
+      await pumpPerfApp(
+        tester,
+        desktopShell: false,
+        favoritesCount: 3,
+        size: const Size(412, 915),
+      );
+      await tester.tap(find.text('播放').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byKey(const Key('singlePaneNowPlaying')), findsOneWidget);
+
+      tester.view.physicalSize = const Size(915, 412);
+      // 播放页有常驻波浪进度等持续动画，不能 pumpAndSettle；按固定帧推进。
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byKey(const Key('wideNowPlayingLayout')), findsOneWidget);
+      expect(find.byKey(const Key('singlePaneNowPlaying')), findsNothing);
+      expect(tester.takeException(), isNull);
     });
   });
 
