@@ -8,6 +8,7 @@
 | 事实 / 主题 | 权威位置（唯一维护） | 说明 |
 | --- | --- | --- |
 | 工具链版本（Flutter / Dart / JDK / Gradle / AGP / Kotlin / SDK / NDK） | `AGENTS.md` §工具链 | 其它文档与 `molia-*` 技能不复列；`check_docs.py` 校验 |
+| 开发 / 编译 / 发布流程（顺序、门禁、偏离登记） | `docs/dev_workflow.md` | 流程入口；命令细节以脚本用法为准 |
 | 本地开发环境、模拟器、seed、集成测试入口 | `docs/dev_environment.md` | 工具版本仍回 `AGENTS.md` |
 | 架构与分层（as-built） | `docs/architecture.md` | 分层约束由 `test/architecture/` 强制执行 |
 | 领域术语与模块职责 | `GLOSSARY.md` | 新术语落地时登记 |

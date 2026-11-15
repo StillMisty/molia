@@ -8,7 +8,7 @@ description: 在 Android 模拟器或 Linux 桌面跑 Molia、热重载、截图
 ```bash
 tool/agent/emu.sh start        # 启动模拟器（默认 headless，阻塞到 boot 完成；--window 经 WSLg 显示）
 tool/agent/app.sh run          # 后台 flutter run（默认 Android；首次需 Gradle 构建）
-tool/agent/app.sh run -d linux # Linux 桌面热重载（免模拟器；无 DISPLAY 自动 xvfb-run）
+tool/agent/app.sh run -d linux # Linux 桌面热重载（免模拟器；无显示加 --headless 走 Xvfb）
 tool/agent/app.sh reload       # 热重载；restart 热重启；status 看 pid / 设备 / VM Service / 日志路径
 tool/agent/shot.sh [name]      # 截图 → /tmp/opencode/molia/shots/*.png（可直接读图）
 tool/agent/ui.sh layout|tap|swipe|text|key|launch|force-stop
@@ -33,7 +33,7 @@ tool/agent/emu.sh stop         # 停止模拟器（app.sh stop 只停 flutter ru
 ## Linux / WSLg
 
 - Linux 桌面优先后台跑：`tool/agent/app.sh run -d linux`（setsid + pid-file，不占会话）；
-  不要前台裸 `flutter run`。
+  无显示加 `--headless`，不做隐式 Xvfb 切换。不要前台裸 `flutter run`。
 - 窗口黑屏先看启动日志，不要先查 GPU：`tool/agent/app.sh log` 或
   `tool/agent/smoke.sh linux`。首帧前出现 `Unhandled Exception`（尤其
   `Tried to use Provider with a subtype`）说明 `main()` 在 `runApp` 前中断，

@@ -29,15 +29,10 @@ PID_FILE="$RUN_DIR/flutter-run.pid"
 RUN_LOG="$RUN_DIR/flutter-run.log"
 RUN_DEVICE_FILE="$RUN_DIR/flutter-run.device" # app.sh 记录本次 flutter run 的设备
 
-# 单实例逃生口：本机开发实例在跑时，agent 启动的测试 / 热重载实例必须仍能
-# 起来（否则会被单实例逻辑当成第二实例直接退出）。只影响 agent 脚本拉起的
-# 进程，正常双击启动的应用不受影响。
-export MOLIA_SINGLE_INSTANCE_DISABLED=1
-
 log() { printf '[agent] %s\n' "$*" >&2; }
 die() { printf '[agent] ERROR: %s\n' "$*" >&2; exit 1; }
 
-# 是否有图形显示（Linux 桌面运行需要；test.sh 默认套 xvfb-run，app.sh 无显示时套）
+# 是否有图形显示（Linux 桌面运行需要；无显示时用 linux_display_prefix 的 Xvfb）
 has_display() { [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; }
 
 # 停应用：按可执行名精确匹配，避免 `pkill -f <长路径>` 把调用它的 shell 一起
@@ -47,19 +42,26 @@ kill_app() {
   pkill -x "$APP_BINARY" 2>/dev/null || true
 }
 
-# Linux 显示前缀：默认无条件 Xvfb，避免 WSLg 下把窗口弹到 Windows 桌面；
-# 传 1 表示用当前真实显示（脚本的 --window）。调用方展开
-# `"${LINUX_DISPLAY_PREFIX[@]}"`；GDK_BACKEND / WAYLAND_DISPLAY 的细节见
-# test.sh：只改 DISPLAY 不够，GDK 见到 WAYLAND_DISPLAY 会优先连真实合成器。
+# Linux 显示前缀：
+#   linux_display_prefix 0  → Xvfb + 强制 X11（默认，不会把窗口弹到 WSLg 桌面）
+#   linux_display_prefix 1  → 当前真实显示（--window）；没有显示直接失败
+# 结果放在 LINUX_DISPLAY_PREFIX，调用方展开 `"${LINUX_DISPLAY_PREFIX[@]}"`。
+#
+# 同时注入单实例逃生口：自动化实例必须能与本机手工启动的实例并存。
+# 只加在本脚本拉起的命令行上，不做全局 export——否则同一个 shell 里手工
+# 启动的应用也会被静默放行第二实例（Android/iOS 不读这个变量）。
 linux_display_prefix() {
-  local real_display="${1:-0}"
-  LINUX_DISPLAY_PREFIX=()
+  local real_display="${1:-0}" hint="${2:-用 --headless 跑 Xvfb}"
   if ((real_display)); then
+    has_display ||
+      die "没有 DISPLAY/WAYLAND_DISPLAY：${hint}"
+    LINUX_DISPLAY_PREFIX=(env MOLIA_SINGLE_INSTANCE_DISABLED=1)
     return 0
   fi
   command -v xvfb-run >/dev/null 2>&1 ||
     die "缺少 xvfb-run（装 xorg-server-xvfb，或显式使用 --window 跑真实显示）"
-  LINUX_DISPLAY_PREFIX=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a)
+  LINUX_DISPLAY_PREFIX=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11 \
+    MOLIA_SINGLE_INSTANCE_DISABLED=1 xvfb-run -a)
 }
 
 # ---- Linux release 构建卫生（perf.sh / startup.sh 共用）--------------------

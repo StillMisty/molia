@@ -11,12 +11,12 @@
 #   --file <path>      集成测试文件（默认 integration_test/lx_engine_integration_test.dart）
 #   --timeout <秒>     墙钟超时（默认 linux 900 / android 1800；Android 首次 Gradle 构建需放宽）
 #   --no-pub           跳过 flutter pub get（仅本地快速迭代；发布/首次构建勿用，见 pitfalls #15）
-#   --window           在真实 DISPLAY/WAYLAND 上跑（默认 headless；`--no-xvfb` 为旧别名）
+#   --window           在真实 DISPLAY/WAYLAND 上跑（默认 headless；无显示会直接失败）
 #   --no-uninstall     Android 跑完保留安装（调试安装态时用；默认卸载）
 #
 # 设计说明:
 # - 判定只看 flutter test 退出码：设备侧异常会被捕获上报，失败必为非零，不依赖人工看截图；
-# - Linux 默认 headless：无条件套 xvfb-run，在 WSLg 下也不会把窗口弹到 Windows 桌面；
+# - Linux 默认 headless：显式套 xvfb-run，在 WSLg 下也不会把窗口弹到 Windows 桌面；
 #   只改 DISPLAY 不够——GDK 见到 WAYLAND_DISPLAY 会优先连真实 Wayland 合成器，
 #   故同时 `env -u WAYLAND_DISPLAY` + `GDK_BACKEND=x11`；
 # - 日志写 /tmp/opencode/molia/it-<platform>-<时间戳>.log，失败时回显尾部 40 行；
@@ -57,7 +57,7 @@ while (($#)); do
     --file) test_file="$2"; shift ;;
     --timeout) timeout_s="$2"; shift ;;
     --no-pub) no_pub=1 ;;
-    --window|--no-xvfb) headless=0 ;;
+    --window) headless=0 ;;
     --no-uninstall) extra_flags+=(--no-uninstall) ;;
     -*) usage ;;
     *)
@@ -81,12 +81,10 @@ run_one() { # platform
   local device prefix=()
   if [[ "$platform" == "linux" ]]; then
     device="linux"
-    linux_display_prefix "$((headless == 0))"
+    linux_display_prefix "$((headless == 0))" "去掉 --window 用 Xvfb，或先准备显示"
     prefix=("${LINUX_DISPLAY_PREFIX[@]}")
     if (( headless )); then
       log "headless: xvfb-run -a（不弹窗；--window 可切回真实显示）"
-    elif ! has_display; then
-      log "警告：--window 但未检测到 DISPLAY/WAYLAND_DISPLAY，仍直接跑（启动报错看日志）"
     fi
   else
     device="${serial:-}"
@@ -123,10 +121,10 @@ run_one() { # platform
   rc=${PIPESTATUS[0]}
   set -e
 
-  # 收尾兜底：桌面测试 App 是 flutter test 的子进程，异常路径下可能没被带走；
-  # 它持有 stdout 会让 tee / 脚本一直不返回。正常退出时它也已走 tearDownAll
-  # 的 exit(0)，这里再补一刀是幂等的。
-  if [[ "$platform" == "linux" ]]; then
+  # 收尾兜底：桌面测试 App 是 flutter test 的子进程，异常路径（超时 / 崩溃）
+  # 下可能没被带走，持有 stdout 会让 tee / 脚本一直不返回。正常退出时它已走
+  # tearDownAll 的 exit(0)，这里不再按名字清扫——那会误杀同机手工启动的实例。
+  if [[ "$platform" == "linux" ]] && ((rc != 0)); then
     kill_app
   fi
 

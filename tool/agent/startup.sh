@@ -16,7 +16,7 @@
 # - 判定看进程自己打的 `molia.startup` 阶段行（main.dart 的埋点，release 也输出），
 #   「首帧」那行即用户可感总时长；Android 另外记 `am start -W` 的 TotalTime
 #   （系统口径：进程起到首帧绘制），两者都会进汇总表；
-# - 每轮独立冷启动：Linux 每次都新进程 + 单实例关闭（_common.sh 的
+# - 每轮独立冷启动：Linux 每次都新进程 + 单实例关闭（linux_display_prefix 注入的
 #   MOLIA_SINGLE_INSTANCE_DISABLED）；Android 用 `am start -W -S`（先 force-stop）；
 # - 采样不做文件系统热缓存区分，中位数对「改前/改后」是可比的；
 # - 原始日志与 summary.txt 落在 $RUN_DIR/startup-<时间戳>/，供 docs/performance.md 引用。
@@ -86,12 +86,10 @@ setup_linux() {
   linux_assert_release_bundle
   [[ -x "$exe" ]] || die "找不到 release 产物：$exe"
 
-  linux_display_prefix "$((headless == 0))"
+  linux_display_prefix "$((headless == 0))" "去掉 --window 用 Xvfb，或先准备显示"
   prefix=("${LINUX_DISPLAY_PREFIX[@]}")
   if (( headless )); then
     log "headless: xvfb-run -a（--window 可切回真实显示）"
-  elif ! has_display; then
-    log "警告：--window 但未检测到 DISPLAY/WAYLAND_DISPLAY，仍直接跑（启动报错看日志）"
   fi
 
   sampling_run() { # $1=轮次 $2=日志路径

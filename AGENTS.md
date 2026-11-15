@@ -16,6 +16,8 @@ compileSdk 37.2 / targetSdk 37，minSdk 35；build-tools 37.0.0；NDK 30.0.16248
 
 ## 常用命令
 
+完整流程（准备 → 开发 → 门禁 → 编译 → 发布）见 `docs/dev_workflow.md`；下面是高频命令。
+
 ```bash
 flutter analyze --no-pub   # 必须 0 error / 0 warning
 flutter test --no-pub      # 全量（默认集，本机 <30s）；单文件：flutter test test/lx_core_test.dart --no-pub

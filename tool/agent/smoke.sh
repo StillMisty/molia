@@ -34,13 +34,12 @@ cd "$PROJECT_DIR"
 "$AGENT_DIR/app.sh" stop >/dev/null 2>&1 || true
 
 log "启动真实应用（Xvfb + 软件 GL），等待首帧..."
-# 无 DISPLAY 时 app.sh 自动套 xvfb-run；这里显式去掉 WSLg 的 DISPLAY /
-# WAYLAND_DISPLAY，保证烟测始终 headless、可重复。
-if ! env -u DISPLAY -u WAYLAND_DISPLAY \
-  GDK_BACKEND=x11 \
+# --headless 让 app.sh 显式走 Xvfb（不会因为 WSLg 的 DISPLAY 把窗口弹出来）。
+# LIBGL_ALWAYS_SOFTWARE 只给这里的软件渲染路径，不影响正常开发。
+if ! GDK_BACKEND=x11 \
   LIBGL_ALWAYS_SOFTWARE=1 \
   XVFBARGS="-screen 0 1920x1080x24" \
-  "$AGENT_DIR/app.sh" run -d linux --timeout 300 >/dev/null; then
+  "$AGENT_DIR/app.sh" run -d linux --headless --timeout 300 >/dev/null; then
   log "应用进程未能启动；日志尾部："
   tail -40 "$RUN_LOG" >&2 || true
   exit 1

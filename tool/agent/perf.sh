@@ -244,14 +244,10 @@ build_perf_linux() { # out_dir hold_seconds start_delay_seconds
 
 LINUX_RUN_PREFIX=()
 linux_run_prefix() {
-  linux_display_prefix "$PERF_WINDOW"
+  linux_display_prefix "$PERF_WINDOW" "去掉 --window 用 Xvfb，或先准备显示"
   LINUX_RUN_PREFIX=("${LINUX_DISPLAY_PREFIX[@]}")
   if ((PERF_WINDOW)); then
-    if has_display; then
-      log "window: 使用当前显示（可能弹到 WSLg）"
-    else
-      log "警告：--window 但未检测到 DISPLAY/WAYLAND_DISPLAY，仍直接跑"
-    fi
+    log "window: 使用当前显示（可能弹到 WSLg）"
   else
     log "headless: xvfb-run -a（--window 可切回真实显示）"
   fi

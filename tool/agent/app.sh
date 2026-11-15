@@ -2,7 +2,8 @@
 # Flutter 应用热重载控制（后台 flutter run + pid-file 信号）
 #
 # 用法:
-#   tool/agent/app.sh run [-d linux|<serial>] [--timeout N]  后台启动 flutter run，就绪后返回
+#   tool/agent/app.sh run [-d linux|<serial>] [--headless] [--timeout N]
+#                            后台启动 flutter run，就绪后返回
 #   tool/agent/app.sh reload                                  热重载（等同终端里按 r）
 #   tool/agent/app.sh restart                                 热重启（等同终端里按 R）
 #   tool/agent/app.sh stop                                    退出 flutter run 并停掉应用
@@ -10,18 +11,18 @@
 #   tool/agent/app.sh status                                  查看运行状态
 #
 # 设计说明：
-# - flutter run 在无 TTY 的后台运行，交互按键不可用；改用官方 --pid-file +
-#   SIGUSR1（热重载）/ SIGUSR2（热重启）通道，适合 agent 脚本化调用；
-# - 设备默认取 $DEVICE_ID（Android 模拟器）；-d linux 走桌面热重载（免模拟器，
-#   无 DISPLAY 时自动套 xvfb-run）。运行设备记入 $RUN_DEVICE_FILE，
-#   reload/stop/status 均按记录设备行事；
+# - 只用官方 `flutter run --pid-file`；交互按键改成官方信号通道
+#   SIGUSR1（热重载）/ SIGUSR2（热重启），适合脚本化调用；
+# - 设备默认取 $DEVICE_ID（Android 模拟器）；-d linux 走桌面热重载。
+#   没有图形显示时必须显式加 --headless（Xvfb），不做隐式猜测；
+# - 运行设备记入 $RUN_DEVICE_FILE，reload/stop/status 均按记录设备行事；
 # - 日志与 pid 文件固定在 /tmp/opencode/molia，便于其它脚本/agent 读取。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
 usage() {
   cat >&2 <<'EOF'
 用法:
-  app.sh run [-d linux|<serial>] [--timeout N]   # 启动并等待就绪（默认 $DEVICE_ID）
+  app.sh run [-d linux|<serial>] [--headless] [--timeout N]  # 启动并等待就绪（默认 $DEVICE_ID）
   app.sh reload                                   # 热重载
   app.sh restart                                  # 热重启
   app.sh stop                                     # 停止
@@ -95,6 +96,7 @@ cmd_run() {
     case "$1" in
       --timeout) timeout="$2"; shift ;;
       -d|--device) device="$2"; shift ;;
+      --headless) headless=1 ;;
       *) usage ;;
     esac
     shift
@@ -106,13 +108,12 @@ cmd_run() {
     return 0
   fi
 
+  local -a prefix=()
   case "$device" in
     linux)
-      if ! has_display; then
-        command -v xvfb-run >/dev/null 2>&1 ||
-          die "无 DISPLAY/WAYLAND_DISPLAY 且缺少 xvfb-run（Arch: pacman -S xorg-server-xvfb）"
-        headless=1
-      fi
+      # 无显示时不做隐式 Xvfb：失败信息里给出 --headless，避免「为什么弹窗/为什么没窗口」。
+      linux_display_prefix "$((headless == 0))" "用 --headless 跑 Xvfb（无窗口）"
+      prefix=("${LINUX_DISPLAY_PREFIX[@]}")
       ;;
     macos|windows)
       die "本脚本只支持 linux 桌面与 Android 设备（当前: $device）"
@@ -124,8 +125,7 @@ cmd_run() {
       ;;
   esac
 
-  local -a cmd=(flutter run -d "$device" --pid-file "$PID_FILE")
-  (( headless )) && cmd=(xvfb-run -a "${cmd[@]}")
+  local -a cmd=("${prefix[@]}" flutter run -d "$device" --pid-file "$PID_FILE")
 
   mkdir -p "$RUN_DIR"
   rm -f "$PID_FILE" "$RUN_LOG" "$RUN_DEVICE_FILE"
