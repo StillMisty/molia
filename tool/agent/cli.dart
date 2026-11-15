@@ -11,6 +11,11 @@ library;
 import 'dart:io';
 
 import 'src/apk_size.dart';
+import 'src/commands/analyze.dart';
+import 'src/commands/app.dart';
+import 'src/commands/emu.dart';
+import 'src/commands/smoke.dart';
+import 'src/commands/test.dart';
 import 'src/context.dart';
 import 'src/perf_report.dart';
 
@@ -22,6 +27,11 @@ molia 跨端工具（Linux / macOS / Windows 同一套命令）
 命令:
   info                      环境信息（平台 / Dart / Flutter / adb / Android CLI）
   deps                      依赖与工具链体检：pub 可解析性、AGP/KGP、工具版本
+  analyze [选项]            flutter analyze（默认 --no-pub，--pub 可关闭）
+  test <平台> [选项]        集成测试：linux / android / all
+  smoke linux              启动首帧烟测（真实 main + provider tree）
+  app <命令>               run / reload / restart / stop / log / status（--machine 控制通道）
+  emu <命令>               start / stop / status（Android 模拟器）
   size apk [<apk>...]       APK 分组体积与 native 库约束
   perf report [<目录>]      frames 结果汇总成 summary.md
   help [<命令>]             查看总用法或单个命令用法
@@ -83,13 +93,25 @@ Future<void> main(List<String> args) async {
     case 'help':
       stdout.write(rest.isEmpty ? _topUsage : _usageFor(rest.first));
     case 'info':
-      if (rest.isNotEmpty && _wantsHelp(rest.first))
+      if (rest.isNotEmpty && _wantsHelp(rest.first)) {
         return stdout.write(_infoUsage);
+      }
       await _runInfo(context);
     case 'deps':
-      if (rest.isNotEmpty && _wantsHelp(rest.first))
+      if (rest.isNotEmpty && _wantsHelp(rest.first)) {
         return stdout.write(_depsUsage);
+      }
       await _runDeps(context);
+    case 'analyze':
+      await runAnalyze(context, rest);
+    case 'test':
+      await runTest(context, rest);
+    case 'smoke':
+      await runSmoke(context, rest);
+    case 'app':
+      await runApp(context, rest);
+    case 'emu':
+      await runEmu(context, rest);
     case 'size':
       await _runSize(context, rest);
     case 'perf':
@@ -245,7 +267,9 @@ Future<void> _runSize(ToolContext context, List<String> args) async {
     exitCode = 2;
     return;
   }
-  if (_wantsHelp(args.first)) return stdout.write(_sizeUsage);
+  if (_wantsHelp(args.first)) {
+    return stdout.write(_sizeUsage);
+  }
   if (args.first != 'apk') {
     stderr.writeln('[agent] 未知子命令：${args.first}（目前只有 apk）');
     exitCode = 2;
@@ -331,15 +355,18 @@ Future<void> _runPerf(ToolContext context, List<String> args) async {
     exitCode = 2;
     return;
   }
-  if (_wantsHelp(args.first)) return stdout.write(_perfUsage);
+  if (_wantsHelp(args.first)) {
+    return stdout.write(_perfUsage);
+  }
   if (args.first != 'report') {
     stderr.writeln('[agent] 未知子命令：${args.first}（目前只有 report）');
     exitCode = 2;
     return;
   }
   final rest = args.sublist(1);
-  if (rest.isNotEmpty && _wantsHelp(rest.first))
+  if (rest.isNotEmpty && _wantsHelp(rest.first)) {
     return stdout.write(_perfUsage);
+  }
 
   final directory = rest.isNotEmpty
       ? Directory(rest.first)

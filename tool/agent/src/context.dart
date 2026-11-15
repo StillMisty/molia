@@ -51,11 +51,14 @@ class ToolContext {
   /// 运行产物目录：与 sh 版本同口径（RUN_DIR 可覆盖），不放仓库里。
   String get runDir {
     final override = Platform.environment['RUN_DIR'];
-    if (override != null && override.isNotEmpty) return override;
+    if (override != null && override.isNotEmpty) {
+      return override;
+    }
     if (isWindows) {
       final temp = Platform.environment['TEMP'] ?? Platform.environment['TMP'];
-      if (temp != null && temp.isNotEmpty)
+      if (temp != null && temp.isNotEmpty) {
         return '$temp${Platform.pathSeparator}molia-agent';
+      }
       return 'C:\\Windows\\Temp\\molia-agent';
     }
     final tmp = Platform.environment['TMPDIR'];
@@ -180,14 +183,64 @@ class ToolContext {
   Future<int> runInherit(
     List<String> command, {
     String? workingDirectory,
+    Map<String, String>? environment,
   }) async {
     final process = await Process.start(
       command.first,
       command.sublist(1),
       workingDirectory: workingDirectory,
+      environment: environment,
       mode: ProcessStartMode.inheritStdio,
       runInShell: isWindows,
     );
     return process.exitCode;
+  }
+
+  /// 透传输出同时写日志（`flutter test` / `flutter run` 用）：终端上的进度
+  /// 不被吞，失败时又能拿到完整日志。
+  Future<int> runTee(
+    List<String> command, {
+    File? logFile,
+    Duration? timeout,
+    String? workingDirectory,
+    Map<String, String>? environment,
+  }) async {
+    final process = await Process.start(
+      command.first,
+      command.sublist(1),
+      workingDirectory: workingDirectory,
+      environment: environment,
+      runInShell: isWindows,
+    );
+    final sink = logFile?.openWrite();
+    void write(String line) {
+      stdout.writeln(line);
+      sink?.writeln(line);
+    }
+
+    final outDone = process.stdout
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(write)
+        .asFuture<void>();
+    final errDone = process.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(write)
+        .asFuture<void>();
+
+    final exit = await process.exitCode.timeout(
+      timeout ?? const Duration(hours: 2),
+      onTimeout: () {
+        process.kill(ProcessSignal.sigterm);
+        Future<void>.delayed(const Duration(seconds: 3))
+            .then((_) => process.kill(ProcessSignal.sigkill));
+        return 124;
+      },
+    );
+    await Future.wait([outDone, errDone]);
+    await sink?.flush();
+    await sink?.close();
+    return exit;
   }
 }
