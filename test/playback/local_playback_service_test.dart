@@ -41,6 +41,9 @@ class _FakeAudioPlayer extends AudioPlayer {
   Duration? _duration;
   double _volume = 1.0;
 
+  /// 下一次 `setAudioSource` 解析出的时长（模拟换源后更短的音频）；用完即清。
+  Duration? nextSourceDuration;
+
   /// 平台收到的音量写入（按顺序）：淡变 / 音量 / 静音断言用。
   final List<double> volumeCalls = [];
 
@@ -79,7 +82,10 @@ class _FakeAudioPlayer extends AudioPlayer {
     lastAudioSource = audioSource;
     _processingState = ProcessingState.ready;
     _position = Duration.zero;
-    _duration ??= const Duration(seconds: 30);
+    // 换源可以解析出不同时长（失败恢复后新源更短的场景）。
+    final nextDuration = nextSourceDuration;
+    nextSourceDuration = null;
+    _duration = nextDuration ?? (_duration ?? const Duration(seconds: 30));
     return _duration;
   }
 
@@ -496,6 +502,138 @@ void main() {
     expect(player.calls, isNot(contains('stop')), reason: '音质切换保持进度，不能卸载播放器');
     expect(service.position, const Duration(seconds: 10));
     expect(service.isPlaying, isTrue);
+  });
+
+  group('播放失败原地重取', () {
+    test('播放中：按当前进度重新取链并继续播放', () async {
+      final requested = <String?>[];
+      final player = _FakeAudioPlayer();
+      final service = LocalPlaybackService(
+        resolver: (track, {String? quality}) async {
+          requested.add(quality);
+          return PlayableStream(Uri.parse('file:///tmp/molia-test.mp3'));
+        },
+        player: player,
+      );
+      addTearDown(service.dispose);
+      await service.playTracks([_track()], 0);
+      await pumpEventQueue();
+      await service.seek(const Duration(seconds: 12));
+      await pumpEventQueue();
+      final resolvesBefore = requested.length;
+
+      player.calls.clear();
+      await service.reloadCurrentStream();
+      await pumpEventQueue();
+
+      expect(requested.length, resolvesBefore + 1, reason: '原地重取 = 再取一次链');
+      expect(player.calls, contains('setAudioSource'));
+      expect(player.calls, contains('seek:12000'));
+      expect(player.calls, contains('play'));
+      expect(player.calls, isNot(contains('stop')), reason: '不卸载旧源，也不切歌');
+      expect(service.position, const Duration(seconds: 12));
+      expect(service.isPlaying, isTrue);
+      expect(service.currentIndex, 0);
+    });
+
+    test('暂停中：保留进度，不自动起播', () async {
+      final player = _FakeAudioPlayer();
+      final service = LocalPlaybackService(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+        player: player,
+      );
+      addTearDown(service.dispose);
+      await service.playTracks([_track()], 0);
+      await pumpEventQueue();
+      await service.seek(const Duration(seconds: 10));
+      await service.pause();
+      await pumpEventQueue();
+      expect(service.isPlaying, isFalse);
+
+      player.calls.clear();
+      await service.reloadCurrentStream();
+      await pumpEventQueue();
+
+      expect(player.calls, contains('seek:10000'));
+      expect(player.calls.where((call) => call == 'play'), isEmpty);
+      expect(service.position, const Duration(seconds: 10));
+      expect(service.isPlaying, isFalse);
+    });
+
+    test('曲末：按既有曲末判定从 0 重取', () async {
+      final (:service, :player) = await start(mode: PlayMode.sequential);
+      player.complete();
+      await pumpEventQueue();
+      expect(service.position, const Duration(seconds: 30));
+
+      player.calls.clear();
+      await service.reloadCurrentStream();
+      await pumpEventQueue();
+
+      expect(service.position, Duration.zero);
+      expect(
+        player.calls.where((call) => call.startsWith('seek:')),
+        isEmpty,
+        reason: '从 0 重取不需要再 seek 回末位',
+      );
+      expect(player.calls, isNot(contains('play')), reason: '曲末停住的状态保持');
+      expect(service.isPlaying, isFalse);
+    });
+
+    test('新源更短：进度按既有口径钳回合法范围', () async {
+      final player = _FakeAudioPlayer();
+      final service = LocalPlaybackService(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+        player: player,
+      );
+      addTearDown(service.dispose);
+      await service.playTracks([_track()], 0);
+      await pumpEventQueue();
+      await service.seek(const Duration(seconds: 20));
+      await pumpEventQueue();
+
+      // 重取后播放器解析出更短的源：原进度已越界，复用切音质的钳位口径。
+      player.nextSourceDuration = const Duration(seconds: 5);
+      player.calls.clear();
+      await service.reloadCurrentStream();
+      await pumpEventQueue();
+
+      expect(player.duration, const Duration(seconds: 5));
+      expect(service.duration, const Duration(seconds: 5));
+      expect(service.position, Duration.zero);
+      expect(player.calls, isNot(contains('seek:20000')));
+    });
+
+    test('取链失败后原地重取：恢复播放而不是停在错误态', () async {
+      final player = _FakeAudioPlayer();
+      var failNext = true;
+      final service = LocalPlaybackService(
+        resolver: (track, {String? quality}) async {
+          if (failNext) {
+            failNext = false;
+            throw StateError('取链失败');
+          }
+          return PlayableStream(Uri.parse('file:///tmp/molia-test.mp3'));
+        },
+        player: player,
+      );
+      addTearDown(service.dispose);
+      await service.playTracks([_track()], 0);
+      await pumpEventQueue();
+      expect(service.isPlaying, isFalse);
+      expect(service.lastError, isNotNull);
+
+      player.calls.clear();
+      await service.reloadCurrentStream();
+      await pumpEventQueue();
+
+      expect(service.lastError, isNull);
+      expect(player.calls, contains('setAudioSource'));
+      expect(player.calls, contains('play'), reason: '失败前用户意图是播放，原地重取要接着出声');
+      expect(service.isPlaying, isTrue);
+    });
   });
 
   test('media_kit 暂停在 EOF（ready + 曲末位置）时，点播放从 0 重播', () async {

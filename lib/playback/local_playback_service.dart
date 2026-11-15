@@ -251,6 +251,14 @@ class LocalPlaybackService extends ChangeNotifier {
   bool _isPlaying = false;
   bool _isLoading = false;
 
+  /// 用户最新的播放意图（播 / 停），与「此刻是否真的在出声」分开。
+  ///
+  /// 为什么不能复用 [_isPlaying]：取链失败、播放错误、切歌卸载都会先把它置
+  /// false，失败恢复的原地重取若按它判断，会把「本该继续播的歌」重取成暂停
+  /// （用户看到进度条停在半途、却没有声音）。`_player.playing` 同样不可靠
+  /// （卸载旧源后为 false）。只有用户显式暂停 / 停止、或停在曲末才撤销。
+  bool _wantsPlayback = false;
+
   /// 旧源已停、新源尚未落位（手动切歌卸载后的空窗）。
   ///
   /// just_audio 的 [AudioPlayer.stop] 会保留当前 audio source：这个窗口里
@@ -993,6 +1001,32 @@ class LocalPlaybackService extends ChangeNotifier {
     );
   }
 
+  /// 原地重新取链当前曲目（播放失败恢复的第一步）：不换曲目、不重放整首。
+  ///
+  /// 与 [setCurrentQuality] 共用同一条装载路径（[_playIndex] + `resumeAt`）：
+  /// 音质不变、不写 override，也不失效取链缓存——失效由失败恢复模块按
+  /// sourceKey 负责，这里再清一次只会让同音源其它曲目白重取。
+  ///
+  /// 播放态按 [_wantsPlayback]（用户意图）而不是 [isPlaying]：错误刚落过，
+  /// 对外播放态已经是 false；曲末错误则从 0 重来，末位进度一落位就又会
+  /// 判成曲末。
+  Future<void> reloadCurrentStream() async {
+    if (_playerDisposed) return;
+    if (_currentTrack == null ||
+        _currentIndex < 0 ||
+        _currentIndex >= _queue.length) {
+      return;
+    }
+    final resumeAt = _isAtTrackEnd ? Duration.zero : _position;
+    await _playIndex(
+      _currentIndex,
+      recordHistory: false,
+      resumeAt: resumeAt,
+      autoplay: _wantsPlayback,
+      unloadCurrent: false,
+    );
+  }
+
   /// 播放队列下标：手动切歌 / 换源 / 切音质 / 曲末自动切歌共用。
   ///
   /// [unloadCurrent] 为 true 时在取链前停掉并卸载旧源（手动切歌）；
@@ -1006,6 +1040,9 @@ class LocalPlaybackService extends ChangeNotifier {
     bool fadeIn = false,
   }) async {
     if (index < 0 || index >= _queue.length) return;
+    // 装载意图即最新意图：取链失败时仍保留它，失败恢复据此决定重取后要不要
+    // 继续出声（[_reloadCurrentStream]）。
+    _wantsPlayback = autoplay;
     _pauseIntentPending = false;
     // 切歌 / 换音质 / 换源都不继承半淡的音量：新源从用户音量开始。
     // 淡入路径留给起播前自己把电平压到静音（见 [_prepareFadeIn]）。
@@ -1276,6 +1313,8 @@ class LocalPlaybackService extends ChangeNotifier {
     if (!fromInterruption) _focusGuard?.cancelPendingResume();
     if (_playerDisposed || _currentTrack == null) return false;
     if (!_player.playing) return false;
+    // 用户 / 系统暂停即撤销播放意图（焦点中断由守卫在归还时重新起播）。
+    _wantsPlayback = false;
     final immediate =
         urgent ||
         fromInterruption ||
@@ -1308,6 +1347,7 @@ class LocalPlaybackService extends ChangeNotifier {
   Future<void> play() async {
     if (!hasTrack) return;
     if (isLoading) return;
+    _wantsPlayback = true;
     final reversingPause = _pauseIntentPending;
     _pauseIntentPending = false;
     if (reversingPause) {
@@ -1359,6 +1399,7 @@ class LocalPlaybackService extends ChangeNotifier {
     if (_isAtTrackEnd) {
       await _restartFromStart();
     }
+    _wantsPlayback = true;
     final fadeIn = await _prepareFadeIn();
     unawaited(
       _player.play().catchError((Object e) {
@@ -1702,6 +1743,7 @@ class LocalPlaybackService extends ChangeNotifier {
       _pauseIntentPending = false;
     }
     _playRequestId++;
+    _wantsPlayback = false;
     _stopAfterCurrentTrack = false;
     _suppressPositionUpdates = false;
     _nextTrackPreloader?.cancelAll();
@@ -1880,6 +1922,9 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 下一次点播放会被当成暂停。
   Future<void> _pauseAtTrackEnd() async {
     if (_duration > Duration.zero) _position = _duration;
+    // 停在曲末是「播完了」而不是「用户暂停」：播放意图一并撤销，失败恢复
+    // 的原地重取不会把停在末尾的歌重新拉起来。
+    _wantsPlayback = false;
     try {
       await _player.pause();
     } catch (e) {
@@ -1895,6 +1940,7 @@ class LocalPlaybackService extends ChangeNotifier {
   /// [fadeIn] 只给用户可感知的「恢复播放」；自动重播（单曲循环 / 列表循环
   /// 单曲）保持硬切，避免每次循环都做一次音量起伏。
   void _resumeCurrentTrack({bool fadeIn = false}) {
+    _wantsPlayback = true;
     unawaited(() async {
       final rampIn = fadeIn && await _prepareFadeIn();
       unawaited(

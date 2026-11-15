@@ -882,6 +882,29 @@ void main() {
     expect(backend.calls.last, 'playQueueIndex:0');
   });
 
+  test('命令面原地重取：恢复态空操作，live 转发后端', () async {
+    build();
+    await seedSession(
+      PlaybackSession(
+        tracks: [_track('a')],
+        index: 0,
+        position: const Duration(seconds: 10),
+      ),
+    );
+    expect(await session.load(), isTrue);
+
+    // 恢复态没有真实播放可重取：空操作，不能把保存的会话当成播放事实。
+    expect(await session.reloadCurrentStream(), PlaybackCommandOutcome.none);
+    expect(backend.calls, isEmpty);
+
+    backend.emitFrame(_live(_track('a')));
+    expect(
+      await session.reloadCurrentStream(),
+      PlaybackCommandOutcome.trackOnly,
+    );
+    expect(backend.calls, ['reloadCurrentStream']);
+  });
+
   test('恢复态队列编辑：移除 / 移动改写保存会话并落盘', () async {
     build(persistStore: true);
     await seedSession(

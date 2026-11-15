@@ -123,6 +123,13 @@ abstract interface class PlaybackCommandPort {
   /// 返回 [PlaybackCommandOutcome.none]。
   Future<PlaybackCommandOutcome> setCurrentQuality(String quality);
 
+  /// 原地重新取链当前曲目（播放失败恢复的第一步）：不换曲目、不重放整首。
+  ///
+  /// live 转发 facade：以当前进度重新取链并保持播放 / 暂停态，曲末从 0 开始；
+  /// 恢复态没有真实播放，返回 [PlaybackCommandOutcome.none]。取链缓存失效由
+  /// 失败恢复模块负责。
+  Future<PlaybackCommandOutcome> reloadCurrentStream();
+
   /// 把队列中 [trackUri] 的曲目原地替换为 [newTrack]（自动换源写回）。
   ///
   /// 只有 live 处理（[PlaybackReplaceScope.liveOnly]）：自动换源由真实播放

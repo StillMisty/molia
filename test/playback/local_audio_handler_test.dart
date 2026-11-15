@@ -108,6 +108,12 @@ class _FakeCommands implements PlaybackCommandPort {
   }
 
   @override
+  Future<PlaybackCommandOutcome> reloadCurrentStream() async {
+    calls.add('reloadCurrentStream');
+    return outcome;
+  }
+
+  @override
   Future<PlaybackCommandOutcome> replaceQueueTrack(
     String trackUri,
     Track newTrack,

@@ -30,6 +30,13 @@ class _RecordingCoordinator extends PlaybackSessionCoordinator {
 
   final List<int> queueIndexes = [];
   final List<String> replacedUris = [];
+  int reloads = 0;
+
+  @override
+  Future<PlaybackCommandOutcome> reloadCurrentStream() {
+    reloads++;
+    return super.reloadCurrentStream();
+  }
 
   @override
   Future<PlaybackCommandOutcome> playQueueIndex(int index) {
@@ -70,15 +77,29 @@ class _RecordingFailures implements FailureRecorder {
 
 /// 恢复策略直测用的命令面替身：只记录写入，不碰真实播放 / 会话。
 class _RecordingCommands implements PlaybackCommandPort {
+  /// 命令调用顺序（验证「原地重取 → 整首重试 → 换源」且不重复触发）。
+  final List<String> steps = [];
   final List<int> playedIndexes = [];
   final List<({String uri, Track track})> replacements = [];
+  int reloads = 0;
 
   /// 非空时对应命令抛错（验证失败路径不会卡住守卫）。
+  Object? reloadError;
   Object? playError;
   Object? replaceError;
 
   @override
+  Future<PlaybackCommandOutcome> reloadCurrentStream() async {
+    steps.add('reload');
+    reloads++;
+    final error = reloadError;
+    if (error != null) throw error;
+    return PlaybackCommandOutcome.trackOnly;
+  }
+
+  @override
   Future<PlaybackCommandOutcome> playQueueIndex(int index) async {
+    steps.add('playQueueIndex:$index');
     playedIndexes.add(index);
     final error = playError;
     if (error != null) throw error;
@@ -90,6 +111,7 @@ class _RecordingCommands implements PlaybackCommandPort {
     String trackUri,
     Track newTrack,
   ) async {
+    steps.add('replaceQueueTrack:$trackUri');
     replacements.add((uri: trackUri, track: newTrack));
     final error = replaceError;
     if (error != null) throw error;
@@ -235,6 +257,7 @@ void main() {
     emitError(failing);
     await pumpEventQueue();
 
+    expect(backend.calls, contains('reloadCurrentStream'));
     expect(backend.calls, contains('playQueueIndex:0'));
     // 自动换源：provenance 含种子源。
     expect(calls, hasLength(1));
@@ -276,7 +299,7 @@ void main() {
     );
   });
 
-  test('同源重试经命令面：playQueueIndex 由协调者路由', () async {
+  test('同源重试经命令面：原地重取与整首重试都由协调者路由', () async {
     final failing = track('fake', 'a');
     final coordinator = recordingCoordinator();
     final (provider, _) = buildProvider(sessionCoordinator: coordinator);
@@ -285,8 +308,10 @@ void main() {
     emitError(failing);
     await pumpEventQueue();
 
-    // 重试不是「直写 facade」：命令进协调者（live 路由 + 返回前已提交）。
+    // 两级恢复都不是「直写 facade」：命令进协调者（live 路由 + 返回前已提交）。
+    expect(coordinator.reloads, 1);
     expect(coordinator.queueIndexes, [0]);
+    expect(backend.calls, contains('reloadCurrentStream'));
     expect(backend.calls, contains('playQueueIndex:0'));
   });
 
@@ -500,38 +525,73 @@ void main() {
       expect(recorder.records, hasLength(1));
     });
 
-    test('同一曲目只同源重试一次，切音质后重新允许', () async {
+    test('同一曲目每级只做一次，切音质后重新允许', () async {
       final failing = track('fake', 'a');
       final h = buildRecovery();
       h.box.value = failureSnapshot(failing);
 
       h.recovery.onPlaybackError(h.box.value);
       await pumpEventQueue();
-      expect(h.commands.playedIndexes, [0]);
-      expect(h.calls, hasLength(1), reason: '重试后仍失败，进入自动换源');
+      expect(h.commands.steps, ['reload', 'playQueueIndex:0']);
+      expect(h.calls, hasLength(1), reason: '两级都仍失败，进入自动换源');
 
       h.recovery.onPlaybackError(h.box.value);
       await pumpEventQueue();
-      expect(h.commands.playedIndexes, [0], reason: '同一曲目 key 不再同源重试');
+      expect(h.commands.steps, [
+        'reload',
+        'playQueueIndex:0',
+      ], reason: '同一曲目 key 不再重取 / 重试');
       expect(h.calls, hasLength(2), reason: '直接尝试自动换源');
 
       h.recovery.resetRetryGuard();
       h.recovery.onPlaybackError(h.box.value);
       await pumpEventQueue();
-      expect(h.commands.playedIndexes, [0, 0], reason: '切音质是新的取链动作');
+      expect(h.commands.steps, [
+        'reload',
+        'playQueueIndex:0',
+        'reload',
+        'playQueueIndex:0',
+      ], reason: '切音质是新的取链动作，恢复链重新开始');
     });
 
-    test('同源重试命令失败：错误仍在时仍尝试自动换源', () async {
+    test('恢复顺序：原地重取 → 整首重试 → 换源，同一失败不重复触发', () async {
       final failing = track('fake', 'a');
       final replacement = track('kg', 'a');
       final h = buildRecovery(resolver: (seed, exclude) async => replacement);
+      h.box.value = failureSnapshot(failing);
+
+      // 同一失败连续到达多帧（错误值相同，真实链路里也可能重复通知）。
+      h.recovery.onPlaybackError(h.box.value);
+      h.recovery.onPlaybackError(h.box.value);
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+
+      expect(h.commands.steps, [
+        'reload',
+        'playQueueIndex:0',
+        'replaceQueueTrack:fake:a',
+      ]);
+      expect(h.commands.reloads, 1);
+      expect(h.commands.playedIndexes, [0]);
+      expect(h.calls, hasLength(1));
+    });
+
+    test('原地重取 / 整首重试命令抛错：错误仍在时仍继续下一级', () async {
+      final failing = track('fake', 'a');
+      final replacement = track('kg', 'a');
+      final h = buildRecovery(resolver: (seed, exclude) async => replacement);
+      h.commands.reloadError = StateError('reload failed');
       h.commands.playError = StateError('play failed');
       h.box.value = failureSnapshot(failing);
 
       h.recovery.onPlaybackError(h.box.value);
       await pumpEventQueue();
 
-      expect(h.commands.playedIndexes, [0]);
+      expect(h.commands.steps, [
+        'reload',
+        'playQueueIndex:0',
+        'replaceQueueTrack:fake:a',
+      ]);
       expect(h.calls.single.exclude, {'fake'});
       expect(h.commands.replacements.single.uri, 'fake:a');
       expect(h.swapped, hasLength(1));

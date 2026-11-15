@@ -34,6 +34,12 @@ abstract interface class PlaybackFacade {
   /// 只影响本次播放，不改变队列 / 进度 / 模式，也不写入持久化会话。
   Future<void> setCurrentQuality(String quality);
 
+  /// 原地重新取链当前曲目（播放失败恢复的第一步）：不换曲目、不重放整首。
+  ///
+  /// 以当前进度重新取链并保持播放 / 暂停态；已到曲末则从 0 开始。取链缓存
+  /// 失效由失败恢复模块负责，这里只做一次新的取链。
+  Future<void> reloadCurrentStream();
+
   /// 追加曲目到当前队列末尾（不打断当前播放）：顺序模式立即可达；
   /// 随机模式下本轮排列不变，追加项在本轮结束后纳入新一轮洗牌。
   Future<void> enqueueTracks(List<Track> tracks);

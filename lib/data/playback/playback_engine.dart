@@ -191,6 +191,13 @@ class PlaybackEngine implements PlaybackFacade {
     _publish();
   }
 
+  /// 原地重新取链当前曲目（失败恢复的第一步）：服务保持进度 / 播放态。
+  @override
+  Future<void> reloadCurrentStream() async {
+    await _service.reloadCurrentStream();
+    _publish();
+  }
+
   @override
   Future<void> toggle() async {
     // 与 play / pause 同一判据，但只发布一次：toggle 是单个用户动作，

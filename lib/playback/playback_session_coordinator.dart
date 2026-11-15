@@ -563,6 +563,20 @@ class PlaybackSessionCoordinator
     return PlaybackCommandOutcome.trackOnly;
   }
 
+  /// 原地重新取链当前曲目（失败恢复的第一步）：保持进度与播放态。
+  ///
+  /// 只服务 live：失败恢复只处理真实播放的失败，恢复态没有真实播放可重取，
+  /// 返回空操作。音质 / 队列 / 下标都不变，因此不提交会话——进度变化由快照
+  /// 监听的常规提交点负责，这里不额外写一次。
+  @override
+  Future<PlaybackCommandOutcome> reloadCurrentStream() async {
+    if (phase != PlaybackSessionPhase.live) {
+      return PlaybackCommandOutcome.none;
+    }
+    await _facade.reloadCurrentStream();
+    return PlaybackCommandOutcome.trackOnly;
+  }
+
   /// 自动换源写回：把 live 队列中 [trackUri] 的曲目原地替换为 [newTrack]。
   ///
   /// 只改真实播放：自动换源由真实播放失败触发，恢复态没有真实队列可换，

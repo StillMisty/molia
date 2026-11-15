@@ -287,6 +287,10 @@ class FakePlaybackFacade implements PlaybackFacade {
     );
   }
 
+  /// 原地重新取链当前曲目（失败恢复的第一步）：只记录调用，快照由测试推进。
+  @override
+  Future<void> reloadCurrentStream() async => calls.add('reloadCurrentStream');
+
   @override
   Future<void> setVolume(double value) async {
     // 只记专用列表：`calls` 保持「播放控制委托」语义，供既有测试断言。
