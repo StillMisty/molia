@@ -1783,6 +1783,13 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   `PredictiveBackPageTransitionsBuilder`（`lib/theme/app_theme.dart`）——手势跟手预览
   只由它插入的手势 detector 提供，换成普通 builder 会静默退化成「能返回、无预览」
   （`WidgetsBinding._handleCommitBackGesture` 无观察者时走 `handlePopRoute`）。
+  主题统一沿用依赖包默认 map（`ThemeData.pageTransitionsTheme` 不手写平台
+  子集），`test/theme/predictive_back_test.dart` 钉住 Android 仍是预测返回。
+  `<application>` 与 `MainActivity` 两处都声明 `enableOnBackInvokedCallback="true"`
+  （Android 15+ 以 activity 级值为准，部分 OEM 忽略 application 级）。
+  跟手预览还要求系统真的往 Dart 派发 progress：部分 OnePlus / ColorOS 机器只给
+  `progress=0` 的事件（flutter#185257），那种机型只能退化成「松手返回」，不要
+  为此改主题 / 弹层宿主，见 `docs/pitfalls.md` #108。
   由此根导航器上 push 的页面（二级页）都有预览。M3E 的弹层类表面（底部弹层）由包内
   宿主自实现预览：宿主自己当手势观察者，guard（`onDismissRequest`）非空时也接管
   （material_3_expressive ≥ 1.1.7），提交后交给 guard 裁决——guard 拒绝则预览回弹、
