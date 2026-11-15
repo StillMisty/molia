@@ -24,7 +24,7 @@
 - **Bili account（B 站账号）** — `BiliAccountService`（`lib/services/bili_account_service.dart`）+ `BiliQrLogin`（`lib/sources/builtin/bili_login.dart`）+ **Bili session** `BiliSession`（`lib/sources/builtin/bili_session.dart`）：官方扫码登录，Cookie 存 `kBiliAccountCookie`（凭证类别 + 本机凭据库，**默认随跨设备同步；完整备份默认包含全部凭证**；退出登录的清空也会同步）。`BiliSession` 是 Cookie / 账号 / 就绪 Future 的唯一持有者；账号服务只保留 UI 状态（登录态 / 过期 / 持久化标记）并通过同一会话读写，`BiliClient` / `BiliLyric` 接受注入的会话（默认 `BiliSession.shared`）；账号请求与字幕取词都先 await `ready` 再读 Cookie，过期标记也由会话持有。只用于 B 站字幕（`/x/player/wbi/v2` + `accountSession`）与账号资料（nav + `account`）；播放直链、搜索、评论、字幕 CDN 保持匿名。登录成功清 `bili:` 原生取词缓存并强刷当前 B 站歌词；手动选择的歌词不被覆盖。凭据存本机凭据库（明文 SQLite，见 ADR-0016 修订），启动时读取；读取失败按匿名会话降级，不阻断播放。
 - **Bili client（B 站请求客户端）** — `lib/sources/builtin/bili_client.dart`：B 站端点请求生命周期的唯一实现——URL / WBI 签名 / 匿名 vs 会话头 / 账号 Cookie（仅 `account` / `accountSession` 两种鉴权口径，播放 / 搜索 / 评论绝不带，Cookie 来自注入的 `BiliSession`）/ 业务码口径（`standard` / `favorites` / `none`）/ 刷新口径（`riskOnly` 默认，仅风控刷新；搜索与 UP 搜索 `anyFailure`，任何失败刷新一次）/ 空响应与非 JSON 归一为 `SourceFailure`。`BiliApi` 仍是匿名访问会话（buvid + WBI 密钥，类型 `BiliAnonSession`）的唯一来源；业务文件只拼参数与解析 `data`，不再各自判断 code / 带 Cookie / 刷新。
 - **Bilibili raw id（B 站取链 id）** — `bvid`（`BV...`）优先、`aid`（av 号）兜底：`raw_track.dart` 的通用 id 优先级把 `bvid` 放在最前，`_platformIdFields['bili'] = ['bvid','aid','id']`，且不登记 `_canonicalIdFields['bili']`（B 站不靠 LX 脚本取链）。raw 原样保留 `cid`（首个分 P，取链与字幕共用）与 `source:'bili'`；`bvid` / `aid` 都缺失的条目不可播放（收藏夹里的番剧 / 课程在映射时过滤）。
-- **LX engine bridge（LX 引擎桥）** — `lib/sources/lx/lx_engine_native.dart`：脚本 isolate 与宿主的唯一通道。投递用 JSInvokable 值直投（`__lxDeliver` / `__lxSetup`，不再把消息拼成 JS 源码 evaluate）；HTTP 响应只下行原文 `raw`，`body` 由 prelude 在 JS 侧还原；任务泵按活动状态自适应（有在途 25ms / 空闲 250ms）；调用超时先探活（`ping`/`pong`，有在途 HTTP 时按脚本声明的超时延长预算），只有无应答才重启——单请求超时抛 `LxEngineTimeoutException` 只失败该请求，`LxEngineSupervisor` 对连续超时熔断（默认 3 次 → `failed` + `failureReason`，成功一次清零）。
+- **LX engine bridge（LX 引擎桥）** — `lib/sources/lx/lx_engine_native.dart`：脚本 isolate 与宿主的唯一通道。投递用 JSInvokable 值直投（`__lxDeliver` / `__lxSetup`，不再把消息拼成 JS 源码 evaluate）；HTTP 响应只下行原文 `raw`，`body` 由 prelude 在 JS 侧还原；任务泵按活动状态自适应（有在途 25ms / 空闲 250ms）；调用超时先探活（`ping`/`pong`，有在途 HTTP 时按脚本声明的超时延长预算），只有无应答才重启——单请求超时抛 `LxEngineTimeoutException` 只失败该请求，`LxEngineSupervisor` 对连续超时熔断（默认 3 次 → `failed` + `failureReason`，成功一次清零）。`failed` 不是永久终态：冷却 60s 后下一次请求半开恢复（重放同一脚本、并发 single-flight、失败重置冷却），`retryNow` 绕过冷却立即尝试；`SourceManager` 对启动激活失败按 5s / 20s 延迟重试，脚本源首次使用时惰性补激活（用户主动停用不触发），引擎 `failed` 时只有网络变化事件会触发 `retryEngine`。
 
 ## 错误模型
 
@@ -43,11 +43,12 @@
   真实播放的 `liveSnapshot` / `livePosition` 投影（恢复态下为空），供定时关闭、失败
   恢复、默认播放模式使用——消费方不再自己判断「恢复态还是 live」。
 - **Playback error recovery（播放失败恢复）** — `lib/playback/playback_error_recovery.dart`：
-  播放失败后的唯一策略模块：失效该曲目取链缓存 → 同一曲目 key 只同源重试一次 →
-  仍失败则自动换源。写入只经 `PlaybackCommandPort`（`playQueueIndex` /
-  `replaceQueueTrack`），阶段路由与「返回前已提交」仍在
-  `PlaybackSessionCoordinator`；`PlaybackProvider` 只把失败快照转发进来，并按命令
-  结果通知 UI。切音质是一次新的取链动作，`resetRetryGuard` 重新允许同源重试。
+  播放失败后的唯一策略模块：失效该曲目取链缓存 → 原地重取（保留进度）→ 同一曲目
+  key 再整首重试一次 → 仍失败则自动换源。写入只经 `PlaybackCommandPort`
+  （`reloadCurrentStream` / `playQueueIndex` / `replaceQueueTrack`），阶段路由与
+  「返回前已提交」仍在 `PlaybackSessionCoordinator`；`PlaybackProvider` 只把失败
+  快照转发进来，并按命令结果通知 UI。切音质是一次新的取链动作，`resetRetryGuard`
+  重新允许整条恢复链。
 - **Playback stream headers（流请求头契约）** — `lib/domain/ports/music_source.dart::PlayableStream`：取链返回 `uri + headers + expiresIn`，`headers` 是**全路径契约**，不是取链层的局部细节。`SourceManagerMusicSource.resolve` / `CatalogService.resolve` 原样保留，`LocalPlaybackService` 同时传给 `AudioSource.uri` 与 `LockCachingAudioSource`，`NextTrackPreloader` / `AudioPredownloader` / 桌面 `PlayingTrackCacheWriter` / 下载复用同一份；任一处丢掉 headers（B 站直链需要 `Referer` + 浏览器 UA）都会变成 403 / 播放失败。新增取链实现时先看这条。
 - **Play mode（播放模式）** — `lib/models/play_mode.dart`：列表循环（队尾回队首）、
   顺序播放（播完即停）、单曲循环、随机播放；`PlayMode.next` 是按钮与系统媒体动作
@@ -98,7 +99,8 @@
   共用 `PlaybackCommandPort`（`lib/playback/playback_commands.dart`，唯一实现是协调者）：
   handler 只把通知 / 耳机键动作翻译成命令，恢复态回落（切歌 / 队列跳转）、阶段路由与
   落盘时机都在命令面，handler 不再直写服务、也不再持有第二个落盘回调。provider
-  的失败恢复写入也走同一条命令面：播放失败的同源重试走 `playQueueIndex`，自动换源写回走
+  的失败恢复写入也走同一条命令面：播放失败的原地重取走 `reloadCurrentStream`、
+  整首重试走 `playQueueIndex`，自动换源写回走
   `replaceQueueTrack`（只有 live 生效，恢复态 / 未命中 no-op），不直写 facade。
   壳层 paused
   与桌面退出共用
@@ -768,7 +770,8 @@
   两种消费面：歌词搜索（非严格，未命中回退首候选）与自动换源（严格，未命中
   返回 null —— 宁可不换，不换错）。
 - **Auto source swap（自动换源）** — `lib/services/source_swap/auto_source_swap_service.dart`
-  + `lib/playback/playback_error_recovery.dart` 的恢复策略：同源重试仍失败后跨源严格
+  + `lib/playback/playback_error_recovery.dart` 的恢复策略：原地重取与整首重试仍
+  失败后跨源严格
   找回并**静默**替换队列曲目（对齐 LX）；替换经 `PlaybackCommandPort.replaceQueueTrack`
   （live 由协调者转发 facade 并返回前提交会话，恢复态 / 未命中 no-op——自动换源
   只由真实播放失败触发，不改保存的恢复会话）；provenance（每个曲目的已尝试来源）

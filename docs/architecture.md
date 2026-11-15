@@ -85,7 +85,12 @@
   `SourceRegistryImpl` 构建 `SourceDescriptor`（排序转发 `lx_source_order`）；
   `CatalogService` 提供 `search`（缓存 5min）、`searchArtists` / `searchLyrics`
   （同一 5min 缓存实例，key=`search:{source}:artist|lyric:{keyword}:{page}:{limit}`，
-  前缀失效与单曲搜索共用）与 `resolve`（缓存 10min，key=`url:{source}:{md5(canonical payload)}:{quality}`，
+  前缀失效与单曲搜索共用）与 `resolve`（缓存上限默认 10min：显式 `resolveTtl`
+  优先，否则跟随注入缓存的 TTL；平台返回 `expiresIn` 时再按
+  `min(上限, expiresIn - 60s)` 收紧、剩余 ≤60s 时结果本次可用但不入库；单飞内
+  一次有界重试，只重试 network / timeout / rateLimited / scriptError /
+  engineRestarting，整段硬预算 25s——每次尝试按剩余预算下发超时并叠加
+  `.timeout` 兜底，LX 降档循环共用同一 deadline；key=`url:{source}:{md5(canonical payload)}:{quality}`，
   失败不缓存，可 `invalidatePrefix`），并把异常归一化为 `SourceFailure`；
   `resolve` 返回 `PlayableStream`（uri + headers + expiresIn），B 站等需要
   `Referer` / UA 的平台由这一层原样保留请求头。
@@ -149,11 +154,12 @@
   停止 / 换源）返回前等 `pendingWrite`（已提交语义）；系统媒体 handler 与 UI 共用
   `PlaybackCommandPort`（`lib/playback/playback_commands.dart`），恢复态回落与
   落盘时机只在协调者实现一次，handler 不直写服务；失败恢复策略
-  `PlaybackErrorRecovery`（`lib/playback/playback_error_recovery.dart`）的同源重试与
-  自动换源写回也走这条命令面（`playQueueIndex` / `replaceQueueTrack`；库内 / 手动
-  换源走同一实现的 `replaceTrack` + `PlaybackReplaceScope.liveAndRestored`，
-  自动换源固定 `liveOnly`），不直写 facade；provider 只把失败快照转给恢复模块并按
-  命令结果通知 UI。音质切换（`setCurrentQuality`）
+  `PlaybackErrorRecovery`（`lib/playback/playback_error_recovery.dart`）的恢复链
+  （原地重取 `reloadCurrentStream` → 整首重试 `playQueueIndex` → 自动换源写回
+  `replaceQueueTrack`；库内 / 手动换源走同一实现的 `replaceTrack` +
+  `PlaybackReplaceScope.liveAndRestored`，自动换源固定 `liveOnly`）也走这条命令面，
+  不直写 facade；provider 只把失败快照转给恢复模块并按命令结果通知 UI。音质切换
+  （`setCurrentQuality`）
   同样走命令面，但只重新取链当前曲目并保持进度 / 播放态，音质不写入会话，
   恢复态返回空操作。手动切歌（next / previous / 队列点选 / 换源重载）在取链前
   先 `_player.stop()` 旧源：`stop()` 同时把 playing 置 false 并释放解码器，避免
@@ -906,7 +912,8 @@
   UI。B 站字幕需登录：未登录时该来源不发搜索请求，登录提示挂在 B 站分组标题
   右侧（单源筛选到 B 站且无结果时放进空态提示）；且只进手动换源，不参与自动
   回退。停用渠道从其歌词来源中隐藏（LRCLIB 不是渠道，不受影响）。
-  **自动换源**：播放失败同源重试仍失败后，组合根注入的 `AutoSourceSwapService.findMatch`
+  **自动换源**：播放失败先原地重取（保留进度），仍失败再整首重试；之后组合根注入的
+  `AutoSourceSwapService.findMatch`
   用 `lib/services/song_match.dart`（LX `findMusic` 判定的唯一实现，与歌词搜索
   回退共用）**严格匹配**（时长 ±5s、版本词一致）跨源找回并静默替换队列曲目
   （经 `PlaybackSessionCoordinator.replaceQueueTrack` 命令：live 转发 facade 并
@@ -1470,7 +1477,11 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   isolate 退出 → `restarting`（退避 0.5s/2s/8s，重放同一脚本），连续 3 次 → `failed`；
   单个请求超时（引擎仍在响应）不再重启，只失败该请求并计入连续超时熔断（3 次 → `failed`
   + `failureReason`，成功一次清零）；重启期间请求等待 ready（10s 上限）；重启成功刷新
-  `activeSources`。
+  `activeSources`。`failed` 不是永久终态：冷却 60s 后下一次请求自动做一次半开恢复
+  （重放同一脚本，并发 single-flight，失败重置冷却），`retryNow` 供 UI / 网络恢复绕过
+  冷却立即尝试。`SourceManager` 侧：启动激活失败按 5s / 20s 延迟重试；脚本源首次
+  搜索 / 取链 / 歌词 / 封面时若引擎没起来再惰性激活一次（用户主动停用绝不触发）；
+  引擎 `failed` 时网络变化事件触发一次 `retryEngine`。
 - 在线更新：脚本 meta `@updateUrl` / 运行时 `updateAlert` → `checkScriptUpdate`（版本 +
   内容 hash）→ `applyScriptUpdate`（原地替换，激活中自动重放）；下载 10s 超时 / 1MB 上限 /
   HTML 识别。
