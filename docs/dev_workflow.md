@@ -42,8 +42,9 @@ tool/agent/setup.sh               # 可选：Android 模拟器 / SDK 组件（�
   工具入口（`-h` 看命令表）。已原生迁移：`info`、`deps`、`analyze`、`test`、`smoke`、
   `app`、`emu`、`size apk`、`perf report`；采样与注入类（`perf` / `startup` / `cpu` /
   `memory` / `io` / `seed`）由 CLI 透传到平台后端（Linux/macOS 走 `tool/agent/*.sh`，
-  Windows 已有的走 `*.ps1`），入口不再分两套。迁移顺序、后端划分与旧实现的退役
-  条件见 ADR-0031。
+  Windows 采样走 `win mem|scroll|frames|startup`，Dart + FFI），入口不再分两套。
+  `.ps1` 仅保留为 Windows 侧验证前的兜底，验证通过后删除；迁移顺序与退役条件
+  见 ADR-0031。
 - **平台依赖**：Linux 的 libmpv / X11 开发包 / 中文字体，macOS 的 Xcode + Swift Package
   Manager（仓库没有 Podfile），Android 的 SDK / NDK —— 见 `docs/dev_environment.md`。
 - **并行会话**：新 worktree 先跑 `tool/agent/worktree_prepare.sh <dir> [branch]`，

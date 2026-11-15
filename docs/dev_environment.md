@@ -106,7 +106,7 @@ tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
 - 日志 / 截图 / pid 统一放在 `${TMPDIR:-/tmp}/molia-agent`（默认 `/tmp/molia-agent`，
   可用 `RUN_DIR` 覆盖；临时目录，重启可清）；集成测试日志为
   `it-<platform>-<时间戳>.log`，失败时脚本自动回显尾部 40 行。Linux 集成测试默认跑在
-  Xvfb 虚拟显示上（`test.sh linux --window` 才上真实显示，WSLg 下会弹窗）。
+  Xvfb 虚拟显示上（`dart run tool/agent/cli.dart test linux --window` 才上真实显示，WSLg 下会弹窗）。
 - Flutter semantics 节点可能不完整：视觉定位用 `shot.sh --annotate` 生成带编号标注的截图，
   再用 `ui.sh resolve 截图.png "#3"` 解析为 `tap X Y`。
 - 输入文本前确保输入框已聚焦（`ui.sh text` 把空格转成 `%s`）。

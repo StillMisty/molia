@@ -1,3 +1,5 @@
+# 已由 `dart run tool/agent/cli.dart win mem` 接管（Dart + FFI）；
+# 保留到 Windows 侧验证通过后删除，见 ADR-0031。
 ﻿<#
 .SYNOPSIS
   托盘内存采样（Windows）：专用工作集 / 提交大小。

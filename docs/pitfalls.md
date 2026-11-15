@@ -49,7 +49,7 @@
     Android 若遇跑完不退出，是上游 adb teardown 无超时（flutter/flutter#187785 / #187984，
     3.47.6 已修 DDS 路径），先看 `dart run tool/agent/cli.dart test` 的日志尾部再判断。
     另：Linux 集成测试默认套 `xvfb-run`（脚本无条件处理，WSLg 下也不会弹窗），否则无显示环境
-    会报「Error waiting for a debug connection」；要肉眼观察用 `test.sh linux --window`。
+    会报「Error waiting for a debug connection」；要肉眼观察用 `dart run tool/agent/cli.dart test linux --window`。
 12. **不内置字体资产**：界面与海报统一使用设备字体，用户可在设置中切换「应用字体」
     （枚举实现见 `lib/services/system_fonts_service*.dart`：Android 解析系统
     `fonts.xml`、iOS 走 `UIFont.familyNames` 通道、Linux 调 `fc-list`、Windows

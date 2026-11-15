@@ -67,7 +67,7 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
 
 ### 3.1 跑测前置条件（2026-11 补充）
 
-- **Linux 默认无头**：`perf.sh` / `startup.sh` / `test.sh` 默认套 Xvfb，
+- **Linux 默认无头**：`perf.sh` / `startup.sh` / `dart run tool/agent/cli.dart test` 默认套 Xvfb，
   不会把窗口弹到 WSLg；只有显式 `--window` 才用当前真实显示。手动跑时也要
   `env -u WAYLAND_DISPLAY GDK_BACKEND=x11`，只 unset `DISPLAY` 不够。
 - **WSL / 容器要私有 D-Bus**：`perf.sh data/cpu linux` 已自动套

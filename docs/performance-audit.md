@@ -715,7 +715,8 @@ Linux release（Xvfb，1440×900）：
    首帧后埋点，便于确认统计收尾 / 裁剪不回到首帧路径。
 5. `tool/agent/perf.sh`：`prepare_perf_home` 每次把隔离 HOME 的窗口 bounds
    固定为 1440×900，避免 Xvfb 复用大窗口导致 CPU / 帧数据失真。
-6. `tool/agent/_common.sh` + `perf.sh` / `startup.sh` / `test.sh`：统一
+6. `tool/agent/_common.sh` + `perf.sh` / `startup.sh` / 集成测试入口（当时为 `test.sh`，现为
+   `dart run tool/agent/cli.dart test`）：统一
    `linux_display_prefix`；`perf.sh` 默认无条件 Xvfb，新增 `--window` 切真实
    显示；`kill_app` 用 `pkill -x`，避免误杀调用脚本的 shell。
 7. `tool/agent/perf.sh`：Linux `data` / `cpu` 自动套私有 `dbus-run-session`，

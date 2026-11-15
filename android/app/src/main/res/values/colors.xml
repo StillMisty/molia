@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 下载通知图标着色（DownloadNotificationService.kt）；其余 md_theme_* 无引用已删。 -->
     <color name="md_theme_primary">#6750A4</color>
-    <color name="md_theme_onPrimary">#FFFFFF</color>
-    <color name="md_theme_primaryContainer">#EADDFF</color>
-    <color name="md_theme_onPrimaryContainer">#21005E</color>
-    <color name="md_theme_surface">#FEF7FF</color>
-    <color name="md_theme_surfaceVariant">#E7E0EC</color>
 </resources> 

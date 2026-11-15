@@ -41,6 +41,14 @@ Flutter 开发者一定装了 which 运行时？只有 Dart —— 这是唯一�
    `.sh` / `.ps1` / `.py` 工具；一次性需求仍按 `docs/dev_workflow.md`「原则」第 6 条走
    官方命令。
 
+## 追加：Windows 采样改为 Dart + FFI（2026-11-15）
+
+`*.ps1`（memory / frames / startup / scroll）原来承担 Windows 侧全部采样。
+现已迁到 `win mem|scroll|frames|startup`（`tool/agent/src/win32.dart` 只绑定
+user32 / psapi / kernel32 的必要函数，不引第三方包）。`.ps1` 保留为
+Windows 侧验证通过前的兜底，不在 CLI 路径上——除 `win` 覆盖的四类采样外，
+Windows 上其它命令明确报错并指向 Linux/WSL。
+
 ## 后果
 
 - Windows 开发机第一次有了与 Linux 等价的入口；`deps` / `size apk` 这类门禁

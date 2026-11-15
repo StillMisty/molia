@@ -16,6 +16,7 @@ import 'src/commands/app.dart';
 import 'src/commands/docs.dart';
 import 'src/commands/emu.dart';
 import 'src/commands/smoke.dart';
+import 'src/commands/win.dart';
 import 'src/commands/test.dart';
 import 'src/context.dart';
 import 'src/data_report.dart';
@@ -37,6 +38,7 @@ molia 跨端工具（Linux / macOS / Windows 同一套命令）
   smoke linux              启动首帧烟测（真实 main + provider tree）
   app <命令>               run / reload / restart / stop / log / status（--machine 控制通道）
   emu <命令>               start / stop / status（Android 模拟器）
+  win <命令>               Windows 采样：mem / scroll / frames / startup（Dart + FFI）
   size apk [<apk>...]       APK 分组体积与 native 库约束
   perf <子命令>             frames / startup / data / cpu / memory / size（后端 perf.sh）
   perf report [<目录>]      frames 结果汇总成 summary.md（本命令为 Dart 实现）
@@ -123,6 +125,8 @@ Future<void> main(List<String> args) async {
       await runApp(context, rest);
     case 'emu':
       await runEmu(context, rest);
+    case 'win':
+      await runWin(context, rest);
     case 'size':
       await _runSize(context, rest);
     case 'perf':
@@ -451,25 +455,30 @@ Future<void> _runBackend(
   List<String> args,
 ) async {
   if (context.isWindows) {
-    final backend = _windowsBackend(context, name, args);
-    if (backend == null) {
-      stderr.writeln(
-        '[agent] Windows 上还没有 `$name` 的等价实现（见 ADR-0031 第三层）：'
-        '这一步请在 Linux/WSL 侧执行，或先补 ps1 后端',
-      );
-      exitCode = 2;
+    // Windows 采样已迁到 Dart + FFI（win 命令）；ps1 只作未覆盖场景的兜底。
+    if (name == 'memory') {
+      await runWin(context, ['mem', ...args]);
       return;
     }
-    final code = await context.runInherit([
-      'powershell.exe',
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-File',
-      backend.$1,
-      ...backend.$2,
-    ]);
-    if (code != 0) exitCode = code;
+    if (name == 'startup') {
+      await runWin(context, ['startup', ...args]);
+      return;
+    }
+    if (name == 'perf' &&
+        args.length >= 2 &&
+        args.first == 'frames' &&
+        args.contains('--real')) {
+      await runWin(context, [
+        'frames',
+        ...args.where((arg) => arg != '--real'),
+      ]);
+      return;
+    }
+    stderr.writeln(
+      '[agent] Windows 上还没有 `$name` 的等价实现（见 ADR-0031）：'
+      '这一步在 Linux/WSL 侧执行；采样类可用 `win mem|scroll|frames|startup`',
+    );
+    exitCode = 2;
     return;
   }
 
@@ -477,31 +486,6 @@ Future<void> _runBackend(
   if (!script.existsSync()) context.fail('找不到后端脚本：${script.path}');
   final code = await context.runInherit(['bash', script.path, ...args]);
   if (code != 0) exitCode = code;
-}
-
-/// Windows 侧已有的 ps1 后端；没有就返回 null（而不是假装支持）。
-(String, List<String>)? _windowsBackend(
-  ToolContext context,
-  String name,
-  List<String> args,
-) {
-  final agentDir = '${context.repoRoot}\\tool\\agent';
-  switch (name) {
-    case 'memory':
-      return ('$agentDir\\memory_windows.ps1', args);
-    case 'startup':
-      return ('$agentDir\\startup_windows.ps1', args);
-    case 'perf':
-      // Windows 只有「真实窗口帧」这一条采样路径。
-      if (args.length >= 2 &&
-          args.first == 'frames' &&
-          args.contains('--real')) {
-        return ('$agentDir\\frames_windows.ps1', const []);
-      }
-      return null;
-    default:
-      return null;
-  }
 }
 
 /// `perf home <prefs.json>`：把隔离 HOME 的窗口 bounds 固定成 1440×900。

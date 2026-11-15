@@ -1,4 +1,6 @@
 param(
+# 已由 `dart run tool/agent/cli.dart win frames` 接管（Dart + FFI）；
+# 保留到 Windows 侧验证通过后删除，见 ADR-0031。
   [string]$Exe = '',
   [string]$OutDir = '',
   [int]$IdleSeconds = 5,
