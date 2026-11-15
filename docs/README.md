@@ -30,6 +30,7 @@
 | 投屏 / Android Auto 范围 | `docs/adr/0025-cast-and-auto-out-of-scope.md` | 生产入口保持缺席 |
 | 收藏页密度 / 封面口径 | `docs/adr/0028-favorites-convergence.md` | 单一入口、桌面宽屏表格行、书脊、动图封面 |
 | 凭据存储 | `docs/adr/0029-credentials-in-local-database.md` | 本机明文 SQLite，不依赖钥匙串 |
+| Windows 贴靠布局 / 虚拟桌面 / 窗口位置分组 | `docs/adr/0032-windows-snap-and-virtual-desktops.md` | 最大化键上报、按桌面分组几何 |
 | 界面截图 | `docs/images/` | 只被 `README.md` 引用 |
 
 ## 维护规则

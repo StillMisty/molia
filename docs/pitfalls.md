@@ -1101,3 +1101,23 @@
     不动」。上游同源问题 flutter/flutter#185257（OnePlus，closed 未修，社区结论是
     OEM 派发畸形 / 重复 back 事件），三键导航的 progress=0 序列见 #183635。
     这类机型只能退化成「松手返回」：不要去改主题 / 弹层宿主，也不要自己造进度。
+
+109. **隐藏标题栏后必须把最大化键矩形报给原生，否则 Win11 贴靠布局消失**：
+    自绘标题栏（`TitleBarStyle.hidden`）把系统最大化键一起隐藏，Windows 只在
+    `WM_NCHITTEST` 命中最大化键区域返回 `HTMAXBUTTON` 时才弹贴靠网格 / 让
+    Win+Z 有锚点。矩形由 `MaximizeButtonSnapRegion` 在布局后按帧测量（逻辑
+    像素、相对内容区左上角），经 `WindowChrome.setMaximizeButtonBounds` 上报；
+    不要改成 build 时读一次常量：窗口缩放 / 顶栏内容变化只触发布局，不触发
+    该 widget 的 build。非 Windows 与无原生窗口时是空操作（构建期调用不会
+    碰测试环境，见 #30）。另：最小窗口宽度必须 ≤500 epx（当前 480），否则
+    网格弹出来窗口也塞不进贴靠区。
+
+110. **`ShowWindow` 不会把窗口跟到当前虚拟桌面**：窗口只在创建时归属当时的
+    活动桌面；关闭到托盘后用户切桌面，再 `ShowWindow` 窗口仍留在旧桌面，
+    表现就是「点了托盘没反应」。显示前必须走 runner 的
+    `ensureOnCurrentDesktop`（公开接口 `IVirtualDesktopManager`）：不在当前
+    桌面时用一个 1×1、屏幕外、`WS_VISIBLE` 的探针窗口拿当前桌面 GUID，再
+    `MoveWindowToDesktop`；探针窗口必须可见（隐藏窗口拿不到桌面 ID），用完
+    立即销毁。失败（远程桌面 / 虚拟桌面服务不可用）必须静默并保持原显示
+    路径，不能阻断托盘恢复。按桌面分组的位置只是设备本地缓存，桌面 GUID
+    在桌面删除后失效，靠上限淘汰 + 最近分组兜底。

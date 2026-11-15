@@ -119,3 +119,13 @@ nativeapi 的 `Window` / `WindowManager` / 窗口事件 API，以及
 - **Wayland dock 图标**（2026-10-16）：当时的开发环境是 WSLg，只能验证 X11 的 WM_HINTS
   与安装脚本落盘；GNOME/KDE Wayland 下「装 .desktop 后 dock / 应用菜单显示
   品牌图标」需真实桌面会话复核。
+
+## 修订
+
+- **2026-11-15：Win11 贴靠布局**。隐藏标题栏后系统最大化键消失，Windows 11
+  只有在窗口对 `WM_NCHITTEST` 在最大化键区域返回 `HTMAXBUTTON` 时才会弹贴靠
+  网格。现由 `MaximizeButtonSnapRegion` 量出自绘最大化键的矩形，经
+  `WindowChrome.setMaximizeButtonBounds` 上报原生（nativeapi
+  `Window.setMaximizeButtonBounds`）；点击 / hover 仍由 Flutter 按钮处理。
+  最小窗口同步降到 480×400 以适配主流贴靠区。细节与虚拟桌面、按桌面分组
+  记忆见 ADR-0032。

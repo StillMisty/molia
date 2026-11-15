@@ -5,6 +5,8 @@
 /// 文件而不是留在某一侧壳层里。
 library;
 
+import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -51,21 +53,25 @@ class WindowControls extends StatelessWidget {
         ),
         ValueListenableBuilder<bool>(
           valueListenable: WindowChrome.maximized,
-          builder: (context, maximized, _) => M3EIconButton(
-            variant: M3EIconButtonVariant.standard,
-            semanticLabel: maximized ? l10n.windowRestore : l10n.windowMaximize,
-            icon: IconSwap<bool>(
-              value: maximized,
-              builder: (context, maximized) => Icon(
-                maximized
-                    ? Icons.filter_none_rounded
-                    : Icons.crop_square_rounded,
-                // 20 而不是 24：Material 的方形/双方形字形更实（16dp 笔画），
-                // 与 24 档的叉（12dp）并排时显得重；20 档≈13dp 与叉对齐。
-                size: 20,
+          builder: (context, maximized, _) => MaximizeButtonSnapRegion(
+            child: M3EIconButton(
+              variant: M3EIconButtonVariant.standard,
+              semanticLabel: maximized
+                  ? l10n.windowRestore
+                  : l10n.windowMaximize,
+              icon: IconSwap<bool>(
+                value: maximized,
+                builder: (context, maximized) => Icon(
+                  maximized
+                      ? Icons.filter_none_rounded
+                      : Icons.crop_square_rounded,
+                  // 20 而不是 24：Material 的方形/双方形字形更实（16dp 笔画），
+                  // 与 24 档的叉（12dp）并排时显得重；20 档≈13dp 与叉对齐。
+                  size: 20,
+                ),
               ),
+              onPressed: WindowChrome.toggleMaximize,
             ),
-            onPressed: WindowChrome.toggleMaximize,
           ),
         ),
         const WindowCloseButton(),
@@ -113,5 +119,77 @@ class _WindowCloseButtonState extends State<WindowCloseButton> {
         onPressed: WindowChrome.close,
       ),
     );
+  }
+}
+
+/// 把自绘最大化键的矩形上报给原生（Windows 11 贴靠布局的命中区）。
+///
+/// 为什么用 RenderObject 而不是 build + 后帧回调：窗口缩放、顶栏内容变化
+/// 都可能只触发布局、不触发本 widget 的 build；在 `performLayout` 后统一测量
+/// 才能保证原生矩形始终贴着按钮。只在矩形变化时上报（FFI 不做每帧调用），
+/// 卸载时上报 null，避免窗口收进托盘后仍保留旧命中区。
+///
+/// 非 Windows / 无桌面窗口时 [WindowChrome.setMaximizeButtonBounds] 是空
+/// 操作，测试宿主与 Linux / macOS 构建不受影响。
+class MaximizeButtonSnapRegion extends SingleChildRenderObjectWidget {
+  const MaximizeButtonSnapRegion({
+    super.key,
+    required super.child,
+    this.onChanged = WindowChrome.setMaximizeButtonBounds,
+  });
+
+  /// 矩形变化回调（测试注入用）；null 表示清空。
+  final ValueChanged<Rect?> onChanged;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderMaximizeButtonSnapRegion(onChanged: onChanged);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant RenderObject renderObject,
+  ) {
+    (renderObject as _RenderMaximizeButtonSnapRegion).onChanged = onChanged;
+  }
+}
+
+class _RenderMaximizeButtonSnapRegion extends RenderProxyBox {
+  _RenderMaximizeButtonSnapRegion({required this.onChanged});
+
+  ValueChanged<Rect?> onChanged;
+
+  Rect? _last;
+
+  bool _measureScheduled = false;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    _scheduleMeasure();
+  }
+
+  /// 后帧测量：`performLayout` 里父级变换可能尚未落定，`localToGlobal`
+  /// 要等这一帧的布局全部完成后才准确。
+  void _scheduleMeasure() {
+    if (_measureScheduled) return;
+    _measureScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _measureScheduled = false;
+      if (!attached || !hasSize) return;
+      final rect = localToGlobal(Offset.zero) & size;
+      if (rect == _last) return;
+      _last = rect;
+      onChanged(rect);
+    });
+  }
+
+  @override
+  void dispose() {
+    if (_last != null) {
+      _last = null;
+      onChanged(null);
+    }
+    super.dispose();
   }
 }

@@ -257,6 +257,24 @@ void main() {
     expect(await WindowChrome.isVisible(), isFalse, reason: '隐藏后窗口不应可见');
     await WindowChrome.show();
     expect(await WindowChrome.isVisible(), isTrue, reason: '显示后窗口应恢复可见');
+
+    // Windows 11 贴靠布局：最大化键矩形必须能原生往返（其它平台是空操作，
+    // 不触碰原生 API）。
+    if (Platform.isWindows) {
+      const snapBounds = Rect.fromLTWH(12, 8, 46, 32);
+      WindowChrome.setMaximizeButtonBounds(snapBounds);
+      expect(
+        WindowChrome.debugMaximizeButtonBounds(),
+        snapBounds,
+        reason: '原生应记录上报的最大化键矩形',
+      );
+      WindowChrome.setMaximizeButtonBounds(null);
+      expect(
+        WindowChrome.debugMaximizeButtonBounds(),
+        isNull,
+        reason: '空矩形应清除贴靠命中区',
+      );
+    }
   });
 
   testWidgets('桌面托盘内存：隐藏后清理图片缓存并压低上限，恢复后还原', (tester) async {

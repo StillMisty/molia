@@ -360,6 +360,7 @@
   让位；壳层另叠一层整窗 `BackdropFilter` 跟遮罩开合淡入淡出。
 
 - **Desktop layout（桌面布局解析）** — `lib/widgets/desktop_layout.dart::DesktopLayout`：「是不是桌面宽布局」的唯一解析处（壳层在 `build` 里解析一次并向下提供，页面 / 骨架只消费；独立挂载页面 / 弹层路由按当前 context 回退解析，与生产同一公式）。全部判据都以窗口宽为来源：`masterDetail`（设置首屏两列的页面级增强）、`contentWidth`（窗口宽 − 实际栏宽；侧栏恒折叠 ⇒ 它就是内容区可用宽）、`tableColumns` / `tableColumnsFor`（内容宽 ≥ 720 / 历史档 812）。900 / 720 / 812 等阈值与宽度来源的选择集中在这里，页面 / 骨架只消费。
+- **Desktop window chrome（桌面窗口 chrome）** — `lib/services/window/window_chrome*.dart` + `lib/services/window/window_bounds_store.dart`：最小化 / 最大化 / 关闭、窗口几何记忆、托盘隐藏与恢复。Windows 额外做两件事：`MaximizeButtonSnapRegion` 把自绘最大化键的矩形上报原生（Win11 贴靠布局 / Win+Z 的 `HTMAXBUTTON` 命中区），`show()` 前经 `IVirtualDesktopManager` 把窗口跟到当前虚拟桌面；几何按虚拟桌面 GUID 分组保存在 `window_bounds_by_desktop` / `window_maximized_by_desktop`（每桌面上限 8 条，旧全局键只读兜底）。非 Windows 全部为空操作。见 ADR-0032、`docs/pitfalls.md` #109 / #110。
 
 - **Shell chrome（壳层 chrome spec）** — `lib/app/shell_chrome.dart::ShellChrome`：两套骨架（移动 / 桌面）共用的导航与顶栏 spec（目的地 + 标签 + 选择 + 顶栏槽位）。目的地 → 图标 / 标签映射（`railDestinations` / `barDestinations`）、索引 → 目的地回调（`selectDestinationAt`）、顶栏构造（`appBar`：titleSpacing / 无返回键 / 拖动区包装 / 设置按钮 / 窗口控件）只此一份；骨架不合并——顶栏槽里的内容、侧栏类型与底栏形态仍由各自适配渲染。
 

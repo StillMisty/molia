@@ -54,6 +54,10 @@ class WindowChrome {
   /// 当前主窗口的原生句柄；[ensureInitialized] 解析后一直复用。
   static Window? _window;
 
+  /// `setMaximizeButtonBounds` 的平台支持（首次调用时查询一次；Windows 上
+  /// 除 WinUI3 外恒为真）。
+  static bool? _maximizeButtonBoundsSupported;
+
   /// 是否拦截原生关闭请求（窗口关闭键 / 系统关闭按钮）。
   static bool _preventClose = false;
 
@@ -75,6 +79,10 @@ class WindowChrome {
 
   /// 启动恢复：显示后是否补 `maximize()`（见 [_restoreSavedGeometry]）。
   static bool _restoreMaximized = false;
+
+  /// 隐藏态下推迟到显示路径 cloak 之后再套用的目标桌面几何（见
+  /// [_applyDesktopForShow]）。
+  static Rect? _pendingDesktopBounds;
 
   /// 关闭请求策略（顶栏关闭键 / 系统关闭按钮）：由组合根注入
   /// （最小化到托盘 / 真正退出）。未注入时直接退出。
@@ -168,21 +176,28 @@ class WindowChrome {
   /// 「首启就最大化 → 退出」这种会话只有标记可读，不能因为几何缺失就跳过
   /// 最大化恢复。
   ///
+  /// 桌面端按当前虚拟桌面分组取几何；没有该桌面的记录时回退最近使用的
+  /// 分组 / 旧全局键（见 `WindowBoundsStore.loadPreferred`）。
+  ///
   /// 没有保存几何 / 拿不到显示器列表时保持系统默认位置：拿不到显示器就
   /// 无从校验，宁可用默认位置也不赌保存值可见。
   static Future<void> _restoreSavedGeometry() async {
     _restoreMaximized = false;
     if (!WindowSettings.rememberBounds) return;
     try {
-      _restoreMaximized = await _boundsStore.loadMaximized();
-      final saved = await _boundsStore.load();
-      if (saved == null) return;
+      final preferred = await _boundsStore.loadPreferred(
+        await _currentDesktopId(),
+      );
+      if (preferred == null) return;
+      _restoreMaximized = preferred.maximized;
+      final savedBounds = preferred.bounds;
+      if (savedBounds == null) return;
       final window = _window;
       if (window == null) return;
       final areas = DesktopDisplayAreas.read();
       if (areas == null) return;
       window.bounds = resolveRestoredBounds(
-        saved: saved.bounds,
+        saved: savedBounds,
         displayVisibleAreas: areas.visibleAreas,
         primaryVisibleArea: areas.primary,
       ).toNative();
@@ -209,7 +224,13 @@ class WindowChrome {
       // 最大化态不覆盖 bounds（bounds 返回最大化矩形，存了会丢还原尺寸）；
       // 最大化标记由 maximize 事件即时保存。
       if (window.isMaximized) return;
-      await _boundsStore.saveBounds(window.bounds.toRect());
+      final bounds = window.bounds.toRect();
+      final desktopId = await _currentDesktopId();
+      if (desktopId == null) {
+        await _boundsStore.saveBounds(bounds);
+      } else {
+        await _boundsStore.saveBoundsFor(desktopId, bounds);
+      }
     } catch (error) {
       _logger.warning('窗口几何保存失败：$error');
     }
@@ -226,7 +247,12 @@ class WindowChrome {
 
   static Future<void> _saveMaximizedNow(bool maximized) async {
     try {
-      await _boundsStore.saveMaximized(maximized);
+      final desktopId = await _currentDesktopId();
+      if (desktopId == null) {
+        await _boundsStore.saveMaximized(maximized);
+      } else {
+        await _boundsStore.saveMaximizedFor(desktopId, maximized);
+      }
     } catch (error) {
       _logger.warning('窗口最大化状态保存失败：$error');
     }
@@ -300,6 +326,49 @@ class WindowChrome {
     _window?.hide();
   }
 
+  /// Windows 11 贴靠布局：上报应用自绘的最大化键矩形。
+  ///
+  /// 隐藏标题栏后系统最大化键随标题栏一起消失，而 Windows 只有在窗口对
+  /// `WM_NCHITTEST` 在最大化键区域返回 `HTMAXBUTTON` 时，才会在悬停时弹出
+  /// 贴靠网格（Snap Layouts）并让 Win+Z 有锚点。nativeapi 把上报的矩形转成
+  /// 该命中结果；鼠标事件仍会转发给 Flutter 内容，按钮自己的 hover / 点击
+  /// 不受影响。
+  ///
+  /// 坐标是逻辑像素、相对内容区左上角；`null` 表示清空。非 Windows / 窗口
+  /// 尚未就绪 / 原生不支持时为空操作——UI 可以在布局回调里安全调用
+  /// （见 docs/pitfalls.md #30）。
+  static void setMaximizeButtonBounds(Rect? bounds) {
+    if (!Platform.isWindows) return;
+    final window = _window;
+    if (window == null) return;
+    _maximizeButtonBoundsSupported ??= Window.isMaximizeButtonBoundsSupported();
+    if (_maximizeButtonBoundsSupported != true) return;
+    try {
+      final applied = window.setMaximizeButtonBounds(
+        (bounds ?? Rect.zero).toNative(),
+      );
+      if (!applied && bounds != null) {
+        _logger.fine('最大化键矩形上报失败：贴靠布局不可用');
+      }
+    } catch (error) {
+      _logger.fine('最大化键矩形上报失败：$error');
+    }
+  }
+
+  /// 原生侧记录的最大化键矩形（仅诊断 / 集成测试）。
+  @visibleForTesting
+  static Rect? debugMaximizeButtonBounds() {
+    if (!Platform.isWindows) return null;
+    final window = _window;
+    if (window == null) return null;
+    try {
+      final rect = window.maximizeButtonBounds.toRect();
+      return rect.isEmpty ? null : rect;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// 设置窗口标题（任务栏 / 窗口列表 / Alt-Tab 显示）。
   ///
   /// Linux / Windows 隐藏原生标题栏后 UI 里看不到标题，但系统仍以它标识
@@ -369,6 +438,103 @@ class WindowChrome {
     });
   }
 
+  /// 当前主窗口所在的虚拟桌面 ID（Windows）；非 Windows / 原生不可用时 null。
+  ///
+  /// 原生把 GUID 规范化为小写、无大括号；直接作为按桌面分组的存储键。
+  static Future<String?> _currentDesktopId() async {
+    if (!Platform.isWindows) return null;
+    try {
+      final id = await _windowChannel
+          .invokeMethod<String>('windowDesktopId')
+          .timeout(const Duration(milliseconds: 300));
+      return (id == null || id.isEmpty) ? null : id;
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    } on TimeoutException {
+      return null;
+    }
+  }
+
+  /// 把窗口搬到用户当前所在的虚拟桌面（Windows）。
+  ///
+  /// 窗口只在创建时归属当时的活动桌面，隐藏到托盘后用户切了桌面，`ShowWindow`
+  /// 不会把窗口搬过去——用户会看到「点了托盘没反应」。返回目标桌面 ID 与是否
+  /// 真的搬过；原生不支持时 null，调用方按原行为显示。
+  static Future<({String desktopId, bool moved})?>
+  _ensureOnCurrentDesktop() async {
+    if (!Platform.isWindows) return null;
+    try {
+      final raw = await _windowChannel
+          .invokeMethod<Object?>('ensureOnCurrentDesktop')
+          .timeout(const Duration(milliseconds: 300));
+      if (raw is! Map) return null;
+      final id = raw['desktopId'];
+      if (id is! String || id.isEmpty) return null;
+      return (desktopId: id, moved: raw['moved'] == true);
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    } on TimeoutException {
+      return null;
+    }
+  }
+
+  /// 显示前跟到当前虚拟桌面，并按该桌面的分组几何摆好窗口。
+  ///
+  /// 只在真的搬过桌面时才读分组：窗口还在隐藏态，几何跳变用户看不到；
+  /// 同桌面恢复保持当前几何（也就是这个桌面自己的几何）。
+  ///
+  /// 隐藏态下的 `unmaximize()` 会走 `ShowWindow(SW_RESTORE)` 提前把窗口亮出来，
+  /// 因此「当前最大化、目标桌面不最大化」这一种推迟到显示路径 cloak 之后再
+  /// 还原 + 套几何（见 [show] 的 [_pendingDesktopBounds]）。
+  static Future<void> _applyDesktopForShow(Window window) async {
+    final desktop = await _ensureOnCurrentDesktop();
+    if (desktop == null || !desktop.moved) return;
+    if (!WindowSettings.rememberBounds) return;
+    try {
+      final preferred = await _boundsStore.loadFor(desktop.desktopId);
+      final targetMaximized = preferred?.maximized ?? false;
+      _restoreMaximized = targetMaximized;
+      final savedBounds = preferred?.bounds;
+      if (savedBounds == null) return;
+      final currentlyMaximized = window.isMaximized;
+      if (targetMaximized && currentlyMaximized) {
+        // 已经是最大化：最大化矩形就是当前工作区，不需要再套 normal bounds
+        // （还原后的几何会在下次 unmaximize 时保存）。
+        _restoreMaximized = false;
+        return;
+      }
+      if (currentlyMaximized && !window.isVisible) {
+        _pendingDesktopBounds = savedBounds;
+        return;
+      }
+      _applyDesktopBounds(window, savedBounds);
+    } catch (error) {
+      // 主题 / 几何恢复失败不阻断显示：窗口按当前几何出现。
+      _logger.warning('虚拟桌面窗口几何恢复失败：$error');
+    }
+  }
+
+  /// 在隐藏 / cloak 状态下套用目标桌面的几何：先退出最大化（最大化态下
+  /// `bounds` 是最大化矩形），再夹到可见区。
+  static void _applyDesktopBounds(Window window, Rect savedBounds) {
+    try {
+      final areas = DesktopDisplayAreas.read();
+      if (areas == null) return;
+      if (window.isMaximized) window.unmaximize();
+      window.bounds = resolveRestoredBounds(
+        saved: savedBounds,
+        displayVisibleAreas: areas.visibleAreas,
+        primaryVisibleArea: areas.primary,
+      ).toNative();
+    } catch (error) {
+      _logger.warning('虚拟桌面窗口几何恢复失败：$error');
+    }
+  }
+
   static Future<void> show() async {
     if (!isSupported) return;
     final window = _window;
@@ -378,6 +544,8 @@ class WindowChrome {
     // 实测会在首帧后崩（ucrtbase 0xc0000409）。
     final fromTray = AppPresence.instance.isTrayHidden;
     AppPresence.instance.markVisible();
+    _pendingDesktopBounds = null;
+    await _applyDesktopForShow(window);
     // Dock 点击恢复时窗口可能在最小化态：先还原再显示（macOS 的
     // `makeKeyAndOrderFront` 不会自动把窗口从 Dock 里拉回来）。
     if (window.isMinimized) window.restore();
@@ -387,6 +555,13 @@ class WindowChrome {
       await _showLinuxWithOpacity();
     } else {
       window.show();
+    }
+    // 隐藏态下不能先 unmaximize：推迟到这里（Windows 恢复路径此时已 cloak，
+    // 几何变化不可见）。
+    final pendingBounds = _pendingDesktopBounds;
+    if (pendingBounds != null) {
+      _pendingDesktopBounds = null;
+      _applyDesktopBounds(window, pendingBounds);
     }
     window.focus();
     if (_restoreMaximized) {

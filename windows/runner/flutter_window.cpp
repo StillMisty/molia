@@ -3,8 +3,12 @@
 #include <dwmapi.h>
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
+#include <shobjidl.h>
 
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <utility>
@@ -66,6 +70,116 @@ std::string ActionName(TaskbarThumbBar::Action action) {
       return "next";
   }
   return std::string();
+}
+
+// 虚拟桌面（Windows 10/11）：公开接口只有 IVirtualDesktopManager。窗口不会
+// 随 ShowWindow 自动跟到用户当前桌面，托盘恢复必须显式搬过去。
+constexpr wchar_t kVirtualDesktopProbeClass[] = L"MOLIA_VIRTUAL_DESKTOP_PROBE";
+
+IVirtualDesktopManager* CreateVirtualDesktopManager() {
+  IVirtualDesktopManager* manager = nullptr;
+  const HRESULT hr = ::CoCreateInstance(
+      CLSID_VirtualDesktopManager, nullptr, CLSCTX_INPROC_SERVER,
+      IID_PPV_ARGS(&manager));
+  return SUCCEEDED(hr) ? manager : nullptr;
+}
+
+// Dart 侧按这个字符串做 SharedPreferences 键：统一去掉大括号并转小写。
+std::string DesktopIdToString(const GUID& id) {
+  wchar_t buffer[64] = {};
+  if (::StringFromGUID2(id, buffer, static_cast<int>(std::size(buffer))) <= 0) {
+    return {};
+  }
+  std::string text = Utf8FromUtf16(buffer);
+  text.erase(std::remove(text.begin(), text.end(), '{'), text.end());
+  text.erase(std::remove(text.begin(), text.end(), '}'), text.end());
+  std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return text;
+}
+
+LRESULT CALLBACK ProbeWndProc(HWND window, UINT message, WPARAM wparam,
+                              LPARAM lparam) {
+  return ::DefWindowProcW(window, message, wparam, lparam);
+}
+
+// 当前活动桌面的 ID 只能从「此刻新建的窗口」上读：新窗口会落在当前桌面。
+// 探针必须可见（隐藏窗口拿不到桌面 ID），所以用 1×1、屏幕外、不激活的弹窗。
+std::optional<GUID> CurrentDesktopId(IVirtualDesktopManager* manager) {
+  static bool class_registered = false;
+  if (!class_registered) {
+    WNDCLASSW window_class{};
+    window_class.hInstance = ::GetModuleHandleW(nullptr);
+    window_class.lpfnWndProc = ProbeWndProc;
+    window_class.lpszClassName = kVirtualDesktopProbeClass;
+    // 重复注册失败（类已存在）不影响 CreateWindowExW。
+    ::RegisterClassW(&window_class);
+    class_registered = true;
+  }
+  HWND probe = ::CreateWindowExW(
+      WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kVirtualDesktopProbeClass, L"",
+      WS_POPUP, -32000, -32000, 1, 1, nullptr, nullptr,
+      ::GetModuleHandleW(nullptr), nullptr);
+  if (probe == nullptr) {
+    return std::nullopt;
+  }
+  ::ShowWindow(probe, SW_SHOWNOACTIVATE);
+  GUID id{};
+  const bool ok = SUCCEEDED(manager->GetWindowDesktopId(probe, &id));
+  ::DestroyWindow(probe);
+  return ok ? std::optional<GUID>(id) : std::nullopt;
+}
+
+std::string WindowDesktopId(HWND window) {
+  IVirtualDesktopManager* manager = CreateVirtualDesktopManager();
+  if (manager == nullptr) {
+    return {};
+  }
+  GUID id{};
+  if (::IsWindow(window) &&
+      SUCCEEDED(manager->GetWindowDesktopId(window, &id))) {
+    manager->Release();
+    return DesktopIdToString(id);
+  }
+  // 启动恢复发生在首帧显示之前：主窗口还隐藏时 GetWindowDesktopId 可能拿不到
+  // （TYPE_E_ELEMENTNOTFOUND），退回探针读取的当前活动桌面。
+  const std::optional<GUID> current = CurrentDesktopId(manager);
+  manager->Release();
+  return current ? DesktopIdToString(*current) : std::string();
+}
+
+// 保证主窗口在用户当前所在的虚拟桌面；返回目标桌面 ID 与是否搬过。
+// 拿不到桌面信息（旧系统 / 远程桌面 / COM 失败）返回 nullopt，调用方保持原行为。
+std::optional<std::pair<std::string, bool>> EnsureOnCurrentDesktop(HWND window) {
+  if (!::IsWindow(window)) {
+    return std::nullopt;
+  }
+  IVirtualDesktopManager* manager = CreateVirtualDesktopManager();
+  if (manager == nullptr) {
+    return std::nullopt;
+  }
+  BOOL on_current = FALSE;
+  if (FAILED(manager->IsWindowOnCurrentVirtualDesktop(window, &on_current))) {
+    manager->Release();
+    return std::nullopt;
+  }
+  std::string desktop_id;
+  bool moved = false;
+  if (on_current) {
+    GUID id{};
+    if (SUCCEEDED(manager->GetWindowDesktopId(window, &id))) {
+      desktop_id = DesktopIdToString(id);
+    }
+  } else if (const std::optional<GUID> current = CurrentDesktopId(manager)) {
+    desktop_id = DesktopIdToString(*current);
+    moved = SUCCEEDED(manager->MoveWindowToDesktop(window, *current));
+  }
+  manager->Release();
+  if (desktop_id.empty()) {
+    return std::nullopt;
+  }
+  return std::make_pair(desktop_id, moved);
 }
 
 // 单实例宿主窗口只接收注册消息；收到后请 FlutterWindow 转 Dart 恢复窗口。
@@ -166,6 +280,25 @@ bool FlutterWindow::OnCreate() {
             RequestDestroy();
             result->Success();
           }
+        } else if (call.method_name() == "ensureOnCurrentDesktop") {
+          const HWND window = GetHandle();
+          const std::optional<std::pair<std::string, bool>> info =
+              window == nullptr ? std::nullopt
+                                : EnsureOnCurrentDesktop(window);
+          if (!info) {
+            // 旧系统 / COM 失败：返回 null，Dart 按原行为直接显示。
+            result->Success();
+            return;
+          }
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("desktopId")] =
+              flutter::EncodableValue(info->first);
+          payload[flutter::EncodableValue("moved")] =
+              flutter::EncodableValue(info->second);
+          result->Success(flutter::EncodableValue(payload));
+        } else if (call.method_name() == "windowDesktopId") {
+          result->Success(
+              flutter::EncodableValue(WindowDesktopId(GetHandle())));
         } else {
           result->NotImplemented();
         }

@@ -144,6 +144,8 @@ void main() {
       MusicFoldersStore.prefsKey: '本地曲库文件夹（本机文件）',
       WindowBoundsStore.keyBounds: '窗口位置（屏幕）',
       WindowBoundsStore.keyMaximized: '窗口最大化（屏幕）',
+      WindowBoundsStore.keyBoundsByDesktop: '窗口位置分组（屏幕）',
+      WindowBoundsStore.keyMaximizedByDesktop: '窗口最大化分组（屏幕）',
       WindowSettings.keyRememberBounds: '窗口记忆开关（屏幕）',
       TraySettings.keyCloseToTray: '关闭到托盘（桌面平台）',
       UpdatePreferences.keyAutoCheck: '更新检查（安装渠道）',

@@ -43,6 +43,10 @@ target_link_libraries(${BINARY_NAME} PRIVATE "shell32.lib")
 # （AllowSetForegroundWindow）。
 target_link_libraries(${BINARY_NAME} PRIVATE "advapi32.lib")
 target_link_libraries(${BINARY_NAME} PRIVATE "user32.lib")
+# 虚拟桌面跟随：CoCreateInstance(CLSID_VirtualDesktopManager) 与
+# IVirtualDesktopManager 的 CLSID/IID 符号。
+target_link_libraries(${BINARY_NAME} PRIVATE "ole32.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "uuid.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
