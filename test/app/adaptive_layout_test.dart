@@ -1,12 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:molia/app/desktop/now_playing_bar.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/settings_page.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/widgets/adaptive_layout.dart';
 import 'package:molia/widgets/desktop_layout.dart';
+import 'package:molia/widgets/now_playing_layout_metrics.dart';
 import 'package:molia/widgets/settings/settings_section_grid.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -48,6 +50,18 @@ void main() {
       expect(libraryBrowseUsesSplitLayout(WindowSizeClass.expanded), isTrue);
       expect(usesWideNowPlayingLayout(WindowSizeClass.medium), isFalse);
       expect(usesWideNowPlayingLayout(WindowSizeClass.expanded), isTrue);
+    });
+
+    test('桌面播放页左栏：内容宽充足保持 480，不足优先保右栏 420', () {
+      // 900 窗口 − 96 导航轨 = 804 → 左 384 / 右 420。
+      expect(desktopNowPlayingPlayerWidth(804), 384);
+      expect(desktopNowPlayingPlayerWidth(840), 420);
+      expect(desktopNowPlayingPlayerWidth(900), 480);
+      expect(desktopNowPlayingPlayerWidth(904), 480);
+      expect(desktopNowPlayingPlayerWidth(1184), 480);
+      // 极窄值不返回大于内容宽的宽度。
+      expect(desktopNowPlayingPlayerWidth(300), 300);
+      expect(desktopNowPlayingPlayerWidth(0), 0);
     });
   });
 
@@ -126,6 +140,123 @@ void main() {
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.byKey(const Key('singlePaneNowPlaying')), findsOneWidget);
       expect(find.byKey(const Key('wideNowPlayingLayout')), findsNothing);
+    });
+  });
+
+  group('桌面壳层窄窗口', () {
+    testWidgets('480 宽：紧凑底栏 + 单栏播放页，无溢出', (tester) async {
+      await pumpPerfApp(
+        tester,
+        desktopShell: true,
+        favoritesCount: 3,
+        size: const Size(480, 800),
+      );
+      expect(find.byKey(DesktopNowPlayingBar.compactKey), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('播放').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byKey(const Key('singlePaneNowPlaying')), findsOneWidget);
+      expect(find.byKey(const Key('desktopNowPlayingLayout')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('480×400 最小窗口：首屏与播放页无溢出', (tester) async {
+      await pumpPerfApp(
+        tester,
+        desktopShell: true,
+        favoritesCount: 3,
+        size: const Size(480, 400),
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('播放').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byKey(const Key('singlePaneNowPlaying')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('900 宽：完整底栏 + 桌面两栏播放页', (tester) async {
+      await pumpPerfApp(
+        tester,
+        desktopShell: true,
+        favoritesCount: 3,
+        size: const Size(900, 800),
+      );
+      expect(find.byKey(DesktopNowPlayingBar.compactKey), findsNothing);
+
+      await tester.tap(find.text('播放').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byKey(const Key('desktopNowPlayingLayout')), findsOneWidget);
+      expect(find.byKey(const Key('singlePaneNowPlaying')), findsNothing);
+      expect(
+        tester.getSize(find.byKey(const Key('desktopPlayerColumn'))).width,
+        384,
+        reason: '900 − 96 内容宽 804：左栏给右栏让到 384',
+      );
+      expect(
+        tester.getSize(find.byKey(const Key('desktopSidePane'))).width,
+        420,
+        reason: '右栏（队列/歌词/信息）保底 420',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('1280 宽：左栏保持 480，右栏吃余量', (tester) async {
+      await pumpPerfApp(
+        tester,
+        desktopShell: true,
+        favoritesCount: 3,
+        size: const Size(1280, 800),
+      );
+      await tester.tap(find.text('播放').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(
+        tester.getSize(find.byKey(const Key('desktopPlayerColumn'))).width,
+        480,
+      );
+      expect(
+        tester.getSize(find.byKey(const Key('desktopSidePane'))).width,
+        greaterThanOrEqualTo(420),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('900×600 + 200% 字号：桌面两栏不溢出', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await pumpPerfApp(
+        tester,
+        desktopShell: true,
+        favoritesCount: 3,
+        size: const Size(900, 600),
+      );
+      await tester.tap(find.text('播放').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byKey(const Key('desktopNowPlayingLayout')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('480 宽 200% 字号无溢出', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await pumpPerfApp(
+        tester,
+        desktopShell: true,
+        favoritesCount: 3,
+        size: const Size(480, 800),
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('播放').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(tester.takeException(), isNull);
     });
   });
 

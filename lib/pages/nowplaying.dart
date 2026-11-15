@@ -5,11 +5,13 @@ import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 import 'package:molia/services/haptics.dart';
 import 'package:molia/widgets/adaptive_layout.dart';
+import 'package:molia/widgets/desktop_layout.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/queue.dart';
 import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/now_playing_controller.dart';
+import 'package:molia/widgets/now_playing_layout_metrics.dart';
 import 'package:molia/widgets/player_morph.dart';
 import 'package:molia/widgets/scroll_edge_fade.dart';
 import 'package:molia/widgets/shell_page_visibility.dart';
@@ -87,11 +89,6 @@ class _NowPlayingState extends State<NowPlaying>
   static const int _currentPageIndex = nowPlayingLyricsTabIndex;
   static const int _queuePageIndex = nowPlayingQueueTabIndex;
   static const int _infoPageIndex = nowPlayingInfoTabIndex;
-
-  /// 桌面版式播放器列宽度：封面按可用宽高自适应，这一列只负责给它留出
-  /// 「封面 + 两侧邻位露出」的横向余量（480 下封面边 ≈288，
-  /// 见 `cover_deck_metrics.dart`）。
-  static const double _desktopPlayerColumnWidth = 480;
 
   /// 桌面版式右侧分页：0 = 队列、1 = 歌词、2 = 歌曲信息。
   late int _desktopTab;
@@ -536,20 +533,27 @@ class _NowPlayingState extends State<NowPlaying>
     setState(() => _desktopTab = index);
   }
 
-  /// 桌面骨架版式：左「播放器」固定列 + 右「队列 / 歌词 / 歌曲信息」三 tab。
+  /// 桌面骨架版式：左「播放器」列 + 右「队列 / 歌词 / 歌曲信息」三 tab。
   ///
   /// 与移动版式的差别：没有迷你态与圆点切换（也不需要展开/收起与内容
   /// 下拉手势），页序与默认页跟移动端一致（队列 / 歌词 / 信息，默认歌词）。
+  /// 左栏宽度按内容宽在 360–480 之间收缩，优先保右栏 420（见
+  /// `now_playing_layout_metrics.dart`）。
   Widget _buildDesktopLayout(
     BuildContext context, {
     required bool shellVisible,
   }) {
     final l10n = AppLocalizations.of(context)!;
+    final playerWidth = desktopNowPlayingPlayerWidth(
+      DesktopLayout.of(context).contentWidth,
+    );
     return Scaffold(
+      key: const Key('desktopNowPlayingLayout'),
       body: Row(
         children: [
           SizedBox(
-            width: _desktopPlayerColumnWidth,
+            key: const Key('desktopPlayerColumn'),
+            width: playerWidth,
             // 大屏播放器布局：封面自适应 + 歌名/歌手两行 + 进度 + 传输控制
             // （desktopLayout：传输排在播放器列里，见 player.dart）。
             child: Player(
@@ -559,6 +563,7 @@ class _NowPlayingState extends State<NowPlaying>
             ),
           ),
           Expanded(
+            key: const Key('desktopSidePane'),
             child: Column(
               children: [
                 Padding(
@@ -644,9 +649,10 @@ class _NowPlayingState extends State<NowPlaying>
     final bool shellVisible =
         ShellPageVisibility.maybeVisibleOf(context) ?? true;
 
-    // 桌面版式由壳层启用：布局与窗口宽度解耦（窄窗口也保持两栏），
-    // 不走移动骨架的尺寸分支。
-    if (widget.desktopLayout) {
+    // 桌面版式由壳层启用：宽窗口用「左播放器 + 右队列/歌词/信息」两栏；
+    // 窄窗口（compact / medium）退回单栏，480 窗口下两栏必然互相挤压。
+    if (widget.desktopLayout &&
+        AdaptiveLayoutScope.of(context).sizeClass == WindowSizeClass.expanded) {
       return _buildDesktopLayout(context, shellVisible: shellVisible);
     }
 
@@ -664,10 +670,12 @@ class _NowPlayingState extends State<NowPlaying>
       key: const Key('singlePaneNowPlaying'),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final double playerMaxHeight = max(
-            340.0,
-            constraints.maxHeight - 180,
-          );
+          // 矮窗口（贴靠到 480×400）不能沿用 340 的地板：地板高于可用高度时
+          // 内容区会被压成 0。窗口高 < 520 时改为「播放器 + 140 内容」，
+          // 保证歌词 / 队列仍有一行可操作的高度。
+          final double playerMaxHeight = constraints.maxHeight < 520
+              ? max(180.0, constraints.maxHeight - 140)
+              : max(340.0, constraints.maxHeight - 180);
           // 供播放器区域的跟手拖拽换算行程（布局期写入，不触发重建）。
           _playerMaxHeight = playerMaxHeight;
           return Column(

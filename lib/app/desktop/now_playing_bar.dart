@@ -42,14 +42,19 @@ class DesktopNowPlayingBar extends StatelessWidget {
   /// 播放条固定高度（桌面骨架底栏档位）。
   static const double barHeight = 80;
 
+  /// 窄窗口（贴靠 / 手动缩到 480）的底栏高度：单行只留曲目 + 传输 + 队列，
+  /// 不再把 720 内容缩成小字。
+  static const double compactBarHeight = 64;
+
+  /// 紧凑底栏的稳定 Key（测试定位）。
+  static const Key compactKey = Key('desktopNowPlayingBarCompact');
+
   /// 封面槽边长：与顶栏 40 档同源外观（[CoverAppearance.bar]），尺寸放大
   /// 到 48 与迷你条一致——底栏是常驻信息位，比顶栏需要更强的可读性。
   static const double coverSize = 48;
 
-  /// 三个分区（左信息 / 中控制 / 右动作）互不挤压的宽度下限：更窄时整条
-  /// 按比例缩小渲染（[FittedBox] scaleDown）。Linux / Windows 原生侧已设
-  /// 最小窗口 900×600（见 `services/window/window_chrome_io.dart`），这里
-  /// 是兜底：macOS / 测试 / 任何更小的宿主都不该出现 RenderFlex 溢出。
+  /// 三个分区（左信息 / 中控制 / 右动作）互不挤压的宽度下限：更窄时换成
+  /// 紧凑单行（[compactBarHeight]），不再把整条内容等比缩成小字。
   static const double _minComfortableWidth = 720;
 
   /// 顶栏 ↔ 播放页共享元素控制器：封面锚点与「播放页激活时收起封面」。
@@ -83,17 +88,48 @@ class DesktopNowPlayingBar extends StatelessWidget {
     // 语义一致——播放条是壳层家具，不参与页面内容的 surface 层级。
     return Material(
       color: scheme.surfaceContainer,
-      child: SizedBox(
-        height: barHeight,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth >= _minComfortableWidth) return content;
-            return FittedBox(
-              fit: BoxFit.scaleDown,
-              child: SizedBox(width: _minComfortableWidth, child: content),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // 窄窗口（贴靠区 / 最小 480）换紧凑单行：整条 720 内容等比缩到
+          // 0.66 会把标题和时间一起缩成看不清的小字，信息反而更少。
+          if (constraints.maxWidth < _minComfortableWidth) {
+            return SizedBox(
+              key: compactKey,
+              height: compactBarHeight,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _TrackSection(
+                        morph: morph,
+                        onOpenPlayer: onOpenPlayer,
+                        coverSize: 40,
+                      ),
+                    ),
+                    const PlaybackPreviousButton(),
+                    const PlaybackPlayPauseButton(
+                      variant: M3EIconButtonVariant.tonal,
+                    ),
+                    const PlaybackNextButton(),
+                    // 模式 / 音量在播放页都有落点；窄底栏只保留队列入口，
+                    // 保证「看接下来放什么」仍然一步可达。
+                    M3EIconButton(
+                      key: openQueueKey,
+                      variant: M3EIconButtonVariant.standard,
+                      semanticLabel: AppLocalizations.of(context)!
+                          .playerBarQueue,
+                      icon: const Icon(Icons.queue_music_rounded),
+                      onPressed: onOpenQueue,
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                ),
+              ),
             );
-          },
-        ),
+          }
+          return SizedBox(height: barHeight, child: content);
+        },
       ),
     );
   }
@@ -107,10 +143,15 @@ class DesktopNowPlayingBar extends StatelessWidget {
 /// 摘要内容（封面 / 文本 / 收藏）由 `now_playing_summary.dart` 收口，
 /// 这里只决定底栏的尺寸与尾部位置。
 class _TrackSection extends StatelessWidget {
-  const _TrackSection({required this.morph, required this.onOpenPlayer});
+  const _TrackSection({
+    required this.morph,
+    required this.onOpenPlayer,
+    this.coverSize = DesktopNowPlayingBar.coverSize,
+  });
 
   final PlayerMorphController morph;
   final VoidCallback onOpenPlayer;
+  final double coverSize;
 
   @override
   Widget build(BuildContext context) {
@@ -121,10 +162,10 @@ class _TrackSection extends StatelessWidget {
         return NowPlayingSummary(
           onTap: onOpenPlayer,
           cover: SizedBox(
-            width: DesktopNowPlayingBar.coverSize,
-            height: DesktopNowPlayingBar.coverSize,
+            width: coverSize,
+            height: coverSize,
             child: NowPlayingCover.current(
-              size: DesktopNowPlayingBar.coverSize,
+              size: coverSize,
               flightKey: morph.barCoverKey,
               hidden: !showTrack,
             ),

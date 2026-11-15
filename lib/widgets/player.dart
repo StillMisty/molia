@@ -83,8 +83,20 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   // 两者间距 14。
   static const double _textSectionHeight = 38;
   static const double _seekSectionHeight = 46;
-  static const double _sectionsReservedHeight =
-      _textSectionHeight + _seekSectionHeight + 14;
+  static const double _sectionsGap = 14;
+
+  /// 标题 / 进度排预留高度：1.0 字号档 = 98，随 `textScaler` 放大文字段。
+  ///
+  /// 小屏完整播放器用「可用高 − 预留」反推封面；预留不跟字号时，200% 字号
+  /// 会把进度排挤出列（实测 480 宽桌面列溢出 14px）。滑杆盒是固定几何，
+  /// 只放大标题行与时间行。
+  static double _sectionsReservedHeightFor(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    return scaler.scale(_textSectionHeight) +
+        (_seekSectionHeight - 18) +
+        scaler.scale(18) +
+        _sectionsGap;
+  }
 
   /// 播放器内容的横向内边距：标题/专辑/进度排与封面区同一留白。
   ///
@@ -112,10 +124,11 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   static CoverDeckMetrics _smallScreenDeckMetrics(
     double maxWidth,
     double maxHeight,
+    double reservedHeight,
   ) => coverDeckMetricsFor(
     availableWidth: maxWidth,
     availableHeight: maxHeight.isFinite
-        ? max(0.0, maxHeight - _sectionsReservedHeight)
+        ? max(0.0, maxHeight - reservedHeight)
         : double.infinity,
   );
 
@@ -130,8 +143,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
   /// 完整播放器内容高度：高度贴合内容（封面堆叠 + 标题/进度排），
   /// 避免大片留白；是 [_smallScreenDeckMetrics] 的逆函数。
-  double _playerContentHeight(double art) =>
-      art * coverDeckVerticalFactor + _sectionsReservedHeight;
+  double _playerContentHeight(double art, double reservedHeight) =>
+      art * coverDeckVerticalFactor + reservedHeight;
 
   /// 迷你 ⇄ 完整切换时的封面飞行：两端锚点与页内 Stack 坐标系。
   final GlobalKey _playerStackKey = GlobalKey(debugLabel: 'playerStack');
@@ -384,6 +397,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         final metrics = _smallScreenDeckMetrics(
           constraints.maxWidth,
           constraints.maxHeight,
+          _sectionsReservedHeightFor(context),
         );
 
         return Column(
@@ -439,11 +453,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final double reservedHeight = _sectionsReservedHeightFor(context);
         final double fullHeight = _playerContentHeight(
           _smallScreenDeckMetrics(
             constraints.maxWidth,
             constraints.maxHeight,
+            reservedHeight,
           ).artDimension,
+          reservedHeight,
         );
         // 两套布局在这里构建一次，弹簧逐帧只改下面的包装层（高度 / 收起
         // 裁剪 / 交叉淡化 / 点击门控）与飞行副本：整棵完整层与迷你层不再随

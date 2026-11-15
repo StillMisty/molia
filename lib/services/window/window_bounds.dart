@@ -8,8 +8,12 @@ library;
 import 'dart:math' as math;
 import 'dart:ui';
 
-/// 窗口最小尺寸：与下发给原生的 `minimumSize` 同值（再窄时桌面骨架会破版式）。
-const Size kMinimumWindowSize = Size(900, 600);
+/// 窗口最小尺寸：与下发给原生的 `minimumSize` 同值。
+///
+/// 480×400 是 Windows 贴靠布局（Snap Layouts）的硬前提：微软要求最小宽度
+/// ≤500 epx，1080p 四宫格 = 480 宽；再大时贴靠网格能弹出但窗口塞不进区域。
+/// 桌面骨架为这一档配套了紧凑底栏与单栏播放页（见 `docs/architecture.md`）。
+const Size kMinimumWindowSize = Size(480, 400);
 
 /// 判定「落在可见区内」所需的最小交集：两个方向各 100 逻辑像素。
 ///
