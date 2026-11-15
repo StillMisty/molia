@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """APK 体积 / native 库明细（只依赖 Python 标准库，不要求 unzip）。
 
+已由 `dart run tool/agent/cli.dart size apk` 接管（跨端、输出一致）；
+本文件保留到 CI / 文档切完为止，见 ADR-0031。
+
 用法:
     tool/agent/apk_size.py app-arm64-v8a-release.apk [more.apk ...]
     tool/agent/apk_size.py --check app-arm64-v8a-release.apk
