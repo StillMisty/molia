@@ -115,7 +115,7 @@ void main() {
     expect(provider.config?.model, 'model-b');
   });
 
-  testWidgets('播放全部是唯一 filled 主操作，换一批 / 补一批 / 历史在顶栏溢出', (tester) async {
+  testWidgets('播放全部 / 换一批收成分裂按钮，历史固定在顶栏', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final l10n = lookupAppLocalizations(const Locale('zh'));
     final secrets = MemorySettingsSecretStore();
@@ -156,6 +156,12 @@ void main() {
       playback.dispose();
     });
 
+    // 手机窄宽：两颗分裂按钮允许换行，但按钮排本身不能溢出。
+    tester.view.physicalSize = const Size(360, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       MultiProvider(
         providers: [
@@ -179,30 +185,51 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 页内只有一个 filled 主操作（播放全部）；加入队列保持 tonal。
+    // 主操作收进分裂按钮：播放全部 filled、换一批 tonal。
     expect(
       tester
-          .widget<M3EButton>(find.byKey(const Key('aiDjPlayAllButton')))
+          .widget<M3ESplitButton<Object?>>(
+            find.byKey(const Key('aiDjPlayAllSplitButton')),
+          )
           .style,
       M3EButtonStyle.filled,
     );
     expect(
       tester
-          .widget<M3EButton>(find.byKey(const Key('aiDjEnqueueAllButton')))
+          .widget<M3ESplitButton<Object?>>(
+            find.byKey(const Key('aiDjRefreshSplitButton')),
+          )
           .style,
       M3EButtonStyle.tonal,
     );
-    // 分区标题行不再有换一批 / 补一批图标按钮。
-    expect(find.byKey(const Key('aiDjRefreshBatchButton')), findsNothing);
-    expect(find.byKey(const Key('aiDjFeedBatchButton')), findsNothing);
+    // 旧的独立按钮与顶栏「更多」溢出菜单都已移除。
+    expect(find.byKey(const Key('aiDjPlayAllButton')), findsNothing);
+    expect(find.byKey(const Key('aiDjEnqueueAllButton')), findsNothing);
+    expect(find.byKey(const Key('aiDjMoreButton')), findsNothing);
 
-    // 顶栏只有一个溢出入口，三个低频动作都在里面。
-    expect(find.byKey(const Key('aiDjHistoryButton')), findsNothing);
-    await tester.tap(find.byKey(const Key('aiDjMoreButton')));
+    // 历史改成顶栏固定图标入口，不再藏在菜单里。
+    expect(find.byKey(const Key('aiDjHistoryButton')), findsOneWidget);
+
+    Future<void> openTrailingMenu(Key key) async {
+      final arrow = find.descendant(
+        of: find.byKey(key),
+        matching: find.byIcon(M3EIcons.keyboard_arrow_down),
+      );
+      expect(arrow, findsOneWidget);
+      await tester.tap(arrow);
+      await tester.pumpAndSettle();
+    }
+
+    // 播放全部 ▾ 加入队列。
+    await openTrailingMenu(const Key('aiDjPlayAllSplitButton'));
+    expect(find.text(l10n.aiDjEnqueueAll), findsOneWidget);
+    await tester.tapAt(const Offset(4, 4));
     await tester.pumpAndSettle();
-    expect(find.text(l10n.aiDjRefreshBatch), findsOneWidget);
+
+    // 换一批 ▾ 补一批到队尾；历史不在菜单里。
+    await openTrailingMenu(const Key('aiDjRefreshSplitButton'));
     expect(find.text(l10n.aiDjFeedBatch), findsOneWidget);
-    expect(find.text(l10n.aiDjHistoryTitle), findsOneWidget);
+    expect(find.text(l10n.aiDjHistoryTitle), findsNothing);
   });
 
   testWidgets('生成中旧列表仍可点播，且只留一条进度带', (tester) async {

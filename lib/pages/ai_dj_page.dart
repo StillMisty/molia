@@ -143,51 +143,14 @@ class _AiDjPageState extends State<AiDjPage> {
               onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
             ),
       actions: [
-        // 低频动作（换一批 / 补一批 / 历史）收进同一个溢出菜单：顶栏只留
-        // 一个入口，页内主操作留给「播放全部」。
-        Consumer<AiDjProvider>(
-          builder: (context, provider, _) {
-            final radioActive = provider.status == AiDjStatus.playing;
-            return M3EMenu(
-              position: M3EMenuAnchorPosition.bottomEnd,
-              anchorBuilder: (context, open) => M3EIconButton(
-                key: const Key('aiDjMoreButton'),
-                variant: M3EIconButtonVariant.standard,
-                icon: const Icon(Icons.more_vert_rounded),
-                semanticLabel: l10n.moreActions,
-                onPressed: open,
-              ),
-              onSelected: (value) {
-                switch (value) {
-                  case 'refresh':
-                    unawaited(provider.refreshRecommendations());
-                  case 'feed':
-                    unawaited(_feedBatch());
-                  case 'history':
-                    _openPage(const AiDjHistoryPage());
-                }
-              },
-              children: [
-                M3EMenuEntry(
-                  label: l10n.aiDjRefreshBatch,
-                  value: 'refresh',
-                  enabled: !provider.isBusy,
-                  leading: const Icon(Icons.refresh_rounded, size: 20),
-                ),
-                M3EMenuEntry(
-                  label: l10n.aiDjFeedBatch,
-                  value: 'feed',
-                  enabled: radioActive && !provider.isBusy,
-                  leading: const Icon(Icons.queue_music_rounded, size: 20),
-                ),
-                M3EMenuEntry(
-                  label: l10n.aiDjHistoryTitle,
-                  value: 'history',
-                  leading: const Icon(Icons.history_rounded, size: 20),
-                ),
-              ],
-            );
-          },
+        // 历史入口取代原「更多」溢出菜单：换一批 / 补一批已回到页内按钮排，
+        // 顶栏只留一个稳定性入口；功能关闭时历史仍可查看。
+        M3EIconButton(
+          key: const Key('aiDjHistoryButton'),
+          variant: M3EIconButtonVariant.standard,
+          icon: const Icon(Icons.history_rounded),
+          semanticLabel: l10n.aiDjHistoryTitle,
+          onPressed: () => _openPage(const AiDjHistoryPage()),
         ),
       ],
       body: Consumer<AiDjProvider>(
@@ -419,6 +382,7 @@ class _AiDjPageState extends State<AiDjPage> {
     // 播放类动作只挡队列操作；显式生成进行中旧列表仍可播放 / 入队。
     final queueBusy = provider.queueBusy;
     final canReplace = !provider.isBusy && !provider.hasReplacing;
+    final radioActive = provider.status == AiDjStatus.playing;
 
     return [
       const SizedBox(height: _sectionGap),
@@ -428,30 +392,51 @@ class _AiDjPageState extends State<AiDjPage> {
             ? null
             : l10n.aiDjLastUpdated(aiDjUpdatedText(l10n, batch.generatedAt)),
       ),
-      if (items.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            M3EButton.filled(
-              key: const Key('aiDjPlayAllButton'),
-              onPressed: queueBusy
-                  ? null
-                  : () => unawaited(provider.startRadio()),
-              icon: const Icon(Icons.play_arrow_rounded),
-              label: Text(l10n.aiDjPlayAll),
-            ),
-            M3EButton.tonal(
-              key: const Key('aiDjEnqueueAllButton'),
-              onPressed: queueBusy ? null : _enqueueAll,
-              icon: const Icon(Icons.playlist_add_rounded),
-              label: Text(l10n.aiDjEnqueueAll),
-            ),
-          ],
-        ),
-      ],
+      // 按钮排常显：列表为空时「播放全部」置灰，换一批改用「生成推荐」文案，
+      // 空态里不再放第二颗同意图按钮。
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          M3ESplitButton<_PlayAllAction>(
+            key: const Key('aiDjPlayAllSplitButton'),
+            label: l10n.aiDjPlayAll,
+            leadingIcon: Icons.play_arrow_rounded,
+            style: M3EButtonStyle.filled,
+            enabled: items.isNotEmpty && !queueBusy,
+            onPressed: () => unawaited(provider.startRadio()),
+            items: [
+              M3ESplitButtonItem<_PlayAllAction>(
+                value: _PlayAllAction.enqueue,
+                enabled: !queueBusy,
+                child: Text(l10n.aiDjEnqueueAll),
+              ),
+            ],
+            onSelected: (_) => unawaited(_enqueueAll()),
+          ),
+          M3ESplitButton<_BatchAction>(
+            key: const Key('aiDjRefreshSplitButton'),
+            label: items.isEmpty ? l10n.aiDjGenerate : l10n.aiDjRefreshBatch,
+            leadingIcon: items.isEmpty
+                ? Icons.auto_awesome_rounded
+                : Icons.refresh_rounded,
+            style: M3EButtonStyle.tonal,
+            enabled: !provider.isBusy,
+            onPressed: () => unawaited(provider.refreshRecommendations()),
+            items: [
+              M3ESplitButtonItem<_BatchAction>(
+                value: _BatchAction.feed,
+                // 补批只服务正在直播的电台；未起播时没有可续的队列。
+                enabled: radioActive,
+                child: Text(l10n.aiDjFeedBatch),
+              ),
+            ],
+            onSelected: (_) => unawaited(_feedBatch()),
+          ),
+        ],
+      ),
       const SizedBox(height: 12),
       // 进度分片只重建这条进度带，不带走整页列表。
       ValueListenableBuilder<AiGenerationState>(
@@ -469,7 +454,7 @@ class _AiDjPageState extends State<AiDjPage> {
       if (provider.progress != null && items.isEmpty)
         const SizedBox.shrink()
       else if (batch == null || items.isEmpty)
-        _emptyRecommendations(l10n, provider)
+        _emptyRecommendations(l10n)
       else ...[
         for (var i = 0; i < items.length; i++) ...[
           if (i > 0) SizedBox(height: TrackRow.gapOf(context)),
@@ -522,10 +507,10 @@ class _AiDjPageState extends State<AiDjPage> {
     ];
   }
 
-  /// 空列表：显式「生成推荐」（不自动消耗 token）。
-  Widget _emptyRecommendations(AppLocalizations l10n, AiDjProvider provider) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+  /// 空列表：只留说明；显式「生成推荐」走分区头下方的分裂按钮，
+  /// 不在这里再放第二颗同意图按钮。
+  Widget _emptyRecommendations(AppLocalizations l10n) {
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -536,15 +521,6 @@ class _AiDjPageState extends State<AiDjPage> {
           style: context.typeScale.bodySmall.copyWith(
             color: scheme.onSurfaceVariant,
           ),
-        ),
-        const SizedBox(height: 12),
-        M3EButton.tonal(
-          key: const Key('aiDjGenerateButton'),
-          onPressed: provider.isBusy
-              ? null
-              : () => unawaited(provider.refreshRecommendations()),
-          icon: const Icon(Icons.auto_awesome_rounded),
-          label: Text(l10n.aiDjGenerate),
         ),
       ],
     );
@@ -938,3 +914,9 @@ class _GenerationStrip extends StatelessWidget {
     );
   }
 }
+
+/// 「播放全部」分裂按钮的尾部动作。
+enum _PlayAllAction { enqueue }
+
+/// 「换一批」分裂按钮的尾部动作。
+enum _BatchAction { feed }
