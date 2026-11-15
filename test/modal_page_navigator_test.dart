@@ -1,5 +1,11 @@
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:molia/theme/app_theme.dart';
+import 'package:molia/widgets/m3e_page_route.dart';
 import 'package:molia/widgets/modal_page_navigator.dart';
 
 void main() {
@@ -90,4 +96,116 @@ void main() {
       });
     });
   });
+
+  testWidgets('弹层内子页：预测返回驱动内层路由，提交只退一级', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    final theme = buildAppThemeData(
+      ColorScheme.fromSeed(seedColor: const Color(0xFF2196F3)),
+    );
+    final rootNavigator = GlobalKey<NavigatorState>();
+    final innerNavigator = GlobalKey<NavigatorState>();
+    final coordinator = ModalNavigatorBackCoordinator();
+    late ModalRoute<dynamic> subPageRoute;
+
+    await tester.pumpWidget(
+      M3EMaterialApp(
+        data: buildM3EThemeData(theme),
+        theme: theme,
+        darkTheme: theme,
+        navigatorKey: rootNavigator,
+        home: const Scaffold(body: Text('home')),
+      ),
+    );
+
+    rootNavigator.currentState!.push(
+      _TestSheetRoute(
+        child: ModalPageNavigatorShell(
+          navigatorKey: innerNavigator,
+          backCoordinator: coordinator,
+          initialPageBuilder: (context, _) => const Text('sheet first'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    innerNavigator.currentState!.push(
+      M3EPageRoute<void>(
+        builder: (context) {
+          subPageRoute = ModalRoute.of(context)!;
+          return const Text('sheet second');
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _sendBackGesture(tester, 'startBackGesture', const <String, dynamic>{
+      'touchOffset': <double>[5.0, 300.0],
+      'progress': 0.0,
+      'swipeEdge': 0,
+    });
+    expect(innerNavigator.currentState!.userGestureInProgress, isTrue);
+    expect(coordinator.predictiveBackActive, isTrue);
+
+    await _sendBackGesture(
+      tester,
+      'updateBackGestureProgress',
+      const <String, dynamic>{
+        'x': 100.0,
+        'y': 300.0,
+        'progress': 0.35,
+        'swipeEdge': 0,
+      },
+    );
+    expect(subPageRoute.animation!.value, closeTo(0.65, 0.001));
+
+    await _sendBackGesture(tester, 'commitBackGesture');
+    await tester.pumpAndSettle();
+
+    expect(find.text('sheet second'), findsNothing);
+    expect(find.text('sheet first'), findsOneWidget);
+    expect(rootNavigator.currentState!.canPop(), isTrue, reason: '弹层本身保留');
+  });
+}
+
+Future<void> _sendBackGesture(
+  WidgetTester tester,
+  String method, [
+  Map<String, dynamic>? arguments,
+]) async {
+  await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+    'flutter/backgesture',
+    const StandardMethodCodec().encodeMethodCall(MethodCall(method, arguments)),
+    (_) {},
+  );
+  await tester.pump();
+}
+
+/// 模拟 M3E 弹层路由：不是 PageRoute，因此不会插入框架自带的预测返回
+/// detector；内层 Navigator 的手势归属由 [ModalPageNavigatorTransitionsBuilder]
+/// 单独判定。
+class _TestSheetRoute extends PopupRoute<void> {
+  _TestSheetRoute({required this.child});
+
+  final Widget child;
+
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  bool get barrierDismissible => false;
+
+  @override
+  String? get barrierLabel => null;
+
+  @override
+  Duration get transitionDuration => Duration.zero;
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) => child;
 }

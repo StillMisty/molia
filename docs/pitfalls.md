@@ -1075,3 +1075,26 @@
     未钉住时这条带子压在页面 surface 上不可见。不要改成页面级 overlay：未钉住
     （封面头还在视口里）时 overlay 会压住封面头，靠 `overlapsContent` 回传再驱动
     overlay 又需要额外一层 post-frame 通知，收益不值。
+
+108. **预测返回的「慢拖不动、松手直接返回」先查 detector 是否被打断**：
+    跟手预览只由 `PredictiveBackPageTransitionsBuilder` 插入的 detector 提供；
+    主题统一沿用依赖包默认 map（不要手写平台子集），升级依赖后用
+    `test/theme/predictive_back_test.dart` 确认 Android 仍是预测返回。
+    `NavigatorObserver.didStartUserGesture`
+    里任何异常都会让 `handleStartBackGesture` 提前退出，观察者不会被登记，
+    后续 progress 全部丢给 `handlePopRoute`，表现与「没开预测返回」完全一样；
+    Hero 在低层路由未布局时测量 `RenderBox` 抛断言是已知来源
+    （flutter#194447，Android 17 实测），SnackBar 自带的 Hero 同样参与。
+    排查顺序：`test/theme/predictive_back_test.dart` 先验证主题 builder；
+    真机抓 `CoreBackPreview ... mIsAnimationCallback=true` 与 debug 日志里的
+    首次异常；不要给 NavigatorObserver 加可能抛异常的副作用。
+
+    真机还要先确认 progress 有没有真的到 Dart：部分 OnePlus / ColorOS 机器
+    （本项目实测 PLQ110 / Android 17）只派发 `startBackGesture` + 几条
+    `progress=0` 的 update 就 commit，系统只画返回箭头、页面不动。同机原生应用
+    正常、Flutter 应用（Molia、PiliPlus，targetSdk 36 / 37 都试过）都不行；
+    Flutter 的 `isButtonEvent` 只认 `progress == 0 && touchOffset == Offset.zero`，
+    这种事件 touchOffset 非零，于是被当成真手势 seek 到 1，视觉上就是「有箭头、
+    不动」。上游同源问题 flutter/flutter#185257（OnePlus，closed 未修，社区结论是
+    OEM 派发畸形 / 重复 back 事件），三键导航的 progress=0 序列见 #183635。
+    这类机型只能退化成「松手返回」：不要去改主题 / 弹层宿主，也不要自己造进度。
