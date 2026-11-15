@@ -17,7 +17,7 @@ Linux/Windows 桌面端此前保留系统标题栏：窗口最小化/最大化/�
 ## 决策
 
 1. **选 `window_manager ^0.5.2`**。证据：pub 160/160 分、GitHub 849★、
-   调研时 2 天内仍有推送；本机硬验证：Flutter 3.47.x 下可编译可运行，
+   调研时 2 天内仍有推送；当时的验证环境实测：Flutter 3.47.x 下可编译可运行，
    默认（Wayland）与 `GDK_BACKEND=x11` 两条路径下 `getTitleBarHeight() == 0`。
 2. **排除项**：
    - `nativeapi_flutter`：WIP，Linux 拖动未实现；
@@ -107,15 +107,15 @@ nativeapi 的 `Window` / `WindowManager` / 窗口事件 API，以及
 
 ## 未验证
 
-- **Windows**：本机只有 Linux，未实机验证（代码路径与 Linux 共用同一
+- **Windows**：当时的开发环境只有 Linux，未实机验证（代码路径与 Linux 共用同一
   Dart 实现，但 Windows 的原生插件行为、按钮观感未确认）；
 - **人工手感项**：拖动跟手程度、边缘缩放、隐藏标题栏后的窗口阴影/圆角、
   最小化/关闭的动画（双击最大化已实现，见上）。
-- **X11 路径**：`GDK_BACKEND=x11` 下在本机（WSLg 的 X11 显示）跑端到端集成测试
+- **X11 路径**：`GDK_BACKEND=x11` 下在当时的 WSLg 环境跑端到端集成测试
   曾因播放用例在 libmpv 起播后卡死而不稳定；播放与缓存用例已从集成测试删除
   （原因见 `docs/pitfalls.md` #33），窗口 chrome / 托盘用例继续在 Xvfb 下覆盖。
   `getTitleBarHeight() == 0` 的结论来自调研阶段的独立验证；X11 用户的实际表现
   需在真机确认。
-- **Wayland dock 图标**（2026-10-16）：本机是 WSLg，只能验证 X11 的 WM_HINTS
+- **Wayland dock 图标**（2026-10-16）：当时的开发环境是 WSLg，只能验证 X11 的 WM_HINTS
   与安装脚本落盘；GNOME/KDE Wayland 下「装 .desktop 后 dock / 应用菜单显示
   品牌图标」需真实桌面会话复核。

@@ -96,7 +96,7 @@ tool/agent/app.sh run -d linux --headless  # 无图形显示：显式 Xvfb
 ```bash
 dart format <改动的文件>          # pre-commit 也会自动格式化已暂存的 Dart
 flutter analyze --no-pub          # 必须 0 error / 0 warning
-flutter test --no-pub             # 默认集，本机 <30s
+flutter test --no-pub             # 默认集，通常 30s 内
 python3 tool/agent/check_docs.py  # 改文档 / 版本 / workflow 时
 ```
 

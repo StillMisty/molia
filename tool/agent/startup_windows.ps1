@@ -1,13 +1,24 @@
 param(
-  [string]$Project = 'C:\Users\Still\molia-perf',
-  [string]$Flutter = 'C:\Tools\flutter\bin\flutter.bat',
+  [string]$Project = '',
+  [string]$Flutter = '',
   [int]$Runs = 5,
-  [string]$OutDir = 'C:\Users\Still\AppData\Local\Temp\molia-perf',
+  [string]$OutDir = '',
   [switch]$NoBuild
 )
 
 $ErrorActionPreference = 'Stop'
-$env:PUB_HOSTED_URL = 'https://pub.flutter-io.cn'
+# 默认值按脚本位置、Windows PATH 与 %TEMP% 推导；不写死用户名 / SDK 路径。
+if (-not $Project) {
+  $Project = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+}
+if (-not $Flutter) {
+  $flutterCmd = Get-Command flutter.bat -ErrorAction SilentlyContinue
+  if (-not $flutterCmd) {
+    throw '找不到 Windows 侧 flutter.bat：把 Flutter 加进 PATH，或传 -Flutter <path>'
+  }
+  $Flutter = $flutterCmd.Source
+}
+if (-not $OutDir) { $OutDir = Join-Path $env:TEMP 'molia-perf' }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
 Set-Location $Project

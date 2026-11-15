@@ -16,7 +16,7 @@
 # - 设备默认取 $DEVICE_ID（Android 模拟器）；-d linux 走桌面热重载。
 #   没有图形显示时必须显式加 --headless（Xvfb），不做隐式猜测；
 # - 运行设备记入 $RUN_DEVICE_FILE，reload/stop/status 均按记录设备行事；
-# - 日志与 pid 文件固定在 /tmp/opencode/molia，便于其它脚本/agent 读取。
+# - 日志与 pid 文件固定在 $RUN_DIR（默认 ${TMPDIR:-/tmp}/molia-agent），便于其它脚本/agent 读取。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
 usage() {

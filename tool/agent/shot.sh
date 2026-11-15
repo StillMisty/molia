@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 设备截图（agent 的"眼睛"）：PNG 写到 /tmp/opencode/molia/shots/ 并打印路径
+# 设备截图（agent 的"眼睛"）：PNG 写到 $SHOT_DIR（默认 ${TMPDIR:-/tmp}/molia-agent/shots）并打印路径
 #
 # 用法:
 #   tool/agent/shot.sh [name] [--annotate]

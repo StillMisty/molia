@@ -261,7 +261,7 @@ pending / keepAlive，当前展示的封面不受影响。
     包），未完成 A/B。真机 / 真实库场景仍需复测。
 - **采样入口（2026-11-08 补充）**：`tool/agent/perf.sh memory android` 会构建
   普通 release、`seed.sh android covers 30` 注入 30 张本地封面，然后采「空闲 /
-  后台 35s / 回前台」。本机 x86_64 模拟器复测：PSS `136.4 → 129.6 → 128.9MB`，
+  后台 35s / 回前台」。x86_64 模拟器复测：PSS `136.4 → 129.6 → 128.9MB`，
   `molia.memory` 记录上限 `64MB → 16MB → 64MB`；封面以 live 图片存在，未进入
   `ImageCache.currentSizeBytes`，因此不能把这约 6.8MB 全归因于图片缓存，真机 /
   真实库仍需复测。
@@ -292,7 +292,7 @@ pending / keepAlive，当前展示的封面不受影响。
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
 - `flutter test --no-pub`：**2636 passed / 11 skipped**（新增：延迟 trim / 暂停 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate、会话 cursor 增量 / fresh 快照 / 最大版本应用 / 本地曲目下标映射、换队列播放器回收、系统退出请求门闩）；
-- Windows release（2026-11-11，本机；顶栏关闭键 / 任务栏关闭走同一策略，`SC_CLOSE` 与 runner 转发的 `WM_CLOSE` 都覆盖）：
+- Windows release（2026-11-11，Windows 11 环境；顶栏关闭键 / 任务栏关闭走同一策略，`SC_CLOSE` 与 runner 转发的 `WM_CLOSE` 都覆盖）：
   - `memory_windows.ps1` 一次完整场景：空闲专用工作集 170.0MB、浏览 234.5MB、关闭前 210.4MB；托盘 +3s **4.1MB**、+15s **3.1MB**（该轮日志出现 `托盘暂停延迟 trim`，是暂停/空闲托盘，不能当作播放态收益）。
   - 另一次确认 `play.start result=ok`、播放中关到托盘：**133–143MB**，90s 内稳定（`cache_path=direct`）；原始反馈的 200MB 在同一构建未复现。
   - 提交大小 373–490MB；本轮后续已补「托盘暂停 10s 释放 player / source」，恢复播放按进度重载，但该改动尚未做 Windows 实机 A/B。

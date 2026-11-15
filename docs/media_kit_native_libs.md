@@ -2,11 +2,11 @@
 
 > **结论：保持按平台拆分**（`media_kit_libs_linux` + `media_kit_libs_windows_audio`）。
 > 换成官方的 `media_kit_libs_audio` 不改变任何功能，却会让 Android 每个 ABI 的 release APK
-> **+2.98 MB（本机实测）**、iOS / macOS 各额外 vendor 一份 libmpv xcframework（本仓库这两端都走
+> **+2.98 MB（本地实测）**、iOS / macOS 各额外 vendor 一份 libmpv xcframework（本仓库这两端都走
 > `just_audio` 原生实现，media_kit 后端不激活，纯死重量），并在每次 Android 构建时强制从 GitHub
 > 下载 4 个 ABI 的 11.5 MB jar。
 >
-> 本文数字分三类标注：**【实测】**（本机跑出来的产物/网络数据）、**【源码】**（读 pubspec /
+> 本文数字分三类标注：**【实测】**（本地跑出来的产物/网络数据）、**【源码】**（读 pubspec /
 > Gradle / CMake / Flutter SDK 源码确认）、**【三方】**（别人的说法，带链接）。
 > 无标注的推理由前两类推出。复评触发条件见 §8，复现命令见 §9。
 
@@ -25,10 +25,10 @@
   `Platform.isWindows || Platform.isLinux` 时调 `JustAudioMediaKit.ensureInitialized()`。**【源码】**
 - **双保险**：`just_audio_media_kit` 2.1.0 的 `ensureInitialized` 默认值就是
   `linux: true, windows: true, android: false, iOS: false, macOS: false`（包源码
-  `lib/just_audio_media_kit.dart`，本机 pub cache 核对）——即使 libs 装上了，Android/iOS/macOS 也不会激活
+  `lib/just_audio_media_kit.dart`，本地 pub cache 核对）——即使 libs 装上了，Android/iOS/macOS 也不会激活
   media_kit 后端。**【源码】**
 - **`media_kit` 本身没有原生代码**：`media_kit` 1.2.6 的 pubspec 无 `flutter.plugin.platforms` 段，
-  包内不存在 `android/ ios/ macos/ linux/ windows/` 目录（本机 pub cache 核对）。
+  包内不存在 `android/ ios/ macos/ linux/ windows/` 目录（本地 pub cache 核对）。
   也就是说**原生库的有无 100% 由 `media_kit_libs_*` 决定**，不是"编译必需"，而是"要不要打进产物"。**【源码】**
 - **现有 libs 的实际作用**（这决定了"保持拆分"到底保住了什么）：
   - Windows：`media_kit_libs_windows_audio` 1.0.9 的 `windows/CMakeLists.txt` 在 configure 阶段下载
@@ -38,7 +38,7 @@
     `media_kit_libs_linux_bundled_libraries` 设为**空字符串**，只从源码编译一个静态 mimalloc；
     插件 `.cc` 只做 `setlocale(LC_NUMERIC, "C")` 与打印一行注册日志。libmpv 来自系统包，
     这也是 `docs/lx_sources.md` 要求 Linux 用户安装 mpv（`sudo pacman -S --needed mpv`）的原因。**【源码】+【实测】**
-    本机 `build/linux/x64/debug/bundle/lib/` 实际只有 `libmedia_kit_libs_linux_plugin.so`，没有 `libmpv.so`。
+    本地 `build/linux/x64/debug/bundle/lib/` 实际只有 `libmedia_kit_libs_linux_plugin.so`，没有 `libmpv.so`。
   - 顺带一提：本仓库 `linux/CMakeLists.txt` 未引用 `MIMALLOC_LIB`（grep 无匹配），
     所以那个静态 mimalloc 对本应用是空转——不影响本决策。**【源码】**
 
@@ -104,7 +104,7 @@ android/ios/macos 列表里**没有任何 media_kit 插件**（本仓库 `.flutt
 | 平台 | 原生库来源（构建期下载） | 体积 |
 |---|---|---|
 | Android | `libmpv-android-audio-build` release `v1.1.8` 的 4 个 jar（`media_kit_libs_android_audio` 1.3.8 固定此版本） | jar 合计 **12,004,734 B（≈11.5 MiB）**，每次 Android 构建都会下载全部 4 个 ABI；jar 内 `libmpv.so` 见下表 **【实测】** |
-| iOS | podspec 里 `system("make")` → 下载 `libmpv-xcframeworks_v0.6.0_ios-universal-audio-default.tar.gz` 并 `s.vendored_frameworks = 'Frameworks/*.xcframework'` | 上游资产 **7.66 MB**（压缩包，v0.6.0，2023-09-24 发布）；`.app` 实际增量**未实测**（本机无 macOS 工具链） **【三方-GitHub API】+【源码】** |
+| iOS | podspec 里 `system("make")` → 下载 `libmpv-xcframeworks_v0.6.0_ios-universal-audio-default.tar.gz` 并 `s.vendored_frameworks = 'Frameworks/*.xcframework'` | 上游资产 **7.66 MB**（压缩包，v0.6.0，2023-09-24 发布）；`.app` 实际增量**未实测**（当时无 macOS 工具链） **【三方-GitHub API】+【源码】** |
 | macOS | 同上，`libmpv-xcframeworks_v0.6.0_macos-universal-audio-default.tar.gz` | 上游资产 **8.08 MB**；本仓库有 `macos/` 构建目标，但播放走 `just_audio` 原生 AVPlayer（`desktop_audio_init_io` 只在 Windows/Linux 激活 media_kit），仍是纯死重量 **【三方-GitHub API】+【仓库核对】** |
 | Windows | CMake 下载 `mpv-dev-x86_64-20230924-git-652a1dd.7z`，bundle `libmpv-2.dll` | 与 umbrella 相同（同一包 `media_kit_libs_windows_audio` 1.0.9） **【源码】** |
 | Linux | 不下载 libmpv，用系统 libmpv（只编译静态 mimalloc） | 与 umbrella 相同 **【源码】** |
@@ -167,7 +167,7 @@ x86 ≈ +2.95 MB；若构建**不拆分 ABI 的 fat APK**，4 个 ABI 全带上�
 **没有找到可引用的量化社区报告**：Stack Overflow 检索（`media_kit apk size`、`media_kit_libs_audio`
 等）无结果；Reddit 有相关帖子（如 r/FlutterDev "what do you prefer: video_player or media_kit?"）
 但正文抓取被拒（403/空壳），检索摘要里提到体积权衡却无法核实原句，**因此本文不引用任何 Reddit 文字**。
-本节的体积结论完全来自 §5 的本机实测。
+本节的体积结论完全来自 §5 的本地实测。
 
 ## 7. 代价对比
 
@@ -178,7 +178,7 @@ x86 ≈ +2.95 MB；若构建**不拆分 ABI 的 fat APK**，4 个 ABI 全带上�
 2. **Android 构建新增 GitHub release 硬依赖**：每次 `assembleRelease` 下载 4 个 ABI 共 11.5 MB jar，
    MD5 不符/网络不通即构建失败（#1056）。注意两点免得夸大：
    （a）这不是全新风险——Linux 桌面构建本来就会从 github.com 拉 mimalloc 源码
-   （`media_kit_libs_linux` CMake 核对；本机 `build/linux/x64/debug/mimalloc/` 实测存在）；
+   （`media_kit_libs_linux` CMake 核对；本地 `build/linux/x64/debug/mimalloc/` 实测存在）；
    （b）本次实测中 GitHub 下载是成功的（构建日志逐行打印了 4 个 jar 的 URL，`BUILD_EXIT=0`），
    所以"能拉到"在本机成立。区别在于**新增的是一条 Android 构建期外网链路**，而现状下
    Android 的原生库来自 pub 包（源码编译或预编译）与 Maven 依赖，不需要访问 GitHub release；

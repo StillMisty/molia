@@ -160,9 +160,10 @@ lib/playback/
 - `node tool/gen_qs_fixtures.mjs`：重新抓取汽水真实响应（搜索 / 专辑 / 歌手 /
   评论），更新 `test/fixtures/qs.json`、`albums/qs.json`、`artists/qs_*.json`、
   `comments/qs.json`（列表截断；匿名接口概率性返回 `200` + 空 body，脚本内重试）。
-- 构建环境（WSL/Arch 参考）：
+- 构建环境（Linux 参考；Arch 用 `pacman`，Debian/Ubuntu 用 `apt`）：
   - Linux 桌面：`sudo pacman -S --needed base-devel ninja cmake clang pkgconf gtk3 mesa-utils`
-    - 本地播放依赖 libmpv：`sudo pacman -S --needed mpv`（media_kit 后端需要）
+    （Debian/Ubuntu 等价：`sudo apt install build-essential ninja-build cmake clang pkg-config libgtk-3-dev mesa-utils`）
+    - 本地播放依赖 libmpv：`sudo pacman -S --needed mpv` / `sudo apt install libmpv2`（media_kit 后端需要）
     - **中文字体**：`sudo pacman -S --needed wqy-microhei`（App 不内置 CJK 字体；否则中文显示方块）
   - Android（用户态安装）：先用官方脚本装 Android CLI，再按 `AGENTS.md`「工具链」的
     compileSdk / build-tools / NDK 版本执行

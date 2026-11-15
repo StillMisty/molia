@@ -37,7 +37,7 @@ description: 发布 Molia 版本，或改动发布产物 / 更新清单 / 平台
    ```
 
    必须显式 `-s` + `-m`：签名只能挂在附注标签（tag 对象）上，裸 `git tag` 签不签取决于
-   本机 `tag.gpgSign`（没配 → 未签名轻量标签；配了 → 附注签名标签并要求消息）；`-m` 免开编辑器。
+   发布机的 `tag.gpgSign`（没配 → 未签名轻量标签；配了 → 附注签名标签并要求消息）；`-m` 免开编辑器。
 4. 看 `release.yml` 跑完：版本校验 → 矩阵构建 → 汇总产物 + sha256 + `latest.json`
    → GitHub Release；测试版为 prerelease，并原地覆盖滚动 `beta` release 的
    `latest.json`（不删除 release、不动 tag target），避免删除重建期间客户端取
@@ -77,12 +77,12 @@ description: 发布 Molia 版本，或改动发布产物 / 更新清单 / 平台
    连接入口会显示「这个版本没有内置 Last.fm 应用密钥」。共享密钥无法在分发型客户端里
    真正保密，保护模型是每用户会话密钥 + TLS；不要把密钥写进日志、错误文案或 UI。
 
-2. **签名 tag 的 GPG**：本机有私钥，且公钥已上传 GitHub（Settings → SSH and GPG keys），
+2. **签名 tag 的 GPG**：发布机要有私钥，且公钥已上传 GitHub（Settings → SSH and GPG keys），
    Release 页才显示 Verified；发布机没有私钥时 `git tag -s` 直接失败——宁可不发，
    也不发未签名标签。
 
-3. **pub 源**：`pubspec.lock` 锁定 `pub.flutter-io.cn`，工作流统一设
-   `PUB_HOSTED_URL=https://pub.flutter-io.cn` 保持同源（否则 lock 会被改写）。
+3. **pub 源**：`pubspec.lock` 指向 `pub.dev`，工作流与 `tool/agent/perf.sh` 都默认
+   使用它。需要走镜像时自行设 `PUB_HOSTED_URL`，并接受 lock 被改写的代价。
 
 ## 5. 产物清单
 
@@ -116,7 +116,7 @@ flutter run \
   --dart-define=MOLIA_LASTFM_API_SECRET=...
 ```
 
-Windows 安装器可在 Windows 本机单独编译验证：
+Windows 安装器可在 Windows 机器上单独编译验证：
 
 ```powershell
 flutter build windows --release

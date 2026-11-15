@@ -57,7 +57,7 @@ partial wake lock 只在后台 / 息屏时持有。
 
 ## 5. 验证
 
-自动化（本机）：
+自动化（本地）：
 
 ```bash
 flutter analyze --no-pub

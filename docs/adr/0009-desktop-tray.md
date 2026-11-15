@@ -119,16 +119,16 @@ Linux / Windows 桌面端此前只有「关掉窗口 = 进程退出」一条路�
 - `flutter build linux --release`：nativeapi build hook 在 Linux 上编译通过；
 - `flutter build web --release`：stub 路径通过（无 `dart:io` / FFI 泄漏）；
 - 运行时证据（真实应用 + `tool/agent/app.sh run -d linux`）：
-  `molia.app_tray: 托盘已创建`；本机无 StatusNotifierWatcher 时
+  `molia.app_tray: 托盘已创建`；没有 StatusNotifierWatcher 时
   `molia.app_tray: 未检测到托盘宿主…关闭到托盘将退回直接退出`（nativeapi 同时
   输出 `SNI: no StatusNotifierWatcher found`，与探测结论一致）；启动无异常，
   热重载正常。
 
 ## 未验证
 
-- **本机（WSL2）看不到托盘图标**：session D-Bus 上没有 StatusNotifierWatcher，
+- **当时的 WSL2 环境看不到托盘图标**：session D-Bus 上没有 StatusNotifierWatcher，
   只能验证「原生链路可调用 + 无宿主时静默降级 + 关闭策略退回直接退出」；
   图标观感、菜单交互需在 KDE / GNOME（+AppIndicator 扩展）或 Windows 真机复核；
-- **Windows**：本机只有 Linux（与 ADR-0004 相同的未验证项）——左键唤起、
+- **Windows**：当时的开发环境只有 Linux（与 ADR-0004 相同的未验证项）——左键唤起、
   右键菜单、任务栏隐藏行为均未实机确认；
 - 托盘菜单在 GNOME AppIndicator 扩展下的渲染细节（禁用项、分隔线）未实机确认。

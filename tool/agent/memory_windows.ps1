@@ -1,11 +1,17 @@
 param(
-  [string]$Exe = 'C:\Users\Still\molia-perf\build\windows\x64\runner\Release\molia.exe',
-  [string]$OutDir = 'C:\Users\Still\AppData\Local\Temp\molia-perf',
+  [string]$Exe = '',
+  [string]$OutDir = '',
   [int]$IdleSeconds = 5,
   [int]$PlaySeconds = 8
 )
 
 $ErrorActionPreference = 'Stop'
+# 默认值按脚本位置与 %TEMP% 推导，不依赖任何用户名或固定构建目录。
+if (-not $Exe) {
+  $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+  $Exe = Join-Path $repoRoot 'build\windows\x64\runner\Release\molia.exe'
+}
+if (-not $OutDir) { $OutDir = Join-Path $env:TEMP 'molia-perf' }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
 Add-Type @"

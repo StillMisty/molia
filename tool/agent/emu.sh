@@ -7,9 +7,9 @@
 #   tool/agent/emu.sh status                                 查看 AVD 与设备状态
 #
 # 设计说明：
-# - WSL 内原生模拟器（KVM + swiftshader 软渲染，WSLg 无 GL 直通）；
+# - WSL / Linux 原生模拟器（KVM + swiftshader 软渲染；WSLg 无 GL 直通）；
 # - headless 是 agent 默认模式：无窗口、截图仍可用（android screen capture / adb screencap）；
-# - window 模式经 WSLg 显示，供人工观察。
+# - window 模式经 WSLg（或当前桌面会话）显示，供人工观察。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
 usage() {

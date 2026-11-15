@@ -19,7 +19,7 @@
 # - Linux 默认 headless：显式套 xvfb-run，在 WSLg 下也不会把窗口弹到 Windows 桌面；
 #   只改 DISPLAY 不够——GDK 见到 WAYLAND_DISPLAY 会优先连真实 Wayland 合成器，
 #   故同时 `env -u WAYLAND_DISPLAY` + `GDK_BACKEND=x11`；
-# - 日志写 /tmp/opencode/molia/it-<platform>-<时间戳>.log，失败时回显尾部 40 行；
+# - 日志写 $RUN_DIR/it-<platform>-<时间戳>.log（默认 ${TMPDIR:-/tmp}/molia-agent），失败时回显尾部 40 行；
 # - Android 由 flutter test 自动构建并安装 debug APK（不需要先 flutter build apk）。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 

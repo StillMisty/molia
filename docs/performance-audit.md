@@ -13,10 +13,10 @@
 > 目标：在同一个可复现口径下拿到启动、帧、交互、内存与体积的基线，按数据排序
 > 再修，不重复已否证的方向（见 `docs/performance.md`、`docs/memory.md`）。
 >
-> 采样环境：WSL2 Linux（Arch，20 vCPU）+ 本机 Windows 11（i5-13600K /
-> RTX 4060 Ti / 2560×1440，150% 缩放）+ Android 模拟器 `molia_api37`
-> （x86_64，headless，软件渲染）。Windows 是桌面运行时主口径；Android 只做
-> 相对比较。
+> 采样环境（作者当时的验证环境，不是最低要求）：WSL2 Linux（Arch，20 vCPU）
+> + Windows 11（i5-13600K / RTX 4060 Ti / 2560×1440，150% 缩放）
+> + Android 模拟器 `molia_api37`（x86_64，headless，软件渲染）。Windows 是
+> 桌面运行时主口径；Android 只做相对比较。
 
 ### 1. 结论（先看这里）
 
@@ -48,7 +48,7 @@
 ```bash
 tool/agent/startup.sh --runs 5                 # Linux release 冷启动
 tool/agent/perf.sh startup android             # Android 模拟器 release
-tool/agent/perf.sh startup windows             # Windows release（本机）
+tool/agent/perf.sh startup windows             # Windows release（WSL 里驱动 Windows 侧 Flutter）
 ```
 
 Windows 由 `tool/agent/startup_windows.ps1` 完成：结束旧进程 →
@@ -84,8 +84,8 @@ tool/agent/perf.sh frames windows --real        # release 真实窗口 + 滚轮�
 `latency16`，不叫 jank。需要归因时用：
 
 ```bash
-# Windows 侧
-flutter run --profile -d windows --trace-to-file=C:\Users\Still\molia-perf\perf-scroll.binpb
+# Windows 侧（构建目录是脚本同步过去的 %USERPROFILE%\molia-perf）
+flutter run --profile -d windows --trace-to-file=%USERPROFILE%\molia-perf\perf-scroll.binpb
 # 另一个终端跑滚轮（脚本只驱动，不启动/退出应用）
 powershell -File tool/agent/scroll_windows.ps1 -Steps 80
 ```
@@ -101,7 +101,7 @@ powershell -File tool/agent/scroll_windows.ps1 -Steps 80
 
 ```bash
 tool/agent/memory.sh --interval 2 --timeout 120          # Linux
-tool/agent/perf.sh memory windows                        # 本机场景
+tool/agent/perf.sh memory windows                        # Windows 场景
 ```
 
 Windows 场景：启动 → 空闲 → 滚轮浏览 → 媒体键播放 / 暂停 → 关闭到托盘 →
@@ -110,8 +110,10 @@ Windows 场景：启动 → 空闲 → 滚轮浏览 → 媒体键播放 / 暂停
 
 Windows 构建前提：Flutter 3.47.7 Windows zip + VS BuildTools 2022（Windows
 10/11 SDK、ATL）、系统 Developer Mode；构建目录在 C: 上（不要用
-`\\wsl$` UNC 路径），脚本默认 `C:\Users\Still\molia-perf`，可用
-`MOLIA_WIN_PROJECT` / `MOLIA_WIN_FLUTTER` 覆盖。首次构建由
+`\\wsl$` UNC 路径）。脚本默认把源码同步到 `%USERPROFILE%\molia-perf`、输出到
+`%TEMP%\molia-perf`，Flutter 取 Windows PATH 里的 `flutter.bat`；可用
+`MOLIA_WIN_PROJECT` / `MOLIA_WIN_PROJECT_WSL` / `MOLIA_WIN_TEMP` /
+`MOLIA_WIN_FLUTTER` / `MOLIA_WIN_PERF_OUT` 覆盖。首次构建由
 `media_kit_libs_windows_audio` 下载 mpv 压缩包；受限网络下手动放入
 `build\windows\x64\mpv-dev-x86_64-20230924-git-652a1dd.7z` 并核对
 MD5 `cd738e16e2a19626d7cfa48801524f8c`。
@@ -462,13 +464,13 @@ Linux profile、`mobile-mini-expand`、3 轮中位数：
 | 预取完成 → `file` | 3 | 870ms | 10.5ms | **852ms** |
 | 预取在途 → `direct` | 2 | 708ms | 8.1ms | **699ms** |
 
-`source_ms` 仍绝对主导，且本机 `file://` 打开不比直接流播快；另有 1 次
+`source_ms` 仍绝对主导，且本地 `file://` 打开不比直接流播快；另有 1 次
 `file://` 路径在 `setAudioSource` 上出现 30s 超时（同一 fixture 随后复跑成功），
 属于当前媒体后端 / Xvfb 的不稳定点，尚未归因。因此下一步要压起播只能做
 播放器预打开 / 双播放器预加载，不能把「预取命中」当成起播收益；保留本改动
 的理由只能是「避免切歌时重复下载」，不是延迟。
 
-#### 3.4 内存（Windows，本机实测）
+#### 3.4 内存（Windows）
 
 | 状态 | 专用工作集 | 提交 |
 | --- | ---: | ---: |
@@ -541,7 +543,7 @@ Linux profile、`mobile-mini-expand`、3 轮中位数：
 > `molia_api37`。Windows 本轮未测（用户指定范围）。
 >
 > 基线/方法沿用首轮（2026-10-22，见上文）；本节只记录本轮数字、
-> 改动与未结论项。原始日志在 `/tmp/opencode/molia/`（文末列出目录名）。
+> 改动与未结论项。原始日志在 `${TMPDIR:-/tmp}/molia-agent/`（文末列出目录名）。
 
 ### 1. 结论
 

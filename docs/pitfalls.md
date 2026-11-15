@@ -185,7 +185,7 @@
     `TitleBarStyle.hidden` 之后系统标题栏与系统按钮都不复存在，窗口拖动只能靠
     UI 侧的 `WindowDragArea`（已包在壳层顶栏外层）——不要在别处再隐藏标题栏，
     也不要把顶栏的拖动区摘掉，否则窗口再也拖不动。
-    另：`flutter test` 在 Linux / macOS 本机跑时 `WindowChrome.isSupported` 为 true 属预期
+    另：`flutter test` 在 Linux / macOS 本地跑时 `WindowChrome.isSupported` 为 true 属预期
     （单测里顶栏只在 `usesCustomTitleBar` 为 true 的 Linux / Windows 构建出三个
     窗口按钮，按钮本身不发起原生调用；macOS 保留原生红绿灯）；除
     `ensureInitialized()`（仅 `main()` 与集成测试调用）外，任何构建期/测试期路径
@@ -370,7 +370,7 @@
     弹层后收不到按键，登记又让壳层让位，按键被完全吞掉。注意登记只对壳层让位——
     两个非壳层消费方同时可见时（如收藏页多选 + 音量弹层）仍会各处理一次。
 46. **Windows 宿主保留端口块：UDP 绑定 errno 10013 不该被当成传输启动失败**：
-    WSL2 **mirrored 模式**下 Windows 宿主会把大段端口标记为系统保留（本机实测
+    WSL2 **mirrored 模式**下 Windows 宿主会把大段端口标记为系统保留（本地实测
     44620–48715），Dart / Winsock 绑定这些端口抛
     `SocketException ... errno = 10013`，而 `netsh excludedportrange show`
     **看不到**这些块（上游 microsoft/WSL#40169）——排查时不要只在 netsh 里找。

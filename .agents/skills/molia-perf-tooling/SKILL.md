@@ -45,7 +45,7 @@ tool/agent/seed.sh android mock-source      # mock LX 音源 + WAV
 - DB 读取会拉主库 + `-wal` / `-shm`，本地 checkpoint 后修改；release 包的 schema
   常只在 WAL 里，只 `cat` 主库会得到 0 表空库（`no such table`）。
 - 大数据量走临时 JSON 文件，不把 tracks 塞进 argv（1000 首会 `Argument list too long`）。
-- 首次注入前的有效单文件库备份在 `/tmp/opencode/molia/seed-backup/latest/`；
+- 首次注入前的有效单文件库备份在 `${TMPDIR:-/tmp}/molia-agent/seed-backup/latest/`；
   0 表空备份会被替换。`restore` 会清设备旁挂文件。
 - `covers` 依赖本地 1000×1000 PNG；采样时用 `perf.sh memory android`，不要手写
   adb 循环。

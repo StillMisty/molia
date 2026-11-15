@@ -35,8 +35,9 @@ GTK 建窗 ~46ms + libmpv `dlopen` ~39ms + 引擎与首帧渲染 ~100ms；我们
 - **冷启动、逐次新进程**：每轮 `TERM` 掉上一轮进程，跑 5 次取中位数（抖动 ±5ms）。
 - **无头显示**：`xvfb-run -a` + `env -u WAYLAND_DISPLAY GDK_BACKEND=x11`（只改
   `DISPLAY` 不够：GDK 见到 `WAYLAND_DISPLAY` 会优先连真实合成器）。
-- **测量机器**：本机 WSL2（Arch，20 vCPU / 23GB），Flutter 3.47.7 / Dart 3.13.5。
-- **Windows 说明**：本机是 WSL2，没有 Windows 侧 Flutter SDK；Windows 数字用 CI
+- **测量机器**：2026-10 的作者采样环境，WSL2（Arch，20 vCPU / 23GB），
+  Flutter 3.47.7 / Dart 3.13.5；其它机器的绝对值不可直接对比，只看量级。
+- **Windows 说明**：该环境没有 Windows 侧 Flutter SDK；Windows 数字用 CI
   `windows-dev` 的 release 产物，在 Windows 上从 `molia.exe` 重定向 stdout 抓
   `molia.startup`，并用 `MainWindowHandle` 轮询「进程起 → 窗口可见」的墙钟。
   引擎 / DLL 加载是 Windows 的固定成本，不能拿 Linux 的 207ms 代替。
@@ -51,7 +52,7 @@ tool/agent/startup.sh --no-build      # 复用已有产物（只重测）
 tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会弹窗）
 ```
 
-- 结果落在 `/tmp/opencode/molia/startup-<平台>-<时间戳>/`：每轮原始日志 `run-N.log`
+- 结果落在 `${TMPDIR:-/tmp}/molia-agent/startup-<平台>-<时间戳>/`：每轮原始日志 `run-N.log`
   + `summary.txt`（各阶段中位 / 最小 / 最大 / 原始样本）。
 - Android 模式会构建 release APK 并按设备 ABI 安装（`am start -W -S` 冷启动 + logcat
   抓埋点）；汇总表里多一行 `Activity TotalTime`——那是 `am -W` 的系统口径（进程起到首帧
@@ -212,7 +213,7 @@ I/O 空档。试法：在后台 isolate 里先 `DynamicLibrary.open` 一次（�
   封面颜色由图片内容决定，壁纸结果不会覆盖它，没必要在首帧路径上多解码一张图。
   用户之后切到壁纸档时本次启动没有壁纸 seed，是明确接受的取舍。
 
-Linux 本机 microbenchmark（非端到端启动采样，绝对值只用于比较量级）：
+Linux microbenchmark（非端到端启动采样，绝对值只用于比较量级）：
 
 | 项 | 实测 |
 | --- | ---: |
@@ -240,7 +241,7 @@ Linux 本机 microbenchmark（非端到端启动采样，绝对值只用于比�
 
 ## 7. Android 参考（模拟器，非真机）
 
-2026-10-18 本机模拟器（`molia_api37`，x86_64）实测，release APK，
+2026-10-18 模拟器（`molia_api37`，x86_64）实测，release APK，
 `tool/agent/startup.sh android --no-build --runs 5`：
 
 | 口径 | 中位 | 最小 | 最大 |
@@ -303,7 +304,7 @@ Linux 本机 microbenchmark（非端到端启动采样，绝对值只用于比�
 
 ## 8. 未覆盖
 
-- **iOS**：本机没有对应设备侧采样；做法同 Android（release 构建 + 平台日志）。
+- **iOS**：本轮未采集 iOS 设备侧数据；做法同 Android（release 构建 + 平台日志）。
 - **Windows / 真机**：Windows 已用 CI `windows-dev` + 重定向 stdout 采样（§4.1）；
   仍需覆盖不同机器 / Defender 冷扫描等环境。Android 只有模拟器，真机数据待补。
 
@@ -348,7 +349,7 @@ bundle-only tar.gz。下表同机实测（Linux x64 / Flutter 3.47.9）；MB 为
   `flutter test` 的产物，release 只负责把目录原样 install，不会删除其中的
   `kernel_blob.bin`。CI 是干净 checkout，不会带 128.8MB 的 kernel_blob；
   这段修复的是本地 `perf.sh size` / `startup.sh` 的体积与启动口径。同理，
-  `--analyze-size` 会把非 release 引擎留在 `linux/flutter/ephemeral`（本机
+  `--analyze-size` 会把非 release 引擎留在 `linux/flutter/ephemeral`（本地
   残留实测 43,377,848 B ≈ 41MB，正常 release 17,256,536 B），之后的 release
   构建可能继续沿用；`perf.sh size` 无条件重建 ephemeral，`startup.sh` 在检测
   到 >20MB 时删除并在日志里说明。
@@ -356,7 +357,7 @@ bundle-only tar.gz。下表同机实测（Linux x64 / Flutter 3.47.9）；MB 为
   strip 后 15.93MB（约 −1.68MB / −9.5%）；bundle 44.28MB → 40.04MB（约
   −4.24MB）。symbols zip 不计入 tar.gz 体积（它是单独的调试资产）。
 - **测量陷阱**：
-  1. `build/flutter_assets` 残留：debug/profile 的 `kernel_blob.bin`（本机
+  1. `build/flutter_assets` 残留：debug/profile 的 `kernel_blob.bin`（本地
      128.8MB）会被 release install 原样带走；`perf.sh size linux` /
      `startup.sh` 构建前都清该目录，构建后 `linux_assert_release_bundle`
      再校验没有 `data/flutter_assets/kernel_blob.bin`。

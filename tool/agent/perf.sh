@@ -26,21 +26,26 @@
 #   不可 run-as）；首次安装会先启动一次应用创建私有目录再 seed；
 # - frames 走 `flutter drive --profile` + integration_test/perf_flows_test.dart，
 #   只读 `molia.frame` 汇总行（FrameStats opt-in，正常包无开销）；
-# - Windows 目标必须用 Windows 侧 Flutter（WSL 的 Flutter 不能构建 Windows），
-#   默认 SDK `C:\Tools\flutter`、构建目录 `C:\Users\Still\molia-perf`，可用
-#   MOLIA_WIN_FLUTTER / MOLIA_WIN_PROJECT 覆盖；
+# - Windows 目标必须用 Windows 侧 Flutter（WSL 的 Flutter 不能构建 Windows）；
+#   默认从 Windows 用户目录推导构建目录（%USERPROFILE%\molia-perf）、从 %TEMP%
+#   推导采样输出、从 Windows PATH 取 flutter.bat，可用 MOLIA_WIN_FLUTTER /
+#   MOLIA_WIN_PROJECT / MOLIA_WIN_TEMP / MOLIA_WIN_PERF_OUT 覆盖；
 # - 启动 / 内存沿用已有专用脚本，避免两套口径（startup.sh / memory.sh / memory.ps1）；
 # - 结果落在 $RUN_DIR/perf-<平台>-<时间戳>/，原始日志与 frames.jsonl 都可复查。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
 FRAME_TEST_TARGET="integration_test/perf_flows_test.dart"
 FRAME_TEST_DRIVER="test_driver/integration_test.dart"
-WIN_FLUTTER="${MOLIA_WIN_FLUTTER:-C:\\Tools\\flutter\\bin\\flutter.bat}"
-WIN_PROJECT="${MOLIA_WIN_PROJECT:-C:\\Users\\Still\\molia-perf}"
-WIN_PROJECT_WSL="${MOLIA_WIN_PROJECT_WSL:-/mnt/c/Users/Still/molia-perf}"
-WIN_PERF_OUT_WIN="${MOLIA_WIN_PERF_OUT:-C:\\Users\\Still\\AppData\\Local\\Temp\\molia-perf\\frames.jsonl}"
-WIN_PERF_OUT_WSL="/mnt/c/Users/Still/AppData/Local/Temp/molia-perf/frames.jsonl"
-WIN_TEMP_WSL="/mnt/c/Users/Still/AppData/Local/Temp/molia-perf"
+# Windows 侧路径：优先环境变量；未设置时由 win_init 从 Windows 用户目录与
+# %TEMP% 推导，不假设任何用户名或 SDK 安装位置。
+WIN_FLUTTER="${MOLIA_WIN_FLUTTER:-}"
+WIN_PROJECT="${MOLIA_WIN_PROJECT:-}"
+WIN_PROJECT_WSL="${MOLIA_WIN_PROJECT_WSL:-}"
+WIN_PERF_OUT_WIN="${MOLIA_WIN_PERF_OUT:-}"
+WIN_PERF_OUT_WSL="${MOLIA_WIN_PERF_OUT_WSL:-}"
+WIN_TEMP_WIN="${MOLIA_WIN_TEMP:-}"
+WIN_TEMP_WSL="${MOLIA_WIN_TEMP_WSL:-}"
+WIN_DIRNAME="molia-perf"
 FRAME_TIMEOUT="${MOLIA_PERF_TIMEOUT:-1800}"
 
 PERF_WINDOW=0
@@ -74,7 +79,44 @@ require_flutter() {
   command -v flutter >/dev/null 2>&1 || die "找不到 flutter"
 }
 
+# ---- Windows 目标路径推导 --------------------------------------------------
+# 只在 windows 子命令里调用：非 WSL 环境没有 cmd.exe / wslpath，提前退出比
+# 脚本顶部直接展开更可控；已显式设置的变量不会被覆盖（幂等）。
+win_init() {
+  command -v powershell.exe >/dev/null 2>&1 ||
+    die "没有 powershell.exe：Windows 目标需要在 WSL 里执行"
+  command -v wslpath >/dev/null 2>&1 ||
+    die "没有 wslpath：Windows 目标需要在 WSL 里执行"
+
+  if [[ -z "$WIN_PROJECT" ]]; then
+    local userprofile
+    userprofile="$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r' || true)"
+    [[ -n "$userprofile" ]] ||
+      die "取不到 Windows 用户目录：请设 MOLIA_WIN_PROJECT='C:\\path\\molia-perf'（或同时设 MOLIA_WIN_PROJECT_WSL）"
+    WIN_PROJECT="$userprofile\\$WIN_DIRNAME"
+  fi
+  [[ -n "$WIN_PROJECT_WSL" ]] || WIN_PROJECT_WSL="$(wslpath -u "$WIN_PROJECT")"
+
+  if [[ -z "$WIN_FLUTTER" ]]; then
+    WIN_FLUTTER="$(where.exe flutter.bat 2>/dev/null | tr -d '\r' | head -n 1 || true)"
+    [[ -n "$WIN_FLUTTER" ]] ||
+      die "找不到 Windows 侧 flutter.bat：把 Flutter 加进 Windows PATH，或设 MOLIA_WIN_FLUTTER='C:\\path\\flutter\\bin\\flutter.bat'"
+  fi
+
+  if [[ -z "$WIN_TEMP_WIN" ]]; then
+    local wintemp
+    wintemp="$(cmd.exe /c 'echo %TEMP%' 2>/dev/null | tr -d '\r' | head -n 1 || true)"
+    [[ -n "$wintemp" ]] ||
+      die "取不到 Windows %TEMP%：请设 MOLIA_WIN_TEMP='C:\\path\\temp'"
+    WIN_TEMP_WIN="$wintemp\\$WIN_DIRNAME"
+  fi
+  [[ -n "$WIN_TEMP_WSL" ]] || WIN_TEMP_WSL="$(wslpath -u "$WIN_TEMP_WIN")"
+  [[ -n "$WIN_PERF_OUT_WIN" ]] || WIN_PERF_OUT_WIN="$WIN_TEMP_WIN\\frames.jsonl"
+  [[ -n "$WIN_PERF_OUT_WSL" ]] || WIN_PERF_OUT_WSL="$(wslpath -u "$WIN_PERF_OUT_WIN")"
+}
+
 windows_sync() {
+  win_init
   mkdir -p "$WIN_PROJECT_WSL"
   log "同步源码到 Windows 构建目录：$WIN_PROJECT"
   # 不用 rsync（WSL 最小环境里不一定装）：tar 管道保留权限位，排除构建产物。
@@ -159,7 +201,7 @@ run_frames_windows_real() {
   powershell.exe -NoProfile -ExecutionPolicy Bypass \
     -File "$(wslpath -w "$PROJECT_DIR/tool/agent/frames_windows.ps1")" \
     -Exe "$WIN_PROJECT\\build\\windows\\x64\\runner\\Release\\molia.exe" \
-    -OutDir 'C:\Users\Still\AppData\Local\Temp\molia-perf' \
+    -OutDir "$WIN_TEMP_WIN" \
     2>&1 | tee "$out_dir/frames-console.log"
   cp "$WIN_TEMP_WSL"/frames.log "$out_dir/" 2>/dev/null || true
   cp "$WIN_TEMP_WSL"/frames-pre-scroll.png "$out_dir/" 2>/dev/null || true
@@ -805,7 +847,7 @@ case "$cmd" in
           -Project "$WIN_PROJECT" \
           -Flutter "$WIN_FLUTTER" \
           -Runs "${2:-5}" \
-          -OutDir 'C:\Users\Still\AppData\Local\Temp\molia-perf' \
+          -OutDir "$WIN_TEMP_WIN" \
           2>&1 | tee "$out_dir/startup.log"
         cp "$WIN_TEMP_WSL"/startup.jsonl "$out_dir/" 2>/dev/null || true
         cp "$WIN_TEMP_WSL"/startup-run-*.log "$out_dir/" 2>/dev/null || true
@@ -823,13 +865,13 @@ case "$cmd" in
         run_memory_android "$out_dir" "${2:-}"
         ;;
       windows)
-        command -v powershell.exe >/dev/null 2>&1 || die "没有 powershell.exe"
+        win_init
         out_dir="$(new_out_dir windows-memory)"
         log "Windows 内存场景：结果 $out_dir"
         powershell.exe -NoProfile -ExecutionPolicy Bypass \
           -File "$(wslpath -w "$PROJECT_DIR/tool/agent/memory_windows.ps1")" \
           -Exe "$WIN_PROJECT\\build\\windows\\x64\\runner\\Release\\molia.exe" \
-          -OutDir 'C:\Users\Still\AppData\Local\Temp\molia-perf' \
+          -OutDir "$WIN_TEMP_WIN" \
           2>&1 | tee "$out_dir/memory.log"
         cp "$WIN_TEMP_WSL"/memory.jsonl "$out_dir/" 2>/dev/null || true
         cp "$WIN_TEMP_WSL"/memory-release.log "$out_dir/" 2>/dev/null || true

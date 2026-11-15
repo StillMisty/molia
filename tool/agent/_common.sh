@@ -2,8 +2,8 @@
 # 公共变量与辅助函数（被同目录脚本 source）
 #
 # 设计说明：
-# - 全部基于 WSL 内的 Android CLI + 本机 KVM 模拟器，不依赖 Windows 侧任何组件；
-# - 日志/截图/pid 统一放在 /tmp/opencode/molia（临时目录，重启可清），
+# - 全部基于 WSL / Linux 内的 Android CLI + 本机 KVM 模拟器，不依赖 Windows 侧任何组件；
+# - 日志/截图/pid 统一放在 ${TMPDIR:-/tmp}/molia-agent（临时目录，重启可清；RUN_DIR 可覆盖），
 #   截图路径会打印出来供 agent 用 read 工具直接查看 PNG。
 set -euo pipefail
 
@@ -13,7 +13,7 @@ PROJECT_DIR="$(cd "$AGENT_DIR/../.." && pwd)"
 # Android SDK：优先环境变量；默认用户态安装目录
 ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"
 ADB="${ADB:-$ANDROID_SDK_ROOT/platform-tools/adb}"
-# AUR 管理的 android-cli（更新走 paru，不用 CLI 自带 android update）
+# Android CLI：默认 `android`（Arch 的 android-cli 包；其它发行版可指向等价封装）
 ANDROID_CLI="${ANDROID_CLI:-android}"
 
 # 模拟器与目标应用
@@ -22,8 +22,8 @@ DEVICE_ID="${DEVICE_ID:-emulator-5554}"
 APP_ID="${APP_ID:-top.stillmisty.molia}"
 APP_BINARY="${APP_BINARY:-molia}" # 桌面构建产物名（linux/CMakeLists.txt 的 BINARY_NAME）
 
-# 运行产物目录
-RUN_DIR="${RUN_DIR:-/tmp/opencode/molia}"
+# 运行产物目录（临时目录，不依赖特定 agent harness）
+RUN_DIR="${RUN_DIR:-${TMPDIR:-/tmp}/molia-agent}"
 SHOT_DIR="${SHOT_DIR:-$RUN_DIR/shots}"
 PID_FILE="$RUN_DIR/flutter-run.pid"
 RUN_LOG="$RUN_DIR/flutter-run.log"

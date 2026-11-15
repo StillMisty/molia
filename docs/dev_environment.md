@@ -23,21 +23,24 @@ PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解�
   bookmark），默认下载目录不受影响（见 `docs/pitfalls.md` #89）。
 - **托盘 = 菜单栏图标**：关闭窗口默认隐藏到菜单栏（`设置 › 桌面` 可改成直接
   退出）；点 Dock 图标会经窗口通道恢复窗口。
-- **更新走手动**：macOS 没有应用内安装，发布产物是 `-unsigned.zip`；本机调试用
+- **更新走手动**：macOS 没有应用内安装，发布产物是 `-unsigned.zip`；本地调试用
   `flutter run -d macos`，不需要签名证书。
 - **iOS 最低版本 18.0**：Xcode 工程的 `IPHONEOS_DEPLOYMENT_TARGET` 已同步；真机 /
   模拟器需 iOS 18+。
 
 ## Linux 桌面运行要求
 
-- 本地播放需要 `libmpv`：`sudo pacman -S --needed mpv`（Debian/Ubuntu: `libmpv2`）。
+以下命令按发行版二选一（Arch 用 `pacman`，Debian/Ubuntu 用 `apt`）：
+
+- 本地播放需要 `libmpv`：`sudo pacman -S --needed mpv` / `sudo apt install libmpv2`。
 - **桌面托盘（Linux/Windows）需要 X11 / Xi 开发文件**参与构建（nativeapi 的
   build hook 经 pkg-config 链接 `gtk+-3.0 x11 xi`；Arch 随 `libx11` / `libxi`
-  提供，Debian/Ubuntu 需 `libx11-dev libxi-dev`）。运行期依赖这些系统库的
-  常规共享版本（任何桌面都有）；无 StatusNotifier 宿主时图标不显示（GNOME
-  需 AppIndicator 扩展），应用自动降级、不影响其余功能。
+  提供，Debian/Ubuntu 需 `sudo apt install libx11-dev libxi-dev`）。运行期依赖
+  这些系统库的常规共享版本（任何桌面都有）；无 StatusNotifier 宿主时图标不显示
+  （GNOME 需 AppIndicator 扩展），应用自动降级、不影响其余功能。
 - **中文字体需要系统安装**（App 不内置 CJK 字体，保持包体精简）：
-  `sudo pacman -S --needed wqy-microhei`（最小 1.7MB）或 `noto-fonts-cjk`（质量最好但 189MB）；
+  `sudo pacman -S --needed wqy-microhei` / `sudo apt install fonts-wqy-microhei`
+  （最小 1.7MB），或 `noto-fonts-cjk` / `fonts-noto-cjk`（质量最好但约 189MB）；
   否则中文界面显示为方块。
 - 本地数据库（最近播放 / 资料库 / 听歌统计）走 drift：原生 SQLite 由
   `sqlite3` 的 Dart build hooks 提供（`flutter test` / 构建时自动生成，无需
@@ -51,7 +54,7 @@ PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解�
   （并强制 `GDK_BACKEND=x11`、去掉 `WAYLAND_DISPLAY`——只改 DISPLAY 挡不住 GTK 走 WSLg
   Wayland，窗口照样弹）；要肉眼观察加 `--window`。等价裸命令
   `flutter test integration_test/... -d linux` 必须有 DISPLAY（官方要求，无显示时 App 起不来）；
-  缺 `xvfb-run` 时 `sudo pacman -S xorg-server-xvfb`。
+  缺 `xvfb-run` 时 `sudo pacman -S xorg-server-xvfb` / `sudo apt install xvfb`。
 
 ## WSL 桌面（Linux 应用）
 
@@ -86,7 +89,7 @@ tool/agent/app.sh run      # 后台 flutter run（默认 Android 模拟器；首
 tool/agent/app.sh run -d linux   # Linux 桌面热重载（免模拟器；无显示加 --headless 走 Xvfb）
 tool/agent/app.sh reload   # 热重载；restart = 热重启（无 TTY 走 --pid-file + SIGUSR1/2）
 tool/agent/app.sh status   # pid / 设备 / VM Service / 日志路径
-tool/agent/shot.sh [name]  # 截图 → /tmp/opencode/molia/shots/*.png（供 agent 直接读图）
+tool/agent/shot.sh [name]  # 截图 → ${TMPDIR:-/tmp}/molia-agent/shots/*.png（供 agent 直接读图）
 tool/agent/ui.sh layout|tap|swipe|text|key|launch|force-stop
 tool/agent/seed.sh android favorites|covers|history|session|lang|mock-source|status|clear|restore
                            # 数据注入：收藏 / 最近播放 / 恢复会话 / mock 音源（见下）
@@ -94,13 +97,14 @@ tool/agent/test.sh android # 集成测试（官方 flutter test 路径；自动�
 tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
 ```
 
-- `app.sh` 把运行设备记入 `/tmp/opencode/molia/flutter-run.device`，`reload`/`stop`/`status`
+- `app.sh` 把运行设备记入 `${TMPDIR:-/tmp}/molia-agent/flutter-run.device`，`reload`/`stop`/`status`
   均按它操作：`-d linux` 起的桌面会话不会误发给 adb，反之亦然。
 - 模拟器默认 16 KB 页（`google_apis_ps16k` 镜像，`emu.sh status` 会打印页大小）；
   回 4 KB 需另建 AVD（`-k "system-images;android-37.0;google_apis;x86_64"`）并 `AVD_NAME=... emu.sh start`。
   应用最低支持 API 35；默认镜像仍是 API 37（覆盖 targetSdk 37 的局域网权限等行为），
   验最低版本时另建 API 35 AVD 并 `AVD_NAME=... emu.sh start`。
-- 日志 / 截图 / pid 统一放在 `/tmp/opencode/molia`（临时目录，重启可清）；集成测试日志为
+- 日志 / 截图 / pid 统一放在 `${TMPDIR:-/tmp}/molia-agent`（默认 `/tmp/molia-agent`，
+  可用 `RUN_DIR` 覆盖；临时目录，重启可清）；集成测试日志为
   `it-<platform>-<时间戳>.log`，失败时脚本自动回显尾部 40 行。Linux 集成测试默认跑在
   Xvfb 虚拟显示上（`test.sh linux --window` 才上真实显示，WSLg 下会弹窗）。
 - Flutter semantics 节点可能不完整：视觉定位用 `shot.sh --annotate` 生成带编号标注的截图，
@@ -110,7 +114,7 @@ tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
 ### 数据注入（seed.sh）
 
 `tool/agent/seed.sh <android|linux> <command>` 把「手工造数据」固化成可复用脚本
-（bash + python3 + adb；写入前自动备份到 `/tmp/opencode/molia/seed-backup/latest`）：
+（bash + python3 + adb；写入前自动备份到 `${TMPDIR:-/tmp}/molia-agent/seed-backup/latest`）：
 
 ```bash
 tool/agent/seed.sh android favorites 3   # 注入 __favorites__ + 3 首固定样例（含超长标题）

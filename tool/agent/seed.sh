@@ -35,7 +35,6 @@
 #   ~/.local/share/$APP_ID/molia_database_v2.sqlite。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
-RUN_DIR="${RUN_DIR:-/tmp/opencode/molia}"
 SEED_WEB_DIR="$RUN_DIR/seed-web"
 SEED_BACKUP_DIR="$RUN_DIR/seed-backup"
 SEED_PID_FILE="$RUN_DIR/seed-http.pid"
