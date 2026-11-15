@@ -409,9 +409,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get playModeSingleRepeat => '单曲循环';
 
   @override
-  String get playModeTitle => '播放模式';
-
-  @override
   String get settingsHapticsTitle => '震动反馈';
 
   @override
@@ -5124,20 +5121,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get playlistImportReasonNoLocation => '缺少文件地址';
-
-  @override
-  String get queueSaveAsPlaylist => '存为列表';
-
-  @override
-  String get queuePlaylistDefaultName => '当前队列';
-
-  @override
-  String queueSavedAsPlaylist(String name, int added, int skipped) {
-    return '已存为「$name」，加入 $added 首，跳过 $skipped 首';
-  }
-
-  @override
-  String get queueSaveFailed => '保存失败';
 
   @override
   String get backButton => '返回';

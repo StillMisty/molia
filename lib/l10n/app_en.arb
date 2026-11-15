@@ -174,7 +174,6 @@
   "playModeSequential": "Sequential",
   "playModeShuffle": "Shuffle",
   "playModeSingleRepeat": "Single repeat",
-  "playModeTitle": "Play mode",
   "settingsHapticsTitle": "Vibration feedback",
   "settingsHapticsSubtitle": "Light vibration on taps such as navigation and playback",
   "settingsAutoSaveHint": "Changes take effect immediately",
@@ -2968,23 +2967,6 @@
   "playlistImportReasonOnlineUrl": "Only local files or Molia records are supported",
   "playlistImportReasonMalformed": "The file has an invalid entry",
   "playlistImportReasonNoLocation": "No file location",
-  "queueSaveAsPlaylist": "Save as playlist",
-  "queuePlaylistDefaultName": "Current queue",
-  "queueSavedAsPlaylist": "Saved as “{name}”: {added} added, {skipped} skipped",
-  "@queueSavedAsPlaylist": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      },
-      "added": {
-        "type": "int"
-      },
-      "skipped": {
-        "type": "int"
-      }
-    }
-  },
-  "queueSaveFailed": "Couldn't save",
   "backButton": "Back",
   "localRefreshInfo": "Refresh info from file",
   "localTitleUpdated": "Title updated",

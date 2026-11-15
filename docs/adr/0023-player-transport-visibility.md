@@ -1,6 +1,8 @@
 # ADR-0023：展开播放页不新增常显传输排
 
-状态：已采纳（2026-11-14）。相关：`lib/pages/nowplaying.dart`、
+状态：已采纳（2026-11-14）；其中「进度排保留收藏、进度与『更多』，播放模式 /
+存为列表 / 歌词显示设置收进『更多』」一条已被 ADR-0030 取代（2026-11-15），
+其余结论不变。相关：`lib/pages/nowplaying.dart`、
 `lib/widgets/player.dart`、`lib/widgets/player_cover_deck.dart`、
 `lib/widgets/playback_transport.dart`、`docs/architecture.md` §6。
 

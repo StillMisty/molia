@@ -872,12 +872,6 @@ abstract class AppLocalizations {
   /// **'Single repeat'**
   String get playModeSingleRepeat;
 
-  /// No description provided for @playModeTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Play mode'**
-  String get playModeTitle;
-
   /// No description provided for @settingsHapticsTitle.
   ///
   /// In en, this message translates to:
@@ -9519,30 +9513,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No file location'**
   String get playlistImportReasonNoLocation;
-
-  /// No description provided for @queueSaveAsPlaylist.
-  ///
-  /// In en, this message translates to:
-  /// **'Save as playlist'**
-  String get queueSaveAsPlaylist;
-
-  /// No description provided for @queuePlaylistDefaultName.
-  ///
-  /// In en, this message translates to:
-  /// **'Current queue'**
-  String get queuePlaylistDefaultName;
-
-  /// No description provided for @queueSavedAsPlaylist.
-  ///
-  /// In en, this message translates to:
-  /// **'Saved as “{name}”: {added} added, {skipped} skipped'**
-  String queueSavedAsPlaylist(String name, int added, int skipped);
-
-  /// No description provided for @queueSaveFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Couldn\'t save'**
-  String get queueSaveFailed;
 
   /// No description provided for @backButton.
   ///

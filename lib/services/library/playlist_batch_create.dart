@@ -13,7 +13,8 @@ class PlaylistBatchWriteException implements Exception {
 
 /// 执行一次批写入；[write] 抛错时 best-effort 删除刚创建的列表。
 ///
-/// 导入列表文件与「队列存为列表」共用，避免两处各写一份 create/rollback。
+/// 导入列表文件（含跨来源批量加入）走这一条，避免调用方各写一份
+/// create/rollback。
 Future<T> createPlaylistWithRollback<T>({
   required String name,
   required Future<int> Function(String name) createPlaylist,

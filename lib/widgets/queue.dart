@@ -138,8 +138,8 @@ class QueueDisplay extends StatelessWidget {
       child: CustomScrollView(
         controller: controller,
         slivers: [
-          // 队列页不设顶部溢出菜单：「存为列表」是队列级动作，入口收进
-          // 播放器「更多」（队列行自己的 ⋮ 保持不变）。
+          // 队列页不设顶部溢出菜单：队列级动作只剩逐行编辑，行自己的 ⋮
+          // 已经覆盖；「存为列表」随 ADR-0030 移除。
           // 「正在播放」小节（无当前曲目时整段不存在）。
           if (current != null)
             SliverPadding(

@@ -5,7 +5,9 @@ import 'package:molia/app/desktop/now_playing_bar.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/models/play_mode.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/widgets/playback_transport.dart';
 import 'package:molia/widgets/player_morph.dart';
 import 'package:molia/widgets/volume_control.dart';
 import 'package:provider/provider.dart';
@@ -14,11 +16,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/cover_test_support.dart';
 import '../support/fakes.dart';
 
-/// 桌面底栏：播放模式是播放页「更多」的职责，底栏不再重复。
+/// 桌面底栏：播放模式 + 音量 + 队列（ADR-0030，与播放页进度排同源）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('底栏不再有播放模式按钮，音量与队列入口保留', (tester) async {
+  testWidgets('底栏有播放模式按钮，音量与队列入口保留', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final backend = FakePlaybackFacade();
     final playback = buildTestPlaybackProvider(facade: backend);
@@ -65,18 +67,20 @@ void main() {
 
     final bar = find.byType(DesktopNowPlayingBar);
     expect(bar, findsOneWidget);
-    for (final icon in const [
-      Icons.shuffle_rounded,
-      Icons.repeat_rounded,
-      Icons.repeat_one_rounded,
-      Icons.playlist_play_rounded,
-    ]) {
-      expect(
-        find.descendant(of: bar, matching: find.byIcon(icon)),
-        findsNothing,
-        reason: '底栏不再有播放模式按钮（$icon）',
-      );
-    }
+    expect(
+      find.descendant(of: bar, matching: find.byType(PlaybackModeButton)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: bar, matching: find.byIcon(Icons.repeat_rounded)),
+      findsOneWidget,
+      reason: '默认 listLoop 图标常显',
+    );
+    await tester.tap(
+      find.descendant(of: bar, matching: find.byType(PlaybackModeButton)),
+    );
+    await tester.pumpAndSettle();
+    expect(playback.currentMode, PlayMode.sequential);
     expect(
       find.descendant(of: bar, matching: find.byType(VolumeControl)),
       findsOneWidget,

@@ -150,7 +150,6 @@
   "playModeSequential": "顺序播放",
   "playModeShuffle": "随机播放",
   "playModeSingleRepeat": "单曲循环",
-  "playModeTitle": "播放模式",
   "settingsHapticsTitle": "震动反馈",
   "settingsHapticsSubtitle": "点按导航、播放等操作时给出轻震动",
   "settingsAutoSaveHint": "改动即时生效",
@@ -2544,23 +2543,6 @@
   "playlistImportReasonOnlineUrl": "只支持本机文件或 Molia 记录",
   "playlistImportReasonMalformed": "文件内容有误",
   "playlistImportReasonNoLocation": "缺少文件地址",
-  "queueSaveAsPlaylist": "存为列表",
-  "queuePlaylistDefaultName": "当前队列",
-  "queueSavedAsPlaylist": "已存为「{name}」，加入 {added} 首，跳过 {skipped} 首",
-  "@queueSavedAsPlaylist": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      },
-      "added": {
-        "type": "int"
-      },
-      "skipped": {
-        "type": "int"
-      }
-    }
-  },
-  "queueSaveFailed": "保存失败",
   "backButton": "返回",
   "localRefreshInfo": "从文件刷新信息",
   "localTitleUpdated": "标题已更新",

@@ -403,7 +403,7 @@ void main() {
     expect(collapse.isCollapsed('Office'), isFalse);
   });
 
-  testWidgets('队列页不再有顶部溢出菜单（存为列表移入播放器「更多」）', (tester) async {
+  testWidgets('队列页没有顶部溢出菜单（存为列表已随 ADR-0030 移除）', (tester) async {
     final facade = FakePlaybackFacade();
     final playback = buildTestPlaybackProvider(facade: facade);
     final controller = ScrollController();

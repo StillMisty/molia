@@ -26,9 +26,9 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// [PlayMode] 在播放界面上的唯一呈现（图标 + 语义标签）。
 ///
-/// 播放页「更多」的模式子菜单与系统媒体动作共用这一份映射：新增 / 调整模式
-/// 时漏改一处会出现「图标对了、读屏念错」的静默漂移。标签作为
-/// `semanticLabel` / 菜单文案使用——本仓纯图标按钮不挂悬浮提示
+/// 播放页进度排、桌面底栏与系统媒体动作共用这一份映射：新增 / 调整模式时
+/// 漏改一处会出现「图标对了、读屏念错」的静默漂移。标签只作为
+/// `semanticLabel` 使用——本仓纯图标按钮不挂悬浮提示
 /// （见 `docs/architecture.md` §6）。
 extension PlayModeTransportPresentation on PlayMode {
   IconData get transportIcon => switch (this) {
@@ -150,6 +150,45 @@ class PlaybackNextButton extends StatelessWidget {
       variant: variant,
       size: size,
       visualSize: visualSize,
+    );
+  }
+}
+
+/// 播放模式：图标 / 标签走 [PlayModeTransportPresentation] 的唯一映射。
+///
+/// 无曲目也可切换（模式是会话偏好，先选模式再起播是合法操作），因此这里
+/// 不接 [PlaybackProvider.hasTrack] 的禁用谓词。点按按 [PlayMode.next] 循环，
+/// 不弹菜单：播放页进度排与桌面底栏都要一步可达（见 ADR-0030）。
+class PlaybackModeButton extends StatelessWidget {
+  const PlaybackModeButton({
+    super.key,
+    this.variant = M3EIconButtonVariant.standard,
+    this.size = M3EIconButtonSize.sm,
+    this.visualSize,
+  });
+
+  final M3EIconButtonVariant variant;
+  final M3EIconButtonSize size;
+  final Size? visualSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final mode = context.select<PlaybackProvider, PlayMode>(
+      (provider) => provider.currentMode,
+    );
+    return M3EIconButton(
+      variant: variant,
+      size: size,
+      visualSize: visualSize,
+      icon: IconSwap<PlayMode>(
+        value: mode,
+        builder: (context, mode) => Icon(mode.transportIcon),
+      ),
+      semanticLabel: mode.transportLabel(_l10n(context)),
+      onPressed: () {
+        HapticsService.lightImpact();
+        context.read<PlaybackProvider>().togglePlayMode();
+      },
     );
   }
 }

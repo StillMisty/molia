@@ -424,9 +424,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playModeSingleRepeat => 'Single repeat';
 
   @override
-  String get playModeTitle => 'Play mode';
-
-  @override
   String get settingsHapticsTitle => 'Vibration feedback';
 
   @override
@@ -5351,20 +5348,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistImportReasonNoLocation => 'No file location';
-
-  @override
-  String get queueSaveAsPlaylist => 'Save as playlist';
-
-  @override
-  String get queuePlaylistDefaultName => 'Current queue';
-
-  @override
-  String queueSavedAsPlaylist(String name, int added, int skipped) {
-    return 'Saved as “$name”: $added added, $skipped skipped';
-  }
-
-  @override
-  String get queueSaveFailed => 'Couldn\'t save';
 
   @override
   String get backButton => 'Back';
