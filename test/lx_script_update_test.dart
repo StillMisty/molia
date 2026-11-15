@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/sources/lx/lx_engine.dart';
 import 'package:molia/sources/lx/lx_engine_supervisor.dart';
@@ -12,6 +13,7 @@ import 'package:molia/sources/lx/lx_script_update.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/mock_dio.dart';
 import 'support/settings_test_support.dart';
 
 /// 可编程 fake 引擎：记录 start 重放并支持手动发出 updateAlert。
@@ -145,6 +147,11 @@ class _TestScriptServer {
       request.response.headers.set(HttpHeaders.locationHeader, location);
       await request.response.close();
     };
+  }
+
+  /// 自定义路由（需要按请求次数切换行为时用，例如 5xx → 200）。
+  void handler(String path, Future<void> Function(HttpRequest) handler) {
+    _routes[path] = handler;
   }
 
   Future<void> close() => _server.close(force: true);
@@ -513,6 +520,115 @@ void main() {
           ),
         ),
       );
+    });
+  });
+
+  group('downloadLxScriptText · 有界重试', () {
+    test('HTTP 5xx 重试一次后成功', () async {
+      var hits = 0;
+      server.handler('/flaky.js', (request) async {
+        hits++;
+        if (hits == 1) {
+          request.response.statusCode = HttpStatus.serviceUnavailable;
+          await request.response.close();
+          return;
+        }
+        request.response.headers.contentType = ContentType.parse(
+          'application/javascript',
+        );
+        request.response.add(utf8.encode(_script(version: '2.0.0')));
+        await request.response.close();
+      });
+
+      final text = await downloadLxScriptText(server.url('/flaky.js'));
+
+      expect(text, contains('@version 2.0.0'));
+      expect(hits, 2, reason: '5xx 是服务端暂时故障，值得再试一次');
+    });
+
+    test('HTTP 4xx 不重试', () async {
+      var hits = 0;
+      server.handler('/gone.js', (request) async {
+        hits++;
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+      });
+
+      await expectLater(
+        downloadLxScriptText(server.url('/gone.js')),
+        throwsA(
+          isA<ScriptUpdateException>().having(
+            (e) => e.kind,
+            'kind',
+            ScriptUpdateError.downloadFailed,
+          ),
+        ),
+      );
+      expect(hits, 1, reason: '地址 / 权限问题重发没有意义');
+    });
+
+    test('超过大小上限不重试', () async {
+      var hits = 0;
+      server.handler('/big-retry.js', (request) async {
+        hits++;
+        request.response.headers.contentType = ContentType.parse(
+          'application/javascript',
+        );
+        request.response.add(utf8.encode('a' * (kLxScriptMaxBytes + 16)));
+        await request.response.close();
+      });
+
+      await expectLater(
+        downloadLxScriptText(server.url('/big-retry.js')),
+        throwsA(
+          isA<ScriptUpdateException>().having(
+            (e) => e.kind,
+            'kind',
+            ScriptUpdateError.tooLarge,
+          ),
+        ),
+      );
+      expect(hits, 1);
+    });
+
+    test('连接类异常重试一次', () async {
+      var attempts = 0;
+      final dio = mockDio((options) async {
+        attempts++;
+        if (attempts == 1) {
+          throw DioException(
+            requestOptions: options,
+            type: DioExceptionType.connectionTimeout,
+          );
+        }
+        return textResponse(_script(version: '3.0.0'));
+      });
+
+      final text = await downloadLxScriptText(
+        'https://example.com/source.js',
+        dio: dio,
+      );
+
+      expect(text, contains('@version 3.0.0'));
+      expect(attempts, 2);
+    });
+
+    test('非连接类异常不重试', () async {
+      var attempts = 0;
+      final dio = mockDio((options) async {
+        attempts++;
+        throw DioException(
+          requestOptions: options,
+          type: DioExceptionType.badResponse,
+          message: 'backend rejected',
+        );
+      });
+
+      await expectLater(
+        downloadLxScriptText('https://example.com/source.js', dio: dio),
+        throwsA(isA<ScriptUpdateException>()),
+      );
+      expect(attempts, 1);
     });
   });
 

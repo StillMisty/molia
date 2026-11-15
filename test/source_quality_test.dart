@@ -3,7 +3,7 @@ import 'package:molia/domain/models/source_script.dart' show qualityDisplayName;
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/sources/source_track.dart'
-    show capQualityFor, pickQualityFor;
+    show capQualityFor, pickQualityFor, qualityFallbackCandidates;
 import 'package:molia/utils/source_quality_label.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -40,6 +40,52 @@ void main() {
       expect(pickQualityFor(const ['320k', '128k'], capped), '128k');
       // 仅有更高音质：无法更省，回退到可用无损。
       expect(pickQualityFor(const ['flac'], capped), 'flac');
+    });
+  });
+
+  group('qualityFallbackCandidates', () {
+    test('按 kLxQualityOrder 往低档走，只取声明过的音质', () {
+      expect(
+        qualityFallbackCandidates(const ['flac', '320k', '128k'], 'flac'),
+        ['320k', '128k'],
+      );
+      expect(
+        qualityFallbackCandidates(const [
+          'flac24bit',
+          'flac',
+          '320k',
+        ], 'flac24bit'),
+        ['flac', '320k'],
+      );
+      expect(
+        qualityFallbackCandidates(const ['flac', '320k', '128k'], '320k'),
+        ['128k'],
+        reason: '中间未声明的 192k 跳过',
+      );
+    });
+
+    test('最多 maxSteps 档', () {
+      expect(
+        qualityFallbackCandidates(
+          const ['flac24bit', 'flac', 'wav', 'ape', '320k'],
+          'flac24bit',
+          maxSteps: 2,
+        ),
+        ['flac', 'wav'],
+      );
+    });
+
+    test('最低档 / 未知档位 / 未声明音质不产生候选', () {
+      expect(
+        qualityFallbackCandidates(const ['320k', '128k'], '128k'),
+        isEmpty,
+      );
+      expect(qualityFallbackCandidates(const ['320k'], 'auto'), isEmpty);
+      expect(qualityFallbackCandidates(const ['dolby'], 'dolby'), isEmpty);
+    });
+
+    test('曲目未声明音质列表时按顺序表相邻低档试探', () {
+      expect(qualityFallbackCandidates(const [], 'flac'), ['wav', 'ape']);
     });
   });
 

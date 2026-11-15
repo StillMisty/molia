@@ -46,6 +46,9 @@ class _SourcesPageState extends State<SourcesPage> {
   /// 正在执行在线更新的脚本 id（同一时间只允许一个，按钮显示 loading）。
   String? _updatingScriptId;
 
+  /// 正在执行引擎恢复重试（按钮防重复点击并显示进度）。
+  bool _retryingEngine = false;
+
   /// URL 导入下载中（对应列表项禁用并显示进度）。
   bool _importingFromUrl = false;
 
@@ -197,6 +200,32 @@ class _SourcesPageState extends State<SourcesPage> {
                     l10n.sourcesActivationFailed(provider.activeError!),
                     style: m3e.typeScale.bodySmall.copyWith(
                       color: scheme.error,
+                    ),
+                  ),
+                // 引擎已被熔断（失败后自动停在 failed）时给一个立即重试入口：
+                // 等自动冷却可能还要几十秒，用户刚换好网络时应当能直接再试。
+                // 只在有已保存的激活脚本时出现：脚本不存在之类的错误重试无意义。
+                if (provider.activeError != null &&
+                    provider.activeScriptId != null)
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: M3EButton.icon(
+                      key: const Key('sourcesRetryEngine'),
+                      onPressed: _retryingEngine || provider.isActivating
+                          ? null
+                          : () => unawaited(_retryEngine(provider)),
+                      style: M3EButtonStyle.text,
+                      icon: _retryingEngine
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: M3EProgressIndicator.circular(
+                                size: 16,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.refresh_rounded),
+                      label: Text(l10n.retry),
                     ),
                   ),
                 if (active != null && active.author.isNotEmpty)
@@ -468,6 +497,18 @@ class _SourcesPageState extends State<SourcesPage> {
         ],
       ),
     );
+  }
+
+  /// 立即重试引擎恢复：失败原因由 provider.activeError 自动刷新到状态行，
+  /// 这里不额外弹提示（成功也不弹，状态行会自己变成已激活）。
+  Future<void> _retryEngine(SourcesProvider provider) async {
+    if (_retryingEngine) return;
+    setState(() => _retryingEngine = true);
+    try {
+      await provider.retryEngine();
+    } finally {
+      if (mounted) setState(() => _retryingEngine = false);
+    }
   }
 
   Future<void> _activate(

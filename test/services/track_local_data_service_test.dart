@@ -28,6 +28,7 @@ class _ResolvableSource extends FakeMusicSource {
   Future<PlayableStream> resolve(
     Track track, {
     AudioQuality? preferredQuality,
+    Duration? timeout,
   }) async => PlayableStream(Uri.parse('https://cdn.example/${track.id.id}'));
 }
 

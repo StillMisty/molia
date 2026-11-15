@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/cache/request_cache.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
+import 'package:molia/data/catalog/resolve_policy.dart';
 import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/comment.dart';
@@ -11,6 +13,7 @@ import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart';
 import 'package:molia/domain/ports/source_registry.dart';
+import 'package:molia/services/diagnostics/resolve_metrics.dart';
 import 'package:molia/sources/lx/lx_engine_types.dart';
 
 Track _track(String sourceKey, String id) => Track(
@@ -34,6 +37,19 @@ class _FakeMusicSource implements MusicSource {
   Object? artistSearchError;
   Object? lyricSearchError;
   Object? resolveError;
+
+  /// 剩余可失败的取链次数（默认一直失败，直到测试清空 [resolveError]）。
+  int resolveErrorTimes = 1 << 30;
+
+  /// 每次取链的模拟耗时（按调用序号，缺省 0）；用于验证总预算硬截止。
+  final List<Duration> resolveDelays = [];
+
+  /// 每次取链收到的超时提示（验证按剩余预算下发）。
+  final List<Duration?> resolveTimeouts = [];
+
+  /// 成功取链时原样带回的请求头 / 有效期（验证目录层不改写）。
+  Map<String, String> resolveHeaders = const {};
+  Duration? resolveExpiresIn;
 
   @override
   String get displayName => key;
@@ -105,15 +121,26 @@ class _FakeMusicSource implements MusicSource {
   Future<PlayableStream> resolve(
     Track track, {
     AudioQuality? preferredQuality,
+    Duration? timeout,
   }) async {
     resolveCalls++;
+    resolveTimeouts.add(timeout);
+    final delayIndex = resolveCalls - 1;
+    if (delayIndex < resolveDelays.length) {
+      await Future<void>.delayed(resolveDelays[delayIndex]);
+    }
     final error = resolveError;
-    if (error != null) throw error;
+    if (error != null && resolveErrorTimes > 0) {
+      resolveErrorTimes--;
+      throw error;
+    }
     return PlayableStream(
       Uri.parse(
         'https://cdn.example/$key/${track.id.id}'
         '${preferredQuality == null ? '' : '?q=${preferredQuality.type}'}',
       ),
+      headers: resolveHeaders,
+      expiresIn: resolveExpiresIn,
     );
   }
 
@@ -374,11 +401,233 @@ void main() {
         ),
       ),
     );
+    // scriptError 可重试：目录层在单飞内多打了一次（共 2 次）仍是失败。
+    expect(source.resolveCalls, 2);
 
     source.resolveError = null;
     final stream = await service.resolve(track);
     expect(stream.uri.toString(), 'https://cdn.example/kw/a');
-    expect(source.resolveCalls, 2, reason: '失败不缓存，第二次重新取链');
+    expect(source.resolveCalls, 3, reason: '失败不缓存，第二次调用重新取链');
+  });
+
+  test('resolve：可重试失败重试一次后成功', () async {
+    final source = _FakeMusicSource('kw')
+      ..resolveError = const SourceFailure(
+        kind: FailureKind.network,
+        message: 'boom',
+        retryable: true,
+      )
+      ..resolveErrorTimes = 1;
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(registry: registry);
+
+    final stream = await service.resolve(_track('kw', 'a'));
+
+    expect(stream.uri.toString(), 'https://cdn.example/kw/a');
+    expect(source.resolveCalls, 2, reason: '首次失败 + 一次重试');
+  });
+
+  test('resolve：不可重试失败（notFound）不重试', () async {
+    final source = _FakeMusicSource('kw')
+      ..resolveError = const SourceFailure(
+        kind: FailureKind.notFound,
+        message: '没有该档位',
+      );
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(registry: registry);
+
+    await expectLater(
+      service.resolve(_track('kw', 'a')),
+      throwsA(
+        isA<SourceFailure>().having(
+          (f) => f.kind,
+          'kind',
+          FailureKind.notFound,
+        ),
+      ),
+    );
+    expect(source.resolveCalls, 1, reason: 'notFound 原样重发没有意义');
+  });
+
+  test('resolve：重试耗尽抛最后一次失败且不缓存', () async {
+    final source = _FakeMusicSource('kw')
+      ..resolveError = const SourceFailure(
+        kind: FailureKind.timeout,
+        message: '超时',
+        retryable: true,
+      );
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(registry: registry);
+    final track = _track('kw', 'a');
+
+    await expectLater(
+      service.resolve(track),
+      throwsA(
+        isA<SourceFailure>().having((f) => f.kind, 'kind', FailureKind.timeout),
+      ),
+    );
+    expect(source.resolveCalls, 2);
+    expect(service.resolveCacheCountForTrack(track), 0, reason: '失败不缓存');
+
+    await expectLater(service.resolve(track), throwsA(isA<SourceFailure>()));
+    expect(source.resolveCalls, 4, reason: '每次调用重新走完整重试');
+  });
+
+  test('resolve：命中缓存时 headers / expiresIn 原样返回', () async {
+    final source = _FakeMusicSource('kw')
+      ..resolveHeaders = const {'Referer': 'https://example.com/'}
+      ..resolveExpiresIn = const Duration(minutes: 5);
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(registry: registry);
+    final track = _track('kw', 'a');
+
+    final first = await service.resolve(track);
+    final second = await service.resolve(track);
+
+    expect(second, first, reason: '缓存命中直接返回同一流，不改写请求头 / 有效期');
+    expect(second.headers, {'Referer': 'https://example.com/'});
+    expect(second.expiresIn, const Duration(minutes: 5));
+    expect(source.resolveCalls, 1);
+  });
+
+  test('resolve：expiresIn 比默认 TTL 短时按有效期缓存，过期后重新取链', () async {
+    var now = DateTime(2026, 1, 1);
+    final cache = RequestCache(
+      ttl: const Duration(minutes: 10),
+      clock: () => now,
+    );
+    final source = _FakeMusicSource('kw')
+      ..resolveExpiresIn = const Duration(minutes: 3);
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(registry: registry, resolveCache: cache);
+    final track = _track('kw', 'a');
+
+    await service.resolve(track);
+    // TTL = 3min - 60s = 2min：1min59s 内命中。
+    now = now.add(const Duration(minutes: 1, seconds: 59));
+    await service.resolve(track);
+    expect(source.resolveCalls, 1);
+
+    now = now.add(const Duration(seconds: 2));
+    await service.resolve(track);
+    expect(source.resolveCalls, 2, reason: '超出平台有效期前 60s 的缓存窗口');
+  });
+
+  test('resolve：expiresIn 剩余 ≤60s 时不入缓存（本次仍返回结果）', () async {
+    final source = _FakeMusicSource('kw')
+      ..resolveExpiresIn = const Duration(seconds: 30);
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(registry: registry);
+    final track = _track('kw', 'a');
+
+    final stream = await service.resolve(track);
+    expect(stream.uri.toString(), 'https://cdn.example/kw/a');
+
+    await service.resolve(track);
+    expect(source.resolveCalls, 2, reason: '零 TTL 不入库，下一次重新取链');
+    expect(service.resolveCacheCountForTrack(track), 0);
+  });
+
+  test('resolve：注入短 TTL 缓存且无 expiresIn → 按注入缓存的 TTL 过期', () async {
+    var now = DateTime(2026, 1, 1);
+    final cache = RequestCache(
+      ttl: const Duration(minutes: 1),
+      clock: () => now,
+    );
+    final source = _FakeMusicSource('kw');
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(registry: registry, resolveCache: cache);
+    final track = _track('kw', 'a');
+
+    await service.resolve(track);
+    await service.resolve(track);
+    expect(source.resolveCalls, 1);
+
+    now = now.add(const Duration(seconds: 61));
+    await service.resolve(track);
+    expect(
+      source.resolveCalls,
+      2,
+      reason: '没有 expiresIn 时不应把注入的 1min 缓存拉回默认 10min',
+    );
+  });
+
+  test('resolve：单次尝试受总预算硬截止，超时归一化为 timeout', () async {
+    // 预算取 500ms：即使调度抖动几百毫秒，`.timeout` 也一定在 2s 的 fake 延迟
+    // 之前触发，且触发时已吃掉全部预算 → 第二次尝试不会发起（确定性）。
+    final source = _FakeMusicSource('kw')
+      ..resolveDelays.add(const Duration(seconds: 2));
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(
+      registry: registry,
+      resolveBudget: const Duration(milliseconds: 500),
+      resolveRetryDelay: (_) => Duration.zero,
+    );
+
+    final watch = Stopwatch()..start();
+    await expectLater(
+      service.resolve(_track('kw', 'a')),
+      throwsA(
+        isA<SourceFailure>()
+            .having((f) => f.kind, 'kind', FailureKind.timeout)
+            .having((f) => f.retryable, 'retryable', isTrue),
+      ),
+    );
+    watch.stop();
+
+    expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+    expect(source.resolveCalls, 1, reason: '预算已耗尽，不再发起第二次尝试');
+    expect(
+      source.resolveTimeouts.single,
+      lessThanOrEqualTo(const Duration(milliseconds: 500)),
+      reason: '首次尝试也只拿到剩余预算',
+    );
+  });
+
+  test('resolve：第二次尝试共享剩余预算，不叠加满额超时', () async {
+    // 预算 1200ms：首轮失败（零延迟）到重试准入之间即使抖动几百毫秒，
+    // 也仍有剩余预算进入第二次尝试；第二次挂 2s，必然被剩余预算截断。
+    final source = _FakeMusicSource('kw')
+      ..resolveError = const SourceFailure(
+        kind: FailureKind.network,
+        message: 'boom',
+        retryable: true,
+      )
+      ..resolveErrorTimes = 1;
+    source.resolveDelays.addAll([Duration.zero, const Duration(seconds: 2)]);
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(
+      registry: registry,
+      resolveBudget: const Duration(milliseconds: 1200),
+      resolveRetryDelay: (_) => const Duration(milliseconds: 20),
+    );
+
+    final watch = Stopwatch()..start();
+    await expectLater(
+      service.resolve(_track('kw', 'a')),
+      throwsA(
+        isA<SourceFailure>().having((f) => f.kind, 'kind', FailureKind.timeout),
+      ),
+    );
+    watch.stop();
+
+    expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+    expect(source.resolveCalls, 2);
+    expect(
+      source.resolveTimeouts[1]!.inMilliseconds,
+      lessThan(1200),
+      reason: '第二次尝试拿到的是扣除首轮与退避后的剩余预算',
+    );
+    expect(source.resolveTimeouts[1]!.inMilliseconds, greaterThan(0));
   });
 
   test('resolve：TTL 过期后重新取链', () async {
@@ -539,5 +788,190 @@ void main() {
     service.invalidateSearchPrefix('search:kw:');
     await service.search('kw', query);
     expect(source.searchCalls, 2);
+  });
+
+  group('resolve_policy', () {
+    test('shouldRetryResolve：只重试暂时性失败', () {
+      const retryableKinds = [
+        FailureKind.network,
+        FailureKind.timeout,
+        FailureKind.rateLimited,
+        FailureKind.scriptError,
+        FailureKind.engineRestarting,
+      ];
+      for (final kind in retryableKinds) {
+        expect(
+          shouldRetryResolve(
+            SourceFailure(kind: kind, message: 'x', retryable: true),
+          ),
+          isTrue,
+          reason: kind.name,
+        );
+      }
+
+      const terminalKinds = [
+        FailureKind.notFound,
+        FailureKind.unsupported,
+        FailureKind.unauthorized,
+        FailureKind.cancelled,
+        FailureKind.playback,
+        FailureKind.unknown,
+      ];
+      for (final kind in terminalKinds) {
+        expect(
+          shouldRetryResolve(
+            SourceFailure(kind: kind, message: 'x', retryable: true),
+          ),
+          isFalse,
+          reason: kind.name,
+        );
+      }
+
+      expect(
+        shouldRetryResolve(
+          const SourceFailure(kind: FailureKind.network, message: 'x'),
+        ),
+        isFalse,
+        reason: '调用方已标记不可重试时不再重试',
+      );
+    });
+
+    test('resolveRetryDelay：约 300ms ±30%，按尝试序号增长', () {
+      for (var seed = 0; seed < 32; seed++) {
+        final delay = resolveRetryDelay(1, random: math.Random(seed));
+        expect(delay.inMilliseconds, inInclusiveRange(209, 391));
+      }
+      expect(
+        resolveRetryDelay(2, random: math.Random(0)).inMilliseconds,
+        greaterThan(300),
+      );
+    });
+  });
+
+  group('取链指标', () {
+    test('缓存命中与成功次数：第二次 resolve 不再真实取链', () async {
+      final metrics = ResolveMetrics();
+      final source = _FakeMusicSource('kw');
+      final registry = _FakeRegistry({'kw': source});
+      addTearDown(registry.dispose);
+      final service = CatalogService(registry: registry, metrics: metrics);
+      final track = _track('kw', 'a');
+
+      await service.resolve(track);
+      await service.resolve(track);
+
+      final snapshot = metrics.snapshot();
+      expect(snapshot.calls, 2);
+      expect(snapshot.cacheHits, 1);
+      expect(snapshot.successes, 1, reason: '缓存命中不重复计成功');
+      expect(snapshot.failures, 0);
+      expect(snapshot.retries, 0);
+      expect(source.resolveCalls, 1);
+    });
+
+    test('可重试失败重试成功：只记一次成功 + 一次重试', () async {
+      final metrics = ResolveMetrics();
+      final source = _FakeMusicSource('kw')
+        ..resolveError = const SourceFailure(
+          kind: FailureKind.network,
+          message: 'boom',
+          retryable: true,
+        )
+        ..resolveErrorTimes = 1;
+      final registry = _FakeRegistry({'kw': source});
+      addTearDown(registry.dispose);
+      final service = CatalogService(
+        registry: registry,
+        metrics: metrics,
+        resolveRetryDelay: (_) => Duration.zero,
+      );
+
+      await service.resolve(_track('kw', 'a'));
+
+      final snapshot = metrics.snapshot();
+      expect(snapshot.calls, 1);
+      expect(snapshot.retries, 1);
+      expect(snapshot.successes, 1);
+      expect(snapshot.failures, 0, reason: '重试后成功不算失败');
+      expect(source.resolveCalls, 2);
+    });
+
+    test('不可重试失败按类别记一次（notFound，无重试）', () async {
+      final metrics = ResolveMetrics();
+      final source = _FakeMusicSource('kw')
+        ..resolveError = const SourceFailure(
+          kind: FailureKind.notFound,
+          message: '没有该档位',
+        );
+      final registry = _FakeRegistry({'kw': source});
+      addTearDown(registry.dispose);
+      final service = CatalogService(registry: registry, metrics: metrics);
+
+      await expectLater(
+        service.resolve(_track('kw', 'a')),
+        throwsA(isA<SourceFailure>()),
+      );
+
+      final snapshot = metrics.snapshot();
+      expect(snapshot.calls, 1);
+      expect(snapshot.retries, 0);
+      expect(snapshot.successes, 0);
+      expect(snapshot.failures, 1);
+      expect(snapshot.failuresByKind[FailureKind.notFound], 1);
+      expect(snapshot.timeouts, 0);
+    });
+
+    test('预算硬截止记 timeout 与 timeout 类别失败', () async {
+      final metrics = ResolveMetrics();
+      final source = _FakeMusicSource('kw')
+        ..resolveDelays.add(const Duration(seconds: 2));
+      final registry = _FakeRegistry({'kw': source});
+      addTearDown(registry.dispose);
+      final service = CatalogService(
+        registry: registry,
+        metrics: metrics,
+        resolveBudget: const Duration(milliseconds: 200),
+        // 退避本身就超过剩余预算：只走一次预算兜底，计数可精确断言
+        // （零退避时机器负载可能让第二次尝试拿到毫秒级剩余预算）。
+        resolveRetryDelay: (_) => const Duration(seconds: 1),
+      );
+
+      await expectLater(
+        service.resolve(_track('kw', 'a')),
+        throwsA(
+          isA<SourceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            FailureKind.timeout,
+          ),
+        ),
+      );
+
+      final snapshot = metrics.snapshot();
+      expect(snapshot.timeouts, 1, reason: '预算兜底超时单独计数');
+      expect(snapshot.retries, 0, reason: '退避已超预算，不再重试');
+      expect(snapshot.failures, 1);
+      expect(snapshot.failuresByKind[FailureKind.timeout], 1);
+    });
+
+    test('同 key 并发取链合并：入口数 > 真实取链数', () async {
+      final metrics = ResolveMetrics();
+      final source = _FakeMusicSource('kw')
+        ..resolveDelays.add(const Duration(milliseconds: 50));
+      final registry = _FakeRegistry({'kw': source});
+      addTearDown(registry.dispose);
+      final service = CatalogService(registry: registry, metrics: metrics);
+      final track = _track('kw', 'a');
+
+      final first = service.resolve(track);
+      final second = service.resolve(track);
+      await Future.wait([first, second]);
+
+      final snapshot = metrics.snapshot();
+      expect(snapshot.calls, 2);
+      expect(snapshot.cacheHits, 1, reason: '在途条目也算命中（单飞等待）');
+      expect(snapshot.successes, 1, reason: '一次真实取链只记一次成功');
+      expect(source.resolveCalls, 1);
+    });
   });
 }

@@ -196,6 +196,99 @@ void main() {
     });
   });
 
+  group('RequestCache · 逐条 TTL（ttlFor）', () {
+    test('ttlFor 覆盖实例默认 TTL', () async {
+      var now = DateTime(2026, 1, 1);
+      final cache = RequestCache(
+        ttl: const Duration(minutes: 10),
+        clock: () => now,
+      );
+      var calls = 0;
+
+      Future<int> create() async => ++calls;
+
+      // 第一条按 1min 存活，第二条回退实例默认 10min。
+      expect(
+        await cache.getOrCreate(
+          'short',
+          create,
+          ttlFor: (_) => const Duration(minutes: 1),
+        ),
+        1,
+      );
+      expect(await cache.getOrCreate('long', create), 2);
+
+      now = now.add(const Duration(minutes: 2));
+      expect(
+        await cache.getOrCreate(
+          'short',
+          create,
+          ttlFor: (_) => const Duration(minutes: 1),
+        ),
+        3,
+        reason: '逐条 TTL 到期后重新执行',
+      );
+      expect(await cache.getOrCreate('long', create), 2, reason: '默认 TTL 仍有效');
+    });
+
+    test('ttlFor 返回零：结果本次可用但不入库，后续调用重新执行', () async {
+      final cache = RequestCache(ttl: const Duration(minutes: 5));
+      var calls = 0;
+
+      final first = await cache.getOrCreate(
+        'k',
+        () async => ++calls,
+        ttlFor: (_) => Duration.zero,
+      );
+      expect(first, 1);
+      expect(cache.containsKey('k'), isFalse, reason: '零 TTL 完成即移除');
+
+      final second = await cache.getOrCreate(
+        'k',
+        () async => ++calls,
+        ttlFor: (_) => Duration.zero,
+      );
+      expect(second, 2);
+      expect(calls, 2);
+    });
+
+    test('零 TTL 时并发等待方仍拿到本轮结果', () async {
+      final cache = RequestCache(ttl: const Duration(minutes: 5));
+      final completer = Completer<String>();
+      var calls = 0;
+
+      Future<String> create() {
+        calls++;
+        return completer.future;
+      }
+
+      final futures = List.generate(
+        4,
+        (_) => cache.getOrCreate<String>(
+          'k',
+          create,
+          ttlFor: (_) => Duration.zero,
+        ),
+      );
+      expect(calls, 1, reason: 'single-flight 不受零 TTL 影响');
+
+      completer.complete('value');
+      expect(await Future.wait(futures), List.filled(4, 'value'));
+      expect(cache.containsKey('k'), isFalse);
+    });
+
+    test('ttlFor 抛错不影响单飞等待方（不会永久挂起）', () async {
+      // 防御性用例：即使调用方给了会抛错的 ttlFor，等待方也已拿到值。
+      final cache = RequestCache(ttl: const Duration(minutes: 5));
+      final result = await cache.getOrCreate(
+        'k',
+        () async => 'v',
+        ttlFor: (_) => throw StateError('bad ttl'),
+      );
+      expect(result, 'v');
+    });
+  });
+
   group('RequestCache · LRU', () {
     test('超容量淘汰最久未使用条目', () async {
       final cache = RequestCache(

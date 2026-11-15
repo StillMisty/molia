@@ -127,6 +127,30 @@ String pickQualityFor(Iterable<String> supportedTypes, String preferred) {
   return supported.last;
 }
 
+/// 降档候选：从 [preferred] 起沿 [kLxQualityOrder] 往低档走，最多 [maxSteps] 档。
+///
+/// 取链返回「没这个地址」（notFound / unsupported）时用：同一档位重发还是空，
+/// 换低一档才可能命中。曲目声明过音质列表时只取声明过的档位（脚本能保证给
+/// 这些档）；未声明时按顺序表的相邻低档试探（是否支持由脚本自己决定）。
+/// [preferred] 不在顺序表内（脚本自定义档位 / `auto`）→ 无候选，避免乱猜。
+List<String> qualityFallbackCandidates(
+  Iterable<String> supportedTypes,
+  String preferred, {
+  int maxSteps = 2,
+}) {
+  final startIndex = kLxQualityOrder.indexOf(preferred);
+  if (startIndex < 0 || maxSteps <= 0) return const [];
+  final supported = supportedTypes.where((type) => type.isNotEmpty).toSet();
+  final candidates = <String>[];
+  for (var i = startIndex + 1; i < kLxQualityOrder.length; i++) {
+    final candidate = kLxQualityOrder[i];
+    if (supported.isNotEmpty && !supported.contains(candidate)) continue;
+    candidates.add(candidate);
+    if (candidates.length >= maxSteps) break;
+  }
+  return candidates;
+}
+
 /// 音质上限：把 [preferred] 压到不高于 [cap]（[kLxQualityOrder] 中索引
 /// 越大音质越低）。
 ///

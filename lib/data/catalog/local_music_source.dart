@@ -69,7 +69,10 @@ class LocalMusicSource implements MusicSource {
   Future<PlayableStream> resolve(
     Track track, {
     AudioQuality? preferredQuality,
+    Duration? timeout,
   }) async {
+    // 本地文件取链是纯查表（路径已落库），timeout 无意义：保留参数只为满足
+    // 端口签名，不做任何等待。
     final resolved = await pathResolver?.resolve(track);
     final payloadPath = track.payload['path'];
     final path = resolved != null && resolved.isNotEmpty

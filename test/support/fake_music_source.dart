@@ -119,6 +119,7 @@ class FakeMusicSource implements MusicSource {
   Future<PlayableStream> resolve(
     Track track, {
     AudioQuality? preferredQuality,
+    Duration? timeout,
   }) {
     lastResolveQuality = preferredQuality;
     final custom = onResolve;

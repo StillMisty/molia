@@ -90,7 +90,15 @@ abstract interface class MusicSource {
   });
 
   /// 取本地可播流；仅 `capabilities.resolveUrl` 为 true 时调用。
-  Future<PlayableStream> resolve(Track track, {AudioQuality? preferredQuality});
+  ///
+  /// [timeout] 是调用方的剩余预算提示：实现可据此缩短内部请求（脚本取链会
+  /// 透传到引擎 invoke 超时）；null 表示沿用实现自身默认超时，不改变原有语义。
+  /// 实现不保证一定遵守上限——调用方仍应以自己的截止时间兜底。
+  Future<PlayableStream> resolve(
+    Track track, {
+    AudioQuality? preferredQuality,
+    Duration? timeout,
+  });
 
   /// 无能力或无结果返回 null。
   Future<LyricsDoc?> lyrics(Track track);

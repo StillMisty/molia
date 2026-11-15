@@ -22,6 +22,9 @@ class _FakeLxEngine implements LxEngine {
   /// 每次 start 返回的源声明（测试可在重启前替换，验证 refresh）。
   Map<String, LxSourceDecl> nextSources = {};
 
+  /// 挂起 start（并发 / single-flight 测试用；不设则不等待）。
+  Completer<void>? startGate;
+
   int startCalls = 0;
   int musicUrlCalls = 0;
   int lyricCalls = 0;
@@ -61,6 +64,7 @@ class _FakeLxEngine implements LxEngine {
     startCalls++;
     startedScripts.add(script);
     startTimes.add(DateTime.now());
+    if (startGate != null) await startGate!.future;
     if (failStart) {
       running = false;
       throw const LxEngineException('脚本初始化失败（fake）');
@@ -186,6 +190,24 @@ Future<void> _waitUntil(
 Future<String> _musicUrl(LxEngineSupervisor supervisor) => supervisor
     .getMusicUrl(source: 'test', musicInfo: _musicInfo, quality: '320k');
 
+/// 把 supervisor 打进 failed（连续超时熔断，阈值 1）：最省时的失败入口。
+Future<void> _failByTimeout(
+  LxEngineSupervisor supervisor,
+  _FakeLxEngine engine,
+) async {
+  engine.timeoutInvoke = true;
+  await expectLater(
+    _musicUrl(supervisor),
+    throwsA(isA<LxEngineTimeoutException>()),
+  );
+  engine.timeoutInvoke = false;
+  expect(supervisor.state, LxEngineState.failed);
+}
+
+/// 让可注入的短冷却到期（不用真实 60s）。
+Future<void> _elapseCooldown() =>
+    Future<void>.delayed(const Duration(milliseconds: 60));
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -211,6 +233,18 @@ void main() {
       final url = await _musicUrl(supervisor);
       expect(url, 'https://example.com/test/320k');
       expect(engine.musicUrlCalls, 1);
+    });
+
+    test('未 start / 未运行时 invoke 抛 LxEngineUnavailableException', () async {
+      final engine = _FakeLxEngine();
+      final supervisor = LxEngineSupervisor(engineFactory: () => engine);
+      addTearDown(supervisor.close);
+
+      await expectLater(
+        _musicUrl(supervisor),
+        throwsA(isA<LxEngineUnavailableException>()),
+      );
+      expect(engine.musicUrlCalls, 0, reason: '请求根本没被执行');
     });
 
     test('start 失败：状态回 stopped，不进入自动重启', () async {
@@ -469,6 +503,189 @@ void main() {
     });
   });
 
+  group('LxEngineSupervisor · failed 半开自愈', () {
+    test('冷却未到：直接抛 LxEngineUnavailableException，不重跑脚本', () async {
+      final engine = _FakeLxEngine()..nextSources = {'test': _decl('test')};
+      final supervisor = LxEngineSupervisor(
+        engineFactory: () => engine,
+        restartDelays: const [Duration(milliseconds: 10)],
+        maxConsecutiveTimeouts: 1,
+        recoveryCooldown: const Duration(seconds: 30),
+      );
+      addTearDown(supervisor.close);
+      await supervisor.start(_scriptInfo());
+      await _failByTimeout(supervisor, engine);
+
+      await expectLater(
+        _musicUrl(supervisor),
+        throwsA(
+          predicate(
+            (e) =>
+                e is LxEngineUnavailableException &&
+                e.message.contains('连续 1 次请求超时'),
+          ),
+        ),
+      );
+      expect(engine.startCalls, 1, reason: '冷却期不重跑脚本');
+      expect(engine.musicUrlCalls, 1, reason: '请求根本没被执行');
+      expect(supervisor.state, LxEngineState.failed);
+    });
+
+    test('冷却已到：下一次请求半开恢复成功（重放同一脚本）', () async {
+      final engine = _FakeLxEngine()..nextSources = {'test': _decl('test')};
+      final supervisor = LxEngineSupervisor(
+        engineFactory: () => engine,
+        restartDelays: const [Duration(milliseconds: 10)],
+        maxConsecutiveTimeouts: 1,
+        recoveryCooldown: const Duration(milliseconds: 40),
+      );
+      addTearDown(supervisor.close);
+      final states = <LxEngineState>[];
+      supervisor.onStateChanged = states.add;
+      await supervisor.start(_scriptInfo());
+      await _failByTimeout(supervisor, engine);
+
+      await _elapseCooldown();
+      final url = await _musicUrl(supervisor);
+
+      expect(url, 'https://example.com/test/320k');
+      expect(engine.startCalls, 2, reason: '1 次初始 + 1 次半开恢复');
+      expect(engine.startedScripts.last.id, 'script-1');
+      expect(supervisor.state, LxEngineState.ready);
+      expect(supervisor.failureReason, isNull);
+      expect(
+        states,
+        containsAllInOrder([LxEngineState.starting, LxEngineState.ready]),
+      );
+    });
+
+    test('半开失败：回到 failed 并重置冷却', () async {
+      final engine = _FakeLxEngine()..nextSources = {'test': _decl('test')};
+      final supervisor = LxEngineSupervisor(
+        engineFactory: () => engine,
+        restartDelays: const [Duration(milliseconds: 10)],
+        maxConsecutiveTimeouts: 1,
+        recoveryCooldown: const Duration(milliseconds: 40),
+      );
+      addTearDown(supervisor.close);
+      await supervisor.start(_scriptInfo());
+      await _failByTimeout(supervisor, engine);
+
+      engine.failStart = true; // 半开恢复必然失败
+      await _elapseCooldown();
+      await expectLater(
+        _musicUrl(supervisor),
+        throwsA(isA<LxEngineUnavailableException>()),
+      );
+      expect(engine.startCalls, 2);
+      expect(supervisor.state, LxEngineState.failed);
+      expect(supervisor.failureReason, contains('自动恢复失败'));
+
+      // 冷却从这次失败重新计时：立刻再请求不会再启动脚本。
+      await expectLater(
+        _musicUrl(supervisor),
+        throwsA(isA<LxEngineUnavailableException>()),
+      );
+      expect(engine.startCalls, 2, reason: '半开失败后重新进入冷却');
+    });
+
+    test('retryNow：绕过冷却立即尝试，失败保持 failed', () async {
+      final engine = _FakeLxEngine()..nextSources = {'test': _decl('test')};
+      final supervisor = LxEngineSupervisor(
+        engineFactory: () => engine,
+        restartDelays: const [Duration(milliseconds: 10)],
+        maxConsecutiveTimeouts: 1,
+        recoveryCooldown: const Duration(seconds: 30),
+      );
+      addTearDown(supervisor.close);
+      await supervisor.start(_scriptInfo());
+      await _failByTimeout(supervisor, engine);
+
+      expect(await supervisor.retryNow(), isTrue);
+      expect(engine.startCalls, 2, reason: '冷却期内也可立即重试');
+      expect(supervisor.state, LxEngineState.ready);
+      expect(supervisor.isFailed, isFalse);
+      expect(await _musicUrl(supervisor), isNotEmpty);
+
+      // 无脚本 / 已 ready：没有可做的事，按成功返回。
+      expect(await supervisor.retryNow(), isTrue);
+      await supervisor.dispose();
+      expect(await supervisor.retryNow(), isTrue, reason: '无脚本可恢复');
+    });
+
+    test('retryNow 失败：返回 false 并保持 failed', () async {
+      final engine = _FakeLxEngine()..nextSources = {'test': _decl('test')};
+      final supervisor = LxEngineSupervisor(
+        engineFactory: () => engine,
+        restartDelays: const [Duration(milliseconds: 10)],
+        maxConsecutiveTimeouts: 1,
+        recoveryCooldown: const Duration(seconds: 30),
+      );
+      addTearDown(supervisor.close);
+      await supervisor.start(_scriptInfo());
+      await _failByTimeout(supervisor, engine);
+
+      engine.failStart = true;
+      expect(await supervisor.retryNow(), isFalse);
+      expect(supervisor.state, LxEngineState.failed);
+      expect(engine.startCalls, 2);
+    });
+
+    test('并发请求只触发一次半开恢复', () async {
+      final engine = _FakeLxEngine()..nextSources = {'test': _decl('test')};
+      final supervisor = LxEngineSupervisor(
+        engineFactory: () => engine,
+        restartDelays: const [Duration(milliseconds: 10)],
+        maxConsecutiveTimeouts: 1,
+        recoveryCooldown: const Duration(milliseconds: 20),
+      );
+      addTearDown(supervisor.close);
+      await supervisor.start(_scriptInfo());
+      await _failByTimeout(supervisor, engine);
+      await _elapseCooldown();
+
+      // 让恢复中的 start 挂住，三个请求同时等它。
+      engine.startGate = Completer<void>();
+      final pending = [
+        _musicUrl(supervisor),
+        _musicUrl(supervisor),
+        _musicUrl(supervisor),
+      ];
+      await Future<void>.delayed(Duration.zero);
+      expect(engine.startCalls, 2, reason: '半开恢复只启动一次');
+      engine.startGate!.complete();
+      final urls = await Future.wait(pending);
+
+      expect(urls, everyElement('https://example.com/test/320k'));
+      expect(engine.startCalls, 2);
+      expect(supervisor.state, LxEngineState.ready);
+    });
+
+    test('dispose 取消半开等待：等待者立即醒来而不是挂到超时', () async {
+      final engine = _FakeLxEngine()..nextSources = {'test': _decl('test')};
+      final supervisor = LxEngineSupervisor(
+        engineFactory: () => engine,
+        restartDelays: const [Duration(milliseconds: 10)],
+        maxConsecutiveTimeouts: 1,
+        recoveryCooldown: const Duration(milliseconds: 20),
+      );
+      addTearDown(supervisor.close);
+      await supervisor.start(_scriptInfo());
+      await _failByTimeout(supervisor, engine);
+      await _elapseCooldown();
+
+      engine.startGate = Completer<void>();
+      final pending = _musicUrl(supervisor)
+          .then<String?>((v) => v, onError: (Object _) => null);
+      await Future<void>.delayed(Duration.zero);
+      await supervisor.dispose();
+      engine.startGate!.complete();
+      await pending;
+
+      expect(supervisor.state, LxEngineState.stopped);
+    });
+  });
+
   group('SourceManager · supervisor 接入', () {
     setUp(() {
       SharedPreferences.setMockInitialValues({});
@@ -518,6 +735,109 @@ const noop = 1;
       expect(supervisor.state, LxEngineState.stopped);
       expect(manager.activeSources, isEmpty);
       expect(manager.hasActiveSource, isFalse);
+    });
+  });
+
+  group('SourceManager · 激活自愈', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    /// 预置一个「已保存为激活态」的脚本再 init；[failStart] 模拟激活失败。
+    Future<({SourceManager manager, _FakeLxEngine engine})> seededManager({
+      required bool failStart,
+      List<Duration> retryDelays = const [],
+      Duration lazyCooldown = Duration.zero,
+    }) async {
+      final engine = _FakeLxEngine()
+        ..nextSources = {'test': _decl('test')}
+        ..failStart = failStart;
+      final supervisor = LxEngineSupervisor(
+        engineFactory: () => engine,
+        restartDelays: const [Duration(milliseconds: 10)],
+      );
+      final manager = SourceManager(
+        engine: supervisor,
+        settings: testSettingsRegistry(),
+        activationRetryDelays: retryDelays,
+        lazyActivationCooldown: lazyCooldown,
+      );
+      addTearDown(manager.dispose);
+      addTearDown(supervisor.close);
+      // 测试里脚本仓库不落盘（path_provider 不可用），直接写内存态。
+      await manager.repository.add(_scriptInfo());
+      await manager.repository.setActive('script-1');
+      await manager.init();
+      return (manager: manager, engine: engine);
+    }
+
+    test('init 激活失败：按注入间隔延迟重试并恢复', () async {
+      final f = await seededManager(
+        failStart: true,
+        retryDelays: const [Duration(milliseconds: 50)],
+      );
+      expect(f.manager.activeSources, isEmpty);
+      expect(f.manager.activeError, isNotNull);
+      expect(f.engine.startCalls, 1);
+
+      f.engine.failStart = false;
+      await _waitUntil(() => f.manager.activeSources.isNotEmpty);
+
+      expect(f.engine.startCalls, 2);
+      expect(f.manager.activeError, isNull);
+      expect(f.manager.hasActiveSource, isTrue);
+      expect(f.manager.repository.activeId, 'script-1');
+    });
+
+    test('惰性首次使用：脚本源搜索入口补一次激活', () async {
+      final f = await seededManager(failStart: true);
+      expect(f.manager.activeSources, isEmpty);
+
+      f.engine.failStart = false;
+      final result = await f.manager.searchWithMeta('test', 'hello');
+
+      expect(result.tracks, isNotEmpty);
+      expect(f.engine.startCalls, 2, reason: '首次使用时补激活，不依赖启动重试');
+      expect(f.manager.activeError, isNull);
+    });
+
+    test('用户主动停用：脚本源直接不可用，绝不自动激活', () async {
+      final f = await seededManager(failStart: true);
+      await f.manager.deactivate();
+      expect(f.manager.repository.activeId, isNull);
+
+      f.engine.failStart = false;
+      final callsBefore = f.engine.startCalls;
+      await expectLater(
+        f.manager.searchWithMeta('test', 'hello'),
+        throwsA(isA<LxEngineException>()),
+      );
+
+      expect(f.engine.startCalls, callsBefore, reason: '停用后不再拉起引擎');
+      expect(f.manager.activeError, isNull, reason: '停用不是错误状态');
+    });
+
+    test('retryEngine：恢复成功后刷新 activeSources 并清错误', () async {
+      final f = await seededManager(failStart: true);
+      expect(f.manager.activeError, isNotNull);
+
+      f.engine.failStart = false;
+      expect(await f.manager.retryEngine(), isTrue);
+
+      expect(f.manager.activeSources.keys, ['test']);
+      expect(f.manager.hasActiveSource, isTrue);
+      expect(f.manager.activeError, isNull);
+      expect(f.manager.engineFailed, isFalse);
+    });
+
+    test('retryEngine：失败写回 activeError 并保持 failed', () async {
+      final f = await seededManager(failStart: true);
+
+      expect(await f.manager.retryEngine(), isFalse);
+
+      expect(f.manager.activeError, isNotNull);
+      expect(f.manager.activeSources, isEmpty);
+      expect(f.manager.engineFailed, isTrue);
     });
   });
 }

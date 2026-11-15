@@ -251,6 +251,41 @@ void main() {
       expect(failure.kind, FailureKind.scriptError);
     });
 
+    test('LxEngineUnavailableException → engineRestarting（可重试）', () {
+      final failure = SourceFailure.from(
+        const LxEngineUnavailableException('音源引擎未运行'),
+      );
+      expect(failure.kind, FailureKind.engineRestarting);
+      expect(failure.retryable, isTrue);
+    });
+
+    test('LxResolveRejectedException → notFound（不原样重试）', () {
+      final failure = SourceFailure.from(
+        const LxResolveRejectedException('音源未返回有效的播放地址'),
+      );
+      expect(failure.kind, FailureKind.notFound);
+      expect(failure.retryable, isFalse);
+    });
+
+    test('LxEngineTimeoutException → timeout（不依赖 message 特征）', () {
+      final failure = SourceFailure.from(
+        const LxEngineTimeoutException('音源请求超时（20s）'),
+      );
+      expect(failure.kind, FailureKind.timeout);
+      expect(failure.retryable, isTrue);
+    });
+
+    test('LX 细分错误的字符串形态同样归一化（LocalPlaybackService.lastError）', () {
+      expect(
+        SourceFailure.from('LxEngineUnavailableException: 音源引擎未运行').kind,
+        FailureKind.engineRestarting,
+      );
+      expect(
+        SourceFailure.from('LxResolveRejectedException: 音源未返回有效的播放地址').kind,
+        FailureKind.notFound,
+      );
+    });
+
     test('SocketException → network', () {
       final failure = SourceFailure.from(SocketException('Connection refused'));
       expect(failure.kind, FailureKind.network);

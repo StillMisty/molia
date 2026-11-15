@@ -195,6 +195,36 @@ void main() {
       expect(sources.keys, contains('mock'));
       expect(engine.isRunning, isTrue);
     }, skip: skip);
+
+    test('getMusicUrl：脚本返回空地址 → LxResolveRejectedException', () async {
+      await engine.start(_scriptInfo(_probeScript(port)));
+
+      await expectLater(
+        engine.getMusicUrl(
+          source: 'mock',
+          musicInfo: const {'noUrl': true},
+          quality: '128k',
+        ),
+        throwsA(
+          isA<LxResolveRejectedException>().having(
+            (e) => e.message,
+            'message',
+            contains('有效的播放地址'),
+          ),
+        ),
+      );
+
+      // 同一个引擎随后仍能正常取链：拒绝只代表该档位没地址，不是引擎故障。
+      expect(
+        await engine.getMusicUrl(
+          source: 'mock',
+          musicInfo: const {'id': '1'},
+          quality: '128k',
+        ),
+        'https://cdn.example.com/music-128k.mp3',
+      );
+      expect(engine.isRunning, isTrue);
+    }, skip: skip);
   });
 
   // follow_max → 重定向策略的纯映射：不依赖原生库，CI 上也能覆盖。
@@ -282,6 +312,10 @@ on(EVENT_NAMES.request, ({ source, action, info }) => {
       return new Promise(() => {})
     case 'micro':
       return Promise.resolve().then(() => Promise.resolve('micro-ok'))
+    case 'musicUrl':
+      // 模拟脚本「该档位没地址」：返回空串，由引擎侧判定为明确拒绝。
+      if (info.musicInfo && info.musicInfo.noUrl) return ''
+      return 'https://cdn.example.com/music-' + info.type + '.mp3'
     case 'timer':
       return new Promise((resolve) => { setTimeout(() => resolve('timer-ok'), 50) })
     case 'redirect':

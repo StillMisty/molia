@@ -113,6 +113,7 @@ class _FakeMusicSource implements MusicSource {
   Future<PlayableStream> resolve(
     Track track, {
     AudioQuality? preferredQuality,
+    Duration? timeout,
   }) async => PlayableStream(Uri.parse('https://cdn.example/${track.id.uri}'));
 
   @override

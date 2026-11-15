@@ -23,6 +23,7 @@ import 'app/bootstrap/post_frame_init.dart';
 import 'app/bootstrap/provider_tree.dart';
 import 'app/bootstrap/scrobble_stack.dart';
 import 'services/onboarding_store.dart';
+import 'app/bootstrap/source_engine_recovery.dart';
 import 'app/bootstrap/startup_trace.dart';
 import 'app/bootstrap/sync_stack.dart';
 import 'app/bootstrap/update_stack.dart';
@@ -232,6 +233,12 @@ void main() async {
   ).wait;
   await databasePrewarm;
   _markStartup('本地数据/资料库栈', startup);
+  // 音源引擎随网络恢复自愈：断网把引擎打进 failed 后，换网 / 重连事件是
+  // 比 UI 重试按钮更可靠的恢复时机（组合根持有订阅，进程销毁时取消）。
+  final sourceEngineRecovery = SourceEngineNetworkRecovery(
+    sourceManager: catalog.sourceManager,
+    networkEvents: local.dataSaver.networkEvents,
+  );
   // 听歌同步：纯构造（不读凭据库）；服务在首帧后 init，页面打开时再补一次。
   final scrobble = buildScrobbleStack(settings: catalog.settings);
   // 健康检查探针依赖目录服务与省流上限：两者都就绪后挂到同一个诊断服务上。
@@ -565,8 +572,12 @@ void main() async {
     },
     onPause: () => onAppBackground(paused: true),
     onHide: onAppBackground,
-    // 进程销毁：关掉文件日志（有界刷盘），不影响系统回收速度。
-    onDetach: () => unawaited(diagnostics.service.dispose()),
+    // 进程销毁：关掉文件日志（有界刷盘）+ 取消音源引擎的网络恢复订阅，
+    // 不影响系统回收速度。
+    onDetach: () {
+      unawaited(sourceEngineRecovery.dispose());
+      unawaited(diagnostics.service.dispose());
+    },
   );
 
   // 首次引导标记：在 runApp 前读一次，首帧要么是引导、要么是正常壳层，

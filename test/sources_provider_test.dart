@@ -64,7 +64,7 @@ void main() {
     addTearDown(provider.dispose);
     addTearDown(manager.dispose);
     addTearDown(supervisor.close);
-    return _Fixture(provider, manager);
+    return _Fixture(provider, manager, engine);
   }
 
   test('导入并激活：scripts / activeScript / activeSourceEntries 领域转换', () async {
@@ -98,6 +98,35 @@ void main() {
     await f.provider.removeScript(id);
     expect(f.provider.scripts, isEmpty);
     expect(f.manager.scripts, isEmpty);
+  });
+
+  test('retryEngine：引擎熔断后经 provider 重试恢复并刷新状态', () async {
+    final f = await fixture();
+    await f.provider.importScript(_script(), activate: true);
+    expect(f.provider.hasActiveSource, isTrue);
+
+    // 运行期崩溃 + 重启必然失败 → 引擎进入 failed；activeError 同步可读，
+    // 音源页据此显示重试入口。
+    f.engine.failInvoke = true;
+    f.engine.failStart = true;
+    await expectLater(
+      f.manager.searchWithMeta('test', 'hello'),
+      throwsA(isA<LxEngineException>()),
+    );
+    await _waitUntil(() => f.manager.engineFailed);
+
+    expect(f.provider.hasActiveSource, isFalse);
+    expect(f.provider.activeError, isNotNull);
+    expect(f.provider.activeScriptId, isNotNull);
+
+    // 网络 / 脚本恢复后重试立即拉起引擎（不等 60s 半开冷却）。
+    f.engine.failInvoke = false;
+    f.engine.failStart = false;
+    expect(await f.provider.retryEngine(), isTrue);
+
+    expect(f.provider.activeError, isNull);
+    expect(f.provider.hasActiveSource, isTrue);
+    expect(f.provider.activeSourceEntries, isNotEmpty);
   });
 
   test('channels / reorderChannel / resetChannelOrder：含内置发现平台且可排序', () async {
@@ -396,16 +425,32 @@ void main() {
   });
 }
 
+/// 轮询等待异步状态（避免用真实长延时）。
+Future<void> _waitUntil(
+  bool Function() predicate, {
+  Duration timeout = const Duration(seconds: 3),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!predicate()) {
+    if (DateTime.now().isAfter(deadline)) fail('等待条件超时');
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+}
+
 class _Fixture {
   final SourcesProvider provider;
   final SourceManager manager;
+  final _FakeLxEngine engine;
 
-  const _Fixture(this.provider, this.manager);
+  const _Fixture(this.provider, this.manager, this.engine);
 }
 
 /// 可编程 fake 引擎：记录 start 重放并返回预设源声明。
 class _FakeLxEngine implements LxEngine {
   bool running = false;
+  bool failStart = false;
+  bool failInvoke = false;
+  int startCalls = 0;
   Map<String, LxSourceDecl> nextSources = {};
 
   final StreamController<LxLogEntry> _logs =
@@ -435,10 +480,22 @@ class _FakeLxEngine implements LxEngine {
     LxScriptInfo script, {
     Duration timeout = const Duration(seconds: 30),
   }) async {
+    startCalls++;
+    if (failStart) {
+      running = false;
+      throw const LxEngineException('脚本初始化失败（fake）');
+    }
     _script = script;
     _sources = Map<String, LxSourceDecl>.from(nextSources);
     running = true;
     return Map<String, LxSourceDecl>.from(_sources);
+  }
+
+  void _simulateInvoke() {
+    if (failInvoke) {
+      running = false;
+      throw const LxEngineException('音源请求失败（fake），引擎已退出');
+    }
   }
 
   @override
@@ -447,21 +504,30 @@ class _FakeLxEngine implements LxEngine {
     required Map<String, dynamic> musicInfo,
     required String quality,
     Duration timeout = const Duration(seconds: 20),
-  }) async => 'https://example.com/$source/$quality';
+  }) async {
+    _simulateInvoke();
+    return 'https://example.com/$source/$quality';
+  }
 
   @override
   Future<LxLyricResult> getLyric({
     required String source,
     required Map<String, dynamic> musicInfo,
     Duration timeout = const Duration(seconds: 20),
-  }) async => const LxLyricResult(lyric: '[00:00.00]fake');
+  }) async {
+    _simulateInvoke();
+    return const LxLyricResult(lyric: '[00:00.00]fake');
+  }
 
   @override
   Future<String> getPic({
     required String source,
     required Map<String, dynamic> musicInfo,
     Duration timeout = const Duration(seconds: 15),
-  }) async => 'https://example.com/pic.jpg';
+  }) async {
+    _simulateInvoke();
+    return 'https://example.com/pic.jpg';
+  }
 
   @override
   Future<dynamic> search({
@@ -471,7 +537,10 @@ class _FakeLxEngine implements LxEngine {
     int page = 1,
     int limit = 20,
     Duration timeout = const Duration(seconds: 20),
-  }) async => const [];
+  }) async {
+    _simulateInvoke();
+    return const [];
+  }
 
   @override
   Future<void> dispose() async {

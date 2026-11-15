@@ -136,6 +136,9 @@ class SourcesProvider extends ChangeNotifier {
 
   Future<void> deactivate() => _manager.deactivate();
 
+  /// 立即重试引擎恢复（绕过冷却）；失败原因由 [activeError] 自动刷新。
+  Future<bool> retryEngine() => _manager.retryEngine();
+
   /// 将渠道在渠道列表中上移/下移（含内置发现平台与停用项）。
   Future<void> reorderChannel(int oldIndex, int newIndex) =>
       _manager.reorderChannel(oldIndex, newIndex);

@@ -57,8 +57,17 @@ class RequestCache {
 
   /// 返回 key 对应的缓存值；不存在/过期时调用 [create] 并缓存结果。
   ///
+  /// [ttlFor] 可按单条结果覆盖实例默认 [ttl]（例如播放直链按平台返回的
+  /// `expiresIn` 定寿命）；返回 [Duration.zero] 表示「结果本次可用但不入库」：
+  /// 完成时移除条目，已挂在本轮 Future 上的等待方仍然拿到值，下一次调用重新
+  /// 执行 [create]。
+  ///
   /// 注意：同一 key 必须始终使用同一类型 T，否则命中时的类型转换会抛错。
-  Future<T> getOrCreate<T>(String key, Future<T> Function() create) {
+  Future<T> getOrCreate<T>(
+    String key,
+    Future<T> Function() create, {
+    Duration Function(T value)? ttlFor,
+  }) {
     final existing = _entries[key];
     if (existing != null) {
       // single-flight：并发同 key 直接复用同一个 Future。
@@ -89,10 +98,23 @@ class RequestCache {
     future.then(
       (value) {
         if (identical(_entries[key], entry)) {
+          Duration lifetime;
+          try {
+            lifetime = ttlFor == null ? ttl : ttlFor(value as T);
+          } catch (_) {
+            // ttlFor 是调用方代码：算寿命时抛错不能让条目永远停在 in-flight
+            // （否则后续调用一直复用这个已完成的 Future），退回实例默认 TTL。
+            lifetime = ttl;
+          }
+          if (lifetime <= Duration.zero) {
+            // 零/负寿命 = 本次可用但不入缓存：留着只会命中一个即将失效的直链。
+            _entries.remove(key);
+            return;
+          }
           entry
             ..pending = null
             ..value = value
-            ..expiresAt = _clock().add(ttl);
+            ..expiresAt = _clock().add(lifetime);
           _evictOverflow();
         }
       },

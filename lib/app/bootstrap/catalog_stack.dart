@@ -21,6 +21,7 @@ import '../../domain/ports/source_registry.dart';
 import '../../services/app_branding_service.dart';
 import '../../services/bili_account_service.dart';
 import '../../services/diagnostics/failure_ring_buffer.dart';
+import '../../services/diagnostics/resolve_metrics.dart';
 import '../../services/language_service.dart';
 import '../../services/poster/poster_style_settings.dart';
 import '../../services/shortcut_settings.dart';
@@ -45,7 +46,13 @@ typedef CatalogStack = ({
 ///
 /// 「数据源维护」不在这里：脚本加载是启动后的
 /// `sourceManager.init()`（首帧回调，见 `post_frame_init.dart`）。
-CatalogStack buildCatalogStack({FailureRecorder? failures}) {
+///
+/// [metrics] 省略时用 [ResolveMetrics.session]——诊断栈默认持有同一个实例，
+/// 页面才能看到这里的计数；测试 / 自定义装配可注入独立实例隔离计数。
+CatalogStack buildCatalogStack({
+  FailureRecorder? failures,
+  ResolveMetrics? metrics,
+}) {
   // 设置注册表（登记键的唯一家）：读 / 写 / 同步往返 / 应用远端后的 reload
   // 钩子都走它；键的声明见 data/settings/settings_keys.dart。
   final settingsRegistry = SettingsRegistry(keys: kAllSettingsKeys);
@@ -150,6 +157,7 @@ CatalogStack buildCatalogStack({FailureRecorder? failures}) {
   final catalogService = CatalogService(
     registry: sourceRegistry,
     failures: failures,
+    metrics: metrics,
   );
   // 评论：与目录服务同构的缓存层（single-flight + LRU + 5min TTL，
   // key = comments:{source}:{songId}:{kind}:{page}）。

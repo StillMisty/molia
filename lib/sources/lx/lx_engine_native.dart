@@ -156,7 +156,9 @@ class LxEngine {
       'musicInfo': musicInfo,
     }, timeout: timeout);
     if (data is! String || data.isEmpty) {
-      throw const LxEngineException('音源未返回有效的播放地址');
+      // 这是脚本对该曲目/档位的明确拒绝（不是引擎故障）：上报专门的类型，
+      // 让上层换档或换源，而不是把同一个空结果重新发一遍。
+      throw const LxResolveRejectedException('音源未返回有效的播放地址');
     }
     return data;
   }

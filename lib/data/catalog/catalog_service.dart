@@ -10,30 +10,62 @@ import '../../domain/models/track.dart';
 import '../../domain/ports/music_source.dart';
 import '../../domain/ports/source_registry.dart';
 import '../../services/diagnostics/failure_ring_buffer.dart';
+import '../../services/diagnostics/resolve_metrics.dart';
 import '../cache/request_cache.dart';
+import 'resolve_policy.dart' as policy;
 
 /// 目录服务：聚合 [SourceRegistry] 与请求缓存，是 providers 的唯一搜索入口。
 ///
 /// 职责：
 /// - `search`：single-flight + LRU + TTL（默认 5min）搜索缓存；
-/// - `resolve`：single-flight + LRU + TTL（默认 10min）取链缓存，key 为
+/// - `resolve`：single-flight + LRU + 取链缓存（默认 10min 上限，平台给了
+///   `expiresIn` 时按有效期缩短），key 为
 ///   `url:{sourceKey}:{hash(payload)}:{quality}`（稳定序列化 + md5）；
-/// - 边界错误统一归一化为 [SourceFailure]（幂等，失败不缓存由 RequestCache 保证）。
+///   同一次取链内有界重试，且整段受 [policy.kResolveBudget] 硬截止；
+/// - 边界错误统一归一化为 [SourceFailure]（幂等，失败不缓存由 RequestCache 保证）；
+/// - 计数进 [ResolveMetrics]（只记数字与失败类别，不记直链 / payload）。
 class CatalogService {
   CatalogService({
     required this._registry,
     this._failures,
+    ResolveMetrics? metrics,
     RequestCache? searchCache,
     Duration searchTtl = const Duration(minutes: 5),
     RequestCache? resolveCache,
-    Duration resolveTtl = const Duration(minutes: 10),
-  }) : _searchCache = searchCache ?? RequestCache(ttl: searchTtl),
-       _resolveCache = resolveCache ?? RequestCache(ttl: resolveTtl);
+    Duration? resolveTtl,
+    this.resolveBudget = policy.kResolveBudget,
+    Duration Function(int attempt)? resolveRetryDelay,
+  }) : _metrics = metrics ?? ResolveMetrics.session,
+       _resolveRetryDelay = resolveRetryDelay ?? policy.resolveRetryDelay,
+       _resolveTtl = resolveTtl ?? resolveCache?.ttl ?? _kDefaultResolveTtl,
+       _searchCache = searchCache ?? RequestCache(ttl: searchTtl),
+       _resolveCache =
+           resolveCache ?? RequestCache(ttl: resolveTtl ?? _kDefaultResolveTtl);
 
   final SourceRegistry _registry;
   final FailureRecorder? _failures;
+
+  /// 取链指标（默认 [ResolveMetrics.session]，与诊断页共用）。
+  final ResolveMetrics _metrics;
   final RequestCache _searchCache;
   final RequestCache _resolveCache;
+
+  /// 单曲取链总预算（含重试与退避）；默认 [policy.kResolveBudget]。
+  ///
+  /// 公开只读：测试与自定义装配可注入更小预算验证截止行为。
+  final Duration resolveBudget;
+
+  /// 重试退避函数（默认 [policy.resolveRetryDelay] 的 300ms ±30% 抖动）。
+  final Duration Function(int attempt) _resolveRetryDelay;
+
+  /// 取链缓存 TTL 上限：显式 `resolveTtl` 优先，否则跟随注入缓存的 TTL，
+  /// 最后回退默认 10min（平台返回 `expiresIn` 时再取更短者）。
+  final Duration _resolveTtl;
+
+  static const Duration _kDefaultResolveTtl = Duration(minutes: 10);
+
+  /// 直链失效前的安全余量：缓存必须在平台截止时间之前退出。
+  static const Duration _resolveExpirySafety = Duration(seconds: 60);
 
   /// 搜索指定音源；同 `sourceKey + keyword + page + limit` 在 TTL 内共享结果。
   ///
@@ -99,10 +131,16 @@ class CatalogService {
     );
   }
 
-  /// 取本地可播流；同 `source + payload + quality` 在 TTL 内共享结果。
+  /// 取本地可播流；同 `source + payload + quality` 在缓存有效期内共享结果。
   ///
   /// `quality` 为空时使用 `auto` 占位（实际音质由 SourceManager 按用户偏好
-  /// 决定，切换偏好后 key 不变，10min 内可能命中旧音质的 URL）。
+  /// 决定，切换偏好后 key 不变，缓存有效期内可能命中旧音质的 URL）。
+  ///
+  /// 缓存时长上限取构造时的 `_resolveTtl`（显式 `resolveTtl` → 注入缓存的 TTL
+  /// → 默认 10min），平台给了 `expiresIn` 时再收紧为
+  /// `min(上限, expiresIn - 60s)`：B 站等平台的直链自带截止时间，缓存超过它
+  /// 只会把死链接交给播放器。`expiresIn` 剩余不足 60s 时不入库（单飞等待方
+  /// 仍拿到值），下一次取链重新问平台。
   Future<PlayableStream> resolve(Track track, {AudioQuality? quality}) {
     final source = _registry.forTrack(track);
     if (source == null) {
@@ -110,24 +148,14 @@ class CatalogService {
     }
     final key = resolveCacheKey(track, quality);
     final cached = _resolveCache.isFresh(key);
+    _metrics.recordCall();
+    if (cached) _metrics.recordCacheHit();
     return DataPathTrace.async(
       'resolve.catalog',
       () => _resolveCache.getOrCreate<PlayableStream>(
         key,
-        () => DataPathTrace.async(
-          'resolve.source',
-          () => _guardSourceCall(
-            track.id.sourceKey,
-            () => source.resolve(track, preferredQuality: quality),
-            // 取链失败会经播放链路到达 PlaybackErrorRecovery；那里统一记录，
-            // 避免同一失败在目录与播放两个边界各记一次。
-            recordFailure: false,
-          ),
-          fields: () => {
-            'source': track.id.sourceKey,
-            'quality': quality?.type ?? 'auto',
-          },
-        ),
+        () => _resolveWithRetry(source, track, quality),
+        ttlFor: _resolveTtlFor,
       ),
       fields: () => {
         'source': track.id.sourceKey,
@@ -135,6 +163,110 @@ class CatalogService {
         'cached': cached ? 1 : 0,
       },
     );
+  }
+
+  /// 取链 + 有界重试（single-flight 内完成：并发调用方共享整段重试）。
+  ///
+  /// 整段受 [resolveBudget] 硬截止：每次尝试只用「剩余预算」作为音源超时提示
+  /// 并叠加 `.timeout` 兜底，因此第二次尝试不会把总耗时再拉长一倍。只在
+  /// [policy.shouldRetryResolve] 判定为暂时性失败时重试；失败仍是失败
+  /// （RequestCache 不缓存），调用方看到的是最后一次失败的 [SourceFailure]。
+  ///
+  /// 指标口径：[ResolveMetrics.recordSuccess] / [ResolveMetrics.recordFailure]
+  /// 只在这里记（真实取链），所以 single-flight 合并的并发入口不会把一次
+  /// 取链记成多次成败；入口数与缓存命中在 [resolve] 记。预算兜底的
+  /// `recordTimeout` 在截断时就记（含随后重试成功的请求），因此它不是失败计数的
+  /// 子集。
+  Future<PlayableStream> _resolveWithRetry(
+    MusicSource source,
+    Track track,
+    AudioQuality? quality,
+  ) async {
+    final sourceKey = track.id.sourceKey;
+    final qualityLabel = quality?.type ?? 'auto';
+    final stopwatch = Stopwatch()..start();
+    var attempt = 0;
+    while (true) {
+      attempt++;
+      final remaining = resolveBudget - stopwatch.elapsed;
+      if (remaining <= Duration.zero) {
+        _metrics
+          ..recordTimeout()
+          ..recordFailure(FailureKind.timeout);
+        throw SourceFailure(
+          kind: FailureKind.timeout,
+          message: '取链超时：${resolveBudget.inMilliseconds}ms 总预算已用完',
+          retryable: true,
+        );
+      }
+      try {
+        // attempt / retried 直接取自本轮循环（不落静态字段）：埋点只在
+        // 这次调用内有效，避免并发取链互相覆盖。
+        final stream = await DataPathTrace.async(
+          'resolve.source',
+          () =>
+              _guardSourceCall(
+                sourceKey,
+                () => source.resolve(
+                  track,
+                  preferredQuality: quality,
+                  timeout: remaining,
+                ),
+                // 取链失败会经播放链路到达 PlaybackErrorRecovery；那里统一记录，
+                // 避免同一失败在目录与播放两个边界各记一次。
+                recordFailure: false,
+              ).timeout(
+                remaining,
+                // `.timeout` 只截断等待方：底层请求没有取消能力，仍会跑完，
+                // 结果被丢弃（播放侧下一次取链会重新问音源）。
+                onTimeout: () {
+                  // 只有外层预算兜底才记 timeout；音源自己报的超时算普通失败。
+                  // 重试后最终成功也保留这条截断记录（见 recordTimeout）。
+                  _metrics.recordTimeout();
+                  throw SourceFailure(
+                    kind: FailureKind.timeout,
+                    message: '取链超时（剩余 ${remaining.inMilliseconds}ms）',
+                    retryable: true,
+                  );
+                },
+              ),
+          fields: () => {
+            'source': sourceKey,
+            'quality': qualityLabel,
+            'attempt': attempt,
+            'retried': attempt > 1 ? 1 : 0,
+          },
+        );
+        _metrics.recordSuccess();
+        return stream;
+      } on SourceFailure catch (failure) {
+        final canRetry =
+            attempt < policy.kResolveMaxAttempts &&
+            policy.shouldRetryResolve(failure) &&
+            stopwatch.elapsed < resolveBudget;
+        if (!canRetry) {
+          _metrics.recordFailure(failure.kind);
+          rethrow;
+        }
+        final delay = _resolveRetryDelay(attempt);
+        // 退避后已超预算：别再让用户多等一次注定超时的请求。
+        if (stopwatch.elapsed + delay >= resolveBudget) {
+          _metrics.recordFailure(failure.kind);
+          rethrow;
+        }
+        _metrics.recordRetry();
+        await Future<void>.delayed(delay);
+      }
+    }
+  }
+
+  /// 按平台有效期收紧取链缓存 TTL（语义见 [resolve]）。
+  Duration _resolveTtlFor(PlayableStream stream) {
+    final expiresIn = stream.expiresIn;
+    if (expiresIn == null) return _resolveTtl;
+    final remaining = expiresIn - _resolveExpirySafety;
+    if (remaining <= Duration.zero) return Duration.zero;
+    return remaining < _resolveTtl ? remaining : _resolveTtl;
   }
 
   /// 使指定前缀的搜索缓存失效（如 `search:kw:`）。

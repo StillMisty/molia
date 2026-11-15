@@ -59,14 +59,22 @@ class ScriptUpdateCheck {
 /// 在线更新下载的大小上限：1MB（LX 脚本通常几十 KB，超过必为异常内容）。
 const int kLxScriptMaxBytes = 1024 * 1024;
 
-/// 在线更新下载超时。
+/// 在线更新下载超时（每次尝试各自计时）。
 const Duration kLxScriptDownloadTimeout = Duration(seconds: 10);
+
+/// 下载尝试次数：首轮 + 一次重试。
+///
+/// 重试只针对「这一秒网络不好」的情形（超时 / 连接失败 / HTTP 5xx）；移动网络
+/// 抖动很常见，但重试次数必须有界，避免更新检查卡在长时间重试里。
+const int _kDownloadAttempts = 2;
 
 /// 下载脚本原文。
 ///
-/// - 10s 超时（响应头与响应体分别计时）；
+/// - 10s 超时（响应头与响应体分别计时，每次尝试独立计时）；
 /// - 跟随重定向（http 包默认行为，显式开启以免被改动）；
-/// - 响应体超过 [kLxScriptMaxBytes] 立即中止，避免内存被异常内容占满。
+/// - 响应体超过 [kLxScriptMaxBytes] 立即中止，避免内存被异常内容占满；
+/// - 超时 / 连接类异常 / HTTP 5xx 重试一次；4xx、超限、非法 URL 不重试
+///   （同样的地址与内容再请求一次只会得到同样的失败）。
 ///
 /// 所有失败统一抛 [ScriptUpdateException]（可读 message）。
 Future<String> downloadLxScriptText(String url, {Dio? dio}) async {
@@ -79,7 +87,26 @@ Future<String> downloadLxScriptText(String url, {Dio? dio}) async {
   }
   final ownDio = dio ?? createAppDio();
   try {
-    final response = await ownDio
+    _DownloadFailure? lastFailure;
+    for (var attempt = 1; attempt <= _kDownloadAttempts; attempt++) {
+      try {
+        return await _downloadOnce(uri, ownDio);
+      } on _DownloadFailure catch (failure) {
+        lastFailure = failure;
+        if (!failure.retryable || attempt == _kDownloadAttempts) break;
+      }
+    }
+    throw lastFailure!.error;
+  } finally {
+    if (dio == null) ownDio.close(force: true);
+  }
+}
+
+/// 单次下载；失败包装成 [_DownloadFailure] 由调用方决定是否重试。
+Future<String> _downloadOnce(Uri uri, Dio dio) async {
+  final Response<dynamic> response;
+  try {
+    response = await dio
         .requestUri<dynamic>(
           uri,
           options: Options(
@@ -89,37 +116,105 @@ Future<String> downloadLxScriptText(String url, {Dio? dio}) async {
           ),
         )
         .timeout(kLxScriptDownloadTimeout);
-    if (response.statusCode != 200) {
-      throw ScriptUpdateException(
+  } on TimeoutException {
+    throw const _DownloadFailure(
+      ScriptUpdateException(ScriptUpdateError.downloadFailed, '下载超时，请检查网络后重试'),
+      retryable: true,
+    );
+  } catch (e) {
+    throw _DownloadFailure(
+      ScriptUpdateException(ScriptUpdateError.downloadFailed, '下载失败：$e'),
+      retryable: _isRetryableTransportError(e),
+    );
+  }
+
+  if (response.statusCode != 200) {
+    final status = response.statusCode ?? 0;
+    throw _DownloadFailure(
+      ScriptUpdateException(
         ScriptUpdateError.downloadFailed,
         '下载失败：HTTP ${response.statusCode}',
-      );
-    }
-    final bytes = <int>[];
+      ),
+      // 5xx 是服务端暂时故障；4xx 是地址 / 权限问题，重发没有意义。
+      retryable: status >= 500,
+    );
+  }
+
+  final bytes = <int>[];
+  try {
     await for (final chunk in streamBody(
       response,
     ).stream.timeout(kLxScriptDownloadTimeout)) {
       bytes.addAll(chunk);
       if (bytes.length > kLxScriptMaxBytes) {
-        throw const ScriptUpdateException(
-          ScriptUpdateError.tooLarge,
-          '脚本文件超过 1MB 上限，已中止下载',
+        throw const _DownloadFailure(
+          ScriptUpdateException(
+            ScriptUpdateError.tooLarge,
+            '脚本文件超过 1MB 上限，已中止下载',
+          ),
+          retryable: false,
         );
       }
     }
-    return utf8.decode(bytes, allowMalformed: true);
-  } on ScriptUpdateException {
+  } on _DownloadFailure {
     rethrow;
   } on TimeoutException {
-    throw const ScriptUpdateException(
-      ScriptUpdateError.downloadFailed,
-      '下载超时，请检查网络后重试',
+    throw const _DownloadFailure(
+      ScriptUpdateException(ScriptUpdateError.downloadFailed, '下载超时，请检查网络后重试'),
+      retryable: true,
     );
   } catch (e) {
-    throw ScriptUpdateException(ScriptUpdateError.downloadFailed, '下载失败：$e');
-  } finally {
-    if (dio == null) ownDio.close(force: true);
+    throw _DownloadFailure(
+      ScriptUpdateException(ScriptUpdateError.downloadFailed, '下载失败：$e'),
+      retryable: _isRetryableTransportError(e),
+    );
   }
+  return utf8.decode(bytes, allowMalformed: true);
+}
+
+/// 是否是「这一秒网络不好」类异常（可重试）。
+///
+/// dio 会把底层 `SocketException` 包成 `DioException(type: connectionError)`；
+/// 未包装的传输异常按类型名识别，避免为一次类型判断引入 `dart:io`。
+bool _isRetryableTransportError(Object error) {
+  if (error is TimeoutException) return true;
+  if (error is DioException) {
+    switch (error.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.transformTimeout:
+      case DioExceptionType.connectionError:
+        return true;
+      case DioExceptionType.badCertificate:
+      case DioExceptionType.badResponse:
+      case DioExceptionType.cancel:
+        return false;
+      case DioExceptionType.unknown:
+        // dio 有时把 SocketException 留在 error 字段里。
+        return _isConnectionTypeName(error.error?.runtimeType.toString());
+    }
+  }
+  return _isConnectionTypeName(error.runtimeType.toString());
+}
+
+bool _isConnectionTypeName(String? typeName) {
+  switch (typeName) {
+    case 'SocketException':
+    case 'HttpException':
+    case 'HandshakeException':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/// 单次下载失败：[retryable] 决定是否值得再试一次。
+class _DownloadFailure implements Exception {
+  const _DownloadFailure(this.error, {required this.retryable});
+
+  final ScriptUpdateException error;
+  final bool retryable;
 }
 
 /// 粗略判断下载内容是否为网页（而非脚本文件）。

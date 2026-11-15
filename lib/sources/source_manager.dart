@@ -71,19 +71,50 @@ class SourceManager extends ChangeNotifier {
   /// 内置平台原生封面回退（同上）。
   final BuiltinPicDispatch _builtinPicFallback = BuiltinPicDispatch();
 
-  SourceManager({LxEngineSupervisor? engine, required SettingsAccess settings})
-    : _engine = engine ?? LxEngineSupervisor(),
-      _settings = settings,
-      _anyListenSource = AnyListenSource(settings: settings) {
+  SourceManager({
+    LxEngineSupervisor? engine,
+    required SettingsAccess settings,
+    List<Duration> activationRetryDelays = const [
+      Duration(seconds: 5),
+      Duration(seconds: 20),
+    ],
+    Duration lazyActivationCooldown = const Duration(seconds: 5),
+  }) : _engine = engine ?? LxEngineSupervisor(),
+       _settings = settings,
+       _anyListenSource = AnyListenSource(settings: settings),
+       _activationRetryDelays = List<Duration>.unmodifiable(
+         activationRetryDelays,
+       ),
+       // 公开参数名保持 lazyActivationCooldown（测试注入短冷却要能具名传参），
+       // 字段按本类惯例私有。
+       // ignore: prefer_initializing_formals
+       _lazyActivationCooldown = lazyActivationCooldown {
     _preferences = SourcePreferences(_settings)..addListener(notifyListeners);
     _engine.onStateChanged = _onEngineStateChanged;
   }
+
+  /// 启动激活失败的延迟重试间隔（次数 = 长度）。生产默认 5s / 20s；
+  /// 测试注入短间隔，不等待真实秒级定时器。
+  final List<Duration> _activationRetryDelays;
+
+  /// 惰性激活（首次使用触发）的冷却：失败后短时间内不重复重跑脚本。
+  final Duration _lazyActivationCooldown;
 
   bool _initialized = false;
   String? _activatingId;
   String? _activeError;
   Map<String, LxSourceDecl> _activeSources = {};
   LxUpdateAlert? _lastUpdateAlert;
+
+  /// 启动激活失败的延迟重试计时器（用户主动停用 / 激活成功即取消）。
+  Timer? _activationRetryTimer;
+  int _activationRetryAttempt = 0;
+
+  /// 最近一次惰性激活的尝试时刻（限流用；见 [_ensureActiveScript]）。
+  DateTime? _lastLazyActivationAt;
+
+  /// 在途的 [retryEngine]（连点「重试」/ 网络事件连发时合并成一次）。
+  Future<bool>? _retryEngineInFlight;
 
   bool get initialized => _initialized;
   bool get isActivating => _activatingId != null;
@@ -93,6 +124,10 @@ class SourceManager extends ChangeNotifier {
   List<LxScriptInfo> get scripts => repository.scripts;
   LxScriptInfo? get activeScript => repository.activeScript;
   bool get engineReady => _engine.isRunning;
+
+  /// 引擎是否处于「已停止、等冷却后半开恢复」状态（网络恢复触发读这里）。
+  bool get engineFailed => _engine.isFailed;
+
   String get preferredQuality => _preferences.preferredQuality;
   LxUpdateAlert? get lastUpdateAlert => _lastUpdateAlert;
 
@@ -147,12 +182,24 @@ class SourceManager extends ChangeNotifier {
   SourceCapabilities capabilitiesFor(String key) =>
       sourceProfiles.forKey(key)?.capabilities ?? const SourceCapabilities();
 
-  /// supervisor 状态回调：重启成功后用引擎当前声明的源刷新 [activeSources]，
-  /// 修复“引擎死了源列表还在”（超时 kill 后脚本重新执行，声明可能变化）。
+  /// supervisor 状态回调：重启 / 半开恢复成功后用引擎当前声明的源刷新
+  /// [activeSources]，修复“引擎死了源列表还在”（超时 kill 后脚本重新执行，
+  /// 声明可能变化）；进入 failed 时把失败原因写进 [activeError]，
+  /// 让音源页立刻出现「重试」入口（不必等下一次取链失败）。
   void _onEngineStateChanged(LxEngineState state) {
-    if (state != LxEngineState.ready) return;
-    _activeSources = Map<String, LxSourceDecl>.from(_engine.sources);
-    _activeError = null;
+    switch (state) {
+      case LxEngineState.ready:
+        _activeSources = Map<String, LxSourceDecl>.from(_engine.sources);
+        _activeError = null;
+      case LxEngineState.failed:
+        // 不清 _activeSources：惰性激活只在“该源没有声明”时触发，留着声明
+        // 才能让 failed 的冷却由 supervisor 统一裁决（而不是每次请求都跑脚本）。
+        _activeError = _engine.failureReason ?? '音源引擎已停止';
+      case LxEngineState.stopped:
+      case LxEngineState.starting:
+      case LxEngineState.restarting:
+        return;
+    }
     notifyListeners();
   }
 
@@ -184,7 +231,9 @@ class SourceManager extends ChangeNotifier {
       try {
         await activate(activeId);
       } catch (_) {
-        // 激活失败时保留错误信息供 UI 展示
+        // 激活失败保留错误信息供 UI 展示（activate 已写入 _activeError），
+        // 并安排延迟重试：启动阶段的脚本加载 / 网络抖动不该让音源一直不可用。
+        _scheduleActivationRetry(activeId);
       }
     }
   }
@@ -289,12 +338,14 @@ class SourceManager extends ChangeNotifier {
     if (script == null) {
       throw LxEngineException('音源脚本不存在: $id');
     }
+    _cancelActivationRetry();
     _activatingId = id;
     _activeError = null;
     notifyListeners();
     try {
       final sources = await _engine.start(script);
       _activeSources = sources;
+      _activationRetryAttempt = 0;
       await repository.setActive(id);
       await repository.cacheSources(id, sources);
     } catch (e) {
@@ -308,17 +359,107 @@ class SourceManager extends ChangeNotifier {
   }
 
   /// 停用当前音源。
+  ///
+  /// 这是用户的显式决定：取消待执行的激活重试并清掉错误提示，之后的惰性
+  /// 激活（[_ensureActiveScript]）也不会再把脚本拉起来。
   Future<void> deactivate() async {
+    _cancelActivationRetry();
     await _engine.dispose();
     _activeSources = {};
+    _activeError = null;
+    _activationRetryAttempt = 0;
     await repository.setActive(null);
     notifyListeners();
+  }
+
+  /// 安排一次延迟激活重试（[_activationRetryDelays] 用尽后不再重试）。
+  void _scheduleActivationRetry(String id) {
+    if (_activationRetryAttempt >= _activationRetryDelays.length) return;
+    final delay = _activationRetryDelays[_activationRetryAttempt++];
+    _activationRetryTimer?.cancel();
+    _activationRetryTimer = Timer(delay, () {
+      _activationRetryTimer = null;
+      unawaited(_retryActivation(id));
+    });
+  }
+
+  /// 延迟重试回调：用户已切换 / 停用脚本或另有激活在途时直接放弃。
+  Future<void> _retryActivation(String id) async {
+    if (!_initialized || _activatingId != null) return;
+    if (repository.activeId != id) return;
+    try {
+      await activate(id);
+    } catch (_) {
+      // 失败仍写 _activeError；按剩余间隔继续重试。
+      _scheduleActivationRetry(id);
+    }
+  }
+
+  void _cancelActivationRetry() {
+    _activationRetryTimer?.cancel();
+    _activationRetryTimer = null;
+  }
+
+  /// 惰性激活兜底（脚本源的搜索 / 取链 / 歌词 / 封面入口调用）。
+  ///
+  /// 只有「用户保存了激活脚本、但引擎没跑起来」（启动激活失败、半开冷却中）
+  /// 才补一次激活：没有激活脚本（`repository.activeScript == null`，含用户
+  /// 主动停用）绝不自动拉起；引擎已就绪或该源已声明时无事可做。用
+  /// [_lazyActivationCooldown] 限流，避免每次失败请求都重跑脚本
+  /// （激活本身要几百毫秒到数秒）。
+  Future<void> _ensureActiveScript(String sourceKey) async {
+    if (_activeSources[sourceKey] != null) return;
+    // 用 activeScript 而不是 activeId：脚本被删除 / 仓库里找不到时没有可
+    // 重放的内容，不能每隔几秒撞一次「脚本不存在」。
+    final activeScript = repository.activeScript;
+    if (activeScript == null || _engine.isRunning || _activatingId != null) {
+      return;
+    }
+    final now = DateTime.now();
+    final lastAttempt = _lastLazyActivationAt;
+    if (lastAttempt != null &&
+        now.difference(lastAttempt) < _lazyActivationCooldown) {
+      return;
+    }
+    _lastLazyActivationAt = now;
+    try {
+      await activate(activeScript.id);
+    } catch (_) {
+      // 失败已写入 _activeError（UI 展示 + 重试按钮），调用方按原路失败。
+    }
+  }
+
+  /// 立即重试引擎恢复（音源页「重试」与网络恢复触发）。
+  ///
+  /// 绕过 supervisor 的半开冷却；成功时用引擎当前声明的源刷新
+  /// [activeSources] 并清掉 [activeError]，失败保留可读原因。
+  /// 无激活脚本 / 引擎已就绪时视为成功（没有可恢复的东西）。
+  Future<bool> retryEngine() => _retryEngineInFlight ??= _retryEngine()
+      .whenComplete(() => _retryEngineInFlight = null);
+
+  Future<bool> _retryEngine() async {
+    _cancelActivationRetry();
+    _activationRetryAttempt = 0;
+    final ok = await _engine.retryNow();
+    if (ok) {
+      _activeError = null;
+      if (_engine.isRunning) {
+        _activeSources = Map<String, LxSourceDecl>.from(_engine.sources);
+      }
+    } else {
+      _activeError = _engine.failureReason ?? '音源引擎仍未恢复，请稍后重试';
+    }
+    notifyListeners();
+    return ok;
   }
 
   Future<void> removeScript(String id) async {
     await repository.remove(id);
     onScriptRemoved?.call(id);
     if (repository.activeId == null) {
+      // 脚本被删掉后没有可激活目标：连待执行的启动重试一起取消。
+      _cancelActivationRetry();
+      _activationRetryAttempt = 0;
       await _engine.dispose();
       _activeSources = {};
     }
@@ -348,7 +489,6 @@ class SourceManager extends ChangeNotifier {
         throw e.toSourceFailure();
       }
     }
-    final decl = _activeSources[sourceKey];
     if (SongChannels.isSupported(sourceKey)) {
       // 搜索门直接读画像（与能力位同一事实）：能力位为 false 时这里必然
       // 拒绝，避免 UI 显示可搜索但路由报错。
@@ -364,6 +504,9 @@ class SourceManager extends ChangeNotifier {
         limit: limit,
       );
     }
+    // 脚本分支入口：引擎没跑起来时先尝试惰性恢复，再判断源声明。
+    await _ensureActiveScript(sourceKey);
+    final decl = _activeSources[sourceKey];
     if (decl == null) {
       throw LxEngineException('未知音源: $sourceKey');
     }
@@ -389,9 +532,21 @@ class SourceManager extends ChangeNotifier {
   /// `Referer` / `User-Agent`，这些请求头必须一路透传到播放器、边播边缓存
   /// 与后台缓存写入；提前降级成 String 就会丢掉头部。any-listen / LX 脚本
   /// 目前只返回 URL（headers 为空），后续原生解析器可直接返回带头的流。
+  ///
+  /// LX 分支在「该档位没地址」（notFound / unsupported）时按
+  /// [qualityFallbackCandidates] 降档重试（最多 2 档）；网络 / 超时 / 脚本
+  /// 错误不降档——那是暂时故障，同档位重试才有意义（由 CatalogService 做）。
+  ///
+  /// [timeout] 是调用方的剩余预算：降档循环用它算 deadline，每档 `getMusicUrl`
+  /// 的超时取 `min(20s, 剩余)`，剩余耗尽就停（不再发起下一档）。native /
+  /// any-listen 分支不消费该参数，由调用方自己的截止时间兜底。
+  ///
+  /// 脚本源首次使用会先尝试惰性激活（启动激活失败 / 引擎 failed 时），
+  /// 成功后再按正常流程取链。
   Future<PlayableStream> resolveStream(
     SourceTrack track, {
     String? requestedQuality,
+    Duration? timeout,
   }) async {
     // any-listen 曲目走远程服务器取链；其余曲目走 LX 脚本取链。
     if (AnyListenSource.isAnyListenTrack(track)) {
@@ -418,6 +573,8 @@ class SourceManager extends ChangeNotifier {
         throw SourceFailure.from(e);
       }
     }
+    // 脚本分支入口：引擎没跑起来（启动激活失败 / failed）时先惰性补一次激活。
+    await _ensureActiveScript(track.sourceKey);
     final decl = _activeSources[track.sourceKey];
     if (decl == null) {
       throw LxEngineException('音源 ${track.sourceKey} 当前不可用');
@@ -425,14 +582,67 @@ class SourceManager extends ChangeNotifier {
     if (!decl.canResolveUrl) {
       throw LxEngineException('音源「${decl.name}」不支持获取播放地址');
     }
-    final musicInfo = _withPickedHash(track, picked);
-    final url = await _engine.getMusicUrl(
-      source: track.sourceKey,
-      musicInfo: musicInfo,
-      quality: picked,
-    );
-    return PlayableStream(Uri.parse(url));
+    final candidates = <String>[
+      picked,
+      ...qualityFallbackCandidates(
+        track.qualities.map((quality) => quality.type),
+        picked,
+      ),
+    ];
+    final stopwatch = Stopwatch()..start();
+    var index = 0;
+    SourceFailure? lastFailure;
+    while (true) {
+      // 每档都用「剩余预算」压超时：引擎侧的 invoke 超时会被截到剩余时间，
+      // 剩余耗尽就不发起下一档（避免一次取链吃掉 3×20s）。
+      var qualityTimeout = _kLxResolveAttemptTimeout;
+      if (timeout != null) {
+        final remaining = timeout - stopwatch.elapsed;
+        if (remaining <= Duration.zero) {
+          // 没有上一档失败时（timeout 一开始就耗尽）按超时上报。
+          throw lastFailure ??
+              SourceFailure(
+                kind: FailureKind.timeout,
+                message: '取链超时：${timeout.inMilliseconds}ms 预算已用完',
+                retryable: true,
+              );
+        }
+        if (remaining < qualityTimeout) qualityTimeout = remaining;
+      }
+      final quality = candidates[index];
+      try {
+        final musicInfo = _withPickedHash(track, quality);
+        final url = await _engine.getMusicUrl(
+          source: track.sourceKey,
+          musicInfo: musicInfo,
+          quality: quality,
+          timeout: qualityTimeout,
+        );
+        return PlayableStream(Uri.parse(url));
+      } on Exception catch (e) {
+        // 边界统一为 SourceFailure：调用方（适配器 / 目录）按 kind 决策。
+        // 只归一化 Exception：编程错误（Error）继续冒泡，不伪装成音源失败。
+        final failure = SourceFailure.from(e);
+        lastFailure = failure;
+        final canDowngrade =
+            index < candidates.length - 1 && _canDowngradeQuality(failure);
+        if (!canDowngrade) throw failure;
+        index++;
+      }
+    }
   }
+
+  /// 单档 LX 取链的默认超时（与引擎 `getMusicUrl` 默认值一致）；调用方给了
+  /// 剩余预算时取更短者。
+  static const Duration _kLxResolveAttemptTimeout = Duration(seconds: 20);
+
+  /// 取链失败是否值得降档：只有「该档位没有地址」的语义才换档。
+  ///
+  /// 网络 / 超时 / 脚本错误是暂时故障，换档只会多花一次脚本调用；
+  /// 这些交给 CatalogService 在同档位重试。
+  static bool _canDowngradeQuality(SourceFailure failure) =>
+      failure.kind == FailureKind.notFound ||
+      failure.kind == FailureKind.unsupported;
 
   /// 酷狗等平台不同音质对应不同 hash，取链前替换为所选音质的 hash。
   Map<String, dynamic> _withPickedHash(SourceTrack track, String quality) {
@@ -466,6 +676,10 @@ class SourceManager extends ChangeNotifier {
         // 与 LX 分支保持一致：歌词失败返回 null，交由现有歌词源回退。
         return null;
       }
+    }
+    // 原生渠道不依赖脚本：歌词有内置实现兜底，不在这里拉起引擎。
+    if (!SongChannels.isSupported(track.sourceKey)) {
+      await _ensureActiveScript(track.sourceKey);
     }
     final decl = _activeSources[track.sourceKey];
     if (decl != null && decl.canFetchLyric) {
@@ -659,6 +873,10 @@ class SourceManager extends ChangeNotifier {
     }
     final existing = track.coverUrl;
     if (existing != null && existing.isNotEmpty) return existing;
+    // 同 fetchLyric：原生渠道走内置取图，不触发脚本激活。
+    if (!SongChannels.isSupported(track.sourceKey)) {
+      await _ensureActiveScript(track.sourceKey);
+    }
     final decl = _activeSources[track.sourceKey];
     if (decl != null && decl.canFetchPic) {
       try {
@@ -757,6 +975,7 @@ class SourceManager extends ChangeNotifier {
 
   @override
   void dispose() {
+    _cancelActivationRetry();
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }

@@ -16,6 +16,9 @@ import 'lx_script_info.dart';
 ///                              │ 连续失败 ≥ 阈值（重启尝试次数 / 连续超时次数）
 ///                              ▼
 ///                            failed
+///                              │ 冷却后（下一次 invoke / retryNow）
+///                              ▼
+///                          starting ──成功──▶ ready；失败 → failed（重置冷却）
 /// ```
 enum LxEngineState {
   /// 未启动 / 已 dispose。
@@ -30,8 +33,10 @@ enum LxEngineState {
   /// 崩溃后按退避间隔自动重放 [LxEngineSupervisor.start]。
   restarting,
 
-  /// 连续多次自动重启失败（或连续超时熔断）：停止自动重启，直到外部再次
-  /// [LxEngineSupervisor.start]；原因见 [LxEngineSupervisor.failureReason]。
+  /// 连续多次自动重启失败（或连续超时熔断）：先释放 isolate，冷却
+  /// `recoveryCooldown` 后由下一次请求自动做一次半开恢复（重放同一脚本），
+  /// 也可由 [LxEngineSupervisor.retryNow] 绕过冷却立即尝试；原因见
+  /// [LxEngineSupervisor.failureReason]。
   failed,
 }
 
@@ -43,8 +48,13 @@ enum LxEngineState {
 ///   用**同一脚本**按 0.5s / 2s / 8s 退避自动重放 `start`；
 /// - 重启期间到达的请求等待 ready（默认 10s 上限），超时才失败；
 /// - 连续 [restartDelays] 次崩溃（重放 `start` 失败，或重启后再次崩溃且期间
-///   没有任何成功 invoke）进入 [LxEngineState.failed]，不再自动重启，避免
+///   没有任何成功 invoke）进入 [LxEngineState.failed]，先暂停自动重启，避免
 ///   “脚本每次都崩溃时每首歌都吃满 20s 超时”；
+/// - `failed` 不是终点：记录失败时刻，冷却 `recoveryCooldown`（默认 60s）后
+///   由下一次 invoke 自动做**一次**半开恢复（重放同一脚本），成功即回到
+///   [LxEngineState.ready]；失败重新进入 `failed` 并重置冷却。并发请求共享
+///   同一次半开恢复（single-flight），不会重复 `start`；[retryNow] 供「重试」
+///   按钮 / 网络恢复绕过冷却立即尝试一次；
 /// - invoke 超时不再杀掉引擎（引擎侧会自动探活，只有真卡死才重启），
 ///   但连续 [maxConsecutiveTimeouts] 次超时说明脚本「每次起来都慢」，
 ///   同样进入 [LxEngineState.failed] 并记录 [failureReason]；
@@ -60,11 +70,14 @@ class LxEngineSupervisor {
     ],
     this._readyWaitTimeout = const Duration(seconds: 10),
     int maxConsecutiveTimeouts = 3,
+    Duration recoveryCooldown = const Duration(seconds: 60),
   }) : assert(restartDelays.isNotEmpty, '至少需要一个退避间隔'),
        assert(maxConsecutiveTimeouts > 0, '熔断阈值必须为正数'),
+       assert(!recoveryCooldown.isNegative, '半开恢复冷却不能为负（0 表示每次请求都可立即重试）'),
        _engine = (engineFactory ?? LxEngine.new)(),
        _restartDelays = List<Duration>.unmodifiable(restartDelays),
-       _maxConsecutiveTimeouts = maxConsecutiveTimeouts;
+       _maxConsecutiveTimeouts = maxConsecutiveTimeouts,
+       _recoveryCooldown = recoveryCooldown;
 
   /// 被包装的引擎实例（重启时复用同一实例重放 `start`）。
   final LxEngine _engine;
@@ -78,14 +91,21 @@ class LxEngineSupervisor {
   /// 连续超时熔断阈值（见 [restartAttempts] 旁的说明）。
   final int _maxConsecutiveTimeouts;
 
+  /// failed 后的半开恢复冷却：冷却期内请求直接失败，不再反复重跑脚本
+  /// （脚本启动本身要几百毫秒，断网时每次请求都重跑等于白烧 CPU）。
+  final Duration _recoveryCooldown;
+
   LxEngineState _state = LxEngineState.stopped;
   LxScriptInfo? _lastScript;
   int _restartAttempts = 0;
   int _consecutiveTimeouts = 0;
   int _restartGeneration = 0;
+  int _recoveryGeneration = 0;
   Timer? _backoffTimer;
   Completer<bool>? _backoffCompleter;
   Completer<void>? _readyCompleter;
+  Completer<void>? _recoveryCompleter;
+  DateTime? _failedAt;
   bool _disposed = false;
   String? _failureReason;
 
@@ -95,13 +115,13 @@ class LxEngineSupervisor {
   /// 当前状态。
   LxEngineState get state => _state;
 
-  /// 是否处于「连续重启失败」终态。
+  /// 是否处于「已停止、等待半开恢复」状态（冷却期内请求直接失败）。
   bool get isFailed => _state == LxEngineState.failed;
 
   /// 是否正在自动重启。
   bool get isRestarting => _state == LxEngineState.restarting;
 
-  /// 进入 [LxEngineState.failed] 的原因（诊断 / 上报用）；未进入终态时为 null。
+  /// 进入 [LxEngineState.failed] 的原因（诊断 / 上报用）；未处于 failed 时为 null。
   String? get failureReason => _failureReason;
 
   /// 连续崩溃计数（诊断/测试用）：重放 start 失败或重启后再次崩溃时累加，
@@ -120,7 +140,7 @@ class LxEngineSupervisor {
   Map<String, LxSourceDecl> get sources => _engine.sources;
   LxScriptInfo? get script => _engine.script;
 
-  /// 启动引擎并运行脚本（外部入口；同时记录脚本供自动重启重放）。
+  /// 启动引擎并运行脚本（外部入口；同时记录脚本供自动重启 / 半开恢复重放）。
   ///
   /// 失败时状态回到 [LxEngineState.stopped] 并原样抛出（不做自动重启，
   /// 由调用方决定是否重试）；成功进入 [LxEngineState.ready] 并触发回调。
@@ -130,9 +150,11 @@ class LxEngineSupervisor {
   }) async {
     _lastScript = script;
     _cancelPendingRestart();
+    _cancelPendingRecovery();
     _restartAttempts = 0;
     _consecutiveTimeouts = 0;
     _failureReason = null;
+    _failedAt = null;
     _setState(LxEngineState.starting);
     try {
       final sources = await _engine.start(script, timeout: timeout);
@@ -208,13 +230,37 @@ class LxEngineSupervisor {
     );
   }
 
+  /// 立即尝试一次恢复，绕过半开冷却（音源页「重试」/ 网络恢复触发）。
+  ///
+  /// 返回是否已恢复到可用状态：无脚本 / 已 ready 时没有可做的事，同样返回
+  /// true；尝试失败时保持 [LxEngineState.failed] 并重置冷却，返回 false。
+  Future<bool> retryNow() async {
+    if (_disposed) return false;
+    if (_state == LxEngineState.ready) return true;
+    if (_state == LxEngineState.starting ||
+        _state == LxEngineState.restarting) {
+      // 已有启动 / 重启在途：等它出结果，不再叠加第二次 start。
+      try {
+        await _ensureReady();
+      } on LxEngineException {
+        return false;
+      }
+      return _state == LxEngineState.ready;
+    }
+    if (_lastScript == null) return true;
+    await _runRecoveryAttempt();
+    return _state == LxEngineState.ready;
+  }
+
   /// 停止引擎并取消待执行的自动重启（可再次 [start] 复用同一实例）。
   Future<void> dispose() async {
     _cancelPendingRestart();
+    _cancelPendingRecovery();
     _lastScript = null;
     _restartAttempts = 0;
     _consecutiveTimeouts = 0;
     _failureReason = null;
+    _failedAt = null;
     _setState(LxEngineState.stopped);
     await _engine.dispose();
   }
@@ -223,16 +269,22 @@ class LxEngineSupervisor {
   Future<void> close() async {
     _disposed = true;
     _cancelPendingRestart();
+    _cancelPendingRecovery();
     _lastScript = null;
     _restartAttempts = 0;
     _consecutiveTimeouts = 0;
+    _failureReason = null;
+    _failedAt = null;
     _setState(LxEngineState.stopped);
     await _engine.close();
   }
 
   /// invoke 统一入口：确保 ready → 执行 → 崩溃检测/触发重启。
   Future<T> _guard<T>(Future<T> Function() action) async {
-    if (_state == LxEngineState.ready && !_engine.isRunning) {
+    if (_state == LxEngineState.failed) {
+      // failed 不是终点：冷却后由下一次请求自动尝试一次半开恢复。
+      await _recoverFromFailed();
+    } else if (_state == LxEngineState.ready && !_engine.isRunning) {
       _handleCrash(); // isolate 已退出但尚无 invoke 失败：立即进入重启
     }
     await _ensureReady();
@@ -243,7 +295,8 @@ class LxEngineSupervisor {
       _consecutiveTimeouts = 0;
       return result;
     } on LxEngineTimeoutException {
-      // 引擎存活但请求没回响应：不重启（引擎侧探活已排除卡死），累计熔断。
+      // 只统计「引擎活着但请求没回响应」：引擎侧探活已排除卡死，不重启。
+      // 网络类失败（脚本里的 HTTP 报错）走下面的通用分支，不算进超时熔断。
       _consecutiveTimeouts++;
       if (_consecutiveTimeouts >= _maxConsecutiveTimeouts) {
         await _fail('音源脚本连续 $_consecutiveTimeouts 次请求超时，已停止自动重试');
@@ -257,6 +310,68 @@ class LxEngineSupervisor {
     }
   }
 
+  /// failed 状态下的入口门：冷却未到直接拒绝，冷却已到尝试一次半开恢复。
+  ///
+  /// 冷却用「失败时刻 + 冷却时长」而不是一次性 Timer：应用可能整段挂着不动，
+  /// 按需判定不会有定时器泄漏，也天然把「用户刚点播放」当作恢复时机。
+  Future<void> _recoverFromFailed() async {
+    final reason = _failureReason ?? '音源引擎已停止';
+    final failedAt = _failedAt;
+    if (failedAt != null &&
+        DateTime.now().difference(failedAt) < _recoveryCooldown) {
+      throw LxEngineUnavailableException(reason);
+    }
+    if (_lastScript == null) {
+      // 没有脚本可重放（理论上只出现在构造后未 start 就 failed）：不假装恢复。
+      throw LxEngineUnavailableException(reason);
+    }
+    await _runRecoveryAttempt();
+    if (_state != LxEngineState.ready) {
+      throw LxEngineUnavailableException(_failureReason ?? reason);
+    }
+  }
+
+  /// 单飞的半开恢复：并发调用共享同一次 `start`，不会重复执行脚本。
+  Future<void> _runRecoveryAttempt() {
+    final pending = _recoveryCompleter;
+    if (pending != null) return pending.future;
+    final completer = Completer<void>();
+    _recoveryCompleter = completer;
+    _attemptRecovery().whenComplete(() {
+      if (identical(_recoveryCompleter, completer)) _recoveryCompleter = null;
+      if (!completer.isCompleted) completer.complete();
+    });
+    return completer.future;
+  }
+
+  /// 用 [_lastScript] 做一次半开恢复：成功 ready，失败回到 failed 并重置冷却。
+  Future<void> _attemptRecovery() async {
+    final script = _lastScript;
+    if (script == null) return;
+    if (_state == LxEngineState.ready ||
+        _state == LxEngineState.starting ||
+        _state == LxEngineState.restarting) {
+      return; // 已有启动 / 重启在途：不叠加第二次 start
+    }
+    final generation = _recoveryGeneration;
+    _setState(LxEngineState.starting);
+    try {
+      await _engine.start(script);
+      if (_disposed || generation != _recoveryGeneration) return;
+      _restartAttempts = 0;
+      _consecutiveTimeouts = 0;
+      _failureReason = null;
+      _failedAt = null;
+      // onStateChanged(ready) 会驱动 SourceManager 刷新 activeSources。
+      _setState(LxEngineState.ready);
+    } catch (e) {
+      if (_disposed || generation != _recoveryGeneration) return;
+      if (kDebugMode) debugPrint('[LxEngineSupervisor] 半开恢复失败: $e');
+      // _fail 会重置 _failedAt：下一次冷却从这次失败重新计时。
+      await _fail('音源引擎自动恢复失败，请稍后重试');
+    }
+  }
+
   /// 等待引擎就绪；重启期间最多等待 [_readyWaitTimeout]。
   Future<void> _ensureReady() async {
     if (_state == LxEngineState.ready) return;
@@ -267,12 +382,17 @@ class LxEngineSupervisor {
         try {
           await completer.future.timeout(_readyWaitTimeout);
         } on TimeoutException {
-          throw const LxEngineException('音源引擎重启超时，请稍后重试');
+          // 状态机不变，只换错误类型：这两条路径都表示「请求还没被执行」，
+          // 属于可恢复的暂时不可用（不同调用方会重试）。
+          throw const LxEngineUnavailableException('音源引擎重启超时，请稍后重试');
         }
       }
       if (_state == LxEngineState.ready) return;
     }
-    throw const LxEngineException('音源引擎未运行');
+    final reason = _state == LxEngineState.failed
+        ? (_failureReason ?? '音源引擎已停止')
+        : '音源引擎未运行';
+    throw LxEngineUnavailableException(reason);
   }
 
   /// 检测到崩溃：进入 [LxEngineState.restarting] 并启动退避重启循环。
@@ -338,13 +458,17 @@ class LxEngineSupervisor {
     }
   }
 
-  /// 进入 failed 终态：记录原因、取消重启、释放引擎，并保持到外部再次 [start]。
+  /// 进入 failed 终态：记录原因与失败时刻、取消重启、释放引擎。
   ///
   /// 释放 isolate 的原因：脚本已证明不可用（每次起来都慢 / 每次崩溃），
-  /// 继续留着它只会白占内存与 CPU；外部重新激活时会重新 `start`。
+  /// 继续留着它只会白占内存与 CPU；冷却后的半开恢复 / 外部 `start` 会重新
+  /// 执行脚本。`_lastScript` 保留，否则半开恢复无从重放。
   Future<void> _fail(String reason) async {
     if (_state == LxEngineState.failed || _disposed) return;
     _failureReason = reason;
+    // 冷却从这次失败起算：_attemptRecovery 失败时由这里重置，避免连点
+    // 「重试」在脚本确实坏掉时反复吃启动超时。
+    _failedAt = DateTime.now();
     _cancelPendingRestart();
     _setState(LxEngineState.failed);
     if (kDebugMode) debugPrint('[LxEngineSupervisor] $reason');
@@ -373,6 +497,17 @@ class LxEngineSupervisor {
     final backoff = _backoffCompleter;
     _backoffCompleter = null;
     if (backoff != null && !backoff.isCompleted) backoff.complete(false);
+  }
+
+  /// 取消半开恢复的等待者（不中断在途 `start`，只让等待者醒来重新判定状态）。
+  ///
+  /// `dispose` / `close` / 外部 `start` 都要经过这里：否则等待者会一直挂在
+  /// 一个再也不会推进的状态上，直到 ready 等待超时。
+  void _cancelPendingRecovery() {
+    _recoveryGeneration++;
+    final pending = _recoveryCompleter;
+    _recoveryCompleter = null;
+    if (pending != null && !pending.isCompleted) pending.complete();
   }
 
   void _setState(LxEngineState next) {

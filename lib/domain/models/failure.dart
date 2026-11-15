@@ -22,6 +22,9 @@ enum FailureKind {
 /// 纯 Dart 实现（不依赖 Flutter / HTTP 包）：`from` 通过类型名与字符串特征
 /// 归一化常见错误，避免领域层 import `lib/sources/**`（layering 硬规则）与
 /// `dart:io`（`SocketException` / `HttpException` 只按类型名识别）。已知映射：
+/// - `LxEngineUnavailableException` → engineRestarting（可恢复，可重试）
+/// - `LxResolveRejectedException` → notFound（该档位不可用，不原样重试）
+/// - `LxEngineTimeoutException` → timeout
 /// - `LxEngineException` → scriptError
 /// - `TimeoutException` → timeout
 /// - `SocketException` / `ClientException` / `HttpException` → network
@@ -54,6 +57,42 @@ class SourceFailure implements Exception {
 
     final message = error is String ? error : error.toString();
     final typeName = error is String ? '' : error.runtimeType.toString();
+
+    // LX 引擎细分错误（`lib/sources/lx/lx_engine_types.dart`）：领域层不能
+    // import sources 层，按 runtimeType 名 / `toString` 前缀识别。必须排在
+    // 通用 TimeoutException 之前：`LxEngineTimeoutException` 的字符串形态
+    // 同样包含 "TimeoutException"。
+    if (typeName == 'LxResolveRejectedException' ||
+        message.startsWith('LxResolveRejectedException')) {
+      // 脚本明确拒绝该档位/该曲目：不是暂时故障，原样重试没有意义。
+      return SourceFailure(
+        kind: FailureKind.notFound,
+        message: message,
+        cause: error,
+        retryable: false,
+      );
+    }
+
+    if (typeName == 'LxEngineUnavailableException' ||
+        message.startsWith('LxEngineUnavailableException')) {
+      // 引擎未运行 / 重启等待超时：请求没执行，恢复后重试即可。
+      return SourceFailure(
+        kind: FailureKind.engineRestarting,
+        message: message,
+        cause: error,
+        retryable: true,
+      );
+    }
+
+    if (typeName == 'LxEngineTimeoutException' ||
+        message.startsWith('LxEngineTimeoutException')) {
+      return SourceFailure(
+        kind: FailureKind.timeout,
+        message: message,
+        cause: error,
+        retryable: true,
+      );
+    }
 
     if (error is TimeoutException ||
         typeName == 'TimeoutException' ||

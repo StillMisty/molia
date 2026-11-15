@@ -163,6 +163,7 @@ class SourceManagerMusicSource implements MusicSource {
   Future<PlayableStream> resolve(
     Track track, {
     AudioQuality? preferredQuality,
+    Duration? timeout,
   }) async {
     try {
       // 直接返回 PlayableStream：headers（B 站 Referer/UA 等）不能在这一层
@@ -170,6 +171,7 @@ class SourceManagerMusicSource implements MusicSource {
       return await _manager.resolveStream(
         sourceTrackFromTrack(track),
         requestedQuality: preferredQuality?.type,
+        timeout: timeout,
       );
     } catch (e) {
       // 边界错误归一化（幂等：CatalogService 再包一层也不会重复包装）。
