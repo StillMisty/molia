@@ -22,20 +22,7 @@
 # - 日志写 $RUN_DIR/it-<platform>-<时间戳>.log（默认 ${TMPDIR:-/tmp}/molia-agent），失败时回显尾部 40 行；
 # - Android 由 flutter test 自动构建并安装 debug APK（不需要先 flutter build apk）。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
-
-usage() {
-  cat >&2 <<'EOF'
-用法:
-  test.sh linux [--timeout N] [--no-pub] [--window]
-  test.sh android [serial] [--timeout N] [--no-pub] [--no-uninstall]
-  test.sh all [serial] [--timeout N] [--no-pub]
-
-公共选项:
-  --file <path>   集成测试文件（默认 integration_test/lx_engine_integration_test.dart）
-  --window        在真实显示上跑（默认 Xvfb 无窗口）
-EOF
-  exit 2
-}
+handle_help "$@"
 
 [[ $# -ge 1 ]] || usage
 platform="$1"; shift

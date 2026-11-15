@@ -32,6 +32,46 @@ RUN_DEVICE_FILE="$RUN_DIR/flutter-run.device" # app.sh 记录本次 flutter run 
 log() { printf '[agent] %s\n' "$*" >&2; }
 die() { printf '[agent] ERROR: %s\n' "$*" >&2; exit 1; }
 
+# ---- CLI 约定（所有脚本一致：-h 看用法，参数错报用法 + 退出 2）-------------
+# 头部注释是唯一事实来源：改用法只改注释，脚本里不再维护第二份 usage 文本。
+# -h / --help 打印整段头部说明（用法 + 选项/命令 + 说明）到 stdout，退出 0；
+# 参数错误打印「用法类」小节 + 原因到 stderr，退出 2。
+usage_from_header() {
+  awk 'NR == 1 { next }
+       /^#/ { sub(/^# ?/, ""); print; next }
+       { exit }' "$0"
+}
+
+# 只取用法相关小节（用法 / 选项 / 参数 / 命令 / 全局选项 / 示例），到第一个
+# 说明性小节（说明 / 设计说明 / 典型流程 / 输出…）为止。
+usage_brief() {
+  awk 'NR == 1 { next }
+       !on && /^# 用法:/ { on = 1 }
+       on && /^# [^ ]/ {
+         section = $0
+         sub(/^# /, "", section)
+         sub(/:.*/, "", section)
+         if (section !~ /^(用法|选项|参数|命令|全局选项|示例)$/) exit
+       }
+       on { sub(/^# ?/, ""); print }' "$0"
+}
+
+handle_help() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      -h|--help) usage_from_header; exit 0 ;;
+    esac
+  done
+}
+
+# 脚本里的 `usage` 一律走这里：保持既有调用点不动，行为统一成退出 2。
+usage() {
+  usage_brief >&2
+  printf '[agent] 用法错误：%s（%s -h 看全部用法）\n' "${1:-参数不合法}" "${0##*/}" >&2
+  exit 2
+}
+
 # 是否有图形显示（Linux 桌面运行需要；无显示时用 linux_display_prefix 的 Xvfb）
 has_display() { [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; }
 

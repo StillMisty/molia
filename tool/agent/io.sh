@@ -18,11 +18,7 @@
 #   不影响 prefs / DB 采样；
 # - 只做观测，不是 CI 门槛；原始事件直接打印到 stdout。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
-
-usage() {
-  sed -n '/^# 用法:/,/^# 说明:/p' "$0" | sed -e 's/^# \{0,1\}//' -e '$d' >&2
-  exit 2
-}
+handle_help "$@"
 
 interval=0.2
 timeout_s=60

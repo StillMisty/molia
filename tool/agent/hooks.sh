@@ -3,6 +3,7 @@
 #
 # 用法: tool/agent/hooks.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
+handle_help "$@"
 
 git -C "$PROJECT_DIR" config core.hooksPath .githooks
 log "已启用 Git hooks：$PROJECT_DIR/.githooks（仅影响本仓库）"

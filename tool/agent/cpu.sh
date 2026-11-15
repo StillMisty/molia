@@ -15,11 +15,7 @@
 # - 输出一段可直接贴进文档的表格；原始数据落在 $RUN_DIR/cpu-<平台>-<时间戳>.txt。
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
-
-usage() {
-  sed -n '/^# 用法:/,/^# 说明:/p' "$0" | sed -e 's/^# \{0,1\}//' -e '$d' >&2
-  exit 2
-}
+handle_help "$@"
 
 platform=""
 serial=""
@@ -80,7 +76,6 @@ interval = float(sys.argv[3])
 out_path = sys.argv[4]
 clk = os.sysconf('SC_CLK_TCK')
 
-
 def read_threads(pid):
     result = {}
     try:
@@ -100,7 +95,6 @@ def read_threads(pid):
         except (FileNotFoundError, ProcessLookupError, IndexError):
             continue
     return result
-
 
 start = read_threads(pid)
 if not start:
@@ -206,7 +200,6 @@ if len(parts) < 2:
     print(f'没有解析到两次 /proc 采样（见 {raw_path}）', file=sys.stderr)
     sys.exit(1)
 
-
 def parse(block):
     result = {}
     for line in block.splitlines():
@@ -223,7 +216,6 @@ def parse(block):
             continue
     return result
 
-
 start, end = parse(parts[0]), parse(parts[-1])
 rows = []
 for tid, (comm, ticks) in end.items():
@@ -238,7 +230,6 @@ for cpu, name, tid in rows[:25]:
         continue
     lines.append(f'{name[:21]:<22}{cpu:>8.2f}{tid:>8}')
 
-
 def role(name, tid):
     low = name.lower()
     if tid == pid:
@@ -252,7 +243,6 @@ def role(name, tid):
     if 'exoplayer' in low or 'audiotrack' in low or 'audio' in low:
         return '音频解码'
     return '其它'
-
 
 roles = {}
 for cpu, name, tid in rows:

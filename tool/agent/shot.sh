@@ -10,11 +10,7 @@
 # - --annotate 会叠加带编号的 UI 元素框，配合 `ui.sh resolve` 定位点击坐标；
 # - 只在 stdout 打印最终 PNG 路径，便于脚本/agent 直接读取。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
-
-usage() {
-  echo "用法: shot.sh [name] [--annotate]" >&2
-  exit 2
-}
+handle_help "$@"
 
 name="screen"
 annotate=0

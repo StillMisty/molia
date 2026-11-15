@@ -21,20 +21,7 @@
 # - 采样不做文件系统热缓存区分，中位数对「改前/改后」是可比的；
 # - 原始日志与 summary.txt 落在 $RUN_DIR/startup-<时间戳>/，供 docs/performance.md 引用。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
-
-usage() {
-  cat >&2 <<'EOF'
-用法:
-  startup.sh [linux|android] [serial] [--runs N] [--no-build] [--window] [--timeout 秒]
-
-选项:
-  --runs N       采样次数（默认 5）
-  --no-build     跳过构建，用已有产物
-  --window       Linux：在真实显示上跑（默认无显示时套 xvfb-run）
-  --timeout 秒   单次运行墙钟上限（默认 Linux 60 / Android 120）
-EOF
-  exit 2
-}
+handle_help "$@"
 
 platform="linux"
 serial=""

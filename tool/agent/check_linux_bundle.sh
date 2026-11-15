@@ -7,6 +7,7 @@
 # 默认检查 build/linux/x64/release/bundle。CI release、perf.sh size、startup.sh
 # 共用同一判据；日常 `flutter build linux --release` 后也可手动跑。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
+handle_help "$@"
 
 bundle="${1:-$LINUX_RELEASE_BUNDLE}"
 linux_assert_release_bundle "$bundle"

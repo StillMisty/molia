@@ -9,11 +9,7 @@
 # 仍然全绿。本脚本只关心「日志出现 `molia.startup: 首帧`」，并在此之前的
 # Unhandled Exception 直接判失败。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
-
-usage() {
-  echo "用法: smoke.sh linux [--timeout N]" >&2
-  exit 2
-}
+handle_help "$@"
 
 platform="${1:-}"
 shift || true

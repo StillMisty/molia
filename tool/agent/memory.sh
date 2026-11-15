@@ -14,11 +14,7 @@
 # - 结束时输出 min / 中位 / max，用于和 `docs/memory.md` 的基线对比；
 # - Android 不在支持范围（托盘是桌面能力，移动端后台内存由系统托管）。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
-
-usage() {
-  sed -n '/^# 用法:/,/^# 说明:/p' "$0" | sed -e 's/^# \{0,1\}//' -e '$d' >&2
-  exit 2
-}
+handle_help "$@"
 
 interval=5
 timeout_s=0

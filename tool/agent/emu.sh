@@ -11,16 +11,7 @@
 # - headless 是 agent 默认模式：无窗口、截图仍可用（android screen capture / adb screencap）；
 # - window 模式经 WSLg（或当前桌面会话）显示，供人工观察。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
-
-usage() {
-  cat >&2 <<'EOF'
-用法:
-  emu.sh start [--headless|--window] [--cold]   # 启动（默认 --headless）
-  emu.sh stop [serial]                          # 停止
-  emu.sh status                                 # 状态
-EOF
-  exit 2
-}
+handle_help "$@"
 
 cmd_start() {
   local headless=1 cold=0

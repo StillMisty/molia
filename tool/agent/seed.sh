@@ -34,6 +34,7 @@
 #   Linux 优先 $HOME/Documents（xdg 文档目录），缺省回退
 #   ~/.local/share/$APP_ID/molia_database_v2.sqlite。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
+handle_help "$@"
 
 SEED_WEB_DIR="$RUN_DIR/seed-web"
 SEED_BACKUP_DIR="$RUN_DIR/seed-backup"
@@ -48,11 +49,6 @@ ANDROID_DB_PATH="/data/data/$APP_ID/files/molia_database_v2.sqlite"
 ANDROID_PREFS_PATH="/data/data/$APP_ID/shared_prefs/FlutterSharedPreferences.xml"
 ANDROID_SCRIPTS_PATH="/data/data/$APP_ID/files/lx_sources.json"
 ANDROID_TMP="/data/local/tmp/molia-seed"
-
-usage() {
-  sed -n '/^# 用法:/,/^# 说明:/p' "$0" | sed -e 's/^# \{0,1\}//' -e '$d' >&2
-  exit 2
-}
 
 [[ $# -ge 2 ]] || usage
 platform="$1"; shift
@@ -515,7 +511,6 @@ path, platform, source = sys.argv[1], sys.argv[2], sys.argv[3]
 KEY = "flutter.playback_session_v1"
 now = int(time.time() * 1000)
 
-
 def track(i, title, duration):
     return {
         "sourceKey": source,
@@ -528,7 +523,6 @@ def track(i, title, duration):
         "qualities": [],
         "payload": {"songId": f"seed-{i}"},
     }
-
 
 session = {
     "v": 1,

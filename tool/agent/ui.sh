@@ -16,12 +16,7 @@
 #   `shot.sh --annotate` + `ui.sh resolve` 配合；
 # - 输入文本前确保输入框已聚焦（见 android-cli skill 的 interact 参考）。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
-
-usage() {
-  # 从头部注释抽取「用法:」段（到「说明:」为止），避免写死行号漂移
-  sed -n '/^# 用法:/,/^# 说明:/p' "$0" | sed -e 's/^# \{0,1\}//' -e '$d' >&2
-  exit 2
-}
+handle_help "$@"
 
 [[ $# -ge 1 ]] || usage
 cmd="$1"; shift

@@ -18,19 +18,7 @@
 # - 运行设备记入 $RUN_DEVICE_FILE，reload/stop/status 均按记录设备行事；
 # - 日志与 pid 文件固定在 $RUN_DIR（默认 ${TMPDIR:-/tmp}/molia-agent），便于其它脚本/agent 读取。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
-
-usage() {
-  cat >&2 <<'EOF'
-用法:
-  app.sh run [-d linux|<serial>] [--headless] [--timeout N]  # 启动并等待就绪（默认 $DEVICE_ID）
-  app.sh reload                                   # 热重载
-  app.sh restart                                  # 热重启
-  app.sh stop                                     # 停止
-  app.sh log [N]                                  # 日志
-  app.sh status                                   # 状态
-EOF
-  exit 2
-}
+handle_help "$@"
 
 run_pid() {
   # 文件不存在时保持返回 0：调用方一律在 set -e 下用赋值接住
