@@ -167,7 +167,7 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
 - `flutter analyze --no-pub`：0 error / 0 warning；
 - `flutter test --no-pub`：全绿（新增 `test/managers/app_memory_manager_test.dart`
   以及 observer / ArtworkThemeSync 的后台门控用例）；
-- `tool/agent/test.sh linux`：集成用例全绿（含窗口 chrome hide → show 往返）；
+- `dart run tool/agent/cli.dart test linux`：集成用例全绿（含窗口 chrome hide → show 往返）；
 - 真实应用托盘往返：见 §4.3 的三行 `molia.memory` 与同刻断言；
 - Windows 实机（2026-10-19）：CI `windows-dev` dev52（run `39273980119`）
   关闭到托盘往返，数据见 §4.4。

@@ -19,7 +19,7 @@
 #
 # 说明:
 # - Linux 默认无条件 Xvfb；`--window` 才用当前 DISPLAY。只改 DISPLAY 不够，
-#   脚本会同时 unset WAYLAND_DISPLAY + GDK_BACKEND=x11（同 test.sh）；
+#   脚本会同时 unset WAYLAND_DISPLAY + GDK_BACKEND=x11（同 cli.dart test）；
 # - data/cpu linux 自动套私有 `dbus-run-session`：WSL / 容器没有 keyring 或
 #   NetworkManager 时，系统会话总线会让同步初始化（安全存储 / 探针）卡 40s+，
 #   看起来像搜索超时；
@@ -187,8 +187,8 @@ collect_timeline() {
   [[ -f "$FRAME_TIMELINE_DATA" ]] ||
     die "没有 timeline 产物：$FRAME_TIMELINE_DATA（看 $out_dir/drive.log 里 traceAction / VM service 的报错）"
   cp "$FRAME_TIMELINE_DATA" "$out_dir/timeline.json"
-  python3 "$PROJECT_DIR/tool/agent/timeline_report.py" \
-    "$out_dir/timeline.json" "$out_dir/summary.md"
+  dart run "$PROJECT_DIR/tool/agent/cli.dart" perf timeline \
+    "$out_dir/timeline.json" --out "$out_dir/summary.md"
 }
 
 run_frames_windows() {
@@ -936,7 +936,7 @@ case "$cmd" in
         # media_kit / nativeapi 的禁止库与 sqlite3 / quickjs 必需库。
         for apk in build/app/outputs/flutter-apk/*release*.apk; do
           [[ -f "$apk" ]] || continue
-          python3 "$PROJECT_DIR/tool/agent/apk_size.py" --check "$apk" \
+          dart run "$PROJECT_DIR/tool/agent/cli.dart" size apk --check "$apk" \
             >>"$out_dir/summary.md" 2>"$out_dir/check.log" ||
             die "APK native 库约束失败（见 $out_dir/check.log）"
         done

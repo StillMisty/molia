@@ -85,7 +85,7 @@ jobs:
     timeout-minutes: 60
     env:
       # Android CLI 固定到具体版本：`latest` 会让同一条 CI 随时换工具。
-      # 升级时改这里 + AGENTS.md 工具链表，由 check_docs.py 校验。
+      # 升级时改这里 + AGENTS.md 工具链表，由 cli.dart docs check 校验。
       ANDROID_CLI_VERSION: "1.1.16919734"
       # 不启用 Gradle 缓存：tag 构建对 Actions cache 只读，没有 main 预热不会命中。
       # 跨项目并行在 android/gradle.properties 的 org.gradle.parallel 统一开启。
@@ -191,7 +191,7 @@ jobs:
           set -euo pipefail
           for apk in build/app/outputs/flutter-apk/app-*-release.apk; do
             [[ -f "$apk" ]] || continue
-            python3 tool/agent/apk_size.py --check "$apk"
+            dart run tool/agent/cli.dart size apk --check "$apk"
           done
       - name: 校验 release 资源（shrinkResources 不能删掉通知图标，见已知坑 34）
         run: |

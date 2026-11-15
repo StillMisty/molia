@@ -1,4 +1,4 @@
-/// APK 体积 / native 库明细与发布约束校验（跨端，替代 `apk_size.py`）。
+/// APK 体积 / native 库明细与发布约束校验（跨端，替代 `size apk`）。
 ///
 /// 约束来源与 sh / py 版本一致：
 /// - Android 包不得出现 libmpv.so / libmediakitandroidhelper.so（media_kit 的

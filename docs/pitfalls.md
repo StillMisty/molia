@@ -47,7 +47,7 @@
     也不要推广到 Android——Android 走官方 teardown（stopApp/uninstall）能干净退出，注册看门狗
     反而会抢在卸载/回收之前退出进程。
     Android 若遇跑完不退出，是上游 adb teardown 无超时（flutter/flutter#187785 / #187984，
-    3.47.6 已修 DDS 路径），先看 `tool/agent/test.sh` 的日志尾部再判断。
+    3.47.6 已修 DDS 路径），先看 `dart run tool/agent/cli.dart test` 的日志尾部再判断。
     另：Linux 集成测试默认套 `xvfb-run`（脚本无条件处理，WSLg 下也不会弹窗），否则无显示环境
     会报「Error waiting for a debug connection」；要肉眼观察用 `test.sh linux --window`。
 12. **不内置字体资产**：界面与海报统一使用设备字体，用户可在设置中切换「应用字体」
@@ -160,7 +160,7 @@
     从源码编译、shared_preferences 带的 androidx.datastore、sqlite3 经 Dart hooks
     打的 libsqlite3 等；`libquickjs_c_bridge_plugin.so` 与 libsqlite3 均已实测 LOAD 段
     Align=0x4000），升级后可能被换回 4 KB 库。
-    本地默认模拟器就是 16 KB 页，集成测试（`tool/agent/test.sh android`）会当场暴露
+    本地默认模拟器就是 16 KB 页，集成测试（`dart run tool/agent/cli.dart test android`）会当场暴露
     加载失败；必要时用官方 `check_elf_alignment.sh` 或 `zipalign -c -P 16 <apk>` 复查。
 28. **Android 打包不要剔除本地库的 `libsqlite3.so`**：drift 在所有平台都使用
     `sqlite3` 经 Dart hooks 打进 APK 的 `libsqlite3.so`；`android/app/build.gradle`
@@ -207,7 +207,7 @@
     入口是测试 listener（VM Service `rootLib` 是 `flutter_test_listener.dart`），
     单独运行它不执行应用 `main()`——不渲染、窗口不出现，容易误判成「桌面端坏了」。
     手工验证桌面端用 `flutter run -d linux` 或先 `flutter build linux --debug`
-    再跑 bundle（`tool/agent/test.sh linux` 会自行重建，不影响它）。
+    再跑 bundle（`dart run tool/agent/cli.dart test linux` 会自行重建，不影响它）。
 
 33. **桌面集成测试不再包含真实播放用例**：无头环境（Xvfb / CI runner）下
     media_kit/libmpv 偶发卡在 `playTracks` 装载，且 `Future.timeout` 无法打断

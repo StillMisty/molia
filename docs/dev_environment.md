@@ -4,7 +4,7 @@
 
 首次克隆后执行一次 `tool/agent/hooks.sh`（等价于 `git config core.hooksPath .githooks`）。
 `.githooks/pre-commit` 只格式化本次已暂存、且没有未暂存改动的 `*.dart` 文件；提交涉及
-`*.md` 或版本文件时还会跑 `tool/agent/check_docs.py`（文档引用 / 工具链一致性，失败阻塞，
+`*.md` 或版本文件时还会跑 `dart run tool/agent/cli.dart docs check`（文档引用 / 工具链一致性，失败阻塞，
 `SKIP_DOCS_CHECK=1` 可跳过）。同一路径存在
 未暂存改动时会跳过并提示，避免把工作区内容一起 stage。找不到 `dart`（例如 GUI Git 客户端的
 PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解释器。
@@ -50,7 +50,7 @@ PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解�
   原处但不读、不迁移。以后改表结构仍写增量迁移：提 `schemaVersion` 后跑
   `build_runner` + `drift_dev make-migrations`（从新 v1 生成 schema 快照）并用
   `stepByStep` 保留数据（ADR-0005）。
-- **集成测试默认 headless**：`tool/agent/test.sh linux` 无条件套 `xvfb-run -a`
+- **集成测试默认 headless**：`dart run tool/agent/cli.dart test linux` 无条件套 `xvfb-run -a`
   （并强制 `GDK_BACKEND=x11`、去掉 `WAYLAND_DISPLAY`——只改 DISPLAY 挡不住 GTK 走 WSLg
   Wayland，窗口照样弹）；要肉眼观察加 `--window`。等价裸命令
   `flutter test integration_test/... -d linux` 必须有 DISPLAY（官方要求，无显示时 App 起不来）；
@@ -62,7 +62,7 @@ PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解�
   `setsid nohup` + pid-file 起 `flutter run`，等就绪后返回；`reload` / `restart` /
   `stop` 按记录设备操作，不占前台会话。没有图形显示时显式加 `--headless`（Xvfb），
   脚本不隐式猜测显示。不要直接前台 `flutter run`。
-- **首帧烟测**：`tool/agent/smoke.sh linux` 会清掉旧实例，在 Xvfb + 软件 GL 下启动
+- **首帧烟测**：`dart run tool/agent/cli.dart smoke linux` 会清掉旧实例，在 Xvfb + 软件 GL 下启动
   真实 `main()` / provider tree，等日志出现 `molia.startup: 首帧`；首帧前的
   `Unhandled Exception` 直接判失败。`flutter test` / 集成测试都不走 `main()`，
   启动期崩溃只有这个烟测能兜住。
@@ -93,7 +93,7 @@ tool/agent/shot.sh [name]  # 截图 → ${TMPDIR:-/tmp}/molia-agent/shots/*.png�
 tool/agent/ui.sh layout|tap|swipe|text|key|launch|force-stop
 tool/agent/seed.sh android favorites|covers|history|session|lang|mock-source|status|clear|restore
                            # 数据注入：收藏 / 最近播放 / 恢复会话 / mock 音源（见下）
-tool/agent/test.sh android # 集成测试（官方 flutter test 路径；自动构建/安装 debug APK，跑完卸载）
+dart run tool/agent/cli.dart test android # 集成测试（官方 flutter test 路径；自动构建/安装 debug APK，跑完卸载）
 tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
 ```
 
@@ -144,12 +144,12 @@ tool/agent/seed.sh android restore       # 用最近一次备份还原（第一�
   `tool/agent/worktree_prepare.sh <worktree-dir> [branch]`：会补分支、签名
   （优先用户级 `~/.config/molia/android.properties`）与 native assets hooks 缓存
   （受限网络下 sqlite3 下载会卡）。Gradle wrapper 已入库，不需要复制。
-- APK 内容明细：`python3 tool/agent/apk_size.py [--check] <apk>`；不依赖 `unzip`。
+- APK 内容明细：`dart run tool/agent/cli.dart size apk [--check] <apk>`；不依赖 `unzip`。
   内存采样：`tool/agent/perf.sh memory android`（先 `adb root`）。
 
 ### Android 集成测试
 
-`tool/agent/test.sh android` 走官方 `flutter test integration_test/...` 路径（不是截图点按）：
+`dart run tool/agent/cli.dart test android` 走官方 `flutter test integration_test/...` 路径（不是截图点按）：
 
 - 不需要先 `flutter build apk`：flutter test 自己构建 debug APK 并安装，跑完默认卸载
   （要保留安装态排查用 `--no-uninstall`）；失败时设备侧异常会被捕获并让退出码非零；

@@ -1,7 +1,7 @@
 name: CI
 
 # PR / main 的快速校验：静态分析 + 单元测试。
-# 发布构建走 release.yml；真实引擎的集成测试不进 CI，本地用 tool/agent/test.sh
+# 发布构建走 release.yml；真实引擎的集成测试不进 CI，本地用 dart run tool/agent/cli.dart test
 # 在 Linux / Android 上运行，CI 只跑 analyze + 单元测试。
 on:
   pull_request:
@@ -24,7 +24,7 @@ jobs:
       # 文档引用（路径 / 链接 / § 章节号 / 孤儿文档）与工具链版本一致性。
       # 纯 Python，无需 Flutter，放在最前面快速失败。
       - name: docs / toolchain 一致性
-        run: python3 tool/agent/check_docs.py
+        run: dart run tool/agent/cli.dart docs check
 
       # native assets（cnativeapi 等）的构建 hook 需要 GTK / X11 开发包：
       # 缺少时 `flutter analyze` / `flutter test` 会直接死在 native assets 阶段

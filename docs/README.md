@@ -7,7 +7,7 @@
 
 | 事实 / 主题 | 权威位置（唯一维护） | 说明 |
 | --- | --- | --- |
-| 工具链版本（Flutter / Dart / JDK / Gradle / AGP / Kotlin / SDK / NDK） | `AGENTS.md` §工具链 | 其它文档与 `molia-*` 技能不复列；`check_docs.py` 校验 |
+| 工具链版本（Flutter / Dart / JDK / Gradle / AGP / Kotlin / SDK / NDK） | `AGENTS.md` §工具链 | 其它文档与 `molia-*` 技能不复列；`dart run tool/agent/cli.dart docs check` 校验 |
 | 开发 / 编译 / 发布流程（顺序、门禁、偏离登记） | `docs/dev_workflow.md` | 流程入口；命令细节以脚本用法为准 |
 | 本地开发环境、模拟器、seed、集成测试入口 | `docs/dev_environment.md` | 工具版本仍回 `AGENTS.md` |
 | 架构与分层（as-built） | `docs/architecture.md` | 分层约束由 `test/architecture/` 强制执行 |
@@ -39,4 +39,4 @@
 3. **孤儿文档**：新增 `docs/*.md` 必须在本表登记，或删除。没有入链的文档等于不存在。
 4. **用户可见功能**：新功能落地时同步补 `GLOSSARY.md` 术语与 `docs/architecture.md` 条目；评审把「缺条目」视为未完成。
 5. **ADR**：编号从 0001 起连续；已采纳的 ADR 只改「状态 / 相关链接」，不改历史决策正文。
-6. **检查**：改完跑 `python3 tool/agent/check_docs.py`（CI 与 pre-commit 都会跑）。它校验路径 / 链接 / § 章节号 / 孤儿文档 / ADR 编号，以及工具链版本一致性。
+6. **检查**：改完跑 `dart run tool/agent/cli.dart docs check`（CI 与 pre-commit 都会跑）。它校验路径 / 链接 / § 章节号 / 孤儿文档 / ADR 编号，以及工具链版本一致性。

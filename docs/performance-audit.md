@@ -732,7 +732,7 @@ Linux release（Xvfb，1440×900）：
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
 - `flutter test --no-pub`：2526 passed / 11 skipped；
-- `tool/agent/test.sh linux`：通过；`perf_flows_test.dart` 单跑通过；
+- `dart run tool/agent/cli.dart test linux`：通过；`perf_flows_test.dart` 单跑通过；
 - `tool/agent/perf.sh frames linux`：通过，`mobile-mini-expand` 产出 21 帧；
 - `tool/agent/perf.sh data linux`：默认无头 + 私有 D-Bus，`scenario.done`
   正常，`search.source` 0.45ms；

@@ -12,7 +12,7 @@ description: 优化或验证 Molia 的包体积、内存、APK 内容、Linux re
 | 新 worktree 构建前置 | `tool/agent/worktree_prepare.sh <dir> [branch]` |
 | Linux bundle 体积 | `tool/agent/perf.sh size linux` |
 | Android APK 体积 | `tool/agent/perf.sh size android` |
-| APK 明细 / native 库约束 | `python3 tool/agent/apk_size.py --check <apk>` |
+| APK 明细 / native 库约束 | `dart run tool/agent/cli.dart size apk --check <apk>` |
 | Android 内存采样 | `tool/agent/perf.sh memory android`（需 `adb root`） |
 | Linux / Windows 内存 | `tool/agent/perf.sh memory linux\|windows` |
 | Linux release 卫生 | `tool/agent/check_linux_bundle.sh [bundle]` |
@@ -74,12 +74,12 @@ tarball），用 `--split-debug-info=build/symbols/linux` 构建，调用
 
 ```bash
 tool/agent/perf.sh size android
-python3 tool/agent/apk_size.py --check build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+dart run tool/agent/cli.dart size apk --check build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
 ```
 
 - 发布参数以 `.github/workflows/release.yml` 的 `flags` 为准（`--split-per-abi
   --split-debug-info --obfuscate`）；不同参数的数字不能直接 A/B。
-- `apk_size.py` 会按 `lib/<abi>` / dex / `flutter_assets` / res 分组，并检查
+- `size apk` 会按 `lib/<abi>` / dex / `flutter_assets` / res 分组，并检查
   禁止库：`libmpv.so`、`libmediakitandroidhelper.so`、`libcnativeapi.so`；
   必需库：`libsqlite3.so`（坑 #28）、`libquickjs_c_bridge_plugin.so`。
 - 估算 `lib/` 占比时看压缩后；native 库通常占 APK 的 80% 以上。AOT 侧要看
@@ -118,6 +118,6 @@ rg "RemovedType|removed_key|旧术语" lib test integration_test docs GLOSSARY.m
 - 代码检索优先用 `rg`（跳过 `.gitignore`）；不要 `grep -r .` 扫到
   `.dart_tool/flutter_build`，也不要 `find /` 找系统 libmpv（Linux 用系统
   `libmpv.so`，见 `docs/media_kit_native_libs.md`）。
-- APK 内容用 `apk_size.py` 或 `python3 -m zipfile -l`，不依赖 `unzip`。
+- APK 内容用 `size apk` 或 `python3 -m zipfile -l`，不依赖 `unzip`。
 - `adb` 未在 PATH 时用 `~/Android/Sdk/platform-tools/adb`，或先
   `export PATH="$HOME/Android/Sdk/platform-tools:$PATH"`。

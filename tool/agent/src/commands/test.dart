@@ -1,6 +1,6 @@
 /// `test`：官方 `flutter test` 集成测试入口（Linux 桌面 / Android 模拟器）。
 ///
-/// 与 `tool/agent/test.sh` 同口径：Linux 默认 headless（xvfb-run），Android
+/// 与 `dart run tool/agent/cli.dart test` 同口径：Linux 默认 headless（xvfb-run），Android
 /// 默认取运行中的模拟器；判定只看 flutter test 退出码，失败时回显日志尾部。
 library;
 

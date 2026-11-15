@@ -185,10 +185,10 @@ lib/playback/
    `test/lx_script_update_test.dart`、`test/builtin_misc_test.dart`
    （KRC/LRCX/QRC/MRC 合成数据闭环）、`test/architecture/layering_test.dart`）；
 3. `node tool/lx_prelude_harness.mjs` 输出 `PROTOCOL OK`；
-4. `tool/agent/test.sh linux`（等价 `flutter test integration_test/lx_engine_integration_test.dart
+4. `dart run tool/agent/cli.dart test linux`（等价 `flutter test integration_test/lx_engine_integration_test.dart
    -d linux`）：真实导入→搜索→取链→歌词；不含真实播放（无头环境 libmpv 装载不可靠，
    见 `docs/pitfalls.md` #33），默认跑在 Xvfb 上（无窗口，`--window` 才上真实显示）；
-5. `tool/agent/test.sh android`（模拟器，官方 flutter test 路径）：同一份引擎/UI 用例；
+5. `dart run tool/agent/cli.dart test android`（模拟器，官方 flutter test 路径）：同一份引擎/UI 用例；
    跑完自动卸载，不污染设备状态；
 6. 真机/模拟器验证：设置 → 音源管理 → 导入社区脚本（或在线更新）→ 搜索 → 播放。
 

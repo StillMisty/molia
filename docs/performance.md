@@ -330,7 +330,7 @@ VM service timeline（DevTools Performance 的同一数据源），场景仍是�
 - 产物：`timeline.json`（原始 trace，可直接导入 DevTools Performance 或
   ui.perfetto.dev 看火焰图）与 `summary.md`（UI 帧百分位、BUILD / LAYOUT / PAINT /
   COMPOSITING / SEMANTICS / FINALIZE TREE 每帧耗时、最差 8 帧的主要子事件），
-  由 `tool/agent/timeline_report.py` 生成；
+  由 `dart run tool/agent/cli.dart perf timeline` 生成；
 - 不做长期基线：timeline 体积与采集开销都远大于默认路径，回归对比仍看 `frames`；
 - Linux 首测（Xvfb，1000 条收藏，10×12 帧滚动）两次：UI 帧 p50 2–4ms / p95 ≈5–6ms，
   其中 LAYOUT 占 42–44%、SEMANTICS 占 36–39%。两次差距说明 instrument 环境噪声
@@ -415,6 +415,6 @@ bundle-only tar.gz。下表同机实测（Linux x64 / Flutter 3.47.9）；MB 为
 **15,116,932 B**。该组数字与上表不是同一构建参数，不能把差额全归因到 native
 library 剔除；分组收益以 A/B 表为准。
 
-APK 内容明细用 `python3 tool/agent/apk_size.py --check <apk>`（`perf.sh size
+APK 内容明细用 `dart run tool/agent/cli.dart size apk --check <apk>`（`perf.sh size
 android` 已自动调用）；不需要 `unzip`，并会拦住 `libmpv.so` /
 `libmediakitandroidhelper.so` / `libcnativeapi.so` 回流。

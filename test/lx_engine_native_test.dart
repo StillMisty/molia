@@ -18,7 +18,7 @@ import 'package:molia/sources/lx/lx_script_info.dart';
 ///     flutter test test/lx_engine_native_test.dart
 ///
 /// （`build/linux/x64/debug/bundle/lib/` 由 `flutter build linux --debug` 或
-/// `tool/agent/test.sh linux` 产出。）
+/// `dart run tool/agent/cli.dart test linux` 产出。）
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

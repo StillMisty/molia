@@ -9,7 +9,7 @@ description: 发布 Molia 版本，或改动发布产物 / 更新清单 / 平台
 `lib/data/update` + `lib/services/update`（决策见 `docs/adr/0006-in-app-update.md`）。
 
 发布构建的体积 / native 库守卫见 `molia-perf-tooling` skill：Linux 走
-`tool/agent/check_linux_bundle.sh`，Android 走 `python3 tool/agent/apk_size.py
+`tool/agent/check_linux_bundle.sh`，Android 走 `dart run tool/agent/cli.dart size apk
 --check`；release workflow 已接入。
 
 ## 1. 流水线总览

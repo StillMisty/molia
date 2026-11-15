@@ -13,11 +13,14 @@ import 'dart:io';
 import 'src/apk_size.dart';
 import 'src/commands/analyze.dart';
 import 'src/commands/app.dart';
+import 'src/commands/docs.dart';
 import 'src/commands/emu.dart';
 import 'src/commands/smoke.dart';
 import 'src/commands/test.dart';
 import 'src/context.dart';
+import 'src/docs_check.dart';
 import 'src/perf_report.dart';
+import 'src/timeline_report.dart';
 
 const String _topUsage = '''
 molia 跨端工具（Linux / macOS / Windows 同一套命令）
@@ -28,6 +31,7 @@ molia 跨端工具（Linux / macOS / Windows 同一套命令）
   info                      环境信息（平台 / Dart / Flutter / adb / Android CLI）
   deps                      依赖与工具链体检：pub 可解析性、AGP/KGP、工具版本
   analyze [选项]            flutter analyze（默认 --no-pub，--pub 可关闭）
+  docs check [--docs|--toolchain]  文档引用 / 工具链一致性（CI 与 pre-commit 用）
   test <平台> [选项]        集成测试：linux / android / all
   smoke linux              启动首帧烟测（真实 main + provider tree）
   app <命令>               run / reload / restart / stop / log / status（--machine 控制通道）
@@ -35,6 +39,7 @@ molia 跨端工具（Linux / macOS / Windows 同一套命令）
   size apk [<apk>...]       APK 分组体积与 native 库约束
   perf <子命令>             frames / startup / data / cpu / memory / size（后端 perf.sh）
   perf report [<目录>]      frames 结果汇总成 summary.md（本命令为 Dart 实现）
+  perf timeline <json>      VM timeline 帧归因（--out 指定 markdown 路径）
   startup|cpu|memory|io|seed  采样与数据注入（平台后端：sh / ps1，参数原样透传）
   help [<命令>]             查看总用法或单个命令用法
 
@@ -106,6 +111,8 @@ Future<void> main(List<String> args) async {
       await _runDeps(context);
     case 'analyze':
       await runAnalyze(context, rest);
+    case 'docs':
+      await runDocs(context, rest);
     case 'test':
       await runTest(context, rest);
     case 'smoke':
@@ -117,7 +124,7 @@ Future<void> main(List<String> args) async {
     case 'size':
       await _runSize(context, rest);
     case 'perf':
-      if (rest.isEmpty || rest.first == 'report') {
+      if (rest.isEmpty || rest.first == 'report' || rest.first == 'timeline') {
         await _runPerf(context, rest);
       } else {
         await _runBackend(context, 'perf', rest);
@@ -232,18 +239,27 @@ Future<void> _runDeps(ToolContext context) async {
     '${'analyze-suggestions'.padRight(24)}${analyze.ok ? 'ok' : 'fail'}',
   );
 
-  // docs 检查仍是 python 实现（迁移中）：有 python3 就跑，没有就跳过并说明。
-  final python = context.which('python3') ?? context.which('python');
-  if (python == null) {
-    summary.writeln(
-      '${'check-docs'.padRight(24)}skip（没有 python3，docs 检查尚未迁移到 CLI）',
+  // 文档 / 工具链一致性：直接调 Dart 实现，不再依赖 Python。
+  try {
+    final docsCheck = runDocsCheck(
+      context.repoRoot,
+      docs: false,
+      toolchain: true,
     );
-  } else {
-    await record('check-docs', [
-      python,
-      '${context.repoRoot}/tool/agent/check_docs.py',
-      '--toolchain',
-    ]);
+    File('${outDir.path}/check-docs.txt').writeAsStringSync(
+      docsCheck.ok
+          ? 'check_docs: OK\n'
+          : '${docsCheck.errors.map((error) => 'ERROR $error').join('\n')}\n\n'
+                'check_docs: ${docsCheck.errors.length} 项失败\n',
+    );
+    final status = docsCheck.ok ? 'ok' : 'fail';
+    summary.writeln('${'check-docs'.padRight(24)}$status');
+    stdout.writeln('${'check-docs'.padRight(24)}$status');
+  } on StateError catch (error) {
+    File('${outDir.path}/check-docs.txt')
+        .writeAsStringSync('${error.message}\n');
+    summary.writeln('${'check-docs'.padRight(24)}fail');
+    stdout.writeln('${'check-docs'.padRight(24)}fail');
   }
 
   final gradlew = File('${context.repoRoot}/android/gradlew');
@@ -370,8 +386,12 @@ Future<void> _runPerf(ToolContext context, List<String> args) async {
   if (_wantsHelp(args.first)) {
     return stdout.write(_perfUsage);
   }
+  if (args.first == 'timeline') {
+    await _runTimeline(args.sublist(1));
+    return;
+  }
   if (args.first != 'report') {
-    stderr.writeln('[agent] 未知子命令：${args.first}（目前只有 report）');
+    stderr.writeln('[agent] 未知子命令：${args.first}（report / timeline）');
     exitCode = 2;
     return;
   }
@@ -394,7 +414,7 @@ Future<void> _runPerf(ToolContext context, List<String> args) async {
   final rows = loadFrameRows(directory);
   if (rows.isEmpty) {
     stderr.writeln(
-      '[agent] ${directory.path} 里没有 molia.frame 样本（timeline 结果用 perf.sh 的 timeline_report.py）',
+      '[agent] ${directory.path} 里没有 molia.frame 样本（timeline 结果用 `perf timeline`）',
     );
     exitCode = 1;
     return;
@@ -466,6 +486,47 @@ Future<void> _runBackend(
     default:
       return null;
   }
+}
+
+/// `perf timeline <timeline.json> [--out <summary.md>]`：VM timeline 帧归因。
+Future<void> _runTimeline(List<String> args) async {
+  if (args.isEmpty) {
+    stderr.writeln(
+      '用法: dart run tool/agent/cli.dart perf timeline <timeline.json> [--out <summary.md>]',
+    );
+    exitCode = 2;
+    return;
+  }
+  final file = File(args.first);
+  if (!file.existsSync()) {
+    stderr.writeln('[agent] 文件不存在：${file.path}');
+    exitCode = 2;
+    return;
+  }
+  String? out;
+  for (var index = 1; index < args.length; index++) {
+    if (args[index] == '--out' && index + 1 < args.length) {
+      out = args[++index];
+      continue;
+    }
+    stderr.writeln('[agent] 未知参数：${args[index]}');
+    exitCode = 2;
+    return;
+  }
+
+  final report = renderTimelineReport(file);
+  if (out != null) {
+    File(out).writeAsStringSync(report.markdown);
+    if (!report.ok) {
+      stderr.writeln('[agent] trace 里没有 $buildEvent 事件；已写出说明到 \$out');
+      exitCode = 1;
+      return;
+    }
+    stdout.writeln('timeline 归因 -> $out');
+    return;
+  }
+  stdout.write(report.markdown);
+  if (!report.ok) exitCode = 1;
 }
 
 Directory? _latestPerfDir(ToolContext context) {

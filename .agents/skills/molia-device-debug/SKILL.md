@@ -35,7 +35,7 @@ tool/agent/emu.sh stop         # 停止模拟器（app.sh stop 只停 flutter ru
 - Linux 桌面优先后台跑：`tool/agent/app.sh run -d linux`（setsid + pid-file，不占会话）；
   无显示加 `--headless`，不做隐式 Xvfb 切换。不要前台裸 `flutter run`。
 - 窗口黑屏先看启动日志，不要先查 GPU：`tool/agent/app.sh log` 或
-  `tool/agent/smoke.sh linux`。首帧前出现 `Unhandled Exception`（尤其
+  `dart run tool/agent/cli.dart smoke linux`。首帧前出现 `Unhandled Exception`（尤其
   `Tried to use Provider with a subtype`）说明 `main()` 在 `runApp` 前中断，
   窗口不会显示；`Provider` 暴露窄接口时改用 `InheritedProvider`。
 - `shot.sh` 目前只支持 Android。Linux 截图用 Xvfb + `xdotool` + `ffmpeg x11grab`

@@ -36,22 +36,22 @@ Android CLI 1.1.16919734。
 ```bash
 flutter analyze --no-pub   # 必须 0 error / 0 warning
 flutter test --no-pub      # 全量（默认集，本机 <30s）；单文件：flutter test test/lx_core_test.dart --no-pub
-dart run tool/agent/cli.dart -h          # 跨端工具入口（info/deps/analyze/test/smoke/app/emu/size/perf/startup/cpu/memory/io/seed；采样类透传平台后端，见 ADR-0031）
-tool/agent/test.sh linux   # 端到端（真实引擎 + 设置页 + 窗口/托盘，不含播放）；Xvfb 无窗口，桌面看门狗勿删
-tool/agent/test.sh android # 同一套跑模拟器（先 emu.sh start）；--window / --timeout 见脚本
-tool/agent/smoke.sh linux  # 启动首帧烟测（真实 main + provider tree；Xvfb，抓 runApp 前崩溃）
-tool/agent/seed.sh android|linux <cmd>   # 数据注入：favorites/covers/history/session/lang/mock-source/status/clear/restore
-tool/agent/startup.sh                    # 启动耗时采样（release 冷启动 N 次取中位；基线与结论见 docs/performance.md）
-tool/agent/perf.sh                       # 全链路体检：frames / startup / data / cpu / memory / size（最新基线与跑法见 docs/performance.md）
-tool/agent/cpu.sh                        # 按线程 CPU 采样（平台 / Dart UI / raster / IO / 音频；被 perf.sh cpu 调用）
-tool/agent/memory.sh                     # 托盘内存采样（RSS 曲线 + molia.memory 转换日志；见 docs/memory.md）
-tool/agent/io.sh                         # 磁盘写入采样（prefs mtime 计数 + DB/WAL 大小 + /proc IO 差分）
-tool/agent/memory.ps1                    # Windows 托盘内存采样（专用工作集 / 提交大小；见 docs/memory.md）
-tool/agent/hooks.sh                      # 启用 .githooks/pre-commit：格式化暂存 Dart + 文档/工具链检查
-tool/agent/deps.sh                       # 依赖/工具链体检：pub outdated + analyze suggestions + Gradle 实际版本
+dart run tool/agent/cli.dart -h                # 跨端工具入口：info/deps/analyze/test/smoke/app/emu/size/perf…（ADR-0031）
+dart run tool/agent/cli.dart test linux        # 端到端（真实引擎 + 设置页 + 窗口/托盘，不含播放）；Xvfb 无窗口，桌面看门狗勿删
+dart run tool/agent/cli.dart test android      # 同一套跑模拟器（先 emu start）；--window / --timeout 见命令用法
+dart run tool/agent/cli.dart smoke linux       # 启动首帧烟测（真实 main + provider tree；Xvfb，抓 runApp 前崩溃）
+dart run tool/agent/cli.dart deps              # 依赖/工具链体检：pub outdated + analyze suggestions + Gradle 实际版本
+dart run tool/agent/cli.dart size apk --check <apk>   # APK 分组体积与 native 库约束（无需 unzip）
+dart run tool/agent/cli.dart docs check        # 文档引用 / 工具链一致性（CI 与 pre-commit 自动跑）
+tool/agent/seed.sh android|linux <cmd>         # 数据注入：favorites/covers/history/session/lang/mock-source/status/clear/restore
+tool/agent/startup.sh                          # 启动耗时采样（release 冷启动 N 次取中位；基线与结论见 docs/performance.md）
+tool/agent/perf.sh                             # 全链路体检：frames / startup / data / cpu / memory / size（见 docs/performance.md）
+tool/agent/cpu.sh                              # 按线程 CPU 采样（平台 / Dart UI / raster / IO / 音频；被 perf.sh cpu 调用）
+tool/agent/memory.sh                           # 托盘内存采样（RSS 曲线 + molia.memory 转换日志；见 docs/memory.md）
+tool/agent/io.sh                               # 磁盘写入采样（prefs mtime 计数 + DB/WAL 大小 + /proc IO 差分）
+tool/agent/memory.ps1                          # Windows 托盘内存采样（专用工作集 / 提交大小；见 docs/memory.md）
+tool/agent/hooks.sh                            # 启用 .githooks/pre-commit：格式化暂存 Dart + 文档/工具链检查
 tool/agent/worktree_prepare.sh <dir> [branch]  # 新 worktree：分支 / 签名 / hooks 缓存
-python3 tool/agent/apk_size.py --check <apk>   # APK 分组体积与 native 库约束（无需 unzip）
-python3 tool/agent/check_docs.py               # 文档引用 / 工具链一致性（CI 与 pre-commit 自动跑）
 ```
 
 生成物（改对应源码后必跑，产物提交进仓库）：
