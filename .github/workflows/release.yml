@@ -186,6 +186,11 @@ jobs:
           )
           flutter build apk "${flags[@]}" --split-per-abi
           flutter build appbundle "${flags[@]}"
+      - name: 系统依赖（native assets host 构建的 pkg-config）
+        # 体积校验走 `dart run tool/agent/cli.dart`，它会为 host 构建 native
+        # assets；cnativeapi 的 Linux hook 需要 gtk+-3.0 / x11 / xi。
+        # Android 产物本身不需要这些库，但校验步骤在同一个 job 里。
+        uses: ./.github/actions/linux-system-deps
       - name: 校验 native 库集合（体积 / 运行期必需库）
         run: |
           set -euo pipefail
