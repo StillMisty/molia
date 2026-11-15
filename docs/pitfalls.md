@@ -1121,3 +1121,36 @@
     立即销毁。失败（远程桌面 / 虚拟桌面服务不可用）必须静默并保持原显示
     路径，不能阻断托盘恢复。按桌面分组的位置只是设备本地缓存，桌面 GUID
     在桌面删除后失效，靠上限淘汰 + 最近分组兜底。
+
+111. **取链的「重试 / 硬预算 / 直链有效期缓存」是三层独立概念，改一层要看另两层**：
+     `resolve_policy.dart` 只决定「失败后还发不发第二次请求」（仅 network / timeout /
+     rateLimited / scriptError / engineRestarting 且 `retryable`，最多 2 次尝试）；
+     `CatalogService.resolveBudget`（25s）是单曲取链的墙钟上限（含退避，每次尝试只拿
+     剩余预算当超时提示并叠加 `.timeout`）；`RequestCache.ttlFor` 决定「结果能缓存
+     多久」（平台 `expiresIn` 再减 60s 安全余量，剩余 ≤60s 时本次可用但不入库）。
+     常见改坏方式：把退避时间算进缓存寿命、或让第二次尝试重新拿满额超时（总耗时
+     翻倍）。`LxResolveRejectedException`（脚本返回空串）归为 notFound，**不会**原地
+     重试，交给 `SourceManager` 降档。
+     观测入口：诊断页「播放链接（本次运行）」（`ResolveMetrics`：链接请求 / 缓存命中 /
+     重试 / 失败（按 FailureKind 分类）/ 预算超时）。只在内存、重启清零；只存数字与
+     失败类别，不存 URL / payload / headers，可安全进诊断包。口径：请求数按入口计
+     （单飞等待也算缓存命中），成功 / 失败按**真实取链**计，所以并发合并时
+     请求数 > 成功数 + 失败数；预算超时按**截断次数**计（重试后最终成功的也算），
+     因此它不要求出现在失败分类里，可能大于 timeout 类别的失败数。
+
+     弱网 / 过期直链夹具（`seed.sh mock-source --fault ...`，默认 none 行为不变）：
+     - `--fault retry`：脚本首次 `musicUrl` 返回空串（宿主抛
+       `LxResolveRejectedException` → notFound → 降档 / 换档），第二次给地址；
+       计数器在脚本实例内，引擎重启后重新从「首次」开始；
+     - `--fault slow [--delay-ms N]`（默认 2000）：`musicUrl` 延迟 N 毫秒再返回；
+       N 调到 >25000 才能看到 25s 硬预算与诊断页的超时计数；
+     - `--fault expire [--expire-after N]`（默认 20）：静态 `http.server` 做不到
+       「同一链接几秒后 403」，改用 `tool/agent/mock_source_server.py`（只用标准库，
+       按 `?token=` 从该 token 首次请求起计时，超时返回 403）。端口必须独占；
+       取链缓存默认 10min，所以过期后重播会**先命中旧链接** → 403 → 播放失败恢复
+       重新取链拿新 token，这正是要验证的链路。
+     手工验证（Linux 桌面）：`tool/agent/seed.sh linux mock-source --fault expire`
+     → 播 mock 曲目 → 等过 `--expire-after` 秒 → 暂停再播放（或清该曲目缓存后重播）
+     → 诊断页出现失败 / 链接请求增长。切回默认：再跑一次不带 `--fault` 的
+     `mock-source`，脚本会先停掉自己上次起的服务再起静态服务（两种实现不能复用同
+     一个端口上的旧进程，否则 expire 会静默失效）。

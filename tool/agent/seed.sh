@@ -11,9 +11,14 @@
 #   covers [N]           注入 __favorites__ + N 首带本地 file:// 封面的样例（默认 30）
 #   history [N]          注入最近播放 N 条（默认 5，最近在上）
 #   session              写恢复会话（3 首 mock 曲目，下标 1，进度 20s）
-#   mock-source [--port P]  生成 mock LX 脚本 + WAV，起宿主机 http 服务，
+#   mock-source [--port P] [--fault MODE] [--delay-ms N] [--expire-after N]
+#                           生成 mock LX 脚本 + WAV，起宿主机 http 服务，
 #                           并把脚本直接写进 lx_sources.json 并置 activeId
 #                           （绕开应用内 Import from URL；默认端口 8765）
+#                           --fault 默认 none；retry = 首次 musicUrl 返回空串
+#                           （走降档 / 重试），slow = 延迟 --delay-ms（默认
+#                           2000）再返回，expire = 直链 --expire-after（默认
+#                           20）秒后 403（改用 mock_source_server.py）
 #   lang <zh|en|system>  切换应用语言（截图对照用；system = 跟随系统）
 #   clear                清除注入的收藏 / 历史 / 会话（音源脚本保留）
 #   restore              用最近一次备份恢复被本脚本写过的文件
@@ -30,6 +35,9 @@
 #   运行中写入会被覆盖）；Linux 请先退出正在运行的应用；
 # - Android 上的 mock 音频 URL 用 127.0.0.1:<port> + `adb reverse`（模拟器→
 #   宿主机 NAT 的 10.0.2.2 在应用进程内实测会超时），Linux 直接用 127.0.0.1;
+# - mock-source 的 --fault retry / slow 复用静态服务；--fault expire 需要按
+#   token 计时、几秒后改回 403，静态服务做不到，改用
+#   tool/agent/mock_source_server.py，端口必须独占（被其它进程占用会报错）。
 # - DB 路径：Android /data/data/$APP_ID/files/molia_database_v2.sqlite，
 #   Linux 优先 $HOME/Documents（xdg 文档目录），缺省回退
 #   ~/.local/share/$APP_ID/molia_database_v2.sqlite。
@@ -596,7 +604,7 @@ PY
 # ---------- mock 音源 ----------
 
 mock_script() {
-  local base_url="$1"
+  local base_url="$1" fault="$2" delay_ms="$3"
   cat <<EOF
 /**
  * @name $MOCK_SOURCE_NAME
@@ -607,10 +615,35 @@ mock_script() {
 
 const { EVENT_NAMES, on, send } = globalThis.lx
 
+// 故障注入：seed.sh --fault 写进脚本，宿主（Dart 侧）不感知。
+const fault = '$fault'
+const delayMs = $delay_ms
+let urlCalls = 0
+let audioToken = 0
+
+function audioUrl() {
+  // expire：每次取链给一条新链接，服务端按 token 从首次请求起计时。
+  return '$base_url/audio.wav' + (fault === 'expire' ? '?token=' + audioToken : '')
+}
+
 on(EVENT_NAMES.request, function (payload) {
   const action = payload.action
   if (action === 'musicUrl') {
-    return Promise.resolve('$base_url/audio.wav')
+    if (fault === 'retry') {
+      // 首次返回空串 = 脚本对该档位「没有地址」的明确拒绝（宿主归为 notFound，
+      // 不原地重试），用于验证降档 / 换档路径；第二次起给真实地址。
+      // 计数器在脚本实例内，引擎重启后从 1 重新开始。
+      urlCalls += 1
+      if (urlCalls === 1) return Promise.resolve('')
+    }
+    if (fault === 'slow') {
+      // 延迟返回：观察取链耗时与总预算截止（预算 25s，超时后降档 / 报错）。
+      return new Promise(function (resolve) {
+        setTimeout(function () { resolve(audioUrl()) }, delayMs)
+      })
+    }
+    if (fault === 'expire') audioToken += 1
+    return Promise.resolve(audioUrl())
   }
   if (action === 'search') {
     return Promise.resolve({
@@ -649,15 +682,51 @@ send(EVENT_NAMES.inited, {
 EOF
 }
 
+# 停掉本脚本上一次起的 mock http 服务（pid 记录在 $SEED_PID_FILE）。
+#
+# 为什么要主动停：--fault 会换实现（静态 http.server ↔ mock_source_server.py），
+# 「端口已在监听就复用」会留下上一次的进程，expire 模式静默退化成永不 403。
+# 只杀命令行确实是这两个服务的进程，避免 pid 文件被系统复用时误杀。
+seed_http_stop_own() {
+  [[ -f "$SEED_PID_FILE" ]] || return 0
+  local pid
+  pid="$(cat "$SEED_PID_FILE" 2>/dev/null || true)"
+  rm -f "$SEED_PID_FILE"
+  [[ -n "$pid" ]] || return 0
+  kill -0 "$pid" 2>/dev/null || return 0
+  if [[ -r "/proc/$pid/cmdline" ]] \
+    && ! tr '\0' ' ' <"/proc/$pid/cmdline" | grep -Eq 'http\.server|mock_source_server\.py'; then
+    return 0
+  fi
+  kill "$pid" 2>/dev/null || true
+  # 端口释放是异步的：最多等 2s，别让紧接着的探测把「正在退出」当成「已在监听」。
+  local i
+  for i in {1..20}; do
+    kill -0 "$pid" 2>/dev/null || return 0
+    sleep 0.1
+  done
+  log "上一次的 mock http 服务（pid $pid）未退出，继续按端口占用处理"
+}
+
 seed_mock_source() {
   local port="$SEED_PORT_DEFAULT"
+  local fault="none" delay_ms=2000 expire_after=20
   while (($#)); do
     case "$1" in
-      --port) port="$2"; shift ;;
+      --port) [[ $# -ge 2 ]] || usage; port="$2"; shift ;;
+      --fault) [[ $# -ge 2 ]] || usage; fault="$2"; shift ;;
+      --delay-ms) [[ $# -ge 2 ]] || usage; delay_ms="$2"; shift ;;
+      --expire-after) [[ $# -ge 2 ]] || usage; expire_after="$2"; shift ;;
       *) usage ;;
     esac
     shift
   done
+  case "$fault" in
+    none|retry|slow|expire) ;;
+    *) die "--fault 只支持 none / retry / slow / expire" ;;
+  esac
+  [[ "$delay_ms" =~ ^[0-9]+$ ]] || die "--delay-ms 需要毫秒整数"
+  [[ "$expire_after" =~ ^[0-9]+$ ]] || die "--expire-after 需要秒数整数"
 
   # 音频素材：优先复用上次会话留下的 WAV，否则现场生成。
   mkdir -p "$SEED_WEB_DIR"
@@ -693,17 +762,30 @@ PY
   else
     base_url="http://127.0.0.1:$port"
   fi
-  mock_script "$base_url" >"$SEED_WEB_DIR/mock.js"
+  mock_script "$base_url" "$fault" "$delay_ms" >"$SEED_WEB_DIR/mock.js"
 
-  # 起宿主机 http 服务（已在监听则复用）。
-  if ! (echo >"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
-    log "启动宿主机 http 服务：$SEED_WEB_DIR（端口 $port）"
-    nohup python3 -m http.server "$port" --directory "$SEED_WEB_DIR" \
-      >"$RUN_DIR/seed-http.log" 2>&1 &
+  # 先停掉本脚本上次起的服务：模式可能是 expire ↔ 静态，端口上的行为必须跟着
+  # --fault 走，不能「复用」出一个行为不对的旧进程（详见 seed_http_stop_own）。
+  seed_http_stop_own
+  # 起宿主机 http 服务（已在监听则复用；expire 例外，见下）。
+  if (echo >"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+    if [[ "$fault" == expire ]]; then
+      # 静态服务分不清 token、也不会在几秒后改回 403；复用会让 expire 静默失效。
+      die "端口 $port 已被占用：--fault expire 需要独占端口（先停掉它或换 --port）"
+    fi
+    log "端口 $port 已有服务在监听，复用"
+  else
+    log "启动宿主机 http 服务：$SEED_WEB_DIR（端口 $port，fault=$fault）"
+    if [[ "$fault" == expire ]]; then
+      nohup python3 "$AGENT_DIR/mock_source_server.py" --port "$port" \
+        --directory "$SEED_WEB_DIR" --expire-after "$expire_after" \
+        >"$RUN_DIR/seed-http.log" 2>&1 &
+    else
+      nohup python3 -m http.server "$port" --directory "$SEED_WEB_DIR" \
+        >"$RUN_DIR/seed-http.log" 2>&1 &
+    fi
     echo $! >"$SEED_PID_FILE"
     sleep 1
-  else
-    log "端口 $port 已有服务在监听，复用"
   fi
 
   # 写 lx_sources.json（备份 → 生成 → 推送）。

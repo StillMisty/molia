@@ -78,7 +78,8 @@ tool/agent/app.sh run -d linux --headless  # 无图形显示：显式 Xvfb
 ### 3.3 看数据、看界面
 
 - 数据夹具：`tool/agent/seed.sh android|linux <cmd>`（收藏 / 历史 / 会话 / 语言 /
-  mock 音源）。它绕过 UI 直接写 prefs 与 SQLite，**只用于构造固定夹具**；能通过界面
+  mock 音源；`mock-source --fault retry|slow|expire` 模拟弱网与过期直链）。
+  它绕过 UI 直接写 prefs 与 SQLite，**只用于构造固定夹具**；能通过界面
   或导入完成的操作不要用它。
 - 截图：`tool/agent/shot.sh [name] [--annotate]`（Android）。
 - 点按 / 输入 / 布局：`tool/agent/ui.sh layout|tap|swipe|text|key`。

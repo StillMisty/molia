@@ -122,6 +122,7 @@ tool/agent/seed.sh android covers 30     # 注入带 30 张本地 file:// 封面
 tool/agent/seed.sh android history 5     # 注入最近播放 5 条
 tool/agent/seed.sh android session       # 写恢复会话（3 首 mock 曲目 / 下标 1 / 进度 20s）
 tool/agent/seed.sh android mock-source   # 生成 mock LX 脚本 + WAV，起宿主机 http 服务并激活音源
+tool/agent/seed.sh android mock-source --fault slow   # 弱网夹具：--fault retry / slow / expire
 tool/agent/seed.sh android lang zh       # 切换应用语言（截图对照用；system = 跟随系统）
 tool/agent/seed.sh android status        # 三份数据的位置与摘要
 tool/agent/seed.sh android clear         # 清掉注入的收藏/历史/会话
