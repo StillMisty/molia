@@ -55,11 +55,15 @@
             android:exported="false"
             tools:ignore="Instantiatable" />
 
+        <!-- 逐 activity 再声明一次预测返回开关：Android 15+ 以 activity 级值为准，
+             部分 OEM 会忽略 application 级开关；两处保持一致，避免真机静默
+             退化成「能返回、无预览」。 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:theme="@style/LaunchTheme"
+            android:enableOnBackInvokedCallback="true"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">

@@ -40,10 +40,12 @@ ThemeData buildAppThemeData(
     fontFamily: fontFamily ?? platformDefaultFontFamily,
     fontFamilyFallback: useSystemFont ? platformDefaultFontFallbacks : null,
     appBarTheme: AppBarTheme(systemOverlayStyle: systemUiOverlayStyle),
-    // 页面过渡沿用 ThemeData 默认值：Android = 预测返回 builder（跟手预览
+    // 页面过渡统一沿用 ThemeData 默认值：Android = 预测返回 builder（跟手预览
     // 只由它插入的手势 detector 提供），iOS = Cupertino（边缘返回手势），
     // 桌面 = Zoom。框架默认 map 已覆盖本仓库的四个目标平台；不要再手写一份
     // 只含 Android/iOS 的 map——其余平台会回退到 Zoom，反而与默认值脱节。
+    // 依赖包升级可能换默认 builder：`test/theme/predictive_back_test.dart`
+    // 会断言默认 map 在 Android 上仍是 PredictiveBackPageTransitionsBuilder。
     // 语义色（成功/警告）随方案亮度派生，供全 App 统一取用。
     extensions: <ThemeExtension<dynamic>>[AppSemanticColors.fromScheme(scheme)],
   );
