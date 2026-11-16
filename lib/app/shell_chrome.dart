@@ -25,6 +25,7 @@ class ShellChrome {
     required this.l10n,
     required this.onDestinationSelected,
     required this.onOpenSettings,
+    this.destinationLongPress = const {},
   });
 
   /// 实际渲染的目的地（NavProvider 过滤隐藏项后的顺序）。
@@ -46,6 +47,12 @@ class ShellChrome {
   /// 打开设置弹层。
   final VoidCallback onOpenSettings;
 
+  /// 目的地 → 长按回调（两套骨架共用）。
+  ///
+  /// 不在表里的目的地不挂长按手势：长按照常落回普通点按，不制造「按了却
+  /// 没反应」。目前只有收藏目的地接线（切到收藏页并定位当前播放曲目）。
+  final Map<ShellDestination, VoidCallback> destinationLongPress;
+
   /// 目的地 → 本地化标签（唯一映射，见 `nav_destination_style.dart`）。
   String labelFor(ShellDestination destination) => destination.label(l10n);
 
@@ -57,8 +64,8 @@ class ShellChrome {
   List<M3ENavigationRailDestination> railDestinations() => [
     for (final destination in destinations)
       M3ENavigationRailDestination(
-        icon: destination.outlinedIcon,
-        selectedIcon: destination.filledIcon,
+        icon: _iconFor(destination, destination.outlinedIcon),
+        selectedIcon: _iconFor(destination, destination.filledIcon),
         label: labelFor(destination),
       ),
   ];
@@ -67,11 +74,25 @@ class ShellChrome {
   List<M3ENavigationBarDestination> barDestinations() => [
     for (final destination in destinations)
       M3ENavigationBarDestination(
-        icon: destination.outlinedIcon,
-        selectedIcon: destination.filledIcon,
+        icon: _iconFor(destination, destination.outlinedIcon),
+        selectedIcon: _iconFor(destination, destination.filledIcon),
         label: labelFor(destination),
       ),
   ];
+
+  /// 目的地图标：有长按回调时包一层手势（命中范围是整个图标槽）。
+  ///
+  /// 包内组件只暴露点按回调，图标槽是可替换 Widget：手势挂在图标上，长按
+  /// 赢下手势竞技场后祖先的 `InkWell` 点按自动作废，不会「长按顺带切页」。
+  Widget _iconFor(ShellDestination destination, Widget icon) {
+    final onLongPress = destinationLongPress[destination];
+    if (onLongPress == null) return icon;
+    return _ShellNavLongPressIcon(
+      key: ValueKey<String>('shellNavLongPress-${destination.name}'),
+      onLongPress: onLongPress,
+      child: icon,
+    );
+  }
 
   /// 顶栏槽：工具行（M3E compact，56dp）+ 骨架自己的前置动作 / 底部槽。
   ///
@@ -111,4 +132,35 @@ class ShellChrome {
   /// M3E 的标题槽从 titleInset 起排，这里跟随包内默认值而不是自定一个数：
   /// 一旦包内对齐调整，壳层与二级页顶栏一起移动。
   static const double appBarTitleSpacing = 16;
+}
+
+/// 目的地图标的长按热区。
+///
+/// 图标槽有界时（底栏 / 恒折叠导航轨）撑满整个指示器，免得只能按住 24dp
+/// 字形；展开导航轨里图标在 `Row` 中（宽度无界），保持原尺寸，不把行撑坏。
+class _ShellNavLongPressIcon extends StatelessWidget {
+  const _ShellNavLongPressIcon({
+    super.key,
+    required this.onLongPress,
+    required this.child,
+  });
+
+  final VoidCallback onLongPress;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: onLongPress,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (!constraints.hasBoundedWidth || !constraints.hasBoundedHeight) {
+            return child;
+          }
+          return SizedBox.expand(child: Center(child: child));
+        },
+      ),
+    );
+  }
 }

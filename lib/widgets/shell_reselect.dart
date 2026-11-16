@@ -18,3 +18,15 @@ class ShellReselectSignal extends ChangeNotifier {
   /// 触发一次重复点击（订阅方自行决定响应；无可响应时保持空操作）。
   void trigger() => notifyListeners();
 }
+
+/// 一次「长按壳层目的地」的请求通道。
+///
+/// 与 [ShellReselectSignal] 同形（一次性通知、订阅方只做动作），只是手势
+/// 不同：目前只有收藏目的地接线——长按后切到收藏页并定位当前播放曲目。
+///
+/// 触感归属：已在本页时由壳层长按处理器给一次轻震；从别的目的地过来时由
+/// 切页路径（`_selectDestination`）给，页面侧不再自带触感。
+class ShellLongPressSignal extends ChangeNotifier {
+  /// 触发一次长按意图（订阅方自行决定响应；无可响应时保持空操作）。
+  void trigger() => notifyListeners();
+}

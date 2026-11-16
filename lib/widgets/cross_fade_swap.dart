@@ -45,12 +45,12 @@ class _CrossFadeSwapState extends State<CrossFadeSwap>
   /// 离场层（上一份内容）；null = 还没播过 / 过渡已落定，只剩一层。
   Widget? _outgoing;
 
-  /// 出场层代次：同时充当 [KeyedSubtree] 的 key，让 `Stack` 按 key 认领
-  /// 子元素而不是按位置——落定后出场层从 index 1 挪到 index 0 时，它的
-  /// 状态（滚动位置、输入焦点、图片缓存订阅）不会被离场层的元素顶掉。
+  /// 出场层代次：同时充当入场层 `Opacity` 的 key，让 `Stack` 按 key 认领
+  /// 子元素而不是按位置——过渡开始 / 落定后入场层在 index 0 / 1 之间挪动时，
+  /// 它的状态（滚动位置、输入焦点、图片缓存订阅）不会被离场层的元素顶掉。
   int _generation = 0;
 
-  /// 离场层代次：与上一帧的出场层同一个 key，整层原样继续渲染。
+  /// 离场层代次：充当离场层 `IgnorePointer` 的 key，整层原样继续渲染。
   int _outgoingGeneration = 0;
 
   @override
@@ -103,20 +103,25 @@ class _CrossFadeSwapState extends State<CrossFadeSwap>
 
   @override
   Widget build(BuildContext context) {
-    final incoming = KeyedSubtree(
-      key: ValueKey<int>(_generation),
-      child: widget.child,
-    );
-    final outgoing = _outgoing;
+    final Widget? previous = _outgoing;
     return AnimatedBuilder(
       animation: _progress,
       // 每帧只重排两层；`child` 原样透传，同一实例不会重建子树。
-      child: incoming,
+      child: widget.child,
       builder: (context, active) {
-        final Widget current = active!;
-        final Widget? previous = outgoing;
-        // 结构恒定（永远是 `Stack`）：只有一层时也不拆掉，否则过渡开始 /
-        // 结束时子树要在 `Stack` 内外搬一次，滚动位置与焦点都会重建。
+        // 入场层在两种结构里都是同一个 keyed `Opacity`（落定时透明度 1）：
+        // 过渡结束丢掉离场层时，子树（滚动位置、焦点、输入框）原地保留。
+        // 不能让入场层在 `Opacity` 内 / 外搬家——那会重建整棵子树，懒列表
+        // 的滚动位置也会归零。
+        final Widget current = Opacity(
+          key: ValueKey<int>(_generation),
+          opacity: previous == null
+              ? 1
+              : M3EMotion.emphasizedDecelerate.transform(_progress.value),
+          child: active!,
+        );
+        // 结构恒定（永远是 `Stack` + 带 key 的入场层）：只有一层时也不
+        // 拆掉入场层，否则过渡结束要在 `Stack` 内外搬一次。
         //
         // `passthrough` 把父级约束原样给两层：调用点的版式（Expanded 的
         // 紧约束、顶栏槽的松约束）与包装前逐像素一致。
@@ -136,20 +141,15 @@ class _CrossFadeSwapState extends State<CrossFadeSwap>
           children: [
             // 离场层只负责画：不吃点击、不进语义树（读屏只播报当前内容）。
             IgnorePointer(
+              key: ValueKey<int>(_outgoingGeneration),
               child: ExcludeSemantics(
                 child: Opacity(
                   opacity: 1 - M3EMotion.emphasizedAccelerate.transform(t),
-                  child: KeyedSubtree(
-                    key: ValueKey<int>(_outgoingGeneration),
-                    child: previous,
-                  ),
+                  child: previous,
                 ),
               ),
             ),
-            Opacity(
-              opacity: M3EMotion.emphasizedDecelerate.transform(t),
-              child: current,
-            ),
+            current,
           ],
         );
       },

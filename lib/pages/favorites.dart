@@ -26,6 +26,7 @@ import '../providers/library_outcome.dart';
 import '../providers/library_provider.dart';
 import '../providers/local_library_provider.dart';
 import '../providers/local_songs_collection.dart';
+import '../providers/playback_provider.dart';
 import '../providers/playlist_batch_download.dart';
 import '../domain/models/library_browse.dart';
 import '../domain/models/smart_lists.dart';
@@ -140,10 +141,17 @@ IconData _smartListIcon(String id) => switch (id) {
 ///   本地歌曲合集多一个「导入本地歌曲」按钮；
 /// - 自建列表支持「调整顺序」模式：长按拖动曲目落位即持久化；
 /// - 播放历史支持单条删除（⋮ 菜单）与批量删除（多选）。
+/// - 壳层底栏 / 导航轨长按「收藏」= 切到本页并定位当前播放曲目
+///   （当前可见行里找；找不到 / 没在播 / 曲库浏览给底栏提示）。
 /// - 本地歌曲（下载副本 + 导入的本地文件）来自下载记录：
 ///   下载副本删除会删文件，导入项只从列表移除。
 class FavoritesPage extends StatefulWidget {
-  const FavoritesPage({super.key, this.shuffleRandom, this.reselect});
+  const FavoritesPage({
+    super.key,
+    this.shuffleRandom,
+    this.reselect,
+    this.locatePlaying,
+  });
 
   /// 随机播放起点随机源（测试注入种子；默认系统随机源）。
   final math.Random? shuffleRandom;
@@ -151,6 +159,12 @@ class FavoritesPage extends StatefulWidget {
   /// 壳层「重复点击底栏 / 导航轨收藏目的地」的请求通道：
   /// 当前合集的列表回到顶部。
   final ShellReselectSignal? reselect;
+
+  /// 壳层「长按收藏目的地」的请求通道：定位当前播放曲目。
+  ///
+  /// 壳层负责先切到收藏页；页面在下一次 build 里按当帧可见行算下标，
+  /// 列表布局完成后滚到视口中央（见 [_FavoritesPageState._locateCurrentTrack]）。
+  final ShellLongPressSignal? locatePlaying;
 
   @override
   State<FavoritesPage> createState() => _FavoritesPageState();
@@ -202,6 +216,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 上次观察到的壳层可见性：隐藏 → 可见 = 重新进入收藏页，刷新播放历史
   /// 顺序（顺序在停留期间冻结，见 LibraryProvider）。未挂壳层的单测按可见。
   bool _pageVisible = true;
+
+  /// 一次「定位当前播放曲目」请求：在列表数据 / 布局就绪后消费。
+  ///
+  /// 跨页长按时壳层先切页，本页要等下一帧才可见、列表才有滚动客户端；
+  /// 加载中也先挂起，避免把请求丢在骨架屏上。
+  bool _locatePending = false;
 
   /// 智能列表的重复版本展开（按代表行 key）与当前计数。
   final Set<String> _expandedSmartVersions = {};
@@ -257,6 +277,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _historyScrollController.addListener(_bookkeeping.saveFromScroll);
     _localSongsScrollController.addListener(_bookkeeping.saveFromScroll);
     widget.reselect?.addListener(_handleReselect);
+    widget.locatePlaying?.addListener(_handleLocatePlaying);
     // 恢复（顺序 / 选集 / 滚动偏移）与会话内的首帧加载都在模块内，页面
     // 既不落 setState 校准，也不编排 ensure*。
     unawaited(_session.start());
@@ -306,6 +327,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
       oldWidget.reselect?.removeListener(_handleReselect);
       widget.reselect?.addListener(_handleReselect);
     }
+    if (oldWidget.locatePlaying != widget.locatePlaying) {
+      oldWidget.locatePlaying?.removeListener(_handleLocatePlaying);
+      widget.locatePlaying?.addListener(_handleLocatePlaying);
+    }
   }
 
   @override
@@ -316,6 +341,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     EscapeClaims.remove(_escapeClaim);
     HardwareKeyboard.instance.removeHandler(_keyHandler);
     widget.reselect?.removeListener(_handleReselect);
+    widget.locatePlaying?.removeListener(_handleLocatePlaying);
     _cacheService?.revision.removeListener(_onCacheRevision);
     _downloadRecords?.removeListener(_onDownloadsChanged);
     _collectionRequest?.removeListener(_onCollectionRequest);
@@ -395,6 +421,59 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final controller = _bookkeeping.activeController;
     if (controller == null) return;
     animateScrollToTop(controller);
+  }
+
+  /// 壳层长按「收藏」目的地：请求定位当前播放曲目。
+  ///
+  /// 只挂起意图，不在这里算行下标：跨页切回来时本页下一帧才可见，列表也要
+  /// 等这一帧布局完才有滚动客户端；加载中则等数据就绪后的下一次 build。
+  void _handleLocatePlaying() {
+    if (!mounted) return;
+    setState(() => _locatePending = true);
+  }
+
+  /// 在当前可见行里找正在播放的曲目：找到滚到视口中央，找不到给底栏提示。
+  ///
+  /// 行身份与 `TrackRow` 的当前曲目判定同源（`TrackId` ↔ `favoriteKey`）：
+  /// 收藏 / 历史 / 本地歌曲三种行共用这一条匹配，不按合集种类分支。
+  void _locateCurrentTrack(
+    CollectionView view,
+    List<CollectionRow> rows,
+    TrackRowSurface surface,
+  ) {
+    final l10n = _l10n(context);
+    final trackId = context.read<PlaybackProvider?>()?.currentTrackId;
+    if (trackId == null) {
+      _showLocateMessage(l10n.favoritesLocateNoTrack);
+      return;
+    }
+    final index = rows.indexWhere(
+      (row) =>
+          row.favoriteKey.sourceKey == trackId.sourceKey &&
+          row.favoriteKey.songId == trackId.id,
+    );
+    if (index < 0) {
+      _showLocateMessage(l10n.favoritesLocateMissing);
+      return;
+    }
+    final controller = _scrollControllerForKey(view.collectionKey);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      CollectionTrackList.revealIndex(
+        context,
+        controller,
+        index: index,
+        surface: surface,
+      );
+    });
+  }
+
+  /// 定位类提示：build 内只登记，帧后弹（build 里不能弹底栏）。
+  void _showLocateMessage(String message) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      M3ESnackbar.show(context, message: message);
+    });
   }
 
   void _openSearch() {
@@ -1165,6 +1244,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
         : view.isLibraryBrowse
         ? _CollectionSurface.libraryBrowse
         : _CollectionSurface.body;
+
+    // 长按定位请求：加载中挂起（数据就绪后的下一次 build 再消费）；曲库
+    // 浏览没有歌曲列表，直接提示先选列表；读取失败已有失败态，清掉即可。
+    if (_locatePending &&
+        (surface == _CollectionSurface.failed ||
+            surface == _CollectionSurface.libraryBrowse)) {
+      _locatePending = false;
+      if (surface == _CollectionSurface.libraryBrowse) {
+        _showLocateMessage(l10n.favoritesLocateUnavailable);
+      }
+    }
 
     // 合集切换只有标题行弹层一个入口：条目不额外解析一份，弹层打开时按
     // 当下 provider 状态现算。
@@ -2207,6 +2297,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
         : null;
     // 智能列表按展示层重复聚类：代表行 + 展开后的版本行；不删除任何记录。
     final rows = view.isSmartList ? _smartDisplayRows(view) : view.visibleRows;
+    final rowSurface = TrackRowSurface(tableSpec: columnSpec);
+    // 长按定位：此刻可见行与行高都定了，算下标并安排帧后滚动 / 提示。
+    if (_locatePending) {
+      _locatePending = false;
+      _locateCurrentTrack(view, rows, rowSurface);
+    }
     // 窄窗口：简洁双行列表（历史播放时间进副标题）。宽窗口：表格列填满
     // 行中段，避免标题与行尾时长之间留出大片空白。
     final body = CollectionTrackList<CollectionRow>(
@@ -2222,7 +2318,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           : null,
       // 行高与行渲染同档（表格 56 / 双行 72）：同一份 surface 同时决定
       // itemExtent 与行内版式，差一档滚动条拇指与拖动定位就落在错误位置。
-      surface: TrackRowSurface(tableSpec: columnSpec),
+      surface: rowSurface,
       itemBuilder: (context, row, index) => _buildRow(
         context,
         l10n,

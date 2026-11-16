@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/collection_presenter.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 import '../utils/responsive.dart';
 import 'row_actions.dart';
 import 'track_row.dart';
@@ -111,6 +112,44 @@ class CollectionTrackList<T> extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(bottom: gap),
       child: itemBuilder(context, rows[index], index),
+    );
+  }
+
+  /// 把第 [index] 行滚到视口中央（长按底栏收藏定位当前播放曲目）。
+  ///
+  /// 行几何只在这里复刻 `itemExtent` 的口径：`itemExtent` 本身含行距，
+  /// 可见判定与居中落点都用「行顶 + 行高」，行距不参与（否则最后一行会
+  /// 永远差一个 gap 才算完整可见）。无客户端 / 下标越界时保持空操作；
+  /// 已经完整可见时不滚，避免「本来就在眼前却被挪走」。
+  static void revealIndex(
+    BuildContext context,
+    ScrollController controller, {
+    required int index,
+    required TrackRowSurface surface,
+  }) {
+    if (index < 0 || !controller.hasClients) return;
+    final position = controller.position;
+    final double rowHeight = TrackRow.extentOf(
+      context,
+      tableColumns: surface.isTable,
+    );
+    final double top =
+        verticalPadding + index * (rowHeight + TrackRow.gapOf(context));
+    final double bottom = top + rowHeight;
+    final double viewTop = position.pixels;
+    final double viewBottom = viewTop + position.viewportDimension;
+    if (top >= viewTop && bottom <= viewBottom) return;
+    final double target = (top - (position.viewportDimension - rowHeight) / 2)
+        .clamp(position.minScrollExtent, position.maxScrollExtent);
+    if ((target - position.pixels).abs() < 0.5) return;
+    if (reduceMotionOf(context)) {
+      controller.jumpTo(target);
+      return;
+    }
+    controller.animateTo(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
     );
   }
 }

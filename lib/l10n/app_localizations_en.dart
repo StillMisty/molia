@@ -1146,6 +1146,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get favoritesSearchEmpty => 'No matching tracks';
 
   @override
+  String get favoritesLocateMissing => 'The current song isn\'t in this list';
+
+  @override
+  String get favoritesLocateNoTrack => 'Nothing is playing right now';
+
+  @override
+  String get favoritesLocateUnavailable =>
+      'Choose favorites or a playlist first';
+
+  @override
   String get favoritesSwitchTitle => 'Switch collection';
 
   @override

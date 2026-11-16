@@ -265,6 +265,12 @@ class _MyAppState extends State<MyApp>
       destination: ShellReselectSignal(),
   };
 
+  /// 「长按收藏目的地」意图通道：页面订阅后切到收藏页并定位当前播放曲目。
+  ///
+  /// 与 [_reselect] 分开持有：长按不是重复点击，页面响应也不同（回到顶部
+  /// vs. 定位当前曲目）。目前只有收藏目的地接线。
+  final ShellLongPressSignal _locatePlaying = ShellLongPressSignal();
+
   /// 搜索遮罩的打开入口（Ctrl+F / 顶栏品牌区路径）：遮罩宿主挂在
   /// DesktopShell 里，控制器由壳层持有后下传。
   final GlobalSearchController _globalSearch = GlobalSearchController();
@@ -288,6 +294,7 @@ class _MyAppState extends State<MyApp>
     ),
     ShellDestination.favorites: FavoritesPage(
       reselect: _reselect[ShellDestination.favorites],
+      locatePlaying: _locatePlaying,
     ),
     ShellDestination.library: Library(
       reselect: _reselect[ShellDestination.library],
@@ -390,6 +397,7 @@ class _MyAppState extends State<MyApp>
     for (final signal in _reselect.values) {
       signal.dispose();
     }
+    _locatePlaying.dispose();
     _showSearchRequest.dispose();
     super.dispose();
   }
@@ -426,6 +434,22 @@ class _MyAppState extends State<MyApp>
     // 避免同一次点击两次震动（命中忽略分支时不震动）。
     HapticsService.lightImpact();
     _reselect[destination]?.trigger();
+  }
+
+  /// 长按收藏目的地：切到收藏页并请求页面定位当前播放曲目。
+  ///
+  /// 页面在下一帧才可见，滚动请求由页面自己挂起、等列表布局完成后再消费
+  /// （见 `FavoritesPage.locatePlaying`）。触感只给一次：从别的目的地过来
+  /// 由 [_selectDestination] 给，已经在本页时由这里补上。
+  void _onFavoritesLongPress() {
+    const favorites = ShellDestination.favorites;
+    if (!context.read<NavProvider>().isVisible(favorites)) return;
+    if (_effectiveDestination != favorites) {
+      _selectDestination(favorites);
+    } else {
+      HapticsService.lightImpact();
+    }
+    _locatePlaying.trigger();
   }
 
   void _selectDestination(ShellDestination destination) {
@@ -710,6 +734,9 @@ class _MyAppState extends State<MyApp>
       l10n: l10n,
       onDestinationSelected: _onDestinationSelected,
       onOpenSettings: () => _openSettings(context),
+      // 长按收藏目的地：切到收藏页并定位当前播放曲目（页面在下一帧
+      // 可见、列表布局完成后执行滚动）。
+      destinationLongPress: {ShellDestination.favorites: _onFavoritesLongPress},
     );
 
     // 桌面骨架：顶栏瘦身 + 恒折叠侧栏 + 页面栈（底栏播放条在非播放页出现）

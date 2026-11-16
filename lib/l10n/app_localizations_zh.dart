@@ -1103,6 +1103,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get favoritesSearchEmpty => '没有匹配的歌曲';
 
   @override
+  String get favoritesLocateMissing => '当前列表里没有正在播放的歌曲';
+
+  @override
+  String get favoritesLocateNoTrack => '还没有正在播放的歌曲';
+
+  @override
+  String get favoritesLocateUnavailable => '先在合集里选择收藏或列表';
+
+  @override
   String get favoritesSwitchTitle => '切换收藏夹';
 
   @override

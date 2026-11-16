@@ -2162,6 +2162,24 @@ abstract class AppLocalizations {
   /// **'No matching tracks'**
   String get favoritesSearchEmpty;
 
+  /// No description provided for @favoritesLocateMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The current song isn\'t in this list'**
+  String get favoritesLocateMissing;
+
+  /// No description provided for @favoritesLocateNoTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing is playing right now'**
+  String get favoritesLocateNoTrack;
+
+  /// No description provided for @favoritesLocateUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose favorites or a playlist first'**
+  String get favoritesLocateUnavailable;
+
   /// No description provided for @favoritesSwitchTitle.
   ///
   /// In en, this message translates to:
