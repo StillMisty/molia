@@ -41,7 +41,6 @@ class AnnualPosterData {
     required this.topTracksTitle,
     required this.topArtistsTitle,
     required this.months,
-    this.yearNote,
     this.topArtists = const [],
     this.topTracks = const [],
     this.topPlatform,
@@ -49,9 +48,6 @@ class AnnualPosterData {
 
   final String yearLabel;
   final String subtitle;
-
-  /// 年份旁的补充说明（例如「截至今天」）；空串不绘制。
-  final String? yearNote;
 
   final String listenedLabel;
   final String listenedCaption;
@@ -135,7 +131,7 @@ class AnnualPosterService {
 
       var y = _margin;
 
-      // 品牌行：左侧图标 + 品牌名，右侧年份备注。品牌行不抢年份的视觉重心。
+      // 品牌行：左侧图标 + 品牌名。品牌行不抢年份的视觉重心。
       final brandPainter = _layoutText(
         watermarkText,
         style(30, palette.watermark),
@@ -150,18 +146,6 @@ class AnnualPosterService {
         color: palette.watermark,
         iconTextSpacing: 12,
       );
-      if (data.yearNote != null && data.yearNote!.isNotEmpty) {
-        final notePainter = _layoutText(
-          data.yearNote!,
-          style(28, palette.extended),
-          contentWidth,
-        );
-        notePainter.paint(
-          canvas,
-          Offset(width - _margin - notePainter.width, y),
-        );
-        notePainter.dispose();
-      }
       brandPainter.dispose();
       y += math.max(brandHeight, 36) + 44;
 

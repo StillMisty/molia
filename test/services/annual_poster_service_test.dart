@@ -19,7 +19,6 @@ const _palette = PosterPalette(
 AnnualPosterData _data({String track = 'Track'}) => AnnualPosterData(
   yearLabel: '2026',
   subtitle: 'Yearly listening report',
-  yearNote: 'As of today',
   listenedLabel: '120 小时 30 分钟',
   listenedCaption: 'listened this year',
   playsLabel: '321',

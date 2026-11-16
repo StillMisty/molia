@@ -116,13 +116,25 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
         ),
       );
     }
+    // 年份切换是报告页的第二主操作：显示当前年份 + 下拉箭头，比只放
+    // 日历图标更容易发现；打开后仍是同一份年份菜单。
     return M3EMenu.entries(
       position: M3EMenuAnchorPosition.bottomEnd,
-      anchorBuilder: (context, open) => M3EIconButton(
-        variant: M3EIconButtonVariant.standard,
-        icon: const Icon(Icons.calendar_month_rounded),
+      anchorBuilder: (context, open) => M3EButton.text(
+        key: const Key('annualYearPicker'),
         semanticLabel: l10n.annualReportPickYear,
         onPressed: open,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${provider.selectedYear}',
+              style: context.typeScale.titleSmall,
+            ),
+            const SizedBox(width: 2),
+            const Icon(Icons.arrow_drop_down_rounded, size: 20),
+          ],
+        ),
       ),
       onSelected: (value) {
         if (value is int) unawaited(provider.selectYear(value));
@@ -922,7 +934,6 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
     return AnnualPosterData(
       yearLabel: '${report.year}',
       subtitle: l10n.annualReportSubtitle,
-      yearNote: report.asOfToday ? l10n.annualReportAsOfToday : null,
       listenedLabel: formatListenedDuration(l10n, report.totalListenedMs),
       listenedCaption: l10n.annualReportListenedCaption,
       playsLabel: '${report.qualifiedPlayCount}',

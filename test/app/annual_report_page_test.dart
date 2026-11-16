@@ -116,6 +116,46 @@ void main() {
     expect(find.textContaining('数据范围：'), findsOneWidget);
   });
 
+  testWidgets('顶栏年份入口：显示当前年份并可切换到往年', (tester) async {
+    final oldStart = DateTime(2025, 6, 1, 12);
+    await insertPlayEvent(
+      db,
+      songId: 'old1',
+      title: '旧歌',
+      artist: '旧歌手',
+      album: '旧专辑',
+      startedAt: oldStart.millisecondsSinceEpoch,
+      endedAt: oldStart.millisecondsSinceEpoch + 120000,
+      listenedMs: 120000,
+      maxPositionMs: 120000,
+      endReason: 'completed',
+    );
+    final start = DateTime(2026, 3, 1, 12);
+    await insertPlayEvent(
+      db,
+      songId: 'new1',
+      title: '新歌',
+      artist: '新歌手',
+      album: '新专辑',
+      startedAt: start.millisecondsSinceEpoch,
+      endedAt: start.millisecondsSinceEpoch + 120000,
+      listenedMs: 120000,
+      maxPositionMs: 120000,
+      endReason: 'completed',
+    );
+    await pumpPage(tester, years: [2026, 2025], featuredYear: 2026);
+    expect(find.byKey(const Key('annualYearPicker')), findsOneWidget);
+    expect(find.text('2026'), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('annualYearPicker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2025'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2025'), findsWidgets);
+    expect(find.text('旧歌'), findsOneWidget);
+  });
+
   testWidgets('窄屏 360：滚动完整页不溢出，月度刻度与歌单入口可用', (tester) async {
     tester.view.physicalSize = const Size(360, 1200);
     tester.view.devicePixelRatio = 1;
