@@ -1081,6 +1081,7 @@
   "statsCompleteRate": "Completion rate",
   "statsSkipRate": "Skip rate",
   "statsSources": "Sources",
+  "statsWeekdayHour": "Listening times",
   "statsTopTracks": "Most played",
   "statsTopArtists": "Top artists",
   "statsEmpty": "No listening history yet",

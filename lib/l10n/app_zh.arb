@@ -817,6 +817,7 @@
   "statsCompleteRate": "完整播放率",
   "statsSkipRate": "跳过率",
   "statsSources": "来源分布",
+  "statsWeekdayHour": "收听时段",
   "statsTopTracks": "最常听",
   "statsTopArtists": "常听歌手",
   "statsEmpty": "还没有听歌记录",

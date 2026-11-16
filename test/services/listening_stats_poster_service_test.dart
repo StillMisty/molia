@@ -17,10 +17,19 @@ const _palette = PosterPalette(
   separator: Color(0xFF40566E),
 );
 
+ListeningStatsPosterRow _row(String title, String subtitle) =>
+    ListeningStatsPosterRow(title: title, subtitle: subtitle);
+
+List<int> _weekdayHour() => List<int>.generate(
+  168,
+  (index) => index % 24 == 0 ? 0 : ((index * 37) % 1000) * 1000,
+);
+
 ListeningStatsPosterData _data({
-  String track = '晴天 — 周杰伦',
-  List<String>? topTracks,
-  List<String>? topArtists,
+  ListeningStatsPosterRow? track,
+  List<ListeningStatsPosterRow>? topTracks,
+  List<ListeningStatsPosterRow>? topArtists,
+  List<int>? weekdayHour,
   String? platform = '最常使用 网易云',
 }) => ListeningStatsPosterData(
   title: '听歌记录',
@@ -31,11 +40,31 @@ ListeningStatsPosterData _data({
   playsCaption: '有效播放',
   tracksLabel: '128',
   tracksCaption: '听过曲目',
+  completionLabel: '78%',
+  completionCaption: '完整播放率',
   topTracksTitle: '最常听',
   topTracks:
-      topTracks ?? [track, '七里香 — 周杰伦', '夜曲 — 周杰伦', '稻香 — 周杰伦', '搁浅 — 周杰伦'],
+      topTracks ??
+      [
+        track ?? _row('晴天', '周杰伦 · 12 次 · 42 分钟'),
+        _row('七里香', '周杰伦 · 10 次 · 38 分钟'),
+        _row('夜曲', '周杰伦 · 9 次 · 35 分钟'),
+        _row('稻香', '周杰伦 · 8 次 · 31 分钟'),
+        _row('搁浅', '周杰伦 · 7 次 · 28 分钟'),
+      ],
   topArtistsTitle: '常听歌手',
-  topArtists: topArtists ?? const ['周杰伦', '陈奕迅', '林俊杰', '五月天', '孙燕姿'],
+  topArtists:
+      topArtists ??
+      [
+        _row('周杰伦', '46 次 · 2 小时 54 分钟'),
+        _row('陈奕迅', '36 次 · 2 小时 12 分钟'),
+        _row('林俊杰', '31 次 · 1 小时 58 分钟'),
+        _row('五月天', '28 次 · 1 小时 44 分钟'),
+        _row('孙燕姿', '24 次 · 1 小时 31 分钟'),
+      ],
+  weekdayHourTitle: '收听时段',
+  weekdayLabels: const ['一', '二', '三', '四', '五', '六', '日'],
+  weekdayHour: weekdayHour ?? _weekdayHour(),
   platformLabel: platform,
 );
 
@@ -60,12 +89,18 @@ void main() {
     image.dispose();
   });
 
-  test('超长标题 / 曲目 / 歌手仍按固定尺寸渲染（省略号截断）', () async {
+  test('超长标题 / 曲目 / 歌手仍按固定尺寸渲染（单行省略）', () async {
     final bytes = await const ListeningStatsPosterService().render(
       data: _data(
-        track: '很长的歌曲标题' * 30,
-        topTracks: [for (var i = 0; i < 8; i++) '长标题 $i — 长歌手' * 20],
-        topArtists: [for (var i = 0; i < 8; i++) '很长的歌手名 $i' * 20],
+        track: _row('很长的歌曲标题' * 30, '长歌手 · 999 次 · 999 小时 59 分钟' * 10),
+        topTracks: [
+          for (var i = 0; i < 8; i++)
+            _row('长标题 $i' * 30, '长歌手 $i · 999 次 · 999 小时' * 10),
+        ],
+        topArtists: [
+          for (var i = 0; i < 8; i++)
+            _row('很长的歌手名 $i' * 30, '999 次 · 999 小时' * 10),
+        ],
       ),
       palette: _palette,
     );
@@ -77,21 +112,26 @@ void main() {
 
   test('精简 / 零数据仍能渲染有效海报（空块省略）', () async {
     final reduced = await const ListeningStatsPosterService().render(
-      data: ListeningStatsPosterData(
-        title: '听歌记录',
-        rangeLabel: '近 7 天',
-        listenedLabel: '0 分钟',
-        listenedCaption: '收听时长',
-        playsLabel: '0',
-        playsCaption: '有效播放',
-        tracksLabel: '0',
-        tracksCaption: '听过曲目',
-        topTracksTitle: '最常听',
-        topArtistsTitle: '常听歌手',
+      data: _data(
+        topTracks: const [],
+        topArtists: const [],
+        weekdayHour: List<int>.filled(168, 0),
+        platform: null,
       ),
       palette: _palette,
     );
     final image = await _decode(reduced);
+    expect(image.width, 1440);
+    expect(image.height, 1920);
+    image.dispose();
+  });
+
+  test('热力图数据不完整时省略该块，不影响固定尺寸', () async {
+    final bytes = await const ListeningStatsPosterService().render(
+      data: _data(weekdayHour: const [1, 2, 3]),
+      palette: _palette,
+    );
+    final image = await _decode(bytes);
     expect(image.width, 1440);
     expect(image.height, 1920);
     image.dispose();

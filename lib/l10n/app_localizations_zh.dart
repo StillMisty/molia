@@ -2113,6 +2113,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statsSources => '来源分布';
 
   @override
+  String get statsWeekdayHour => '收听时段';
+
+  @override
   String get statsTopTracks => '最常听';
 
   @override

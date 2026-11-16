@@ -20,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// `m3e_typography_test` 对 `lyrics_poster_service` 的例外同一理由）。
 const Set<String> _shapeLiteralAllowlist = {
   'lib/services/annual_poster_service.dart', // 海报导出固定设计稿（无 context）
+  'lib/services/listening_stats_poster_service.dart', // 同上
 };
 
 /// 字面量圆角：`BorderRadius.circular(12)` / `Radius.circular(999)`。

@@ -4070,6 +4070,12 @@ abstract class AppLocalizations {
   /// **'Sources'**
   String get statsSources;
 
+  /// No description provided for @statsWeekdayHour.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening times'**
+  String get statsWeekdayHour;
+
   /// No description provided for @statsTopTracks.
   ///
   /// In en, this message translates to:

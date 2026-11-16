@@ -784,6 +784,22 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       PlayStatisticsRange.month => l10n.statsRangeMonth,
       PlayStatisticsRange.all => l10n.statsRangeAll,
     };
+    final narrowWeekdays = MaterialLocalizations.of(context).narrowWeekdays;
+    final weekdayLabels = <String>[
+      for (var day = 1; day < 7; day++) narrowWeekdays[day],
+      narrowWeekdays.first,
+    ];
+    final weekdayHour = List<int>.filled(168, 0);
+    for (final entry
+        in snapshot?.byWeekdayHour ?? const <WeekdayHourListened>[]) {
+      if (entry.weekday < 0 ||
+          entry.weekday > 6 ||
+          entry.hour < 0 ||
+          entry.hour > 23) {
+        continue;
+      }
+      weekdayHour[entry.weekday * 24 + entry.hour] = entry.listenedMs;
+    }
     return ListeningStatsPosterData(
       title: l10n.statsPosterTitle,
       rangeLabel: rangeLabel,
@@ -793,19 +809,34 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       playsCaption: l10n.statsPlays,
       tracksLabel: '${summary.uniqueTrackCount}',
       tracksCaption: l10n.statsTracks,
+      completionLabel: '${(summary.completionRate * 100).round()}%',
+      completionCaption: l10n.statsCompleteRate,
       topTracksTitle: l10n.statsTopTracks,
       topTracks: [
         for (final track in snapshot?.topTracks ?? const <PlayStatTrackEntry>[])
-          track.artist.trim().isEmpty
-              ? track.title
-              : '${track.title} — ${track.artist}',
+          ListeningStatsPosterRow(
+            title: track.title,
+            subtitle: [
+              if (track.artist.trim().isNotEmpty) track.artist.trim(),
+              l10n.statsPlaysCount(track.playCount),
+              formatListenedDuration(l10n, track.listenedMs),
+            ].join(' · '),
+          ),
       ],
       topArtistsTitle: l10n.statsTopArtists,
       topArtists: [
         for (final artist
             in snapshot?.topArtists ?? const <PlayStatArtistEntry>[])
-          artist.artist,
+          ListeningStatsPosterRow(
+            title: artist.artist,
+            subtitle:
+                '${l10n.statsPlaysCount(artist.playCount)} · '
+                '${formatListenedDuration(l10n, artist.listenedMs)}',
+          ),
       ],
+      weekdayHourTitle: l10n.statsWeekdayHour,
+      weekdayLabels: weekdayLabels,
+      weekdayHour: weekdayHour,
       platformLabel: sources.isEmpty
           ? null
           : l10n.annualReportTopPlatform(_sourceName(sources.first.sourceKey)),

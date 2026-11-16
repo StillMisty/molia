@@ -2194,6 +2194,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statsSources => 'Sources';
 
   @override
+  String get statsWeekdayHour => 'Listening times';
+
+  @override
   String get statsTopTracks => 'Most played';
 
   @override
