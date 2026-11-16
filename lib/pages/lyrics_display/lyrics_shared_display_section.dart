@@ -10,8 +10,8 @@ import '../../widgets/settings/settings_tiles.dart';
 /// 歌词输出共享展示项：翻译 / 罗马音 / 偏移 / 未同步回退。
 ///
 /// 这些策略由 `LyricsDisplayProvider` 在 Dart 侧统一应用，改一次对桌面
-/// 悬浮窗、通知栏·锁屏与蓝牙全部生效。「歌词输出」页与桌面歌词页内联的
-/// 是同一组行（同一 provider 源），不存在两份状态。
+/// 悬浮窗、通知栏·锁屏与蓝牙全部生效。只在「歌词与输出」页出现一份，
+/// 桌面歌词页不再重复铺同一组行。
 class LyricsSharedDisplaySection extends StatelessWidget {
   const LyricsSharedDisplaySection({super.key, this.title});
 

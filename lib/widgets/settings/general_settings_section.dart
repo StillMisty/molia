@@ -1,22 +1,20 @@
 import 'dart:async';
 
-import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../pages/bottom_nav_settings_page.dart';
 import '../../providers/nav_provider.dart';
-import '../../services/app_branding_service.dart';
-import '../../services/haptics.dart';
 import '../../services/language_service.dart';
 import '../nav_destination_style.dart';
 import 'settings_section_availability.dart';
 import 'settings_tiles.dart';
 
-/// 设置首屏「通用」卡：启动页 / 底部导航 / 语言 / 震动 / 应用名称。
+/// 设置首屏「通用」卡：启动页 / 底部导航 / 语言。
 ///
-/// 桌面托盘、窗口与快捷键在「桌面」卡（仅桌面出现），更新与问题排查在
-/// 「关于与更新」卡；本卡只放平台无关的通用偏好。
+/// 震动与应用名称收进「高级设置」；桌面托盘、窗口与快捷键在「桌面」卡
+/// （仅桌面出现），更新与问题排查在「关于与更新」卡；本卡只放平台无关的
+/// 日常偏好。
 class GeneralSettingsSection extends StatefulWidget {
   const GeneralSettingsSection({super.key, required this.availability});
 
@@ -66,7 +64,7 @@ class _GeneralSettingsSectionState extends State<GeneralSettingsSection> {
     return SettingsSectionCard(
       title: l10n.settingsGeneralTitle,
       children: [
-        // 行序按改动频率：启动页（常改）→ 底栏 → 震动 → 语言 → 应用名称。
+        // 行序按改动频率：启动页（常改）→ 底栏 → 语言。
         if (nav != null) ...[
           _StartupPageSettings(provider: nav),
           SettingsNavTile(
@@ -78,17 +76,6 @@ class _GeneralSettingsSectionState extends State<GeneralSettingsSection> {
                 openSettingsSubPage(context, const BottomNavSettingsPage()),
           ),
         ],
-        ValueListenableBuilder<bool>(
-          valueListenable: HapticsService.enabledNotifier,
-          builder: (context, hapticsEnabled, _) => SettingsSwitchTile(
-            switchKey: const Key('settingsHapticsSwitch'),
-            icon: Icons.vibration_rounded,
-            title: l10n.settingsHapticsTitle,
-            subtitle: l10n.settingsHapticsSubtitle,
-            value: hapticsEnabled,
-            onChanged: HapticsService.setEnabled,
-          ),
-        ),
         SettingsChoiceRow<String>(
           key: const Key('settingsLanguageItem'),
           icon: Icons.language_rounded,
@@ -101,61 +88,8 @@ class _GeneralSettingsSectionState extends State<GeneralSettingsSection> {
           ],
           onChanged: _setLanguage,
         ),
-        // 应用名称：顶栏无歌曲时显示的自定义文案。
-        ValueListenableBuilder<String>(
-          valueListenable: AppBrandingService.titleNotifier,
-          builder: (context, appTitle, _) => SettingsNavTile(
-            key: const Key('settingsAppTitleItem'),
-            icon: Icons.badge_rounded,
-            title: l10n.settingsAppTitle,
-            subtitle: appTitle,
-            onTap: () => _showAppTitleDialog(context, l10n),
-          ),
-        ),
       ],
     );
-  }
-
-  /// 自定义应用名称：文本输入弹层（空白回退默认名称 Molia）。
-  Future<void> _showAppTitleDialog(
-    BuildContext context,
-    AppLocalizations l10n,
-  ) async {
-    final controller = TextEditingController(
-      text: AppBrandingService.titleNotifier.value,
-    );
-    // 弹层 dialog 挂 root navigator（M3EDialog.show 语义），关闭要显式定向。
-    final navigator = Navigator.of(context, rootNavigator: true);
-    await M3EDialog.show<void>(
-      context,
-      dialog: M3EDialog(
-        title: l10n.settingsAppTitleDialogTitle,
-        content: SizedBox(
-          width: settingsDialogWidth(context),
-          child: M3ETextField(
-            controller: controller,
-            placeholder: l10n.settingsAppTitleHint,
-            leading: const Icon(Icons.badge_rounded),
-            maxLength: AppBrandingService.maxLength,
-            autofocus: true,
-          ),
-        ),
-        actions: [
-          M3EButton.text(
-            onPressed: () => navigator.pop(),
-            child: Text(l10n.cancel),
-          ),
-          M3EButton.filled(
-            onPressed: () async {
-              await AppBrandingService.setTitle(controller.text);
-              navigator.pop();
-            },
-            child: Text(l10n.saveChanges),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
   }
 }
 

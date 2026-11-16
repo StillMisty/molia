@@ -73,17 +73,12 @@ void main() {
     );
     final fadeLabel = tester.getSemantics(fadeRow).label;
     expect(fadeLabel, contains('淡入淡出'));
-    expect(fadeLabel, contains('切歌不受影响'));
+    expect(fadeLabel, contains('渐入渐出'));
 
     expect(
       find.bySemanticsLabel(RegExp('少放最近听过的')),
       findsWidgets,
       reason: '开关行标题进入无障碍标签',
-    );
-    expect(
-      find.bySemanticsLabel(RegExp('随机播放时少放最近听过的歌')),
-      findsWidgets,
-      reason: '开关行副标题进入无障碍标签',
     );
     semantics.dispose();
   });

@@ -2,15 +2,16 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../pages/diagnostics_page.dart';
+import '../../pages/settings_advanced_page.dart';
 import '../../pages/update_settings_page.dart';
 import '../../providers/update_provider.dart';
 import 'settings_section_availability.dart';
 import 'settings_tiles.dart';
 
-/// 设置首屏「关于与更新」卡：版本与更新入口 + 问题排查。
+/// 设置首屏「关于与更新」卡：版本与更新入口 + 问题排查 + 高级设置。
 ///
-/// 更新是低频的「检查 / 下载 / 安装」，问题排查是求助入口；两者都不参与
-/// 日常播放配置，因此从「通用」卡拆出，放在首屏末位。
+/// 更新是低频的「检查 / 下载 / 安装」，问题排查是求助入口，高级设置是
+/// 首屏收起项的统一出口；三者都不参与日常播放配置，因此放在首屏末位。
 class AboutSettingsSection extends StatelessWidget {
   const AboutSettingsSection({super.key, required this.availability});
 
@@ -41,6 +42,16 @@ class AboutSettingsSection extends StatelessWidget {
           title: l10n.diagnosticsTitle,
           subtitle: l10n.diagnosticsSubtitle,
           onTap: () => openSettingsSubPage(context, const DiagnosticsPage()),
+        ),
+        // 首屏收起项的统一出口：字体、默认封面、淡入淡出、加入位置、
+        // 震动、应用名称、窗口记忆、省流音质、下载与缓存策略、更新地址。
+        SettingsNavTile(
+          key: const Key('settingsAdvancedItem'),
+          icon: Icons.tune_rounded,
+          title: l10n.settingsAdvancedTitle,
+          subtitle: l10n.settingsAdvancedSubtitle,
+          onTap: () =>
+              openSettingsSubPage(context, const SettingsAdvancedPage()),
         ),
       ],
     );

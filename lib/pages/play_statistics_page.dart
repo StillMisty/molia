@@ -31,6 +31,7 @@ import '../providers/play_statistics_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/listening_stats_poster_service.dart';
 import '../services/notification_service.dart';
+import '../services/play_statistics_service.dart';
 import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
@@ -158,7 +159,27 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       ],
       onChanged: (range) => unawaited(provider.setRange(range)),
     );
+    final statistics = context.watch<PlayStatisticsService?>();
     final sections = <Widget>[
+      // 采集开关跟随统计页：关闭 = 停止记录新事件，已有数据保留。
+      if (statistics != null) ...[
+        SettingsSectionCard(
+          children: [
+            ValueListenableBuilder<bool>(
+              valueListenable: statistics.enabledNotifier,
+              builder: (context, enabled, _) => SettingsSwitchTile(
+                switchKey: const Key('settingsPlayStatisticsSwitch'),
+                icon: Icons.query_stats_rounded,
+                title: l10n.statsRecordSwitch,
+                subtitle: l10n.statsRecordSwitchSubtitle,
+                value: enabled,
+                onChanged: (value) => unawaited(statistics.setEnabled(value)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+      ],
       if (provider.snapshot != null) ..._annualEntry(provider.allHistoryDaily),
       rangeRow,
       const SizedBox(height: 16),

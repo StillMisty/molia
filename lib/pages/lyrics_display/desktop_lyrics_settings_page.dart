@@ -14,11 +14,10 @@ import '../../services/lyrics_display/lyrics_output.dart';
 import '../../theme/app_semantic_colors.dart';
 import '../../theme/m3e_context.dart';
 import '../../theme/scheme_builder.dart';
-import '../../utils/color_hex.dart';
-import '../../widgets/app_color_picker.dart';
 import '../../widgets/settings/settings_subpage.dart';
 import '../../widgets/settings/settings_tiles.dart';
-import 'lyrics_shared_display_section.dart';
+import 'desktop_lyrics_advanced_page.dart';
+import 'lyric_color_row.dart';
 
 /// 桌面歌词子页：外观与配色（含开关与权限）、共享展示项、行为与控制条。
 ///
@@ -143,23 +142,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               ],
               onChanged: settings.setDesktopMaxLines,
             ),
-            SettingsChoiceRow<DesktopTextAlignX>(
-              icon: Icons.format_align_center_rounded,
-              title: l10n.lyricsDesktopAlign,
-              value: settings.desktopTextAlignX,
-              options: [
-                (DesktopTextAlignX.left, l10n.lyricsDesktopAlignLeft),
-                (DesktopTextAlignX.center, l10n.lyricsDesktopAlignCenter),
-                (DesktopTextAlignX.right, l10n.lyricsDesktopAlignRight),
-              ],
-              icons: const {
-                DesktopTextAlignX.left: Icons.format_align_left_rounded,
-                DesktopTextAlignX.center: Icons.format_align_center_rounded,
-                DesktopTextAlignX.right: Icons.format_align_right_rounded,
-              },
-              onChanged: settings.setDesktopTextAlignX,
-            ),
-            // 取色来源：决定三行「跟随主题角色」用哪套方案（应用主题 /
+            // 取色来源：决定颜色行「跟随主题角色」用哪套方案（应用主题 /
             // 当前曲目封面）；自定义行不受影响。
             SettingsChoiceRow<SurfaceColorSource>(
               icon: Icons.palette_rounded,
@@ -171,9 +154,8 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               ],
               onChanged: settings.setDesktopSchemeSource,
             ),
-            _colorRow(
-              context,
-              rowKey: const Key('desktopColorPlayedRow'),
+            LyricColorRow(
+              key: const Key('desktopColorPlayedRow'),
               icon: Icons.text_fields_rounded,
               title: l10n.lyricsDesktopColorPlayed,
               source: settings.desktopPlayedColorSource,
@@ -182,9 +164,8 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               onSourceChanged: settings.setDesktopPlayedColorSource,
               onCustomColorChanged: settings.setDesktopPlayedColor,
             ),
-            _colorRow(
-              context,
-              rowKey: const Key('desktopColorUnplayedRow'),
+            LyricColorRow(
+              key: const Key('desktopColorUnplayedRow'),
               icon: Icons.text_fields_rounded,
               title: l10n.lyricsDesktopColorUnplayed,
               source: settings.desktopUnplayedColorSource,
@@ -192,17 +173,6 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               scheme: scheme,
               onSourceChanged: settings.setDesktopUnplayedColorSource,
               onCustomColorChanged: settings.setDesktopUnplayedColor,
-            ),
-            _colorRow(
-              context,
-              rowKey: const Key('desktopColorShadowRow'),
-              icon: Icons.blur_on_rounded,
-              title: l10n.lyricsDesktopColorShadow,
-              source: settings.desktopShadowColorSource,
-              customColor: settings.desktopShadowColor,
-              scheme: scheme,
-              onSourceChanged: settings.setDesktopShadowColorSource,
-              onCustomColorChanged: settings.setDesktopShadowColor,
             ),
             Padding(
               padding: const EdgeInsets.only(top: 2, bottom: 4),
@@ -216,8 +186,6 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
           ],
         ),
         const SizedBox(height: kSettingsSectionSpacing),
-        LyricsSharedDisplaySection(title: l10n.lyricsSharedDisplaySection),
-        const SizedBox(height: kSettingsSectionSpacing),
         SettingsSectionCard(
           title: l10n.lyricsDesktopBehaviorSection,
           children: [
@@ -227,20 +195,6 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               subtitle: '',
               value: settings.desktopLock,
               onChanged: settings.setDesktopLock,
-            ),
-            SettingsSwitchTile(
-              icon: Icons.ac_unit_rounded,
-              title: l10n.lyricsDesktopFreeze,
-              subtitle: '',
-              value: settings.desktopFreezeOnScreenOff,
-              onChanged: settings.setDesktopFreezeOnScreenOff,
-            ),
-            SettingsSwitchTile(
-              icon: Icons.animation_rounded,
-              title: l10n.lyricsDesktopAnimation,
-              subtitle: '',
-              value: settings.desktopShowToggleAnimation,
-              onChanged: settings.setDesktopShowToggleAnimation,
             ),
             SettingsChoiceRow<DesktopScrollMode>(
               key: const Key('desktopScrollModeRow'),
@@ -264,67 +218,15 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               value: settings.desktopHideOnPause,
               onChanged: settings.setDesktopHideOnPause,
             ),
-            SettingsChoiceRow<LyricsPauseBehavior>(
-              icon: Icons.pause_rounded,
-              title: l10n.lyricsDesktopPauseBehavior,
-              // 整窗隐藏时回退策略不生效：置灰并说明原因（值保留，关掉开关即恢复可点）。
-              subtitle: settings.desktopHideOnPause
-                  ? l10n.lyricsDesktopPauseFallbackOverridden
-                  : null,
-              enabled: !settings.desktopHideOnPause,
-              value: settings.desktopPauseBehavior,
-              options: [
-                (LyricsPauseBehavior.keep, l10n.lyricsBehaviorKeep),
-                (LyricsPauseBehavior.title, l10n.lyricsBehaviorTitle),
-                (LyricsPauseBehavior.clear, l10n.lyricsBehaviorClear),
-              ],
-              onChanged: settings.setDesktopPauseBehavior,
-            ),
-            SettingsChoiceRow<DesktopNoLyricsBehavior>(
-              icon: Icons.music_off_rounded,
-              title: l10n.lyricsDesktopNoLyrics,
-              value: settings.desktopNoLyricsBehavior,
-              options: [
-                (DesktopNoLyricsBehavior.title, l10n.lyricsBehaviorTitle),
-                (DesktopNoLyricsBehavior.hide, l10n.lyricsDisplayUnsyncedHide),
-              ],
-              onChanged: settings.setDesktopNoLyricsBehavior,
-            ),
-            _controlSwitch(
-              l10n.lyricsControlPlayPause,
-              Icons.play_arrow_rounded,
-              DesktopControlKeys.playPause,
-              settings,
-            ),
-            _controlSwitch(
-              l10n.lyricsControlPrevious,
-              Icons.skip_previous_rounded,
-              DesktopControlKeys.previous,
-              settings,
-            ),
-            _controlSwitch(
-              l10n.lyricsControlNext,
-              Icons.skip_next_rounded,
-              DesktopControlKeys.next,
-              settings,
-            ),
-            _controlSwitch(
-              l10n.lyricsControlTranslation,
-              Icons.translate_rounded,
-              DesktopControlKeys.translation,
-              settings,
-            ),
-            _controlSwitch(
-              l10n.lyricsControlLock,
-              Icons.lock_rounded,
-              DesktopControlKeys.lock,
-              settings,
-            ),
-            _controlSwitch(
-              l10n.lyricsControlClose,
-              Icons.close_rounded,
-              DesktopControlKeys.close,
-              settings,
+            SettingsNavTile(
+              key: const Key('lyricsDesktopAdvancedItem'),
+              icon: Icons.tune_rounded,
+              title: l10n.lyricsDesktopAdvancedTitle,
+              subtitle: l10n.lyricsDesktopAdvancedSubtitle,
+              onTap: () => openSettingsSubPage(
+                context,
+                const DesktopLyricsAdvancedPage(),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -338,118 +240,6 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
           ],
         ),
       ],
-    );
-  }
-
-  /// 控制条按钮可见性开关（键 → 配置字段一一对应）。
-  Widget _controlSwitch(
-    String title,
-    IconData icon,
-    String key,
-    LyricsDisplaySettings settings,
-  ) {
-    return SettingsSwitchTile(
-      icon: icon,
-      title: title,
-      subtitle: '',
-      value: settings.desktopControls[key] ?? true,
-      onChanged: (value) => settings.setDesktopControlVisible(key, value),
-    );
-  }
-
-  /// 颜色行：显示当前解析出的颜色，点开「颜色选择面板」。
-  Widget _colorRow(
-    BuildContext context, {
-    required Key rowKey,
-    required IconData icon,
-    required String title,
-    required LyricColorSource source,
-    required int customColor,
-    required ColorScheme scheme,
-    required Future<void> Function(LyricColorSource) onSourceChanged,
-    required Future<void> Function(int) onCustomColorChanged,
-  }) {
-    return SettingsColorValueTile(
-      key: rowKey,
-      icon: icon,
-      title: title,
-      colorArgb: resolveLyricColor(source, customColor, scheme),
-      onTap: () => _showColorSourcePanel(
-        context,
-        title: title,
-        selected: source,
-        customColor: customColor,
-        scheme: scheme,
-        onSourceChanged: onSourceChanged,
-        onCustomColorChanged: onCustomColorChanged,
-      ),
-    );
-  }
-
-  /// 颜色选择面板：选来源即生效。
-  ///
-  /// - 选主题角色：直接写入来源并关面板；
-  /// - 选自定义：先关面板再打开任意取色器（HSV + Hex + 透明度），
-  ///   确认后写入「自定义」来源与颜色；取消不改任何配置。
-  Future<void> _showColorSourcePanel(
-    BuildContext context, {
-    required String title,
-    required LyricColorSource selected,
-    required int customColor,
-    required ColorScheme scheme,
-    required Future<void> Function(LyricColorSource) onSourceChanged,
-    required Future<void> Function(int) onCustomColorChanged,
-  }) {
-    final l10n = AppLocalizations.of(context)!;
-    // M3EDialog.show 固定把 dialog 推入 root navigator，关闭也必须定向 root。
-    final navigator = Navigator.of(context, rootNavigator: true);
-    Future<void> apply(LyricColorSource source) async {
-      if (source != LyricColorSource.custom) {
-        await onSourceChanged(source);
-        navigator.pop();
-        return;
-      }
-      navigator.pop();
-      final picked = await showAppColorPicker(
-        context,
-        initialColor: customColor,
-        withAlpha: true,
-      );
-      if (picked == null) return;
-      await onSourceChanged(LyricColorSource.custom);
-      await onCustomColorChanged(picked);
-    }
-
-    return M3EDialog.show<void>(
-      context,
-      dialog: M3EDialog(
-        title: title,
-        content: SizedBox(
-          width: settingsDialogWidth(context),
-          child: M3ERadioGroup<LyricColorSource>(
-            groupValue: selected,
-            onChanged: (source) => unawaited(apply(source)),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final source in LyricColorSource.values)
-                  _ColorSourceOption(
-                    source: source,
-                    groupValue: selected,
-                    argb: resolveLyricColor(source, customColor, scheme),
-                    onSelected: (value) => unawaited(apply(value)),
-                  ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          M3EButton.text(
-            onPressed: () => navigator.pop(),
-            child: Text(l10n.cancelButton),
-          ),
-        ],
-      ),
     );
   }
 
@@ -536,83 +326,3 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
     );
   }
 }
-
-/// 颜色来源候选项：radio + 色块 / 名称 / hex，整行可点。
-///
-/// 不复用 `M3ERadio.label`：label 挂在外层 `mainAxisSize.min` 的 Row 上，
-/// 非 flex 子项拿到无界宽度约束，内部放不了 `Expanded`（hex 无法右对齐）；
-/// 这里把候选项做成「radio + Expanded 可点标签区」，视觉与交互等价。
-class _ColorSourceOption extends StatelessWidget {
-  const _ColorSourceOption({
-    required this.source,
-    required this.groupValue,
-    required this.argb,
-    required this.onSelected,
-  });
-
-  final LyricColorSource source;
-  final LyricColorSource groupValue;
-  final int argb;
-  final ValueChanged<LyricColorSource> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final m3e = M3ETheme.of(context);
-    final name = _colorSourceLabel(l10n, source);
-    final hex = colorHexLabel(argb, withAlpha: (argb >> 24) & 0xFF != 0xFF);
-    return Row(
-      children: [
-        M3ERadio<LyricColorSource>(
-          value: source,
-          groupValue: groupValue,
-          onChanged: onSelected,
-        ),
-        Expanded(
-          child: M3ETappable(
-            onTap: () => onSelected(source),
-            // radio 自身是键盘 Tab 停靠点，标签区只承担指针点击；
-            // 语义上的「选中」由 radio 承担（标签区再报一次会让
-            // Semantics 认为 radio group 里有多个选中项）。
-            focusable: false,
-            semanticLabel: '$name, $hex',
-            semanticButton: false,
-            builder: (context, _) => Row(
-              children: [
-                SettingsColorSwatch(color: Color(argb), size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    name,
-                    style: m3e.typeScale.bodyLarge.copyWith(
-                      color: m3e.colorScheme.onSurface,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  hex,
-                  style: m3e.typeScale.bodySmall.copyWith(
-                    color: m3e.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-String _colorSourceLabel(AppLocalizations l10n, LyricColorSource source) =>
-    switch (source) {
-      LyricColorSource.custom => l10n.lyricsColorSourceCustom,
-      LyricColorSource.primary => l10n.lyricsColorSourcePrimary,
-      LyricColorSource.secondary => l10n.lyricsColorSourceSecondary,
-      LyricColorSource.tertiary => l10n.lyricsColorSourceTertiary,
-      LyricColorSource.onSurface => l10n.lyricsColorSourceOnSurface,
-      LyricColorSource.onSurfaceVariant =>
-        l10n.lyricsColorSourceOnSurfaceVariant,
-      LyricColorSource.surface => l10n.lyricsColorSourceSurface,
-    };

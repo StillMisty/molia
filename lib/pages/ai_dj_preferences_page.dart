@@ -126,8 +126,6 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
       title: l10n.aiDjPreferencesTitle,
       safeArea: true,
       children: [
-        SettingsSectionHint(text: l10n.aiDjPrefsAutoSaveHint),
-        const SizedBox(height: 12),
         SettingsSectionCard(
           title: l10n.aiDjPrefsGenerationGroup,
           children: [

@@ -158,7 +158,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsFollowArtwork => '播放时跟随封面';
 
   @override
-  String get settingsFollowArtworkSubtitle => '按当前歌曲封面取色，无封面时用基础配色';
+  String get settingsFollowArtworkSubtitle => '按封面取色，无封面用基础配色';
 
   @override
   String get coverTitle => '歌曲封面';
@@ -219,6 +219,36 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get coverLoadFailed => '封面加载失败，请稍后重试';
+
+  @override
+  String get settingsAdvancedTitle => '高级设置';
+
+  @override
+  String get settingsAdvancedSubtitle => '低频选项';
+
+  @override
+  String get settingsDownloadsAndCacheTitle => '下载与缓存';
+
+  @override
+  String get settingsDownloadsAndCacheSubtitle => '保存位置、任务与清理';
+
+  @override
+  String get settingsDataSaverQualitySubtitle => '省流开启时生效';
+
+  @override
+  String get lyricsSystemMediaAdvancedTitle => '系统媒体歌词高级设置';
+
+  @override
+  String get lyricsSystemMediaAdvancedSubtitle => '目标、格式与暂停行为';
+
+  @override
+  String get lyricsDesktopAdvancedTitle => '桌面歌词高级设置';
+
+  @override
+  String get lyricsDesktopAdvancedSubtitle => '对齐、阴影与控制条';
+
+  @override
+  String get lyricsDesktopControlsSection => '控制条按钮';
 
   @override
   String get settingsAppFont => '应用字体';
@@ -284,7 +314,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsFadeTitle => '淡入淡出';
 
   @override
-  String get settingsFadeSubtitle => '播放和暂停时音量渐入渐出，切歌不受影响';
+  String get settingsFadeSubtitle => '播放与暂停时音量渐入渐出';
 
   @override
   String get settingsFadeOff => '关闭';
@@ -302,7 +332,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSmartShuffleTitle => '少放最近听过的';
 
   @override
-  String get settingsSmartShuffleSubtitle => '随机播放时少放最近听过的歌';
+  String get settingsSmartShuffleSubtitle => '';
 
   @override
   String get settingsDefaultPlayMode => '默认播放模式';
@@ -326,7 +356,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsLibraryAddPosition => '加入收藏与列表的位置';
 
   @override
-  String get settingsLibraryAddPositionSubtitle => '收藏和自建列表的新歌放在顶部还是底部';
+  String get settingsLibraryAddPositionSubtitle => '';
 
   @override
   String get settingsLibraryAddPositionTop => '顶部';
@@ -338,7 +368,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAutoSourceSwap => '自动换源';
 
   @override
-  String get settingsAutoSourceSwapSubtitle => '播放失败时自动换到其它音源找同一首歌';
+  String get settingsAutoSourceSwapSubtitle => '播放失败时自动找其它音源';
 
   @override
   String get settingsDataSaverTitle => '省流模式';
@@ -362,10 +392,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsDataSaverCovers => '移动数据下仅使用已缓存封面';
 
   @override
-  String get settingsDataSaverCoversSubtitle => '不再加载新封面，未缓存的显示占位图';
+  String get settingsDataSaverCoversSubtitle => '不再加载新封面';
 
   @override
-  String get settingsSourcesItemSubtitle => '导入 LX Music 音源脚本，扩展可搜索的平台';
+  String get settingsSourcesItemSubtitle => '导入脚本，增加可搜索平台';
 
   @override
   String get settingsLyricsSection => '歌词';
@@ -412,7 +442,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsHapticsTitle => '震动反馈';
 
   @override
-  String get settingsHapticsSubtitle => '点按导航、播放等操作时给出轻震动';
+  String get settingsHapticsSubtitle => '点按时轻震动';
 
   @override
   String get settingsAutoSaveHint => '改动即时生效';
@@ -1466,9 +1496,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAppTitle => '应用名称';
 
   @override
-  String get settingsAppTitleSubtitle => '无歌曲播放时显示在顶栏';
-
-  @override
   String get settingsAppTitleDialogTitle => '应用名称';
 
   @override
@@ -1512,9 +1539,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsCacheTitle => '缓存管理';
 
   @override
-  String get settingsCacheSubtitle => '音频、歌词、封面的占用与清理规则';
-
-  @override
   String get cachePartitionAudio => '音频缓存';
 
   @override
@@ -1533,12 +1557,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get cachePolicyAudioEnabled => '边播边缓存';
-
-  @override
-  String get cachePolicyAudioScope => '听过的自动缓存';
-
-  @override
-  String get cachePolicyAudioHint => '播放时自动缓存，可离线播放，也可另存为下载；超出上限时自动清理最早的缓存。';
 
   @override
   String get cachePolicyAudioMax => '容量上限';
@@ -1623,16 +1641,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsContentTitle => '歌词与输出';
 
   @override
-  String get lyricsContentSubtitle => '歌词页、翻译、偏移等共享设置';
+  String get lyricsContentSubtitle => '歌词页、通知栏与车机歌词';
 
   @override
   String get lyricsPageTitle => '歌词页';
 
   @override
-  String get lyricsPageTranslationSubtitle => '在歌词页每行下方显示翻译';
+  String get lyricsPageTranslationSubtitle => '';
 
   @override
-  String get lyricsPageRomaSubtitle => '在歌词页每行下方显示罗马音';
+  String get lyricsPageRomaSubtitle => '';
 
   @override
   String get lyricsDisplaySharedTitle => '歌词输出';
@@ -1641,13 +1659,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsDisplayTranslation => '翻译';
 
   @override
-  String get lyricsDisplayTranslationSubtitle => '在桌面歌词、通知栏与蓝牙歌词中显示翻译';
+  String get lyricsDisplayTranslationSubtitle => '桌面与系统歌词中显示翻译';
 
   @override
   String get lyricsDisplayRoma => '罗马音';
 
   @override
-  String get lyricsDisplayRomaSubtitle => '在桌面歌词、通知栏与蓝牙歌词中显示罗马音';
+  String get lyricsDisplayRomaSubtitle => '桌面与系统歌词中显示罗马音';
 
   @override
   String get lyricsDisplayUnsynced => '未同步歌词';
@@ -1673,7 +1691,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsDesktopTitle => '桌面歌词';
 
   @override
-  String get lyricsDesktopEntrySubtitle => '悬浮窗样式、行为与配色';
+  String get lyricsDesktopEntrySubtitle => '样式、行为与配色';
 
   @override
   String get lyricsDesktopEnable => '开启桌面歌词';
@@ -1824,7 +1842,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsNotificationEnable => '在通知栏显示歌词';
 
   @override
-  String get lyricsNotificationEnableSubtitle => '把当前歌词同步到系统播放控制';
+  String get lyricsNotificationEnableSubtitle => '同步到系统播放控制';
 
   @override
   String get lyricsMetadataTarget => '显示在';
@@ -1866,7 +1884,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsBluetoothEnable => '车机显示歌词';
 
   @override
-  String get lyricsBluetoothEnableSubtitle => '让车机、通知栏与锁屏显示当前歌词';
+  String get lyricsBluetoothEnableSubtitle => '让车机与锁屏显示歌词';
 
   @override
   String get lyricsBluetoothOnlyA2dp => '仅在蓝牙音频连接时生效';
@@ -1950,8 +1968,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsColorSourceSurface => '表面色';
 
   @override
-  String get lyricsDesktopColorThemeHint =>
-      '「跟随应用主题」随外观设置变化；「跟随封面」按当前歌曲封面取色并实时更新。';
+  String get lyricsDesktopColorThemeHint => '「跟随主题」随外观变化；「跟随封面」按当前歌曲封面取色。';
 
   @override
   String get statsTitle => '听歌统计';
@@ -2065,13 +2082,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statsSubtitle => '播放次数、收听时长与热度分布（数据只保存在本机）';
 
   @override
-  String get statsSettingsSubtitle => '播放次数 / 时段热力图 / 导出';
+  String get statsSettingsSubtitle => '播放次数、热力图与导出';
 
   @override
   String get statsRecordSwitch => '记录听歌统计';
 
   @override
-  String get statsRecordSwitchSubtitle => '关闭后停止记录新的播放事件，已有数据保留';
+  String get statsRecordSwitchSubtitle => '关闭后停止记录，已有数据保留';
 
   @override
   String get statsRangeWeek => '近 7 天';
@@ -2190,7 +2207,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjTitle => 'AI 推歌';
 
   @override
-  String get aiDjSettingsSubtitle => '自备密钥的 AI 推荐电台';
+  String get aiDjSettingsSubtitle => '自备密钥的 AI 电台';
 
   @override
   String get aiDjNotConfigured => '尚未配置 AI 服务';
@@ -2728,9 +2745,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiDjEraBefore90 => '90 年代及更早';
-
-  @override
-  String get aiDjPrefsAutoSaveHint => '修改会立即保存，下一批生成时生效。';
 
   @override
   String get aiDjPrefsReset => '恢复默认';
@@ -3731,7 +3745,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateAutoCheckTitle => '自动检查更新';
 
   @override
-  String get updateAutoCheckSubtitle => '启动时静默检查，每天最多一次';
+  String get updateAutoCheckSubtitle => '启动时检查，每天最多一次';
 
   @override
   String get updateCheckTitle => '检查更新';
@@ -4094,16 +4108,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadSaveLocationIos => '文件 App › 我的 iPhone › Molia';
 
   @override
-  String get downloadSaveLocationFixedHintAndroid =>
-      '播放副本在应用内；下载完成后在系统「下载」另存一份';
+  String get downloadSaveLocationFixedHintAndroid => '播放副本在应用内，下载后另存到系统「下载」';
 
   @override
   String get downloadSaveLocationFixedHintAndroidOff =>
-      '公共副本已关闭；文件只在应用内，可在下方打开「发布到公共下载目录」';
+      '文件只在应用内，可开启「发布到公共下载目录」';
 
   @override
-  String get downloadSaveLocationFixedHintIos =>
-      '文件可在「文件」App › 我的 iPhone › Molia 中找到';
+  String get downloadSaveLocationFixedHintIos => '文件可在「文件」App 中找到';
 
   @override
   String get downloadPickDirectory => '选择目录';
@@ -4125,31 +4137,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadEmbedTags => '嵌入歌词与封面标签';
 
   @override
-  String get downloadEmbedTagsSubtitle =>
-      '写入音频标签（MP3 / FLAC），其它播放器也能读到；失败时保留原文件';
+  String get downloadEmbedTagsSubtitle => '写入音频标签，其它播放器也能读到';
 
   @override
   String get downloadPublishToPublicDir => '发布到公共下载目录';
 
   @override
-  String get downloadPublishToPublicDirSubtitle =>
-      '完成后另存一份到系统「下载」目录（Android），文件管理器与其它播放器可见';
+  String get downloadPublishToPublicDirSubtitle => '另存一份到系统「下载」目录';
 
   @override
   String get downloadNotifications => '下载通知';
 
   @override
-  String get downloadNotificationsSubtitle =>
-      '在通知栏显示下载进度，退到后台也能继续（Android，需要通知权限）';
+  String get downloadNotificationsSubtitle => '在通知栏显示进度，后台继续';
 
   @override
   String get downloadLocationInfo => '下载目录';
-
-  @override
-  String get downloadPlaybackLocation => '播放副本';
-
-  @override
-  String get downloadPublicCopyLocation => '另存目录';
 
   @override
   String get downloadLocationUnsupported => '当前平台不支持下载';
@@ -4498,13 +4501,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsCloseToTray => '关闭时最小化到托盘';
 
   @override
-  String get settingsCloseToTraySubtitle => '播放不中断；可从托盘图标重新打开或退出';
+  String get settingsCloseToTraySubtitle => '播放不中断，可从托盘重新打开';
 
   @override
   String get settingsShortcutsTitle => '快捷键';
 
   @override
-  String get settingsShortcutsSubtitle => '软件内与全局快捷键的开关与自定义';
+  String get settingsShortcutsSubtitle => '软件内与全局快捷键';
 
   @override
   String get shortcutsInAppSection => '软件内快捷键';
@@ -4611,7 +4614,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRememberWindowBounds => '记住窗口位置与大小';
 
   @override
-  String get settingsRememberWindowBoundsSubtitle => '下次启动时恢复上次的位置、大小与最大化状态';
+  String get settingsRememberWindowBoundsSubtitle => '下次启动恢复上次位置与大小';
 
   @override
   String get settingsTrayLinuxHint =>
@@ -4699,7 +4702,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsTitle => '问题排查';
 
   @override
-  String get diagnosticsSubtitle => '导出运行记录与设备信息，便于定位播放或音源问题';
+  String get diagnosticsSubtitle => '导出运行记录与设备信息';
 
   @override
   String get diagnosticsOverviewSection => '概览';
@@ -5177,8 +5180,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsListeningSyncTitle => '听歌同步';
 
   @override
-  String get settingsListeningSyncSubtitle =>
-      '把正在播放和播放记录发送到 ListenBrainz 或 Last.fm';
+  String get settingsListeningSyncSubtitle => '发送播放记录到 ListenBrainz / Last.fm';
 
   @override
   String get listeningSyncTitle => '听歌同步';

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:material_ui/material_ui.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -28,20 +26,8 @@ class DataBackupSection extends StatelessWidget {
     return SettingsSectionCard(
       title: l10n.settingsDataBackupTitle,
       children: [
-        // 统计采集开关（关闭 = 停止记录新事件，已有数据保留）。
-        if (statistics != null)
-          ValueListenableBuilder<bool>(
-            valueListenable: statistics.enabledNotifier,
-            builder: (context, enabled, _) => SettingsSwitchTile(
-              switchKey: const Key('settingsPlayStatisticsSwitch'),
-              icon: Icons.query_stats_rounded,
-              title: l10n.statsRecordSwitch,
-              subtitle: l10n.statsRecordSwitchSubtitle,
-              value: enabled,
-              onChanged: (value) => unawaited(statistics.setEnabled(value)),
-            ),
-          ),
         // 听歌统计：事件级采集（本机），播放次数 / 热力图 / 导出。
+        // 采集开关在统计页内，首屏只留入口。
         if (statistics != null)
           SettingsNavTile(
             key: const Key('settingsPlayStatisticsItem'),

@@ -161,7 +161,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsFollowArtworkSubtitle =>
-      'Pick colors from the current song’s artwork; base colors when there is none';
+      'Colors from the current artwork; base colors when none';
 
   @override
   String get coverTitle => 'Song cover';
@@ -222,6 +222,40 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get coverLoadFailed => 'Couldn’t load the cover. Try again';
+
+  @override
+  String get settingsAdvancedTitle => 'Advanced settings';
+
+  @override
+  String get settingsAdvancedSubtitle => 'Less-used options';
+
+  @override
+  String get settingsDownloadsAndCacheTitle => 'Downloads & cache';
+
+  @override
+  String get settingsDownloadsAndCacheSubtitle =>
+      'Save location, tasks and cleanup';
+
+  @override
+  String get settingsDataSaverQualitySubtitle =>
+      'Applies while Data Saver is on';
+
+  @override
+  String get lyricsSystemMediaAdvancedTitle => 'System media lyrics advanced';
+
+  @override
+  String get lyricsSystemMediaAdvancedSubtitle =>
+      'Target, format and pause behavior';
+
+  @override
+  String get lyricsDesktopAdvancedTitle => 'Desktop lyrics advanced';
+
+  @override
+  String get lyricsDesktopAdvancedSubtitle =>
+      'Alignment, shadow and control bar';
+
+  @override
+  String get lyricsDesktopControlsSection => 'Control bar buttons';
 
   @override
   String get settingsAppFont => 'App font';
@@ -287,8 +321,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsFadeTitle => 'Fade in and out';
 
   @override
-  String get settingsFadeSubtitle =>
-      'Smooths the volume when you play or pause. Track changes stay instant.';
+  String get settingsFadeSubtitle => 'Fade volume in and out on play and pause';
 
   @override
   String get settingsFadeOff => 'Off';
@@ -306,8 +339,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSmartShuffleTitle => 'Fewer recent repeats';
 
   @override
-  String get settingsSmartShuffleSubtitle =>
-      'Recently played songs come up less often in shuffle.';
+  String get settingsSmartShuffleSubtitle => '';
 
   @override
   String get settingsDefaultPlayMode => 'Default play mode';
@@ -334,8 +366,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLibraryAddPosition => 'Position of added songs';
 
   @override
-  String get settingsLibraryAddPositionSubtitle =>
-      'Top or bottom of favorites and playlists';
+  String get settingsLibraryAddPositionSubtitle => '';
 
   @override
   String get settingsLibraryAddPositionTop => 'Top';
@@ -348,7 +379,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAutoSourceSwapSubtitle =>
-      'On playback failure, look for the same song in another source';
+      'Find another source when playback fails';
 
   @override
   String get settingsDataSaverTitle => 'Data saver';
@@ -373,12 +404,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsDataSaverCovers => 'Cached artwork only on mobile data';
 
   @override
-  String get settingsDataSaverCoversSubtitle =>
-      'Stop loading new artwork; show a placeholder when not cached';
+  String get settingsDataSaverCoversSubtitle => 'Stop loading new artwork';
 
   @override
   String get settingsSourcesItemSubtitle =>
-      'Import LX Music source scripts to search more platforms';
+      'Import scripts to search more platforms';
 
   @override
   String get settingsLyricsSection => 'Lyrics';
@@ -427,8 +457,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsHapticsTitle => 'Vibration feedback';
 
   @override
-  String get settingsHapticsSubtitle =>
-      'Light vibration on taps such as navigation and playback';
+  String get settingsHapticsSubtitle => 'Light vibration on tap';
 
   @override
   String get settingsAutoSaveHint => 'Changes take effect immediately';
@@ -1518,10 +1547,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAppTitle => 'App name';
 
   @override
-  String get settingsAppTitleSubtitle =>
-      'Shown in the top bar when nothing is playing';
-
-  @override
   String get settingsAppTitleDialogTitle => 'App name';
 
   @override
@@ -1566,10 +1591,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsCacheTitle => 'Cache management';
 
   @override
-  String get settingsCacheSubtitle =>
-      'Audio, lyric and artwork usage and cleanup rules';
-
-  @override
   String get cachePartitionAudio => 'Audio cache';
 
   @override
@@ -1588,13 +1609,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cachePolicyAudioEnabled => 'Cache audio while playing';
-
-  @override
-  String get cachePolicyAudioScope => 'Cache what you play';
-
-  @override
-  String get cachePolicyAudioHint =>
-      'Songs are cached as they play, so they can play offline or be saved as downloads; the oldest cache is cleared when the limit is reached.';
 
   @override
   String get cachePolicyAudioMax => 'Size limit';
@@ -1681,18 +1695,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsContentSubtitle =>
-      'Lyrics page, translation, offset and shared options';
+      'Lyrics page, notification and car lyrics';
 
   @override
   String get lyricsPageTitle => 'Lyrics page';
 
   @override
-  String get lyricsPageTranslationSubtitle =>
-      'Show translation under each line in the lyrics page';
+  String get lyricsPageTranslationSubtitle => '';
 
   @override
-  String get lyricsPageRomaSubtitle =>
-      'Show romanization under each line in the lyrics page';
+  String get lyricsPageRomaSubtitle => '';
 
   @override
   String get lyricsDisplaySharedTitle => 'Lyric outputs';
@@ -1702,14 +1714,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsDisplayTranslationSubtitle =>
-      'Show translation in floating, notification and Bluetooth lyrics';
+      'Show translation in system lyrics';
 
   @override
   String get lyricsDisplayRoma => 'Romanization';
 
   @override
-  String get lyricsDisplayRomaSubtitle =>
-      'Show romanization in floating, notification and Bluetooth lyrics';
+  String get lyricsDisplayRomaSubtitle => 'Show romanization in system lyrics';
 
   @override
   String get lyricsDisplayUnsynced => 'Unsynced lyrics';
@@ -1735,8 +1746,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsDesktopTitle => 'Floating lyrics';
 
   @override
-  String get lyricsDesktopEntrySubtitle =>
-      'Floating window style, behavior and colors';
+  String get lyricsDesktopEntrySubtitle => 'Style, behavior and colors';
 
   @override
   String get lyricsDesktopEnable => 'Enable floating lyrics';
@@ -1892,7 +1902,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsNotificationEnableSubtitle =>
-      'Sync the current lyric to system playback controls';
+      'Sync lyrics to system playback controls';
 
   @override
   String get lyricsMetadataTarget => 'Show in';
@@ -1935,7 +1945,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsBluetoothEnableSubtitle =>
-      'Show the current lyric on the car head unit, notification shade and lock screen';
+      'Show lyrics on car units and the lock screen';
 
   @override
   String get lyricsBluetoothOnlyA2dp =>
@@ -2026,7 +2036,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lyricsDesktopColorThemeHint =>
-      '“Follow app theme” changes with the appearance settings; “Follow artwork” picks colors from the current song and updates live.';
+      '“App theme” follows appearance; “Artwork” follows the current song.';
 
   @override
   String get statsTitle => 'Listening Stats';
@@ -2145,14 +2155,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Play counts, listening time, and activity heatmaps (stored on this device only)';
 
   @override
-  String get statsSettingsSubtitle => 'Plays / activity heatmaps / export';
+  String get statsSettingsSubtitle => 'Plays, heatmaps and export';
 
   @override
   String get statsRecordSwitch => 'Record listening stats';
 
   @override
   String get statsRecordSwitchSubtitle =>
-      'Turn off to stop recording new plays; existing data is kept';
+      'Turn off to stop recording; existing data is kept';
 
   @override
   String get statsRangeWeek => '7 days';
@@ -2832,10 +2842,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjEraBefore90 => 'Before the 90s';
-
-  @override
-  String get aiDjPrefsAutoSaveHint =>
-      'Changes save automatically and apply to the next batch.';
 
   @override
   String get aiDjPrefsReset => 'Restore defaults';
@@ -3893,8 +3899,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updateAutoCheckTitle => 'Check for updates automatically';
 
   @override
-  String get updateAutoCheckSubtitle =>
-      'Silent check at startup, at most once a day';
+  String get updateAutoCheckSubtitle => 'Check at startup, at most once a day';
 
   @override
   String get updateCheckTitle => 'Check for updates';
@@ -4274,15 +4279,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadSaveLocationFixedHintAndroid =>
-      'The playback copy stays in the app; a copy is also saved to Downloads after each download';
+      'Playback copy stays in the app; a copy goes to Downloads';
 
   @override
   String get downloadSaveLocationFixedHintAndroidOff =>
-      'Public copy is off; files stay in the app. Turn on “Publish to system Downloads” below';
+      'Files stay in the app; enable Publish to public Downloads';
 
   @override
   String get downloadSaveLocationFixedHintIos =>
-      'Files are visible in Files › On My iPhone › Molia';
+      'Files are available in the Files app';
 
   @override
   String get downloadPickDirectory => 'Choose folder';
@@ -4305,30 +4310,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadEmbedTagsSubtitle =>
-      'Write tags into the audio file (MP3 / FLAC) so other players can read them; the original file is kept if writing fails';
+      'Write audio tags other players can read';
 
   @override
   String get downloadPublishToPublicDir => 'Publish to system Downloads';
 
   @override
   String get downloadPublishToPublicDirSubtitle =>
-      'Also save a copy to the system Downloads folder (Android) so file managers and other players can see it';
+      'Also save a copy to the system Downloads folder';
 
   @override
   String get downloadNotifications => 'Download notifications';
 
   @override
   String get downloadNotificationsSubtitle =>
-      'Show download progress in the notification shade and keep downloading in the background (Android; notification permission required)';
+      'Show progress in notifications; keep running in background';
 
   @override
   String get downloadLocationInfo => 'Download folder';
-
-  @override
-  String get downloadPlaybackLocation => 'Playback copy';
-
-  @override
-  String get downloadPublicCopyLocation => 'Also saved to';
 
   @override
   String get downloadLocationUnsupported =>
@@ -4692,14 +4691,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsCloseToTraySubtitle =>
-      'Keep playing in the background; reopen or quit from the tray icon';
+      'Keep playing; reopen from the tray';
 
   @override
   String get settingsShortcutsTitle => 'Shortcuts';
 
   @override
-  String get settingsShortcutsSubtitle =>
-      'Enable and customize in-app and global shortcuts';
+  String get settingsShortcutsSubtitle => 'In-app and global shortcuts';
 
   @override
   String get shortcutsInAppSection => 'In-app shortcuts';
@@ -4813,7 +4811,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsRememberWindowBoundsSubtitle =>
-      'Reopen at the last position, size and maximized state';
+      'Reopen at the last position and size';
 
   @override
   String get settingsTrayLinuxHint =>
@@ -4907,8 +4905,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagnosticsTitle => 'Troubleshooting';
 
   @override
-  String get diagnosticsSubtitle =>
-      'Export run records and device details to help with playback or source problems';
+  String get diagnosticsSubtitle => 'Export run records and device details';
 
   @override
   String get diagnosticsOverviewSection => 'Overview';
@@ -5407,7 +5404,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsListeningSyncSubtitle =>
-      'Send what you play to ListenBrainz or Last.fm';
+      'Send plays to ListenBrainz or Last.fm';
 
   @override
   String get listeningSyncTitle => 'Listening sync';
