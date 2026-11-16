@@ -6,10 +6,11 @@ import 'package:provider/single_child_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/l10n/app_localizations.dart';
-import 'package:molia/pages/cache_management_page.dart';
+import 'package:molia/pages/downloads_and_cache_page.dart';
 import 'package:molia/pages/downloads_manage_page.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/cache_service.dart';
+import 'package:molia/services/download/download_settings.dart';
 import 'package:molia/widgets/settings/settings_tiles.dart';
 
 import '../support/fakes.dart';
@@ -52,7 +53,7 @@ void main() {
     final cache = CacheService(prefs: prefs, storage: MemoryCacheStorage());
     await pump(
       tester,
-      const CacheManagementPage(),
+      const DownloadsAndCachePage(),
       providers: [Provider<CacheService>.value(value: cache)],
     );
 
@@ -76,6 +77,34 @@ void main() {
     final clearAllButton = find.widgetWithText(M3EButton, '清理全部缓存');
     expect(clearAllButton, findsOneWidget);
     expect(tester.getSize(clearAllButton).width, greaterThan(300));
+  });
+
+  testWidgets('下载与缓存页把下载入口与缓存清理放在同一页', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final cache = CacheService(prefs: prefs, storage: MemoryCacheStorage());
+    final downloadSettings = DownloadSettings(prefs: prefs);
+    await downloadSettings.init();
+    addTearDown(downloadSettings.dispose);
+
+    await pump(
+      tester,
+      const DownloadsAndCachePage(),
+      providers: [
+        Provider<CacheService>.value(value: cache),
+        ChangeNotifierProvider<DownloadSettings>.value(value: downloadSettings),
+      ],
+    );
+
+    // 下载：保存位置 + 任务入口；缓存：三块用量与清理仍在同页。
+    expect(find.byKey(const Key('downloadSaveLocationItem')), findsOneWidget);
+    expect(
+      find.byKey(const Key('settingsDownloadsManageItem')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('cacheClearAudioItem')), findsOneWidget);
+    expect(find.byKey(const Key('cacheClearLyricsItem')), findsOneWidget);
+    expect(find.byKey(const Key('cacheClearArtworkItem')), findsOneWidget);
   });
 
   testWidgets('下载管理的批量破坏动作只在顶栏 ⋮ 里', (tester) async {

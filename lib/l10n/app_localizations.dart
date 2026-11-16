@@ -377,7 +377,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsFollowArtworkSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Pick colors from the current song’s artwork; base colors when there is none'**
+  /// **'Colors from the current artwork; base colors when none'**
   String get settingsFollowArtworkSubtitle;
 
   /// No description provided for @coverTitle.
@@ -499,6 +499,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn’t load the cover. Try again'**
   String get coverLoadFailed;
+
+  /// No description provided for @settingsAdvancedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced settings'**
+  String get settingsAdvancedTitle;
+
+  /// No description provided for @settingsAdvancedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Less-used options'**
+  String get settingsAdvancedSubtitle;
+
+  /// No description provided for @settingsDownloadsAndCacheTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads & cache'**
+  String get settingsDownloadsAndCacheTitle;
+
+  /// No description provided for @settingsDownloadsAndCacheSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save location, tasks and cleanup'**
+  String get settingsDownloadsAndCacheSubtitle;
+
+  /// No description provided for @settingsDataSaverQualitySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies while Data Saver is on'**
+  String get settingsDataSaverQualitySubtitle;
+
+  /// No description provided for @lyricsSystemMediaAdvancedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'System media lyrics advanced'**
+  String get lyricsSystemMediaAdvancedTitle;
+
+  /// No description provided for @lyricsSystemMediaAdvancedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Target, format and pause behavior'**
+  String get lyricsSystemMediaAdvancedSubtitle;
+
+  /// No description provided for @lyricsDesktopAdvancedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Desktop lyrics advanced'**
+  String get lyricsDesktopAdvancedTitle;
+
+  /// No description provided for @lyricsDesktopAdvancedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Alignment, shadow and control bar'**
+  String get lyricsDesktopAdvancedSubtitle;
+
+  /// No description provided for @lyricsDesktopControlsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Control bar buttons'**
+  String get lyricsDesktopControlsSection;
 
   /// No description provided for @settingsAppFont.
   ///
@@ -629,7 +689,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsFadeSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Smooths the volume when you play or pause. Track changes stay instant.'**
+  /// **'Fade volume in and out on play and pause'**
   String get settingsFadeSubtitle;
 
   /// No description provided for @settingsFadeOff.
@@ -665,7 +725,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsSmartShuffleSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Recently played songs come up less often in shuffle.'**
+  /// **''**
   String get settingsSmartShuffleSubtitle;
 
   /// No description provided for @settingsDefaultPlayMode.
@@ -713,7 +773,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsLibraryAddPositionSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Top or bottom of favorites and playlists'**
+  /// **''**
   String get settingsLibraryAddPositionSubtitle;
 
   /// No description provided for @settingsLibraryAddPositionTop.
@@ -737,7 +797,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAutoSourceSwapSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'On playback failure, look for the same song in another source'**
+  /// **'Find another source when playback fails'**
   String get settingsAutoSourceSwapSubtitle;
 
   /// No description provided for @settingsDataSaverTitle.
@@ -785,13 +845,13 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDataSaverCoversSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Stop loading new artwork; show a placeholder when not cached'**
+  /// **'Stop loading new artwork'**
   String get settingsDataSaverCoversSubtitle;
 
   /// No description provided for @settingsSourcesItemSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Import LX Music source scripts to search more platforms'**
+  /// **'Import scripts to search more platforms'**
   String get settingsSourcesItemSubtitle;
 
   /// No description provided for @settingsLyricsSection.
@@ -881,7 +941,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsHapticsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Light vibration on taps such as navigation and playback'**
+  /// **'Light vibration on tap'**
   String get settingsHapticsSubtitle;
 
   /// No description provided for @settingsAutoSaveHint.
@@ -2852,12 +2912,6 @@ abstract class AppLocalizations {
   /// **'App name'**
   String get settingsAppTitle;
 
-  /// No description provided for @settingsAppTitleSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Shown in the top bar when nothing is playing'**
-  String get settingsAppTitleSubtitle;
-
   /// No description provided for @settingsAppTitleDialogTitle.
   ///
   /// In en, this message translates to:
@@ -2936,12 +2990,6 @@ abstract class AppLocalizations {
   /// **'Cache management'**
   String get settingsCacheTitle;
 
-  /// No description provided for @settingsCacheSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Audio, lyric and artwork usage and cleanup rules'**
-  String get settingsCacheSubtitle;
-
   /// No description provided for @cachePartitionAudio.
   ///
   /// In en, this message translates to:
@@ -2977,18 +3025,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cache audio while playing'**
   String get cachePolicyAudioEnabled;
-
-  /// No description provided for @cachePolicyAudioScope.
-  ///
-  /// In en, this message translates to:
-  /// **'Cache what you play'**
-  String get cachePolicyAudioScope;
-
-  /// No description provided for @cachePolicyAudioHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Songs are cached as they play, so they can play offline or be saved as downloads; the oldest cache is cleared when the limit is reached.'**
-  String get cachePolicyAudioHint;
 
   /// No description provided for @cachePolicyAudioMax.
   ///
@@ -3125,7 +3161,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsContentSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Lyrics page, translation, offset and shared options'**
+  /// **'Lyrics page, notification and car lyrics'**
   String get lyricsContentSubtitle;
 
   /// No description provided for @lyricsPageTitle.
@@ -3137,13 +3173,13 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsPageTranslationSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show translation under each line in the lyrics page'**
+  /// **''**
   String get lyricsPageTranslationSubtitle;
 
   /// No description provided for @lyricsPageRomaSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show romanization under each line in the lyrics page'**
+  /// **''**
   String get lyricsPageRomaSubtitle;
 
   /// No description provided for @lyricsDisplaySharedTitle.
@@ -3161,7 +3197,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsDisplayTranslationSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show translation in floating, notification and Bluetooth lyrics'**
+  /// **'Show translation in system lyrics'**
   String get lyricsDisplayTranslationSubtitle;
 
   /// No description provided for @lyricsDisplayRoma.
@@ -3173,7 +3209,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsDisplayRomaSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show romanization in floating, notification and Bluetooth lyrics'**
+  /// **'Show romanization in system lyrics'**
   String get lyricsDisplayRomaSubtitle;
 
   /// No description provided for @lyricsDisplayUnsynced.
@@ -3221,7 +3257,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsDesktopEntrySubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Floating window style, behavior and colors'**
+  /// **'Style, behavior and colors'**
   String get lyricsDesktopEntrySubtitle;
 
   /// No description provided for @lyricsDesktopEnable.
@@ -3521,7 +3557,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsNotificationEnableSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Sync the current lyric to system playback controls'**
+  /// **'Sync lyrics to system playback controls'**
   String get lyricsNotificationEnableSubtitle;
 
   /// No description provided for @lyricsMetadataTarget.
@@ -3605,7 +3641,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsBluetoothEnableSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show the current lyric on the car head unit, notification shade and lock screen'**
+  /// **'Show lyrics on car units and the lock screen'**
   String get lyricsBluetoothEnableSubtitle;
 
   /// No description provided for @lyricsBluetoothOnlyA2dp.
@@ -3773,7 +3809,7 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsDesktopColorThemeHint.
   ///
   /// In en, this message translates to:
-  /// **'“Follow app theme” changes with the appearance settings; “Follow artwork” picks colors from the current song and updates live.'**
+  /// **'“App theme” follows appearance; “Artwork” follows the current song.'**
   String get lyricsDesktopColorThemeHint;
 
   /// No description provided for @statsTitle.
@@ -3977,7 +4013,7 @@ abstract class AppLocalizations {
   /// No description provided for @statsSettingsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Plays / activity heatmaps / export'**
+  /// **'Plays, heatmaps and export'**
   String get statsSettingsSubtitle;
 
   /// No description provided for @statsRecordSwitch.
@@ -3989,7 +4025,7 @@ abstract class AppLocalizations {
   /// No description provided for @statsRecordSwitchSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Turn off to stop recording new plays; existing data is kept'**
+  /// **'Turn off to stop recording; existing data is kept'**
   String get statsRecordSwitchSubtitle;
 
   /// No description provided for @statsRangeWeek.
@@ -5197,12 +5233,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Before the 90s'**
   String get aiDjEraBefore90;
-
-  /// No description provided for @aiDjPrefsAutoSaveHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Changes save automatically and apply to the next batch.'**
-  String get aiDjPrefsAutoSaveHint;
 
   /// No description provided for @aiDjPrefsReset.
   ///
@@ -6981,7 +7011,7 @@ abstract class AppLocalizations {
   /// No description provided for @updateAutoCheckSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Silent check at startup, at most once a day'**
+  /// **'Check at startup, at most once a day'**
   String get updateAutoCheckSubtitle;
 
   /// No description provided for @updateCheckTitle.
@@ -7657,19 +7687,19 @@ abstract class AppLocalizations {
   /// No description provided for @downloadSaveLocationFixedHintAndroid.
   ///
   /// In en, this message translates to:
-  /// **'The playback copy stays in the app; a copy is also saved to Downloads after each download'**
+  /// **'Playback copy stays in the app; a copy goes to Downloads'**
   String get downloadSaveLocationFixedHintAndroid;
 
   /// No description provided for @downloadSaveLocationFixedHintAndroidOff.
   ///
   /// In en, this message translates to:
-  /// **'Public copy is off; files stay in the app. Turn on “Publish to system Downloads” below'**
+  /// **'Files stay in the app; enable Publish to public Downloads'**
   String get downloadSaveLocationFixedHintAndroidOff;
 
   /// No description provided for @downloadSaveLocationFixedHintIos.
   ///
   /// In en, this message translates to:
-  /// **'Files are visible in Files › On My iPhone › Molia'**
+  /// **'Files are available in the Files app'**
   String get downloadSaveLocationFixedHintIos;
 
   /// No description provided for @downloadPickDirectory.
@@ -7711,7 +7741,7 @@ abstract class AppLocalizations {
   /// No description provided for @downloadEmbedTagsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Write tags into the audio file (MP3 / FLAC) so other players can read them; the original file is kept if writing fails'**
+  /// **'Write audio tags other players can read'**
   String get downloadEmbedTagsSubtitle;
 
   /// No description provided for @downloadPublishToPublicDir.
@@ -7723,7 +7753,7 @@ abstract class AppLocalizations {
   /// No description provided for @downloadPublishToPublicDirSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Also save a copy to the system Downloads folder (Android) so file managers and other players can see it'**
+  /// **'Also save a copy to the system Downloads folder'**
   String get downloadPublishToPublicDirSubtitle;
 
   /// No description provided for @downloadNotifications.
@@ -7735,7 +7765,7 @@ abstract class AppLocalizations {
   /// No description provided for @downloadNotificationsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Show download progress in the notification shade and keep downloading in the background (Android; notification permission required)'**
+  /// **'Show progress in notifications; keep running in background'**
   String get downloadNotificationsSubtitle;
 
   /// No description provided for @downloadLocationInfo.
@@ -7743,18 +7773,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Download folder'**
   String get downloadLocationInfo;
-
-  /// No description provided for @downloadPlaybackLocation.
-  ///
-  /// In en, this message translates to:
-  /// **'Playback copy'**
-  String get downloadPlaybackLocation;
-
-  /// No description provided for @downloadPublicCopyLocation.
-  ///
-  /// In en, this message translates to:
-  /// **'Also saved to'**
-  String get downloadPublicCopyLocation;
 
   /// No description provided for @downloadLocationUnsupported.
   ///
@@ -8359,7 +8377,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsCloseToTraySubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Keep playing in the background; reopen or quit from the tray icon'**
+  /// **'Keep playing; reopen from the tray'**
   String get settingsCloseToTraySubtitle;
 
   /// No description provided for @settingsShortcutsTitle.
@@ -8371,7 +8389,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsShortcutsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Enable and customize in-app and global shortcuts'**
+  /// **'In-app and global shortcuts'**
   String get settingsShortcutsSubtitle;
 
   /// No description provided for @shortcutsInAppSection.
@@ -8569,7 +8587,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsRememberWindowBoundsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Reopen at the last position, size and maximized state'**
+  /// **'Reopen at the last position and size'**
   String get settingsRememberWindowBoundsSubtitle;
 
   /// No description provided for @settingsTrayLinuxHint.
@@ -8737,7 +8755,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagnosticsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Export run records and device details to help with playback or source problems'**
+  /// **'Export run records and device details'**
   String get diagnosticsSubtitle;
 
   /// No description provided for @diagnosticsOverviewSection.
@@ -9625,7 +9643,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsListeningSyncSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Send what you play to ListenBrainz or Last.fm'**
+  /// **'Send plays to ListenBrainz or Last.fm'**
   String get settingsListeningSyncSubtitle;
 
   /// No description provided for @listeningSyncTitle.

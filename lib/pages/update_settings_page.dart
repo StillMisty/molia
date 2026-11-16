@@ -43,8 +43,6 @@ class UpdateSettingsPage extends StatelessWidget {
                   _ReleaseSection(provider: provider, l10n: l10n),
                 ],
                 const SizedBox(height: kSettingsSectionSpacing),
-                _AdvancedSection(provider: provider, l10n: l10n),
-                const SizedBox(height: kSettingsSectionSpacing),
                 _AboutSection(provider: provider, l10n: l10n),
               ],
             ),
@@ -382,93 +380,6 @@ class _ReleaseActions extends StatelessWidget {
     final url = provider.release?.notesUrl;
     if (url == null) return;
     await launchUrl(url, mode: LaunchMode.externalApplication);
-  }
-}
-
-/// 高级：清单地址覆盖与下载镜像前缀（都可留空走默认）。
-class _AdvancedSection extends StatelessWidget {
-  const _AdvancedSection({required this.provider, required this.l10n});
-
-  final UpdateProvider provider;
-  final AppLocalizations l10n;
-
-  @override
-  Widget build(BuildContext context) {
-    return SettingsSectionCard(
-      title: l10n.updateAdvancedSection,
-      children: [
-        SettingsNavTile(
-          key: const Key('settingsUpdateManifestItem'),
-          icon: Icons.link_rounded,
-          title: l10n.updateManifestOverrideTitle,
-          subtitle: provider.manifestUrlOverride.isEmpty
-              ? l10n.updateManifestOverrideDefault
-              : provider.manifestUrlOverride,
-          onTap: () => _editText(
-            context,
-            title: l10n.updateManifestOverrideTitle,
-            hint: l10n.updateManifestOverrideHint,
-            initial: provider.manifestUrlOverride,
-            onSave: provider.setManifestUrlOverride,
-          ),
-        ),
-        SettingsNavTile(
-          key: const Key('settingsUpdateMirrorItem'),
-          icon: Icons.cloud_download_rounded,
-          title: l10n.updateDownloadPrefixTitle,
-          subtitle: provider.downloadPrefix.isEmpty
-              ? l10n.updateDownloadPrefixDefault
-              : provider.downloadPrefix,
-          onTap: () => _editText(
-            context,
-            title: l10n.updateDownloadPrefixTitle,
-            hint: l10n.updateDownloadPrefixHint,
-            initial: provider.downloadPrefix,
-            onSave: provider.setDownloadPrefix,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _editText(
-    BuildContext context, {
-    required String title,
-    required String hint,
-    required String initial,
-    required Future<void> Function(String value) onSave,
-  }) async {
-    final controller = TextEditingController(text: initial);
-    final navigator = Navigator.of(context, rootNavigator: true);
-    await M3EDialog.show<void>(
-      context,
-      dialog: M3EDialog(
-        title: title,
-        content: SizedBox(
-          width: settingsDialogWidth(context),
-          child: M3ETextField(
-            controller: controller,
-            placeholder: hint,
-            leading: const Icon(Icons.link_rounded),
-            autofocus: true,
-          ),
-        ),
-        actions: [
-          M3EButton.text(
-            onPressed: () => navigator.pop(),
-            child: Text(l10n.cancel),
-          ),
-          M3EButton.filled(
-            onPressed: () async {
-              await onSave(controller.text);
-              navigator.pop();
-            },
-            child: Text(l10n.saveChanges),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
   }
 }
 

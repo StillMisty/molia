@@ -1,23 +1,15 @@
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../../pages/cache_management_page.dart';
-import '../../pages/download_settings_page.dart';
-import '../../pages/downloads_manage_page.dart';
+import '../../pages/downloads_and_cache_page.dart';
 import '../../pages/music_folders_page.dart';
-import '../../services/library/library_add_settings.dart';
 import 'settings_section_availability.dart';
 import 'settings_tiles.dart';
 
-/// 设置首屏「曲库与存储」卡：新歌加入位置、本地文件夹与下载 / 缓存。
+/// 设置首屏「曲库与存储」卡：本地文件夹与下载 / 缓存。
 ///
-/// 这些行都围绕「歌从哪里来、存在哪里」：加入位置是曲库行为，文件夹是本地
-/// 导入，下载与缓存是占用治理。
-///
-/// 可选服务与平台能力是否具备由 [SettingsSectionAvailability] 判定；加入位置
-/// 的值仍由本行的 `Selector` 订阅，写入归 [LibraryAddSettings]（跟人走），
-/// 卡片不碰存储。
+/// 下载设置、下载管理与缓存管理合并为一个子页，首屏不再为同一类事情
+/// 付出三行；加入收藏与列表的位置收进「高级设置」。
 class LibraryStorageSection extends StatelessWidget {
   const LibraryStorageSection({super.key, required this.availability});
 
@@ -29,30 +21,6 @@ class LibraryStorageSection extends StatelessWidget {
     return SettingsSectionCard(
       title: l10n.settingsLibraryStorageTitle,
       children: [
-        // 加入收藏 / 列表的位置：新曲目放开头还是末尾（默认开头）。
-        if (availability.hasLibraryAdd)
-          Selector<LibraryAddSettings, LibraryAddPosition>(
-            selector: (context, settings) => settings.position,
-            builder: (context, position, _) =>
-                SettingsChoiceRow<LibraryAddPosition>(
-                  key: const Key('settingsLibraryAddPositionItem'),
-                  icon: Icons.playlist_add_rounded,
-                  title: l10n.settingsLibraryAddPosition,
-                  subtitle: l10n.settingsLibraryAddPositionSubtitle,
-                  value: position,
-                  options: [
-                    (
-                      LibraryAddPosition.top,
-                      l10n.settingsLibraryAddPositionTop,
-                    ),
-                    (
-                      LibraryAddPosition.bottom,
-                      l10n.settingsLibraryAddPositionBottom,
-                    ),
-                  ],
-                  onChanged: availability.libraryAdd!.setPosition,
-                ),
-          ),
         // 音乐文件夹：扫描目录、进度 / 摘要与手动重扫（iOS 不展示）。
         if (availability.musicFoldersRowVisible)
           SettingsNavTile(
@@ -62,32 +30,14 @@ class LibraryStorageSection extends StatelessWidget {
             subtitle: l10n.musicFoldersSubtitle,
             onTap: () => openSettingsSubPage(context, const MusicFoldersPage()),
           ),
-        // 下载设置：保存位置 / 文件名格式 / 标签嵌入。
+        // 下载与缓存：保存位置 / 任务入口 / 缓存策略与清理。
         SettingsNavTile(
-          key: const Key('settingsDownloadSettingsItem'),
-          icon: Icons.download_rounded,
-          title: l10n.downloadSettingsTitle,
-          subtitle: l10n.downloadSettingsSubtitle,
-          onTap: () =>
-              openSettingsSubPage(context, const DownloadSettingsPage()),
-        ),
-        // 下载管理：任务队列 / 批量下载 / 文件维护。
-        SettingsNavTile(
-          key: const Key('settingsDownloadsManageItem'),
+          key: const Key('settingsDownloadsAndCacheItem'),
           icon: Icons.download_for_offline_rounded,
-          title: l10n.downloadsManageTitle,
-          subtitle: l10n.downloadsManageSubtitle,
+          title: l10n.settingsDownloadsAndCacheTitle,
+          subtitle: l10n.settingsDownloadsAndCacheSubtitle,
           onTap: () =>
-              openSettingsSubPage(context, const DownloadsManagePage()),
-        ),
-        // 缓存管理：音频/歌词/封面占用 + 策略 + 单清/全清。
-        SettingsNavTile(
-          key: const Key('settingsCacheManagementItem'),
-          icon: Icons.storage_rounded,
-          title: l10n.settingsCacheTitle,
-          subtitle: l10n.settingsCacheSubtitle,
-          onTap: () =>
-              openSettingsSubPage(context, const CacheManagementPage()),
+              openSettingsSubPage(context, const DownloadsAndCachePage()),
         ),
       ],
     );

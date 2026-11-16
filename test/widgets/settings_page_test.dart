@@ -126,64 +126,108 @@ void main() {
     expect(find.byKey(const Key('settingsDataItem')), findsNothing);
   });
 
-  testWidgets('重组后的行仍保留原子页入口 key', (tester) async {
+  testWidgets('首屏只留日常项，低频项收进高级设置', (tester) async {
     await pumpSettings(tester);
 
-    // 外观：封面并进外观。
+    // 外观：保留跟随封面；字体与默认封面下沉。
     expect(
       find.byKey(const Key('settingsFollowArtworkSwitch')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('settingsDefaultCoverItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsAppFontItem')), findsNothing);
+    expect(find.byKey(const Key('settingsDefaultCoverItem')), findsNothing);
 
-    // 播放：播放细节并进播放卡。
+    // 播放：淡入淡出与智能随机下沉。
+    expect(find.byKey(const Key('settingsFadeItem')), findsNothing);
+    expect(find.byKey(const Key('settingsSmartShuffleSwitch')), findsNothing);
+
+    // 曲库与存储：加入位置下沉，下载三入口并为一行。
+    expect(
+      find.byKey(const Key('settingsLibraryAddPositionItem')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('settingsMusicFoldersItem')), findsOneWidget);
+    expect(
+      find.byKey(const Key('settingsDownloadsAndCacheItem')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('settingsDownloadSettingsItem')), findsNothing);
+    expect(find.byKey(const Key('settingsDownloadsManageItem')), findsNothing);
+    expect(find.byKey(const Key('settingsCacheManagementItem')), findsNothing);
+
+    // 数据与备份：采集开关移进统计页，首屏只留入口。
+    expect(find.byKey(const Key('settingsPlayStatisticsSwitch')), findsNothing);
+    expect(find.byKey(const Key('settingsPlayStatisticsItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsBackupRestoreItem')), findsOneWidget);
+
+    // 通用：震动与应用名称下沉。
+    expect(find.byKey(const Key('settingsStartupPageItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsBottomNavItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsLanguageItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsHapticsSwitch')), findsNothing);
+    expect(find.byKey(const Key('settingsAppTitleItem')), findsNothing);
+
+    // 桌面：窗口记忆下沉。
+    expect(find.byKey(const Key('settingsCloseToTraySwitch')), findsOneWidget);
+    expect(
+      find.byKey(const Key('settingsRememberWindowBoundsSwitch')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('settingsShortcutsItem')), findsOneWidget);
+
+    // 关于与更新：问题排查 + 高级设置出口。
+    expect(find.byKey(const Key('settingsDiagnosticsItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsAdvancedItem')), findsOneWidget);
+  });
+
+  testWidgets('高级设置页保留字体、震动与播放细节的自定义能力', (tester) async {
+    await pumpSettings(tester);
+
+    // 子页在 pump 之后才构建：桌面平台标记要保留到导航完成。
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final entry = find.byKey(const Key('settingsAdvancedItem'));
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+
+    expect(find.text('高级设置'), findsWidgets);
+    // 外观 / 通用：字体、默认封面、震动、应用名称。
+    expect(find.byKey(const Key('settingsAppFontItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsDefaultCoverItem')), findsOneWidget);
+    expect(find.byKey(const Key('settingsHapticsSwitch')), findsOneWidget);
+    expect(find.byKey(const Key('settingsAppTitleItem')), findsOneWidget);
+    // 播放 / 曲库 / 桌面：淡入淡出、智能随机、加入位置、窗口记忆。
     expect(find.byKey(const Key('settingsFadeItem')), findsOneWidget);
     expect(find.byKey(const Key('settingsSmartShuffleSwitch')), findsOneWidget);
-
-    // 曲库与存储：加入位置 / 文件夹 / 下载 / 缓存。
     expect(
       find.byKey(const Key('settingsLibraryAddPositionItem')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('settingsMusicFoldersItem')), findsOneWidget);
-    expect(
-      find.byKey(const Key('settingsDownloadSettingsItem')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('settingsDownloadsManageItem')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('settingsCacheManagementItem')),
-      findsOneWidget,
-    );
-
-    // 数据与备份：统计 / 备份入口。
-    expect(
-      find.byKey(const Key('settingsPlayStatisticsSwitch')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const Key('settingsPlayStatisticsItem')), findsOneWidget);
-    expect(find.byKey(const Key('settingsBackupRestoreItem')), findsOneWidget);
-
-    // 通用：启动页 / 底栏入口 / 语言 / 震动 / 应用名称。
-    expect(find.byKey(const Key('settingsStartupPageItem')), findsOneWidget);
-    expect(find.byKey(const Key('settingsBottomNavItem')), findsOneWidget);
-    expect(find.byKey(const Key('settingsHapticsSwitch')), findsOneWidget);
-    expect(find.byKey(const Key('settingsLanguageItem')), findsOneWidget);
-    expect(find.byKey(const Key('settingsAppTitleItem')), findsOneWidget);
-
-    // 桌面：托盘 / 窗口 / 快捷键。
-    expect(find.byKey(const Key('settingsCloseToTraySwitch')), findsOneWidget);
+    // 桌面窗口记忆在长页靠后：滚动到可见再断言。
+    await tester.drag(find.byType(ListView).last, const Offset(0, -700));
+    await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('settingsRememberWindowBoundsSwitch')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('settingsShortcutsItem')), findsOneWidget);
+  });
 
-    // 关于与更新：问题排查（更新入口缺省 provider 时不渲染）。
-    expect(find.byKey(const Key('settingsDiagnosticsItem')), findsOneWidget);
+  testWidgets('360 宽首屏与高级设置不溢出', (tester) async {
+    await pumpSettings(tester);
+    tester.view.physicalSize = const Size(360, 1200);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final entry = find.byKey(const Key('settingsAdvancedItem'));
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('底部导航入口打开独立子页，拖拽列表不再占首屏', (tester) async {

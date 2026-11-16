@@ -1,6 +1,3 @@
-import 'dart:async';
-
-import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -28,22 +25,17 @@ import '../utils/responsive.dart';
 import '../utils/source_quality_label.dart';
 import '../widgets/adaptive_layout.dart';
 import '../widgets/app_color_picker.dart';
-import '../widgets/cover_picker_sheet.dart';
-import '../widgets/font_picker_sheet.dart';
 import '../widgets/settings/about_settings_section.dart';
 import '../widgets/settings/data_backup_section.dart';
 import '../widgets/settings/desktop_settings_section.dart';
 import '../widgets/settings/general_settings_section.dart';
 import '../widgets/settings/library_storage_section.dart';
-import '../widgets/settings/playback_details_section.dart';
 import '../widgets/settings/settings_section_availability.dart';
 import '../widgets/settings/settings_section_grid.dart';
 import '../widgets/settings/settings_tiles.dart';
-import '../widgets/track_artwork.dart';
 import 'ai_dj_page.dart';
 import 'lyrics_display/desktop_lyrics_settings_page.dart';
 import 'lyrics_display/lyrics_content_settings_page.dart';
-import 'lyrics_display/system_media_lyrics_settings_page.dart';
 import 'listening_sync_page.dart';
 import 'sources_page.dart';
 
@@ -147,7 +139,7 @@ class _SettingsPageState extends State<SettingsPage>
                 twoColumn: twoColumn,
                 // 宽屏按内容量分列：外观 / 歌词 / 曲库 / 通用在左，播放 /
                 // 音源与在线服务 / 数据与备份 / 桌面 / 关于在右；左右各约
-                // 20 行。九张卡按「同一类事情」聚合，同类不跨卡。
+                // 14 行。九张卡按「同一类事情」聚合，同类不跨卡。
                 startColumn: const {0, 2, 4, 6},
                 children: [
                   _appearanceSection(context, l10n),
@@ -169,7 +161,10 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  /// 外观：主题模式 / 基础配色 / 自定义色（仅自定义时） / 纯黑 / 字体。
+  /// 外观：主题模式 / 基础配色 / 自定义色（仅自定义时） / 纯黑 / 跟随封面。
+  ///
+  /// 应用字体与默认封面是低频个性化项，收进「高级设置」；本卡只留每天
+  /// 会改的外观开关。
   Widget _appearanceSection(BuildContext context, AppLocalizations l10n) {
     return SettingsSectionCard(
       title: l10n.settingsAppearanceTitle,
@@ -182,7 +177,6 @@ class _SettingsPageState extends State<SettingsPage>
             SystemBaseColorSource systemColorSource,
             bool pureBlack,
             Color seed,
-            String? appFont,
           })
         >(
           selector: (context, provider) => (
@@ -191,7 +185,6 @@ class _SettingsPageState extends State<SettingsPage>
             systemColorSource: provider.systemBaseColorSource,
             pureBlack: provider.pureBlackEnabled,
             seed: provider.seedColor,
-            appFont: provider.appFontFamily,
           ),
           builder: (context, appearance, _) {
             final (
@@ -200,9 +193,7 @@ class _SettingsPageState extends State<SettingsPage>
               systemColorSource: systemColorSource,
               pureBlack: pureBlackEnabled,
               seed: seedColor,
-              appFont: appFontFamily,
             ) = appearance;
-            final m3e = M3ETheme.of(context);
             // 同一个 Selector 产出的多行：行距由 SettingsRows 统一给。
             return SettingsRows(
               children: [
@@ -271,23 +262,7 @@ class _SettingsPageState extends State<SettingsPage>
                   onChanged: (value) =>
                       context.read<ThemeProvider>().setPureBlackEnabled(value),
                 ),
-                // 全局应用字体：来自设备已装字体，null = 系统默认；
-                // 行尾 "Aa" 用所选字体渲染，名称只作副标题。
-                SettingsNavTile(
-                  key: const Key('settingsAppFontItem'),
-                  icon: Icons.text_fields_rounded,
-                  title: l10n.settingsAppFont,
-                  subtitle: appFontFamily ?? l10n.fontSystemDefault,
-                  trailing: Text(
-                    'Aa',
-                    style: m3e.typeScale.titleMedium.copyWith(
-                      fontFamily: appFontFamily,
-                      color: m3e.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  onTap: () => _showAppFontPicker(context, l10n, appFontFamily),
-                ),
-                // 封面：播放时跟随封面取色 / 默认封面。
+                // 封面：播放时跟随封面取色。
                 Selector<ThemeProvider, bool>(
                   selector: (context, provider) =>
                       provider.followArtworkEnabled,
@@ -303,32 +278,6 @@ class _SettingsPageState extends State<SettingsPage>
                             .setFollowArtworkEnabled(value),
                       ),
                 ),
-                // 默认封面：只作用于没有封面 / 远端加载失败的歌曲封面，
-                // 不参与取色、下载与标签。
-                CoverChangeBuilder(
-                  builder: (context, _) => SettingsNavTile(
-                    key: const Key('settingsDefaultCoverItem'),
-                    icon: Icons.image_rounded,
-                    title: l10n.coverDefaultTitle,
-                    subtitle: l10n.coverDefaultSubtitle,
-                    trailing: TrackArtwork(
-                      // 只显示全局默认封面（没有曲目身份）；外层已订阅。
-                      listenForChanges: false,
-                      size: 40,
-                      borderRadius: M3EShapes.radiusMedium,
-                      memCacheWidth:
-                          (40 * MediaQuery.of(context).devicePixelRatio)
-                              .round(),
-                      fallbackIconSize: 20,
-                    ),
-                    onTap: () => unawaited(
-                      showCoverPickerSheet(
-                        context,
-                        fileNameBase: l10n.coverDefaultTitle,
-                      ),
-                    ),
-                  ),
-                ),
               ],
             );
           },
@@ -337,11 +286,10 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  /// 播放：默认播放模式 / 启动恢复 / 与其他应用同时播放 / 淡入淡出 /
-  /// 少放最近听过的。
+  /// 播放：默认播放模式 / 启动恢复 / 与其他应用同时播放。
   ///
-  /// 音质、自动换源与省流属于「音源与在线服务」，加入位置属于「曲库与
-  /// 存储」：同一类事情只在一张卡里出现。
+  /// 淡入淡出与智能随机收进「高级设置」。音质、自动换源与省流属于
+  /// 「音源与在线服务」：同一类事情只在一张卡里出现。
   Widget _playbackSection(
     BuildContext context,
     AppLocalizations l10n, {
@@ -395,17 +343,14 @@ class _SettingsPageState extends State<SettingsPage>
               onChanged: availability.audioFocus!.setPlayWithOtherApps,
             ),
           ),
-        // 播放细节同挂在这一张卡（淡入淡出 / 智能随机都是设备本地值）。
-        ...PlaybackDetailsSection.rows(context),
       ],
     );
   }
 
-  /// 歌词：桌面歌词 / 歌词与输出 / 系统媒体歌词（三条叶子入口）。
+  /// 歌词：桌面歌词 / 歌词与输出（两条叶子入口）。
   ///
-  /// 输出入口按平台能力显隐（桌面歌词＝悬浮窗能力、系统媒体＝媒体会话能力；
-  /// 不支持的平台隐藏入口，避免开关撒谎）；「歌词与输出」与应用内歌词页
-  /// 及共享项相关，与输出能力无关，始终可见。
+  /// 桌面歌词入口按悬浮窗能力显隐；通知栏·锁屏与车机歌词并进「歌词与输出」
+  /// 子页，由该页按媒体会话能力分段展示，不再占首屏一行。
   Widget _lyricsSection(
     BuildContext context,
     AppLocalizations l10n, {
@@ -438,27 +383,12 @@ class _SettingsPageState extends State<SettingsPage>
                 const LyricsContentSettingsPage(),
               ),
             ),
-            if (availability.systemMediaLyricsVisible)
-              SettingsNavTile(
-                key: const Key('settingsSystemMediaLyricsItem'),
-                icon: Icons.notifications_active_rounded,
-                title: l10n.lyricsSystemMediaTitle,
-                subtitle: l10n.lyricsSystemMediaSubtitle,
-                onTap: () => openSettingsSubPage(
-                  context,
-                  const SystemMediaLyricsSettingsPage(),
-                ),
-              ),
           ],
         ),
         // 桌面歌词与系统媒体两路输出都不可用：给一句解释，而不是静默只剩一条
         // 入口。
         if (availability.noLyricsOutputs)
           _lyricsSectionHint(context, l10n.lyricsDisplayUnsupported),
-        // 平台支持但媒体会话初始化失败（音频服务 init 返回 null）：
-        // 给出可见提示——否则系统媒体入口消失、只剩日志，用户无法自查。
-        if (availability.mediaSessionLyricsHintVisible)
-          _lyricsSectionHint(context, l10n.lyricsMediaSessionUnavailable),
       ],
     );
   }
@@ -480,7 +410,7 @@ class _SettingsPageState extends State<SettingsPage>
   /// 听歌同步。
   ///
   /// 同一域只在一张卡出现：音源管理与默认音质、自动换源、省流不再分居两卡。
-  /// 省流开关排在在线服务入口之前，开启时才展开音质上限与封面省流。
+  /// 省流开关排在在线服务入口之前，开启时才展开封面省流；音质上限在高级设置。
   Widget _networkSection(
     BuildContext context,
     AppLocalizations l10n, {
@@ -549,18 +479,7 @@ class _SettingsPageState extends State<SettingsPage>
             value: dataSaver.enabled,
             onChanged: (value) => dataSaver.setEnabled(value),
           ),
-          if (dataSaver.enabled) ...[
-            SettingsChoiceRow<String>(
-              key: const Key('settingsDataSaverQualityItem'),
-              icon: Icons.graphic_eq_rounded,
-              title: l10n.settingsDataSaverQuality,
-              value: dataSaver.qualityCap,
-              options: [
-                for (final option in DataSaverService.qualityOptions)
-                  (option, sourceQualityLabel(l10n, option)),
-              ],
-              onChanged: (value) => dataSaver.setQualityCap(value),
-            ),
+          if (dataSaver.enabled)
             SettingsSwitchTile(
               switchKey: const Key('settingsDataSaverCoversSwitch'),
               icon: Icons.image_rounded,
@@ -569,7 +488,6 @@ class _SettingsPageState extends State<SettingsPage>
               value: dataSaver.coversSaverEnabled,
               onChanged: (value) => dataSaver.setCoversSaverEnabled(value),
             ),
-          ],
         ],
         // AI 推歌：配置与开启入口（模式生效后推荐流出在发现页）。
         SettingsNavTile(
@@ -622,24 +540,5 @@ class _SettingsPageState extends State<SettingsPage>
     );
     if (picked == null) return;
     await themeProvider.setSeedColor(Color(picked));
-  }
-
-  /// 全局应用字体选择：来自设备已装字体（枚举见 SystemFontsService），
-  /// null 表示系统默认；选择后经 ThemeProvider 立即重建全局主题。
-  Future<void> _showAppFontPicker(
-    BuildContext context,
-    AppLocalizations l10n,
-    String? current,
-  ) async {
-    final themeProvider = context.read<ThemeProvider>();
-    final choice = await showFontPickerSheet(
-      context,
-      title: l10n.settingsAppFont,
-      selected: current == null
-          ? const FontChoice.system()
-          : FontChoice.family(current),
-    );
-    if (choice == null || choice.inherit) return;
-    await themeProvider.setAppFontFamily(choice.family);
   }
 }
