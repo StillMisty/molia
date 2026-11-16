@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -59,8 +60,20 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   /// 已有海报时的重新生成（换色/换字体/主题变化）：保留旧图不清空，
   /// 只在预览区叠一层轻量进度，避免整页闪成加载态。
   bool _isRegenerating = false;
-  Uint8List? _posterBytes;
-  String? _tempFilePath;
+
+  /// 海报位图：预览直接画 `ui.Image`，不再为了显示而编码 PNG。
+  ui.Image? _posterImage;
+
+  /// 生成中再改样式只记一个待重生成标记，当前这轮结束后用最新参数补一次，
+  /// 避免多轮渲染并行抢 CPU。
+  bool _isGenerating = false;
+  bool _pendingRegenerate = false;
+  Timer? _regenerateTimer;
+
+  /// 最近一次编码出的 PNG；保存 / 分享连续操作时复用，换图后失效。
+  ui.Image? _encodedImage;
+  Uint8List? _cachedPngBytes;
+
   String? _errorMessage;
 
   /// 海报取色来源（跟随应用主题 / 跟随封面 / 自定义色），独立于全局主题。
@@ -70,7 +83,6 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   /// 最近一次生成海报所用的配色签名：主题变化（莫奈 / 封面取色 / 亮度 /
   /// 种子色）时重新生成，保证海报真正跟随色彩系统。
   (Brightness, int, int, int)? _lastSchemeSignature;
-  bool _schemeDirty = false;
 
   /// 海报字体覆盖：null = 跟随应用字体；'' = 强制系统默认；其它 = 字体族名。
   String? _posterFontOverride;
@@ -97,10 +109,6 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
 
   /// 当前曲目是否带真实封面（「跟随封面」来源可用性）。
   bool get _hasArtwork => (_paletteCoverUrl ?? '').isNotEmpty;
-
-  /// 预览解码宽度上限：海报成品是 1440 宽，预览区通常不超过 3x 手机宽度；
-  /// 限制到 1080 可覆盖高清屏，又不把整张 PNG（1440×N）解码进 ImageCache。
-  static const int _previewCacheWidth = 1080;
 
   @override
   void initState() {
@@ -129,12 +137,11 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     _lastSchemeSignature = signature;
     if (!changed) return; // 首次：由 initState 的 post-frame 生成
     if (_isBusy) {
-      _schemeDirty = true;
+      _pendingRegenerate = true;
       return;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _generatePoster();
-    });
+    // 主题切换 / 动画期间签名会连续变化：防抖成一次重生成。
+    _scheduleRegeneration();
   }
 
   /// 自定义 / 默认封面变化：封面签名变了才重新生成（主题色来源也跟着
@@ -144,15 +151,26 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     final signature = '$_displayCoverUrl|$_paletteCoverUrl';
     if (signature == _lastCoverSignature) return;
     if (_isBusy) {
-      _schemeDirty = true;
+      _pendingRegenerate = true;
       return;
     }
     _generatePoster();
   }
 
+  /// 延迟一小段时间再重生成：主题动画会连续触发依赖变化，逐帧生成
+  /// 既卡顿又只留下最后一版结果。
+  void _scheduleRegeneration() {
+    _regenerateTimer?.cancel();
+    _regenerateTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted) _generatePoster();
+    });
+  }
+
   @override
   void dispose() {
     _removeCoverListener?.call();
+    _regenerateTimer?.cancel();
+    _posterImage?.dispose();
     super.dispose();
   }
 
@@ -193,10 +211,16 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
 
   Future<void> _generatePoster() async {
     if (!mounted) return;
+    _regenerateTimer?.cancel();
+    if (_isGenerating) {
+      // 生成中再改样式：只记标记，避免两轮渲染并行抢 CPU / 互相覆盖。
+      _pendingRegenerate = true;
+      return;
+    }
+    _isGenerating = true;
     final displayCoverUrl = _displayCoverUrl;
     // 生成期间再换封面：本轮结束后的补生成要拿到新签名。
     _lastCoverSignature = '$displayCoverUrl|$_paletteCoverUrl';
-    HapticsService.lightImpact();
     final appScheme = Theme.of(context).colorScheme;
     final appName = AppLocalizations.of(context)?.appName ?? 'Molia';
     // 海报字体优先级：海报独立覆盖 > 应用字体（主题注入）> 系统默认；
@@ -214,8 +238,8 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
           final family => (family: family, fallback: null),
         };
 
-    // 已有海报：保留旧图（不清 bytes），只标记重生成；首刷才进加载态。
-    final bool hasPoster = _posterBytes != null;
+    // 已有海报：保留旧图，只标记重生成；首刷才进加载态。
+    final bool hasPoster = _posterImage != null;
     setState(() {
       if (hasPoster) {
         _isRegenerating = true;
@@ -225,12 +249,13 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       _errorMessage = null;
     });
 
+    ui.Image? rendered;
     try {
       final scheme = await _resolveScheme(appScheme);
       final palette = PosterPalette.fromScheme(scheme);
       final posterService = LyricsPosterService();
 
-      final bytes = await posterService.generatePosterData(
+      rendered = await posterService.renderPosterImage(
         lyrics: widget.lyrics,
         posterLyricLines: widget.posterLyricLines,
         trackTitle: widget.trackTitle,
@@ -249,43 +274,28 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         watermarkText: appName,
       );
 
-      final tempDir = await getTemporaryDirectory();
-      final fileName =
-          'lyrics_poster_preview_${DateTime.now().millisecondsSinceEpoch}.png';
-      final file = File('${tempDir.path}/$fileName');
-      await file.writeAsBytes(bytes);
-
-      // 旧预览临时文件（分享用）：换新后清理，失败静默。
-      final oldPath = _tempFilePath;
-      if (oldPath != null) {
-        unawaited(File(oldPath).delete().catchError((_) => File(oldPath)));
+      if (!mounted) {
+        rendered.dispose();
+        return;
       }
 
-      if (mounted) {
-        final previousBytes = _posterBytes;
-        setState(() {
-          _posterBytes = bytes;
-          _tempFilePath = file.path;
-          _isLoading = false;
-          _isRegenerating = false;
+      final previousImage = _posterImage;
+      setState(() {
+        _posterImage = rendered;
+        rendered = null; // 所有权已交给 State，catch 不再释放。
+        _isLoading = false;
+        _isRegenerating = false;
+      });
+      _encodedImage = null;
+      _cachedPngBytes = null;
+      if (previousImage != null) {
+        // 旧图在本帧仍可能被绘制；等新帧完成后再释放底层位图。
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          previousImage.dispose();
         });
-        if (previousBytes != null && !identical(previousBytes, bytes)) {
-          // 旧预览在本帧仍可能被绘制（新 Image 还没 build），此时按
-          // includeLive 驱逐有释放正在使用图像的风险。等新帧完成、旧
-          // Image 离场后再把旧 provider 从 ImageCache 丢掉；只命中旧
-          // 字节，不影响新图，旧图已不在缓存时 evict 静默返回 false。
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            PaintingBinding.instance.imageCache.evict(
-              ResizeImage.resizeIfNeeded(
-                _previewCacheWidth,
-                null,
-                MemoryImage(previousBytes),
-              ),
-            );
-          });
-        }
       }
     } catch (e) {
+      rendered?.dispose();
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -305,9 +315,10 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         }
       }
     } finally {
-      // 生成期间主题又变了：补一次生成，保证最终海报与当前配色一致。
-      if (_schemeDirty && mounted) {
-        _schemeDirty = false;
+      _isGenerating = false;
+      // 生成期间主题 / 封面又变了：用最新状态补一次，保证最终结果一致。
+      if (_pendingRegenerate && mounted) {
+        _pendingRegenerate = false;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _generatePoster();
         });
@@ -315,8 +326,27 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     }
   }
 
+  /// 保存 / 分享时才编码 PNG；换图后缓存自动失效。
+  Future<Uint8List> _posterPngBytes() async {
+    final image = _posterImage;
+    if (image == null) {
+      throw StateError('海报还没生成');
+    }
+    if (identical(_encodedImage, image) && _cachedPngBytes != null) {
+      return _cachedPngBytes!;
+    }
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (data == null) {
+      throw StateError('海报编码失败');
+    }
+    final bytes = data.buffer.asUint8List();
+    _encodedImage = image;
+    _cachedPngBytes = bytes;
+    return bytes;
+  }
+
   Future<void> _savePoster() async {
-    if (_posterBytes == null || _isOperating) return;
+    if (_posterImage == null || _isOperating || _isRegenerating) return;
 
     HapticsService.mediumImpact();
     setState(() {
@@ -327,10 +357,11 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       final l10n = AppLocalizations.of(context)!;
       final saveAs = context.read<SaveAs?>();
       if (saveAs == null) throw StateError('SaveAs 未装配');
+      final bytes = await _posterPngBytes();
       final result = await saveAs.saveBytes(
         fileName:
             'lyrics_poster_${widget.trackTitle}_${DateTime.now().millisecondsSinceEpoch}.png',
-        bytes: _posterBytes!,
+        bytes: bytes,
         mimeType: 'image/png',
         relativeDir: saveAsPostersDirName,
         dialogTitle: l10n.save,
@@ -369,7 +400,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   }
 
   Future<void> _sharePoster() async {
-    if (_tempFilePath == null || _isOperating) return;
+    if (_posterImage == null || _isOperating || _isRegenerating) return;
 
     HapticsService.mediumImpact();
     setState(() {
@@ -377,9 +408,14 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     });
 
     try {
+      final bytes = await _posterPngBytes();
+      final tempDir = await getTemporaryDirectory();
+      // 固定文件名：连续分享覆盖同一个临时文件，不在临时目录里堆 PNG。
+      final file = File('${tempDir.path}/lyrics_poster_share.png');
+      await file.writeAsBytes(bytes, flush: true);
       final posterService = LyricsPosterService();
       await posterService.sharePosterFile(
-        _tempFilePath!,
+        file.path,
         '${widget.trackTitle} - ${widget.artistName}\n\n${widget.lyrics}',
       );
     } catch (e) {
@@ -577,12 +613,12 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                 padding: EdgeInsets.all(previewLayout.horizontalPadding),
                 child: ResponsivePageContainer(
                   pageType: ResponsivePageType.preview,
-                  child: Center(child: _buildPosterContent(theme, l10n)),
+                  child: Center(child: _buildPosterContent(theme)),
                 ),
               ),
             ),
             // 控制栏：有海报即常驻（重生成期间禁用不消失），避免整条闪现。
-            if (_posterBytes != null)
+            if (_posterImage != null)
               Container(
                 padding: EdgeInsets.only(
                   left: previewLayout.horizontalPadding,
@@ -603,7 +639,9 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                     Expanded(
                       child: M3EButton.filled(
                         key: const Key('posterShareButton'),
-                        onPressed: _isOperating ? null : _sharePoster,
+                        onPressed: _isOperating || _isRegenerating
+                            ? null
+                            : _sharePoster,
                         icon: const Icon(Icons.share_rounded),
                         label: Text(l10n!.sharePoster),
                       ),
@@ -616,7 +654,9 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                         variant: M3EIconButtonVariant.standard,
                         icon: const Icon(Icons.more_vert_rounded),
                         semanticLabel: l10n.moreActions,
-                        onPressed: _isOperating ? null : open,
+                        onPressed: _isOperating || _isRegenerating
+                            ? null
+                            : open,
                       ),
                       onSelected: (value) {
                         switch (value) {
@@ -648,36 +688,26 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     );
   }
 
-  Widget _buildPosterContent(ThemeData theme, AppLocalizations? l10n) {
+  Widget _buildPosterContent(ThemeData theme) {
     // 有图就展示（重生成期间不卸载旧图，只在上面叠轻量进度）。
-    final bytes = _posterBytes;
-    if (bytes != null) {
+    final image = _posterImage;
+    if (image != null) {
       return Stack(
         alignment: Alignment.center,
         children: [
           ClipRRect(
             borderRadius: M3EShapes.radiusMedium,
-            child: Image.memory(
-              bytes,
-              cacheWidth: _previewCacheWidth,
+            // 海报按 2x 设计尺寸绘制：scale 2 让 1440 宽的位图在布局里
+            // 按 720 逻辑宽参与尺寸计算，再按屏幕宽度等比缩放。
+            child: RawImage(
+              image: image,
+              scale: 2,
               fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => Column(
-                children: [
-                  Icon(
-                    Icons.broken_image_rounded,
-                    size: 64,
-                    color: theme.colorScheme.error,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    AppLocalizations.of(context)!.lyricsFailedToLoad,
-                    style: context.typeScale.bodyMedium,
-                  ),
-                ],
-              ),
+              filterQuality: FilterQuality.medium,
             ),
           ),
-          if (_isRegenerating)
+          // 重生成 / 分享前编码 PNG 都在当前位图上叠轻量进度。
+          if (_isRegenerating || _isOperating)
             Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(

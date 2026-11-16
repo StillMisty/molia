@@ -480,68 +480,111 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
         child: _isLoading
             ? const Center(child: M3ELoadingIndicator())
             : _hasSelectedLyrics()
-            ? Row(
-                children: [
-                  M3EIconButton(
-                    key: const Key('lyricsDeselectAll'),
-                    variant: M3EIconButtonVariant.tonal,
-                    size: M3EIconButtonSize.md,
-                    visualSize: const Size(56, 56),
-                    onPressed: _deselectAllLines,
-                    icon: const Icon(Icons.close_rounded),
-                    semanticLabel: l10n.deselectAll,
-                  ),
-                  const SizedBox(width: 8),
-                  M3EIconButton(
-                    key: const Key('lyricsSelectAll'),
-                    variant: M3EIconButtonVariant.tonal,
-                    size: M3EIconButtonSize.md,
-                    visualSize: const Size(56, 56),
-                    // 全选只负责选中；已全选时禁用，清空走 ✕。
-                    onPressed: _allSelectableSelected ? null : _selectAllLines,
-                    icon: const Icon(Icons.select_all_rounded),
-                    semanticLabel: l10n.selectAllItems,
-                  ),
-                  const Spacer(),
-                  M3EButton.text(
-                    key: const Key('lyricsCopySelected'),
-                    onPressed: _copySelectedLyrics,
-                    child: Text(
-                      l10n.copySelectedLines(_selectedIndices.length),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 3,
-                    child: M3EButton.filled(
-                      // 行数不设上限：海报按选中行数计算高度。
-                      onPressed: _shareAsPoster,
-                      icon: const Icon(Icons.image_rounded),
-                      label: Text(l10n.posterButtonLabel),
-                    ),
-                  ),
-                ],
-              )
-            : Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      l10n.lyricsSelectionHint,
-                      style: context.typeScale.bodyMedium.copyWith(
-                        // 操作引导是次要文本，不用强调色。
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  M3EButton.text(
-                    key: const Key('lyricsCopyAll'),
-                    onPressed: _copyAllOriginalLyrics,
-                    child: Text(l10n.copyAll),
-                  ),
-                ],
-              ),
+            ? _buildSelectedActions(context, l10n)
+            : _buildEmptyActions(context, l10n, theme),
       ),
+    );
+  }
+
+  /// 未选中时的引导：提示文案 + 明确的「复制全部」按钮。
+  Widget _buildEmptyActions(
+    BuildContext context,
+    AppLocalizations l10n,
+    ThemeData theme,
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            l10n.lyricsSelectionHint,
+            style: context.typeScale.bodyMedium.copyWith(
+              // 操作引导是次要文本，不用强调色。
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        M3EButton.tonal(
+          key: const Key('lyricsCopyAll'),
+          onPressed: _copyAllOriginalLyrics,
+          icon: const Icon(Icons.content_copy_rounded),
+          label: Text(l10n.copyAll),
+        ),
+      ],
+    );
+  }
+
+  /// 已选中时的操作条：副操作（取消 / 全选 / 复制）+ 主操作（生成海报）。
+  ///
+  /// 窄屏或大字号下拆成两行：图标 + 复制占一行，海报按钮独占一行。
+  /// 单行塞四个动作会在 360 宽 / 200% 字号时把「生成海报」挤成省略号，
+  /// 两行布局用高度换完整标签，主按钮也更醒目。
+  Widget _buildSelectedActions(BuildContext context, AppLocalizations l10n) {
+    final copyButton = M3EButton.tonal(
+      key: const Key('lyricsCopySelected'),
+      onPressed: _copySelectedLyrics,
+      icon: const Icon(Icons.content_copy_rounded),
+      label: Text(l10n.copySelected),
+    );
+    final posterButton = M3EButton.filled(
+      key: const Key('lyricsPosterButton'),
+      // 行数不设上限：海报按选中行数计算高度。
+      onPressed: _shareAsPoster,
+      icon: const Icon(Icons.image_rounded),
+      label: Text(l10n.posterButtonLabel),
+    );
+    final secondaryActions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        M3EIconButton(
+          key: const Key('lyricsDeselectAll'),
+          variant: M3EIconButtonVariant.tonal,
+          onPressed: _deselectAllLines,
+          icon: const Icon(Icons.close_rounded),
+          semanticLabel: l10n.deselectAll,
+        ),
+        const SizedBox(width: 8),
+        M3EIconButton(
+          key: const Key('lyricsSelectAll'),
+          variant: M3EIconButtonVariant.tonal,
+          // 全选只负责选中；已全选时禁用，清空走 ✕。
+          onPressed: _allSelectableSelected ? null : _selectAllLines,
+          icon: const Icon(Icons.select_all_rounded),
+          semanticLabel: l10n.selectAllItems,
+        ),
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 400 是单行能放下四个动作的实测下限；字号放大后同样退化到两行，
+        // 避免按钮内部文字被压成省略号。
+        final compact =
+            constraints.maxWidth < 400 ||
+            MediaQuery.textScalerOf(context).scale(14) > 18;
+        if (compact) {
+          return Column(
+            // 底栏由 Scaffold 以松约束挂载：mainAxisSize.max 会吃掉整个
+            // 屏幕高度，把正文压成 0。
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(children: [secondaryActions, const Spacer(), copyButton]),
+              const SizedBox(height: 12),
+              posterButton,
+            ],
+          );
+        }
+        return Row(
+          children: [
+            secondaryActions,
+            const Spacer(),
+            copyButton,
+            const SizedBox(width: 8),
+            Expanded(flex: 3, child: posterButton),
+          ],
+        );
+      },
     );
   }
 }

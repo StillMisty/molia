@@ -1112,11 +1112,11 @@ abstract class AppLocalizations {
   /// **'Copy all'**
   String get copyAll;
 
-  /// No description provided for @copySelectedLines.
+  /// No description provided for @copySelected.
   ///
   /// In en, this message translates to:
-  /// **'Copy {count} lines'**
-  String copySelectedLines(int count);
+  /// **'Copy'**
+  String get copySelected;
 
   /// No description provided for @noLyricsSelected.
   ///

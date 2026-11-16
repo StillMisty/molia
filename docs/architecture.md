@@ -1723,8 +1723,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
 - **排版**：UI 一律 `context.typeScale`（`lib/theme/m3e_context.dart`），强调位
   （品牌名 / 播放页标题 / 收藏合集标题）用 `emphasizedTypeScale`；不直接读
   `ThemeData.textTheme`、不写 `w600/w800/w900`；护栏
-  `test/architecture/m3e_typography_test.dart`（`lyrics_poster_service.dart` 例外：
-  无 context、固定设计稿排版）。
+  `test/architecture/m3e_typography_test.dart`（海报服务无 context，字号走固定
+  设计稿，但字重仍只用 w400 / w500 / w700 档位）。
 - **已知例外**（`m3e_component_usage_test` 白名单）：3 处 `ReorderableListView`；
   2 处 `SelectableText`（M3E 无可选文本件）；热力图 `Tooltip`（需要 400ms wait，
   `M3ETooltip` 无 wait API）；M3E 弹层 / 歌词滚动区 / 全局搜索遮罩 / 音量面板 /

@@ -151,10 +151,23 @@ double posterDrawWatermark(
   final height = math.max(painter.height, iconSize);
   var textX = leftX;
   if (icon != null) {
+    final iconRect = Rect.fromLTWH(
+      leftX,
+      centerY - iconSize / 2,
+      iconSize,
+      iconSize,
+    );
+    // 品牌图标是固定方形 asset，但其它调用方传入非方形时也不能拉伸：
+    // 与封面同样按 cover 语义取中心区域。
     canvas.drawImageRect(
       icon,
-      Rect.fromLTWH(0, 0, icon.width.toDouble(), icon.height.toDouble()),
-      Rect.fromLTWH(leftX, centerY - iconSize / 2, iconSize, iconSize),
+      posterCoverCropRect(
+        sourceWidth: icon.width.toDouble(),
+        sourceHeight: icon.height.toDouble(),
+        targetWidth: iconSize,
+        targetHeight: iconSize,
+      ),
+      iconRect,
       Paint()..colorFilter = ColorFilter.mode(color, BlendMode.srcIn),
     );
     textX = leftX + iconSize + iconTextSpacing;

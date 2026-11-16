@@ -540,9 +540,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get copyAll => '复制全部';
 
   @override
-  String copySelectedLines(int count) {
-    return '复制 $count 行';
-  }
+  String get copySelected => '复制';
 
   @override
   String get noLyricsSelected => '请先选择一些歌词';
