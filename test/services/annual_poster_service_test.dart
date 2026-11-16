@@ -19,6 +19,7 @@ const _palette = PosterPalette(
 AnnualPosterData _data({String track = 'Track'}) => AnnualPosterData(
   yearLabel: '2026',
   subtitle: 'Yearly listening report',
+  yearNote: 'As of today',
   listenedLabel: '120 小时 30 分钟',
   listenedCaption: 'listened this year',
   playsLabel: '321',
@@ -27,9 +28,16 @@ AnnualPosterData _data({String track = 'Track'}) => AnnualPosterData(
   artistsCaption: 'Artists',
   streakLabel: '7',
   streakCaption: 'days in a row',
+  monthlyTitle: 'Monthly trend',
+  topTracksTitle: 'Top tracks',
+  topArtistsTitle: 'Top artists',
   months: const [1, 0, 2, 3, 0, 4, 5, 0, 6, 7, 8, 9],
   topArtists: const ['Artist A', 'Artist B', 'Artist C'],
-  topTracks: [track, 'Second track', 'Third track'],
+  topTracks: [
+    AnnualPosterTrack(title: track, artist: 'Artist A'),
+    const AnnualPosterTrack(title: 'Second track', artist: 'Artist B'),
+    const AnnualPosterTrack(title: 'Third track', artist: 'Artist C'),
+  ],
   topPlatform: 'Most used: 网易云',
 );
 
@@ -78,6 +86,9 @@ void main() {
         artistsCaption: 'Artists',
         streakLabel: '1',
         streakCaption: 'days in a row',
+        monthlyTitle: 'Monthly trend',
+        topTracksTitle: 'Top tracks',
+        topArtistsTitle: 'Top artists',
         months: const [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       ),
       palette: _palette,

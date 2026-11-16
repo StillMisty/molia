@@ -26,7 +26,6 @@ import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
 import '../utils/listened_duration.dart';
 import '../utils/poster_render_style.dart';
-import '../utils/responsive.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/poster_share_sheet.dart';
 import '../widgets/settings/settings_subpage.dart';
@@ -182,42 +181,89 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
         ),
       );
     }
-    final wide = context.isLargeScreen;
-    final sections = <Widget>[
-      _hero(context, l10n, report),
-      const SizedBox(height: 20),
-      _numbers(context, l10n, report, wide: wide),
-      if (report.pageTopArtists.isNotEmpty) ...[
-        const SizedBox(height: 24),
-        _topArtists(context, l10n, report),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 报告页活在设置弹层里，内容区比窗口窄：两栏必须按实际内容宽判断，
+        // 否则 880 弹层里的 600 宽窗口会误判成宽屏。
+        const horizontalPadding = 16.0;
+        final wide = constraints.maxWidth - horizontalPadding * 2 >= 760;
+        final coverage = _coverage(context, l10n, report);
+        final sections = <Widget>[
+          _hero(context, l10n, report),
+          const SizedBox(height: 20),
+          _numbers(context, l10n, report, wide: wide),
+          const SizedBox(height: 24),
+          _monthly(context, l10n, report),
+          if (report.pageTopTracks.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            _topTracks(context, l10n, report),
+          ],
+          if (report.pageTopArtists.isNotEmpty ||
+              report.pageTopAlbums.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            _twoUp(
+              wide: wide,
+              first: report.pageTopArtists.isEmpty
+                  ? null
+                  : _topArtists(context, l10n, report),
+              second: report.pageTopAlbums.isEmpty
+                  ? null
+                  : _topAlbums(context, l10n, report),
+            ),
+          ],
+          if (report.platforms.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            _platforms(context, l10n, report),
+          ],
+          if (report.firstPlay != null || report.lastPlay != null) ...[
+            const SizedBox(height: 24),
+            _edges(context, l10n, report, wide: wide),
+          ],
+          if (coverage != null) ...[const SizedBox(height: 24), coverage],
+          const SizedBox(height: 24),
+          _playlistAction(context, l10n, report, wide: wide),
+          const SizedBox(height: 24),
+        ];
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(
+            horizontalPadding,
+            8,
+            horizontalPadding,
+            32,
+          ),
+          children: sections,
+        );
+      },
+    );
+  }
+
+  /// 宽屏两栏、窄屏顺排。两栏只用于成组的榜单 / 时刻，避免在宽屏里
+  /// 每块都拉满一行造成的松散感。
+  Widget _twoUp({
+    required bool wide,
+    required Widget? first,
+    required Widget? second,
+  }) {
+    final children = [?first, ?second];
+    if (children.isEmpty) return const SizedBox.shrink();
+    if (!wide || children.length == 1) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var index = 0; index < children.length; index++) ...[
+            if (index > 0) const SizedBox(height: 24),
+            children[index],
+          ],
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: children[0]),
+        const SizedBox(width: 24),
+        Expanded(child: children[1]),
       ],
-      if (report.pageTopTracks.isNotEmpty) ...[
-        const SizedBox(height: 24),
-        _topTracks(context, l10n, report),
-      ],
-      if (report.pageTopAlbums.isNotEmpty) ...[
-        const SizedBox(height: 24),
-        _topAlbums(context, l10n, report),
-      ],
-      if (report.platforms.isNotEmpty) ...[
-        const SizedBox(height: 24),
-        _platforms(context, l10n, report),
-      ],
-      const SizedBox(height: 24),
-      _monthly(context, l10n, report),
-      if (report.firstPlay != null || report.lastPlay != null) ...[
-        const SizedBox(height: 24),
-        _edges(context, l10n, report),
-      ],
-      const SizedBox(height: 24),
-      _coverage(context, l10n, report),
-      const SizedBox(height: 24),
-      _playlistAction(context, l10n, report),
-      const SizedBox(height: 24),
-    ];
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-      children: sections,
     );
   }
 
@@ -247,11 +293,25 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
               ),
               if (report.asOfToday)
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    l10n.annualReportAsOfToday,
-                    style: context.typeScale.labelMedium.copyWith(
-                      color: scheme.onPrimaryContainer,
+                  padding: const EdgeInsets.only(top: 4),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: scheme.onPrimaryContainer.withValues(alpha: 0.08),
+                      borderRadius: const BorderRadius.all(
+                        Radius.circular(M3EShapes.full),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      child: Text(
+                        l10n.annualReportAsOfToday,
+                        style: context.typeScale.labelMedium.copyWith(
+                          color: scheme.onPrimaryContainer,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -372,46 +432,18 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
     AppLocalizations l10n,
     AnnualReport report,
   ) {
-    final scheme = Theme.of(context).colorScheme;
     return _section(
       context,
       title: l10n.annualReportTopArtists,
       child: Column(
         children: [
           for (var index = 0; index < report.pageTopArtists.length; index++)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 28,
-                    child: Text(
-                      '${index + 1}',
-                      textAlign: TextAlign.center,
-                      style: context.typeScale.labelMedium.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      report.pageTopArtists[index].artist,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.typeScale.bodyLarge,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    l10n.statsPlaysCount(
-                      report.pageTopArtists[index].playCount,
-                    ),
-                    style: context.typeScale.labelSmall.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+            _rankRow(
+              context,
+              index: index,
+              label: report.pageTopArtists[index].artist,
+              trailing: l10n.statsPlaysCount(
+                report.pageTopArtists[index].playCount,
               ),
             ),
         ],
@@ -424,35 +456,63 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
     AppLocalizations l10n,
     AnnualReport report,
   ) {
-    final scheme = Theme.of(context).colorScheme;
     return _section(
       context,
       title: l10n.annualReportTopAlbums,
       child: Column(
         children: [
           for (var index = 0; index < report.pageTopAlbums.length; index++)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      report.pageTopAlbums[index].album,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.typeScale.bodyLarge,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    l10n.statsPlaysCount(report.pageTopAlbums[index].playCount),
-                    style: context.typeScale.labelSmall.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+            _rankRow(
+              context,
+              index: index,
+              label: report.pageTopAlbums[index].album,
+              trailing: l10n.statsPlaysCount(
+                report.pageTopAlbums[index].playCount,
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// 歌手 / 专辑榜单共用一行的排名槽与省略规则，避免同一页出现两套对齐。
+  Widget _rankRow(
+    BuildContext context, {
+    required int index,
+    required String label,
+    required String trailing,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 28,
+            child: Text(
+              '${index + 1}',
+              textAlign: TextAlign.center,
+              style: context.typeScale.labelMedium.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: context.typeScale.bodyLarge,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            trailing,
+            style: context.typeScale.labelSmall.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
@@ -506,13 +566,17 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  formatListenedDuration(
-                    l10n,
-                    report.platforms[index].listenedMs,
-                  ),
-                  style: context.typeScale.labelSmall.copyWith(
-                    color: scheme.onSurfaceVariant,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 160),
+                  child: Text(
+                    '${formatListenedDuration(l10n, report.platforms[index].listenedMs)}'
+                    ' · ${(report.platforms[index].share * 100).round()}%',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: context.typeScale.labelSmall.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],
@@ -533,51 +597,94 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
       0,
       (max, value) => value > max ? value : max,
     );
+    // 多个月并列最高时不强行挑一个「峰值」，否则连续持平的数据会误导。
+    final peakCount = maxValue <= 0
+        ? 0
+        : report.monthlyListenedMs.where((value) => value == maxValue).length;
+    final peakMonth = peakCount == 1
+        ? report.monthlyListenedMs.indexOf(maxValue)
+        : -1;
     return _section(
       context,
       title: l10n.annualReportMonthly,
-      child: SizedBox(
-        height: 120,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            for (var month = 0; month < 12; month++)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: Semantics(
-                    label: l10n.annualReportMonthLabel(
-                      month + 1,
-                      formatListenedDuration(
-                        l10n,
-                        report.monthlyListenedMs[month],
-                      ),
-                    ),
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: FractionallySizedBox(
-                        heightFactor:
-                            maxValue <= 0 ||
-                                report.monthlyListenedMs[month] <= 0
-                            ? 0
-                            : (report.monthlyListenedMs[month] / maxValue)
-                                  .clamp(0.02, 1),
-                        widthFactor: 1,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: scheme.primary,
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(M3EShapes.extraSmall),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 140,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (var month = 0; month < 12; month++)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: Semantics(
+                        label: l10n.annualReportMonthLabel(
+                          month + 1,
+                          formatListenedDuration(
+                            l10n,
+                            report.monthlyListenedMs[month],
+                          ),
+                        ),
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: FractionallySizedBox(
+                            heightFactor:
+                                maxValue <= 0 ||
+                                    report.monthlyListenedMs[month] <= 0
+                                ? 0
+                                : (report.monthlyListenedMs[month] / maxValue)
+                                      .clamp(0.02, 1),
+                            widthFactor: 1,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                // 最高月份用完整主色，其余降透明度：不增加
+                                // 图例，也能一眼看出全年峰值。
+                                color: month == peakMonth
+                                    ? scheme.primary
+                                    : scheme.primary.withValues(alpha: 0.45),
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(M3EShapes.extraSmall),
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-          ],
-        ),
+              ],
+            ),
+          ),
+          Container(
+            height: 1,
+            color: scheme.outlineVariant.withValues(alpha: 0.6),
+          ),
+          const SizedBox(height: 6),
+          // 柱子自己的 Semantics 已经带月份与时长；这排数字只是视觉刻度，
+          // 不重复读给读屏。
+          ExcludeSemantics(
+            child: Row(
+              children: [
+                for (var month = 0; month < 12; month++)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: Text(
+                        '${month + 1}',
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        style: context.typeScale.labelSmall.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -585,38 +692,25 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
   Widget _edges(
     BuildContext context,
     AppLocalizations l10n,
-    AnnualReport report,
-  ) {
-    final moments = <Widget>[
-      if (report.firstPlay != null)
-        _MomentTile(
-          label: l10n.annualReportFirstPlay,
-          moment: report.firstPlay!,
-        ),
-      if (report.lastPlay != null)
-        _MomentTile(label: l10n.annualReportLastPlay, moment: report.lastPlay!),
-    ];
-    if (moments.length == 2 && context.isLargeScreen) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(child: moments[0]),
-          const SizedBox(width: 12),
-          Expanded(child: moments[1]),
-        ],
-      );
-    }
-    return Column(
-      children: [
-        for (final moment in moments) ...[
-          if (moment != moments.first) const SizedBox(height: 12),
-          moment,
-        ],
-      ],
-    );
+    AnnualReport report, {
+    required bool wide,
+  }) {
+    final first = report.firstPlay == null
+        ? null
+        : _MomentTile(
+            label: l10n.annualReportFirstPlay,
+            moment: report.firstPlay!,
+          );
+    final last = report.lastPlay == null
+        ? null
+        : _MomentTile(
+            label: l10n.annualReportLastPlay,
+            moment: report.lastPlay!,
+          );
+    return _twoUp(wide: wide, first: first, second: last);
   }
 
-  Widget _coverage(
+  Widget? _coverage(
     BuildContext context,
     AppLocalizations l10n,
     AnnualReport report,
@@ -638,11 +732,40 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
           localizations.formatMediumDate(report.coverageEnd!),
         ),
     ];
-    if (lines.isEmpty) return const SizedBox.shrink();
-    return Text(
-      lines.join('\n'),
-      style: context.typeScale.bodySmall.copyWith(
-        color: scheme.onSurfaceVariant,
+    if (lines.isEmpty) return null;
+    final text = lines.join('\n');
+    // 「统计关闭 / 只覆盖部分时段」会影响用户对数字的信任，不能继续当
+    // 脚注小字；普通「截至今天」仍保持轻量说明。
+    if (report.notice == AnnualReportNotice.none) {
+      return Text(
+        text,
+        style: context.typeScale.bodySmall.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+      );
+    }
+    return M3ECard(
+      variant: M3ECardVariant.filled,
+      color: scheme.tertiaryContainer,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            size: 20,
+            color: scheme.onTertiaryContainer,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: context.typeScale.bodySmall.copyWith(
+                color: scheme.onTertiaryContainer,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -650,19 +773,23 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
   Widget _playlistAction(
     BuildContext context,
     AppLocalizations l10n,
-    AnnualReport report,
-  ) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: M3EButton.icon(
-        style: M3EButtonStyle.outlined,
-        onPressed: _savingPlaylist
-            ? null
-            : () => unawaited(_savePlaylist(context, report)),
-        icon: const Icon(Icons.playlist_add_rounded, size: 18),
-        label: Text(l10n.annualReportSavePlaylist),
-      ),
+    AnnualReport report, {
+    required bool wide,
+  }) {
+    final button = M3EButton.icon(
+      style: M3EButtonStyle.outlined,
+      onPressed: _savingPlaylist
+          ? null
+          : () => unawaited(_savePlaylist(context, report)),
+      icon: const Icon(Icons.playlist_add_rounded, size: 18),
+      label: Text(l10n.annualReportSavePlaylist),
     );
+    // 窄屏整行宽度让次要操作也好点；宽屏保持行内按钮，避免 832 宽的一条
+    // 空心按钮压过顶栏分享的主操作。
+    if (wide) {
+      return Align(alignment: Alignment.centerLeft, child: button);
+    }
+    return SizedBox(width: double.infinity, child: button);
   }
 
   Widget _section(
@@ -795,6 +922,7 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
     return AnnualPosterData(
       yearLabel: '${report.year}',
       subtitle: l10n.annualReportSubtitle,
+      yearNote: report.asOfToday ? l10n.annualReportAsOfToday : null,
       listenedLabel: formatListenedDuration(l10n, report.totalListenedMs),
       listenedCaption: l10n.annualReportListenedCaption,
       playsLabel: '${report.qualifiedPlayCount}',
@@ -803,11 +931,17 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
       artistsCaption: l10n.annualReportStatArtists,
       streakLabel: '${report.streak.days}',
       streakCaption: l10n.annualReportStreakCaption,
+      monthlyTitle: l10n.annualReportMonthly,
+      topTracksTitle: l10n.annualReportTopTracks,
+      topArtistsTitle: l10n.annualReportTopArtists,
       months: report.monthlyListenedMs,
       topArtists: [
         for (final artist in report.topArtists.take(3)) artist.artist,
       ],
-      topTracks: [for (final track in report.topTracks.take(3)) track.title],
+      topTracks: [
+        for (final track in report.topTracks.take(3))
+          AnnualPosterTrack(title: track.title, artist: track.artist),
+      ],
       topPlatform: topPlatform == null
           ? null
           : l10n.annualReportTopPlatform(topPlatform),

@@ -116,6 +116,38 @@ void main() {
     expect(find.textContaining('数据范围：'), findsOneWidget);
   });
 
+  testWidgets('窄屏 360：滚动完整页不溢出，月度刻度与歌单入口可用', (tester) async {
+    tester.view.physicalSize = const Size(360, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final start = DateTime(2026, 3, 1, 12);
+    await insertPlayEvent(
+      db,
+      songId: 'narrow1',
+      title: '晴天',
+      artist: '周杰伦',
+      album: '叶惠美',
+      startedAt: start.millisecondsSinceEpoch,
+      endedAt: start.millisecondsSinceEpoch + 120000,
+      listenedMs: 120000,
+      maxPositionMs: 120000,
+      endReason: 'completed',
+    );
+    await pumpPage(tester, years: [2026], featuredYear: 2026);
+    expect(tester.takeException(), isNull);
+    expect(find.text('月度趋势'), findsOneWidget);
+    // 月份刻度 12 在窄屏也必须完整出现（柱子宽度收敛后不能把最后一个
+    // 月份挤出可视区）。
+    expect(find.text('12'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('存成歌单'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('存成歌单'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('顶栏分享弹层：预览 + 保存图片写入海报目录', (tester) async {
     final start = DateTime(2026, 4, 1, 12);
     await insertPlayEvent(
