@@ -11,7 +11,7 @@ import '../../services/notification_permission.dart';
 import '../../widgets/settings/settings_subpage.dart';
 import '../../widgets/settings/settings_tiles.dart';
 import 'lyrics_shared_display_section.dart';
-import 'system_media_lyrics_settings_page.dart';
+import 'system_media_lyrics_advanced_page.dart';
 
 /// 歌词与输出页：应用内歌词、共享展示、通知栏·锁屏与车机/蓝牙。
 ///

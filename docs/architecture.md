@@ -1798,8 +1798,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   （Repeat all / Sequential / Single repeat）保持纯文字分段，图标或勾都会挤断文案）、
   ≥5 项或长文案 → Dropdown（必设 `fieldStyle.hintText`）、区间数值 → Slider、
   大范围绝对量（缓存上限）→ Value + 输入弹层（带常用预设）；
-  子页（音源 / 底部导航 / 备份与恢复 / 高级设置 / 歌词显示〔二级：歌词页 /
-  桌面歌词 / 通知·锁屏 / 蓝牙 / 各自高级〕/ AI 推歌 / 下载与缓存 / 统计 /
+  子页（音源 / 底部导航 / 备份与恢复 / 高级设置 / 歌词与输出〔含通知·锁屏 /
+  车机蓝牙 / 高级〕/ 桌面歌词〔含高级〕/ AI 推歌 / 下载与缓存 / 统计 /
   同步 / 更新）经设置弹层壳
   （`lib/widgets/settings/settings_sheet.dart`，内部 Navigator 由
   `lib/widgets/modal_page_navigator.dart` 提供）在同一弹层内 push

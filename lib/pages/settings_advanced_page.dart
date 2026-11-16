@@ -22,6 +22,7 @@ import '../services/download/download_manager.dart';
 import '../services/download/download_settings.dart';
 import '../services/haptics.dart';
 import '../services/library/library_add_settings.dart';
+import '../services/notification_permission.dart';
 import '../services/window/window_settings.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
@@ -249,7 +250,10 @@ class SettingsAdvancedPage extends StatelessWidget {
             title: l10n.downloadNotifications,
             subtitle: l10n.downloadNotificationsSubtitle,
             value: settings.notifications,
-            onChanged: (value) => unawaited(settings.setNotifications(value)),
+            onChanged: (value) {
+              unawaited(settings.setNotifications(value));
+              if (value) unawaited(NotificationPermission.ensureRequested());
+            },
           ),
       ],
     );
