@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
+import 'package:molia/data/http/app_dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/models/poster_lyric_line.dart';
 import 'package:molia/services/lyrics_poster_service.dart';
@@ -15,6 +16,9 @@ import '../support/mock_dio.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUp(LyricsPosterService.debugClearImageCaches);
+  tearDown(LyricsPosterService.debugClearImageCaches);
+
   Future<ui.Image> decode(List<int> bytes) async {
     final codec = await ui.instantiateImageCodec(Uint8List.fromList(bytes));
     final frame = await codec.getNextFrame();
@@ -22,9 +26,35 @@ void main() {
     return frame.image;
   }
 
-  Future<Uint8List> render(List<PosterLyricLine> lines, {String? coverUrl}) {
-    final service = LyricsPosterService();
+  Future<Uint8List> generate(
+    LyricsPosterService service,
+    List<PosterLyricLine> lines, {
+    String? coverUrl,
+  }) {
     return service.generatePosterData(
+      lyrics: lines.map((line) => line.text).join('\n'),
+      posterLyricLines: lines,
+      trackTitle: 'Title',
+      artistName: 'Artist',
+      albumCoverUrl: coverUrl,
+      backgroundColor: const Color(0xFF101010),
+      titleColor: const Color(0xFFFFFFFF),
+      artistColor: const Color(0xFFCCCCCC),
+      lyricsColor: const Color(0xFFFFFFFF),
+      extendedColor: const Color(0xB3FFFFFF),
+      watermarkColor: const Color(0x99FFFFFF),
+      separatorColor: const Color(0x33FFFFFF),
+    );
+  }
+
+  Future<Uint8List> render(List<PosterLyricLine> lines, {String? coverUrl}) =>
+      generate(LyricsPosterService(), lines, coverUrl: coverUrl);
+
+  Future<ui.Image> renderImage(
+    List<PosterLyricLine> lines, {
+    String? coverUrl,
+  }) {
+    return LyricsPosterService().renderPosterImage(
       lyrics: lines.map((line) => line.text).join('\n'),
       posterLyricLines: lines,
       trackTitle: 'Title',
@@ -146,6 +176,40 @@ void main() {
       greaterThan(shortImage.height),
       reason: '行数不设上限，高度由选中行数决定',
     );
+  });
+
+  test('renderPosterImage 返回 1440 宽位图，调用方负责释放', () async {
+    final image = await renderImage(const [PosterLyricLine(text: 'Hello')]);
+    addTearDown(image.dispose);
+    expect(image.width, kLyricsPosterWidth);
+    expect(image.height, greaterThan(0));
+  });
+
+  test('同一封面 URL 重生成不再重复下载', () async {
+    final coverBytes = await pngBytes(const Color(0xFF00BB00), size: 128);
+    final adapter = MockDioAdapter((_) => bytesResponse(coverBytes));
+    final service = LyricsPosterService(dio: createAppDio(adapter: adapter));
+
+    await generate(service, const [
+      PosterLyricLine(text: 'Hello'),
+    ], coverUrl: 'https://example.com/cover.png');
+    await generate(service, const [
+      PosterLyricLine(text: 'Hello'),
+    ], coverUrl: 'https://example.com/cover.png');
+
+    expect(adapter.requests, hasLength(1), reason: '第二次命中封面字节缓存');
+  });
+
+  test('超长歌词收缩到画布高度上限内，仍生成完整宽度', () async {
+    final bytes = await render([
+      for (var i = 0; i < 220; i++) PosterLyricLine(text: 'Line $i'),
+    ]);
+    final image = await decode(bytes);
+    addTearDown(image.dispose);
+
+    expect(image.width, kLyricsPosterWidth);
+    expect(image.height, lessThanOrEqualTo(kLyricsPosterMaxHeight));
+    expect(image.height, greaterThan(400), reason: '仍按内容高度渲染，不裁成最小画布');
   });
 
   test('本地封面按有界尺寸解码后仍生成海报', () async {

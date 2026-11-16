@@ -15,10 +15,6 @@ import 'package:flutter_test/flutter_test.dart';
 /// - 取值统一走 `lib/theme/m3e_context.dart` 的 `context.typeScale` /
 ///   `context.emphasizedTypeScale`，字号 / 行高 / 字重只在一处演进。
 ///
-/// 为什么海报服务例外：`lyrics_poster_service.dart` 跑在导出管线里，没有
-/// `BuildContext`、也拿不到页面主题；那里的排版是设计稿规格（固定字号 /
-/// 字重），要保证任何主题下导出的图一致，不属于 UI 主题口径。
-///
 /// 规则：
 /// - T1 非白名单文件不得出现小写 `textTheme`（不误伤 `TextTheme`）；
 /// - T2 非白名单文件不得出现 `FontWeight.w600 / w800 / w900`（off-token
@@ -28,9 +24,7 @@ const Set<String> _textThemeAllowlist = {
   'lib/theme/m3e_context.dart', // 迁移说明里引用 textTheme（文档）
 };
 
-const Set<String> _fontWeightAllowlist = {
-  'lib/services/lyrics_poster_service.dart', // 海报导出固定排版（无 context）
-};
+const Set<String> _fontWeightAllowlist = {};
 
 void main() {
   final files = _libFiles();

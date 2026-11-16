@@ -560,9 +560,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get copyAll => 'Copy all';
 
   @override
-  String copySelectedLines(int count) {
-    return 'Copy $count lines';
-  }
+  String get copySelected => 'Copy';
 
   @override
   String get noLyricsSelected => 'Please select some lyrics first';

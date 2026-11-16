@@ -106,12 +106,12 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const Key('lyricsSelectAll')));
     await tester.pump();
-    expect(find.text(l10n.copySelectedLines(4)), findsOneWidget);
+    expect(find.text(l10n.copySelected), findsOneWidget);
 
     // 再次点击全选不会清空（已全选时按钮禁用）。
     await tester.tap(find.byKey(const Key('lyricsSelectAll')));
     await tester.pump();
-    expect(find.text(l10n.copySelectedLines(4)), findsOneWidget);
+    expect(find.text(l10n.copySelected), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('lyricsDeselectAll')));
     await tester.pump();
@@ -123,15 +123,44 @@ void main() {
 
     await tester.tap(find.text('B'));
     await tester.pump();
-    expect(find.text(l10n.copySelectedLines(1)), findsOneWidget);
+    expect(find.text(l10n.copySelected), findsOneWidget);
 
     await tester.longPress(find.text('D'));
     await tester.pump();
     expect(
-      find.text(l10n.copySelectedLines(3)),
+      find.text(l10n.copySelected),
       findsOneWidget,
-      reason: 'B / C / D 含两端',
+      reason: '复制按钮不再显示行数；B / C / D 已选中',
     );
+  });
+
+  testWidgets('360 宽 + 200% 字号：底栏动作不截断', (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await pumpPage(tester);
+    expect(find.byKey(const Key('lyricsCopyAll')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text('A'));
+    await tester.pump();
+
+    // 窄屏 / 大字号退化到两行：副操作 + 复制一行，海报独占一行。
+    expect(find.byKey(const Key('lyricsDeselectAll')), findsOneWidget);
+    expect(find.byKey(const Key('lyricsSelectAll')), findsOneWidget);
+    expect(find.byKey(const Key('lyricsCopySelected')), findsOneWidget);
+    expect(find.byKey(const Key('lyricsPosterButton')), findsOneWidget);
+    expect(find.text(l10n.copySelected), findsOneWidget);
+    expect(find.text(l10n.posterButtonLabel), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(ListView)).height,
+      greaterThan(0),
+      reason: '两行底栏不能用 MainAxisSize.max 吃掉正文高度',
+    );
+    expect(tester.takeException(), isNull, reason: '按钮标签不能被挤到溢出');
   });
 
   testWidgets('页头与海报输入共用同一份自定义展示封面', (tester) async {

@@ -218,7 +218,7 @@
   "selectionRangeToHere": "选中到这里",
   "lyricsSelectionHint": "轻点选中，长按选中一段",
   "copyAll": "复制全部",
-  "copySelectedLines": "复制 {count} 行",
+  "copySelected": "复制",
   "noLyricsSelected": "请先选择一些歌词",
   "sharePoster": "分享海报",
   "shareAction": "分享",
