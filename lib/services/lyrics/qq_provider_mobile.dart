@@ -1,6 +1,5 @@
-import 'dart:convert';
-import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
@@ -140,12 +139,9 @@ class QQProvider extends LyricProvider {
       }
       return results;
     } catch (e) {
-      _logger.severe('QQ音乐搜索歌曲失败: $e');
-      if (e is SocketException) {
-        _logger.severe('网络连接错误: ${e.message}');
-      } else if (e is TimeoutException) {
-        _logger.warning('请求超时: ${e.message}');
-      }
+      // 歌词搜索是多提供者并行的一路；超时 / 断网 / 接口失败都只影响这一路，
+      // 记录一条即可（不带堆栈，避免诊断包出现整屏异常帧）。
+      _logger.warning('QQ音乐搜索失败: $e');
       return [];
     }
   }
@@ -305,12 +301,7 @@ class QQProvider extends LyricProvider {
             },
           );
     } catch (e) {
-      _logger.severe('QQ音乐获取歌词详情失败: $e');
-      if (e is SocketException) {
-        _logger.severe('网络连接错误: ${e.message}');
-      } else if (e is TimeoutException) {
-        _logger.warning('请求超时: ${e.message}');
-      }
+      _logger.warning('QQ音乐获取歌词失败: $e');
       return null;
     }
 
@@ -336,7 +327,7 @@ class QQProvider extends LyricProvider {
       final data = json.decode(decodedBody) as Map<String, dynamic>;
       return QQLyricPayload.fromJson(data);
     } catch (e) {
-      _logger.severe('解析QQ音乐歌词响应失败: $e');
+      _logger.warning('解析QQ音乐歌词响应失败: $e');
       return null;
     }
   }

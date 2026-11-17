@@ -91,8 +91,9 @@ class LRCLibProvider extends LyricProvider {
         );
       }
       return results;
-    } catch (e, st) {
-      _logger.severe('LRCLIB 搜索失败', e, st);
+    } catch (e) {
+      // 与其它歌词提供者并行兜底：超时 / 网络失败是一路失败，不是本机故障。
+      _logger.warning('LRCLIB 搜索失败: $e');
       return [];
     }
   }
@@ -127,8 +128,8 @@ class LRCLibProvider extends LyricProvider {
       }
 
       return null;
-    } catch (e, st) {
-      _logger.severe('LRCLIB 获取歌词失败', e, st);
+    } catch (e) {
+      _logger.fine(() => 'LRCLIB 歌词未命中: $e');
       return null;
     }
   }

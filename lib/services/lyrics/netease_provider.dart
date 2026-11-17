@@ -48,8 +48,10 @@ class NetEaseProvider extends LyricProvider {
             duration: track.duration,
           ),
       ];
-    } catch (e, st) {
-      _logger.severe('搜索失败', e, st);
+    } catch (e) {
+      // 歌词搜索是并行兜底的一路：网络 / 无结果都是常态，不能按严重错误
+      // 带堆栈记录（否则诊断包会被预期失败刷屏）。
+      _logger.warning('网易云歌词搜索失败: $e');
       return [];
     }
   }
@@ -71,8 +73,10 @@ class NetEaseProvider extends LyricProvider {
         roma: info.rlyric.isEmpty ? null : info.rlyric,
         lxlyric: info.lxlyric.isEmpty ? null : info.lxlyric,
       );
-    } catch (e, st) {
-      _logger.severe('获取歌词失败', e, st);
+    } catch (e) {
+      // `Get lyric failed` 表示平台没有这首歌词；网络失败也可能走到这里。
+      // 歌词服务还有跨平台回退，无歌词不是本机故障。
+      _logger.fine(() => '网易云歌词未命中: $e');
       return null;
     }
   }

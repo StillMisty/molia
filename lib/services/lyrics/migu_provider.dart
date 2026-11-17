@@ -33,8 +33,8 @@ class MiguProvider extends LyricProvider {
       final keyword = '$title $artist'.trim();
       final result = await MgSearch.searchWithMeta(keyword, limit: limit);
       return [for (final track in result.tracks.take(limit)) _toMatch(track)];
-    } catch (e, st) {
-      _logger.severe('搜索失败', e, st);
+    } catch (e) {
+      _logger.warning('咪咕歌词搜索失败: $e');
       return [];
     }
   }
@@ -91,8 +91,8 @@ class MiguProvider extends LyricProvider {
         roma: info.rlyric,
         lxlyric: info.lxlyric,
       );
-    } catch (e, st) {
-      _logger.severe('取词失败', e, st);
+    } catch (e) {
+      _logger.fine(() => '咪咕歌词未命中: $e');
       return null;
     }
   }

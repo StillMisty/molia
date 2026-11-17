@@ -34,8 +34,8 @@ class KugouProvider extends LyricProvider {
       final keyword = '$title $artist'.trim();
       final result = await KgSearch.searchWithMeta(keyword, limit: limit);
       return [for (final track in result.tracks.take(limit)) _toMatch(track)];
-    } catch (e, st) {
-      _logger.severe('搜索失败', e, st);
+    } catch (e) {
+      _logger.warning('酷狗歌词搜索失败: $e');
       return [];
     }
   }
@@ -79,8 +79,8 @@ class KugouProvider extends LyricProvider {
         roma: info.rlyric,
         lxlyric: info.lxlyric,
       );
-    } catch (e, st) {
-      _logger.severe('取词失败', e, st);
+    } catch (e) {
+      _logger.fine(() => '酷狗歌词未命中: $e');
       return null;
     }
   }
