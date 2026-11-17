@@ -428,6 +428,13 @@ void main() async {
       ..addReleaser(releaser)
       ..addLowMemoryReleaser(releaser);
   }
+  // 真实低内存时先把「现场」落盘：系统可能在随后几秒内查杀进程（含 OEM
+  // 的内存治理），播放队列 / 进度 / 统计不该等下一次 pause。保存与上面的
+  // 缓存释放并发，失败只记日志。
+  AppMemoryManager.instance.addLowMemoryFlusher(() async {
+    await playback.playbackProvider.suspendPlaybackSession();
+    await library.playStatisticsService.flush();
+  });
   // ⑪ 应用内更新（纯构造；包信息 / 偏好 / 平台信息读取后移到首帧）。
   final update = buildUpdateStack(quitApp: desktop.quitApp);
   _markStartup('更新栈（装配完成）', startup);

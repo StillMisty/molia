@@ -17,7 +17,9 @@
 /// 上限，回前台取消并恢复；Android 不卸载界面，所以**不清 live 图片**，恢复
 /// 时当前封面还在。系统低内存（`didHaveMemoryPressure`）走
 /// [onMemoryPressure]，只在那时释放可重建的浏览 / 搜索 / 目录缓存；普通退
-/// 后台不释放列表，避免恢复时出现空列表。
+/// 后台不释放列表，避免恢复时出现空列表。真实低内存还可能很快升级为进程
+/// 查杀（含 OEM 的内存治理机制），所以同一时机先用 [addLowMemoryFlusher]
+/// 提交播放会话 / 统计等「现场」，再释放缓存。
 ///
 /// 每次翻转打一行 `molia.memory`（RSS + 缓存占用），release 也输出，作为
 /// 托盘 / 后台内存回归的观测点（见 `tool/agent/memory.sh` 与 `docs/memory.md`）。
@@ -253,6 +255,12 @@ class AppMemoryManager {
   /// 只有系统明确报告内存压力时才放弃可重建的浏览 / 搜索 / 目录缓存。
   final List<void Function()> _lowMemoryReleasers = [];
 
+  /// 系统低内存时先提交「现场」的异步回调（播放会话 / 统计）。
+  ///
+  /// 与 [_lowMemoryReleasers] 分开：这些回调要写持久化，启动后与缓存释放
+  /// 并发执行，既不拖慢释放，也保证保存请求先于系统可能的查杀发出。
+  final List<Future<void> Function()> _lowMemoryFlushers = [];
+
   bool _attached = false;
 
   /// 订阅存在态并立即校正一次（启动即处于托盘隐藏时也要清理）。
@@ -281,6 +289,18 @@ class AppMemoryManager {
   /// 取消注册低内存回调。
   void removeLowMemoryReleaser(void Function() releaser) =>
       _lowMemoryReleasers.remove(releaser);
+
+  /// 注册系统低内存时先提交现场的异步回调（播放会话 / 统计落盘）。
+  ///
+  /// 与 [addLowMemoryReleaser] 分开：这些回调等的是持久化写入，不能阻塞
+  /// 图片缓存释放；组合根只在这里挂 `suspendPlaybackSession` / 统计 flush，
+  /// 本类不反向依赖播放或资料库类型。回调必须幂等，失败只记日志。
+  void addLowMemoryFlusher(Future<void> Function() flusher) =>
+      _lowMemoryFlushers.add(flusher);
+
+  /// 取消注册低内存保存回调。
+  void removeLowMemoryFlusher(Future<void> Function() flusher) =>
+      _lowMemoryFlushers.remove(flusher);
 
   /// 托盘内暂停稳定后补一次 trim（由组合根在播放态翻转时调用）。
   ///
@@ -410,6 +430,9 @@ class AppMemoryManager {
 
   /// 低内存清理的实际执行点（去抖 / 过渡判断之后）。
   void _releaseLowMemoryCaches() {
+    // 先发出保存请求：真实低内存可能紧接着触发系统 / OEM 的进程查杀，
+    // 会话与统计不能等下一次 pause；保存与缓存释放并发，互不阻塞。
+    _runLowMemoryFlushers();
     _runReleasers(_lowMemoryReleasers, failureMessage: '低内存业务缓存释放失败');
     _cache.clear();
     _releaseToOs();
@@ -434,6 +457,7 @@ class AppMemoryManager {
     _backgroundTransitionTimer = null;
     _releasers.clear();
     _lowMemoryReleasers.clear();
+    _lowMemoryFlushers.clear();
     if (!_attached) return;
     _attached = false;
     _presence.removeListener(_onPresenceChanged);
@@ -533,6 +557,23 @@ class AppMemoryManager {
       } catch (e, stackTrace) {
         _logger.warning(failureMessage, e, stackTrace);
       }
+    }
+  }
+
+  /// 并发启动现场保存：单个失败只记日志，不阻塞缓存释放与其它保存。
+  void _runLowMemoryFlushers() {
+    for (final flusher in List<Future<void> Function()>.of(
+      _lowMemoryFlushers,
+    )) {
+      unawaited(_runLowMemoryFlusher(flusher));
+    }
+  }
+
+  Future<void> _runLowMemoryFlusher(Future<void> Function() flusher) async {
+    try {
+      await flusher();
+    } catch (e, stackTrace) {
+      _logger.warning('低内存现场保存失败', e, stackTrace);
     }
   }
 

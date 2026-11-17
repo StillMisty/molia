@@ -244,6 +244,49 @@ void main() {
     expect(cache.maximumSizeBytes, kFullImageCacheLimitBytes);
   });
 
+  testWidgets('系统低内存：去抖后先触发一次现场保存；UI_HIDDEN 伪低内存不保存', (tester) async {
+    final presence = AppPresence();
+    final cache = _FakeImageCache();
+    final manager = AppMemoryManager(presence: presence, imageCache: cache);
+    addTearDown(manager.dispose);
+    manager.attach();
+
+    var flushes = 0;
+    manager.addLowMemoryFlusher(() async => flushes++);
+
+    manager.onMemoryPressure();
+    expect(flushes, 0, reason: '去抖窗口内可能被紧随其后的退后台取消');
+
+    await tester.pump(kMemoryPressureDebounce);
+    expect(flushes, 1);
+
+    // 退后台的 UI_HIDDEN 也会报告低内存：取消后不能白写一次盘。
+    manager.onMemoryPressure();
+    manager.onAppBackground();
+    await tester.pump(kMemoryPressureDebounce);
+    expect(flushes, 1);
+    manager.onAppForeground();
+  });
+
+  testWidgets('单个现场保存失败不影响其它保存与缓存释放', (tester) async {
+    final presence = AppPresence();
+    final cache = _FakeImageCache();
+    final manager = AppMemoryManager(presence: presence, imageCache: cache);
+    addTearDown(manager.dispose);
+    manager.attach();
+
+    var flushes = 0;
+    manager.addLowMemoryFlusher(() async => throw StateError('boom'));
+    manager.addLowMemoryFlusher(() async => flushes++);
+
+    manager.onMemoryPressure();
+    await tester.pump(kMemoryPressureDebounce);
+    await tester.pump();
+
+    expect(flushes, 1, reason: '前一个保存抛错不能中断后面的保存');
+    expect(cache.clearCount, 1, reason: '保存失败也不能阻塞缓存释放');
+  });
+
   testWidgets('退后台的 UI_HIDDEN 伪低内存：取消清理，不清浏览缓存', (tester) async {
     final presence = AppPresence();
     final cache = _FakeImageCache();

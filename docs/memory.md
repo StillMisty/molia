@@ -316,3 +316,22 @@ pending / keepAlive，当前展示的封面不受影响。
 - media_kit 官方建议 Windows 链接 mimalloc；2026-11-11 用 mimalloc 2.1.2 实测：Windows 上静态对象不会覆盖 CRT `malloc`，必须用共享 DLL + `mimalloc-redirect.dll`，且 redirect 要早于 `ucrtbase` 加载（测试中需 delay-load 系统 DLL 才生效）。生效后两次托盘 +5s 136–146MB、+15s 156.6–167.1MB，非 mimalloc 同场景 164.6–167.7MB；暂停 +30s 反而 160–167.5MB，提交大小 / 保留内存明显更高。加载顺序 hack 不适合产品构建，暂不接入。
 - 备份 / 同步自定义封面的 base64 仍是整批进内存，尚未流式化。
 - `just_audio` 的 source 注册表只在换队列 / 显式停止时回收；单个超长队列连续播放仍会按曲目数增长，彻底解决需要 just_audio 提供单源释放 API 或改播放器模型。
+
+## 10. 2026-11-17：低内存先提交现场
+
+### 10.1 改了什么
+
+| 位置 | 行为 |
+| --- | --- |
+| `lib/managers/app_memory_manager.dart` | 新增 `addLowMemoryFlusher()`；真实低内存去抖通过后，先并发启动现场保存，再释放浏览 / 搜索 / 目录缓存。单个保存失败只记日志，不阻塞其它保存与缓存清理；UI_HIDDEN 伪低内存仍在退后台时取消，不白写盘 |
+| `lib/main.dart` | 注册唯一保存入口：`suspendPlaybackSession()` + `playStatisticsService.flush()`。与缓存 releaser 分开注册，managers 层不反向依赖 playback / library 类型 |
+| `test/managers/app_memory_manager_test.dart` | 覆盖「去抖后才保存」「伪低内存不保存」「单个保存抛错不影响其它保存与缓存释放」 |
+
+为什么不接金标联盟（ITGSA）的 `TRIM` / `KILL` 广播：那套协议要求 3s 内通过 Binder 回执，主要服务内存大户与商店评测；Molia 实测 PSS 约 300–400MB，离 Android 17 的 per-app 上限（4GB 设备前台约 2GB）很远。这里只复用 Android 官方 `onTrimMemory` → `didHaveMemoryPressure` 语义：真实低内存时顺手把会话与统计落盘，成本一次 prefs / DB 写，不做厂商分叉、不主动杀进程。
+
+### 10.2 验证
+
+- `flutter analyze --no-pub`：0 error / 0 warning；
+- `flutter test --no-pub`：全绿（新增 2 个用例）；
+- 真机触发系统低内存时，`molia.memory` 仍输出「系统低内存清理完成」；随后冷启动应恢复最后一次播放队列 / 曲目 / 进度，统计不丢最后一段。
+
