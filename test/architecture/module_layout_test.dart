@@ -57,15 +57,8 @@ const Set<String> _sizeExcludedFiles = {
   'lib/utils/html_unescape/src/data/named_chars_all.dart',
 };
 
-/// 现存 `pages/widgets -> lib/data` 依赖（只减不增，后续阶段清）。
-const Set<String> _uiDataImportWhitelist = {
-  'lib/pages/album_page.dart',
-  'lib/pages/artist_page.dart',
-  'lib/pages/sync_dialogs.dart',
-  'lib/pages/sync_log_page.dart',
-  'lib/pages/update_settings_page.dart',
-  'lib/widgets/lxmc_import.dart',
-};
+/// 现存 `pages/widgets -> lib/data` 依赖（已清零；新增违规必须修复）。
+const Set<String> _uiDataImportWhitelist = {};
 
 const List<String> _utilsForbiddenPathPrefixes = [
   'lib/widgets/',
