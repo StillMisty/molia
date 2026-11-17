@@ -726,7 +726,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   /// 滚到当前行：把主行文本块的顶边锚定在会话给出的锚点。
   @override
-  bool scrollToLine(int index) => _scroll.scrollToLine(index, context: context);
+  bool scrollToLine(int index) {
+    if (!mounted) return false;
+    return _scroll.scrollToLine(index, context: context);
+  }
 
   @override
   void jumpTowardLine(int currentLineIndex) {
