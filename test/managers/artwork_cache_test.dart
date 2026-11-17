@@ -178,6 +178,26 @@ class _MemoryRepo implements CacheInfoRepository {
   Future<void> deleteDataFile() async {}
 }
 
+/// 打开完成前访问索引会抛错的 repo：复现 Android SQLite 仓库在 open 前
+/// 直接查表导致「Null check operator used on a null value」的启动竞态。
+class _LateOpenRepo extends _MemoryRepo {
+  final Completer<bool> openGate = Completer<bool>();
+  bool _opened = false;
+
+  @override
+  Future<bool> open() async {
+    final result = await openGate.future;
+    _opened = true;
+    return result;
+  }
+
+  @override
+  Future<List<CacheObject>> getAllObjects() async {
+    if (!_opened) throw StateError('repo not opened');
+    return super.getAllObjects();
+  }
+}
+
 /// 记录 `updateOrInsert` 调用的内存 repo：验证元数据代理是否真的跳过写入。
 class _RecordingRepo extends _MemoryRepo {
   int updateOrInsertCalls = 0;
@@ -660,6 +680,20 @@ void main() {
         ),
       );
       expect(repo.updateOrInsertCalls, 3, reason: '新 key 必须走插入');
+    });
+
+    test('open 完成前访问索引会等待，不会把未打开当成空索引 / 抛空断言', () async {
+      final repo = _LateOpenRepo();
+      final wrapper = wrapArtworkRepository(repo);
+
+      final openFuture = wrapper.open();
+      final objectsFuture = wrapper.getAllObjects();
+      expect(repo.getAllCalls, 0, reason: 'open 未完成前不能直接查底层仓库');
+
+      repo.openGate.complete(true);
+      expect(await openFuture, isTrue);
+      expect(await objectsFuture, isEmpty);
+      expect(repo.getAllCalls, 1);
     });
   });
 

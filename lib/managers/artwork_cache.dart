@@ -563,14 +563,28 @@ class _PolicyNeutralRepository implements CacheInfoRepository {
 
   final CacheInfoRepository _inner;
 
+  /// 底层仓库的打开结果（成功 / 失败都共享同一个 Future）。
+  ///
+  /// `CacheStore` 构造时才开始 `repo.open()`，而启动 sweep 是 fire-and-forget：
+  /// sweep 可能在 open 完成前直接查 `getAllObjects()`。Android 的 SQLite 仓库
+  /// 在 open 前 `db` 还是 null，直接查会抛「Null check operator used on a
+  /// null value」。所有委托入口先等这份 Future，避免把「尚未打开」当成
+  /// 「索引为空 / 损坏」。
+  Future<bool>? _opened;
+
   @override
-  Future<bool> open() => _inner.open();
+  Future<bool> open() => _opened ??= _inner.open();
+
+  Future<void> _ensureOpen() async {
+    await open();
+  }
 
   /// 命中缓存时 flutter_cache_manager 会立刻用「只改了 touched」的对象回调
   /// 这里；JSON 元数据仓库每次写都要重写整个文件。内容字段没变就跳过写入，
   /// 直接返回旧对象——封面淘汰按文件 mtime，不依赖 touched。
   @override
   Future<dynamic> updateOrInsert(CacheObject cacheObject) async {
+    await _ensureOpen();
     final existing = await _inner.get(cacheObject.key);
     if (existing != null && _sameContent(existing, cacheObject)) {
       return existing;
@@ -591,23 +605,43 @@ class _PolicyNeutralRepository implements CacheInfoRepository {
   Future<CacheObject> insert(
     CacheObject cacheObject, {
     bool setTouchedToNow = true,
-  }) => _inner.insert(cacheObject, setTouchedToNow: setTouchedToNow);
+  }) async {
+    await _ensureOpen();
+    return _inner.insert(cacheObject, setTouchedToNow: setTouchedToNow);
+  }
 
   @override
-  Future<CacheObject?> get(String key) => _inner.get(key);
+  Future<CacheObject?> get(String key) async {
+    await _ensureOpen();
+    return _inner.get(key);
+  }
 
   @override
-  Future<int> delete(int id) => _inner.delete(id);
+  Future<int> delete(int id) async {
+    await _ensureOpen();
+    return _inner.delete(id);
+  }
 
   @override
-  Future<int> deleteAll(Iterable<int> ids) => _inner.deleteAll(ids);
+  Future<int> deleteAll(Iterable<int> ids) async {
+    await _ensureOpen();
+    return _inner.deleteAll(ids);
+  }
 
   @override
-  Future<int> update(CacheObject cacheObject, {bool setTouchedToNow = true}) =>
-      _inner.update(cacheObject, setTouchedToNow: setTouchedToNow);
+  Future<int> update(
+    CacheObject cacheObject, {
+    bool setTouchedToNow = true,
+  }) async {
+    await _ensureOpen();
+    return _inner.update(cacheObject, setTouchedToNow: setTouchedToNow);
+  }
 
   @override
-  Future<List<CacheObject>> getAllObjects() => _inner.getAllObjects();
+  Future<List<CacheObject>> getAllObjects() async {
+    await _ensureOpen();
+    return _inner.getAllObjects();
+  }
 
   @override
   Future<List<CacheObject>> getObjectsOverCapacity(int capacity) async =>
@@ -617,11 +651,20 @@ class _PolicyNeutralRepository implements CacheInfoRepository {
   Future<List<CacheObject>> getOldObjects(Duration maxAge) async => const [];
 
   @override
-  Future<bool> close() => _inner.close();
+  Future<bool> close() async {
+    await _ensureOpen();
+    return _inner.close();
+  }
 
   @override
-  Future<bool> exists() => _inner.exists();
+  Future<bool> exists() async {
+    await _ensureOpen();
+    return _inner.exists();
+  }
 
   @override
-  Future<void> deleteDataFile() => _inner.deleteDataFile();
+  Future<void> deleteDataFile() async {
+    await _ensureOpen();
+    await _inner.deleteDataFile();
+  }
 }
