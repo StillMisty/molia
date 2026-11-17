@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/models/lyric_line.dart';
+import 'package:molia/domain/models/lyric_line.dart';
 import 'package:molia/services/lyrics_display/lyric_timing_policy.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 

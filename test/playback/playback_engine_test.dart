@@ -6,7 +6,7 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/domain/ports/playback_facade.dart';
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/playback/queue_projection.dart';
 import 'package:molia/sources/source_track.dart';

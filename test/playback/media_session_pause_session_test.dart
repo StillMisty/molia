@@ -20,7 +20,7 @@ import 'package:molia/data/playback/playback_engine.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/l10n/app_localizations.dart';
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/playback/local_audio_handler.dart';
 import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/playback/media_session_copy.dart';

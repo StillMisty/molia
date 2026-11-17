@@ -16,7 +16,7 @@ import '../domain/models/track.dart';
 import '../domain/ports/playback_facade.dart';
 import '../domain/ports/state_listenable.dart';
 import '../domain/ports/ui_messenger.dart';
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 import '../playback/playback_error_recovery.dart';
 import '../playback/playback_session_coordinator.dart';
 import '../services/data_saver_service.dart';

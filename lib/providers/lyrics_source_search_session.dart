@@ -12,7 +12,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
-import '../models/lyric_line.dart';
+import '../domain/models/lyric_line.dart';
 import '../services/lyrics/lyric_provider.dart';
 import '../services/lyrics/lyrics_match.dart';
 import '../services/lyrics/lyrics_source_strategy.dart';

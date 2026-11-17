@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 import '../providers/playback_provider.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';

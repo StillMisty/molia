@@ -8,9 +8,9 @@ import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../domain/models/track.dart';
-import '../models/lyric_line.dart';
+import '../domain/models/lyric_line.dart';
 import 'lyrics_scroll_policy.dart';
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 import '../pages/source_swap_page.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/playback_provider.dart';

@@ -11,7 +11,7 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/playback_facade.dart';
 import 'package:molia/domain/ports/state_listenable.dart';
 import 'package:molia/domain/ports/ui_messenger.dart';
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/playback/playback_power_policy.dart';
 import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/providers/playback_provider.dart';

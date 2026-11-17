@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../../models/lyric_line.dart';
+import '../../domain/models/lyric_line.dart';
 import 'lyric_timing_policy.dart';
 import 'lyrics_display_settings.dart' show UnsyncedBehavior;
 

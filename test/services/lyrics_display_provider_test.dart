@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
-import 'package:molia/models/lyric_line.dart';
+import 'package:molia/domain/models/lyric_line.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';

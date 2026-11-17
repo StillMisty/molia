@@ -7,7 +7,7 @@
 /// 本身仍由调用方完成。
 library;
 
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 
 /// 队列编辑计划：是否允许，以及编辑后的当前下标。
 ///

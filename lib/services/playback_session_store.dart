@@ -7,7 +7,7 @@ import '../data/playback_session_repository.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/playback_session_sync.dart';
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 
 /// 上次播放会话：队列 + 下标 + 进度 + 模式 + 上下文。
 ///

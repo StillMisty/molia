@@ -19,7 +19,7 @@ import 'package:flutter/foundation.dart';
 
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 import 'cover_appearance.dart';
 import 'player_cover_swap.dart';
 

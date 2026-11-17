@@ -1,4 +1,4 @@
-import '../../models/play_mode.dart';
+import 'play_mode.dart';
 import 'equality.dart';
 import 'failure.dart';
 import 'track.dart';

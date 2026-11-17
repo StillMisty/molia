@@ -5,7 +5,7 @@ import 'package:molia/app/desktop/now_playing_bar.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/playback_transport.dart';
 import 'package:molia/widgets/player_morph.dart';

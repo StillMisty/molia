@@ -6,7 +6,7 @@
 library;
 
 import '../l10n/app_localizations.dart';
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 
 /// 通知 / 锁屏上会出现的全部文案（元数据回退 + 两个自定义动作）。
 class MediaSessionCopy {

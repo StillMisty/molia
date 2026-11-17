@@ -14,7 +14,7 @@ import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/playback_session_repository.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/services/playback_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // 仅测试用：模拟平台 remove 返回 false（不是 lib 的依赖）。

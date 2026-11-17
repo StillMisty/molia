@@ -7,7 +7,7 @@ import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/playback_session_sync.dart';
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/services/playback_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';

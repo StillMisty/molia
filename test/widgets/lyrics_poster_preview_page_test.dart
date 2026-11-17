@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/l10n/app_localizations.dart';
-import 'package:molia/models/poster_lyric_line.dart';
+import 'package:molia/domain/models/poster_lyric_line.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/lyrics_poster_preview_page.dart';

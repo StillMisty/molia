@@ -7,7 +7,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/playback/queue_projection.dart';
 
 /// 一条表驱动用例（record 让期望值直接写在用例里）。

@@ -5,7 +5,7 @@ import '../domain/models/discover.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 import '../sources/builtin/builtin_search.dart';
 import '../sources/builtin/discover_source.dart';
 import '../sources/raw_track.dart';

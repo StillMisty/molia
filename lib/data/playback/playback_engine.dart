@@ -5,7 +5,7 @@ import '../../domain/models/playback.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/playback_facade.dart';
 import '../../domain/ports/state_listenable.dart';
-import '../../models/play_mode.dart';
+import '../../domain/models/play_mode.dart';
 import '../../playback/local_playback_service.dart';
 import '../../playback/queue_projection.dart';
 import '../../sources/source_track.dart';

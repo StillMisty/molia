@@ -6,7 +6,7 @@ import 'dart:ui' as ui;
 import 'package:dio/dio.dart';
 import 'package:molia/data/http/app_dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/models/poster_lyric_line.dart';
+import 'package:molia/domain/models/poster_lyric_line.dart';
 import 'package:molia/services/lyrics_poster_service.dart';
 import 'package:material_ui/material_ui.dart';
 

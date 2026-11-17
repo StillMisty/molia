@@ -22,7 +22,7 @@ import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/library.dart';
 import '../domain/models/playlist_cover_keys.dart';
 import '../domain/models/track.dart';
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 import '../sources/raw_track.dart';
 import '../sources/source_track.dart';
 import 'library_outcome.dart';

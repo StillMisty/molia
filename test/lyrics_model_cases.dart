@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/models/lyric_line.dart';
+import 'package:molia/domain/models/lyric_line.dart';
 
 /// 歌词模型（解析 / 未同步 / 当前行查找）的单一测试面。
 void main() {

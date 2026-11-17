@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../../models/lyric_line.dart';
+import '../../domain/models/lyric_line.dart';
 import '../../theme/scheme_builder.dart';
 import 'lyric_color_resolver.dart';
 import 'lyrics_channel.dart';

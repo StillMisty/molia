@@ -4,7 +4,7 @@ library;
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/l10n/app_localizations.dart';
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/playback/media_session_copy.dart';
 import 'package:molia/playback/media_session_copy_source.dart';
 import 'package:molia/services/language_service.dart';

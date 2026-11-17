@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../../models/play_mode.dart';
+import '../models/play_mode.dart';
 import '../models/playback.dart';
 import '../models/track.dart';
 import 'state_listenable.dart';

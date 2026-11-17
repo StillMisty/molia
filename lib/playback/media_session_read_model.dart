@@ -11,7 +11,7 @@ library;
 
 import 'package:flutter/foundation.dart' show Listenable, VoidCallback;
 
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 import '../sources/source_track.dart';
 import 'local_playback_service.dart';
 

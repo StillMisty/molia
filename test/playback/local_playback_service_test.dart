@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/playback/audio_predownload.dart';
 import 'package:molia/playback/audio_predownloader.dart';
 import 'package:molia/playback/audio_cache_completion_recorder.dart';

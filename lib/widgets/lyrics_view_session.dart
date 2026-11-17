@@ -17,8 +17,8 @@ library;
 
 import 'package:flutter/foundation.dart';
 
-import '../models/lyric_line.dart';
-import '../models/play_mode.dart';
+import '../domain/models/lyric_line.dart';
+import '../domain/models/play_mode.dart';
 import '../services/lyrics_display/lyric_timing_policy.dart';
 
 /// 会话的定时能力。

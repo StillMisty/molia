@@ -16,7 +16,7 @@ import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/playback/playback_power_policy.dart';
 import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/services/playback_session_store.dart';

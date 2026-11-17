@@ -7,7 +7,7 @@ import '../app/bootstrap/startup_trace.dart';
 import '../domain/models/track.dart' show TrackId;
 import '../managers/artwork_cache.dart';
 import '../services/covers/cover_resolution.dart';
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 import '../services/lyrics_display/media_lyric_composer.dart';
 import '../sources/source_track.dart';
 import 'local_playback_service.dart';

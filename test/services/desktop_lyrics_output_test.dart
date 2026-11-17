@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:molia/models/lyric_line.dart';
+import 'package:molia/domain/models/lyric_line.dart';
 import 'package:molia/services/lyrics_display/desktop_lyrics_output.dart';
 import 'package:molia/services/lyrics_display/lyrics_channel.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';

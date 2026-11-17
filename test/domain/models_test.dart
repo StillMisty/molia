@@ -11,7 +11,7 @@ import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/lx/lx_engine_types.dart';
 import 'package:molia/sources/source_track.dart';

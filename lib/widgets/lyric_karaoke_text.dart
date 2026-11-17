@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_ui/material_ui.dart';
 
-import '../models/lyric_line.dart';
+import '../domain/models/lyric_line.dart';
 
 /// 逐字歌词文本（当前行的词级高亮）。
 ///

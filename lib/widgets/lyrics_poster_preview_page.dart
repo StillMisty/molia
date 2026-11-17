@@ -18,7 +18,7 @@ import '../services/lyrics_poster_service.dart';
 import '../services/poster/poster_style_settings.dart';
 import '../services/system_fonts_service.dart';
 import '../l10n/app_localizations.dart';
-import '../models/poster_lyric_line.dart';
+import '../domain/models/poster_lyric_line.dart';
 import '../theme/m3e_context.dart';
 import '../theme/poster_palette.dart';
 import '../theme/scheme_builder.dart';

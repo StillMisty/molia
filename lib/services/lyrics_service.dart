@@ -5,13 +5,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app/perf/data_path_trace.dart';
 import '../domain/models/track.dart';
-import '../models/lyrics_result.dart';
+import '../domain/models/lyrics_result.dart';
 import 'cache_service.dart';
 import 'lyrics_cache.dart';
 import 'lyrics/lyric_provider.dart';
 import 'lyrics/lyrics_source_registry.dart';
 
-export '../models/lyrics_result.dart';
+export '../domain/models/lyrics_result.dart';
 
 /// 曲目原生取词加载器（组合根注入：`SourceManager` 路由脚本 `lyric`
 /// action / any-listen / 内置平台原生实现）。

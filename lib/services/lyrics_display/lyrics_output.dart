@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../../models/lyric_line.dart';
+import '../../domain/models/lyric_line.dart';
 import 'lyrics_display_settings.dart';
 
 /// 输出能力：平台是否支持 / 权限是否就绪。

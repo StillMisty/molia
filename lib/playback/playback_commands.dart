@@ -8,7 +8,7 @@
 library;
 
 import '../domain/models/track.dart';
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 
 /// 命令真正改变的 UI 领域。
 ///

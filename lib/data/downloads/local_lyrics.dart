@@ -11,7 +11,7 @@ library;
 
 import '../../domain/models/download.dart';
 import '../../domain/models/track.dart';
-import '../../models/lyrics_result.dart';
+import '../../domain/models/lyrics_result.dart';
 import 'download_storage.dart';
 
 /// 读取 [track]（`local` 音源曲目）的离线歌词与可选翻译；无歌词返回 null。

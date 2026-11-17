@@ -8,8 +8,8 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
-import '../models/lyric_line.dart';
-import '../models/poster_lyric_line.dart';
+import '../domain/models/lyric_line.dart';
+import '../domain/models/poster_lyric_line.dart';
 import '../providers/playback_provider.dart';
 import '../services/covers/cover_resolution.dart';
 import '../services/haptics.dart';

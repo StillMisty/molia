@@ -8,7 +8,7 @@ import 'package:just_audio/just_audio.dart';
 import '../app/perf/playback_start_trace.dart';
 import '../data/files/local_locator.dart';
 import '../domain/ports/music_source.dart' show PlayableStream;
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 import '../services/audio_cache_platform.dart';
 import '../services/audio_cache_store.dart';
 import '../services/cache_service.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../../models/lyric_line.dart';
+import '../../domain/models/lyric_line.dart';
 import 'lyrics_display_settings.dart' show UnsyncedBehavior;
 
 /// 应用内歌词页的视觉提前量（正值 = 比真实进度早）。

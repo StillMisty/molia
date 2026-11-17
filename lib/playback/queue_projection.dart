@@ -16,7 +16,7 @@
 /// 不伪装成线性下一首），这是 [QueueOrder] 保留的 null 语义。
 library;
 
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 import 'queue_navigation.dart';
 
 /// 投影用的播放顺序。

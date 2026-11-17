@@ -12,7 +12,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 import '../providers/playback_provider.dart';
 import '../services/haptics.dart';
 import 'icon_swap.dart';

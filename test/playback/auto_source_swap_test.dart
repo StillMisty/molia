@@ -6,7 +6,7 @@ import 'package:molia/domain/ports/playback_facade.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/playback/playback_commands.dart';
 import 'package:molia/playback/playback_error_recovery.dart';
 import 'package:molia/playback/playback_session_coordinator.dart';

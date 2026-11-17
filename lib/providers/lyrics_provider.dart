@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../app/perf/data_path_trace.dart';
 import '../domain/models/track.dart';
-import '../models/lyric_line.dart';
+import '../domain/models/lyric_line.dart';
 import '../services/lyrics_service.dart';
 
 /// 歌词加载状态。

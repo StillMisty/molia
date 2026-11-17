@@ -5,7 +5,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/playback/media_session_read_model.dart';
 import 'package:molia/sources/source_track.dart';
 

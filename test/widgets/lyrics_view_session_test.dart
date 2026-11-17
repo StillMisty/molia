@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/models/lyric_line.dart';
-import 'package:molia/models/play_mode.dart';
+import 'package:molia/domain/models/lyric_line.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/widgets/lyrics_view_session.dart';
 
 /// 手动推进的调度器：替代真实 Timer / post-frame，3 秒窗口可同步断言。

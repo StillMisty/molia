@@ -17,7 +17,7 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
-import '../models/play_mode.dart';
+import '../domain/models/play_mode.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/haptics.dart';
