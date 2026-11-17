@@ -30,6 +30,7 @@ import '../../providers/play_statistics_provider.dart';
 import '../../providers/search_provider.dart';
 import '../../providers/source_swap_provider.dart';
 import '../../providers/sources_provider.dart';
+import '../../providers/track_info_controller.dart';
 import '../../services/ai/ai_recommendation_service.dart';
 import '../../services/ai/ai_settings_store.dart';
 import '../../services/artwork_palette_service.dart';
@@ -95,6 +96,13 @@ List<SingleChildWidget> buildAppProviders({
   );
   final collectionMode = CollectionModeStore();
   final collectionRequest = LibraryCollectionRequest();
+  // 单曲本地数据门面：信息页控制器与「本地数据」子页共享同一实例。
+  final trackLocalData = TrackLocalDataService(
+    cacheService: CacheService.instance,
+    artworkCache: ArtworkCache.instance,
+    catalogService: catalogService,
+    downloadRecords: downloadService.records,
+  );
   unawaited(collectionMode.load());
   // “另存目录”服务：下载设置里的桌面自选目录同时作用于导出；未设置时用
   // 各平台公共下载目录。页面经 Provider 读取，测试注入 fake。
@@ -208,14 +216,7 @@ List<SingleChildWidget> buildAppProviders({
     Provider<CacheService>.value(value: CacheService.instance),
     // 单曲本地数据门面（下载记录 + 音频/歌词/封面/取链缓存）：
     // 播放页「本地数据」行与其子页消费（两档词表的唯一读取口）。
-    Provider<TrackLocalDataService>(
-      create: (_) => TrackLocalDataService(
-        cacheService: CacheService.instance,
-        artworkCache: ArtworkCache.instance,
-        catalogService: catalogService,
-        downloadRecords: downloadService.records,
-      ),
-    ),
+    Provider<TrackLocalDataService>.value(value: trackLocalData),
     // 下载记录只读面：收藏页本地歌曲 / 单曲本地数据 / 信息页只订阅记录，
     // 不感知下载队列与文件布局（记录变化低频，进度不经这里）。
     ChangeNotifierProvider<DownloadRecords>.value(
@@ -257,6 +258,17 @@ List<SingleChildWidget> buildAppProviders({
     Provider<NotificationService>.value(value: notifications),
     // 省流模式：设置页读写开关/音质上限；取链与封面网关已在上方接线。
     ChangeNotifierProvider.value(value: local.dataSaver),
+    // 歌曲信息页：跟随播放器切歌，组合本地数据与省流状态；页面只读
+    // TrackInfoState 与本地数据通道，不直接接触这几个服务。
+    ChangeNotifierProvider(
+      create: (_) => TrackInfoController(
+        playback: playbackProvider,
+        cacheService: CacheService.instance,
+        localDataService: trackLocalData,
+        downloadRecords: downloadService.records,
+        dataSaver: local.dataSaver,
+      ),
+    ),
     // 跨设备数据同步：设置页读写。
     ChangeNotifierProvider.value(value: sync.provider),
     // 换源偏好（自动换源开关）：设置页读写；播放链路已在上方接线。

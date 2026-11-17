@@ -15,12 +15,7 @@ import '../providers/lyrics_provider.dart';
 import '../providers/playback_provider.dart';
 import '../providers/sleep_timer.dart';
 import '../providers/sources_provider.dart';
-import '../services/cache_service.dart';
-import '../services/covers/cover_resolution.dart';
-import '../services/data_saver_service.dart';
-import '../services/download/download_records.dart';
-import '../services/track_local_data_controller.dart';
-import '../services/track_local_data_service.dart';
+import '../providers/track_info_controller.dart';
 import 'labels/lyrics_provider_label.dart';
 import 'labels/source_label.dart';
 import 'labels/source_quality_label.dart';
@@ -48,7 +43,7 @@ import 'track_share_sheet.dart';
 /// - 来源行合并「渠道 + 曲目 ID」，点击进分享 / 复制弹层；歌词来源只读；
 /// - 「本地数据」页里缓存与下载是**两套东西**：清缓存永不触碰 `downloads/`，
 ///   已缓存可「转存」成持久下载（不触网）。
-class TrackInfoView extends StatefulWidget {
+class TrackInfoView extends StatelessWidget {
   const TrackInfoView({
     super.key,
     required this.controller,
@@ -62,66 +57,13 @@ class TrackInfoView extends StatefulWidget {
   final double topPadding;
 
   @override
-  State<TrackInfoView> createState() => _TrackInfoViewState();
-}
-
-class _TrackInfoViewState extends State<TrackInfoView> {
-  PlaybackProvider? _playback;
-  TrackLocalDataService? _localDataService;
-  CacheService? _cacheService;
-  DownloadRecords? _downloads;
-
-  /// 本地数据的监听 / 防抖 / 单飞 / 切歌守卫都在控制器里，两个消费面共用。
-  TrackLocalDataController? _localDataController;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final service = context.read<TrackLocalDataService?>();
-    final cacheService = context.read<CacheService?>() ?? CacheService.instance;
-    final downloads = context.read<DownloadRecords?>();
-    if (_localDataController == null ||
-        !identical(_localDataService, service) ||
-        !identical(_cacheService, cacheService) ||
-        !identical(_downloads, downloads)) {
-      _localDataController?.dispose();
-      _localDataService = service;
-      _cacheService = cacheService;
-      _downloads = downloads;
-      _localDataController = TrackLocalDataController(
-        service: service,
-        cacheService: cacheService,
-        downloadRecords: downloads,
-      );
-    }
-    final playback = context.read<PlaybackProvider?>();
-    if (playback != null && !identical(_playback, playback)) {
-      _playback?.removeListener(_syncTrack);
-      _playback = playback..addListener(_syncTrack);
-    }
-    _syncTrack();
-  }
-
-  @override
-  void dispose() {
-    _playback?.removeListener(_syncTrack);
-    _localDataController?.dispose();
-    super.dispose();
-  }
-
-  /// 切歌（含自动连播）与封面补取回写都会走到这里；控制器负责比对曲目 /
-  /// 封面并决定是否立即重载。
-  void _syncTrack() {
-    _localDataController?.setTrack(_playback?.snapshot.current);
-  }
-
-  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // 订阅音质偏好（音源页）与省流开关（数据设置）：「本次播放音质」
-    // 是二者的派生值，改完设置要立即刷新，不等下一次播放通知。
+    // 本地数据 / 省流 / 切歌订阅都在控制器内；页面只读不可变状态。
+    final info = context.watch<TrackInfoController>();
+    // 订阅音质偏好（音源页）：「本次播放音质」是偏好、省流与恢复态的
+    // 派生值，改完设置要立即刷新，不等下一次播放通知。
     final sources = context.watch<SourcesProvider?>();
-    final dataSaver = context.watch<DataSaverService?>();
     final (track, qualityType) = context
         .select<PlaybackProvider, (Track?, String)>(
           (provider) =>
@@ -163,18 +105,18 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     final qualityLabel = qualityType.isEmpty
         ? l10n.trackInfoQualityUnknown
         : sourceQualityLabel(l10n, qualityType);
-    final dataSaverActive = dataSaver?.active ?? false;
+    final dataSaverActive = info.state.dataSaverActive;
     final showDataSaverHint = dataSaverActive && !qualityOverridden;
 
     return Scrollbar(
-      controller: widget.controller,
+      controller: controller,
       thumbVisibility: true,
       interactive: true,
       child: ListView(
-        controller: widget.controller,
+        controller: controller,
         padding: EdgeInsets.fromLTRB(
           kSettingsPadding,
-          widget.topPadding,
+          topPadding,
           kSettingsPadding,
           kSettingsPadding * 2,
         ),
@@ -231,8 +173,8 @@ class _TrackInfoViewState extends State<TrackInfoView> {
             const SizedBox(height: kSettingsSectionSpacing),
             // 本地数据：单行入口（两档状态 / 音质选择 / 转存与清理在页内）。
             // 只订阅控制器状态，进度 / 记录变化不重建信息区其它行。
-            ValueListenableBuilder<TrackLocalDataState>(
-              valueListenable: _localDataController!,
+            ValueListenableBuilder(
+              valueListenable: info.localData,
               builder: (context, localData, _) => SettingsSectionCard(
                 children: [
                   SettingsNavTile(
@@ -246,7 +188,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                             localData.data!,
                             localSource: track.id.sourceKey == kLocalSourceKey,
                           ),
-                    onTap: _localDataService == null
+                    onTap: !info.state.localDataAvailable
                         ? null
                         : () => unawaited(
                             showTrackLocalDataPage(context, track: track),
@@ -280,8 +222,14 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                                 .round(),
                         fallbackIconSize: 16,
                       ),
-                      onTap: () =>
-                          unawaited(_openCover(context, track, covers, l10n)),
+                      onTap: () => unawaited(
+                        _openCover(
+                          context,
+                          track,
+                          covers.realOf(track).url,
+                          l10n,
+                        ),
+                      ),
                     );
                   },
                 ),
@@ -381,10 +329,9 @@ class _TrackInfoViewState extends State<TrackInfoView> {
   Future<void> _openCover(
     BuildContext context,
     Track track,
-    CoverResolver covers,
+    String? url,
     AppLocalizations l10n,
   ) async {
-    final url = covers.realOf(track).url;
     final fileNameBase = track.artistLabel.isEmpty
         ? track.title
         : '${track.title} - ${track.artistLabel}';
