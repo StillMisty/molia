@@ -334,7 +334,7 @@
   反馈：播放页 = 迷你 ⇄ 完整（现有 `_toggleExpand`，进入播放页的共享元素飞行期间
   由壳层忽略），资料库 = 当前渠道可搜索时切到搜索 tab 并聚焦搜索框（键盘即用），
   没有搜索 tab 时当前可见列表回到顶部；收藏 = 当前可见列表回到顶部
-  （`lib/utils/scroll_to_top.dart::animateScrollToTop`）。壳层不消费状态，但重复点击
+  （`lib/widgets/scroll_to_top.dart::animateScrollToTop`）。壳层不消费状态，但重复点击
   命中时统一给一次轻震（`lib/services/haptics.dart`，可在设置里全局关闭）；页面不重复给触感。
 
 - **Shell long press（底栏长按定位）** — `lib/widgets/shell_reselect.dart::ShellLongPressSignal` +

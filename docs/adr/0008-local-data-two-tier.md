@@ -99,7 +99,7 @@
   `lib/services/cache_types.dart`（半成品后缀常量 / seam `deleteWhere`）
 - `lib/playback/local_playback_service.dart`、`playing_track_cache_writer.dart`、
   `audio_predownloader.dart`、`lib/services/audio_cache_platform.dart`
-- `lib/widgets/track_info_view.dart`、`lib/utils/track_local_data_label.dart`、
+- `lib/widgets/track_info_view.dart`、`lib/widgets/labels/track_local_data_label.dart`、
   `lib/main.dart`（组合根）、l10n（en / zh）
 
 ## 2026-11-17 修订：本地歌曲缓存行改由设备本地缓存索引驱动（schema v4）

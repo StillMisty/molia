@@ -222,7 +222,7 @@ work >16.7ms**；`totalSpan` 的 20ms+ 是帧请求到呈现的延迟（约 1% �
 
 修复：
 
-- 新增 `lib/utils/playback_cover_decode.dart::playbackCoverDecodeEdge`：取
+- 新增 `lib/widgets/playback_cover_decode.dart::playbackCoverDecodeEdge`：取
   屏幕短边与 600 逻辑像素的较小值 × DPR。顶栏、迷你条、播放页三封面、
   飞行副本、当前/邻位预取全部使用同一个值，继续共享同一个 ImageCache 键，
   共享元素飞行不会因缓存键不同重新解码；
