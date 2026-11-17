@@ -11,7 +11,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:molia/managers/app_memory_manager.dart';
+import 'package:molia/services/memory/app_memory_manager.dart';
 import 'package:molia/pages/sources_page.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/data/downloads/downloads_publisher.dart';

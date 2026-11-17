@@ -34,7 +34,7 @@ import 'package:flutter/painting.dart' show ImageCache, PaintingBinding;
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:logging/logging.dart';
 
-import '../services/app_presence.dart';
+import '../app_presence.dart';
 
 /// 图片缓存的最小操作面（测试注入假实现；生产走 [PaintingImageCache]）。
 abstract interface class ImageCacheTarget {

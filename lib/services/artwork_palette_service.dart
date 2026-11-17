@@ -9,7 +9,7 @@ import 'package:material_color_utilities/material_color_utilities.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/track.dart';
-import '../managers/artwork_cache.dart';
+import 'artwork/artwork_cache.dart';
 import '../playback/playback_power_policy.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/local_image_provider.dart';

@@ -6,7 +6,7 @@ import 'package:molia/data/mapping/track_mapper.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart';
-import 'package:molia/managers/artwork_cache.dart';
+import 'package:molia/services/artwork/artwork_cache.dart';
 import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_io.dart';

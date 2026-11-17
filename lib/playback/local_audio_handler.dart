@@ -5,7 +5,7 @@ import 'package:flutter_media_session/flutter_media_session.dart';
 
 import '../app/bootstrap/startup_trace.dart';
 import '../domain/models/track.dart' show TrackId;
-import '../managers/artwork_cache.dart';
+import '../services/artwork/artwork_cache.dart';
 import '../services/covers/cover_resolution.dart';
 import '../domain/models/play_mode.dart';
 import '../services/lyrics_display/media_lyric_composer.dart';

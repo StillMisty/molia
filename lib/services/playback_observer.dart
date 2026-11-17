@@ -33,7 +33,7 @@ import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/library_store.dart';
 import '../domain/ports/playback_facade.dart';
-import '../managers/image_preload_manager.dart';
+import 'artwork/image_preload_manager.dart';
 import '../playback/playback_power_policy.dart';
 import 'covers/cover_resolution.dart';
 import 'app_presence.dart';

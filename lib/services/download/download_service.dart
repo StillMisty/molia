@@ -72,7 +72,7 @@ import '../../data/local_identity.dart';
 import '../../domain/models/download.dart';
 import '../../domain/models/failure.dart';
 import '../../domain/models/track.dart';
-import '../../managers/artwork_cache.dart';
+import '../artwork/artwork_cache.dart';
 import '../../domain/models/lyrics_result.dart';
 import '../../services/cache_service.dart';
 import '../local/local_write_gate.dart';

@@ -13,7 +13,7 @@ import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 
 import '../../data/http/app_dio.dart';
-import '../../managers/artwork_cache.dart';
+import '../artwork/artwork_cache.dart';
 import '../download/download_file_layout.dart';
 import 'cover_bytes_downloader.dart';
 

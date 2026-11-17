@@ -10,7 +10,7 @@ import 'package:logging/logging.dart';
 import 'package:dio/dio.dart';
 
 import '../data/http/app_dio.dart';
-import '../managers/artwork_cache.dart';
+import 'artwork/artwork_cache.dart';
 import '../domain/models/poster_lyric_line.dart';
 import 'poster/poster_draw.dart'
     show

@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/track.dart';
-import 'package:molia/managers/artwork_cache.dart';
+import 'package:molia/services/artwork/artwork_cache.dart';
 import 'package:molia/playback/playback_power_policy.dart';
 import 'package:molia/services/app_presence.dart';
 import 'package:molia/services/artwork_palette_seed_store.dart';

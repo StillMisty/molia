@@ -6,7 +6,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../managers/artwork_cache.dart';
+import '../services/artwork/artwork_cache.dart';
 import '../theme/motion_policy.dart';
 import '../utils/local_image_provider.dart';
 import 'molia_mark.dart';

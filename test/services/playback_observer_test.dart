@@ -5,7 +5,7 @@ import 'package:molia/domain/ports/playback_facade.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
-import 'package:molia/managers/image_preload_manager.dart';
+import 'package:molia/services/artwork/image_preload_manager.dart';
 import 'package:molia/playback/playback_power_policy.dart';
 import 'package:molia/services/app_presence.dart';
 import 'package:molia/services/covers/cover_resolution.dart';

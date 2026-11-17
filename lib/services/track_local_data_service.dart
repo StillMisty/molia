@@ -19,7 +19,7 @@ import '../app/perf/data_path_trace.dart';
 import '../data/catalog/catalog_service.dart';
 import '../domain/models/download.dart';
 import '../domain/models/track.dart';
-import '../managers/artwork_cache.dart';
+import 'artwork/artwork_cache.dart';
 import 'audio_cache_store.dart';
 import 'cache_service.dart';
 import 'download/download_records.dart';

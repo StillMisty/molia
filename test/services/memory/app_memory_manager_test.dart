@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/managers/app_memory_manager.dart';
+import 'package:molia/services/memory/app_memory_manager.dart';
 import 'package:molia/services/app_presence.dart';
 
 /// 托盘期内存守卫：隐藏后清图片缓存并压低上限，恢复还原；最小化不动缓存。

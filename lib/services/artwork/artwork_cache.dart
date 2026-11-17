@@ -11,8 +11,8 @@ import 'package:flutter/widgets.dart' show ImageProvider, VoidCallback;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:logging/logging.dart';
 
-import '../services/cache_service.dart';
-import '../utils/local_image_provider.dart';
+import '../cache_service.dart';
+import '../../utils/local_image_provider.dart';
 import 'artwork_cache_fs.dart';
 
 /// 缓存相对路径归一化：`p.relative` 在 Windows 返回 `\`，而

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../../managers/artwork_cache.dart';
+import '../artwork/artwork_cache.dart';
 import '../../utils/local_image_provider.dart';
 
 /// 封面内容的本地身份：URL + 文件大小 + 修改时间。

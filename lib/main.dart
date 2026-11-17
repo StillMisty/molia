@@ -36,7 +36,7 @@ import 'data/diagnostics/source_snapshot.dart';
 import 'data/molia_database.dart';
 import 'data/settings/settings_keys.dart';
 import 'data/settings/settings_module.dart';
-import 'managers/app_memory_manager.dart';
+import 'services/memory/app_memory_manager.dart';
 import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
 import 'playback/playback_power_policy.dart';

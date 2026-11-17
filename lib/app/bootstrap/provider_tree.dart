@@ -15,7 +15,7 @@ import '../../data/catalog/artist_service.dart';
 import '../../data/catalog/catalog_service.dart';
 import '../../data/play_statistics_repository.dart';
 import '../../domain/ports/source_registry.dart';
-import '../../managers/artwork_cache.dart';
+import '../../services/artwork/artwork_cache.dart';
 import '../../providers/channel_selection.dart';
 import '../../providers/annual_report_provider.dart';
 import '../../providers/comments_provider.dart';

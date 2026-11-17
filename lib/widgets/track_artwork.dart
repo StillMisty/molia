@@ -17,7 +17,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
-import '../managers/artwork_cache.dart';
+import '../services/artwork/artwork_cache.dart';
 import '../services/covers/cover_resolution.dart';
 import '../services/covers/custom_cover_store.dart';
 import 'app_network_image.dart';

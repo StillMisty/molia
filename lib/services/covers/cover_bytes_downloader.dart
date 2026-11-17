@@ -12,7 +12,7 @@ import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 
 import '../../data/http/app_dio.dart';
-import '../../managers/artwork_cache.dart';
+import '../artwork/artwork_cache.dart';
 
 /// 封面大小上限：超过按无封面处理（避免异常大图占用磁盘）。
 const int defaultCoverMaxBytes = 8 * 1024 * 1024;

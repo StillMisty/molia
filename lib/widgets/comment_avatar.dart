@@ -9,7 +9,7 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 
-import '../managers/artwork_cache.dart';
+import '../services/artwork/artwork_cache.dart';
 import 'app_network_image.dart';
 
 class CommentAvatar extends StatefulWidget {

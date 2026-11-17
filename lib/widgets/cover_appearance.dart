@@ -22,7 +22,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/track.dart';
-import '../managers/artwork_cache.dart';
+import '../services/artwork/artwork_cache.dart';
 import '../utils/local_image_provider.dart';
 import '../utils/playback_cover_decode.dart';
 import 'molia_mark.dart';

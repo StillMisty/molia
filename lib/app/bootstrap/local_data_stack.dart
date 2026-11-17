@@ -26,7 +26,7 @@ import '../../data/local_cache_index_repository.dart';
 import '../../data/mapping/track_mapper.dart';
 import '../../domain/models/download.dart' show kLocalSourceKey;
 import '../../domain/models/track.dart';
-import '../../managers/artwork_cache.dart';
+import '../../services/artwork/artwork_cache.dart';
 import '../../playback/audio_predownloader.dart';
 import '../../services/cache_service.dart';
 import '../../services/covers/cover_backfill_service.dart';

@@ -10,7 +10,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 // ignore: depend_on_referenced_packages
 import 'package:file/file.dart' as pkg_file;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/managers/artwork_cache.dart';
+import 'package:molia/services/artwork/artwork_cache.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_io.dart';
 import 'package:shared_preferences/shared_preferences.dart';
