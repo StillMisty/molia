@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/download.dart' show DownloadedTrack, kLocalSourceKey;
 import '../domain/models/library.dart';
+import '../domain/models/local_cache_index.dart';
 import '../domain/models/playlist_folders.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
@@ -23,7 +24,6 @@ import '../providers/discover_provider.dart';
 import '../providers/library_collection_request.dart';
 import '../providers/library_collections.dart';
 import '../providers/library_outcome.dart';
-import '../domain/models/local_cache_index.dart';
 import '../providers/library_provider.dart';
 import '../providers/local_library_provider.dart';
 import '../providers/local_songs_collection.dart';

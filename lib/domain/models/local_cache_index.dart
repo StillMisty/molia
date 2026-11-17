@@ -1,8 +1,8 @@
 /// 设备本地缓存索引行：本机确认存在完整音频缓存的曲目快照。
 ///
-/// 它不是资料库真值：只由缓存完成事件 / 启动对账写入，不参与同步；展示前
-/// 仍要实时扫描缓存目录，索引行存在不代表缓存现在仍在。`raw` 与播放历史
-/// 同形态（文本 / Map），缓存被清后回退在线取链时仍能原样回传脚本参数。
+/// 它不是资料库真值：只由缓存完成事件 / 手动核对本地缓存写入，不参与同步；
+/// 展示前仍要实时扫描缓存目录，索引行存在不代表缓存现在仍在。`raw` 与播放
+/// 历史同形态（文本 / Map），缓存被清后回退在线取链时仍能原样回传脚本参数。
 library;
 
 import 'library.dart';
@@ -21,7 +21,7 @@ class LocalCacheIndexEntry {
     required this.cachedAt,
   });
 
-  /// 播放历史条目 → 索引候选（仅用于启动对账的元数据来源）。
+  /// 播放历史条目 → 索引候选（仅用于「核对本地缓存」的元数据来源）。
   factory LocalCacheIndexEntry.fromHistoryEntry(PlayHistoryEntry entry) =>
       LocalCacheIndexEntry(
         sourceKey: entry.sourceKey,

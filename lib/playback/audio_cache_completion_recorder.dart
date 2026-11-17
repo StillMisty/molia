@@ -6,7 +6,9 @@
 /// 生命周期持有，切歌不取消订阅；只在完成 / 失败 / 超时 / dispose 时清理。
 ///
 /// 有界：每个 handle 有超时（默认 10 分钟），并限制同时 pending 的数量；
-/// 超时或超限时主动 `cancel()`，避免下载卡死时长期持有订阅。
+/// 超时或超限时主动 `cancel()`，避免下载卡死时长期持有订阅。超限淘汰最旧
+/// 的 handle 后，该曲目即使缓存文件稍后写完也不会写索引，由用户手动「核对
+/// 本地缓存」兜底。
 library;
 
 import 'dart:async';
@@ -19,7 +21,7 @@ class AudioCacheCompletionRecorder {
   AudioCacheCompletionRecorder({
     required this._onCompleted,
     this.timeout = const Duration(minutes: 10),
-    this.maxPending = 8,
+    this.maxPending = 32,
   }) : assert(maxPending > 0),
        assert(timeout > Duration.zero);
 
@@ -29,7 +31,8 @@ class AudioCacheCompletionRecorder {
   /// 单个 handle 的最长等待时间；超时取消并丢弃。
   final Duration timeout;
 
-  /// 同时保留的 pending handle 上限；超过时取消最旧的一个。
+  /// 同时保留的 pending handle 上限；超过时取消最旧的一个。超限淘汰后
+  /// 该曲目的完成不会再写索引，由手动「核对本地缓存」兜底。
   final int maxPending;
 
   /// pending handle → 超时计时器（插入顺序 = 记录顺序，便于淘汰最旧）。

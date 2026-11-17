@@ -111,7 +111,7 @@ class LocalCacheIndexStore extends ChangeNotifier {
     return recordCompletedEntry(entry);
   }
 
-  /// 记录一条已构造的索引行（启动对账 / 测试共用）。
+  /// 记录一条已构造的索引行（手动核对本地缓存 / 测试共用）。
   Future<void> recordCompletedEntry(LocalCacheIndexEntry entry) async {
     await init();
     await _serialize(() async {

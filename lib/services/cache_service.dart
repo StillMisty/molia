@@ -305,7 +305,7 @@ class CacheService {
   /// 完整判据与列举口径见 [AudioCacheStore.index]。
   Future<Map<String, int>> audioCacheIndex() => _audioStore.index();
 
-  /// 完整音频缓存索引；目录不可用 / 列举失败返回 null（启动对账用）。
+  /// 完整音频缓存索引；目录不可用 / 列举失败返回 null（手动核对本地缓存用）。
   Future<Map<String, int>?> audioCacheCompleteIndexOrNull() =>
       _audioStore.completeIndexOrNull();
 

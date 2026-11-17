@@ -132,7 +132,7 @@ class AudioCacheStore {
   Future<Map<String, int>> index() async => (await splitIndex()).$1;
 
   /// 完整音频缓存索引；目录不可用 / 列举失败返回 null（调用方据此区分
-  /// 「空目录」与「读不到目录」，启动对账不能把失败当成缓存全没了）。
+  /// 「空目录」与「读不到目录」，手动核对不能把失败当成缓存全没了）。
   Future<Map<String, int>?> completeIndexOrNull() async {
     final dir = await directoryPath();
     if (dir == null) return null;

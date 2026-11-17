@@ -222,7 +222,7 @@ List<SingleChildWidget> buildAppProviders({
       value: downloadService.records,
     ),
     // 设备本地缓存索引：收藏页「本地歌曲」的缓存行来源。只由缓存完成事件
-    // / 启动对账写入，不参与同步，也不经过播放历史 provider。
+    // / 手动核对本地缓存写入，不参与同步，也不经过播放历史 provider。
     ChangeNotifierProvider<LocalCacheIndexStore>.value(
       value: local.localCacheIndex,
     ),
