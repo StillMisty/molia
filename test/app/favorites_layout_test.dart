@@ -6,6 +6,7 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/download/download_records.dart';
 import 'package:molia/services/local_cache_index_store.dart';
+import 'package:molia/widgets/app_search_bar.dart';
 import 'package:molia/widgets/track_table_header.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
@@ -145,4 +146,49 @@ void main() {
     expect(find.byKey(const Key('favoritesHeaderOverflow')), findsOneWidget);
     expect(find.byKey(const Key('favoritesModeSwitch')), findsNothing);
   });
+
+  // 窄窗口版式特征化：标题行、搜索行、多选栏都不溢出，且不误出表格表头。
+  //
+  // 用桌面壳跑：移动壳在 360 宽时顶栏迷你播放器（now_playing_summary）另有
+  // 一处与本页无关的溢出；桌面壳在 360 宽的内容区只有 264（导航轨 96），
+  // 对收藏页反而是更窄的约束。移动壳的 500 / 840 宽已由上面的用例覆盖。
+  for (final width in [360.0, 640.0]) {
+    testWidgets('${width.toInt()} 宽：标题 / 搜索 / 多选栏不溢出', (tester) async {
+      await pumpPerfApp(
+        tester,
+        desktopShell: true,
+        favoritesCount: 5,
+        size: Size(width, 900),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('favoritesTitleSwitcher')), findsOneWidget);
+      expect(find.byKey(const Key('favoritesShuffleButton')), findsOneWidget);
+      expect(find.byKey(const Key('favoritesSearchButton')), findsOneWidget);
+      expect(find.byKey(const Key('favoritesHeaderOverflow')), findsOneWidget);
+      expect(find.byType(TrackTableHeader), findsNothing);
+
+      await tester.tap(find.byKey(const Key('favoritesSearchButton')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(AppSearchBar), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.longPress(find.text('Performance Track 1'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('collectionSelectionClose')), findsOneWidget);
+      expect(
+        find.byKey(const Key('collectionSelectionSelectAll')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('collectionSelectionFavorite')),
+        findsOneWidget,
+      );
+    });
+  }
 }
