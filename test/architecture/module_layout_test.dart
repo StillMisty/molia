@@ -14,6 +14,10 @@ const List<String> _retiredTopLevelDirs = ['lib/models', 'lib/managers'];
 
 const int _fileSizeLimit = 800;
 
+/// 组合根体积守卫：`lib/main.dart` 只做绑定初始化 + `runMoliaApp()`；
+/// 平台装配与各阶段顺序调用在 `lib/app/bootstrap/**`。
+const int _mainLineLimit = 40;
+
 /// 本任务开始时就已超限的文件（只减不增；降回 ≤800 行后删除条目）。
 const Set<String> _sizeWhitelist = {
   'lib/data/library_repository.dart',
@@ -104,6 +108,18 @@ void main() {
   test('扫描到 lib/** 的 Dart 文件', () {
     expect(files, isNotEmpty);
     expect(files, contains('lib/main.dart'));
+  });
+
+  test('lib/main.dart 是薄组合根（≤$_mainLineLimit 行）', () {
+    final lines = _lineCount('lib/main.dart');
+    expect(
+      lines,
+      lessThanOrEqualTo(_mainLineLimit),
+      reason:
+          '组合根应只做 WidgetsFlutterBinding.ensureInitialized() + runMoliaApp()；'
+          '平台装配与各栈顺序调用放在 lib/app/bootstrap/**（ADR-0034）。\n'
+          'lib/main.dart 当前 $lines 行。',
+    );
   });
 
   test('退役顶层目录不存在（lib/models、lib/managers）', () {
