@@ -42,7 +42,9 @@ dependencies:
   just_audio_media_kit: ^2.1.0
   media_kit_libs_linux: ^1.2.1
   media_kit_libs_windows_audio: ^1.0.9
-  flutter_media_session: ^3.2.0
+  # 3.2.1-pre.1 修了 Linux MPRIS Seek / SetPosition 丢位置（上游 #62）；
+  # 正式版发布后改回稳定约束。
+  flutter_media_session: ^3.2.1-pre.1
   material_ui: ^1.11.1
   material_3_expressive: ^1.2.2
   motor: ^1.1.0

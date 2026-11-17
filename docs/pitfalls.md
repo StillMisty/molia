@@ -1029,7 +1029,7 @@
     （每次冷启动仍是新的一轮随机顺序）。回归用例见
     `test/playback_session_coordinator_test.dart` 的「恢复态 shuffle → 恢复播放」。
 
-102. **Linux MPRIS（`flutter_media_session` 3.2.0）的能力位与播放模式写入**：
+102. **Linux MPRIS（`flutter_media_session` 3.2.1-pre.1）的能力位与播放模式写入**：
     插件 Linux 实现的 `CanPlay` / `CanPause` / `CanSeek` / `CanGoNext` /
     `CanGoPrevious` 只在 `updateAvailableActions` 后按动作名刷新（`seekTo` /
     `rewind` / `fastForward` 才算 `CanSeek`），且 `CanGoNext` / `CanGoPrevious`
@@ -1038,11 +1038,11 @@
     `repeat` / `shuffle` 媒体动作，应用分不清目标模式，因此**不**把它当 toggle
     猜测（也不能绕过 `PlaybackCommandPort`）：MPRIS 上的这两个属性只是应用侧
     模式的只读镜像，切换仍走应用内 / Android 通知动作。
-    另：插件 Linux 事件把 seek 位置放在顶层 `positionMs`，Dart 通道却读
-    `args`，`playerctl position` / MPRIS `Seek` / `SetPosition` 到达 handler 时
-    `seekPosition` 为 null，只能忽略（Molia #58 / 上游
-    [wyrindev/flutter-media-session#62](https://github.com/wyrindev/flutter-media-session/issues/62)
-    已记录，等上游修复）。
+    3.2.0 的 Linux `Seek` / `SetPosition` 曾丢位置（插件发顶层 `positionMs`，
+    Dart 通道只读 `args`，handler 收到 null 忽略）；3.2.1-pre.1 已修：Linux
+    改发 `args`，Dart 同时兜底读 `positionMs`。依赖暂固定 pre-release，正式版
+    发布后改回稳定约束；验证证据见 Molia #58 与上游
+    [wyrindev/flutter-media-session#62](https://github.com/wyrindev/flutter-media-session/issues/62)。
     身份：`FlutterMediaSessionBackend` 在 Linux 激活前
     `setAppId('top.stillmisty.molia', displayName: 'Molia')`，与已安装
     `.desktop` 的 `DesktopEntry` 对齐；总线名是
