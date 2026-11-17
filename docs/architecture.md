@@ -42,10 +42,15 @@
 2. `lib/data/**`、`lib/sources/**`、`lib/playback/**` 禁止 providers/pages/widgets/main；
 3. `lib/providers/**` 禁止 import `lib/main.dart`；
 4. `lib/main.dart` 是唯一 composition root，不允许被其它 lib 文件 import；
-   接线圈按子系统拆在 `lib/app/bootstrap/**`（catalog / 本地数据 / 资料库 /
-   playback / sync / AI / 歌词显示 / 桌面 / 更新 / Provider 树 / 首帧收尾
-   各 stack builder：依赖进、装好的子系统出；初始化顺序与前向引用关在 builder
-   内，main() 只做顺序调用 + runApp）；应用壳的对外入口是
+   它只做 `WidgetsFlutterBinding.ensureInitialized()` + `runMoliaApp()`（行数由
+   `module_layout_test.dart` 守卫）。启动顺序集中在
+   `lib/app/bootstrap/app_bootstrap.dart`：平台装配 → 核心栈 → 功能栈 → 尾部栈
+   → 读引导标记 → runApp → 首帧回调；各阶段拆在 `platform_bootstrap.dart` 与
+   `build_core_stacks.dart` / `build_feature_stacks.dart` /
+   `build_aux_stacks.dart`（依赖进、装好的子系统出），观察者 / 生命周期 /
+   内存 / 托盘接在 `lib/app/bootstrap/wiring/**`，Provider 树与根 widget 在
+   `provider_tree.dart` / `root_widget.dart`；初始化顺序与前向引用关在 builder
+   内，main() 不再持有子系统细节；应用壳的对外入口是
    `lib/app/app_shell.dart`（barrel：MyApp / MyThemedApp / 全局 key 等公开
    类型），实现按职责拆在 `lib/app/shell/`（app_shell / shell_bar /
    shell_page_layer / shell_progress / pairing_queue / themed_app /
