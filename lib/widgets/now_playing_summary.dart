@@ -179,10 +179,13 @@ class NowPlayingTrackText extends StatelessWidget {
       return (track?.id.uri, track?.title, track?.artistLabel);
     });
     final (id, name, artists) = info;
-    // 只做 effects 交叉淡化，不叠加位移 / 缩放：顶栏是固定高度槽，任何
-    // 缩放都会让共享飞行的封面锚点在过渡期间抖动。
+    // 走 fade-through（顺序交接）：顶栏槽窄、新旧标题长度不同却完全重合，
+    // 同进度交叉会让两串字在整段过渡里叠在一起。两种过渡都只做透明度，
+    // 不叠加位移 / 缩放：顶栏是固定高度槽，任何缩放都会让共享飞行的封面
+    // 锚点在过渡期间抖动。
     return CrossFadeSwap(
       value: id ?? '',
+      mode: CrossFadeMode.fadeThrough,
       child: _buildBarText(context, name, artists),
     );
   }

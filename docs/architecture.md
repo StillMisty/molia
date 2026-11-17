@@ -1765,8 +1765,11 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   见 `docs/pitfalls.md` #106 / #107）。调用点不要再手写 `LinearGradient`。
 - 内容身份切换（曲目文本块 / 骨架 / 失败态 / 正文）统一走
   `lib/widgets/cross_fade_swap.dart`：effects 时长 + emphasized 曲线，保留离场层
-  做同进度交叉淡化（离场层 `IgnorePointer` + `ExcludeSemantics`，落下即丢弃）。
-  不要在调用点写 `AnimatedSwitcher`（只给 `icon_swap.dart` 的图标切换用）。
+  做同进度交叉淡化（两层不透明度严格互补，离场层 `IgnorePointer` +
+  `ExcludeSemantics`，落下即丢弃）。顶栏 / 底栏的歌名作者换曲用
+  `CrossFadeMode.fadeThrough`（旧层先淡出、新层后淡入）：槽窄且新旧标题完全
+  重合，同进度交叉会让两串字叠在一起；顺序交接保证任何一帧都不会两层同时
+  清晰可读。不要在调用点写 `AnimatedSwitcher`（只给 `icon_swap.dart` 的图标切换用）。
 - 加载骨架：`lib/widgets/skeleton.dart` 是唯一实现（`SkeletonPulse` /
   `SliverSkeletonPulse` + `SkeletonBlock` / `SkeletonRow` / `SkeletonGridTile`）。
   网络优先的首屏（发现详情、歌单 tab）用骨架而不是居中转圈；骨架的列数 / 行高

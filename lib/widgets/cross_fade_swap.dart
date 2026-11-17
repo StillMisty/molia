@@ -3,7 +3,24 @@ import 'package:material_ui/material_ui.dart';
 
 import '../theme/motion_policy.dart';
 
-/// 内容整体交叉淡化：`value` 变化时旧内容淡出、新内容淡入，两层同时在场。
+/// 内容身份的过渡配方。
+enum CrossFadeMode {
+  /// 同进度交叉淡化（默认）：新旧两层全程同时在场，不透明度互补。
+  ///
+  /// 适合大块内容（骨架 ↔ 正文 / 失败态）：两层面积大、形状不同，交叉时
+  /// 读到的是「换了一屏」，不是两份字叠在一起。
+  crossFade,
+
+  /// 顺序交接（M3 fade-through）：旧层先快速淡出，新层随后淡入。
+  ///
+  /// 适合窄槽里的文本（顶栏 / 底栏歌名作者）：新旧标题长度不同、位置完全
+  /// 重合，同进度交叉会让两串字在整段过渡里糊在一起。顺序交接把两层同时
+  /// 可见的窗口压到十毫秒级，旧层归零前新层也已经开始入场，固定高度槽
+  /// 不会出现真的空白帧。
+  fadeThrough,
+}
+
+/// 内容整体交叉淡化：`value` 变化时旧内容淡出、新内容淡入。
 ///
 /// 与 `IconSwap`（`lib/widgets/icon_swap.dart`）的分工：那个是「同一按钮槽位
 /// 换图标」的配方（带缩放、直连切换器）；这里换的是整块内容的身份（曲目
@@ -11,20 +28,27 @@ import '../theme/motion_policy.dart';
 ///
 /// 为什么不用 `AnimatedSwitcher`：一是架构测试只允许图标切换用它
 /// （`test/architecture/icon_usage_test.dart`）；二是它让新旧子树各自跑
-/// 入场动画，这里需要的是「同一进度下旧出 / 新入」——一个控制器驱动两条
-/// 相反的曲线，两层的半透明时长才会严格相等。
+/// 入场动画，这里需要的是一个控制器驱动「旧出 / 新入」两条曲线。
 ///
 /// 为什么不「淡出空白再淡入」：中间会有一帧只剩背景（顶栏是固定高度槽，
-/// 空白帧看起来像掉字）。保留旧层做离场层、与出场层叠在 `Stack` 里交叉，
-/// 全程至少有一层不透明内容在场。
+/// 空白帧看起来像掉字）。保留旧层做离场层、与新内容叠在 `Stack` 里，
+/// 全程至少有一层内容在场。
 class CrossFadeSwap extends StatefulWidget {
-  const CrossFadeSwap({super.key, required this.value, required this.child});
+  const CrossFadeSwap({
+    super.key,
+    required this.value,
+    required this.child,
+    this.mode = CrossFadeMode.crossFade,
+  });
 
   /// 内容身份：只有它变化才触发过渡，同值重建只更新内容、不重播。
   final Object value;
 
   /// 当前内容。
   final Widget child;
+
+  /// 过渡配方；窄槽文本用 [CrossFadeMode.fadeThrough]。
+  final CrossFadeMode mode;
 
   @override
   State<CrossFadeSwap> createState() => _CrossFadeSwapState();
@@ -36,6 +60,13 @@ class _CrossFadeSwapState extends State<CrossFadeSwap>
   /// 身份比按钮图标反馈（`short3`）慢一档，读起来才是「换了一屏」而不是
   /// 「闪了一下」。
   static const Duration _duration = M3EMotion.short4;
+
+  /// fade-through 的离场结束点（总进度占比）：旧层在这之后不再参与绘制。
+  static const double _fadeThroughOutgoingEnd = 0.4;
+
+  /// fade-through 的入场起点：与离场尾部只留 5% 重叠，保证任一时段都有
+  /// 内容在场，又不会让两层同时清晰可读。
+  static const double _fadeThroughIncomingStart = 0.35;
 
   late final AnimationController _progress = AnimationController(
     vsync: this,
@@ -95,6 +126,30 @@ class _CrossFadeSwapState extends State<CrossFadeSwap>
     setState(() => _outgoing = null);
   }
 
+  /// 入场层不透明度。
+  double _incomingOpacity(double t) {
+    if (widget.mode == CrossFadeMode.fadeThrough) {
+      if (t <= _fadeThroughIncomingStart) return 0;
+      final local =
+          (t - _fadeThroughIncomingStart) / (1 - _fadeThroughIncomingStart);
+      return M3EMotion.emphasizedDecelerate.transform(local);
+    }
+    return M3EMotion.emphasizedDecelerate.transform(t);
+  }
+
+  /// 离场层不透明度。
+  double _outgoingOpacity(double t) {
+    if (widget.mode == CrossFadeMode.fadeThrough) {
+      if (t >= _fadeThroughOutgoingEnd) return 0;
+      return 1 -
+          M3EMotion.emphasizedAccelerate.transform(t / _fadeThroughOutgoingEnd);
+    }
+    // 必须与入场层严格互补：`emphasizedDecelerate` 起步就冲到 0.8，再用
+    // `1 - emphasizedAccelerate` 做离场，两层合计最高到 1.8——整段过渡里
+    // 新旧内容都是近乎不透明地叠着。
+    return 1 - _incomingOpacity(t);
+  }
+
   @override
   void dispose() {
     _progress.dispose();
@@ -115,9 +170,7 @@ class _CrossFadeSwapState extends State<CrossFadeSwap>
         // 的滚动位置也会归零。
         final Widget current = Opacity(
           key: ValueKey<int>(_generation),
-          opacity: previous == null
-              ? 1
-              : M3EMotion.emphasizedDecelerate.transform(_progress.value),
+          opacity: previous == null ? 1 : _incomingOpacity(_progress.value),
           child: active!,
         );
         // 结构恒定（永远是 `Stack` + 带 key 的入场层）：只有一层时也不
@@ -143,10 +196,7 @@ class _CrossFadeSwapState extends State<CrossFadeSwap>
             IgnorePointer(
               key: ValueKey<int>(_outgoingGeneration),
               child: ExcludeSemantics(
-                child: Opacity(
-                  opacity: 1 - M3EMotion.emphasizedAccelerate.transform(t),
-                  child: previous,
-                ),
+                child: Opacity(opacity: _outgoingOpacity(t), child: previous),
               ),
             ),
             current,
