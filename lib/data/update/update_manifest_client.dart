@@ -5,7 +5,6 @@ import 'package:dio/dio.dart';
 import '../../domain/models/app_release.dart';
 import '../http/app_dio.dart';
 import 'update_manifest_endpoints.dart';
-import 'update_repository.dart';
 
 /// 更新清单（latest.json）客户端：拉取 + 结构校验 + 镜像地址重写。
 ///

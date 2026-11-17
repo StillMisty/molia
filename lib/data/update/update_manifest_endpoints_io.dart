@@ -1,5 +1,4 @@
 import '../../domain/models/app_release.dart';
-import 'update_repository.dart';
 
 /// 默认更新清单地址。
 ///

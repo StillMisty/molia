@@ -5,10 +5,10 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../data/lxmc_decoder.dart';
 import '../domain/models/library.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
+import '../services/library/lxmc_import_service.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
 /// 此时回退到简体中文（与 favorites 页的约定一致）。
@@ -22,6 +22,8 @@ AppLocalizations _l10n(BuildContext context) =>
 Future<LxmcImportResult?> importLxmcFavoritesFlow(BuildContext context) async {
   final l10n = _l10n(context);
   final provider = context.read<LibraryProvider>();
+  // 数据层解码异常在服务内翻译成稳定原因，widget 不直接依赖 data 层。
+  final service = LxmcImportService(importBytes: provider.importLxmcBytes);
   final messengerContext = context;
 
   final List<PlatformFile> files;
@@ -57,14 +59,14 @@ Future<LxmcImportResult?> importLxmcFavoritesFlow(BuildContext context) async {
   }
 
   try {
-    final result = await provider.importLxmcBytes(bytes, fileName: file.name);
+    final result = await service.importBytes(bytes, fileName: file.name);
     if (!messengerContext.mounted) return null;
     M3ESnackbar.show(
       messengerContext,
       message: l10n.libraryImportSuccess(result.imported),
     );
     return result;
-  } on LxmcDecodeException catch (e) {
+  } on LxmcImportException catch (e) {
     if (!messengerContext.mounted) return null;
     M3ESnackbar.show(
       messengerContext,

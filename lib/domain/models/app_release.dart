@@ -5,6 +5,10 @@
 /// `lib/data/update/update_manifest_client.dart`，领域层保持纯 Dart。
 library;
 
+/// 官方仓库（`owner/repo`）：更新清单/下载地址与 `release.yml` 的发布目标
+/// 同源，改这里要同步工作流与 `.agents/skills/molia-release/SKILL.md`。
+const String kUpdateRepository = 'StillMisty/molia';
+
 /// 发布渠道：稳定版 / 测试版（清单里的 `channel` 字段）。
 enum UpdateChannel {
   stable('stable'),

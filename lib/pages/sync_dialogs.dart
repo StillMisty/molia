@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../data/sync/sync_state_store.dart';
 import '../domain/models/device_sync.dart';
+import '../domain/models/sync_entry.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
 import '../providers/sync_ui_state.dart';
