@@ -1514,6 +1514,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryImportLocalSongs => '导入本地歌曲';
 
   @override
+  String get localCacheCheck => '核对本地缓存';
+
+  @override
+  String get localCacheCheckDone => '本地缓存已核对';
+
+  @override
   String libraryImportLocalSongsDone(int count) {
     return '已导入 $count 首';
   }

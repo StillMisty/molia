@@ -1160,9 +1160,10 @@
   缓存（`localUriFor`：精确音质优先、未命中用其它已缓存音质）→ `file://`
   离线可播；收藏页「本地歌曲」合集按设备本地缓存完成索引 × 缓存目录确认
   列出缓存行（保留原曲身份，删除 = 清缓存；索引只在缓存文件真正写完时写入，
-  播放历史清空 / 删除 / 同步墓碑都不影响它；索引读取失败保留已有行，首次
-  装载显示加载态）。缓存可被 LRU / 用户清理移除，状态与列表随
-  `CacheService.revision` 回退（不承诺持久可用）；
+  播放历史清空 / 删除 / 同步墓碑都不影响它；旧缓存 / 丢失的完成事件由合集
+  ⋮ 的「核对本地缓存」显式补齐，启动与删除历史都不再做隐性扫描；索引读取
+  失败保留已有行，首次装载显示加载态）。缓存可被 LRU / 用户清理移除，状态
+  与列表随 `CacheService.revision` 回退（不承诺持久可用）；
 - **本地数据刷新（Track local data controller）**：信息页本地数据行与
   `track_local_data_page.dart` 共用 `lib/services/track_local_data_controller.dart`，
   不再各自实现监听 / 防抖 / 单飞：下载记录变化防抖 300ms 合并同批目录扫描，
@@ -1226,7 +1227,9 @@
   取链 headers）；桌面 media_kit 后端不能走 `StreamAudioSource`，改由
   `PlayingTrackCacheWriter` 起播后带 headers 后台下载当前曲目字节（`.predl` →
   原子改名 → LRU，`platformSupportsAudioPrefetch`），重播即命中 `file://`；两者互斥
-  （同一文件不双写），切歌 / 停止 / 销毁取消；省流生效时两侧都跳过；
+  （同一文件不双写）；桌面 writer 切歌 / 停止 / 销毁取消，移动端完成监听由
+  app 生命周期 `AudioCacheCompletionRecorder` 持有（不随切歌取消，超时 / 退出
+  才清理）；省流生效时两侧都跳过；
 - **离线播放**：封面走本地文件（`AppNetworkImage` / `ArtworkCache` 对
   `file://` 走 `FileImage`）；歌词由组合根的歌词加载器读
   `downloads/lyrics/`（翻译 `.t.lrc` 边车），且 `LyricsService` 对本地

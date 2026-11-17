@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'artwork_resolver_cases.dart' as artwork_resolver;
+import 'audio_cache_completion_recorder_cases.dart' as cache_completion;
 import 'audio_cache_source_cases.dart' as audio_cache_source;
 import 'audio_focus_policy_cases.dart' as audio_focus_policy;
 import 'audio_output_policy_cases.dart' as audio_output_policy;
@@ -9,6 +10,7 @@ import 'playback_power_policy_cases.dart' as playback_power_policy;
 
 void main() {
   group('artwork resolver', artwork_resolver.main);
+  group('audio cache completion recorder', cache_completion.main);
   group('audio cache source', audio_cache_source.main);
   group('audio focus policy', audio_focus_policy.main);
   group('audio output policy', audio_output_policy.main);

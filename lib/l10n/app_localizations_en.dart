@@ -1565,6 +1565,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get libraryImportLocalSongs => 'Import local tracks';
 
   @override
+  String get localCacheCheck => 'Check local cache';
+
+  @override
+  String get localCacheCheckDone => 'Local cache checked';
+
+  @override
   String libraryImportLocalSongsDone(int count) {
     return 'Imported $count tracks';
   }

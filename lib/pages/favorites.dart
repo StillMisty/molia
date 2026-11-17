@@ -23,6 +23,7 @@ import '../providers/discover_provider.dart';
 import '../providers/library_collection_request.dart';
 import '../providers/library_collections.dart';
 import '../providers/library_outcome.dart';
+import '../domain/models/local_cache_index.dart';
 import '../providers/library_provider.dart';
 import '../providers/local_library_provider.dart';
 import '../providers/local_songs_collection.dart';
@@ -412,6 +413,34 @@ class _FavoritesPageState extends State<FavoritesPage> {
       initialized: index.initialized,
       revision: index.revision,
     );
+  }
+
+  /// 显式核对本地缓存：当前播放历史只作为元数据候选，缓存目录确认存在
+  /// 完整文件的曲目才补索引；同时清理索引里已无缓存文件的行。
+  ///
+  /// 服务未注册时静默跳过；失败走统一失败文案。
+  Future<void> _checkLocalCache(AppLocalizations l10n) async {
+    final index = context.read<LocalCacheIndexStore?>();
+    final cache = context.read<CacheService?>();
+    final library = context.read<LibraryProvider>();
+    if (index == null || cache == null) return;
+    final candidates = [
+      for (final entry in library.history)
+        LocalCacheIndexEntry.fromHistoryEntry(entry),
+    ];
+    try {
+      await index.reconcile(
+        candidates: candidates,
+        scanCache: cache.audioCacheCompleteIndexOrNull,
+      );
+    } catch (e) {
+      debugPrint('[Favorites] 核对本地缓存失败: $e');
+      if (!mounted) return;
+      M3ESnackbar.show(context, message: l10n.operationFailed);
+      return;
+    }
+    if (!mounted) return;
+    M3ESnackbar.show(context, message: l10n.localCacheCheckDone);
   }
 
   /// 本帧的下载能力快照（本地歌曲合集的输入）。
@@ -1791,6 +1820,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
           value: 'importLocal',
           leading: const Icon(Icons.audio_file_rounded, size: 20),
         ),
+      if (view.isLocalSongs)
+        M3EMenuEntry(
+          label: l10n.localCacheCheck,
+          value: 'checkLocalCache',
+          leading: const Icon(Icons.fact_check_rounded, size: 20),
+        ),
       if (view.isCustom && currentPlaylist != null)
         M3EMenuEntry(
           label: l10n.playlistEditDetails,
@@ -1854,6 +1889,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
             break;
           case 'importLocal':
             unawaited(importLocalAudioFilesFlow(context));
+            break;
+          case 'checkLocalCache':
+            unawaited(_checkLocalCache(l10n));
             break;
           case 'details':
             if (currentPlaylist != null) {

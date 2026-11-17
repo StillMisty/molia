@@ -744,6 +744,8 @@
   "libraryHistory": "Play History",
   "libraryLocalSongs": "Local tracks",
   "libraryImportLocalSongs": "Import local tracks",
+  "localCacheCheck": "Check local cache",
+  "localCacheCheckDone": "Local cache checked",
   "libraryImportLocalSongsDone": "Imported {count} tracks",
   "@libraryImportLocalSongsDone": {
     "placeholders": {

@@ -532,6 +532,8 @@
   "libraryHistory": "播放历史",
   "libraryLocalSongs": "本地歌曲",
   "libraryImportLocalSongs": "导入本地歌曲",
+  "localCacheCheck": "核对本地缓存",
+  "localCacheCheckDone": "本地缓存已核对",
   "libraryImportLocalSongsDone": "已导入 {count} 首",
   "@libraryImportLocalSongsDone": {
     "placeholders": {

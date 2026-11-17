@@ -30,6 +30,7 @@ import 'package:molia/services/shortcut_bindings.dart';
 import 'package:molia/services/shortcut_settings.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:provider/provider.dart';
+import 'package:provider/single_child_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fake_library_repository.dart';
@@ -54,6 +55,7 @@ Future<FakePlaybackFacade> pumpPerfApp(
   bool showOnboarding = false,
   bool resetPreferences = true,
   bool waitForHome = true,
+  List<SingleChildWidget> extraProviders = const [],
 }) async {
   if (resetPreferences) {
     SharedPreferences.setMockInitialValues({
@@ -199,6 +201,7 @@ Future<FakePlaybackFacade> pumpPerfApp(
         ),
         ChangeNotifierProvider<NavProvider>.value(value: nav),
         ChangeNotifierProvider<ThemeProvider>.value(value: theme),
+        ...extraProviders,
       ],
       child: MaterialApp(
         locale: const Locale('zh'),

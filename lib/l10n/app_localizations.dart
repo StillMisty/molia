@@ -2948,6 +2948,18 @@ abstract class AppLocalizations {
   /// **'Import local tracks'**
   String get libraryImportLocalSongs;
 
+  /// No description provided for @localCacheCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'Check local cache'**
+  String get localCacheCheck;
+
+  /// No description provided for @localCacheCheckDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Local cache checked'**
+  String get localCacheCheckDone;
+
   /// No description provided for @libraryImportLocalSongsDone.
   ///
   /// In en, this message translates to:

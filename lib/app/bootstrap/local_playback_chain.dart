@@ -15,6 +15,7 @@ import '../../data/mapping/track_mapper.dart';
 import '../../data/playback/playback_engine.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/music_source.dart' show PlayableStream;
+import '../../playback/audio_cache_completion_recorder.dart';
 import '../../playback/local_playback_service.dart';
 import '../../playback/next_track_preloader.dart';
 import '../../playback/playback_power_policy.dart';
@@ -96,10 +97,13 @@ class LocalPlaybackChain {
     audioCacheWriter: PlayingTrackCacheWriter(
       predownloader: local.audioCacheWriter,
     ),
-    // 移动端边播边缓存完成后把曲目快照交给设备本地索引；桌面 / 回退路径
-    // 由预下载器的 onCompleted 上报（两条路径互斥）。
-    onAudioCacheCompleted: (track) =>
-        unawaited(local.localCacheIndex.recordCompleted(track)),
+    // 移动端边播边缓存的完成记录由 app 生命周期的 recorder 持有：切歌不
+    // 取消完成监听，缓存真正写完仍写索引。桌面 / 回退路径由预下载器的
+    // onCompleted 上报（两条路径互斥）。
+    cacheCompletionRecorder: AudioCacheCompletionRecorder(
+      onCompleted: (track) =>
+          unawaited(local.localCacheIndex.recordCompleted(track)),
+    ),
   );
 
   PlaybackEngine buildEngine({required LocalPlaybackService service}) =>

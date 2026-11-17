@@ -8,6 +8,7 @@ import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/audio_predownload.dart';
 import 'package:molia/playback/audio_predownloader.dart';
+import 'package:molia/playback/audio_cache_completion_recorder.dart';
 import 'package:molia/playback/audio_cache_source.dart';
 import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/playback/next_track_preloader.dart';
@@ -1437,11 +1438,14 @@ void main() {
     });
   });
 
-  test('边播边缓存完成信号：完成才上报，切歌取消旧订阅', () async {
+  test('边播边缓存完成信号：切歌不取消，旧缓存完成后仍上报', () async {
     final cache = _CompletionCacheService();
     final completers = <Completer<bool>>[];
     final cancelled = <int>[];
     final completedTracks = <String>[];
+    final recorder = AudioCacheCompletionRecorder(
+      onCompleted: (track) => completedTracks.add(track.id),
+    );
     final service = LocalPlaybackService(
       resolver: (track, {String? quality}) async =>
           PlayableStream(Uri.parse('https://cdn.example/${track.id}.mp3')),
@@ -1461,7 +1465,7 @@ void main() {
           },
         );
       },
-      onAudioCacheCompleted: (track) => completedTracks.add(track.id),
+      cacheCompletionRecorder: recorder,
     );
     addTearDown(service.dispose);
 
@@ -1469,24 +1473,28 @@ void main() {
     await pumpEventQueue();
     expect(completers, hasLength(1));
 
-    // 切歌发生在完成之前：旧 handle 必须取消，晚到的 true 也不能上报。
+    // 切歌发生在完成之前：完成监听由 recorder 持有，不能被取消。
     await service.playTracks([_track(index: 1)], 0);
     await pumpEventQueue();
-    expect(cancelled, [0]);
-    await pumpEventQueue();
-    expect(completedTracks, isEmpty, reason: '取消的缓存写入不能写索引');
+    expect(cancelled, isEmpty, reason: '切歌不能取消旧缓存完成监听');
+    expect(completedTracks, isEmpty);
 
-    // 新曲目完成：上报一次。
+    // 旧曲目缓存这时才完成：仍要写索引。
+    completers[0].complete(true);
+    await pumpEventQueue();
+    expect(completedTracks, [trackIdOf('test', 0)]);
+
+    // 新曲目完成：再上报一次。
     completers[1].complete(true);
     await pumpEventQueue();
-    expect(completedTracks, [trackIdOf('test', 1)]);
+    expect(completedTracks, [trackIdOf('test', 0), trackIdOf('test', 1)]);
 
     // 失败完成不上报。
     await service.playTracks([_track(index: 2)], 0);
     await pumpEventQueue();
     completers[2].complete(false);
     await pumpEventQueue();
-    expect(completedTracks, [trackIdOf('test', 1)]);
+    expect(completedTracks, [trackIdOf('test', 0), trackIdOf('test', 1)]);
   });
 }
 

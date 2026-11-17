@@ -203,6 +203,24 @@ void main() {
       expect(persistence.removals, [(sourceKey: 'wy', songId: 'old')]);
     });
 
+    test('候选为空：只清理已无缓存文件的行，保留仍命中的行', () async {
+      final persistence = _FakePersistence(
+        rows: [entry('keep', cachedAt: 10), entry('stale', cachedAt: 20)],
+      );
+      final store = LocalCacheIndexStore(persistence: persistence);
+      addTearDown(store.dispose);
+      await store.init();
+
+      await store.reconcile(
+        candidates: const [],
+        scanCache: () async => cacheFiles(['keep']),
+      );
+
+      expect(store.entries.map((row) => row.songId), ['keep']);
+      expect(persistence.rows.keys, ['wy:keep']);
+      expect(persistence.removals, [(sourceKey: 'wy', songId: 'stale')]);
+    });
+
     test('对账：目录列举失败完全不动索引', () async {
       final persistence = _FakePersistence(rows: [entry('old')]);
       final store = LocalCacheIndexStore(persistence: persistence);
