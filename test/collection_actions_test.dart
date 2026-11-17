@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
+import 'package:molia/domain/models/local_cache_index.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/collection_actions.dart';
 import 'package:molia/providers/collection_presenter.dart';
@@ -214,8 +215,17 @@ CollectionLocalSong _downloaded(String id, {bool imported = false}) =>
       ),
     );
 
-CollectionLocalSong _cached(String id) =>
-    CollectionLocalSong.cached(_history(id));
+CollectionLocalSong _cached(String id) => CollectionLocalSong.cached(
+  LocalCacheIndexEntry(
+    sourceKey: 'wy',
+    songId: id,
+    title: 'Song $id',
+    artist: 'Artist',
+    album: 'Album',
+    raw: {'songId': id},
+    cachedAt: 1,
+  ),
+);
 
 CollectionView _view(
   List<CollectionRow> rows, {

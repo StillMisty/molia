@@ -8,10 +8,12 @@ import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/audio_predownload.dart';
 import 'package:molia/playback/audio_predownloader.dart';
+import 'package:molia/playback/audio_cache_source.dart';
 import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/playback/next_track_preloader.dart';
 import 'package:molia/playback/playing_track_cache_writer.dart';
 import 'package:molia/sources/source_track.dart';
+import 'package:molia/services/cache_service.dart';
 
 /// 可脚本化播放器：只实现 [LocalPlaybackService] 用到的状态与控制接口，
 /// 不触碰 just_audio 的平台通道。
@@ -1434,4 +1436,70 @@ void main() {
       expect(notifications, 1, reason: '仅播放器状态变化的低频通知');
     });
   });
+
+  test('边播边缓存完成信号：完成才上报，切歌取消旧订阅', () async {
+    final cache = _CompletionCacheService();
+    final completers = <Completer<bool>>[];
+    final cancelled = <int>[];
+    final completedTracks = <String>[];
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async =>
+          PlayableStream(Uri.parse('https://cdn.example/${track.id}.mp3')),
+      player: _FakeAudioPlayer(),
+      cacheService: cache,
+      audioCachePlatformSupported: () => true,
+      cachingAudioSourceFactory: (uri, path, {headers = const {}}) {
+        final index = completers.length;
+        final completer = Completer<bool>();
+        completers.add(completer);
+        return CachingAudioSourceHandle(
+          source: AudioSource.uri(uri),
+          completed: completer.future,
+          cancel: () {
+            cancelled.add(index);
+            if (!completer.isCompleted) completer.complete(false);
+          },
+        );
+      },
+      onAudioCacheCompleted: (track) => completedTracks.add(track.id),
+    );
+    addTearDown(service.dispose);
+
+    await service.playTracks([_track(index: 0), _track(index: 1)], 0);
+    await pumpEventQueue();
+    expect(completers, hasLength(1));
+
+    // 切歌发生在完成之前：旧 handle 必须取消，晚到的 true 也不能上报。
+    await service.playTracks([_track(index: 1)], 0);
+    await pumpEventQueue();
+    expect(cancelled, [0]);
+    await pumpEventQueue();
+    expect(completedTracks, isEmpty, reason: '取消的缓存写入不能写索引');
+
+    // 新曲目完成：上报一次。
+    completers[1].complete(true);
+    await pumpEventQueue();
+    expect(completedTracks, [trackIdOf('test', 1)]);
+
+    // 失败完成不上报。
+    await service.playTracks([_track(index: 2)], 0);
+    await pumpEventQueue();
+    completers[2].complete(false);
+    await pumpEventQueue();
+    expect(completedTracks, [trackIdOf('test', 1)]);
+  });
 }
+
+/// 只覆盖缓存源装配用到的三个方法：单测不碰真实目录 / prefs。
+class _CompletionCacheService extends CacheService {
+  @override
+  Future<bool> audioEnabled() async => true;
+
+  @override
+  Future<String?> audioCacheDirPath() async => '/tmp/molia-test-audio-cache';
+
+  @override
+  Future<int> enforceAudioLimit({bool force = false}) async => 0;
+}
+
+String trackIdOf(String sourceKey, int index) => '$sourceKey:a$index';

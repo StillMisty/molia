@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../domain/ports/music_source.dart' show PlayableStream;
 import '../services/audio_cache_store.dart';
@@ -35,6 +38,7 @@ class CacheAudioPredownloader implements AudioPredownloader {
     this._allowed,
     this._platformSupported,
     AudioPredownloadStarter? starter,
+    this._onCompleted,
   }) : _cache = cacheService ?? CacheService.instance,
        _starter = starter ?? startAudioPredownload;
 
@@ -42,6 +46,12 @@ class CacheAudioPredownloader implements AudioPredownloader {
   final bool Function()? _allowed;
   final bool Function()? _platformSupported;
   final AudioPredownloadStarter _starter;
+
+  /// 缓存**成功写入最终文件**后的上报口（组合根接本地缓存索引）。
+  ///
+  /// 任务在成功 / 失败 / 取消时都会完成，因此这里必须在完成后确认
+  /// `targetPath` 真的存在；半成品 `.predl` 或失败清理不会触发。
+  final void Function(SourceTrack track)? _onCompleted;
 
   @override
   Future<AudioPredownloadTask?> predownload({
@@ -70,8 +80,22 @@ class CacheAudioPredownloader implements AudioPredownloader {
       headers: stream.headers.isEmpty ? null : stream.headers,
     );
     if (task == null) return null;
-    // 预取写入后执行一次 LRU 淘汰（与边播边缓存的策略一致）。
-    unawaited(task.done.whenComplete(() => _cache.enforceAudioLimit()));
+    // 预取写入后执行一次 LRU 淘汰（与边播边缓存的策略一致）。完成上报
+    // 与淘汰在同一条链上：只有最终文件存在才算「缓存写完」。
+    unawaited(
+      task.done
+          .then((_) async {
+            try {
+              if (await File(audioCacheFilePath(directory, fileName))
+                  .exists()) {
+                _onCompleted?.call(track);
+              }
+            } catch (e) {
+              debugPrint('[AudioPredownload] 缓存完成确认失败: $e');
+            }
+          })
+          .whenComplete(() => _cache.enforceAudioLimit()),
+    );
     return task;
   }
 }

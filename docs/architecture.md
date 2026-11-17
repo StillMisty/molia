@@ -996,9 +996,9 @@
 - **收藏页合集状态**：`CollectionSession`（`lib/providers/collection_session.dart`）
   拥有「当前合集」的恢复 / 校准 / 模式 / 按行 key 的多选 / 加载组合 / 滚动键
   激活与切换持久化；`LocalSongsCollection`
-  （`lib/providers/local_songs_collection.dart`）拥有本地歌曲的历史 × 下载 /
-  导入 × 完整音频缓存联结、下载优先去重、输入签名、在途令牌 / 过期丢弃与
-  加载态 · 弹层计数；`CollectionPresenter`（`lib/providers/collection_presenter.dart`）
+  （`lib/providers/local_songs_collection.dart`）拥有本地歌曲的缓存完成索引 ×
+  下载 / 导入 × 完整音频缓存联结、下载优先去重、输入签名、在途令牌 / 过期
+  丢弃与加载态 · 弹层计数；`CollectionPresenter`（`lib/providers/collection_presenter.dart`）
   拥有合集身份（kind / 落库 id / 展示名 / 合集键）、可见行投影（过滤 /
   排序）与行动作构成。`CollectionView.visibleRows` 是统一的 `CollectionRow` 联合
   （列表曲目 / 播放历史 / 本地歌曲），`rowActionsFor` 按行变体给动作规格；收藏页
@@ -1156,8 +1156,10 @@
   识别——信息页「本地数据」行与页内状态（体积 · 音质 · 可离线使用），动作是
   「转存到本地文件夹」（拷贝成持久副本，不触网）；播放取链在下载记录之后回退
   缓存（`localUriFor`：精确音质优先、未命中用其它已缓存音质）→ `file://`
-  离线可播；收藏页「本地歌曲」合集按播放历史 × 缓存目录前缀匹配列出缓存行
-  （保留原曲身份，删除 = 清缓存）。缓存可被 LRU / 用户清理移除，状态与列表随
+  离线可播；收藏页「本地歌曲」合集按设备本地缓存完成索引 × 缓存目录确认
+  列出缓存行（保留原曲身份，删除 = 清缓存；索引只在缓存文件真正写完时写入，
+  播放历史清空 / 删除 / 同步墓碑都不影响它；索引读取失败保留已有行，首次
+  装载显示加载态）。缓存可被 LRU / 用户清理移除，状态与列表随
   `CacheService.revision` 回退（不承诺持久可用）；
 - **本地数据刷新（Track local data controller）**：信息页本地数据行与
   `track_local_data_page.dart` 共用 `lib/services/track_local_data_controller.dart`，

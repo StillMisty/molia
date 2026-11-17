@@ -88,7 +88,7 @@ sealed class CollectionRow {
   String get album;
   int? get durationMs;
 
-  /// 行封面地址（下载 / 导入副本优先本地封面，缓存行用历史原图）。
+  /// 行封面地址（下载 / 导入副本优先本地封面，缓存行用索引快照原图）。
   String? get artworkUrl;
 
   /// 收藏键（下载副本 = local 音源；缓存行 / 历史 / 曲目 = 原曲键）。

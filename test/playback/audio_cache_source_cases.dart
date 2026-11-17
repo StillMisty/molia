@@ -2,10 +2,12 @@
 // 钉住它的 headers 字段，忽略该标注。
 // ignore_for_file: experimental_member_use
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:molia/playback/audio_cache_completion.dart';
 import 'package:molia/playback/audio_cache_source.dart';
 import 'package:path/path.dart' as p;
 
@@ -25,14 +27,81 @@ void main() {
       p.join(dir.path, 'a.m4a'),
       headers: headers,
     );
-    expect(withHeaders, isA<LockCachingAudioSource>());
-    expect((withHeaders! as LockCachingAudioSource).headers, headers);
+    expect(withHeaders, isNotNull);
+    expect(withHeaders!.source, isA<LockCachingAudioSource>());
+    expect((withHeaders.source as LockCachingAudioSource).headers, headers);
+    withHeaders.cancel();
 
     final withoutHeaders = createCachingAudioSource(
       Uri.parse('https://cdn.example/b.m4a'),
       p.join(dir.path, 'b.m4a'),
     );
-    expect(withoutHeaders, isA<LockCachingAudioSource>());
-    expect((withoutHeaders! as LockCachingAudioSource).headers, isNull);
+    expect(withoutHeaders, isNotNull);
+    expect(withoutHeaders!.source, isA<LockCachingAudioSource>());
+    expect((withoutHeaders.source as LockCachingAudioSource).headers, isNull);
+    withoutHeaders.cancel();
+  });
+
+  group('缓存完成信号', () {
+    late StreamController<double> progress;
+    late AudioSource source;
+
+    setUp(() {
+      progress = StreamController<double>.broadcast();
+      source = AudioSource.uri(Uri.parse('https://cdn.example/a.m4a'));
+    });
+
+    tearDown(() => progress.close());
+
+    test('进度 100% 且最终文件存在才完成 true', () async {
+      var exists = false;
+      final handle = watchCachingAudioSource(
+        source: source,
+        progress: progress.stream,
+        fileExists: () => exists,
+        retryDelay: const Duration(milliseconds: 1),
+        retries: 3,
+      );
+
+      progress.add(1.0);
+      // 100% 与原子改名之间允许一个事件循环：第一次检查还没文件。
+      exists = true;
+
+      expect(await handle.completed, isTrue);
+    });
+
+    test('进度 100% 但最终文件始终不存在：按未完成处理', () async {
+      final handle = watchCachingAudioSource(
+        source: source,
+        progress: progress.stream,
+        fileExists: () => false,
+        retryDelay: const Duration(milliseconds: 1),
+        retries: 2,
+      );
+
+      progress.add(1.0);
+
+      expect(await handle.completed, isFalse);
+    });
+
+    test('失败 / 取消不完成成功', () async {
+      final failed = watchCachingAudioSource(
+        source: source,
+        progress: progress.stream,
+        fileExists: () => true,
+      );
+      progress.addError(StateError('network'));
+
+      expect(await failed.completed, isFalse);
+
+      final cancelled = watchCachingAudioSource(
+        source: source,
+        progress: StreamController<double>.broadcast().stream,
+        fileExists: () => true,
+      );
+      cancelled.cancel();
+
+      expect(await cancelled.completed, isFalse);
+    });
   });
 }

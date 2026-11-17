@@ -131,6 +131,18 @@ class LocalPlaybackService extends ChangeNotifier {
   /// `LockCachingAudioSource` 写同一文件，重复写会互相破坏。
   final PlayingTrackCacheWriter? _cacheWriter;
 
+  /// 边播边缓存源工厂（默认 just_audio；测试注入假 handle）。
+  final CachingAudioSourceFactory _createCachingAudioSource;
+
+  /// 平台是否支持边播边缓存（默认按平台判定；测试可覆盖）。
+  final bool Function()? _audioCachePlatformSupported;
+
+  /// 当前边播边缓存源的完成订阅（切歌 / 停止 / 销毁时取消）。
+  CachingAudioSourceHandle? _cacheSourceHandle;
+
+  /// 缓存真正写完（最终文件存在）后的上报口（组合根接本地缓存索引）。
+  final void Function(SourceTrack track)? _onAudioCacheCompleted;
+
   /// 已知平台后端不支持 StreamAudioSource（如桌面 media_kit）：
   /// 本会话内不再尝试边播边缓存，直接流播。
   bool _audioCacheUnsupported = false;
@@ -319,6 +331,9 @@ class LocalPlaybackService extends ChangeNotifier {
     math.Random? random,
     this._nextTrackPreloader,
     PlayingTrackCacheWriter? audioCacheWriter,
+    CachingAudioSourceFactory? cachingAudioSourceFactory,
+    this._audioCachePlatformSupported,
+    this._onAudioCacheCompleted,
     Stream<AudioInterruptionEvent>? audioInterruptions,
     Stream<void>? audioBecomingNoisy,
     Stream<AudioDevicesChangedEvent>? audioDevicesChanged,
@@ -340,6 +355,8 @@ class LocalPlaybackService extends ChangeNotifier {
            : null,
        _cacheService = cacheService ?? CacheService.instance,
        _cacheWriter = audioCacheWriter,
+       _createCachingAudioSource =
+           cachingAudioSourceFactory ?? createCachingAudioSource,
        _interruptionsOverride = audioInterruptions,
        _becomingNoisyOverride = audioBecomingNoisy,
        _audioDevicesOverride = audioDevicesChanged,
@@ -1082,6 +1099,8 @@ class LocalPlaybackService extends ChangeNotifier {
         false;
     // 上一首的后台缓存写入（桌面）同理：切歌即停，避免与新曲目抢带宽。
     _cacheWriter?.cancel();
+    // 移动端边播边缓存的完成订阅同样随切歌作废，不能挂到新曲目上。
+    _cancelCacheCompletion();
     final startTrace = PlaybackStartTrace.begin(track.id.toString());
 
     _currentIndex = index;
@@ -1200,6 +1219,7 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 继续出声。失败只记日志——随后仍要尝试加载新源，stop 失败时再补一次
   /// pause 尽量止声。
   Future<void> _unloadCurrentSource() async {
+    _cancelCacheCompletion();
     try {
       await _player.stop();
     } catch (e) {
@@ -1256,16 +1276,28 @@ class LocalPlaybackService extends ChangeNotifier {
               track,
               quality: quality ?? '',
             );
-            final source = createCachingAudioSource(
+            final source = _createCachingAudioSource(
               uri,
               audioCacheFilePath(directory, fileName),
               headers: headers,
             );
             if (source != null) {
+              _cancelCacheCompletion();
+              _cacheSourceHandle = source;
+              unawaited(
+                source.completed.then((completed) {
+                  if (identical(_cacheSourceHandle, source)) {
+                    _cacheSourceHandle = null;
+                  }
+                  if (completed && !_playerDisposed) {
+                    _onAudioCacheCompleted?.call(track);
+                  }
+                }),
+              );
               try {
                 _sourceRegistrations++;
                 await _player
-                    .setAudioSource(source)
+                    .setAudioSource(source.source)
                     .timeout(const Duration(seconds: 30));
                 // 写入开始后执行一次 LRU 淘汰（策略上限）。
                 unawaited(cache.enforceAudioLimit());
@@ -1273,8 +1305,10 @@ class LocalPlaybackService extends ChangeNotifier {
               } on UnsupportedError catch (e) {
                 // 防御性兜底：平台后端不支持 StreamAudioSource 时本会话停用。
                 _audioCacheUnsupported = true;
+                _cancelCacheCompletion();
                 debugPrint('[LocalPlayback] 平台不支持音频缓存，改用直接流播: $e');
               } catch (e) {
+                _cancelCacheCompletion();
                 debugPrint('[LocalPlayback] 音频缓存源失败，回退直接流播: $e');
               }
             }
@@ -1294,8 +1328,16 @@ class LocalPlaybackService extends ChangeNotifier {
     return localFile ? PlaybackCachePath.file : PlaybackCachePath.direct;
   }
 
+  /// 取消当前缓存源的完成订阅（完成 / 切歌 / 停止 / 销毁）。
+  void _cancelCacheCompletion() {
+    final handle = _cacheSourceHandle;
+    _cacheSourceHandle = null;
+    handle?.cancel();
+  }
+
   /// 是否尝试边播边缓存：仅 Android / iOS / macOS（见 [platformSupportsAudioCaching]）。
-  bool get _platformSupportsAudioCaching => platformSupportsAudioCaching();
+  bool get _platformSupportsAudioCaching =>
+      _audioCachePlatformSupported?.call() ?? platformSupportsAudioCaching();
 
   /// 暂停播放（音频焦点被其他应用夺走等外部触发）。
   ///
@@ -1751,6 +1793,7 @@ class LocalPlaybackService extends ChangeNotifier {
     _suppressPositionUpdates = false;
     _nextTrackPreloader?.cancelAll();
     _cacheWriter?.cancel();
+    _cancelCacheCompletion();
     try {
       await _player.stop();
     } catch (_) {}
@@ -2014,6 +2057,7 @@ class LocalPlaybackService extends ChangeNotifier {
     _cancelPositionSubscription();
     _nextTrackPreloader?.cancelAll();
     _cacheWriter?.cancel();
+    _cancelCacheCompletion();
     _playWithOtherApps.removeListener(_onPlayWithOtherAppsChanged);
     unawaited(_becomingNoisySubscription?.cancel());
     unawaited(_audioDevicesSubscription?.cancel());

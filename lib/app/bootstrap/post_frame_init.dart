@@ -12,6 +12,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../services/cache_service.dart';
+import '../../domain/models/local_cache_index.dart';
 import 'ai_stack.dart';
 import 'catalog_stack.dart';
 import 'desktop_stack.dart';
@@ -73,6 +74,27 @@ void initAfterFirstFrame({
   unawaited(() async {
     // 半成品清扫只可能清理本进程启动前的残留；放在首帧后不影响下载语义。
     await CacheService.instance.cleanupAudioPartials();
+  }());
+
+  // 设备本地缓存索引：先装载（收藏页据此退出加载态），再用当前播放历史
+  // 做一次旧缓存确认对账——历史只提供元数据候选，没有缓存文件的曲目永远
+  // 不会写索引；目录列举失败则完全不动索引。
+  unawaited(() async {
+    final index = local.localCacheIndex;
+    await index.init();
+    try {
+      final history = await library.libraryRepository.listHistory();
+      await index.reconcile(
+        candidates: [
+          for (final entry in history)
+            LocalCacheIndexEntry.fromHistoryEntry(entry),
+        ],
+        scanCache: CacheService.instance.audioCacheCompleteIndexOrNull,
+      );
+    } catch (e) {
+      // 对账失败只记日志：不影响下载 / 导入行，也不阻塞页面。
+      debugPrint('[Molia] 本地缓存索引对账失败（继续运行）: $e');
+    }
   }());
 
   // 资料库启动尾巴：全库最大戳种子 → 统计收尾/裁剪

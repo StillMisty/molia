@@ -43,6 +43,7 @@ import '../../services/download/download_manager.dart';
 import '../../services/download/download_records.dart';
 import '../../services/local/local_library_service.dart';
 import '../../services/local/local_metadata_service.dart';
+import '../../services/local_cache_index_store.dart';
 import '../../services/notification_service.dart';
 import '../../services/play_statistics_service.dart';
 import '../../services/scrobble/scrobble_service.dart';
@@ -219,6 +220,11 @@ List<SingleChildWidget> buildAppProviders({
     // 不感知下载队列与文件布局（记录变化低频，进度不经这里）。
     ChangeNotifierProvider<DownloadRecords>.value(
       value: downloadService.records,
+    ),
+    // 设备本地缓存索引：收藏页「本地歌曲」的缓存行来源。只由缓存完成事件
+    // / 启动对账写入，不参与同步，也不经过播放历史 provider。
+    ChangeNotifierProvider<LocalCacheIndexStore>.value(
+      value: local.localCacheIndex,
     ),
     // 下载命令面：管理页 / 本地数据页 / 分享弹层 / 导入流程只依赖窄接口。
     // 队列 / 提交日志 / 文件放置仍只有 DownloadService 一份实现。

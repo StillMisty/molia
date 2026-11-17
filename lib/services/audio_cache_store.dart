@@ -131,6 +131,23 @@ class AudioCacheStore {
   /// [cachedQualitiesForTrack] 复用（避免逐曲探测）。
   Future<Map<String, int>> index() async => (await splitIndex()).$1;
 
+  /// 完整音频缓存索引；目录不可用 / 列举失败返回 null（调用方据此区分
+  /// 「空目录」与「读不到目录」，启动对账不能把失败当成缓存全没了）。
+  Future<Map<String, int>?> completeIndexOrNull() async {
+    final dir = await directoryPath();
+    if (dir == null) return null;
+    try {
+      final files = await _storage.listFiles(dir);
+      return {
+        for (final entry in files.entries)
+          if (isCompleteFileName(entry.key)) entry.key: entry.value,
+      };
+    } catch (e) {
+      _logger.warning('音频缓存列举失败（对账跳过）: $e');
+      return null;
+    }
+  }
+
   /// 一次目录列举，切分完整文件索引与半成品 / 边车索引。
   ///
   /// 批量读曲（[usageForTrackInFiles]）用：一次列举服务多曲，避免逐曲重列

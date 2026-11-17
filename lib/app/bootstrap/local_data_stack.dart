@@ -22,6 +22,7 @@ import '../../data/saf/saf_music_folder_tree.dart';
 import '../../data/downloads/downloads_publisher.dart';
 import '../../data/downloads/downloads_repository.dart';
 import '../../data/downloads/local_lyrics.dart';
+import '../../data/local_cache_index_repository.dart';
 import '../../data/mapping/track_mapper.dart';
 import '../../domain/models/download.dart' show kLocalSourceKey;
 import '../../domain/models/track.dart';
@@ -42,6 +43,7 @@ import '../../services/local/music_folder_scanner.dart';
 import '../../services/local/music_folder_watcher.dart';
 import '../../domain/ports/music_folder_tree.dart';
 import '../../services/local/music_folders.dart';
+import '../../services/local_cache_index_store.dart';
 import '../../services/local_cover_identity_sweep.dart';
 import '../../services/lyrics_cache.dart';
 import '../../services/lyrics_service.dart';
@@ -61,6 +63,7 @@ typedef LocalDataStack = ({
   LyricsService lyricsService,
   CoverBackfillService coverBackfill,
   AudioPredownloader audioCacheWriter,
+  LocalCacheIndexStore localCacheIndex,
   CustomCoverStore customCovers,
 });
 
@@ -257,6 +260,12 @@ Future<LocalDataStack> buildLocalDataStack({
   // 扫描都不参与首帧内容。服务先构造好交给 Provider 树，`post_frame_init`
   // 调 `init()`；依赖记录的方法经 `ready` 自行等待就绪。
   //
+  // 设备本地缓存索引：只由「缓存真正写完」的事件写入；播放历史清空 /
+  // 删除 / 同步墓碑都不会碰它。首帧后 init + 一次旧缓存确认对账。
+  final localCacheIndex = LocalCacheIndexStore(
+    persistence: LocalCacheIndexRepository(),
+  );
+
   // 音频缓存字节写入器：两处复用同一实例——
   // 1) 下一首字节预取（`NextTrackPreloader`，起播后预热下一首）；
   // 2) 当前曲目后台缓存（`PlayingTrackCacheWriter`，桌面等播放侧不写缓存的
@@ -265,6 +274,9 @@ Future<LocalDataStack> buildLocalDataStack({
   final audioCacheWriter = CacheAudioPredownloader(
     cacheService: CacheService.instance,
     allowed: () => !dataSaver.active,
+    // 两条桌面路径都经同一个预下载器：任务成功后确认最终文件存在，
+    // 再上报缓存索引（失败 / 取消 / 半成品不写）。
+    onCompleted: (track) => unawaited(localCacheIndex.recordCompleted(track)),
   );
 
   return (
@@ -278,6 +290,7 @@ Future<LocalDataStack> buildLocalDataStack({
     lyricsService: lyricsService,
     coverBackfill: coverBackfill,
     audioCacheWriter: audioCacheWriter,
+    localCacheIndex: localCacheIndex,
     customCovers: customCovers,
   );
 }

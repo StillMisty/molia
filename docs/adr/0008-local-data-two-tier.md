@@ -101,3 +101,37 @@
   `audio_predownloader.dart`、`lib/services/audio_cache_platform.dart`
 - `lib/widgets/track_info_view.dart`、`lib/utils/track_local_data_label.dart`、
   `lib/main.dart`（组合根）、l10n（en / zh）
+
+## 2026-11-17 修订：本地歌曲缓存行改由设备本地缓存索引驱动（schema v4）
+
+收藏页「本地歌曲」的缓存行原先由「播放历史 ∩ 完整音频缓存」推导：历史被
+清空 / 单条删除 / 批量删除 / 同步墓碑删除后，缓存文件仍在磁盘，缓存行却从
+列表消失。本次把「缓存行从哪来」与「播放历史」彻底解耦：
+
+- **新增 drift 表 `local_cache_index`**（`schemaVersion = 4`，
+  `from3To4` 建表；`(sourceKey, songId)` 唯一）：只存本机确认写完的曲目
+  快照（展示字段 + `raw` JSON + `cachedAt`）。它没有同步版本三列、没有同步
+  类别、不写同步日志，也不在 `MoliaDatabase.maxSyncVersion()` 的扫描范围；
+  完整备份的类别集合同样不包含它。
+- **只在缓存真正写完时写入**：移动端 `LockCachingAudioSource` 下载进度
+  100% 且最终缓存文件存在（不是 `.part`）后上报；桌面 / 回退路径的
+  `AudioPredownloader` 在任务完成后确认最终文件存在（`.predl` 已原子改名）
+  才上报。当前曲目后台写入与下一首字节预取共用这一条完成口径；失败、取消、
+  半成品都不写。播放历史写入 / 播放开始 / 同步应用历史都不写索引。
+- **上限**：与播放历史同量级的 500 行，按 `cachedAt` 倒序裁剪；未播放过、
+  仅由下一首预取写入的缓存也参与排序。
+- **本地歌曲候选**：只读索引行，播放历史完全不参与；展示前仍做一次完整
+  缓存目录扫描（LRU / 清缓存后行会消失），下载 / 导入记录优先去重并排在前。
+- **旧缓存对账**：首帧后执行一次（可重复、幂等）：当前播放历史只作为元数据
+  候选，列出完整音频缓存，仅对确认存在缓存文件的曲目补索引行；同时清理
+  已无缓存文件的索引行——目录列举失败时完全不动索引。迁移本身不回填索引，
+  也不从听歌统计回溯。
+- **读取失败**：保留内存中已有行、按「已尝试」结束加载态，不把本地歌曲
+  列表清空；首次装载显示加载态，避免先闪空态。
+- **删除语义不变**：播放历史的清空 / 单条 / 批量 / 墓碑删除只动历史；音频
+  缓存被清或 LRU 淘汰后，列表通过实时目录扫描过滤，索引行可留到对账清理。
+- **影响**：`lib/data/molia_database.dart`（v4 表 / 迁移）、
+  `lib/data/local_cache_index_repository.dart`、
+  `lib/services/local_cache_index_store.dart`、
+  `lib/providers/local_songs_collection.dart`、`lib/playback/*`（完成信号）、
+  `lib/app/bootstrap/*`（组合根接线与首帧后对账）、`docs/architecture.md`。

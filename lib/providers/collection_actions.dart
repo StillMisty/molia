@@ -15,6 +15,7 @@ library;
 
 import '../domain/models/download.dart';
 import '../domain/models/library.dart';
+import '../domain/models/local_cache_index.dart';
 import '../domain/models/track.dart';
 import '../services/download/download_manager.dart';
 import '../services/track_local_data_service.dart';
@@ -496,7 +497,7 @@ final class CollectionActions {
           kind: CollectionLocalDeleteKind.download,
           success: CollectionLocalDeleteStatus.deleted,
         );
-      case CollectionLocalSong(history: final entry?):
+      case CollectionLocalSong(cached: final entry?):
         return _clearCachedAudio(song, entry);
       case CollectionLocalSong():
         // 两个载荷都为空不是合法行形状；按能力不可用处理，不抛到页面。
@@ -537,7 +538,7 @@ final class CollectionActions {
 
   Future<CollectionLocalDeleteItem> _clearCachedAudio(
     CollectionLocalSong song,
-    PlayHistoryEntry entry,
+    LocalCacheIndexEntry entry,
   ) async {
     final localData = _localData;
     if (localData == null) {
@@ -549,7 +550,7 @@ final class CollectionActions {
     }
     try {
       final result = await localData.clearCachedAudio(
-        _library.trackFromHistoryEntry(entry),
+        _library.trackFromPlaylistTrack(entry.toPlaylistTrack(addedAt: 0)),
       );
       if (result == null) {
         return CollectionLocalDeleteItem(

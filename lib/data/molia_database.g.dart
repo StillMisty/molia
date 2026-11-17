@@ -978,13 +978,13 @@ class Playlist extends DataClass implements Insertable<Playlist> {
   final int id;
   final String name;
 
-  /// 列表描述（#54 列表体验；本 spec 只负责同一次 v3 迁移）。
+  /// 列表描述（列表增强的读写行为由对应模块负责；v3 只保证列存在）。
   final String description;
 
-  /// 列表封面键（自定义封面索引；#54 拥有读写行为）。
+  /// 列表封面键（自定义封面索引）。
   final String? coverKey;
 
-  /// 列表分组（用户可见文案是「分组 / Group」，不是音乐文件夹；#54 拥有读写行为）。
+  /// 列表分组（用户可见文案是「分组 / Group」，不是音乐文件夹）。
   final String folder;
   final int createdAt;
   final String? syncId;
@@ -6636,6 +6636,562 @@ class PlaybackSessionCursorsCompanion
   }
 }
 
+class $LocalCacheIndexTable extends LocalCacheIndex
+    with TableInfo<$LocalCacheIndexTable, LocalCacheIndexRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalCacheIndexTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _sourceKeyMeta = const VerificationMeta(
+    'sourceKey',
+  );
+  @override
+  late final GeneratedColumn<String> sourceKey = GeneratedColumn<String>(
+    'sourceKey',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _songIdMeta = const VerificationMeta('songId');
+  @override
+  late final GeneratedColumn<String> songId = GeneratedColumn<String>(
+    'songId',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _artistMeta = const VerificationMeta('artist');
+  @override
+  late final GeneratedColumn<String> artist = GeneratedColumn<String>(
+    'artist',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _albumMeta = const VerificationMeta('album');
+  @override
+  late final GeneratedColumn<String> album = GeneratedColumn<String>(
+    'album',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _coverUrlMeta = const VerificationMeta(
+    'coverUrl',
+  );
+  @override
+  late final GeneratedColumn<String> coverUrl = GeneratedColumn<String>(
+    'coverUrl',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _durationMsMeta = const VerificationMeta(
+    'durationMs',
+  );
+  @override
+  late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
+    'durationMs',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _rawMeta = const VerificationMeta('raw');
+  @override
+  late final GeneratedColumn<String> raw = GeneratedColumn<String>(
+    'raw',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _cachedAtMeta = const VerificationMeta(
+    'cachedAt',
+  );
+  @override
+  late final GeneratedColumn<int> cachedAt = GeneratedColumn<int>(
+    'cachedAt',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    sourceKey,
+    songId,
+    title,
+    artist,
+    album,
+    coverUrl,
+    durationMs,
+    raw,
+    cachedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_cache_index';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LocalCacheIndexRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('sourceKey')) {
+      context.handle(
+        _sourceKeyMeta,
+        sourceKey.isAcceptableOrUnknown(data['sourceKey']!, _sourceKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceKeyMeta);
+    }
+    if (data.containsKey('songId')) {
+      context.handle(
+        _songIdMeta,
+        songId.isAcceptableOrUnknown(data['songId']!, _songIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_songIdMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('artist')) {
+      context.handle(
+        _artistMeta,
+        artist.isAcceptableOrUnknown(data['artist']!, _artistMeta),
+      );
+    }
+    if (data.containsKey('album')) {
+      context.handle(
+        _albumMeta,
+        album.isAcceptableOrUnknown(data['album']!, _albumMeta),
+      );
+    }
+    if (data.containsKey('coverUrl')) {
+      context.handle(
+        _coverUrlMeta,
+        coverUrl.isAcceptableOrUnknown(data['coverUrl']!, _coverUrlMeta),
+      );
+    }
+    if (data.containsKey('durationMs')) {
+      context.handle(
+        _durationMsMeta,
+        durationMs.isAcceptableOrUnknown(data['durationMs']!, _durationMsMeta),
+      );
+    }
+    if (data.containsKey('raw')) {
+      context.handle(
+        _rawMeta,
+        raw.isAcceptableOrUnknown(data['raw']!, _rawMeta),
+      );
+    }
+    if (data.containsKey('cachedAt')) {
+      context.handle(
+        _cachedAtMeta,
+        cachedAt.isAcceptableOrUnknown(data['cachedAt']!, _cachedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_cachedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => const {};
+  @override
+  LocalCacheIndexRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LocalCacheIndexRow(
+      sourceKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sourceKey'],
+      )!,
+      songId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}songId'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      artist: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}artist'],
+      )!,
+      album: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}album'],
+      )!,
+      coverUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}coverUrl'],
+      ),
+      durationMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}durationMs'],
+      ),
+      raw: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}raw'],
+      )!,
+      cachedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cachedAt'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalCacheIndexTable createAlias(String alias) {
+    return $LocalCacheIndexTable(attachedDatabase, alias);
+  }
+}
+
+class LocalCacheIndexRow extends DataClass
+    implements Insertable<LocalCacheIndexRow> {
+  final String sourceKey;
+  final String songId;
+  final String title;
+  final String artist;
+  final String album;
+  final String? coverUrl;
+  final int? durationMs;
+  final String raw;
+
+  /// 缓存完成时间（毫秒）：排序与上限裁剪的依据，不参与展示。
+  final int cachedAt;
+  const LocalCacheIndexRow({
+    required this.sourceKey,
+    required this.songId,
+    required this.title,
+    required this.artist,
+    required this.album,
+    this.coverUrl,
+    this.durationMs,
+    required this.raw,
+    required this.cachedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['sourceKey'] = Variable<String>(sourceKey);
+    map['songId'] = Variable<String>(songId);
+    map['title'] = Variable<String>(title);
+    map['artist'] = Variable<String>(artist);
+    map['album'] = Variable<String>(album);
+    if (!nullToAbsent || coverUrl != null) {
+      map['coverUrl'] = Variable<String>(coverUrl);
+    }
+    if (!nullToAbsent || durationMs != null) {
+      map['durationMs'] = Variable<int>(durationMs);
+    }
+    map['raw'] = Variable<String>(raw);
+    map['cachedAt'] = Variable<int>(cachedAt);
+    return map;
+  }
+
+  LocalCacheIndexCompanion toCompanion(bool nullToAbsent) {
+    return LocalCacheIndexCompanion(
+      sourceKey: Value(sourceKey),
+      songId: Value(songId),
+      title: Value(title),
+      artist: Value(artist),
+      album: Value(album),
+      coverUrl: coverUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(coverUrl),
+      durationMs: durationMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(durationMs),
+      raw: Value(raw),
+      cachedAt: Value(cachedAt),
+    );
+  }
+
+  factory LocalCacheIndexRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LocalCacheIndexRow(
+      sourceKey: serializer.fromJson<String>(json['sourceKey']),
+      songId: serializer.fromJson<String>(json['songId']),
+      title: serializer.fromJson<String>(json['title']),
+      artist: serializer.fromJson<String>(json['artist']),
+      album: serializer.fromJson<String>(json['album']),
+      coverUrl: serializer.fromJson<String?>(json['coverUrl']),
+      durationMs: serializer.fromJson<int?>(json['durationMs']),
+      raw: serializer.fromJson<String>(json['raw']),
+      cachedAt: serializer.fromJson<int>(json['cachedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'sourceKey': serializer.toJson<String>(sourceKey),
+      'songId': serializer.toJson<String>(songId),
+      'title': serializer.toJson<String>(title),
+      'artist': serializer.toJson<String>(artist),
+      'album': serializer.toJson<String>(album),
+      'coverUrl': serializer.toJson<String?>(coverUrl),
+      'durationMs': serializer.toJson<int?>(durationMs),
+      'raw': serializer.toJson<String>(raw),
+      'cachedAt': serializer.toJson<int>(cachedAt),
+    };
+  }
+
+  LocalCacheIndexRow copyWith({
+    String? sourceKey,
+    String? songId,
+    String? title,
+    String? artist,
+    String? album,
+    Value<String?> coverUrl = const Value.absent(),
+    Value<int?> durationMs = const Value.absent(),
+    String? raw,
+    int? cachedAt,
+  }) => LocalCacheIndexRow(
+    sourceKey: sourceKey ?? this.sourceKey,
+    songId: songId ?? this.songId,
+    title: title ?? this.title,
+    artist: artist ?? this.artist,
+    album: album ?? this.album,
+    coverUrl: coverUrl.present ? coverUrl.value : this.coverUrl,
+    durationMs: durationMs.present ? durationMs.value : this.durationMs,
+    raw: raw ?? this.raw,
+    cachedAt: cachedAt ?? this.cachedAt,
+  );
+  LocalCacheIndexRow copyWithCompanion(LocalCacheIndexCompanion data) {
+    return LocalCacheIndexRow(
+      sourceKey: data.sourceKey.present ? data.sourceKey.value : this.sourceKey,
+      songId: data.songId.present ? data.songId.value : this.songId,
+      title: data.title.present ? data.title.value : this.title,
+      artist: data.artist.present ? data.artist.value : this.artist,
+      album: data.album.present ? data.album.value : this.album,
+      coverUrl: data.coverUrl.present ? data.coverUrl.value : this.coverUrl,
+      durationMs: data.durationMs.present
+          ? data.durationMs.value
+          : this.durationMs,
+      raw: data.raw.present ? data.raw.value : this.raw,
+      cachedAt: data.cachedAt.present ? data.cachedAt.value : this.cachedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalCacheIndexRow(')
+          ..write('sourceKey: $sourceKey, ')
+          ..write('songId: $songId, ')
+          ..write('title: $title, ')
+          ..write('artist: $artist, ')
+          ..write('album: $album, ')
+          ..write('coverUrl: $coverUrl, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('raw: $raw, ')
+          ..write('cachedAt: $cachedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    sourceKey,
+    songId,
+    title,
+    artist,
+    album,
+    coverUrl,
+    durationMs,
+    raw,
+    cachedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LocalCacheIndexRow &&
+          other.sourceKey == this.sourceKey &&
+          other.songId == this.songId &&
+          other.title == this.title &&
+          other.artist == this.artist &&
+          other.album == this.album &&
+          other.coverUrl == this.coverUrl &&
+          other.durationMs == this.durationMs &&
+          other.raw == this.raw &&
+          other.cachedAt == this.cachedAt);
+}
+
+class LocalCacheIndexCompanion extends UpdateCompanion<LocalCacheIndexRow> {
+  final Value<String> sourceKey;
+  final Value<String> songId;
+  final Value<String> title;
+  final Value<String> artist;
+  final Value<String> album;
+  final Value<String?> coverUrl;
+  final Value<int?> durationMs;
+  final Value<String> raw;
+  final Value<int> cachedAt;
+  final Value<int> rowid;
+  const LocalCacheIndexCompanion({
+    this.sourceKey = const Value.absent(),
+    this.songId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.artist = const Value.absent(),
+    this.album = const Value.absent(),
+    this.coverUrl = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.raw = const Value.absent(),
+    this.cachedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalCacheIndexCompanion.insert({
+    required String sourceKey,
+    required String songId,
+    required String title,
+    this.artist = const Value.absent(),
+    this.album = const Value.absent(),
+    this.coverUrl = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.raw = const Value.absent(),
+    required int cachedAt,
+    this.rowid = const Value.absent(),
+  }) : sourceKey = Value(sourceKey),
+       songId = Value(songId),
+       title = Value(title),
+       cachedAt = Value(cachedAt);
+  static Insertable<LocalCacheIndexRow> custom({
+    Expression<String>? sourceKey,
+    Expression<String>? songId,
+    Expression<String>? title,
+    Expression<String>? artist,
+    Expression<String>? album,
+    Expression<String>? coverUrl,
+    Expression<int>? durationMs,
+    Expression<String>? raw,
+    Expression<int>? cachedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (sourceKey != null) 'sourceKey': sourceKey,
+      if (songId != null) 'songId': songId,
+      if (title != null) 'title': title,
+      if (artist != null) 'artist': artist,
+      if (album != null) 'album': album,
+      if (coverUrl != null) 'coverUrl': coverUrl,
+      if (durationMs != null) 'durationMs': durationMs,
+      if (raw != null) 'raw': raw,
+      if (cachedAt != null) 'cachedAt': cachedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalCacheIndexCompanion copyWith({
+    Value<String>? sourceKey,
+    Value<String>? songId,
+    Value<String>? title,
+    Value<String>? artist,
+    Value<String>? album,
+    Value<String?>? coverUrl,
+    Value<int?>? durationMs,
+    Value<String>? raw,
+    Value<int>? cachedAt,
+    Value<int>? rowid,
+  }) {
+    return LocalCacheIndexCompanion(
+      sourceKey: sourceKey ?? this.sourceKey,
+      songId: songId ?? this.songId,
+      title: title ?? this.title,
+      artist: artist ?? this.artist,
+      album: album ?? this.album,
+      coverUrl: coverUrl ?? this.coverUrl,
+      durationMs: durationMs ?? this.durationMs,
+      raw: raw ?? this.raw,
+      cachedAt: cachedAt ?? this.cachedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (sourceKey.present) {
+      map['sourceKey'] = Variable<String>(sourceKey.value);
+    }
+    if (songId.present) {
+      map['songId'] = Variable<String>(songId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (artist.present) {
+      map['artist'] = Variable<String>(artist.value);
+    }
+    if (album.present) {
+      map['album'] = Variable<String>(album.value);
+    }
+    if (coverUrl.present) {
+      map['coverUrl'] = Variable<String>(coverUrl.value);
+    }
+    if (durationMs.present) {
+      map['durationMs'] = Variable<int>(durationMs.value);
+    }
+    if (raw.present) {
+      map['raw'] = Variable<String>(raw.value);
+    }
+    if (cachedAt.present) {
+      map['cachedAt'] = Variable<int>(cachedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalCacheIndexCompanion(')
+          ..write('sourceKey: $sourceKey, ')
+          ..write('songId: $songId, ')
+          ..write('title: $title, ')
+          ..write('artist: $artist, ')
+          ..write('album: $album, ')
+          ..write('coverUrl: $coverUrl, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('raw: $raw, ')
+          ..write('cachedAt: $cachedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$MoliaDatabase extends GeneratedDatabase {
   _$MoliaDatabase(QueryExecutor e) : super(e);
   $MoliaDatabaseManager get managers => $MoliaDatabaseManager(this);
@@ -6654,6 +7210,9 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
       $PlaybackSessionPayloadsTable(this);
   late final $PlaybackSessionCursorsTable playbackSessionCursors =
       $PlaybackSessionCursorsTable(this);
+  late final $LocalCacheIndexTable localCacheIndex = $LocalCacheIndexTable(
+    this,
+  );
   late final Index idxPlayHistoryPlayedAt = Index(
     'idx_play_history_playedAt',
     'CREATE INDEX idx_play_history_playedAt ON play_history (playedAt)',
@@ -6694,6 +7253,10 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
     'idx_downloads_localKey',
     'CREATE UNIQUE INDEX idx_downloads_localKey ON downloads (localKey) WHERE localKey IS NOT NULL',
   );
+  late final Index idxLocalCacheIndexCachedAt = Index(
+    'idx_local_cache_index_cachedAt',
+    'CREATE INDEX idx_local_cache_index_cachedAt ON local_cache_index (cachedAt)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6711,6 +7274,7 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
     downloads,
     playbackSessionPayloads,
     playbackSessionCursors,
+    localCacheIndex,
     idxPlayHistoryPlayedAt,
     idxPlaylistsSyncId,
     idxPlaylistTracksOrder,
@@ -6721,6 +7285,7 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
     idxPlayEventsSyncKey,
     idxDownloadsDownloadedAt,
     idxDownloadsLocalKey,
+    idxLocalCacheIndexCachedAt,
   ];
 }
 
@@ -10403,6 +10968,303 @@ typedef $$PlaybackSessionCursorsTableProcessedTableManager =
       PlaybackSessionCursor,
       PrefetchHooks Function()
     >;
+typedef $$LocalCacheIndexTableCreateCompanionBuilder =
+    LocalCacheIndexCompanion Function({
+      required String sourceKey,
+      required String songId,
+      required String title,
+      Value<String> artist,
+      Value<String> album,
+      Value<String?> coverUrl,
+      Value<int?> durationMs,
+      Value<String> raw,
+      required int cachedAt,
+      Value<int> rowid,
+    });
+typedef $$LocalCacheIndexTableUpdateCompanionBuilder =
+    LocalCacheIndexCompanion Function({
+      Value<String> sourceKey,
+      Value<String> songId,
+      Value<String> title,
+      Value<String> artist,
+      Value<String> album,
+      Value<String?> coverUrl,
+      Value<int?> durationMs,
+      Value<String> raw,
+      Value<int> cachedAt,
+      Value<int> rowid,
+    });
+
+class $$LocalCacheIndexTableFilterComposer
+    extends Composer<_$MoliaDatabase, $LocalCacheIndexTable> {
+  $$LocalCacheIndexTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get sourceKey => $composableBuilder(
+    column: $table.sourceKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get songId => $composableBuilder(
+    column: $table.songId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get artist => $composableBuilder(
+    column: $table.artist,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get album => $composableBuilder(
+    column: $table.album,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get coverUrl => $composableBuilder(
+    column: $table.coverUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get raw => $composableBuilder(
+    column: $table.raw,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cachedAt => $composableBuilder(
+    column: $table.cachedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LocalCacheIndexTableOrderingComposer
+    extends Composer<_$MoliaDatabase, $LocalCacheIndexTable> {
+  $$LocalCacheIndexTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get sourceKey => $composableBuilder(
+    column: $table.sourceKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get songId => $composableBuilder(
+    column: $table.songId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get artist => $composableBuilder(
+    column: $table.artist,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get album => $composableBuilder(
+    column: $table.album,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get coverUrl => $composableBuilder(
+    column: $table.coverUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get raw => $composableBuilder(
+    column: $table.raw,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cachedAt => $composableBuilder(
+    column: $table.cachedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LocalCacheIndexTableAnnotationComposer
+    extends Composer<_$MoliaDatabase, $LocalCacheIndexTable> {
+  $$LocalCacheIndexTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get sourceKey =>
+      $composableBuilder(column: $table.sourceKey, builder: (column) => column);
+
+  GeneratedColumn<String> get songId =>
+      $composableBuilder(column: $table.songId, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get artist =>
+      $composableBuilder(column: $table.artist, builder: (column) => column);
+
+  GeneratedColumn<String> get album =>
+      $composableBuilder(column: $table.album, builder: (column) => column);
+
+  GeneratedColumn<String> get coverUrl =>
+      $composableBuilder(column: $table.coverUrl, builder: (column) => column);
+
+  GeneratedColumn<int> get durationMs => $composableBuilder(
+    column: $table.durationMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get raw =>
+      $composableBuilder(column: $table.raw, builder: (column) => column);
+
+  GeneratedColumn<int> get cachedAt =>
+      $composableBuilder(column: $table.cachedAt, builder: (column) => column);
+}
+
+class $$LocalCacheIndexTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $LocalCacheIndexTable,
+          LocalCacheIndexRow,
+          $$LocalCacheIndexTableFilterComposer,
+          $$LocalCacheIndexTableOrderingComposer,
+          $$LocalCacheIndexTableAnnotationComposer,
+          $$LocalCacheIndexTableCreateCompanionBuilder,
+          $$LocalCacheIndexTableUpdateCompanionBuilder,
+          (
+            LocalCacheIndexRow,
+            BaseReferences<
+              _$MoliaDatabase,
+              $LocalCacheIndexTable,
+              LocalCacheIndexRow
+            >,
+          ),
+          LocalCacheIndexRow,
+          PrefetchHooks Function()
+        > {
+  $$LocalCacheIndexTableTableManager(
+    _$MoliaDatabase db,
+    $LocalCacheIndexTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalCacheIndexTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LocalCacheIndexTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LocalCacheIndexTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> sourceKey = const Value.absent(),
+                Value<String> songId = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> artist = const Value.absent(),
+                Value<String> album = const Value.absent(),
+                Value<String?> coverUrl = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<String> raw = const Value.absent(),
+                Value<int> cachedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalCacheIndexCompanion(
+                sourceKey: sourceKey,
+                songId: songId,
+                title: title,
+                artist: artist,
+                album: album,
+                coverUrl: coverUrl,
+                durationMs: durationMs,
+                raw: raw,
+                cachedAt: cachedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String sourceKey,
+                required String songId,
+                required String title,
+                Value<String> artist = const Value.absent(),
+                Value<String> album = const Value.absent(),
+                Value<String?> coverUrl = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<String> raw = const Value.absent(),
+                required int cachedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => LocalCacheIndexCompanion.insert(
+                sourceKey: sourceKey,
+                songId: songId,
+                title: title,
+                artist: artist,
+                album: album,
+                coverUrl: coverUrl,
+                durationMs: durationMs,
+                raw: raw,
+                cachedAt: cachedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$LocalCacheIndexTable, LocalCacheIndexRow>(table),
+                  BaseReferences<
+                    _$MoliaDatabase,
+                    $LocalCacheIndexTable,
+                    LocalCacheIndexRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LocalCacheIndexTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $LocalCacheIndexTable,
+      LocalCacheIndexRow,
+      $$LocalCacheIndexTableFilterComposer,
+      $$LocalCacheIndexTableOrderingComposer,
+      $$LocalCacheIndexTableAnnotationComposer,
+      $$LocalCacheIndexTableCreateCompanionBuilder,
+      $$LocalCacheIndexTableUpdateCompanionBuilder,
+      (
+        LocalCacheIndexRow,
+        BaseReferences<
+          _$MoliaDatabase,
+          $LocalCacheIndexTable,
+          LocalCacheIndexRow
+        >,
+      ),
+      LocalCacheIndexRow,
+      PrefetchHooks Function()
+    >;
 
 class $MoliaDatabaseManager {
   final _$MoliaDatabase _db;
@@ -10437,4 +11299,6 @@ class $MoliaDatabaseManager {
         _db,
         _db.playbackSessionCursors,
       );
+  $$LocalCacheIndexTableTableManager get localCacheIndex =>
+      $$LocalCacheIndexTableTableManager(_db, _db.localCacheIndex);
 }

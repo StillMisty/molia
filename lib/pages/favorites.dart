@@ -44,6 +44,7 @@ import '../services/playlist/playlist_import_service.dart';
 import '../services/escape_claims.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
+import '../services/local_cache_index_store.dart';
 import '../services/track_local_data_service.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
@@ -241,6 +242,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 记录 revision 随本地歌曲输入一起交给状态机做失效判定。
   DownloadRecords? _downloadRecords;
 
+  /// 设备本地缓存索引（可能未注册）：缓存完成 / 对账 / 移除时重建。
+  LocalCacheIndexStore? _cacheIndex;
+
   /// 曲库分组缓存：页面会因任意资料库通知（含每次写播放历史）重建，
   /// 索引 / 模式 / 语言都没变时分组内容完全一致，不必重新分配 N 个组
   /// 并逐组扫描首张封面。
@@ -314,6 +318,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
       _downloadRecords = records;
       records?.addListener(_onDownloadsChanged);
     }
+    final cacheIndex = context.read<LocalCacheIndexStore?>();
+    if (!identical(cacheIndex, _cacheIndex)) {
+      _cacheIndex?.removeListener(_onCacheIndexChanged);
+      _cacheIndex = cacheIndex;
+      cacheIndex?.addListener(_onCacheIndexChanged);
+    }
     // 重新可见 = 重新进入本页：刷新历史顺序（provider 通知自带重建）。
     final visible = ShellPageVisibility.maybeVisibleOf(context) ?? true;
     if (visible && !_pageVisible) _session.onPageVisible();
@@ -344,6 +354,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     widget.locatePlaying?.removeListener(_handleLocatePlaying);
     _cacheService?.revision.removeListener(_onCacheRevision);
     _downloadRecords?.removeListener(_onDownloadsChanged);
+    _cacheIndex?.removeListener(_onCacheIndexChanged);
     _collectionRequest?.removeListener(_onCollectionRequest);
     _folderCollapse
       ..removeListener(_onFolderCollapseChanged)
@@ -382,6 +393,25 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 缓存变化（清缓存 / LRU 淘汰）：重建以按新签名重算缓存行。
   void _onCacheRevision() {
     if (mounted) setState(() {});
+  }
+
+  /// 缓存索引变化（完成 / 对账 / 移除）：与列表 / 计数同帧重建。
+  void _onCacheIndexChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// 本帧的缓存索引快照（本地歌曲合集的输入）。
+  CollectionCacheIndex get _cacheIndexSnapshot {
+    final index = _cacheIndex;
+    if (index == null) {
+      // 未注册 = 无索引能力：按空且已就绪处理，不阻塞下载 / 导入行。
+      return const CollectionCacheIndex();
+    }
+    return CollectionCacheIndex(
+      entries: index.entries,
+      initialized: index.initialized,
+      revision: index.revision,
+    );
   }
 
   /// 本帧的下载能力快照（本地歌曲合集的输入）。
@@ -610,8 +640,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
           id: LibraryCollections.downloadsSentinel,
           name: l10n.libraryLocalSongs,
           icon: Icons.library_music_rounded,
-          // 计数与列表行数同源：下载 / 导入记录 + 播放历史里的缓存行
-          //（弹层打开前会先把缓存行重算到当前输入，见 _showCollectionPicker）。
+          // 计数与列表行数同源：下载 / 导入记录 + 缓存完成索引里命中缓存
+          // 的行（弹层打开前会先把缓存行重算到当前输入，见 _showCollectionPicker）。
           trackCount: _session.localSongsCount,
           selected: selected == LibraryCollections.downloadsSentinel,
           pinned: true,
@@ -1229,6 +1259,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         smartRows: smartRows,
         query: _searchController.text,
         downloads: _downloadsSnapshot,
+        cacheIndex: _cacheIndexSnapshot,
         cacheRevision: _cacheService?.revision.value ?? -1,
       ),
     );

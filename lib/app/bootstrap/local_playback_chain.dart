@@ -7,6 +7,8 @@
 /// （见 `test/app/bootstrap_smoke_test.dart`）。
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 
 import '../../data/mapping/track_mapper.dart';
@@ -94,6 +96,10 @@ class LocalPlaybackChain {
     audioCacheWriter: PlayingTrackCacheWriter(
       predownloader: local.audioCacheWriter,
     ),
+    // 移动端边播边缓存完成后把曲目快照交给设备本地索引；桌面 / 回退路径
+    // 由预下载器的 onCompleted 上报（两条路径互斥）。
+    onAudioCacheCompleted: (track) =>
+        unawaited(local.localCacheIndex.recordCompleted(track)),
   );
 
   PlaybackEngine buildEngine({required LocalPlaybackService service}) =>

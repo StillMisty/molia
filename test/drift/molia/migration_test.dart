@@ -16,6 +16,7 @@ import 'generated/schema.dart';
 import 'generated/schema_v1.dart' as v1;
 import 'generated/schema_v2.dart' as v2;
 import 'generated/schema_v3.dart' as v3;
+import 'generated/schema_v4.dart' as v4;
 
 /// v1 → v2：新增播放会话两表，现有资料库 / 统计 / 下载数据保留。
 void main() {
@@ -223,6 +224,65 @@ void main() {
   );
 
   _v2ToV3Tests();
+  _v3ToV4Tests();
+}
+
+/// v3 → v4：新增设备本地缓存索引表；现有数据保留，迁移不回填索引。
+void _v3ToV4Tests() {
+  test('v3 → v4 creates local cache index and preserves data', () async {
+    final verifier = SchemaVerifier(GeneratedHelper());
+    const history = v3.PlayHistoryData(
+      sourceKey: 'wy',
+      songId: 'song-1',
+      title: '歌曲一',
+      artist: '歌手',
+      album: '专辑',
+      coverUrl: 'https://img.example/a.jpg',
+      durationMs: 200000,
+      raw: '{"id":"song-1"}',
+      playedAt: 1000,
+      versionPhysical: 7,
+      versionCounter: 3,
+      deviceId: 'devA',
+    );
+
+    await verifier.testWithDataIntegrity(
+      oldVersion: 3,
+      newVersion: 4,
+      createOld: v3.DatabaseAtV3.new,
+      createNew: v4.DatabaseAtV4.new,
+      openTestedDatabase: MoliaDatabase.new,
+      createItems: (batch, oldDb) {
+        batch.insert(oldDb.playHistory, history);
+      },
+      validateItems: (newDb) async {
+        // 既有数据原样保留。
+        final rows = await newDb.select(newDb.playHistory).get();
+        expect(rows, hasLength(1));
+        expect(rows.single.songId, 'song-1');
+        expect(rows.single.raw, '{"id":"song-1"}');
+
+        // 迁移只建表，不产生任何索引行。
+        expect(await newDb.select(newDb.localCacheIndex).get(), isEmpty);
+
+        // 新表可正常写入（唯一键 + raw JSON）。
+        await newDb
+            .into(newDb.localCacheIndex)
+            .insert(
+              v4.LocalCacheIndexCompanion.insert(
+                sourceKey: 'wy',
+                songId: 'song-1',
+                title: '歌曲一',
+                raw: const Value('{"id":"song-1"}'),
+                cachedAt: 2000,
+              ),
+            );
+        final index = await newDb.select(newDb.localCacheIndex).get();
+        expect(index, hasLength(1));
+        expect(index.single.cachedAt, 2000);
+      },
+    );
+  });
 }
 
 /// v2 → v3：本地稳定 id + 扫描 / 缺文件列 + 列表增强列，现有数据保留。

@@ -60,8 +60,8 @@ tool/agent/worktree_prepare.sh <dir> [branch]  # 新 worktree：分支 / 签名 
   + `node tool/lx_prelude_harness.mjs`（应输出 PROTOCOL OK）；重抓平台响应 →
   `node tool/gen_{search,album,artist,lyric_search,qs}_fixtures.mjs`；
 - 改 `lib/data/molia_database.dart` → `dart run build_runner build`；当前基线是
-  `molia_database_v2.sqlite` / `schemaVersion = 3`（v2 新增播放会话两表，v3 是本地曲库 /
-  列表增强的身份重写）；以后改表结构提 `schemaVersion`，用 `dart run drift_dev make-migrations`
+  `molia_database_v2.sqlite` / `schemaVersion = 4`（v2 新增播放会话两表，v3 是本地曲库 /
+  列表增强的身份重写，v4 新增设备本地缓存索引 `local_cache_index`）；以后改表结构提 `schemaVersion`，用 `dart run drift_dev make-migrations`
   生成 schema 快照 + `stepByStep` 写增量迁移并保留数据（ADR-0005、ADR-0017、ADR-0021）；
 - 改 `tool/gen_taskbar_icons.py`（Windows 任务栏按钮字形 / 档位）→ `python3 tool/gen_taskbar_icons.py`
   （产物 `windows/runner/resources/thumbbar/*.ico` 提交进仓库；需 `rsvg-convert`）；

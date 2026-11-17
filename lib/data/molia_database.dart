@@ -1,13 +1,14 @@
 /// 本地数据库（drift）：资料库（播放历史 / 用户列表 / 删除墓碑 / 同步已知版本）
 /// + 跨设备增量日志（sync_journal / sync_journal_state）+ 听歌统计
-/// （play_events / play_tracks）+ 本地下载 + 播放会话。
+/// （play_events / play_tracks）+ 本地下载 + 播放会话 + 设备本地缓存索引。
 ///
 /// `schemaVersion = 1` 是 fresh 基线（库文件名见 [moliaDatabaseFileName]，
 /// 不迁移历史数据）；`2` 新增播放会话两表并保留 v1 数据（见
 /// docs/adr/0005-drift-migration.md、docs/adr/0017-playback-session-sql.md）；
 /// `3` 是其后的共享一次迁移：导入文件稳定 id（`downloads.localKey`）
 /// + 扫描 / 缺文件字段 + 列表描述 / 封面 / 分组列（见
-/// docs/adr/0021-local-library-identity.md）。
+/// docs/adr/0021-local-library-identity.md）；`4` 新增设备本地缓存索引
+/// （`local_cache_index`，见 docs/adr/0008-local-data-two-tier.md）。
 ///
 /// 文件复制 / 目录迁移收在 [appDataDirectory] 旁边的 helper 里（带 `dart:io`），
 /// 本文件仍只做库声明、路径选择与连接配置；测试可用内存库
@@ -204,6 +205,42 @@ class SyncJournalStates extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// 设备本地缓存索引：本机确认存在完整音频缓存的曲目快照。
+///
+/// 为什么需要它：本地歌曲的缓存行原先由「播放历史 ∩ 完整音频缓存」推导，
+/// 历史一旦被清空 / 删除（含同步墓碑）缓存行就消失，但缓存文件仍在磁盘。
+/// 这张表只记录**缓存真正写完**的曲目，播放历史完全不参与；它是本机派生
+/// 数据，不是资料库真值：
+///
+/// - 没有同步版本三列、没有同步类别、不写同步日志、不参与全库最大戳扫描；
+/// - 有该行不保证缓存现在仍在：展示前仍要实时扫描缓存目录过滤；
+/// - `raw` 用文本 JSON 保存（与播放历史同形态），缓存被清后回退在线取链时
+///   仍有脚本参数。
+///
+/// `(sourceKey, songId)` 唯一，同一曲目换音质重新缓存按键幂等 upsert；
+/// 上限由 [LocalCacheIndexStore] 在写入时按 `cachedAt` 倒序裁剪。
+@DataClassName('LocalCacheIndexRow')
+@TableIndex(name: 'idx_local_cache_index_cachedAt', columns: {#cachedAt})
+class LocalCacheIndex extends Table {
+  @override
+  String get tableName => 'local_cache_index';
+
+  TextColumn get sourceKey => text()();
+  TextColumn get songId => text()();
+  TextColumn get title => text()();
+  TextColumn get artist => text().withDefault(const Constant(''))();
+  TextColumn get album => text().withDefault(const Constant(''))();
+  TextColumn get coverUrl => text().nullable()();
+  IntColumn get durationMs => integer().nullable()();
+  TextColumn get raw => text().withDefault(const Constant('{}'))();
+
+  /// 缓存完成时间（毫秒）：排序与上限裁剪的依据，不参与展示。
+  IntColumn get cachedAt => integer()();
+
+  @override
+  List<String> get customConstraints => const ['UNIQUE (sourceKey, songId)'];
+}
+
 /// 本地下载（持久副本，不参与缓存 LRU 淘汰）。
 ///
 /// 行内保存曲目自包含快照（元数据 + 原音源 raw 取链参数），供「本地歌曲」
@@ -397,6 +434,7 @@ const String moliaDatabaseFileName = 'molia_database_v2';
     Downloads,
     PlaybackSessionPayloads,
     PlaybackSessionCursors,
+    LocalCacheIndex,
   ],
 )
 class MoliaDatabase extends _$MoliaDatabase {
@@ -494,12 +532,13 @@ class MoliaDatabase extends _$MoliaDatabase {
   }
 
   /// 当前 schema 版本：`1` 为 fresh 基线，`2` 新增播放会话两表，`3` 是本地
-  /// 曲库 / 列表增强共享的迁移（见 [LocalIdentityMigration]）。
+  /// 曲库 / 列表增强共享的迁移（见 [LocalIdentityMigration]），`4` 新增设备
+  /// 本地缓存索引（不参与同步，不从历史回填）。
   ///
   /// 后续结构变更必须写增量迁移：提版本号 → `dart run drift_dev make-migrations`
   /// 生成 schema 快照 → 用 `stepByStep` 写迁移并保留数据（见 ADR-0005）。
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -528,6 +567,12 @@ class MoliaDatabase extends _$MoliaDatabase {
               'ON downloads (localKey) WHERE localKey IS NOT NULL',
             );
           },
+          from3To4: (m, schema) async {
+            // 缓存索引只存本机派生数据；迁移不回填，旧缓存由首帧后的
+            // 「缓存确认对账」补入（见 LocalCacheIndexStore.reconcile）。
+            await m.createTable(schema.localCacheIndex);
+            await m.createIndex(schema.idxLocalCacheIndexCachedAt);
+          },
         )(m, from, to);
       });
     },
@@ -539,7 +584,7 @@ class MoliaDatabase extends _$MoliaDatabase {
 
   /// 迁移前快照：库文件 + `-wal`（+ `-shm` 可选）。失败只记日志，不阻断。
   ///
-  /// 旧版本无法打开 v3；快照只是给人工排查 / 手工回退用，不自动恢复。
+  /// 旧版本无法打开 v4；快照只是给人工排查 / 手工回退用，不自动恢复。
   Future<void> _snapshotBeforeMigration() async {
     final path = _snapshotPath;
     if (path == null) return;
@@ -550,7 +595,7 @@ class MoliaDatabase extends _$MoliaDatabase {
           .toIso8601String()
           .replaceAll(':', '-')
           .replaceAll('.', '-');
-      final target = '$path.pre-v3-$stamp.bak';
+      final target = '$path.pre-v4-$stamp.bak';
       await source.copy(target);
       for (final suffix in const ['-wal', '-shm']) {
         final sidecar = File('$path$suffix');

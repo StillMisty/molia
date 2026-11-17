@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 
 import '../domain/models/download.dart' show DownloadedTrack;
 import '../domain/models/library.dart';
+import '../domain/models/local_cache_index.dart';
 import '../domain/models/track.dart';
 import '../utils/collection_row_query.dart';
 import '../utils/collection_selection.dart';
@@ -159,6 +160,22 @@ class LibraryCollectionReader implements CollectionLibrary {
       _provider.trackFromHistoryEntry(entry);
 }
 
+/// 设备本地缓存索引的一帧快照（本地歌曲合集的输入）。
+///
+/// 用快照而不是 store：会话与单测都不感知索引实现；`initialized=false` 时
+/// 本地歌曲显示加载态，避免先闪空态。
+class CollectionCacheIndex {
+  const CollectionCacheIndex({
+    this.entries = const [],
+    this.initialized = true,
+    this.revision = 0,
+  });
+
+  final List<LocalCacheIndexEntry> entries;
+  final bool initialized;
+  final int revision;
+}
+
 /// 下载能力的一帧快照（本地歌曲合集的输入）。
 ///
 /// 用快照而不是 `DownloadRecords`：会话与单测都不感知记录实现。
@@ -226,6 +243,7 @@ class CollectionSessionInput {
     required this.names,
     required this.query,
     this.downloads = const CollectionDownloads.unavailable(),
+    this.cacheIndex = const CollectionCacheIndex(),
     this.cacheRevision = -1,
     this.smartRows = const {},
   });
@@ -237,6 +255,9 @@ class CollectionSessionInput {
   final String query;
 
   final CollectionDownloads downloads;
+
+  /// 设备本地缓存索引快照（本地歌曲缓存行的唯一候选来源）。
+  final CollectionCacheIndex cacheIndex;
 
   /// 音频缓存 revision（清缓存 / LRU 淘汰后变化）。
   final int cacheRevision;
@@ -256,6 +277,7 @@ class CollectionFrame {
     required this.library,
     required this.snapshot,
     required this.downloads,
+    required this.cacheIndex,
     required this.cacheRevision,
     required this.playlistId,
   });
@@ -266,6 +288,7 @@ class CollectionFrame {
   final CollectionLibrarySnapshot snapshot;
 
   final CollectionDownloads downloads;
+  final CollectionCacheIndex cacheIndex;
   final int cacheRevision;
 
   /// 该帧解析出的落库列表 id（历史 / 本地歌曲为 null）。
@@ -446,6 +469,7 @@ class CollectionSession extends ChangeNotifier {
       library: library,
       snapshot: snapshot,
       downloads: input.downloads,
+      cacheIndex: input.cacheIndex,
       cacheRevision: input.cacheRevision,
       playlistId: selectedPlaylistId,
     );
@@ -541,7 +565,8 @@ class CollectionSession extends ChangeNotifier {
     }
     if (identity.isSmartList || identity.isLibraryBrowse) return null;
     if (identity.isLocalSongs) {
-      // 本地歌曲以下载 / 导入记录为准，历史缓存行失败不影响列表可用。
+      // 本地歌曲以下载 / 导入记录 + 缓存索引为准，缓存目录列举失败不影响
+      // 列表可用。
       return null;
     }
     // 收藏 / 自建列表都要落库 id 才读得到曲目：取不到说明列表清单本身
@@ -777,13 +802,10 @@ class CollectionSession extends ChangeNotifier {
   }
 
   LocalSongsInput _localSongsInput(CollectionFrame frame) {
-    final history = frame.snapshot.history;
     return LocalSongsInput(
-      history: history,
-      // 惰性转换：签名只读历史键；真正列举缓存时才需要领域曲目。
-      historyTracks: () => [
-        for (final entry in history) frame.library.trackFromHistoryEntry(entry),
-      ],
+      indexEntries: frame.cacheIndex.entries,
+      indexInitialized: frame.cacheIndex.initialized,
+      indexRevision: frame.cacheIndex.revision,
       downloads: frame.downloads.records,
       supported: frame.downloads.supported,
       initialized: frame.downloads.initialized,

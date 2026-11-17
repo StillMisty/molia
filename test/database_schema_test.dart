@@ -49,6 +49,7 @@ void main() {
       [for (final row in rows) row['name']],
       [
         'downloads',
+        'local_cache_index',
         'play_events',
         'play_history',
         'play_tracks',
@@ -199,6 +200,17 @@ void main() {
         'positionMs|INTEGER|1|null|0',
         'savedAt|INTEGER|1|null|0',
       ],
+      'local_cache_index': [
+        'sourceKey|TEXT|1|null|0',
+        'songId|TEXT|1|null|0',
+        'title|TEXT|1|null|0',
+        "artist|TEXT|1|''|0",
+        "album|TEXT|1|''|0",
+        'coverUrl|TEXT|0|null|0',
+        'durationMs|INTEGER|0|null|0',
+        "raw|TEXT|1|'{}'|0",
+        'cachedAt|INTEGER|1|null|0',
+      ],
     };
 
     for (final entry in expected.entries) {
@@ -223,6 +235,9 @@ void main() {
         'idx_downloads_localKey':
             'CREATE UNIQUE INDEX idx_downloads_localKey '
             'ON downloads (localKey) WHERE localKey IS NOT NULL',
+        'idx_local_cache_index_cachedAt':
+            'CREATE INDEX idx_local_cache_index_cachedAt '
+            'ON local_cache_index (cachedAt)',
         'idx_play_history_playedAt':
             'CREATE INDEX idx_play_history_playedAt ON play_history (playedAt)',
         'idx_playlists_syncId':

@@ -565,6 +565,50 @@ void main() {
       expect(storage.enforceCalls, 1);
     });
 
+    test('任务完成且最终文件存在才上报缓存完成；失败 / 取消不写', () async {
+      final dir = await Directory.systemTemp.createTemp('molia_predl_done');
+      addTearDown(() => dir.delete(recursive: true));
+      final completed = <String>[];
+      final targetPaths = <String>[];
+      final completers = <Completer<void>>[];
+      final downloader = CacheAudioPredownloader(
+        cacheService: CacheService(
+          storage: _FakeCacheStorage(audioDir: dir.path),
+        ),
+        platformSupported: () => true,
+        starter: ({required uri, required targetPath, headers}) {
+          targetPaths.add(targetPath);
+          final completer = Completer<void>();
+          completers.add(completer);
+          return AudioPredownloadTask(done: completer.future, onCancel: () {});
+        },
+        onCompleted: (track) => completed.add(track.id),
+      );
+
+      Future<AudioPredownloadTask?> start(String id) => downloader.predownload(
+        track: _track(id),
+        stream: PlayableStream(Uri.parse('https://cdn.example/$id.mp3')),
+      );
+
+      // 成功：最终文件落位后才上报。
+      final ok = await start('ok');
+      expect(completed, isEmpty);
+      await File(targetPaths[0]).writeAsBytes(const [1, 2, 3]);
+      completers[0].complete();
+      await ok!.done;
+      await pumpEventQueue();
+      expect(completed, ['wy:ok']);
+
+      // 失败 / 取消：只有半成品 `.predl`、没有最终文件 → 不上报。
+      final failed = await start('failed');
+      await File('${targetPaths[1]}$audioCachePredownloadSuffix')
+          .writeAsBytes(const [1]);
+      completers[1].complete();
+      await failed!.done;
+      await pumpEventQueue();
+      expect(completed, ['wy:ok'], reason: '半成品不能当成缓存完成');
+    });
+
     test('headers 透传给预取启动器；空 headers 归为 null', () async {
       final storage = _FakeCacheStorage(audioDir: '/tmp/molia_audio');
       final captured = <Map<String, String>?>[];
