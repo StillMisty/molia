@@ -47,7 +47,8 @@
     也不要推广到 Android——Android 走官方 teardown（stopApp/uninstall）能干净退出，注册看门狗
     反而会抢在卸载/回收之前退出进程。
     Android 若遇跑完不退出，是上游 adb teardown 无超时（flutter/flutter#187785 / #187984，
-    3.47.6 已修 DDS 路径），先看 `dart run tool/agent/cli.dart test` 的日志尾部再判断。
+    3.47.6 已修 DDS 路径），先看 `dart run tool/agent/cli.dart test` 的日志尾部再判断
+    （命令默认后台跑；日志与 `.status` 在 `$RUN_DIR/it-*.log|.status`）。
     另：Linux 集成测试默认套 `xvfb-run`（脚本无条件处理，WSLg 下也不会弹窗），否则无显示环境
     会报「Error waiting for a debug connection」；要肉眼观察用 `dart run tool/agent/cli.dart test linux --window`。
 12. **不内置字体资产**：界面与海报统一使用设备字体，用户可在设置中切换「应用字体」

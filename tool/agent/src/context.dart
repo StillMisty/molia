@@ -65,10 +65,31 @@ class ToolContext {
     return '${tmp ?? '/tmp'}/molia-agent';
   }
 
-  void log(String message) => stderr.writeln('[agent] $message');
+  void log(String message) {
+    final line = '[agent] $message';
+    stderr.writeln(line);
+    // 后台 e2e 由父进程把子进程 stdout/stderr 收到日志文件里；未设置时保持
+    // 只写终端。
+    final path = Platform.environment['MOLIA_AGENT_LOG'];
+    if (path == null || path.isEmpty) return;
+    try {
+      File(path).writeAsStringSync('$line\n', mode: FileMode.append);
+    } catch (_) {
+      // 日志写失败不影响主流程。
+    }
+  }
 
   Never fail(String message) {
-    stderr.writeln('[agent] ERROR: $message');
+    log('ERROR: $message');
+    // 后台 e2e 的调用方靠状态文件判断结束；失败也要落盘，不能只留在日志里。
+    final status = Platform.environment['MOLIA_AGENT_STATUS'];
+    if (status != null && status.isNotEmpty) {
+      try {
+        File(status).writeAsStringSync('1\n');
+      } catch (_) {
+        // 状态文件写失败不改变退出码。
+      }
+    }
     exit(1);
   }
 
@@ -198,12 +219,15 @@ class ToolContext {
 
   /// 透传输出同时写日志（`flutter test` / `flutter run` 用）：终端上的进度
   /// 不被吞，失败时又能拿到完整日志。
+  ///
+  /// [append] 为 true 时保留日志里已有的内容（后台任务先写启动信息）。
   Future<int> runTee(
     List<String> command, {
     File? logFile,
     Duration? timeout,
     String? workingDirectory,
     Map<String, String>? environment,
+    bool append = false,
   }) async {
     final process = await Process.start(
       command.first,
@@ -212,7 +236,9 @@ class ToolContext {
       environment: environment,
       runInShell: isWindows,
     );
-    final sink = logFile?.openWrite();
+    final sink = logFile?.openWrite(
+      mode: append ? FileMode.append : FileMode.write,
+    );
     void write(String line) {
       stdout.writeln(line);
       sink?.writeln(line);

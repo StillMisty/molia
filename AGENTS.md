@@ -37,8 +37,8 @@ Android CLI 1.1.16919734。
 flutter analyze --no-pub   # 必须 0 error / 0 warning
 flutter test --no-pub      # 全量（默认集，本机 <30s）；单文件：flutter test test/lx_core_test.dart --no-pub
 dart run tool/agent/cli.dart -h                # 跨端工具入口：info/deps/analyze/test/smoke/app/emu/win/size/perf…（ADR-0031）
-dart run tool/agent/cli.dart test linux        # 端到端（真实引擎 + 设置页 + 窗口/托盘，不含播放）；Xvfb 无窗口，桌面看门狗勿删
-dart run tool/agent/cli.dart test android      # 同一套跑模拟器（先 emu start）；--window / --timeout 见命令用法
+dart run tool/agent/cli.dart test linux        # 端到端（真实引擎 + 设置页 + 窗口/托盘，不含播放）；默认后台（打印日志/状态路径），--wait 等结果；Xvfb 无窗口，桌面看门狗勿删
+dart run tool/agent/cli.dart test android      # 同一套跑模拟器（先 emu start）；同样默认后台；--window / --timeout 见命令用法
 dart run tool/agent/cli.dart smoke linux       # 启动首帧烟测（真实 main + provider tree；Xvfb，抓 runApp 前崩溃）
 dart run tool/agent/cli.dart deps              # 依赖/工具链体检：pub outdated + analyze suggestions + Gradle 实际版本
 dart run tool/agent/cli.dart size apk --check <apk>   # APK 分组体积与 native 库约束（无需 unzip）

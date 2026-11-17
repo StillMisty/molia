@@ -2,6 +2,9 @@
 ///
 /// 与 `dart run tool/agent/cli.dart test` 同口径：Linux 默认 headless（xvfb-run），Android
 /// 默认取运行中的模拟器；判定只看 flutter test 退出码，失败时回显日志尾部。
+///
+/// 默认后台跑：命令本身重新拉起一个脱离终端的子进程，打印日志与状态文件后立刻
+/// 返回，避免 agent / 人守着十几分钟的构建与安装。需要退出码时加 `--wait`。
 library;
 
 import 'dart:async';
@@ -29,6 +32,9 @@ Future<void> runTest(ToolContext context, List<String> args) async {
   var headless = true;
   String? serial;
   var noUninstall = false;
+  var wait = false;
+  String? internalLog;
+  String? internalStatus;
 
   for (var index = 1; index < args.length; index++) {
     final arg = args[index];
@@ -43,6 +49,12 @@ Future<void> runTest(ToolContext context, List<String> args) async {
         headless = false;
       case '--no-uninstall':
         noUninstall = true;
+      case '--wait':
+        wait = true;
+      case '--internal-log':
+        internalLog = _value(args, ++index, '--internal-log');
+      case '--internal-status':
+        internalStatus = _value(args, ++index, '--internal-status');
       default:
         if (arg.startsWith('-')) {
           stderr.write(_usage);
@@ -58,60 +70,78 @@ Future<void> runTest(ToolContext context, List<String> args) async {
     }
   }
 
-  switch (platform) {
-    case 'linux':
-      final code = await _runOne(
-        context,
-        'linux',
-        file,
-        timeoutSeconds,
-        headless: headless,
-        noPub: noPub,
-        noUninstall: noUninstall,
-      );
-      if (code != 0) exitCode = code;
-    case 'android':
-      final code = await _runOne(
-        context,
-        'android',
-        file,
-        timeoutSeconds,
-        headless: headless,
-        serial: serial,
-        noPub: noPub,
-        noUninstall: noUninstall,
-      );
-      if (code != 0) exitCode = code;
-    case 'all':
-      final linuxCode = await _runOne(
-        context,
-        'linux',
-        file,
-        timeoutSeconds,
-        headless: headless,
-        noPub: noPub,
-        noUninstall: noUninstall,
-      );
-      if (linuxCode != 0) {
-        exitCode = linuxCode;
-        return;
-      }
-      final androidCode = await _runOne(
-        context,
-        'android',
-        file,
-        timeoutSeconds,
-        headless: headless,
-        serial: serial,
-        noPub: noPub,
-        noUninstall: noUninstall,
-      );
-      if (androidCode != 0) exitCode = androidCode;
+  final internal = internalLog != null || internalStatus != null;
+  if (!wait && !internal) {
+    await _spawnBackground(context, args, platform);
+    return;
+  }
+
+  final logFile = internalLog == null ? null : File(internalLog);
+  try {
+    switch (platform) {
+      case 'linux':
+        final code = await _runOne(
+          context,
+          'linux',
+          file,
+          timeoutSeconds,
+          headless: headless,
+          noPub: noPub,
+          noUninstall: noUninstall,
+          logFile: logFile,
+        );
+        if (code != 0) exitCode = code;
+      case 'android':
+        final code = await _runOne(
+          context,
+          'android',
+          file,
+          timeoutSeconds,
+          headless: headless,
+          serial: serial,
+          noPub: noPub,
+          noUninstall: noUninstall,
+          logFile: logFile,
+        );
+        if (code != 0) exitCode = code;
+      case 'all':
+        final linuxCode = await _runOne(
+          context,
+          'linux',
+          file,
+          timeoutSeconds,
+          headless: headless,
+          noPub: noPub,
+          noUninstall: noUninstall,
+          logFile: logFile,
+        );
+        if (linuxCode != 0) {
+          exitCode = linuxCode;
+          return;
+        }
+        final androidCode = await _runOne(
+          context,
+          'android',
+          file,
+          timeoutSeconds,
+          headless: headless,
+          serial: serial,
+          noPub: noPub,
+          noUninstall: noUninstall,
+          logFile: logFile,
+        );
+        if (androidCode != 0) exitCode = androidCode;
+    }
+  } finally {
+    if (internalStatus != null) _writeStatus(internalStatus, exitCode);
   }
 }
 
 const String _usage = '''
 用法: dart run tool/agent/cli.dart test linux|android|all [选项] [<serial>]
+
+默认后台运行：打印日志与状态文件路径后立刻返回（不占终端 / agent）。
+需要等退出码时加 --wait。
 
 选项:
   --file <path>      集成测试文件（默认 integration_test/lx_engine_integration_test.dart）
@@ -119,7 +149,61 @@ const String _usage = '''
   --no-pub           跳过 flutter pub get（仅本地迭代）
   --window           在真实显示上跑（默认 Xvfb；Windows / macOS 无此开关）
   --no-uninstall     Android 跑完保留安装（调试安装态时用）
+  --wait             前台等待结果（CI / 脚本需要退出码时用）
 ''';
+
+/// 默认后台执行：重新拉起一个脱离终端的自己（`--wait` + 内部日志/状态参数），
+/// 父进程立刻返回。
+///
+/// 用 `Platform.resolvedExecutable` 直接跑同一份脚本而不是再走一次
+/// `dart run`：少一次 pub 解析，退出后子进程也不受调用方 shell 的生命周期影响。
+Future<void> _spawnBackground(
+  ToolContext context,
+  List<String> args,
+  String platform,
+) async {
+  final directory = Directory(context.runDir)..createSync(recursive: true);
+  final stamp = _stamp();
+  final logFile = File('${directory.path}/it-$platform-$stamp.log');
+  final statusFile = File('${directory.path}/it-$platform-$stamp.status');
+  // 先写「未完成」：子进程异常早退（连状态都没写）时，调用方能看出这不是结果。
+  statusFile.writeAsStringSync('starting\n');
+
+  final process = await Process.start(
+    Platform.resolvedExecutable,
+    [
+      Platform.script.toFilePath(),
+      'test',
+      ...args,
+      '--wait',
+      '--internal-log',
+      logFile.path,
+      '--internal-status',
+      statusFile.path,
+    ],
+    workingDirectory: Directory.current.path,
+    environment: {
+      'MOLIA_AGENT_LOG': logFile.path,
+      'MOLIA_AGENT_STATUS': statusFile.path,
+    },
+    mode: ProcessStartMode.detached,
+  );
+
+  context.log('e2e（$platform）在后台运行（pid ${process.pid}）');
+  context.log('日志: ${logFile.path}（tail -f 看进度）');
+  context.log('结果: ${statusFile.path}（完成后写入 exit code；`starting` = 未完成或异常早退）');
+  context.log('要等结果：重跑时加 --wait');
+}
+
+void _writeStatus(String path, int code) {
+  try {
+    File(path)
+      ..createSync(recursive: true)
+      ..writeAsStringSync('$code\n');
+  } catch (error) {
+    stderr.writeln('[agent] 写状态文件失败: $error');
+  }
+}
 
 String _value(List<String> args, int index, String flag) {
   if (index >= args.length) {
@@ -138,6 +222,7 @@ Future<int> _runOne(
   String? serial,
   required bool noPub,
   required bool noUninstall,
+  File? logFile,
 }) async {
   final flutter =
       context.flutter ?? context.fail('找不到 flutter（把 Flutter 加进 PATH）');
@@ -192,16 +277,21 @@ Future<int> _runOne(
     if (noUninstall) '--no-uninstall',
   ];
 
-  final logFile = File('${context.runDir}/it-$platform-${_stamp()}.log')
-    ..createSync(recursive: true);
+  final resolvedLog =
+      logFile ??
+      (File('${context.runDir}/it-$platform-${_stamp()}.log')
+        ..createSync(recursive: true));
+  final background = logFile != null;
+  if (background) resolvedLog.parent.createSync(recursive: true);
   context.log('运行: ${command.join(' ')}');
-  context.log('日志: ${logFile.path}');
+  context.log('日志: ${resolvedLog.path}');
 
   var code = await context.runTee(
     command,
-    logFile: logFile,
+    logFile: resolvedLog,
     timeout: Duration(seconds: timeout),
     environment: childEnvironment(),
+    append: background,
   );
 
   if (code != 0 && platform == 'linux') {
@@ -212,12 +302,12 @@ Future<int> _runOne(
 
   if (code == 124) {
     context.log('墙钟超时（${timeout}s）被终止；Android 首次 Gradle/冷启动请加 --timeout');
-    _tail(logFile, 40);
+    _tail(resolvedLog, 40);
   } else if (code != 0) {
     context.log('测试失败（exit=$code），日志尾部：');
-    _tail(logFile, 40);
+    _tail(resolvedLog, 40);
   } else {
-    context.log('测试通过（$platform，日志: ${logFile.path}）');
+    context.log('测试通过（$platform，日志: ${resolvedLog.path}）');
   }
   return code;
 }

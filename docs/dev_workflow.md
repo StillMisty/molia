@@ -131,6 +131,8 @@ dart run tool/agent/cli.dart smoke linux             # 真实 main() + provider 
 
 - 集成测试只走官方 `flutter test integration_test/... -d <device>`；脚本负责
   Xvfb、设备等待、超时与日志。
+- `test` 默认后台跑：立刻打印日志与状态文件（`$RUN_DIR/it-<平台>-<时间戳>.log|.status`），
+  完成后状态文件写入退出码；要当场等结果用 `--wait`。
 - 集成测试**不进 CI**：需要真实设备 / 显示，引擎用例耗时也远超 CI 预算；CI 只跑
   analyze + 单测，设备回归在本地或发布前跑。
 - 集成测试不含真实播放：无头环境 libmpv 装载不可靠（已知坑 #33），播放由单测与

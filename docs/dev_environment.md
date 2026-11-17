@@ -52,7 +52,8 @@ PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解�
   `stepByStep` 保留数据（ADR-0005）。
 - **集成测试默认 headless**：`dart run tool/agent/cli.dart test linux` 无条件套 `xvfb-run -a`
   （并强制 `GDK_BACKEND=x11`、去掉 `WAYLAND_DISPLAY`——只改 DISPLAY 挡不住 GTK 走 WSLg
-  Wayland，窗口照样弹）；要肉眼观察加 `--window`。等价裸命令
+  Wayland，窗口照样弹）；要肉眼观察加 `--window`。命令默认后台跑（打印日志 / 状态文件后
+  返回），要等退出码加 `--wait`。等价裸命令
   `flutter test integration_test/... -d linux` 必须有 DISPLAY（官方要求，无显示时 App 起不来）；
   缺 `xvfb-run` 时 `sudo pacman -S xorg-server-xvfb` / `sudo apt install xvfb`。
 
@@ -105,8 +106,10 @@ tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
   验最低版本时另建 API 35 AVD 并 `AVD_NAME=... emu.sh start`。
 - 日志 / 截图 / pid 统一放在 `${TMPDIR:-/tmp}/molia-agent`（默认 `/tmp/molia-agent`，
   可用 `RUN_DIR` 覆盖；临时目录，重启可清）；集成测试日志为
-  `it-<platform>-<时间戳>.log`，失败时脚本自动回显尾部 40 行。Linux 集成测试默认跑在
-  Xvfb 虚拟显示上（`dart run tool/agent/cli.dart test linux --window` 才上真实显示，WSLg 下会弹窗）。
+  `it-<platform>-<时间戳>.log`，同批次的 `.status` 在跑完时写入退出码（`starting` 表示
+  还没结束）；失败时脚本把日志尾部 40 行写进日志与终端（后台跑时只看日志文件）。
+  Linux 集成测试默认跑在 Xvfb 虚拟显示上（`dart run tool/agent/cli.dart test linux --window`
+  才上真实显示，WSLg 下会弹窗）。
 - Flutter semantics 节点可能不完整：视觉定位用 `shot.sh --annotate` 生成带编号标注的截图，
   再用 `ui.sh resolve 截图.png "#3"` 解析为 `tap X Y`。
 - 输入文本前确保输入框已聚焦（`ui.sh text` 把空格转成 `%s`）。

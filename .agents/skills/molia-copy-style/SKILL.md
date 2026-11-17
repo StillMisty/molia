@@ -36,6 +36,6 @@ description: 在本仓写、改、清理界面显示文案时使用：黑话判�
 1. zh / en 成对改，占位符 `{name}` 保持一致；
 2. `flutter gen-l10n` 更新 `lib/l10n/app_localizations*.dart` 一起提交；
 3. 测试字面量断言按新文案同步（有 l10n 实例时优先引用 `l10n.<key>`）；集成测试
-   finder 同步更新并跑 `dart run tool/agent/cli.dart test linux`；
+   finder 同步更新并跑 `dart run tool/agent/cli.dart test linux --wait`；
 4. `flutter analyze --no-pub` + `flutter test --no-pub` 全量过；
 5. 批量文案改动一个 `chore(l10n): ...` 提交，与功能改动分开。

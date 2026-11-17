@@ -1937,8 +1937,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
 ```bash
 flutter analyze --no-pub                 # 0 error / 0 warning
 flutter test --no-pub                    # 含 domain/catalog/playback/layering/supervisor/update
-dart run tool/agent/cli.dart test linux                 # 集成测试（引擎/设置页/窗口/托盘；不含播放）；默认 Xvfb 无窗口
-dart run tool/agent/cli.dart test android               # 同一份集成测试跑模拟器（跑完自动卸载）
+dart run tool/agent/cli.dart test linux                 # 集成测试（引擎/设置页/窗口/托盘；不含播放）；默认 Xvfb 无窗口、后台跑（--wait 等结果）
+dart run tool/agent/cli.dart test android               # 同一份集成测试跑模拟器（跑完自动卸载；同样默认后台）
 flutter build apk --debug
 flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate
 # 不要加 --extra-gen-snapshot-options=--strip：AAB 需要 libapp.so.sym，见 pitfalls #100。

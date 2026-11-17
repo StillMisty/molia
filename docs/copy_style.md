@@ -62,6 +62,6 @@
 1. zh / en 成对改，占位符 `{name}` 保持一致，不改 key（改 key 属于重构，另开提交）；
 2. `flutter gen-l10n` 更新 `lib/l10n/app_localizations*.dart` 并一起提交；
 3. 测试里的字面量断言按新文案同步更新（有 l10n 实例时优先引用 `l10n.<key>`）；
-   `integration_test/` 用中文找控件的 finder 同步更新，并跑 `dart run tool/agent/cli.dart test linux`；
+   `integration_test/` 用中文找控件的 finder 同步更新，并跑 `dart run tool/agent/cli.dart test linux --wait`；
 4. `flutter analyze --no-pub` + `flutter test --no-pub` 全量过；
 5. 批量文案改动保持一个 `chore(l10n): ...` 提交，与功能改动分开。

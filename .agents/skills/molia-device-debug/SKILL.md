@@ -21,7 +21,7 @@ tool/agent/emu.sh stop         # 停止模拟器（app.sh stop 只停 flutter ru
 - 热重载边界：UI / 简单方法 → hot reload；`initState`、全局静态状态、`main()` → hot restart；
   `test/**`、注释与空白不触发；
 - `app.sh` 按设备记录会话（`-d linux` 的桌面会话不会误发给 adb，反之亦然）；
-- 日志 / 截图 / pid 统一在 `${TMPDIR:-/tmp}/molia-agent`（默认 `/tmp/molia-agent`，`RUN_DIR` 可覆盖）；集成测试失败时脚本自动回显日志尾部；
+- 日志 / 截图 / pid 统一在 `${TMPDIR:-/tmp}/molia-agent`（默认 `/tmp/molia-agent`，`RUN_DIR` 可覆盖）；集成测试默认后台跑，日志 `it-<platform>-<时间戳>.log`、退出码写同批 `.status`（失败时日志尾部 40 行也在其中）；
 - 视觉定位：`shot.sh --annotate` 生成带编号标注的截图，再 `ui.sh resolve 截图.png "#3"` 得到坐标；
   输入文本前确保输入框已聚焦；
 - 模拟器默认 16 KB 页；镜像、AVD 与 WSL 限制等细节见 `docs/dev_environment.md`（权威出处）。

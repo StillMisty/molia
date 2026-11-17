@@ -28,8 +28,8 @@ node tool/gen_lyric_search_fixtures.mjs
 2. `flutter test --no-pub`（重点：`lx_core` / `lx_supervisor` / `lx_script_update` /
    `builtin_*_parse` / `builtin_lyric_decode` / `source_manager_builtin_lyric` / `layering`）；
 3. `node tool/lx_prelude_harness.mjs` → `PROTOCOL OK`；
-4. `dart run tool/agent/cli.dart test linux`（真实导入 → 搜索 → 取链 → 歌词；不含播放，无头环境不装 libmpv）；
-5. `dart run tool/agent/cli.dart test android`（模拟器同一套用例，跑完自动卸载）；
+4. `dart run tool/agent/cli.dart test linux --wait`（真实导入 → 搜索 → 取链 → 歌词；不含播放，无头环境不装 libmpv）；
+5. `dart run tool/agent/cli.dart test android --wait`（模拟器同一套用例，跑完自动卸载）；
 6. 真机/模拟器手验：设置 → 音源管理 → 导入社区脚本（或在线更新）→ 搜索 → 播放。
 
 平台接口说明、加密与签名细节、已知限制见 `docs/lx_sources.md`（权威出处）。
