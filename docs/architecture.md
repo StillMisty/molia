@@ -45,9 +45,12 @@
    接线圈按子系统拆在 `lib/app/bootstrap/**`（catalog / 本地数据 / 资料库 /
    playback / sync / AI / 歌词显示 / 桌面 / 更新 / Provider 树 / 首帧收尾
    各 stack builder：依赖进、装好的子系统出；初始化顺序与前向引用关在 builder
-   内，main() 只做顺序调用 + runApp）；应用壳（MyThemedApp / 导航栏 / 顶栏 /
-   迷你条）与全局 key 在 `lib/app/app_shell.dart`，桌面骨架（顶栏工具条 /
-   恒折叠侧栏 / 常驻底栏播放条）在 `lib/app/desktop/**`，测试可直接挂载
+   内，main() 只做顺序调用 + runApp）；应用壳的对外入口是
+   `lib/app/app_shell.dart`（barrel：MyApp / MyThemedApp / 全局 key 等公开
+   类型），实现按职责拆在 `lib/app/shell/`（app_shell / shell_bar /
+   shell_page_layer / shell_progress / pairing_queue / themed_app /
+   app_keys），桌面骨架（顶栏工具条 / 恒折叠侧栏 / 常驻底栏播放条）在
+   `lib/app/desktop/**`，测试可直接挂载
    （`MyApp(desktopShell: true/false)` 可强制骨架，默认按平台判定）；
 5. UI 禁止 import `lib/sources/**`（Wave 7 后白名单已清空，新增违规必须修复）；
 6. 模块布局与体积由 `test/architecture/module_layout_test.dart` 强制（ADR-0034）：
@@ -1483,7 +1486,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   尾段恢复阴影的取舍，仍需真机 profile 确认收益。
 - **飞行几何不变量**：锚点在点击那一刻**同步**抓取（封面 URL 同刻确定，飞行中不换
   图），因此①隐藏页层（出场过渡结束/未参与过渡）必须 `scale == 1`
-  （`app_shell.dart::shellPageLayerPresentation`，出场微缩只存在于过渡进行中）；
+  （`lib/app/shell/shell_page_layer.dart::shellPageLayerPresentation`，出场微缩
+  只存在于过渡进行中）；
   ②矩形读取必须映射两角得到真实屏幕矩形（唯一实现
   `player_morph.dart::anchorRectOf`，容器为空 = 全局坐标），祖先稳态缩放
   （暂停态 0.98、按压 0.96）不得让副本尺寸/位置错位。
