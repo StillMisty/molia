@@ -60,8 +60,9 @@
 5. UI 禁止 import `lib/sources/**`（Wave 7 后白名单已清空，新增违规必须修复）；
 6. 模块布局与体积由 `test/architecture/module_layout_test.dart` 强制（ADR-0034）：
    模型只在 `lib/domain/models/`、服务在 `lib/services/`，`lib/utils/**` 不反向
-   依赖 UI / 状态 / 数据层，`lib/**` 单文件 ≤800 行，`pages/widgets` 不直接
-   import `lib/data/**`；现存超限 / 违规文件在测试内登记，只减不增。
+   依赖 UI / 状态 / 数据层，`lib/**` 单文件 ≤800 行，`pages/widgets` 禁止
+   import `lib/data/**`（白名单已清空，新增违规必须修复）；现存超限文件仍在
+   体积白名单登记，只减不增。
 
 ## 2. 领域层
 
@@ -80,6 +81,8 @@
     `CommentKind` 区分热门与最新）；
   - `Album`（专辑 id / 名称 / 歌手 / 封面 / 年份 / 曲目列表 / 分页）；
   - `ArtistSummary` / `ArtistDetail`（歌手搜索条目 / 歌手页数据：头像、简介、曲目、分页）；
+  - `WebDavConfig` / `SyncLogEntry`（同步设置页与日志子页的只读投影；JSON 形状仍由
+    data 层编解码）；
   - `LyricHit`（按歌词搜歌命中：领域 `Track` + 命中片段）；`SearchKind`（song / artist / lyric）；
   - `SourceDescriptor` / `SourceCapabilities`：`SourceDescriptor` 是渠道的**唯一形状**
     （key / displayName / kind / capabilities / enabled / discoverable / order），
@@ -88,7 +91,9 @@
 - **端口**：`MusicSource`（search / `resolve`（返回 `PlayableStream`：uri + 请求头 +
   有效期）/ lyrics / artwork / comments / collection / searchArtists / searchLyrics）、`SourceRegistry`
   （descriptors/byKey/forTrack/setOrder/changes）、`PlaybackFacade`（snapshot + position +
-  控制方法；唯一实现是 `PlaybackEngine`）、`UiMessenger`（showMessage/showFailure）、
+  控制方法；唯一实现是 `PlaybackEngine`）、`AlbumRepository` / `ArtistRepository`
+  （专辑 / 歌手分页取数；data 层 `AlbumService` / `ArtistService` 实现，UI 经
+  `AlbumViewModel` / `ArtistViewModel` 消费）、`UiMessenger`（showMessage/showFailure）、
   `StateListenable<T>`。
 
 ## 3. 数据/适配层
@@ -347,8 +352,9 @@
   原样透传）；真实响应快照见 `test/fixtures/albums/`（抓取脚本
   `tool/gen_album_fixtures.mjs`），端点均需真机复验。端口路由：
   `MusicSource.collection(CollectionRef(type: album))` 在能力位为真时转发
-  `fetchAlbum`（playlist / artist 仍 unsupported）。UI 为 `lib/pages/album_page.dart`
-  （头部元信息 + 播放全部 + 加入列表 + `PagedTrackCollection` 分页列表），入口：歌曲信息页
+  `fetchAlbum`（playlist / artist 仍 unsupported）。`AlbumService` 实现
+  `AlbumRepository` 端口；UI 为 `lib/pages/album_page.dart`（经 `AlbumViewModel`
+  取数；头部元信息 + 播放全部 + 加入列表 + `PagedTrackCollection` 分页列表），入口：歌曲信息页
   「专辑」行（`track_mapper` 派生的 `Track.platformAlbumId` + 能力位双判定；否则保持只读）。
 - **系统媒体会话**（Android/iOS/macOS/Windows/Linux）：`LocalAudioHandler`
   经读取面 `MediaSessionReadModel`（生产实现 `LocalPlaybackMediaSessionReadModel`
