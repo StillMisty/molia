@@ -1,6 +1,7 @@
 package top.stillmisty.molia
 
 import android.content.ContentValues
+import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -55,6 +56,28 @@ class MainActivity : FlutterActivity() {
         super.onResume()
         // 悬浮窗权限可能在系统设置页被撤销：回前台复查并收窗。
         lyricsChannel?.onResume()
+    }
+
+    /// Flutter 3.50 把所有 `level >= TRIM_MEMORY_RUNNING_LOW(10)` 的
+    /// `onTrimMemory` 都映射成 Dart 的 `didHaveMemoryPressure`。但 Android 14+
+    /// 实际只送 `UI_HIDDEN(20)` / `BACKGROUND(40)`，于是每次退后台 / 回前台都会
+    /// 被误判成「系统低内存」（12GB 设备也会刷出大量日志）。
+    ///
+    /// 这里只把真正的 running-low / critical 交给 Flutter；`UI_HIDDEN` /
+    /// `BACKGROUND` 仍手动转给渲染器与平台视图，保留 GPU / 纹理回收，但不触发
+    /// Dart 的低内存清理。Dart 侧的去抖 / 过渡窗口继续作为 OEM 误报的兜底。
+    override fun onTrimMemory(level: Int) {
+        val lifecycleOnly = level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+        android.util.Log.i("MoliaMemory", "onTrimMemory level=$level lifecycleOnly=$lifecycleOnly")
+        if (!lifecycleOnly) {
+            super.onTrimMemory(level)
+            return
+        }
+        val engine = flutterEngine ?: return
+        // 与 FlutterActivityAndFragmentDelegate.onTrimMemory 保持一致：跳过
+        // Dart 的 memoryPressure 消息，但仍让渲染器 / 平台视图释放资源。
+        engine.renderer.onTrimMemory(level)
+        engine.platformViewsController.onTrimMemory(level)
     }
 
     private fun handleIntent(intent: Intent?) {

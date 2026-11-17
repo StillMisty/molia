@@ -1167,3 +1167,14 @@
      → 诊断页出现失败 / 链接请求增长。切回默认：再跑一次不带 `--fault` 的
      `mock-source`，脚本会先停掉自己上次起的服务再起静态服务（两种实现不能复用同
      一个端口上的旧进程，否则 expire 会静默失效）。
+
+112. **Android 的 `didHaveMemoryPressure` 不是真低内存信号，别拿它做缓存清理依据**：
+     Flutter 3.50 的 `FlutterActivityAndFragmentDelegate.onTrimMemory` 把所有
+     `level >= TRIM_MEMORY_RUNNING_LOW(10)` 都映射成 `didHaveMemoryPressure`；
+     Android 14+ 实际只送 `TRIM_MEMORY_UI_HIDDEN(20)` / `TRIM_MEMORY_BACKGROUND(40)`，
+     所以普通退后台 / 回前台都会触发一次「低内存」。要按 level 过滤就在
+     `MainActivity.onTrimMemory` 里拦：`level < UI_HIDDEN` 才 `super`，其余手动转
+     `renderer.onTrimMemory` / `platformViewsController.onTrimMemory`（别丢掉 GPU /
+     纹理回收）。Dart 侧的 1s 去抖 + 退后台过渡窗口只能兜底，挡不住后台停留超过 2s
+     的 `BACKGROUND` 信号。诊断包里 224 次「系统低内存」对应 199 次退后台、实际清理
+     76 次就是这么来的。

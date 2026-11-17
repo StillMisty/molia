@@ -335,3 +335,42 @@ pending / keepAlive，当前展示的封面不受影响。
 - `flutter test --no-pub`：全绿（新增 2 个用例）；
 - 真机触发系统低内存时，`molia.memory` 仍输出「系统低内存清理完成」；随后冷启动应恢复最后一次播放队列 / 曲目 / 进度，统计不丢最后一段。
 
+## 11. 2026-11-17：Android trim 信号归因
+
+### 11.1 现象
+
+诊断包里出现 224 次 `molia.memory: 系统低内存`，但几乎都发生在
+`移动端退后台` / `移动端回前台` 前后 0.2–0.7s，RSS 只有 300–560MB；
+12GB 设备、无后台压力时同样会刷。
+
+### 11.2 根因
+
+Flutter 3.50 的 `FlutterActivityAndFragmentDelegate.onTrimMemory` 对所有
+`level >= TRIM_MEMORY_RUNNING_LOW(10)` 都会调 `sendMemoryPressureWarning()`。
+Android 14+ 实际只送 `TRIM_MEMORY_UI_HIDDEN(20)` / `TRIM_MEMORY_BACKGROUND(40)`，
+于是普通退后台 / 回前台也会变成 Dart 的 `didHaveMemoryPressure`。原有的
+1s 去抖 + 2s 退后台过渡窗口只能吞掉一部分；后台停留超过 2s 后，
+`BACKGROUND` 仍会真正清浏览 / 搜索 / 目录缓存（诊断包里 76 次清理完成）。
+
+### 11.3 改法
+
+`MainActivity.onTrimMemory` 按 level 分流：
+
+- `level < TRIM_MEMORY_UI_HIDDEN`（真正的 running-low / critical）才交给
+  Flutter，继续走 `didHaveMemoryPressure`；
+- `UI_HIDDEN` / `BACKGROUND` 手动转 `engine.renderer.onTrimMemory()` 与
+  `engine.platformViewsController.onTrimMemory()`：保留 GPU / 纹理回收，
+  但不触发 Dart 的低内存清理；
+- Dart 侧的去抖 / 过渡窗口保留，作为仍会上报伪低内存的 OEM 的兜底。
+
+`adb logcat -s MoliaMemory` 会打印 `onTrimMemory level=... lifecycleOnly=...`，
+可直接确认某次 trim 有没有被过滤。
+
+### 11.4 验证
+
+- `flutter analyze --no-pub`、`flutter test --no-pub`；
+- `cd android && ./gradlew :app:compileDebugKotlin`；
+- 真机退后台 / 回前台：`molia.memory` 不再新增「系统低内存」日志；若 OEM
+  仍上报 running-low，日志会保留，且低内存清理与现场保存照常执行。
+
+

@@ -91,7 +91,9 @@ DiagnosticsSyncInfo _diagnosticsSyncInfo(SyncUiState state) {
 /// 系统低内存信号：只有在这种情况下释放可重建的浏览 / 搜索 / 目录缓存。
 ///
 /// 普通退后台不释放列表——恢复时用户会看到空列表并被迫重读；系统明确报告
-/// 内存压力时才值得用「恢复后重读」换一次释放。
+/// 内存压力时才值得用「恢复后重读」换一次释放。Android 的 lifecycle trim
+/// （UI_HIDDEN / BACKGROUND）已在 `MainActivity.onTrimMemory` 过滤，这里只会
+/// 收到真正的 running-low 或其它平台的内存警告。
 class _MemoryPressureObserver with WidgetsBindingObserver {
   @override
   void didHaveMemoryPressure() => AppMemoryManager.instance.onMemoryPressure();

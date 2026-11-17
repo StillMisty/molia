@@ -107,14 +107,18 @@ const Duration kTrayPausedTrimDelay = Duration(seconds: 10);
 /// 移动端退后台多久后清理：给短暂切走 / 快速切回留出跟手恢复的窗口。
 const Duration kMobileBackgroundTrimDelay = Duration(seconds: 30);
 
-/// 低内存信号的去抖时间。
+/// 低内存信号的去抖时间：合并同一轮内的重复压力信号，也给紧随其后的
+/// 退后台生命周期一个取消窗口。
 ///
-/// Android 的 `TRIM_MEMORY_UI_HIDDEN` 也会被引擎映射成
-/// `didHaveMemoryPressure`；延迟一拍再释放，让紧随其后的退后台生命周期
-/// 取消这次「伪低内存」，避免每次退后台都清空浏览 / 搜索缓存。
+/// Android 15+ 的 `TRIM_MEMORY_UI_HIDDEN` / `TRIM_MEMORY_BACKGROUND` 已在
+/// `MainActivity.onTrimMemory` 按 level 过滤，不会走到这里；保留这一拍主要
+/// 是兜底仍会在退后台前后上报 running-low 的 OEM，以及其它平台。
 const Duration kMemoryPressureDebounce = Duration(seconds: 1);
 
-/// 退后台后多久内的内存压力仍视为 UI_HIDDEN 过渡（不是真低内存）。
+/// 退后台后多久内的内存压力仍视为过渡信号（不是真低内存）。
+///
+/// 与 [kMemoryPressureDebounce] 配套：原生层已过滤 Android lifecycle trim，
+/// 这里只防仍把退后台当低内存上报的 OEM / 其它平台。
 const Duration kMemoryPressureTransitionGuard = Duration(seconds: 2);
 
 /// glibc `malloc_trim(0)` 的 Dart 签名（size_t → IntPtr）。
@@ -235,7 +239,7 @@ class AppMemoryManager {
   int _mobileTrimToken = 0;
   bool _mobileBackground = false;
 
-  /// 是否处于「刚退后台」的过渡窗口：用于识别紧随其后的 UI_HIDDEN 伪低内存。
+  /// 是否处于「刚退后台」的过渡窗口：用于识别紧随其后的伪低内存信号。
   bool _inBackgroundTransition = false;
   Timer? _backgroundTransitionTimer;
 
@@ -362,13 +366,12 @@ class AppMemoryManager {
   /// 两条独立信号。这里只起 30s 计时；快速切回时由 [onAppForeground] 取消，
   /// 不会白白清掉用户马上要看的封面。重复的 pause / hide 只保留第一次计时。
   void onAppBackground() {
-    // Android 的 TRIM_MEMORY_UI_HIDDEN 会在退后台前后触发
-    // didHaveMemoryPressure；它是生命周期事件，不是真低内存。取消刚排上的
-    // 低内存释放，避免每次退后台都清空浏览 / 搜索缓存。
+    // 若仍有平台 / OEM 在退后台前后上报内存压力，那是生命周期事件而不是
+    // 真低内存。取消刚排上的低内存释放，避免每次切后台都清空浏览 / 搜索缓存。
     if (_lowMemoryTimer != null) {
       _lowMemoryTimer!.cancel();
       _lowMemoryTimer = null;
-      _log('退后台取消低内存清理（UI_HIDDEN）');
+      _log('退后台取消待执行的低内存清理');
     }
     if (_mobileBackground) return;
     _mobileBackground = true;
@@ -399,7 +402,7 @@ class AppMemoryManager {
     if (wasBackground && _lowMemoryTimer != null) {
       _lowMemoryTimer!.cancel();
       _lowMemoryTimer = null;
-      _log('回前台取消低内存清理（UI_HIDDEN）');
+      _log('回前台取消待执行的低内存清理');
     }
     if (!wasBackground) return;
     _restoreLimit(phase: '移动端回前台');
@@ -411,17 +414,16 @@ class AppMemoryManager {
   /// pending / keepAlive。live 图片仍被当前界面引用，保留不动（Android 恢复
   /// 时当前封面不会闪空）。上限保持完整预算，避免一次低内存后长期降质。
   ///
-  /// 去抖 [kMemoryPressureDebounce]：Android 退后台的 UI_HIDDEN 也会走到
-  /// 这里，真正的低内存不应被一次普通的切后台触发。紧随其后的
-  /// [onAppBackground] 会取消这次释放；已经后台一段时间后再收到压力则照常
-  /// 释放（那才可能是真正的后台低内存）。
+  /// 去抖 [kMemoryPressureDebounce]：合并重复压力信号，并给退后台过渡一个
+  /// 取消窗口。Android 15+ 的 lifecycle trim 已在原生层过滤；这里主要兜底
+  /// 仍会在退后台前后上报 running-low 的 OEM / 其它平台。
   void onMemoryPressure() {
     _log('系统低内存');
     _lowMemoryTimer?.cancel();
     _lowMemoryTimer = Timer(kMemoryPressureDebounce, () {
       _lowMemoryTimer = null;
       if (_inBackgroundTransition) {
-        _log('低内存信号来自退后台（UI_HIDDEN），跳过业务缓存清理');
+        _log('低内存信号来自退后台过渡，跳过业务缓存清理');
         return;
       }
       _releaseLowMemoryCaches();

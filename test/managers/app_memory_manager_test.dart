@@ -234,7 +234,7 @@ void main() {
     manager.addLowMemoryReleaser(() => lowMemoryReleases++);
 
     manager.onMemoryPressure();
-    expect(cache.clearCount, 0, reason: '先给紧随其后的 UI_HIDDEN 一个取消窗口');
+    expect(cache.clearCount, 0, reason: '先给紧随其后的退后台一个取消窗口');
     await tester.pump(kMemoryPressureDebounce);
 
     expect(lowMemoryReleases, 1);
@@ -297,8 +297,8 @@ void main() {
     var lowMemoryReleases = 0;
     manager.addLowMemoryReleaser(() => lowMemoryReleases++);
 
-    // Android 实测顺序：先 didHaveMemoryPressure(UI_HIDDEN)，再生命周期
-    // 退后台。后者必须取消前者，否则每次切后台都会清空浏览列表。
+    // 兜底路径：仍有 OEM / 自定义引擎在退后台前后上报内存压力；后者必须
+    // 取消前者，否则每次切后台都会清空浏览列表。
     manager.onMemoryPressure();
     manager.onAppBackground();
     await tester.pump(kMemoryPressureDebounce);
