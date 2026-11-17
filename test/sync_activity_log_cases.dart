@@ -92,6 +92,24 @@ void main() {
     expect(changes, 1, reason: '手动同步是用户动作');
   });
 
+  test('自动轮因未设置口令失败不标脏，日志仍在内存中可见', () {
+    var changes = 0;
+    final state = activityLog(onChanged: () => changes++);
+
+    state.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.resume,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.failed,
+        error: SyncIssue(code: SyncIssueCode.noPassphrase),
+      ),
+    );
+
+    expect(changes, 0, reason: '配置状态没变，不重写大状态 JSON');
+    expect(state.log.single.error?.code, SyncIssueCode.noPassphrase);
+  });
+
   test('日志与活动各自按上限截断，活动窗口不受展示条数限制', () {
     final state = activityLog(logLimit: 3, activityLimit: 5);
     for (var i = 0; i < 7; i++) {

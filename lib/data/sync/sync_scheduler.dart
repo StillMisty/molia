@@ -29,6 +29,7 @@ class SyncRunOutcome {
     required this.delivered,
     this.contacted = true,
     this.contactedLan = false,
+    this.retryable = true,
   });
 
   /// 本轮实际外发的类别（蜂窝小类别轮不含历史 / 统计）。
@@ -45,6 +46,10 @@ class SyncRunOutcome {
 
   /// 本轮是否接触到了局域网对端（重连阶梯据此立即取消）。
   final bool contactedLan;
+
+  /// 失败是否值得重连 / 重试。未设置口令这类配置缺失为 false：
+  /// 零对端时不能进入重连阶梯（5s / 20s / 60s / 180s），那只会做无效轮询。
+  final bool retryable;
 
   static const SyncRunOutcome none = SyncRunOutcome(
     categories: {},
@@ -531,8 +536,9 @@ class SyncScheduler {
     }
     if (_disposed) return outcome;
     _markDelivered(outcome);
-    if (outcome.contactedLan) {
-      // 局域网已经看到对端：后续阶梯档位没有意义。
+    if (outcome.contactedLan || !outcome.retryable) {
+      // 局域网已经看到对端，或本轮是配置缺失（重试也不会变好）：后续阶梯
+      // 档位没有意义。
       _cancelReconnectLadder();
     } else if (armLadderOnZeroPeers && !outcome.contacted) {
       // 「已配对但零对端」：从 5s 档开始重连，任何一轮 LAN 接触成功即取消。
@@ -595,7 +601,7 @@ class SyncScheduler {
       _scheduleReconnectStep();
       return;
     }
-    if (outcome.contactedLan) {
+    if (outcome.contactedLan || !outcome.retryable) {
       _cancelReconnectLadder();
       return;
     }

@@ -104,11 +104,13 @@ class SyncActivityLog {
   void recordRound(SyncRoundReport report) {
     // 自动轮的「零对端 / 无变化」不产生可持久化的状态变化：只更新内存里的
     // 最近一轮展示，不标脏，避免每分钟把整份 sync_state_v2 重写一遍。
-    // 手动轮是用户动作，即使无对端也要留下记录。
+    // 未设置口令同样如此：切前后台都会重试，但配置状态本身没有变化，反复
+    // 落盘只会白白重写大状态 JSON。手动轮是用户动作，即使无对端也要留下记录。
     final silent =
         report.trigger != SyncTrigger.manual &&
         (report.outcome == SyncOutcome.noPeers ||
-            report.outcome == SyncOutcome.noChanges);
+            report.outcome == SyncOutcome.noChanges ||
+            report.error?.code == SyncIssueCode.noPassphrase);
     var changed = !silent;
     _lastSyncAt = report.finishedAt;
     _log.insert(

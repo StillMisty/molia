@@ -643,6 +643,26 @@ void main() {
     });
   });
 
+  test('配置缺失（retryable=false）零对端：不进入重连阶梯', () {
+    fakeAsync((async) {
+      enableLanPeer(async);
+      final env = build(async);
+      env.host.contacted = false;
+      env.host.retryable = false;
+      unawaited(env.scheduler.start());
+      async.flushMicrotasks();
+
+      unawaited(env.scheduler.syncStartup());
+      async.flushMicrotasks();
+      expect(env.host.rounds, hasLength(1));
+
+      // 未设置口令时重连阶梯解决不了问题：5s / 20s / 60s 档都不该跑。
+      async.elapse(const Duration(minutes: 1));
+      expect(env.host.rounds, hasLength(1), reason: '配置缺失不能按零对端进入重连阶梯');
+      env.scheduler.dispose();
+    });
+  });
+
   test('轮次串行：上一轮未结束时公告 pending，结束后补一轮', () {
     fakeAsync((async) {
       final env = build(async);
@@ -688,6 +708,9 @@ class RecordingSyncSchedulerHost implements SyncSchedulerHost {
   /// 下一轮是否接触到局域网对端（阶梯取消判据）。
   bool contactedLan = false;
 
+  /// 下一轮失败是否值得重连（配置缺失时为 false）。
+  bool retryable = true;
+
   /// 非空时 `runSyncRound` 先等这个 Completer（验证串行守卫）。
   Completer<void>? roundGate;
 
@@ -715,6 +738,7 @@ class RecordingSyncSchedulerHost implements SyncSchedulerHost {
       delivered: !failed,
       contacted: contacted,
       contactedLan: contactedLan,
+      retryable: retryable,
     );
   }
 }

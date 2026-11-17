@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logging/logging.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
@@ -437,6 +438,37 @@ void main() {
     expect(report.error?.code, SyncIssueCode.noPassphrase);
     expect(state.log.first.outcome, SyncOutcome.failed);
     expect(prefs.getString('theme_mode'), isNull);
+  });
+
+  test('未设置口令：调度结果不可重试（不进入重连阶梯）', () async {
+    await state.writePassphrase('');
+    final outcome = await engine.runSyncRound(
+      trigger: SyncTrigger.startup,
+      push: true,
+      antiEntropy: false,
+    );
+
+    expect(outcome.delivered, isFalse);
+    expect(outcome.contacted, isFalse);
+    expect(outcome.retryable, isFalse);
+  });
+
+  test('未设置口令：连续多轮只告警一次', () async {
+    await state.writePassphrase('');
+    final warnings = <LogRecord>[];
+    final sub = Logger('molia.sync').onRecord.listen(warnings.add);
+    addTearDown(sub.cancel);
+
+    await engine.syncNow();
+    await engine.syncNow();
+    await engine.syncNow();
+
+    expect(
+      warnings.where(
+        (record) => record.message == '同步一轮未完成：SyncIssue(no_passphrase)',
+      ),
+      hasLength(1),
+    );
   });
 
   test('新状态 key 已存在但派生清理标记缺失：仍会清理，标记写入后不再清空', () async {

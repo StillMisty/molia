@@ -424,6 +424,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     final contactedLan = report.transports.any(
       (item) => item.kind == SyncTransportKind.lan && item.peersSeen > 0,
     );
+    // 未设置口令是配置状态：重连阶梯解决不了，不能按「零对端 -> 5s 后重试」
+    // 处理（否则每次切前后台都多跑几轮必然失败的同步）。
+    final retryable = report.error?.code != SyncIssueCode.noPassphrase;
     // 入站轮 / 只拉不推的轮次同样要回传接触信息：resume 轮没有本地变更时
     // 不推送，但仍决定是否 arm 重连阶梯。
     if (!push) {
@@ -432,6 +435,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         delivered: false,
         contacted: contacted,
         contactedLan: contactedLan,
+        retryable: retryable,
       );
     }
     final enabled = _state.enabledCategories;
@@ -444,6 +448,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
           report.outcome != SyncOutcome.failed && report.failedCount == 0,
       contacted: contacted,
       contactedLan: contactedLan,
+      retryable: retryable,
     );
   }
 

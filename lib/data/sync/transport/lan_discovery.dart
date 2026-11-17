@@ -506,6 +506,9 @@ class LanDiscovery {
   final _MulticastJoinTracker _ipv6MulticastJoins = _MulticastJoinTracker();
 
   Uint8List? _key;
+
+  /// `_ensureKey` 失败是否已告警；同一轮启动 / 恢复 / 换网只提示一次。
+  bool _keyFailureLogged = false;
   bool _running = false;
   bool _hidden = false;
   int _networkEpoch = 0;
@@ -631,6 +634,7 @@ class LanDiscovery {
     _lastInterfaceScanAt = null;
     _networkEpoch = 0;
     _key = null;
+    _keyFailureLogged = false;
     _broadcastCount = 0;
     _broadcastUnavailable = false;
   }
@@ -648,8 +652,14 @@ class LanDiscovery {
         throw const SyncCryptoException('同步口令为空');
       }
       _key = await derive(passphrase);
+      _keyFailureLogged = false;
     } catch (e) {
-      _logger.warning('派生局域网发现密钥失败（收到公告时无法认证）', e);
+      // 未设置口令是持续状态：启动 / 回前台 / 换网都会重试，重复告警只会
+      // 刷日志；同步轮本身已经会报告 noPassphrase。
+      if (!_keyFailureLogged) {
+        _keyFailureLogged = true;
+        _logger.warning('派生局域网发现密钥失败（收到公告时无法认证）', e);
+      }
     }
   }
 

@@ -214,6 +214,13 @@ class SyncRoundRunner {
   /// 拿到同一份观测，不从这里读。
   SyncRoundPeerFailures? _activePeerFailures;
 
+  /// 上一次因配置缺失中止的原因码（成功轮清零）。
+  ///
+  /// 未设置口令时调度器会随生命周期反复唤醒；每轮都写一条 warning 会让
+  /// 诊断日志堆满同样的记录。相同原因只告警一次，后续轮次的状态仍由
+  /// `lastReport` / UI 持续暴露。
+  String? _lastAbortCode;
+
   /// 内存名册（本轮观测优先；落库状态在 [_allPeers] 里合并进来）。
   final Map<String, SyncPeerState> _peersById = {};
 
@@ -423,11 +430,17 @@ class SyncRoundRunner {
         applied,
         published,
       );
+      _lastAbortCode = null;
       _logger.fine(() => '同步一轮完成：$report');
       return report;
     } on _RoundAbort catch (abort) {
-      // 用户可行动的明确状态（未设置口令）：不按内部异常处理。
-      _logger.warning('同步一轮未完成：${abort.issue}');
+      // 用户可行动的明确状态（未设置口令）：不按内部异常处理，同一原因
+      // 只告警一次（见 [_lastAbortCode]）。
+      final issue = abort.issue;
+      if (issue.code != _lastAbortCode) {
+        _lastAbortCode = issue.code;
+        _logger.warning('同步一轮未完成：$issue');
+      }
       return SyncRoundReport(
         trigger: request.trigger,
         startedAt: request.startedAt,
