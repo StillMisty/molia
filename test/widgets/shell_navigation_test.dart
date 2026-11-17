@@ -35,12 +35,21 @@ void main() {
 
   /// Linux 测试宿主上窗口三键会随移动骨架一起进顶栏（真机没有窗口按钮），
   /// 360 宽时迷你播放器的 40dp 封面放不下，顶栏必然报 RenderFlex 溢出。
-  /// 该溢出与导航无关、也不出现在真机装配里：用例只消费这一类错误，
-  /// 其它异常照旧抛出。
+  /// 该溢出与导航无关、也不出现在真机装配里：用例只消费「左右方向的
+  /// RenderFlex 溢出」这一类错误（`takeException` 只带首行，方向看文案），
+  /// 其它异常（含页面自身溢出）照旧抛出。
   void drainHostTopBarOverflow(WidgetTester tester) {
     final error = tester.takeException();
     if (error == null) return;
-    expect('$error', contains('overflowed'), reason: '只忽略顶栏挤压溢出');
+    expect(
+      '$error',
+      matches(
+        RegExp(
+          r'A RenderFlex overflowed by [\d.]+ pixels on the (left|right)\.',
+        ),
+      ),
+      reason: '只忽略顶栏的水平 RenderFlex 溢出',
+    );
   }
 
   /// 点导航条目（底栏或导航轨，按当前档位只有一个在树里）。
