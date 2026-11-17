@@ -49,7 +49,11 @@
    迷你条）与全局 key 在 `lib/app/app_shell.dart`，桌面骨架（顶栏工具条 /
    恒折叠侧栏 / 常驻底栏播放条）在 `lib/app/desktop/**`，测试可直接挂载
    （`MyApp(desktopShell: true/false)` 可强制骨架，默认按平台判定）；
-5. UI 禁止 import `lib/sources/**`（Wave 7 后白名单已清空，新增违规必须修复）。
+5. UI 禁止 import `lib/sources/**`（Wave 7 后白名单已清空，新增违规必须修复）；
+6. 模块布局与体积由 `test/architecture/module_layout_test.dart` 强制（ADR-0034）：
+   模型只在 `lib/domain/models/`、服务在 `lib/services/`，`lib/utils/**` 不反向
+   依赖 UI / 状态 / 数据层，`lib/**` 单文件 ≤800 行，`pages/widgets` 不直接
+   import `lib/data/**`；现存超限 / 违规文件在测试内登记，只减不增。
 
 ## 2. 领域层
 
@@ -252,7 +256,7 @@
   含按时间戳对齐的翻译 / 罗马音扩展行与逐字时间轴）。曲目变化的加载入口只有
   `ensureForTrack`（组合根订阅播放快照后调用，页面是否挂载都加载），空结果允许
   一次自动重试、`retry()` 可显式重来。时间契约统一在
-  `lib/models/lyric_line.dart`：`hasLyricTimestamps` 与 `parseLyrics` 共用同一正则
+  `lib/domain/models/lyric_line.dart`：`hasLyricTimestamps` 与 `parseLyrics` 共用同一正则
   （兼容 1–3 位分钟与行内多标签）。
   **取词顺序**：缓存 → 曲目原生（`SourceManager.fetchLyric`：脚本 `lyric` action →
   any-listen → 内置平台原生实现（六个音乐平台 + B 站 CC/AI 字幕，B 站需扫码

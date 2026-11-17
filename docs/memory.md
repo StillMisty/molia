@@ -35,8 +35,8 @@ Windows `EmptyWorkingSet`），让释放体现在系统观测上。实测：Linu
 | 位置 | 行为 |
 | --- | --- |
 | `lib/services/app_presence.dart` | 窗口三态（可见 / 最小化 / 托盘隐藏）；置位只在窗口层，消费者按状态各自应对 |
-| `lib/managers/app_memory_manager.dart` | 托盘隐藏：等休眠帧落定后 `imageCache.clear()` + `clearLiveImages()` + 上限临时 16 MiB + 平台 trim（Linux `malloc_trim(0)` / Windows `EmptyWorkingSet`）；恢复还原；每次翻转打 `molia.memory`（RSS + 缓存占用） |
-| `lib/managers/image_preload_manager.dart` | 后台期不排预取、清空待办；预取途中进入后台的条目立即 `evict` |
+| `lib/services/memory/app_memory_manager.dart` | 托盘隐藏：等休眠帧落定后 `imageCache.clear()` + `clearLiveImages()` + 上限临时 16 MiB + 平台 trim（Linux `malloc_trim(0)` / Windows `EmptyWorkingSet`）；恢复还原；每次翻转打 `molia.memory`（RSS + 缓存占用） |
+| `lib/services/artwork/image_preload_manager.dart` | 后台期不排预取、清空待办；预取途中进入后台的条目立即 `evict` |
 | `lib/services/playback_observer.dart` | 后台期跳过封面预取；恢复后等重建帧落定补一次 |
 | `lib/services/artwork_palette_service.dart` | `ArtworkThemeSync` 后台期只记 URL 不取色；恢复后补一次且同 URL 不重复应用 |
 | `lib/app/tray_dormant_gate.dart` | 托盘隐藏卸载整棵 `MaterialApp`（导航 / 常驻页面 / 弹层），恢复重建 |
@@ -165,7 +165,7 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
 ## 5. 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：全绿（新增 `test/managers/app_memory_manager_test.dart`
+- `flutter test --no-pub`：全绿（新增 `test/services/memory/app_memory_manager_test.dart`
   以及 observer / ArtworkThemeSync 的后台门控用例）；
 - `dart run tool/agent/cli.dart test linux`：集成用例全绿（含窗口 chrome hide → show 往返）；
 - 真实应用托盘往返：见 §4.3 的三行 `molia.memory` 与同刻断言；
@@ -191,7 +191,7 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
 
 在既有图片缓存 / 休眠界面清理之外，托盘隐藏时再释放纯 Dart 的业务缓存：
 
-- `lib/managers/app_memory_manager.dart` 增加 `addReleaser` / `removeReleaser`，
+- `lib/services/memory/app_memory_manager.dart` 增加 `addReleaser` / `removeReleaser`，
   只在 `trayHidden` 的休眠帧之后执行；`minimized` 不触发，保持跟手恢复。
 - `LibraryProvider.releaseBrowseCaches()`：清 `_tracksByPlaylist` / 读取错误，
   保留收藏键、列表清单与历史；browse generation 让释放前在途读取作废，
@@ -204,7 +204,7 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
   `PlaybackEngine` 在队列 revision 变化时裁剪 `_trackCache` 旧身份。
 - 组合根在 `main.dart` 注册这些 releaser；AppMemoryManager 不反向依赖 provider。
 
-验证：`test/managers/app_memory_manager_test.dart` 等 17 个新增用例覆盖
+验证：`test/services/memory/app_memory_manager_test.dart` 等 17 个新增用例覆盖
 「托盘触发 / 最小化不触发 / 快速可见往返跳过 / 在途读取作废 / 停止播放清队列引用」。
 
 **观测限制**：同一 debug 进程、500 首收藏（mock raw 只有 `{songId}`）里，
@@ -221,10 +221,10 @@ raw payload / 多列表详情场景请按 §4 的隔离 HOME + 真实库复测�
 | 位置 | 行为 |
 | --- | --- |
 | `lib/main.dart` | `ensureInitialized()` 后、`AppMemoryManager` 首次访问前把全局 `imageCache.maximumSizeBytes` 显式设为 64 MiB（`kFullImageCacheLimitBytes`）；注册 `WidgetsBindingObserver.didHaveMemoryPressure` |
-| `lib/managers/app_memory_manager.dart` | 完整上限 `kFullImageCacheLimitBytes = 64 MiB`，托盘 / 后台保持 16 MiB；`onAppBackground()` / `onAppForeground()` 供移动端生命周期使用（不写 `AppPresence`）：退后台 30s 后 `imageCache.clear()`（**不** `clearLiveImages()`）+ 上限压到 16 MiB，回前台取消计时并恢复 64 MiB；token + 重复事件幂等 |
+| `lib/services/memory/app_memory_manager.dart` | 完整上限 `kFullImageCacheLimitBytes = 64 MiB`，托盘 / 后台保持 16 MiB；`onAppBackground()` / `onAppForeground()` 供移动端生命周期使用（不写 `AppPresence`）：退后台 30s 后 `imageCache.clear()`（**不** `clearLiveImages()`）+ 上限压到 16 MiB，回前台取消计时并恢复 64 MiB；token + 重复事件幂等 |
 | 同上 | `addLowMemoryReleaser()` / `onMemoryPressure()`：只有系统低内存才释放浏览 / 搜索 / 目录缓存；Android 的 `TRIM_MEMORY_UI_HIDDEN` 也会映射成 `didHaveMemoryPressure`，用 1s 去抖 + 退后台过渡窗口取消，避免每次切后台清列表 |
 | `lib/providers/library_provider.dart` | `_tracksByPlaylist` 改 LRU，上限 5 个列表；`playlistTracksView` / `ensurePlaylistTracks` 触碰最近使用，淘汰时跳过当前展示列表；`releaseBrowseCaches()` 语义不变（全清） |
-| `test/managers/app_memory_manager_test.dart`、`test/library_provider_test.dart` | 覆盖 64 / 16 / 64、30s 延迟、快速往返、重复退后台、dispose、低内存与 UI_HIDDEN 区分、LRU 淘汰与 release |
+| `test/services/memory/app_memory_manager_test.dart`、`test/library_provider_test.dart` | 覆盖 64 / 16 / 64、30s 延迟、快速往返、重复退后台、dispose、低内存与 UI_HIDDEN 区分、LRU 淘汰与 release |
 
 为什么移动端不 `clearLiveImages()`：Android 退后台不卸载 widget 树，当前封面仍被
 `Image` 持有；清 live 会让回前台第一帧封面空白。`imageCache.clear()` 只清
@@ -274,14 +274,14 @@ pending / keepAlive，当前展示的封面不受影响。
 
 | 位置 | 行为 |
 | --- | --- |
-| `lib/managers/app_memory_manager.dart` | 托盘隐藏完成后再延迟 `kTrayLateTrimDelay = 2s` 调一次平台 trim：第一次发生在原生窗口 hide 之前，窗口 / 引擎收尾 touch 的页需要再归还一次；恢复或再次隐藏用 token 取消。`releaseToOs` 可注入，便于测试计数。托盘内暂停稳定 10s 后再补一次 trim（`scheduleTrayPausedTrim`），播放恢复 / 窗口可见时取消 |
+| `lib/services/memory/app_memory_manager.dart` | 托盘隐藏完成后再延迟 `kTrayLateTrimDelay = 2s` 调一次平台 trim：第一次发生在原生窗口 hide 之前，窗口 / 引擎收尾 touch 的页需要再归还一次；恢复或再次隐藏用 token 取消。`releaseToOs` 可注入，便于测试计数。托盘内暂停稳定 10s 后再补一次 trim（`scheduleTrayPausedTrim`），播放恢复 / 窗口可见时取消 |
 | `lib/main.dart` + `lib/data/sync/**` | 托盘 / 低内存 releaser 增加：统计导出缓存、同步轮次 `_lastEnvelope` / 收集 / 聚合缓存、统计 / 播放列表 / 历史 / 封面适配器的上轮记录缓存、内置平台响应 / 原生取词 / 取图缓存、封面补取缓存。完整备份导出后也立即释放这些缓存；在途轮次不释放，下一次 collect 按需重建 |
 | `lib/sources/builtin/**`、`lib/services/covers/cover_backfill_service.dart` | 新增幂等 `clearCache()`：只清已完成结果，不动平台 / 脚本注册表；在途请求的 identity 校验阻止旧结果写回 |
 | `lib/widgets/ai_dj_carousel.dart` | AI 推荐卡封面按 `256 × DPR` 解码，不再按原图；布局仍由 carousel 槽位决定 |
 | `lib/app/tray_dormant_gate.dart` | 改为 `childBuilder`：托盘隐藏期间不构造整棵 `MaterialApp` 配置（原先 child 实参在 build 前已求值） |
 | `lib/widgets/seek_bar.dart`、`app_shell.dart`、`player.dart`、`current_track_cover.dart`、`playing_indicator.dart` | wavy 进度只保留在播放页（显式 `wavy: true`）；顶栏 / 迷你条静态；当前曲目角徽（列表 / AI 页封面）播放时起伏、暂停冻结，发现页推荐卡改用 `AnimatedPlayingIndicator` 内联在歌名行（不随卡片槽位缩放）；最小化 / 托盘隐藏时 `AppPresenceTickerMode` 静音 ticker（只停动画，不清缓存 / 不改变最小化语义） |
 | `lib/data/playback/playback_engine.dart`、`lib/playback/queue_projection.dart` | 队列投影按 `(queueRevision, index, mode, playbackOrderRevision, shuffleOrderRevision)` 缓存；位置 tick 不再跑 O(N) 投影与 `upNext` 映射（CPU，不是内存回收） |
-| `lib/managers/artwork_cache.dart` | 封面元数据 `updateOrInsert` 跳过「只有 touched 变化」的整文件重写；淘汰仍按文件 mtime |
+| `lib/services/artwork/artwork_cache.dart` | 封面元数据 `updateOrInsert` 跳过「只有 touched 变化」的整文件重写；淘汰仍按文件 mtime |
 | `lib/services/window/window_bounds_store.dart`、`playback_volume_store.dart`、`nav_provider.dart` | 窗口几何 / 音量 + 静音 / 导航布局各合并成单键 JSON：一次动作的整份 prefs 重写从 4 / 2 / 3 次降为 1 次；旧键保留只读兜底 |
 | `lib/data/molia_database.dart` | `journal_size_limit = 4MB`、`wal_autocheckpoint = 1000`，限制 WAL 高水位 |
 | `lib/playback/desktop_audio_init_io.dart` | media_kit `bufferSize` 16MiB → 8MiB（demux + back 合计约 16MiB），按官方示例的音乐场景取值 |
@@ -323,9 +323,9 @@ pending / keepAlive，当前展示的封面不受影响。
 
 | 位置 | 行为 |
 | --- | --- |
-| `lib/managers/app_memory_manager.dart` | 新增 `addLowMemoryFlusher()`；真实低内存去抖通过后，先并发启动现场保存，再释放浏览 / 搜索 / 目录缓存。单个保存失败只记日志，不阻塞其它保存与缓存清理；UI_HIDDEN 伪低内存仍在退后台时取消，不白写盘 |
+| `lib/services/memory/app_memory_manager.dart` | 新增 `addLowMemoryFlusher()`；真实低内存去抖通过后，先并发启动现场保存，再释放浏览 / 搜索 / 目录缓存。单个保存失败只记日志，不阻塞其它保存与缓存清理；UI_HIDDEN 伪低内存仍在退后台时取消，不白写盘 |
 | `lib/main.dart` | 注册唯一保存入口：`suspendPlaybackSession()` + `playStatisticsService.flush()`。与缓存 releaser 分开注册，managers 层不反向依赖 playback / library 类型 |
-| `test/managers/app_memory_manager_test.dart` | 覆盖「去抖后才保存」「伪低内存不保存」「单个保存抛错不影响其它保存与缓存释放」 |
+| `test/services/memory/app_memory_manager_test.dart` | 覆盖「去抖后才保存」「伪低内存不保存」「单个保存抛错不影响其它保存与缓存释放」 |
 
 为什么不接金标联盟（ITGSA）的 `TRIM` / `KILL` 广播：那套协议要求 3s 内通过 Binder 回执，主要服务内存大户与商店评测；Molia 实测 PSS 约 300–400MB，离 Android 17 的 per-app 上限（4GB 设备前台约 2GB）很远。这里只复用 Android 官方 `onTrimMemory` → `didHaveMemoryPressure` 语义：真实低内存时顺手把会话与统计落盘，成本一次 prefs / DB 写，不做厂商分叉、不主动杀进程。
 

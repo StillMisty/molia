@@ -7,7 +7,7 @@
   `lib/domain/ports/music_source.dart`、`lib/playback/local_playback_service.dart`、
   `lib/playback/next_track_preloader.dart`、`lib/playback/audio_predownloader.dart`、
   `lib/playback/playing_track_cache_writer.dart`、`lib/services/download/`、
-  `lib/managers/artwork_cache.dart`、`lib/widgets/track_actions.dart`、
+  `lib/services/artwork/artwork_cache.dart`、`lib/widgets/track_actions.dart`、
   `test/bili_*_test.dart`
 
 ## 背景

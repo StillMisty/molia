@@ -50,7 +50,7 @@
   快照转发进来，并按命令结果通知 UI。切音质是一次新的取链动作，`resetRetryGuard`
   重新允许整条恢复链。
 - **Playback stream headers（流请求头契约）** — `lib/domain/ports/music_source.dart::PlayableStream`：取链返回 `uri + headers + expiresIn`，`headers` 是**全路径契约**，不是取链层的局部细节。`SourceManagerMusicSource.resolve` / `CatalogService.resolve` 原样保留，`LocalPlaybackService` 同时传给 `AudioSource.uri` 与 `LockCachingAudioSource`，`NextTrackPreloader` / `AudioPredownloader` / 桌面 `PlayingTrackCacheWriter` / 下载复用同一份；任一处丢掉 headers（B 站直链需要 `Referer` + 浏览器 UA）都会变成 403 / 播放失败。新增取链实现时先看这条。
-- **Play mode（播放模式）** — `lib/models/play_mode.dart`：列表循环（队尾回队首）、
+- **Play mode（播放模式）** — `lib/domain/models/play_mode.dart`：列表循环（队尾回队首）、
   顺序播放（播完即停）、单曲循环、随机播放；`PlayMode.next` 是按钮与系统媒体动作
   的循环切换顺序，持久化按枚举 `name`。界面图标 / 语义标签的唯一映射是
   `PlayModeTransportPresentation`（`lib/widgets/playback_transport.dart`）。
@@ -427,7 +427,7 @@
 - **Lyrics scroll policy（歌词滚动策略）** — `lib/widgets/lyrics_scroll_policy.dart`：
   纯函数（对齐比例 / 尾部留白 / 目标偏移夹取 / 死区）；组件只测量（ScrollController /
   MediaQuery）与执行（jumpTo / animateTo），策略数学脱离 widget pump 可单测。
-- **Lyric timing contract（歌词时间契约）** — `lib/models/lyric_line.dart`：
+- **Lyric timing contract（歌词时间契约）** — `lib/domain/models/lyric_line.dart`：
   `hasLyricTimestamps` 与 `parseLyrics` 共用同一正则（兼容 1–3 位分钟、`.`/`:` 毫秒
   分隔与行内多标签）；不再允许「检测用一个正则、解析用另一个」的漂移。
 - **Track-native lyric/pic（曲目原生取词 / 取图）** — `SourceManager.fetchLyric` /
@@ -474,7 +474,7 @@
   会话持有（`activeSourceKey`，空串 = 全部）：跨搜索 / 选中保留，视图只读筛选并
   转发 `selectSource`，与音频换源的归属层一致。会话不碰
   Navigator 与 SnackBar；视图只渲染条目、提示并 pop。
-- **Word timing（逐字时间轴）** — `lib/models/lyric_line.dart`：`LyricLine.words`
+- **Word timing（逐字时间轴）** — `lib/domain/models/lyric_line.dart`：`LyricLine.words`
   （`LyricWord`：绝对起止 + 文本）由 `lxlyric` 的 `<相对ms,时长ms>` 解析并对齐主行；
   歌词页当前行用 `KaraokeLyricText` 词级高亮（已唱 primary / 未唱 onSurface，
   采样间线性补间），桌面歌词同样按词渐染（原生 span），通知 / 蓝牙输出按行。
@@ -1365,7 +1365,7 @@
 - **半成品（partial）** — 音频缓存目录里未落成的文件：just_audio 边下载边写 `*.part`、字节预取写 `*.predl`、MIME 边车 `*.mime`。它们占磁盘但不是可播放缓存：索引 / 占用 / 命中一律排除（判据在 Audio cache store），单独计为「写入中」，启动时清扫（写入者在本进程内，重启后残留必为孤儿）。
 - **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词读写、用量与清理的唯一实现。默认构造 / 未接入实例保持旧的 SharedPreferences 行为（不碰 `path_provider` 与文件 IO，widget 测试与降级平台依赖它）；生产组合根用 `LyricsCache.appSupport()` 显式接入文件后端：`<appSupport>/lyrics_cache/{md5(trackId)}.json`（一条一文件、临时文件 + rename 原子写）。旧版 prefs 条目不再懒迁移，历史 `manual_lyrics_cache_*` 键也不再特殊处理（不读、不清）；目录不可用时回退 prefs。TTL 策略属于 `CacheService`（取词时读取）。
 - **Artwork index（封面索引）** — flutter_cache_manager 的元数据存储；`CacheStorage` 直接删文件后，由 `ArtworkCache` 的 `_pruneMissingEntries` 同步清理失效条目（索引不指向缺失文件）。
-- **ArtworkCache 进程级单例（已登记的例外）** — `lib/managers/artwork_cache.dart::ArtworkCache.instance` 仍是全局单例。消费面跨越封面子系统之外的展示与平台出口：`AppNetworkImage` / `CoverAppearance` 的默认取图、`ArtworkPaletteService`、`CoverImageIdentity`、系统媒体会话封面路径与 `ImagePreloadManager`；启动时 `local_data_stack` 还要对同一实例设置省流网关（`networkImageBlocked`）。把这些消费面全部改成构造注入会牵动页面级 widget 默认参数与平台回调，超出本次封面 seam 的边界。移除前允许继续使用，但只作为**封面字节缓存**，不得作为封面解析 / 选择的回退——「这一首用哪张封面」仍只由 `CoverResolver` / `CustomCoverStore` 决定。
+- **ArtworkCache 进程级单例（已登记的例外）** — `lib/services/artwork/artwork_cache.dart::ArtworkCache.instance` 仍是全局单例。消费面跨越封面子系统之外的展示与平台出口：`AppNetworkImage` / `CoverAppearance` 的默认取图、`ArtworkPaletteService`、`CoverImageIdentity`、系统媒体会话封面路径与 `ImagePreloadManager`；启动时 `local_data_stack` 还要对同一实例设置省流网关（`networkImageBlocked`）。把这些消费面全部改成构造注入会牵动页面级 widget 默认参数与平台回调，超出本次封面 seam 的边界。移除前允许继续使用，但只作为**封面字节缓存**，不得作为封面解析 / 选择的回退——「这一首用哪张封面」仍只由 `CoverResolver` / `CustomCoverStore` 决定。
 - **Paged list controller（分页列表状态机）** — `lib/providers/paged_list_controller.dart`：首屏 / 加载更多 / 失败态（首屏清空可重试 vs 追加保留）/ 过期响应丢弃（`reset` 与 `dispose` 都使在途请求过期）/ 跨页去重 / 「追加页去重后无新增即 `hasMore=false`」推断的唯一实现；状态以一个值发布（`PagedListState<T>`，一次请求只发终态），持有方提供 `fetchPage`（平台特有的「取满即结束 / 达到总数」判断留在取数回调）。跨页重复 key 默认保留先到条目，`mergeDuplicate` 可让调用方合并（歌词片段跟随后页）。成功且仍为当前请求的页经 **Accepted page callback** 交付同页元数据（页实体），不再让消费方另写过期判定。消费面：`SearchProvider`（每个 `SearchKind` 一个 **Search results module** 控制器）、评论热门 / 最新 tab、发现页歌单 tab 与曲目页、专辑页、歌手页——不再各自手写 flag 机。
 - **Accepted page callback（已接受页回调）** — `PagedListController.onPageAccepted`：每次取页成功且请求仍为当前代际时调用一次（首屏 `append=false`、加载更多 `append=true`），在发布新状态之前执行；过期响应、失败、`reset` 与 `dispose` 一律不调用。`fetchPage` 可返回 `PagedResult` 子类型携带同页元数据（详情页实体），持有方只在回调里更新，`loadFirstPage` / `loadMore` 返回后元数据与列表同页。价值在于过期守卫只有控制器一处：消费方不再维护第二套代际计数器，也不会在取数阶段提前写共享状态。
 - **Paged track collection（分页曲目集合）** — `lib/widgets/paged_track_collection.dart`：

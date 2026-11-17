@@ -11,6 +11,7 @@
 | 开发 / 编译 / 发布流程（顺序、门禁、偏离登记） | `docs/dev_workflow.md` | 流程入口；命令细节以脚本用法为准 |
 | 本地开发环境、模拟器、seed、集成测试入口 | `docs/dev_environment.md` | 工具版本仍回 `AGENTS.md` |
 | 架构与分层（as-built） | `docs/architecture.md` | 分层约束由 `test/architecture/` 强制执行 |
+| 模块布局 / 文件体积守卫 | `docs/adr/0034-module-layout-and-file-size-guardrails.md` | domain/models 唯一模型位置、lib/utils 纯工具、800 行棘轮、pages/widgets 禁止 data import |
 | 领域术语与模块职责 | `GLOSSARY.md` | 新术语落地时登记 |
 | 已知坑（编号被源码引用） | `docs/pitfalls.md` | 编号不可重排，新增追加到末尾 |
 | LX 音源、引擎、验证清单 | `docs/lx_sources.md` | 引擎 / 音源改动先看这里 |

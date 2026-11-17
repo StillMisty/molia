@@ -283,7 +283,7 @@ abstract class LyricsOutput {
 ### 5.3 行跟踪算法
 
 1. 周期：随 `position` 通道 tick（≤4Hz）重算；同时响应 seek、切歌、歌词到达、暂停/恢复。
-2. 同步歌词：复用 `lyricLineIndexAt`（二分，`lib/models/lyric_line.dart`）。
+2. 同步歌词：复用 `lyricLineIndexAt`（二分，`lib/domain/models/lyric_line.dart`）。
 3. 去重：仅当 `(trackId, index, isPlaying, linesVersion)` 变化时才向输出下发。
 4. `extended`：`translationEnabled` / `romaEnabled` 独立开关；空文本过滤。
 5. `upcoming`：当前行后最多 `maxLines - 1` 行；未同步 / 无歌词为空。
@@ -535,7 +535,7 @@ abstract class LyricsOutput {
 
 | 模块 | 文件 | 说明 |
 |---|---|---|
-| 双语管道 | `lib/services/lyrics/lyric_provider.dart`、`lib/services/lyrics/netease_provider.dart`、`lib/services/lyrics/qq_provider_mobile.dart`、`lib/services/lyrics_service.dart`、`lib/providers/lyrics_provider.dart`、`lib/models/lyric_line.dart` | `LyricsPayload`（原文+翻译+罗马音）、`LyricsState.translations/romas` 时间戳对齐、缓存兼容 |
+| 双语管道 | `lib/services/lyrics/lyric_provider.dart`、`lib/services/lyrics/netease_provider.dart`、`lib/services/lyrics/qq_provider_mobile.dart`、`lib/services/lyrics_service.dart`、`lib/providers/lyrics_provider.dart`、`lib/domain/models/lyric_line.dart` | `LyricsPayload`（原文+翻译+罗马音）、`LyricsState.translations/romas` 时间戳对齐、缓存兼容 |
 | 歌词页扩展行 | `lib/widgets/lyrics.dart` | 每行主文本下方渲染翻译 / 罗马音（主字号 × 0.8、`onSurfaceVariant`、空文本不占位）；`page.translationEnabled` / `page.romaEnabled` 独立于输出侧开关，数据共用 |
 | 歌词页视觉提前量 | `lib/services/lyrics_display/lyric_timing_policy.dart`、`lib/widgets/lyric_karaoke_text.dart` | 行号查表与逐字插值目标统一提前 200ms（正 = 提前），补 450ms 切行过渡与 ≤4Hz 采样滞后；歌词页与选择页共用 `LyricTimingPolicy.page`，不叠加输出侧 `offsetMs` |
 | 配置 | `lib/services/lyrics_display/lyrics_display_settings.dart` | 单 JSON 键 `lyrics_display_settings_v1` |

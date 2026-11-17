@@ -4,7 +4,7 @@
 - 日期：2026-10-17
 - 相关：`lib/playback/local_audio_handler.dart`、`lib/playback/media_session_backend.dart`、
   `lib/playback/flutter_media_session_backend.dart`、
-  `lib/playback/mpris_media_session_backend*.dart`、`lib/managers/artwork_cache.dart`、
+  `lib/playback/mpris_media_session_backend*.dart`、`lib/services/artwork/artwork_cache.dart`、
   `android/app/src/main/kotlin/top/stillmisty/molia/MainActivity.kt`、
   `android/app/src/main/AndroidManifest.xml`、`windows/runner/main.cpp`、
   `windows/installer/molia.iss`、issue #34、`docs/pitfalls.md` #18 / #34

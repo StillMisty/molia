@@ -85,7 +85,8 @@ lib/
 
 分层硬约束由 `test/architecture/layering_test.dart` 扫描 import 强制：domain 纯 Dart；
 data/sources/playback 不碰 UI；providers 不 import `main.dart`；UI（pages/widgets）不直接 import
-sources/playback。
+sources/playback。模块布局与体积由 `test/architecture/module_layout_test.dart` 强制
+（模型只在 `domain/models/`、服务在 `services/`、`utils` 纯度、800 行棘轮，ADR-0034）。
 
 关键不变量（改相关代码前确认）：
 
