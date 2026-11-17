@@ -40,10 +40,6 @@ dependencies:
   media_kit_libs_linux: ^1.2.1
   media_kit_libs_windows_audio: ^1.0.9
   flutter_media_session: ^3.2.0
-  # 1.0.0-beta.3 是首个支持 dbus ^0.8 的版本（也补了 MPRIS Seek / SetPosition）；
-  # 正式版发布后改回稳定约束。
-  audio_service_mpris: ^1.0.0-beta.4
-  audio_service_platform_interface: ^0.1.3
   material_ui: ^1.11.1
   material_3_expressive: ^1.2.2
   motor: ^1.1.0

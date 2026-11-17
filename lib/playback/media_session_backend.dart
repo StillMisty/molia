@@ -3,10 +3,10 @@ import 'package:flutter_media_session/flutter_media_session.dart';
 /// 系统媒体会话后端：跨端统一模型（`flutter_media_session` 的
 /// [MediaMetadata] / [PlaybackState] / [MediaAction]）+ 可注入实现。
 ///
-/// Android / iOS / macOS / Windows 走 [FlutterMediaSessionBackend]；
-/// Linux 走 `audio_service_mpris` 的 MPRIS 实现（见
-/// `mpris_media_session_backend.dart`）。`LocalAudioHandler` 只依赖本接口，
-/// 单测用记录型 fake 即可断言全部映射，不触碰平台通道。
+/// Android / iOS / macOS / Windows / Linux 统一走
+/// [FlutterMediaSessionBackend]（Linux 是插件的原生 MPRIS 2 实现）。
+/// `LocalAudioHandler` 只依赖本接口，单测用记录型 fake 即可断言全部映射，
+/// 不触碰平台通道。
 abstract class MediaSessionBackend {
   /// 启动媒体会话（Android 前台服务 / Windows SMTC / MPRIS 注册）。
   ///

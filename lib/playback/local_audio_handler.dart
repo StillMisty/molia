@@ -21,8 +21,8 @@ import 'playback_commands.dart';
 
 /// 当前平台是否具备系统级媒体会话实现。
 ///
-/// - Android / iOS / macOS / Windows：`flutter_media_session` 原生实现；
-/// - Linux：`audio_service_mpris`（D-Bus 不可用时静默降级）。
+/// - Android / iOS / macOS / Windows / Linux：`flutter_media_session`
+///   原生实现（Linux 是其 MPRIS 2 后端，D-Bus 不可用时静默降级）。
 bool get isSystemMediaSessionSupported {
   return switch (defaultTargetPlatform) {
     TargetPlatform.android ||
@@ -390,6 +390,10 @@ class LocalAudioHandler {
   }
 
   void _onBackendAction(MediaAction action) {
+    // Linux MPRIS 对 LoopStatus / Shuffle 的写入只发出不带目标值的
+    // `repeat` / `shuffle` 动作，分不清要切到哪个模式；这里不把它当 toggle
+    // 猜测（也不能绕过命令面），播放模式仍只由应用内 / Android 通知动作经
+    // `PlaybackCommandPort` 切换。差异见已知坑。
     switch (action.name) {
       case 'play':
         unawaited(_guardControl(play));

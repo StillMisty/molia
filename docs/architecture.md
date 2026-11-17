@@ -335,10 +335,10 @@
   （`flutter_media_session` 的 `MediaMetadata` / `PlaybackState` / `MediaAction`），
   文案经注入的 `MediaSessionCopy`（不读全局 locale，歌手回退走 l10n `unknownArtist`），
   后端可注入（见 ADR-0010）：
-  Android/iOS/macOS/Windows 走 `FlutterMediaSessionBackend`
+  Android/iOS/macOS/Windows/Linux 统一走 `FlutterMediaSessionBackend`
   （`FlutterMediaSessionPlatform`，不调用会主动请求通知权限的
-  `FlutterMediaSession().activate()`），Linux 走 `MprisMediaSessionBackend`
-  （`audio_service_mpris` 的 Dart 平台接口，D-Bus 不可用静默降级）。
+  `FlutterMediaSession().activate()`；Linux 在激活前用 `setAppId` 写入 MPRIS 的
+  DesktopEntry / Identity，D-Bus 不可用时静默降级）。
   封面经 `ArtworkCache.cachedFilePath` 带浏览器 UA + 平台 Referer 落到本地文件后
   传本地地址（Android/iOS/macOS/Linux `file://`、Windows 裸路径；网易 CDN 对
   默认 UA 返回 403），未命中先发远程 URL 兜底；省流模式整体置空封面地址且不下载。

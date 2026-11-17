@@ -1029,12 +1029,22 @@
     （每次冷启动仍是新的一轮随机顺序）。回归用例见
     `test/playback_session_coordinator_test.dart` 的「恢复态 shuffle → 恢复播放」。
 
-102. **`audio_service_mpris` 1.0.0-beta 的 MPRIS 能力位默认全 false**：
-    `AudioServiceMpris.init` 的 `canControl` 默认 `false`，且 `canPlay` /
-    `canPause` / `canGoNext` / `canGoPrevious` 都会被 `canControl` 强制关掉。
-    必须在 `AudioServicePlatform.configure` 前显式 `init(canControl: true, ...)`，
-    否则 KDE / GNOME 的媒体控件会整组变灰（`lib/playback/mpris_media_session_backend_io.dart`
-    已处理；升级该包时先确认默认值有没有变）。
+102. **Linux MPRIS（`flutter_media_session` 3.2.0）的能力位与播放模式写入**：
+    插件 Linux 实现的 `CanPlay` / `CanPause` / `CanSeek` / `CanGoNext` /
+    `CanGoPrevious` 只在 `updateAvailableActions` 后按动作名刷新（`seekTo` /
+    `rewind` / `fastForward` 才算 `CanSeek`），且 `CanGoNext` / `CanGoPrevious`
+    默认 false——handler 的 action 集合必须包含对应名字，否则 KDE / GNOME 的
+    媒体控件会变灰。`LoopStatus` / `Shuffle` 的写入会被插件转成不带目标值的
+    `repeat` / `shuffle` 媒体动作，应用分不清目标模式，因此**不**把它当 toggle
+    猜测（也不能绕过 `PlaybackCommandPort`）：MPRIS 上的这两个属性只是应用侧
+    模式的只读镜像，切换仍走应用内 / Android 通知动作。
+    另：插件 Linux 事件把 seek 位置放在顶层 `positionMs`，Dart 通道却读
+    `args`，`playerctl position` / MPRIS `Seek` / `SetPosition` 到达 handler 时
+    `seekPosition` 为 null，只能忽略（issue #58 已记录，等上游修复）。
+    身份：`FlutterMediaSessionBackend` 在 Linux 激活前
+    `setAppId('top.stillmisty.molia', displayName: 'Molia')`，与已安装
+    `.desktop` 的 `DesktopEntry` 对齐；总线名是
+    `org.mpris.MediaPlayer2.<prgname>.instance<pid>`。
 
 103. **Windows 原生 `WM_CLOSE` 不经过 nativeapi 的 `SC_CLOSE` 拦截**：任务栏
     「关闭窗口」、`Process.CloseMainWindow()` 等路径发的是 `WM_CLOSE`，

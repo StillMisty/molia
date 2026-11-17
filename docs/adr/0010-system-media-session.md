@@ -168,3 +168,32 @@ LocalPlaybackService ──监听──▶ LocalAudioHandler ──▶ MediaSess
 `PlaybackSessionCoordinator`）。系统动作的恢复态回落、阶段路由与「返回前已
 提交」由命令面负责，handler 不再直写 `LocalPlaybackService`，也不再通过
 `attachSessionPersister` 持有第二个落盘回调。
+
+## 后续（2026-11-17：Linux 切到 flutter_media_session）
+
+`flutter_media_session` 3.2.0 起自带原生 Linux MPRIS 2 实现（D-Bus），本 ADR
+决策 #2 的 `audio_service_mpris` 方案退休（历史正文保留作决策记录，相关依赖与
+`MprisMediaSessionBackend` 实现已删除）：
+
+- `createSystemMediaSessionBackend()` 在 Linux 也返回
+  `FlutterMediaSessionBackend`，仍直接包装 `FlutterMediaSessionPlatform`
+  （不引入 `FlutterMediaSession()` 单例，Android 通知权限时机不变）；
+  `audio_service_mpris` 与 `audio_service_platform_interface` 从依赖面移除。
+- Linux 激活前调用 `setAppId('top.stillmisty.molia', displayName: 'Molia')`：
+  MPRIS `DesktopEntry` 与已安装的
+  `linux/packaging/share/applications/top.stillmisty.molia.desktop` 一致，
+  `Identity` 显示 Molia；总线名为
+  `org.mpris.MediaPlayer2.<prgname>.instance<pid>`。Windows AUMID 仍由
+  `windows/runner/main.cpp` 设置，不受影响。
+- 行为对齐：元数据（标题 / 歌手 / 专辑 / 时长 / `file://` 封面地址）、播放状态
+  （playing / paused / stopped / buffering）、位置、可用动作
+  （`CanPlay` / `CanPause` / `CanSeek` / `CanGoNext` / `CanGoPrevious` 按
+  action 集合刷新）、Play / Pause / PlayPause / Stop / Next / Previous。
+- 已知差异（不伪装）：MPRIS `LoopStatus` / `Shuffle` 的写入只触发不带目标值的
+  `repeat` / `shuffle` 媒体动作，应用无法得知目标模式，因此不映射成 toggle、
+  也不绕过 `PlaybackCommandPort`——这两个属性只反映应用内模式，切换仍走应用内
+  / Android 通知动作。MPRIS `Seek` / `SetPosition` 在插件 3.2.0 中丢失位置
+  （事件放 `positionMs`，Dart 通道读 `args`），handler 收到 null 后忽略；
+  已在 issue #58 记录，等上游修复。
+- 无 session bus：插件 `activate` 不抛异常，只是不占用 MPRIS 名字；播放链路
+  照常，没有用户可见错误，与历史降级口径一致。
