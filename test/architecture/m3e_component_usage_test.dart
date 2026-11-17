@@ -38,7 +38,7 @@ const Map<String, Set<String>> _rawComponentAllowlist = {
   // 有意保留，不换 M3ESearchAnchor。
   'lib/widgets/global_search_overlay.dart': {'Material', 'showGeneralDialog'},
   // 歌词滚动区：透明 Material 只补 ink 绘制层（滚动容器本身不是 M3E 组件）。
-  'lib/widgets/lyrics.dart': {'Material'},
+  'lib/widgets/lyrics/lyrics_view.dart': {'Material'},
   // 设置页可重排分段列表：M3E 1.2.0 未导出 reorder host，长期例外。
   'lib/widgets/settings/settings_reorderable_rows.dart': {
     'ReorderableListView',

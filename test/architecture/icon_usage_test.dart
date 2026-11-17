@@ -17,7 +17,7 @@ const Set<String> _outlinedPairAllowlist = {'library_music_outlined'};
 const Set<String> _animatedSwitcherAllowlist = {
   'lib/widgets/icon_swap.dart',
   'lib/widgets/track_row.dart',
-  'lib/widgets/lyrics.dart',
+  'lib/widgets/lyrics/lyrics_controls.dart',
 };
 
 void main() {
