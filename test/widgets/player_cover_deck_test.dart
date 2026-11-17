@@ -213,6 +213,109 @@ void main() {
     );
   });
 
+  testWidgets('空闲期下一首换人时新旧槽位卡交叉淡化后收尾', (tester) async {
+    await pumpDeck(tester);
+    final otherNext = _track('other-next');
+
+    backend.emit(
+      PlaybackSnapshot(
+        current: queue[1],
+        queue: queue,
+        currentIndex: 1,
+        previous: queue[0],
+        next: otherNext,
+        upNext: [otherNext],
+        isPlaying: true,
+        duration: queue[1].duration ?? Duration.zero,
+      ),
+    );
+    await tester.pump();
+
+    // 淡换起手帧：旧身份淡出、新身份淡入同时存在。
+    expect(
+      find.byKey(
+        PlayerCoverDeck.sideCoverCardKey(left: false, id: queue[2].id),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        PlayerCoverDeck.sideCoverCardKey(left: false, id: otherNext.id),
+      ),
+      findsOneWidget,
+    );
+
+    await _pumpFrames(tester, frames: 30);
+    expect(
+      find.byKey(
+        PlayerCoverDeck.sideCoverCardKey(left: false, id: queue[2].id),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(
+        PlayerCoverDeck.sideCoverCardKey(left: false, id: otherNext.id),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('同 id 换图期间旧图卡存在，淡出后收尾', (tester) async {
+    await pumpDeck(tester);
+    final updated = _track(
+      'current',
+      artwork: 'https://example.com/current-new.jpg',
+    );
+
+    backend.emit(
+      PlaybackSnapshot(
+        current: updated,
+        queue: queue,
+        currentIndex: 1,
+        previous: queue[0],
+        previousOfPrevious: null,
+        next: queue[2],
+        upNext: [queue[2], queue[3]],
+        upNextIndices: const [2, 3],
+        isPlaying: true,
+        duration: updated.duration ?? Duration.zero,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(PlayerCoverDeck.outgoingArtworkCardKey), findsOneWidget);
+    expect(
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(queue[1].id)),
+      findsOneWidget,
+    );
+
+    await _pumpFrames(tester, frames: 30);
+    expect(find.byKey(PlayerCoverDeck.outgoingArtworkCardKey), findsNothing);
+    expect(
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(queue[1].id)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('弹簧途中再次切歌走连续接管并最终落位', (tester) async {
+    await pumpDeck(tester);
+
+    backend.emit(_snapshotFor(queue, 2));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+
+    // 上一段弹簧仍在途中：新会话应捕获当前视觉继续，而不是从 0 重播。
+    backend.emit(_snapshotFor(queue, 3));
+    await tester.pump();
+    await _pumpFrames(tester, frames: 60);
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(queue[3].id)),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('快速连续切歌与卸载不抛异常', (tester) async {
     await pumpDeck(tester);
 
