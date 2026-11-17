@@ -127,7 +127,10 @@ class MusicFolder {
 }
 
 /// 添加结果（UI 只按这些分支提示）。
-enum MusicFolderAddResult { added, duplicate, nested, invalid }
+///
+/// [invalid] 是位置本身不合法；[unreadable] 是位置合法但当前读不到
+/// （SAF 授权拒绝 / provider 无法枚举），UI 文案与「重新选择」引导不同。
+enum MusicFolderAddResult { added, duplicate, nested, invalid, unreadable }
 
 class MusicFoldersStore extends ChangeNotifier {
   MusicFoldersStore({

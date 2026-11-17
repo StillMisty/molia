@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/data/downloads/downloads_repository.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/data/files/music_folder_tree_io.dart';
+import 'package:molia/domain/ports/music_folder_tree.dart';
 import 'package:molia/services/local/music_folder_scanner.dart';
 import 'package:molia/services/local/music_folder_watcher.dart';
 import 'package:molia/services/download/download_records.dart';
@@ -515,6 +516,36 @@ void main() {
       expect(service.canAddFolder, isFalse);
       expect(service.canWatchFolders, isFalse);
     });
+
+    test('选中的树读不到：返回 unreadable 且不保留配置', () async {
+      SharedPreferences.setMockInitialValues({});
+      final db = openMemoryDatabase();
+      addTearDown(db.close);
+      final folders = MusicFoldersStore();
+      await folders.load();
+      final service = LocalLibraryService(
+        folders: folders,
+        scanner: MusicFolderScanner(
+          target: _FakeTarget(),
+          tree: _UnavailableTree(),
+        ),
+        probe: MissingFileProbe(
+          records: DownloadRecords(supported: true, initialized: true),
+          repository: DownloadsRepository(databaseProvider: () => db),
+          storage: FakeDownloadStorage(),
+        ),
+        watcher: MusicFolderWatcher(onTrigger: (paths) async {}),
+        canWatch: false,
+        canScanOnStartup: false,
+        canAddFolder: true,
+      );
+
+      expect(
+        await service.addFolder('content://test/tree/primary%3AMusic'),
+        MusicFolderAddResult.unreadable,
+      );
+      expect(folders.folders, isEmpty);
+    });
   });
 
   group('MusicFolderWatcher', () {
@@ -628,5 +659,29 @@ class _FakeTarget implements LocalScanTarget {
           await markMissing(record);
       }
     }
+  }
+}
+
+/// 枚举即失败的树（SAF 授权拒绝 / provider 离线）。
+class _UnavailableTree implements MusicFolderTree {
+  @override
+  Future<String?> displayName(String root) async => null;
+
+  @override
+  Future<FolderTreeEntry?> stat(
+    String locator, {
+    String relativePath = '',
+  }) async => null;
+
+  @override
+  Future<String> canonicalLocator(String locator) async => locator;
+
+  @override
+  Stream<FolderTreeEvent> walk(
+    String root, {
+    int maxDepth = 32,
+    bool Function()? isCancelled,
+  }) async* {
+    throw const FolderTreeUnavailable(permissionDenied: true);
   }
 }

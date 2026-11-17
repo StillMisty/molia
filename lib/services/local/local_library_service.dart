@@ -82,7 +82,7 @@ class LocalLibraryService extends ChangeNotifier {
     if (outcome?.unavailable ?? false) {
       // 选中的树无法枚举：不保留一个永远读不到的条目。
       await folders.remove(added.id);
-      return MusicFolderAddResult.invalid;
+      return MusicFolderAddResult.unreadable;
     }
     return result;
   }

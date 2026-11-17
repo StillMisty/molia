@@ -109,6 +109,8 @@ class MusicFoldersPage extends StatelessWidget {
       case MusicFolderAddResult.nested:
         notifications?.showSnackBar(l10n.musicFoldersNested);
       case MusicFolderAddResult.invalid:
+        notifications?.showSnackBar(l10n.musicFoldersInvalid);
+      case MusicFolderAddResult.unreadable:
         notifications?.showSnackBar(l10n.musicFoldersReadFailed);
     }
   }
