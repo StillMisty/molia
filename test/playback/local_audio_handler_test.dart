@@ -764,15 +764,17 @@ void main() {
       final (_, backend) = await _handler(service, commands: commands);
       final stateCount = backend.stateUpdates.length;
       final actionCount = backend.actionUpdates.length;
+      final modeBefore = service.mode;
 
       // flutter_media_session 的 Linux MPRIS 把 LoopStatus / Shuffle 的写入
       // 转成不带目标值的 `repeat` / `shuffle`；handler 不能当 toggle 猜测，
-      // 也不能绕过 PlaybackCommandPort——两者都应保持无副作用。
+      // 也不能绕过 PlaybackCommandPort——三者都应保持无副作用。
       backend.emit(MediaAction.repeat);
       await pumpEventQueue();
       backend.emit(MediaAction.shuffle);
       await pumpEventQueue();
 
+      expect(service.mode, modeBefore);
       expect(commands.calls, isEmpty);
       expect(backend.stateUpdates.length, stateCount);
       expect(backend.actionUpdates.length, actionCount);
