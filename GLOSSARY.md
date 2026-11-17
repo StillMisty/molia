@@ -820,7 +820,8 @@
   `lib/playback`）；`PlayStatisticsLimits` 是口径常量唯一来源
   （有效播放 = `min(30s, 50%×时长)`；完整播放 = 末尾容差 1s），全部
   **查询时计算**、不改数据（口径变化不需要回填）；采集开关默认为开。
-- **Listening stats page（听歌统计页）** — `lib/pages/play_statistics_page.dart` +
+- **Listening stats page（听歌统计页）** — `lib/pages/play_statistics_page.dart`
+  （barrel；实现拆在 `lib/pages/statistics/`）+
   `lib/providers/play_statistics_provider.dart`：范围切换（近 7 天 / 30 天 /
   全部）只作用于汇总/榜单；**日历热力图固定全量历史**，范围切换只做高亮。
   形状与色阶约定见 `lib/widgets/statistics/listening_heatmap.dart`

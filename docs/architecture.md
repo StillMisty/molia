@@ -406,7 +406,8 @@
   `PlaybackProvider` 快照 + position 接进去，**零改动播放内核**；
   真正出声才开事件、暂停不切断、统计事件只在动作 / 退后台 / 退出时落盘
   （与播放会话无关；播放途中不按 tick / 定时器写库）、启动收尾遗留事件。
-  统计页（`play_statistics_page.dart`）消费 provider 投影：日历热力图（hero，
+  统计页（barrel `lib/pages/play_statistics_page.dart`，实现
+  `lib/pages/statistics/play_statistics_page.dart`）消费 provider 投影：日历热力图（hero，
   全量历史 + 范围高亮）、作息热力图（7×24，随范围过滤）、汇总/指标/榜单
   （Top 曲目可点播）；导出 JSON 面向 AI 消费（全量汇总 + 最近明细、不含 raw）。
   统计页首个内容块是**年度听歌报告**入口：可用年份取自 `allHistoryDaily`
