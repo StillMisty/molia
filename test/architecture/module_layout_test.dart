@@ -16,7 +16,6 @@ const int _fileSizeLimit = 800;
 
 /// 本任务开始时就已超限的文件（只减不增；降回 ≤800 行后删除条目）。
 const Set<String> _sizeWhitelist = {
-  'lib/app/app_shell.dart',
   'lib/data/library_repository.dart',
   'lib/data/library_write_engine.dart',
   'lib/data/play_statistics_repository.dart',
