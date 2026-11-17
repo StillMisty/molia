@@ -11,24 +11,31 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../domain/models/download.dart'
+    show DownloadedTrack, kLocalSourceKey;
 import '../../domain/models/library.dart';
 import '../../domain/models/library_browse.dart';
 import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/collection_actions.dart';
+import '../../providers/collection_batch_download_adapter.dart';
 import '../../providers/collection_io_commands.dart';
 import '../../providers/collection_presenter.dart';
 import '../../providers/collection_session.dart';
+import '../../providers/favorites_view_model.dart';
+import '../../providers/discover_provider.dart';
 import '../../providers/library_outcome.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/lyrics_provider.dart';
 import '../../providers/playlist_batch_download.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/download/download_manager.dart';
+import '../../services/download/download_records.dart';
 import '../../services/download/download_requests.dart';
 import '../../services/haptics.dart';
 import '../../services/local/local_metadata_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/playlist/playlist_import_service.dart';
 import '../../services/save_as.dart';
 import '../../utils/download_failure_label.dart';
 import '../../utils/save_as_label.dart';
@@ -38,6 +45,7 @@ import '../../widgets/cover_picker_sheet.dart';
 import '../../widgets/download_data_saver_guard.dart';
 import '../../widgets/playlist_sheets.dart';
 import '../../widgets/row_actions.dart';
+import '../../widgets/track_row.dart';
 import '../../widgets/track_row_actions.dart';
 import '../source_swap_page.dart';
 import 'favorites_import.dart';
@@ -546,4 +554,99 @@ Track _favoritesDomainTrack(BuildContext context, CollectionRow row) {
       song.toPlaylistTrack(addedAt: 0),
     ),
   };
+}
+
+/// 收藏页当前点击时的合集 I/O 命令工厂。
+CollectionIoCommands buildFavoritesIoCommands(
+  BuildContext context, {
+  DiscoverProvider? discover,
+  DownloadRequests? requests,
+  SyncProvider? sync,
+  SaveAs? saveAs,
+}) {
+  final provider = context.read<LibraryProvider>();
+  final records = context.read<DownloadRecords?>();
+  const files = FilePickerCollectionPlaylistFiles();
+  return CollectionIoCommands(
+    filePicker: files,
+    fileReader: files,
+    importService: PlaylistImportService(
+      localImporter: DownloadRecordsPlaylistLocalImporter(
+        records,
+        context.read<DownloadManager?>(),
+      ),
+      resolver: LibraryPlaylistKeyResolver(provider, records),
+    ),
+    importTarget: LibraryProviderPlaylistImportTarget(provider),
+    playlistNames: () => [for (final item in provider.playlists) item.name],
+    reviewImport: (plan) async =>
+        (await showPlaylistImportReviewSheet(context, plan: plan)) == true,
+    linkImporter: discover == null
+        ? null
+        : DiscoverCollectionLinkImporter(discover),
+    exportLibrary: LibraryProviderCollectionExportLibrary(provider, records),
+    backup: sync == null ? null : SyncCollectionPlaylistBackup(sync),
+    saver: saveAs == null ? null : SaveAsCollectionExportSaver(saveAs),
+    downloader: requests == null
+        ? null
+        : RequestsCollectionBatchDownloader(requests),
+  );
+}
+
+/// 消费一次「定位当前播放曲目」结果：滚动到目标行 / 给底栏提示。
+void applyFavoritesLocateResult({
+  required BuildContext context,
+  required AppLocalizations l10n,
+  required FavoritesLocateResult? result,
+  required ScrollController controller,
+  required TrackRowSurface surface,
+  required void Function(String message) showMessage,
+}) {
+  if (result == null) return;
+  switch (result.kind) {
+    case FavoritesLocateKind.noTrack:
+      showMessage(l10n.favoritesLocateNoTrack);
+    case FavoritesLocateKind.missing:
+      showMessage(l10n.favoritesLocateMissing);
+    case FavoritesLocateKind.reveal:
+      final index = result.index;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        CollectionTrackList.revealIndex(
+          context,
+          controller,
+          index: index,
+          surface: surface,
+        );
+      });
+  }
+}
+
+/// 本地歌曲行对应的下载 / 导入记录（非 local 源或没有记录 = null）。
+DownloadedTrack? findFavoritesLocalRecord(
+  DownloadRecords? records,
+  BrowseTrack track,
+) {
+  if (track.sourceKey != kLocalSourceKey) return null;
+  for (final record in records?.downloads ?? const <DownloadedTrack>[]) {
+    if (record.localSongId == track.songId) return record;
+  }
+  return null;
+}
+
+/// 曲库行「从文件刷新信息」：重读标签并提示结果。
+Future<void> refreshFavoritesBrowseLocal({
+  required BuildContext context,
+  required AppLocalizations l10n,
+  required DownloadedTrack? record,
+  required bool Function() isActive,
+}) async {
+  if (record == null) return;
+  final manager = context.read<DownloadManager?>();
+  final notifications = context.read<NotificationService?>();
+  final updated = await manager?.refreshLocalMetadata(record);
+  if (!context.mounted || !isActive()) return;
+  notifications?.showSnackBar(
+    updated == null ? l10n.localTitleFailed : l10n.localInfoUpdated,
+  );
 }

@@ -13,6 +13,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/collection_io_commands.dart';
 import '../../providers/discover_provider.dart';
+import '../../providers/favorites_view_model.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/save_as.dart';
 import '../../services/download/download_requests.dart';
@@ -36,6 +37,7 @@ Future<void> importFavoritesCollection({
   required bool Function() isActive,
   required void Function(int playlistId) selectCollection,
   required FavoritesIoCommandsFactory ioCommands,
+  required FavoritesViewModel viewModel,
 }) async {
   final choices = <({String value, IconData icon, String label})>[
     (
@@ -95,6 +97,7 @@ Future<void> importFavoritesCollection({
       isActive: isActive,
       selectCollection: selectCollection,
       ioCommands: ioCommands,
+      viewModel: viewModel,
     );
     return;
   }
@@ -106,6 +109,7 @@ Future<void> importFavoritesCollection({
       isActive: isActive,
       selectCollection: selectCollection,
       ioCommands: ioCommands,
+      viewModel: viewModel,
     );
   }
 }
@@ -119,30 +123,19 @@ Future<void> importFavoritesPlaylistFile({
   required bool Function() isActive,
   required void Function(int playlistId) selectCollection,
   required FavoritesIoCommandsFactory ioCommands,
+  required FavoritesViewModel viewModel,
 }) async {
   final outcome = await ioCommands().importPlaylistFile(
     dialogTitle: l10n.playlistImport,
     isActive: isActive,
   );
   if (!context.mounted || !isActive()) return;
-  switch (outcome) {
-    case CollectionPlaylistImportDone(
-      :final playlistId,
-      :final added,
-      :final skipped,
-    ):
-      selectCollection(playlistId);
-      M3ESnackbar.show(
-        context,
-        message: l10n.playlistImportDone(added, skipped),
-      );
-    case CollectionPlaylistImportEmpty():
-      M3ESnackbar.show(context, message: l10n.playlistImportEmpty);
-    case CollectionPlaylistImportFailed():
-      M3ESnackbar.show(context, message: l10n.playlistImportFailed);
-    case CollectionPlaylistImportCancelled():
-      break;
-  }
+  final result = viewModel.mapPlaylistImportOutcome(outcome, l10n);
+  if (result == null) return;
+  final playlistId = result.playlistId;
+  if (playlistId != null) selectCollection(playlistId);
+  final message = result.message;
+  if (message != null) M3ESnackbar.show(context, message: message);
 }
 
 /// 内置平台歌单 / 收藏夹链接导入：选平台 + 粘贴链接/ID → 拉取并存入本地列表。
@@ -153,6 +146,7 @@ Future<void> importFavoritesFromLink({
   required bool Function() isActive,
   required void Function(int playlistId) selectCollection,
   required FavoritesIoCommandsFactory ioCommands,
+  required FavoritesViewModel viewModel,
 }) async {
   final channels = [
     for (final key in discover.sourceKeys)
@@ -166,15 +160,10 @@ Future<void> importFavoritesFromLink({
     fallbackName: l10n.playlistImportedName,
   );
   if (!context.mounted || !isActive()) return;
-  switch (outcome) {
-    case CollectionLinkImportDone(:final playlistId, :final added):
-      selectCollection(playlistId);
-      M3ESnackbar.show(context, message: l10n.libraryImportSuccess(added));
-    case CollectionLinkImportEmpty():
-      M3ESnackbar.show(context, message: l10n.playlistImportEmpty);
-    case CollectionLinkImportAlreadyContains():
-      M3ESnackbar.show(context, message: l10n.playlistAlreadyContains);
-    case CollectionLinkImportFailed():
-      M3ESnackbar.show(context, message: l10n.discoverLoadFailed);
-  }
+  final result = viewModel.mapLinkImportOutcome(outcome, l10n);
+  if (result == null) return;
+  final playlistId = result.playlistId;
+  if (playlistId != null) selectCollection(playlistId);
+  final message = result.message;
+  if (message != null) M3ESnackbar.show(context, message: message);
 }

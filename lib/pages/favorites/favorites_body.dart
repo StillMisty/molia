@@ -22,6 +22,7 @@ import '../../utils/sync_format.dart';
 import '../../widgets/adaptive_layout.dart';
 import '../../widgets/collection_mode_switch.dart';
 import '../../widgets/collection_track_list.dart';
+import '../../widgets/desktop_layout.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/library_browse_view.dart';
 import '../../widgets/row_actions.dart';
@@ -79,6 +80,63 @@ class FavoritesBodyData {
   rowActionsFor;
 
   final VoidCallback onImportLocal;
+}
+
+/// 列表 / 表格正文。表格列只在内容宽足够时出现（[columnSpec] 非空）。
+Widget buildFavoritesCollectionBody(
+  BuildContext context, {
+  required AppLocalizations l10n,
+  required CollectionView view,
+  required List<CollectionRow> rows,
+  required bool reorderActive,
+  required bool selecting,
+  required ScrollController controller,
+  required Map<String, int> smartVersionCounts,
+  required bool Function(String key) isSelected,
+  required bool Function(CollectionRow row) isMissingRow,
+  required void Function(CollectionRow row) onToggleSmartVersions,
+  required void Function(int index) onRowTap,
+  required void Function(int index, {required bool ctrl, required bool shift})
+  onRowTapWithModifiers,
+  required void Function(String key) onRowLongPress,
+  required Future<void> Function(int from, int to) onReorder,
+  required List<RowAction> Function(BuildContext rowContext, CollectionRow row)
+  rowActionsFor,
+  required VoidCallback onImportLocal,
+  required void Function(List<CollectionRow> rows, TrackRowSurface surface)
+  onRowsReady,
+}) {
+  // 行 / 表头同一份列规范：只有播放历史多一列「播放时间」。
+  final spec = view.isHistory
+      ? TrackRowColumnSpec.history
+      : TrackRowColumnSpec.standard;
+  final columnSpec = DesktopLayout.of(context).tableColumnsFor(spec)
+      ? spec
+      : null;
+  final rowSurface = TrackRowSurface(tableSpec: columnSpec);
+  onRowsReady(rows, rowSurface);
+  return buildFavoritesBody(
+    context,
+    FavoritesBodyData(
+      l10n: l10n,
+      view: view,
+      rows: rows,
+      columnSpec: columnSpec,
+      reorderActive: reorderActive,
+      selecting: selecting,
+      controller: controller,
+      smartVersionCounts: smartVersionCounts,
+      isSelected: isSelected,
+      isMissingRow: isMissingRow,
+      onToggleSmartVersions: onToggleSmartVersions,
+      onRowTap: onRowTap,
+      onRowTapWithModifiers: onRowTapWithModifiers,
+      onRowLongPress: onRowLongPress,
+      onReorder: onReorder,
+      rowActionsFor: rowActionsFor,
+      onImportLocal: onImportLocal,
+    ),
+  );
 }
 
 /// 列表 / 表格正文。表格列只在内容宽足够时出现（[columnSpec] 非空）。
