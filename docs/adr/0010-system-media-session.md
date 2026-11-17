@@ -194,6 +194,8 @@ LocalPlaybackService ──监听──▶ LocalAudioHandler ──▶ MediaSess
   也不绕过 `PlaybackCommandPort`——这两个属性只反映应用内模式，切换仍走应用内
   / Android 通知动作。MPRIS `Seek` / `SetPosition` 在插件 3.2.0 中丢失位置
   （事件放 `positionMs`，Dart 通道读 `args`），handler 收到 null 后忽略；
-  已在 issue #58 记录，等上游修复。
+  已记录在 Molia issue #58 与上游
+  [wyrindev/flutter-media-session#62](https://github.com/wyrindev/flutter-media-session/issues/62)，
+  等上游修复。
 - 无 session bus：插件 `activate` 不抛异常，只是不占用 MPRIS 名字；播放链路
   照常，没有用户可见错误，与历史降级口径一致。

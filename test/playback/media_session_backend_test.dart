@@ -101,8 +101,8 @@ void main() {
       await backend.activate();
 
       expect(platform.calls, ['setAppId', 'activate']);
-      expect(platform.appId, 'top.stillmisty.molia');
-      expect(platform.displayName, 'Molia');
+      expect(platform.appId, linuxMediaSessionAppId);
+      expect(platform.displayName, linuxMediaSessionDisplayName);
     });
 
     test('元数据 / 状态 / 动作转发，动作流透传', () async {

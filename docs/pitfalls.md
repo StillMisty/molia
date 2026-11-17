@@ -1040,7 +1040,9 @@
     模式的只读镜像，切换仍走应用内 / Android 通知动作。
     另：插件 Linux 事件把 seek 位置放在顶层 `positionMs`，Dart 通道却读
     `args`，`playerctl position` / MPRIS `Seek` / `SetPosition` 到达 handler 时
-    `seekPosition` 为 null，只能忽略（issue #58 已记录，等上游修复）。
+    `seekPosition` 为 null，只能忽略（Molia #58 / 上游
+    [wyrindev/flutter-media-session#62](https://github.com/wyrindev/flutter-media-session/issues/62)
+    已记录，等上游修复）。
     身份：`FlutterMediaSessionBackend` 在 Linux 激活前
     `setAppId('top.stillmisty.molia', displayName: 'Molia')`，与已安装
     `.desktop` 的 `DesktopEntry` 对齐；总线名是
