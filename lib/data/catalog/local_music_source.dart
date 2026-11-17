@@ -1,7 +1,7 @@
 /// `local` 音源：播放本地下载副本（`downloads/` 持久文件）。
 ///
 /// 曲目 payload 约定（见 `lib/domain/models/download.dart`）：
-/// `path` 为音频文件绝对路径；本地曲目的 `sourceKey = 'local'`，
+/// `path` 为音频文件绝对路径或 SAF 文档 URI；本地曲目的 `sourceKey = 'local'`，
 /// `songId = '{原音源key}:{原曲目id}'`。
 ///
 /// 能力位只有 `resolveUrl = true`：
@@ -19,6 +19,7 @@ import '../../domain/models/failure.dart';
 import '../../domain/models/source.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/music_source.dart';
+import '../files/local_locator.dart';
 import 'local_file_probe.dart';
 import 'local_path_resolver.dart';
 
@@ -94,7 +95,9 @@ class LocalMusicSource implements MusicSource {
         l10nKey: 'downloadFileMissing',
       );
     }
-    return PlayableStream(Uri.file(path));
+    // SAF 曲目的 locator 是 content:// 文档 URI；直接交给播放器，
+    // 不复制、不转成 file:。
+    return PlayableStream(playableUriForLocator(path));
   }
 
   @override

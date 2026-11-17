@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../app/perf/playback_start_trace.dart';
+import '../data/files/local_locator.dart';
 import '../domain/ports/music_source.dart' show PlayableStream;
 import '../models/play_mode.dart';
 import '../services/audio_cache_platform.dart';
@@ -1235,7 +1236,9 @@ class LocalPlaybackService extends ChangeNotifier {
     Map<String, String> headers = const {},
   }) async {
     final cache = _cacheService;
-    final localFile = uri.scheme == 'file';
+    // 本地 locator 包含桌面 file: 与 Android SAF content:：两者都不走
+    // 边播边缓存，直接交给播放器。
+    final localFile = isLocalPlayableLocator(uri.toString());
     final cacheable =
         !localFile &&
         _platformSupportsAudioCaching &&

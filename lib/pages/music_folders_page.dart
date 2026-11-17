@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:android_file_picker/android_file_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -78,19 +79,28 @@ class MusicFoldersPage extends StatelessWidget {
     LocalLibraryService service,
   ) async {
     final notifications = context.read<NotificationService?>();
-    String? picked;
+    Uri? picked;
     try {
-      // 这里 Android 也走得到，而 pickDirectory() 只给 content:// 树 URI；
-      // 本地曲库仍按文件系统路径扫描，等曲库支持 SAF 再换掉（file_picker 14 移除）。
-      // ignore: deprecated_member_use
-      picked = await FilePicker.getDirectoryPath(
+      picked = await FilePicker.pickDirectory(
         dialogTitle: l10n.musicFoldersAdd,
+        androidOptions: const FilePickerAndroidOptions(
+          safOptions: AndroidSAFOptions(
+            grant: AndroidSAFGrant.lifetime,
+            accessMode: AndroidSAFAccessMode.readOnly,
+            copyToCache: false,
+          ),
+        ),
       );
     } catch (_) {
-      picked = null;
+      // 选择器本身失败 / provider 拒绝：给可执行提示，不暴露异常文本。
+      notifications?.showSnackBar(l10n.musicFoldersReadFailed);
+      return;
     }
-    if (picked == null || picked.isEmpty) return;
-    final result = await service.addFolder(picked);
+    if (picked == null) return;
+    final locator = picked.isScheme('file')
+        ? picked.toFilePath()
+        : picked.toString();
+    final result = await service.addFolder(locator);
     switch (result) {
       case MusicFolderAddResult.added:
         notifications?.showSnackBar(l10n.musicFoldersAdded);
@@ -99,7 +109,7 @@ class MusicFoldersPage extends StatelessWidget {
       case MusicFolderAddResult.nested:
         notifications?.showSnackBar(l10n.musicFoldersNested);
       case MusicFolderAddResult.invalid:
-        notifications?.showSnackBar(l10n.musicFoldersInvalid);
+        notifications?.showSnackBar(l10n.musicFoldersReadFailed);
     }
   }
 }
@@ -116,7 +126,7 @@ class _FolderRow extends StatelessWidget {
     final scanning = service.scanning && service.scanningFolderId == folder.id;
     return SettingsInfoTile(
       icon: Icons.folder_rounded,
-      title: folder.root,
+      title: folder.title.isEmpty ? l10n.musicFoldersTitle : folder.title,
       subtitle: scanning
           ? l10n.musicFoldersScanning(service.progress?.processed ?? 0)
           : _summaryText(l10n, folder.lastScan),
@@ -159,6 +169,7 @@ class _FolderRow extends StatelessWidget {
 
   String _summaryText(AppLocalizations l10n, MusicFolderScanSummary? summary) {
     if (summary == null) return l10n.musicFoldersSubtitle;
+    if (summary.accessRevoked) return l10n.musicFoldersAccessRevoked;
     if (summary.unavailable) return l10n.musicFoldersUnavailable;
     if (summary.cancelled) return l10n.musicFoldersCancelled;
     return l10n.musicFoldersSummary(

@@ -34,6 +34,22 @@ void main() {
     expect(stream.headers, isEmpty);
   });
 
+  test('SAF content:// locator 原样交给播放器，存在性走注入端口', () async {
+    const uri =
+        'content://com.android.externalstorage.documents/tree/primary%3AMusic/document/primary%3AMusic%2Fa.mp3';
+    final probed = <String>[];
+    final source = LocalMusicSource(
+      fileExists: (path) async {
+        probed.add(path);
+        return true;
+      },
+    );
+    final stream = await source.resolve(makeTrack({'path': uri}));
+    expect(stream.uri, Uri.parse(uri));
+    expect(stream.uri.scheme, 'content');
+    expect(probed, [uri]);
+  });
+
   test('文件缺失 → notFound + 可读 l10nKey', () async {
     final source = LocalMusicSource(fileExists: (path) async => false);
     await expectLater(

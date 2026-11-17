@@ -4926,7 +4926,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get musicFoldersInvalid => '这个位置不能添加';
 
   @override
-  String get musicFoldersAndroidNote => '系统可能只允许读取部分文件夹；读不到时可以逐个导入文件';
+  String get musicFoldersReadFailed => '读不到这个文件夹，请重新选择或改为逐个导入文件';
+
+  @override
+  String get musicFoldersAccessRevoked => '这个文件夹的访问权限已被移除，请重新添加后再扫描';
+
+  @override
+  String get musicFoldersAndroidNote => 'Android 会请你授权只读访问整个音乐文件夹，不会复制文件';
 
   @override
   String get localFileMissing => '本地文件不存在，可能已被删除';

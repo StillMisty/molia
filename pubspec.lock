@@ -18,7 +18,7 @@ packages:
     source: hosted
     version: "14.7.0"
   android_file_picker:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: android_file_picker
       sha256: ec3cf2a2c7a9b2bd56747e85f80efdd994e563049dfb0981a23903acfdd58cb5

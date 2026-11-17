@@ -63,6 +63,7 @@ import '../covers/cover_image_format.dart';
 import '../../data/downloads/audio_tag_writer.dart';
 import '../../data/downloads/download_notifications.dart';
 import '../../data/downloads/download_storage.dart';
+import '../../data/files/local_locator.dart';
 import '../../data/downloads/downloads_publisher.dart';
 import '../../data/downloads/downloads_repository.dart';
 import '../../data/downloads/local_lyrics.dart';
@@ -963,12 +964,11 @@ class DownloadService extends DownloadManager
     DownloadedTrack record,
     String newPath,
   ) async {
-    final path = p.normalize(newPath.trim());
-    final extension = p.extension(path).toLowerCase();
+    final rawPath = newPath.trim();
+    final path = isContentLocator(rawPath) ? rawPath : p.normalize(rawPath);
+    final extension = audioExtensionOfLocator(path);
     if (path.isEmpty ||
-        !DownloadFileLayout.audioExtensions.contains(
-          extension.replaceFirst('.', ''),
-        )) {
+        !DownloadFileLayout.audioExtensions.contains(extension)) {
       return LocalRelocateResult.unsupportedFormat;
     }
     final size = await _storage.fileSize(path);
@@ -1021,10 +1021,10 @@ class DownloadService extends DownloadManager
     var skipped = 0;
     if (!_recordStore.records.supported) return (0, paths.length);
     for (final rawPath in paths) {
-      final path = p.normalize(rawPath.trim());
+      final trimmed = rawPath.trim();
+      final path = isContentLocator(trimmed) ? trimmed : p.normalize(trimmed);
       // 后缀不带点（`audioExtensions` 约定）；标签解析要带点的原始后缀。
-      final extension = p.extension(path).toLowerCase();
-      final extensionName = extension.replaceFirst('.', '');
+      final extensionName = audioExtensionOfLocator(path);
       if (path.isEmpty ||
           !DownloadFileLayout.audioExtensions.contains(extensionName)) {
         skipped++;
@@ -1047,7 +1047,7 @@ class DownloadService extends DownloadManager
       _writeGate.run(() async {
         final path = record.filePath;
         if (path == null || path.isEmpty) return null;
-        final extension = p.extension(path).toLowerCase();
+        final extension = '.${audioExtensionOfLocator(path)}';
         if (!DownloadFileLayout.audioExtensions.contains(
           extension.replaceFirst('.', ''),
         )) {
@@ -1058,9 +1058,7 @@ class DownloadService extends DownloadManager
         final head =
             await _storage.readHead(path, kAudioTagReadLimit) ?? Uint8List(0);
         final tags = readAudioTags(head, extension: extension, fileSize: size);
-        final fallback = splitFileNameMetadata(
-          p.basenameWithoutExtension(path),
-        );
+        final fallback = splitFileNameMetadata(audioBaseNameOfLocator(path));
         final updated = record.copyWith(
           title: tags.title ?? fallback.title,
           artist: tags.artist ?? fallback.artist,
@@ -1156,11 +1154,11 @@ class DownloadService extends DownloadManager
     required int sizeBytes,
     int? mtimeMs,
   }) async {
-    final extension = p.extension(path).toLowerCase();
+    final extension = '.${audioExtensionOfLocator(path)}';
     final head =
         await _storage.readHead(path, kAudioTagReadLimit) ?? Uint8List(0);
     final tags = readAudioTags(head, extension: extension, fileSize: sizeBytes);
-    final fallback = splitFileNameMetadata(p.basenameWithoutExtension(path));
+    final fallback = splitFileNameMetadata(audioBaseNameOfLocator(path));
     final existing =
         _recordStore.records.importedRecordForPath(path) ??
         await _recordStore.findImportedByPath(path);
@@ -1227,7 +1225,7 @@ class DownloadService extends DownloadManager
     );
     final path = record?.filePath;
     if (path != null && path.isNotEmpty && await _storage.fileExists(path)) {
-      return Uri.file(path);
+      return playableUriForLocator(path);
     }
     final qualities = <String>[
       if (quality != null && quality.isNotEmpty) quality,

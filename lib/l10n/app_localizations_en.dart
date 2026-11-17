@@ -5139,8 +5139,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get musicFoldersInvalid => 'This location can\'t be added';
 
   @override
+  String get musicFoldersReadFailed =>
+      'Couldn\'t read this folder. Pick it again or import files instead.';
+
+  @override
+  String get musicFoldersAccessRevoked =>
+      'Access to this folder was removed. Add it again to keep scanning.';
+
+  @override
   String get musicFoldersAndroidNote =>
-      'Android may only allow part of this folder. If it can\'t be read, import files instead.';
+      'Android asks you to allow read-only access to the whole folder you pick. Files aren\'t copied.';
 
   @override
   String get localFileMissing =>

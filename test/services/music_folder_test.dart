@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/data/downloads/downloads_repository.dart';
 import 'package:molia/domain/models/download.dart';
+import 'package:molia/data/files/music_folder_tree_io.dart';
 import 'package:molia/services/local/music_folder_scanner.dart';
 import 'package:molia/services/local/music_folder_watcher.dart';
 import 'package:molia/services/download/download_records.dart';
@@ -52,6 +53,26 @@ void main() {
       final reloaded = MusicFoldersStore();
       await reloaded.load();
       expect(reloaded.folders, isEmpty);
+    });
+
+    test('SAF 树根：显示名只存 provider 名，UI 不出现 content://', () async {
+      const root =
+          'content://com.android.externalstorage.documents/tree/primary%3AMusic';
+      final store = MusicFoldersStore();
+      await store.load();
+      expect(
+        await store.add(root, displayName: 'Music'),
+        MusicFolderAddResult.added,
+      );
+      expect(store.folders.single.title, 'Music');
+      expect(store.folders.single.title, isNot(contains('content://')));
+      expect(await store.add(root), MusicFolderAddResult.duplicate);
+
+      // 新实例从同一份 prefs 读到显示名。
+      final reloaded = MusicFoldersStore();
+      await reloaded.load();
+      expect(reloaded.folders.single.title, 'Music');
+      expect(reloaded.folders.single.root, root);
     });
 
     test('扫描摘要持久化', () async {
@@ -113,7 +134,10 @@ void main() {
       await write('Album/empty.mp3', bytes: const []);
       final before = await File('${root.path}/Album/01.mp3').readAsBytes();
 
-      final scanner = MusicFolderScanner(target: target);
+      final scanner = MusicFolderScanner(
+        target: target,
+        tree: IoMusicFolderTree(),
+      );
       final outcome = await scanner.scan(root.path);
       expect(outcome.added, 2);
       expect(outcome.skipped, 4);
@@ -135,7 +159,10 @@ void main() {
 
     test('增量：未变化不读标签 / 不写库；mtime / size 变化只刷新', () async {
       final file = await write('a.mp3', mtimeMs: 1000);
-      final scanner = MusicFolderScanner(target: target);
+      final scanner = MusicFolderScanner(
+        target: target,
+        tree: IoMusicFolderTree(),
+      );
       await scanner.scan(root.path);
       expect(target.imports, hasLength(1));
       expect(target.refreshes, isEmpty);
@@ -155,7 +182,10 @@ void main() {
 
     test('缺文件：成功枚举后标记；根目录不存在返回 unavailable 且不标记', () async {
       await write('a.mp3');
-      final scanner = MusicFolderScanner(target: target);
+      final scanner = MusicFolderScanner(
+        target: target,
+        tree: IoMusicFolderTree(),
+      );
       await scanner.scan(root.path);
       target.imported = [
         DownloadedTrack(
@@ -183,8 +213,10 @@ void main() {
       expect(target.missing.map((record) => record.localKey), ['file:y']);
 
       target.missing.clear();
-      final outcome = await MusicFolderScanner(target: target)
-          .scan('${root.path}-not-mounted');
+      final outcome = await MusicFolderScanner(
+        target: target,
+        tree: IoMusicFolderTree(),
+      ).scan('${root.path}-not-mounted');
       expect(outcome.unavailable, isTrue);
       expect(outcome.skipReasons[ScanSkipReason.rootUnavailable], 1);
       expect(target.missing, isEmpty);
@@ -194,7 +226,10 @@ void main() {
       await write('real/a.mp3');
       Link('${root.path}/cycle').createSync(root.path);
       Link('${root.path}/alias.mp3').createSync('${root.path}/real/a.mp3');
-      final scanner = MusicFolderScanner(target: target);
+      final scanner = MusicFolderScanner(
+        target: target,
+        tree: IoMusicFolderTree(),
+      );
       final outcome = await scanner.scan(root.path);
       expect(outcome.added, 1, reason: '链接与真实路径去重');
       expect(outcome.skipReasons[ScanSkipReason.duplicatePath], 1);
@@ -209,7 +244,10 @@ void main() {
       final file = File('$deep/deep.mp3');
       await file.parent.create(recursive: true);
       await file.writeAsBytes([1, 2, 3]);
-      final outcome = await MusicFolderScanner(target: target).scan(root.path);
+      final outcome = await MusicFolderScanner(
+        target: target,
+        tree: IoMusicFolderTree(),
+      ).scan(root.path);
       expect(outcome.added, 0);
       expect(outcome.skipReasons[ScanSkipReason.depthExceeded], 1);
     });
@@ -219,8 +257,10 @@ void main() {
         await write('a$i.mp3');
       }
       final cancellation = ScanCancellation()..cancel();
-      final outcome = await MusicFolderScanner(target: target)
-          .scan(root.path, cancellation: cancellation);
+      final outcome = await MusicFolderScanner(
+        target: target,
+        tree: IoMusicFolderTree(),
+      ).scan(root.path, cancellation: cancellation);
       expect(outcome.cancelled, isTrue);
       expect(target.imports, isEmpty);
     });
@@ -241,12 +281,14 @@ void main() {
       ];
       final outcome = await MusicFolderScanner(
         target: target,
-        lister: (directory) {
-          if (directory.path == root.path) {
-            throw const FileSystemException('permission denied');
-          }
-          return directory.list();
-        },
+        tree: IoMusicFolderTree(
+          lister: (directory) {
+            if (directory.path == root.path) {
+              throw const FileSystemException('permission denied');
+            }
+            return directory.list();
+          },
+        ),
       ).scan(root.path);
       expect(outcome.unavailable, isTrue);
       expect(outcome.skipReasons[ScanSkipReason.rootUnavailable], 1);
@@ -258,7 +300,10 @@ void main() {
       final real = Directory('${root.path}/real')..createSync();
       await write('real/a.mp3');
       final link = Link('${root.path}/alias')..createSync(real.path);
-      final scanner = MusicFolderScanner(target: target);
+      final scanner = MusicFolderScanner(
+        target: target,
+        tree: IoMusicFolderTree(),
+      );
       await scanner.scan(link.path);
       expect(target.imports, hasLength(1));
       expect(target.imports.single, startsWith(link.path));
@@ -274,14 +319,16 @@ void main() {
       final alias = Link('${root.path}/alias.mp3')..createSync(real.path);
       final outcome = await MusicFolderScanner(
         target: target,
-        lister: (directory) async* {
-          if (directory.path == root.path) {
-            yield alias;
-            yield real;
-            return;
-          }
-          yield* directory.list();
-        },
+        tree: IoMusicFolderTree(
+          lister: (directory) async* {
+            if (directory.path == root.path) {
+              yield alias;
+              yield real;
+              return;
+            }
+            yield* directory.list();
+          },
+        ),
       ).scan(root.path);
       expect(outcome.added, 1);
       expect(target.imports.single, alias.path);
@@ -291,7 +338,10 @@ void main() {
       for (var i = 0; i < 210; i++) {
         await write('bulk/$i.mp3', bytes: [i + 1]);
       }
-      final outcome = await MusicFolderScanner(target: target).scan(root.path);
+      final outcome = await MusicFolderScanner(
+        target: target,
+        tree: IoMusicFolderTree(),
+      ).scan(root.path);
       expect(outcome.added, 210);
       expect(target.imports, hasLength(210));
       expect(target.batches.every((size) => size <= 200), isTrue);
@@ -302,12 +352,17 @@ void main() {
     test('只扫描指定路径（监听事件）：不遍历整棵树、不标缺失', () async {
       await write('a.mp3');
       await write('b.mp3');
-      await MusicFolderScanner(target: target).scan(root.path);
+      await MusicFolderScanner(
+        target: target,
+        tree: IoMusicFolderTree(),
+      ).scan(root.path);
       target.imports.clear();
       await File('${root.path}/a.mp3')
           .setLastModified(DateTime.fromMillisecondsSinceEpoch(3000));
-      await MusicFolderScanner(target: target)
-          .scanPaths(root.path, ['${root.path}/a.mp3']);
+      await MusicFolderScanner(
+        target: target,
+        tree: IoMusicFolderTree(),
+      ).scanPaths(root.path, ['${root.path}/a.mp3']);
       expect(target.imports, isEmpty);
       expect(target.refreshes, hasLength(1));
       expect(target.refreshes.single.$1.filePath, '${root.path}/a.mp3');
@@ -317,13 +372,16 @@ void main() {
     test('大小写策略可注入：不敏感时同目录同名只导入一次', () async {
       await write('A.mp3');
       await write('a.mp3');
-      final sensitive = await MusicFolderScanner(target: _FakeTarget())
-          .scan(root.path);
+      final sensitive = await MusicFolderScanner(
+        target: _FakeTarget(),
+        tree: IoMusicFolderTree(),
+      ).scan(root.path);
       expect(sensitive.added, 2);
 
       final folded = _FakeTarget();
       final outcome = await MusicFolderScanner(
         target: folded,
+        tree: IoMusicFolderTree(),
         // 只折叠文件名：临时目录本身可能含大写字母，整路径折叠会让 stat 失败。
         pathKey: (path) =>
             '${p.dirname(path)}/${p.basename(path).toLowerCase()}',
@@ -385,7 +443,10 @@ void main() {
       );
       final service = LocalLibraryService(
         folders: MusicFoldersStore(),
-        scanner: MusicFolderScanner(target: _FakeTarget()),
+        scanner: MusicFolderScanner(
+          target: _FakeTarget(),
+          tree: IoMusicFolderTree(),
+        ),
         probe: probe,
         watcher: MusicFolderWatcher(onTrigger: (paths) async {}),
         canWatch: false,
@@ -400,7 +461,10 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       LocalLibraryService build() => LocalLibraryService(
         folders: MusicFoldersStore(),
-        scanner: MusicFolderScanner(target: _FakeTarget()),
+        scanner: MusicFolderScanner(
+          target: _FakeTarget(),
+          tree: IoMusicFolderTree(),
+        ),
         probe: MissingFileProbe(
           records: DownloadRecords(supported: true, initialized: true),
           repository: DownloadsRepository(),
@@ -436,7 +500,7 @@ void main() {
       final target = _FakeTarget();
       final service = LocalLibraryService(
         folders: folders,
-        scanner: MusicFolderScanner(target: target),
+        scanner: MusicFolderScanner(target: target, tree: IoMusicFolderTree()),
         probe: probe,
         watcher: MusicFolderWatcher(onTrigger: (paths) async {}),
         canWatch: false,

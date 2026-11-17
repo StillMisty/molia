@@ -6,7 +6,6 @@
 library;
 
 import 'package:logging/logging.dart';
-import 'package:path/path.dart' as p;
 
 import '../../data/downloads/download_storage.dart';
 import '../../data/downloads/downloads_repository.dart';
@@ -93,10 +92,9 @@ class MissingFileProbe {
     if (path == null || path.isEmpty) return null;
     final exists = await storage.fileExists(path);
     if (!exists) {
-      // 整块根目录不可用（外接盘拔出 / 网络卷离线）时不把整库标缺失：
-      // 父目录也不存在就当作「暂时读不到」，保留原状态。
-      final parent = p.dirname(path);
-      if (!await storage.directoryExists(parent)) return null;
+      // 整块根目录不可用（外接盘拔出 / 网络卷离线 / SAF 授权撤销）时不把
+      // 整库标缺失：容器不可读就当作「暂时读不到」，保留原状态。
+      if (!await storage.locatorReachable(path)) return null;
       if (record.isMissing) return null;
       final missingAt = _clock().millisecondsSinceEpoch;
       await repository.setFileProbe(

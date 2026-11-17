@@ -48,6 +48,13 @@ class FakeDownloadStorage implements DownloadStorage {
       files.keys.any((key) => key.startsWith('$path/'));
 
   @override
+  Future<bool> locatorReachable(String path) async {
+    final slash = path.lastIndexOf('/');
+    final parent = slash <= 0 ? '/' : path.substring(0, slash);
+    return directoryExists(parent);
+  }
+
+  @override
   Future<int> fileSize(String path) async => files[path]?.length ?? 0;
 
   @override

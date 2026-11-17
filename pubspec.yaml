@@ -30,6 +30,9 @@ dependencies:
   audio_session: ^0.2.4
   share_plus: ^13.3.1
   file_picker: ^13.4.0
+  # SAF 目录选项（AndroidSAFOptions：lifetime + 只读 + 不复制）由 file_picker
+  # 的 Android 实现提供；它本来就在依赖树里，直接依赖只为拿到选项类型。
+  android_file_picker: ^2.2.0
   pointycastle: ^4.0.0
   # 0.13.1 被 Flutter SDK 固定在 0.13.0（sdk-version-pinning）；SDK 升级后跟最新。
   material_color_utilities: ^0.13.0

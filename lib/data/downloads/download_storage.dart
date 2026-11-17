@@ -1,4 +1,6 @@
+import '../saf/saf_bridge.dart';
 import 'download_storage_io.dart' as platform;
+import 'download_storage_saf.dart';
 import 'download_storage_types.dart';
 
 export 'download_storage_types.dart';
@@ -12,5 +14,13 @@ export 'download_storage_types.dart';
 ///
 /// [customRoot] 为设置页选择的保存位置：返回非空时优先使用（每次解析都
 /// 重新读取，改设置无需重启）。
-DownloadStorage createDownloadStorage({String? Function()? customRoot}) =>
-    platform.createDownloadStorage(customRoot: customRoot);
+///
+/// [safBridge] 只在 Android 组合根注入：带 `content://` 的本地导入曲目经
+/// 装饰器路由到 SAF，其它路径仍走 `dart:io`。
+DownloadStorage createDownloadStorage({
+  String? Function()? customRoot,
+  SafBridge? safBridge,
+}) {
+  final storage = platform.createDownloadStorage(customRoot: customRoot);
+  return safBridge == null ? storage : SafDownloadStorage(storage, safBridge);
+}

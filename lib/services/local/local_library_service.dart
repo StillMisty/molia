@@ -5,10 +5,10 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../../data/files/local_locator.dart';
 import '../download/missing_file_probe.dart';
 import 'music_folder_scanner.dart';
 import 'music_folder_watcher.dart';
@@ -69,12 +69,20 @@ class LocalLibraryService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<MusicFolderAddResult> addFolder(String path) async {
+  Future<MusicFolderAddResult> addFolder(String locator) async {
     if (!_canAddFolder) return MusicFolderAddResult.invalid;
-    final result = await folders.add(path);
-    if (result == MusicFolderAddResult.added) {
-      final added = folders.folders.last;
-      await scanFolder(added.id);
+    // provider 显示名在添加时就取一次；取不到先存 null，扫描时再补。
+    final displayName = isContentLocator(locator)
+        ? await _displayNameOf(locator)
+        : null;
+    final result = await folders.add(locator, displayName: displayName);
+    if (result != MusicFolderAddResult.added) return result;
+    final added = folders.folders.last;
+    final outcome = await _run([added]);
+    if (outcome?.unavailable ?? false) {
+      // 选中的树无法枚举：不保留一个永远读不到的条目。
+      await folders.remove(added.id);
+      return MusicFolderAddResult.invalid;
     }
     return result;
   }
@@ -82,9 +90,11 @@ class LocalLibraryService extends ChangeNotifier {
   Future<void> removeFolder(String id) async {
     if (_scanningFolderId == id) _cancellation?.cancel();
     await folders.remove(id);
-    final roots = [for (final folder in folders.folders) folder.root];
     await watcher.stop();
-    watcher.start(roots);
+    watcher.start([
+      for (final folder in folders.folders)
+        if (!isContentLocator(folder.root)) folder.root,
+    ]);
     notifyListeners();
   }
 
@@ -101,7 +111,9 @@ class LocalLibraryService extends ChangeNotifier {
     await _run([folder]);
   }
 
-  Future<void> scanAll() => _run(folders.folders);
+  Future<void> scanAll() async {
+    await _run(folders.folders);
+  }
 
   /// 监听事件：能定位到路径时只 stat 这些路径；否则整树增量。
   Future<void> scanEventPaths(Set<String>? paths) async {
@@ -110,12 +122,10 @@ class LocalLibraryService extends ChangeNotifier {
       return;
     }
     for (final folder in folders.folders) {
-      final root = folder.root.endsWith('/') || folder.root.endsWith('\\')
-          ? folder.root
-          : '${folder.root}${Platform.pathSeparator}';
+      if (isContentLocator(folder.root)) continue;
       final matched = {
         for (final path in paths)
-          if (path == folder.root || path.startsWith(root)) path,
+          if (isLocatorUnder(folder.root, path)) path,
       };
       if (matched.isEmpty) continue;
       await scanner.scanPaths(folder.root, matched);
@@ -134,7 +144,10 @@ class LocalLibraryService extends ChangeNotifier {
       await probe.probeAll();
     }
     if (canWatchFolders) {
-      watcher.start([for (final folder in folders.folders) folder.root]);
+      watcher.start([
+        for (final folder in folders.folders)
+          if (!isContentLocator(folder.root)) folder.root,
+      ]);
     }
   }
 
@@ -143,10 +156,12 @@ class LocalLibraryService extends ChangeNotifier {
 
   void cancelScan() => _cancellation?.cancel();
 
-  Future<void> _run(Iterable<MusicFolder> targets) async {
-    if (_scanning || targets.isEmpty) return;
+  Future<FolderScanOutcome?> _run(Iterable<MusicFolder> targets) async {
+    if (_scanning || targets.isEmpty) return null;
     _scanning = true;
     _cancellation = ScanCancellation();
+    FolderScanOutcome? lastOutcome;
+    var anyUnavailable = false;
     try {
       for (final folder in targets) {
         if (_cancellation!.isCancelled) break;
@@ -161,6 +176,14 @@ class LocalLibraryService extends ChangeNotifier {
             notifyListeners();
           },
         );
+        lastOutcome = outcome;
+        if (outcome.unavailable) anyUnavailable = true;
+        if (isContentLocator(folder.root)) {
+          final displayName = await _displayNameOf(folder.root);
+          if (displayName != null) {
+            await folders.setDisplayName(folder.id, displayName);
+          }
+        }
         await folders.setLastScan(
           folder.id,
           MusicFolderScanSummary(
@@ -169,18 +192,31 @@ class LocalLibraryService extends ChangeNotifier {
             skipped: outcome.skipped,
             cancelled: outcome.cancelled,
             unavailable: outcome.unavailable,
+            accessRevoked: outcome.accessRevoked,
             scannedAt: DateTime.now().millisecondsSinceEpoch,
           ),
         );
       }
       // 扫描成功后再做一轮批量探测（同一串行入口，避免互相覆盖）。
-      await probe.probeAll();
+      // 有根不可用（离线卷 / SAF 授权撤销）时跳过：容器状态未知，不能据此
+      // 把记录标成缺失。
+      if (!anyUnavailable) await probe.probeAll();
     } finally {
       _scanning = false;
       _scanningFolderId = null;
       _progress = null;
       _cancellation = null;
       notifyListeners();
+    }
+    return lastOutcome;
+  }
+
+  Future<String?> _displayNameOf(String root) async {
+    try {
+      return await scanner.displayName(root);
+    } catch (_) {
+      // provider 查询失败只损失标题；扫描会再试。
+      return null;
     }
   }
 

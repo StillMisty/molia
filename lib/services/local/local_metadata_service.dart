@@ -10,6 +10,7 @@
 library;
 
 import '../../data/downloads/audio_title_editor.dart';
+import '../../data/files/local_locator.dart';
 import '../../data/downloads/download_storage.dart';
 import '../../data/local_title_store.dart';
 import '../../domain/models/download.dart';
@@ -56,6 +57,10 @@ class LocalMetadataService {
     if (!appOnly) {
       final path = record.filePath;
       if (path == null || path.isEmpty || !record.hasAudio) {
+        return LocalTitleEditStatus.appOnlyRequired;
+      }
+      // SAF 是只读授权：不尝试写标签，直接走「只在 Molia 中修改」。
+      if (isContentLocator(path)) {
         return LocalTitleEditStatus.appOnlyRequired;
       }
       final outcome = await rewriteAudioTitle(

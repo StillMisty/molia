@@ -139,6 +139,15 @@ class IoDownloadStorage implements DownloadStorage {
   }
 
   @override
+  Future<bool> locatorReachable(String path) async {
+    try {
+      return await Directory(p.dirname(path)).exists();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
   Future<int?> fileMtime(String path) async {
     try {
       final file = File(path);

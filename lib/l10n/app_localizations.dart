@@ -9172,10 +9172,22 @@ abstract class AppLocalizations {
   /// **'This location can\'t be added'**
   String get musicFoldersInvalid;
 
+  /// No description provided for @musicFoldersReadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t read this folder. Pick it again or import files instead.'**
+  String get musicFoldersReadFailed;
+
+  /// No description provided for @musicFoldersAccessRevoked.
+  ///
+  /// In en, this message translates to:
+  /// **'Access to this folder was removed. Add it again to keep scanning.'**
+  String get musicFoldersAccessRevoked;
+
   /// No description provided for @musicFoldersAndroidNote.
   ///
   /// In en, this message translates to:
-  /// **'Android may only allow part of this folder. If it can\'t be read, import files instead.'**
+  /// **'Android asks you to allow read-only access to the whole folder you pick. Files aren\'t copied.'**
   String get musicFoldersAndroidNote;
 
   /// No description provided for @localFileMissing.

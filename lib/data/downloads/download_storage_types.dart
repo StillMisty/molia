@@ -48,6 +48,12 @@ abstract interface class DownloadStorage {
   /// 目录是否存在（缺文件探测判断挂载根是否还在）。
   Future<bool> directoryExists(String path);
 
+  /// 文件所在容器是否仍可读（缺文件探测用：权限撤销 / 卷离线时不能把
+  /// 整库标缺失）。
+  ///
+  /// `dart:io` 实现检查父目录；SAF 实现检查授权树是否仍可 stat。
+  Future<bool> locatorReachable(String path);
+
   /// 文件大小（字节）；不存在 / 不可读返回 0。
   Future<int> fileSize(String path);
 

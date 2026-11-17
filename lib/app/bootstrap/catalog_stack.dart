@@ -11,6 +11,7 @@ import '../../data/catalog/album_service.dart';
 import '../../data/catalog/artist_service.dart';
 import '../../data/catalog/catalog_service.dart';
 import '../../data/catalog/comments_service.dart';
+import '../../data/catalog/local_file_probe.dart';
 import '../../data/catalog/local_music_source.dart';
 import '../../data/catalog/local_path_resolver.dart';
 import '../../data/catalog/source_registry_impl.dart';
@@ -32,6 +33,7 @@ import '../../sources/source_manager.dart';
 typedef CatalogStack = ({
   SettingsRegistry settings,
   LocalPathResolver localPathResolver,
+  LocalFileProbe localFileProbe,
   SourceManager sourceManager,
   SourceRegistry sourceRegistry,
   SwapQueryPlanner swapQueryPlanner,
@@ -140,9 +142,15 @@ CatalogStack buildCatalogStack({
   // 适配层：SourceManager → SourceRegistry → CatalogService。
   // SearchProvider 只依赖后两者（搜索缓存 single-flight + LRU + TTL 5min）。
   final localPathResolver = LocalPathResolver();
+  // 存在性探测先在本地数据栈建好前用平台默认值；数据栈就绪后 attach 到
+  // 下载存储，SAF `content://` 才能走 bridge。
+  final localFileProbe = LocalFileProbe();
   final sourceRegistry = SourceRegistryImpl(
     sourceManager,
-    localSource: LocalMusicSource(pathResolver: localPathResolver),
+    localSource: LocalMusicSource(
+      pathResolver: localPathResolver,
+      fileExists: localFileProbe.probe,
+    ),
   );
   String channelDisplayName(String key) {
     for (final descriptor in sourceRegistry.descriptors) {
@@ -191,6 +199,7 @@ CatalogStack buildCatalogStack({
   return (
     settings: settingsRegistry,
     localPathResolver: localPathResolver,
+    localFileProbe: localFileProbe,
     sourceManager: sourceManager,
     sourceRegistry: sourceRegistry,
     swapQueryPlanner: swapQueryPlanner,

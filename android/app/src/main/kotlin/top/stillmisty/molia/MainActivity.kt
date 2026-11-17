@@ -29,6 +29,7 @@ class MainActivity : FlutterActivity() {
     private var lanPermissionChannel:
         top.stillmisty.molia.sync.LocalNetworkPermissionChannelHandler? = null
     private var sleepTimerChannel: top.stillmisty.molia.sleep.SleepTimerChannelHandler? = null
+    private var safChannel: top.stillmisty.molia.saf.SafChannelHandler? = null
 
     /// 通知权限请求的挂起结果（Android 13+）：权限回调后一次性完成。
     private var notificationPermissionResult: MethodChannel.Result? = null
@@ -202,6 +203,14 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger
         )
 
+        // SAF（本地曲库音乐文件夹）：树枚举 / stat / 只读字节读取。
+        // picker 的 lifetime 授权由 file_picker 负责持久化，这里只消费 URI。
+        safChannel?.dispose()
+        safChannel = top.stillmisty.molia.saf.SafChannelHandler(
+            messenger = flutterEngine.dartExecutor.binaryMessenger,
+            context = this,
+        )
+
         // 通知权限通道：请求时机由 Dart 侧业务决定；被永久拒绝时给设置深链。
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -347,6 +356,8 @@ class MainActivity : FlutterActivity() {
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         sleepTimerChannel?.dispose()
         sleepTimerChannel = null
+        safChannel?.dispose()
+        safChannel = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
 

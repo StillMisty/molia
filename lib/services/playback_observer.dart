@@ -532,7 +532,9 @@ class PlaybackObserver {
     if (url == null || url.isEmpty) return false;
     if (url.startsWith('//')) return false;
     final uri = Uri.tryParse(url);
-    if (uri != null && uri.scheme == 'file') return true;
+    if (uri != null && (uri.scheme == 'file' || uri.scheme == 'content')) {
+      return true;
+    }
     return url.startsWith('/') || _windowsPathPattern.hasMatch(url);
   }
 

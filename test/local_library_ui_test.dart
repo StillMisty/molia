@@ -15,6 +15,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/download/download_records.dart';
 import 'package:molia/services/download/missing_file_probe.dart';
 import 'package:molia/services/local/local_library_service.dart';
+import 'package:molia/data/files/music_folder_tree_io.dart';
 import 'package:molia/services/local/music_folder_scanner.dart';
 import 'package:molia/services/local/music_folder_watcher.dart';
 import 'package:molia/services/local/music_folders.dart';
@@ -364,7 +365,10 @@ void main() {
     final request = LibraryCollectionRequest();
     final service = LocalLibraryService(
       folders: MusicFoldersStore(),
-      scanner: MusicFolderScanner(target: _NoopScanTarget()),
+      scanner: MusicFolderScanner(
+        target: _NoopScanTarget(),
+        tree: IoMusicFolderTree(),
+      ),
       probe: MissingFileProbe(
         records: records,
         repository: DownloadsRepository(databaseProvider: () => db),

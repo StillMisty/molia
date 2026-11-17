@@ -197,6 +197,26 @@ void main() {
     expect(download.data['title'], '新标题');
   });
 
+  test('SAF content:// 曲目：不尝试写标签，直接走 app-only 分支', () async {
+    const uri =
+        'content://com.android.externalstorage.documents/tree/primary%3AMusic/document/primary%3AMusic%2Fsong.mp3';
+    final saf = record.copyWith(filePath: uri);
+    storage.files[uri] = [1, 2, 3, 4];
+    expect(
+      await service.editTitle(saf, '新标题'),
+      LocalTitleEditStatus.appOnlyRequired,
+    );
+    expect(storage.files[uri], [1, 2, 3, 4], reason: 'SAF 只读，不写标签');
+    expect(
+      await service.editTitle(saf, '新标题', appOnly: true),
+      LocalTitleEditStatus.written,
+    );
+    final download = await db
+        .customSelect('SELECT * FROM downloads')
+        .getSingle();
+    expect(download.data['title'], '新标题');
+  });
+
   test('文件不见：直接 app-only；非法标题拒绝', () async {
     final missing = record.copyWith(filePath: '/music/gone.mp3');
     expect(

@@ -634,6 +634,9 @@ class LocalAudioHandler {
     // Uri.tryParse 会得到无 authority 的路径，不能拼成 `file:////host/...`。
     if (url.startsWith('//')) return null;
     final parsed = Uri.tryParse(url);
+    if (parsed != null && parsed.scheme == 'content') {
+      return parsed.toString();
+    }
     if (parsed != null && parsed.scheme == 'file') {
       return mediaArtworkUriForPath(parsed.toFilePath()) ?? parsed.toString();
     }

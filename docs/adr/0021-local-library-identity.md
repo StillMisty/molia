@@ -76,3 +76,20 @@
   `play_tracks.songId`，否则统计与曲库断开。
 - 重命名 / 移动文件仍会得到「旧记录缺失 + 新记录」，需要用户手动重定位；
   不做内容哈希自动匹配。
+
+## 后续（2026-11）：Android SAF locator
+
+本决策的身份规则不变，只把 `filePath` / payload `path` 的 locator 形式扩展到
+Android SAF：
+
+- 音乐文件夹根在 Android 保存 picker 返回的 `content://` 树 URI（lifetime +
+  只读授权，不复制用户文件）；桌面仍是绝对路径。两种形式可以共存，不需要
+  偏好迁移。
+- 扫描器改经 `domain/ports/music_folder_tree.dart` 枚举；桌面实现保留原有
+  深度 / 符号链接 / 隐藏文件 / 排序规则，Android 实现走应用内 Kotlin bridge
+  （`top.stillmisty.molia/saf`，树枚举 + stat + 只读字节）。
+- `DownloadStorage` 只在 Android 组合根套一层装饰器，把 `content://` 路由到
+  bridge；下载 / 封面 / 歌词路径仍走 `dart:io`。SAF 曲目只读：标题编辑不写
+  标签，直接降级为「只在 Molia 中修改」，不复制 / 删除 provider 文档。
+- `localKey` 仍是 `file:<uuid>`，`file:<uuid>` 与 locator 解耦；树授权撤销时
+  文件夹标 unavailable（扫描）或跳过缺文件标记（探测），不把整库标缺失。

@@ -11,9 +11,14 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../../data/downloads/download_notifications.dart';
 import '../../data/downloads/download_storage.dart';
 import '../../data/files/app_data_directory.dart';
+import '../../data/files/music_folder_tree_io.dart';
+import '../../data/saf/method_channel_saf_bridge.dart';
+import '../../data/saf/saf_music_folder_tree.dart';
 import '../../data/downloads/downloads_publisher.dart';
 import '../../data/downloads/downloads_repository.dart';
 import '../../data/downloads/local_lyrics.dart';
@@ -35,6 +40,7 @@ import '../../services/local/local_metadata_service.dart';
 import '../../services/local/local_write_gate.dart';
 import '../../services/local/music_folder_scanner.dart';
 import '../../services/local/music_folder_watcher.dart';
+import '../../domain/ports/music_folder_tree.dart';
 import '../../services/local/music_folders.dart';
 import '../../services/local_cover_identity_sweep.dart';
 import '../../services/lyrics_cache.dart';
@@ -102,9 +108,17 @@ Future<LocalDataStack> buildLocalDataStack({
   ArtworkCache.instance.networkImageBlocked = () =>
       dataSaver.blockNetworkArtwork;
 
+  // Android 的本地导入是 SAF 文档 URI：存储只把 content:// 路由到应用内
+  // Kotlin bridge，下载 / 封面 / 歌词仍走 dart:io。桌面不创建 bridge。
+  final safBridge = defaultTargetPlatform == TargetPlatform.android
+      ? MethodChannelSafBridge()
+      : null;
   final downloadStorage = createDownloadStorage(
     customRoot: () => downloadSettings.saveDir,
+    safBridge: safBridge,
   );
+  // `local` 音源的存在性探测与下载存储同一文件系统视图（含 SAF）。
+  catalog.localFileProbe.attach(downloadStorage.fileExists);
 
   // 自定义封面（每曲 + 默认）：设备本地文件 + prefs 索引。启动只读索引 /
   // 剔除丢失文件，不解码图片。这里构造本进程唯一实例，后续 UI 走 Provider，
@@ -204,10 +218,13 @@ Future<LocalDataStack> buildLocalDataStack({
 
   // 本地曲库：音乐文件夹配置 + 扫描 + 监听 + 缺文件检查（首帧后 idle 启动）。
   final musicFolders = MusicFoldersStore();
+  final MusicFolderTree folderTree = safBridge == null
+      ? IoMusicFolderTree()
+      : SafMusicFolderTree(safBridge);
   late final LocalLibraryService localLibrary;
   localLibrary = LocalLibraryService(
     folders: musicFolders,
-    scanner: MusicFolderScanner(target: downloadService),
+    scanner: MusicFolderScanner(target: downloadService, tree: folderTree),
     probe: missingFileProbe,
     watcher: MusicFolderWatcher(
       onTrigger: (paths) => localLibrary.scanEventPaths(paths),
