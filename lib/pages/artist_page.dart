@@ -3,8 +3,8 @@
 ///
 /// 入口：歌曲信息页「歌手」行、搜索结果行内歌手名、搜索「歌手」条目
 /// （能力位与 id 判定见 `lib/widgets/track_actions.dart`）。取数与缓存由
-/// `ArtistService` 承担，页面只依赖领域 `ArtistDetail` 与注入的取数函数
-/// （测试可直接传假 loader）。
+/// data 层实现 [ArtistRepository]，页面只依赖 view model 与领域
+/// `ArtistDetail`。
 library;
 
 import 'dart:async';
@@ -13,11 +13,12 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../data/catalog/artist_service.dart';
 import '../domain/models/artist.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/track.dart';
+import '../domain/ports/artist_repository.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/artist_view_model.dart';
 import '../providers/paged_list_controller.dart';
 import '../widgets/responsive.dart';
 import '../widgets/detail_page/detail_cover_header.dart';
@@ -36,32 +37,35 @@ Future<void> showArtistPage(
   String artistId, {
   String? fallbackName,
 }) {
-  final service = context.read<ArtistService?>();
-  if (service == null) return Future.value();
+  final repository = context.read<ArtistRepository?>();
+  if (repository == null) return Future.value();
   return ResponsiveNavigation.showSecondaryPage<void>(
     context: context,
     title: _l10n(context).trackInfoArtist,
     body: ArtistPage(
+      repository: repository,
+      sourceKey: sourceKey,
+      artistId: artistId,
       fallbackName: fallbackName,
-      loader: (page) => service.load(sourceKey, artistId, page: page),
       embedded: true,
     ),
   );
 }
 
-/// 单页取数函数（缓存 / 错误边界在 `ArtistService`）。
-typedef ArtistPageLoader = Future<ArtistDetail> Function(int page);
-
 @visibleForTesting
 class ArtistPage extends StatefulWidget {
   const ArtistPage({
     super.key,
-    required this.loader,
+    required this.repository,
+    required this.sourceKey,
+    required this.artistId,
     this.fallbackName,
     this.embedded = false,
   });
 
-  final ArtistPageLoader loader;
+  final ArtistRepository repository;
+  final String sourceKey;
+  final String artistId;
 
   /// 入口已知的歌手名（加载完成前 / 平台未返回名称时的标题回退）。
   final String? fallbackName;
@@ -75,9 +79,8 @@ class ArtistPage extends StatefulWidget {
 }
 
 class _ArtistPageState extends State<ArtistPage> {
-  /// 分页集合：首屏 / 加载更多 / 失败 / 在途守卫 / 跨页去重 / 页实体都在
-  /// 控制器内。
-  late final PagedTrackCollection<ArtistDetail, Track> _collection;
+  /// 首屏 / 加载更多 / 失败 / 在途守卫 / 跨页去重 / 页实体都在 view model 内。
+  late final ArtistViewModel _viewModel;
 
   /// 播放 / 加入列表的唯一编排（洗牌、上下文名、addedAt 都在模块内）。
   final TrackHandoff _handoff = const TrackHandoff();
@@ -85,41 +88,31 @@ class _ArtistPageState extends State<ArtistPage> {
   @override
   void initState() {
     super.initState();
-    _collection = PagedTrackCollection<ArtistDetail, Track>(
-      // 平台分页边界会重复返回（忽略 page 时重复整表）：按 track id 跨页去重。
-      keyOf: (track) => track.id.uri,
-      loadPage: _fetchPage,
+    _viewModel = ArtistViewModel(
+      repository: widget.repository,
+      sourceKey: widget.sourceKey,
+      artistId: widget.artistId,
     );
-    unawaited(_load());
+    unawaited(_viewModel.loadFirstPage());
   }
 
   @override
   void dispose() {
-    _collection.dispose();
+    _viewModel.dispose();
     super.dispose();
   }
 
-  /// 取一页（缓存 / 错误边界在 `ArtistService`）；头部数据随响应更新。
-  Future<PagedTrackPage<ArtistDetail, Track>> _fetchPage(int page) async {
-    final artist = await widget.loader(page);
-    return PagedTrackPage(
-      entity: artist,
-      items: artist.tracks,
-      hasMore: artist.hasMore,
-    );
-  }
-
-  /// 重试 / 失败重试：重新取首屏（在途请求由控制器过期丢弃）。
-  Future<void> _load() => _collection.loadFirstPage();
+  /// 重试 / 失败重试：重新取首屏（在途请求由 view model 过期丢弃）。
+  Future<void> _load() => _viewModel.retry();
 
   /// 播放（[index] 为起始下标；队列上下文名为歌手名）。
   void _playFrom(int index) {
     unawaited(
       _handoff.play(
         context,
-        _collection.items,
+        _viewModel.items,
         startIndex: index,
-        contextName: _collection.entity?.name,
+        contextName: _viewModel.artist?.name,
         fallbackContextName: widget.fallbackName,
       ),
     );
@@ -128,9 +121,9 @@ class _ArtistPageState extends State<ArtistPage> {
   /// 「随机播放全部」：洗牌与起播下标的顺序统一由 handoff 负责。
   Future<void> _playShuffled() => _handoff.play(
     context,
-    _collection.items,
+    _viewModel.items,
     shuffle: true,
-    contextName: _collection.entity?.name,
+    contextName: _viewModel.artist?.name,
     fallbackContextName: widget.fallbackName,
   );
 
@@ -142,10 +135,10 @@ class _ArtistPageState extends State<ArtistPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    final body = ValueListenableBuilder<PagedListState<Track>>(
-      valueListenable: _collection,
-      // 分页状态是不可变值：整块 body 按最新快照重建。
-      builder: (context, state, _) => _buildBody(context, l10n, state),
+    final body = ListenableBuilder(
+      listenable: _viewModel,
+      // view model 每次变更发布新的不可变分页状态：整块 body 按最新快照重建。
+      builder: (context, _) => _buildBody(context, l10n, _viewModel.state),
     );
     if (widget.embedded) return body;
     return Scaffold(
@@ -169,7 +162,7 @@ class _ArtistPageState extends State<ArtistPage> {
     return PagedTrackCollectionBody<Track>(
       state: state,
       headerBuilder: (context, state) {
-        final artist = _collection.entity;
+        final artist = _viewModel.artist;
         // 列表态必有实体（与曲目同一响应写入）；空值只为类型收窄。
         if (artist == null) return const SizedBox.shrink();
         return _buildHeader(context, l10n, artist, state.items.length);
@@ -177,7 +170,7 @@ class _ArtistPageState extends State<ArtistPage> {
       rowBuilder: (context, index, count, tableColumns) =>
           _buildTrackRow(context, index, count),
       onRetry: () => unawaited(_load()),
-      onLoadMore: () => unawaited(_collection.loadMore()),
+      onLoadMore: () => unawaited(_viewModel.loadMore()),
       emptyText: l10n.artistEmpty,
       emptyIcon: Icons.person_rounded,
       failureText: notFound ? l10n.artistNotFound : l10n.artistLoadFailed,
@@ -186,10 +179,10 @@ class _ArtistPageState extends State<ArtistPage> {
   }
 
   Widget _buildTrackRow(BuildContext context, int index, int count) {
-    final track = _collection.items[index];
+    final track = _viewModel.items[index];
     return FavoriteTrackTile.track(
       track: track,
-      fallbackCoverUrl: _collection.entity?.avatarUrl,
+      fallbackCoverUrl: _viewModel.artist?.avatarUrl,
       position: calculateCardPosition(index, count),
       onTap: () => _playFrom(index),
       // 菜单行：成功也确认一句（动作藏在弹层里，弹层关闭后需要回执）。
@@ -221,7 +214,7 @@ class _ArtistPageState extends State<ArtistPage> {
         onPlay: () => _playFrom(0),
         onShuffle: () => unawaited(_playShuffled()),
         onAddToLibrary: () =>
-            unawaited(_handoff.addToLibrary(context, _collection.items)),
+            unawaited(_handoff.addToLibrary(context, _viewModel.items)),
       ),
     );
   }

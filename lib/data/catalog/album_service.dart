@@ -1,4 +1,5 @@
 import '../../domain/models/album.dart';
+import '../../domain/ports/album_repository.dart';
 import '../../services/diagnostics/failure_ring_buffer.dart';
 import '../cache/request_cache.dart';
 import 'cached_page_service.dart';
@@ -22,7 +23,7 @@ typedef _AlbumQuery = ({String sourceKey, String albumId});
 /// key / 前缀。缓存 key 为 `album:{sourceKey}:{albumId}:{page}:{limit}`
 /// （平台 / 专辑 / 页），专辑曲目变化缓慢，TTL 取 10 分钟，重试时用
 /// [invalidateAlbum] 清该专辑全部页。
-class AlbumService {
+class AlbumService implements AlbumRepository {
   AlbumService({
     required AlbumFetcher fetch,
     RequestCache? cache,
@@ -63,6 +64,15 @@ class AlbumService {
     page: page,
     limit: limit,
   );
+
+  /// 领域端口入口：页面只依赖 [AlbumRepository]，不感知本服务的缓存细节。
+  @override
+  Future<Album> loadAlbumPage(
+    String sourceKey,
+    String albumId, {
+    int page = 1,
+    int limit = kAlbumPageSize,
+  }) => load(sourceKey, albumId, page: page, limit: limit);
 
   /// 使该专辑的缓存全部失效（重试 / 手动刷新用）。
   void invalidateAlbum(String sourceKey, String albumId) =>

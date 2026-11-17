@@ -10,10 +10,10 @@ import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 
-import '../../data/catalog/album_service.dart';
-import '../../data/catalog/artist_service.dart';
 import '../../data/catalog/catalog_service.dart';
 import '../../data/play_statistics_repository.dart';
+import '../../domain/ports/album_repository.dart';
+import '../../domain/ports/artist_repository.dart';
 import '../../domain/ports/source_registry.dart';
 import '../../services/artwork/artwork_cache.dart';
 import '../../providers/channel_selection.dart';
@@ -118,10 +118,10 @@ List<SingleChildWidget> buildAppProviders({
     ChangeNotifierProvider.value(value: catalog.biliAccount),
     Provider<SourceRegistry>.value(value: sourceRegistry),
     Provider<CatalogService>.value(value: catalogService),
-    // 专辑页取数（缓存/错误边界在服务内；页面只消费领域 Album）。
-    Provider<AlbumService>.value(value: catalog.albumService),
-    // 歌手页取数（同上，服务内收敛缓存与错误边界）。
-    Provider<ArtistService>.value(value: catalog.artistService),
+    // 专辑页取数端口（缓存/错误边界在 data 层实现；页面只消费领域 Album）。
+    Provider<AlbumRepository>.value(value: catalog.albumService),
+    // 歌手页取数端口（同上，data 层收敛缓存与错误边界）。
+    Provider<ArtistRepository>.value(value: catalog.artistService),
     // 评论页状态：热门 / 最新分页 + 刷新（评论缓存走 CommentsService）。
     ChangeNotifierProvider(
       create: (_) => CommentsProvider(

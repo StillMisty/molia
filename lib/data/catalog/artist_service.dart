@@ -1,4 +1,5 @@
 import '../../domain/models/artist.dart';
+import '../../domain/ports/artist_repository.dart';
 import '../../services/diagnostics/failure_ring_buffer.dart';
 import '../cache/request_cache.dart';
 import 'cached_page_service.dart';
@@ -22,7 +23,7 @@ typedef _ArtistQuery = ({String sourceKey, String artistId});
 /// key / 前缀。缓存 key 为 `artist:{sourceKey}:{artistId}:{page}:{limit}`
 /// （平台 / 歌手 / 页），歌手歌曲变化缓慢，TTL 取 10 分钟，重试时用
 /// [invalidateArtist] 清该歌手全部页。
-class ArtistService {
+class ArtistService implements ArtistRepository {
   ArtistService({
     required ArtistFetcher fetch,
     RequestCache? cache,
@@ -67,6 +68,15 @@ class ArtistService {
     page: page,
     limit: limit,
   );
+
+  /// 领域端口入口：页面只依赖 [ArtistRepository]，不感知本服务的缓存细节。
+  @override
+  Future<ArtistDetail> loadArtistPage(
+    String sourceKey,
+    String artistId, {
+    int page = 1,
+    int limit = kArtistPageSize,
+  }) => load(sourceKey, artistId, page: page, limit: limit);
 
   /// 使该歌手的缓存全部失效（重试 / 手动刷新用）。
   void invalidateArtist(String sourceKey, String artistId) =>
