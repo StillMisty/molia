@@ -2,7 +2,7 @@
 
 - 状态：已采纳
 - 日期：2026-10-14
-- 相关：`lib/widgets/lyrics.dart`、`lib/widgets/track_info_view.dart`、
+- 相关：`lib/widgets/lyrics/lyrics_view.dart`、`lib/widgets/track_info_view.dart`、
   `lib/widgets/track_actions.dart`、`lib/pages/track_cache_page.dart`、
   `lib/providers/comments_provider.dart`、`lib/services/track_cache_service.dart`
 

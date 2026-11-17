@@ -536,7 +536,7 @@ abstract class LyricsOutput {
 | 模块 | 文件 | 说明 |
 |---|---|---|
 | 双语管道 | `lib/services/lyrics/lyric_provider.dart`、`lib/services/lyrics/netease_provider.dart`、`lib/services/lyrics/qq_provider_mobile.dart`、`lib/services/lyrics_service.dart`、`lib/providers/lyrics_provider.dart`、`lib/domain/models/lyric_line.dart` | `LyricsPayload`（原文+翻译+罗马音）、`LyricsState.translations/romas` 时间戳对齐、缓存兼容 |
-| 歌词页扩展行 | `lib/widgets/lyrics.dart` | 每行主文本下方渲染翻译 / 罗马音（主字号 × 0.8、`onSurfaceVariant`、空文本不占位）；`page.translationEnabled` / `page.romaEnabled` 独立于输出侧开关，数据共用 |
+| 歌词页扩展行 | `lib/widgets/lyrics/lyrics_controls.dart` | 每行主文本下方渲染翻译 / 罗马音（主字号 × 0.8、`onSurfaceVariant`、空文本不占位）；`page.translationEnabled` / `page.romaEnabled` 独立于输出侧开关，数据共用 |
 | 歌词页视觉提前量 | `lib/services/lyrics_display/lyric_timing_policy.dart`、`lib/widgets/lyric_karaoke_text.dart` | 行号查表与逐字插值目标统一提前 200ms（正 = 提前），补 450ms 切行过渡与 ≤4Hz 采样滞后；歌词页与选择页共用 `LyricTimingPolicy.page`，不叠加输出侧 `offsetMs` |
 | 配置 | `lib/services/lyrics_display/lyrics_display_settings.dart` | 单 JSON 键 `lyrics_display_settings_v1` |
 | 行跟踪 | `lib/services/lyrics_display/lyric_line_tracker.dart` | 纯逻辑（偏移/未同步/扩展行/后续行） |

@@ -278,7 +278,8 @@
   `bili:` 原生取词缓存并强刷当前歌词。`lxlyric` 的 `<相对ms,时长ms>` 经
   `attachWordTimings` 对齐到主行（`LyricLine.words`），歌词页当前行用
   `KaraokeLyricText` 做词级高亮，桌面歌词 / 通知 / 蓝牙仍按行。
-  UI（LyricsWidget / 歌词搜索页 / 歌词选择页）只渲染状态与交互，不再各自构造
+  UI（LyricsWidget / 歌词搜索页 / 歌词选择页）只渲染状态与交互（歌词页实现拆在
+  `lib/widgets/lyrics/`：view / scroll / controls / line tile / models），不再各自构造
   `LyricsService` / 直接写 `LyricsCache` / 拼装解析逻辑；歌词页只消费 `LyricsState`
   （不维护字段镜像，加载标志由 `status` 推导），滚动/跟随数学在
   `lib/widgets/lyrics_scroll_policy.dart`（纯函数，可单测）：自动滚动把「主行文本块
@@ -1374,8 +1375,10 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
 
 - **模块**：`lib/widgets/lyrics_view_session.dart`（`LyricsViewSession` 状态机 +
   `LyricsViewHost` 播放事实接口 + `LyricsViewScheduler` 定时注入）、
-  `lyrics.dart`（渲染 + 会话宿主：行 key / 逐字渲染 / 布局 / `ScrollController`
-  测量与换源、选择页导航）。
+  `lib/widgets/lyrics/lyrics_view.dart`（渲染 + 会话宿主：行 key / 逐字渲染 /
+  布局 / 换源 / 选择页导航）、`lib/widgets/lyrics/lyrics_scroll.dart`
+  （`ScrollController` 测量与滚动落点）、`lyrics_controls.dart`（空态 / 扩展行 /
+  操作项）、`lyrics_line_tile.dart`（单行渲染与当前行高亮）。
 - **归属**：自动跟随、手动滚动后的 350ms 抑制窗口与 3s 恢复（复制模式 / 未同步 /
   空歌词不恢复）、目标行未布局的按帧重试（上限 8 帧）、快捷操作栏手动 3s 可见、
   复制模式与播放模式保存 / 恢复、隐藏页的滚动门控都在会话里；滚动几何仍是
@@ -1824,10 +1827,11 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   （`CardListSurface`：静止内 4dp / 首末外侧 16dp、hover 12dp、press 16dp，
   expressive spatial 形状弹簧；`TrackRow`、设置行、AI 推荐卡同一套形状语言），
   行间 `cardList.gap`、位置由 `SettingsSectionCard` 下发（`SettingsRowPosition`），
-  排版走 `M3ETypeScale`、不写死字号字重；统一行组件在
-  `lib/widgets/settings/settings_tiles.dart`（Nav / Switch / Info / Value /
-  Choice / Dropdown / Slider / ColorValue），行骨架（图标 / 标题副标题 /
-  行尾间距 / 禁用态）由同一个私有 `_SettingsTileRow` 下发，行尾动作图标统一
+  排版走 `M3ETypeScale`、不写死字号字重；统一行组件入口是
+  `lib/widgets/settings/settings_tiles.dart`（barrel），实现拆在
+  `lib/widgets/settings/tiles/`（Nav / Switch / Info / Value / Choice /
+  Dropdown / Slider / ColorValue），行骨架（图标 / 标题副标题 / 行尾间距 /
+  禁用态）由 `tiles/settings_tiles_support.dart` 的 `SettingsTileRow` 下发，行尾动作图标统一
   20dp；按值类型选型：bool → Switch、
   2–5 项短枚举 → Choice（行内分段，显式宽度，防 `M3ESegmentedButton` 零宽溢出；
   短标签行可配逐项图标——选中段的对勾替换图标，M3E 选中形态；长标签行
