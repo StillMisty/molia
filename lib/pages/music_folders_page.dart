@@ -80,6 +80,9 @@ class MusicFoldersPage extends StatelessWidget {
     final notifications = context.read<NotificationService?>();
     String? picked;
     try {
+      // 这里 Android 也走得到，而 pickDirectory() 只给 content:// 树 URI；
+      // 本地曲库仍按文件系统路径扫描，等曲库支持 SAF 再换掉（file_picker 14 移除）。
+      // ignore: deprecated_member_use
       picked = await FilePicker.getDirectoryPath(
         dialogTitle: l10n.musicFoldersAdd,
       );

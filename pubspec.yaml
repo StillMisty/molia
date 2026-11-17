@@ -29,8 +29,9 @@ dependencies:
   path_provider: ^2.1.4
   audio_session: ^0.2.4
   share_plus: ^13.3.1
-  file_picker: ^13.3.3
+  file_picker: ^13.4.0
   pointycastle: ^4.0.0
+  # 0.13.1 被 Flutter SDK 固定在 0.13.0（sdk-version-pinning）；SDK 升级后跟最新。
   material_color_utilities: ^0.13.0
   dynamic_color: ^2.1.0
   connectivity_plus: ^7.3.2
@@ -38,13 +39,13 @@ dependencies:
   just_audio_media_kit: ^2.1.0
   media_kit_libs_linux: ^1.2.1
   media_kit_libs_windows_audio: ^1.0.9
-  flutter_media_session: ^3.1.0
+  flutter_media_session: ^3.2.0
   # 1.0.0-beta.3 是首个支持 dbus ^0.8 的版本（也补了 MPRIS Seek / SetPosition）；
   # 正式版发布后改回稳定约束。
   audio_service_mpris: ^1.0.0-beta.4
   audio_service_platform_interface: ^0.1.3
-  material_ui: ^1.11.0
-  material_3_expressive: ^1.2.1
+  material_ui: ^1.11.1
+  material_3_expressive: ^1.2.2
   motor: ^1.1.0
   quickjs_engine: ^0.1.7
   dio: ^5.11.1

@@ -390,10 +390,13 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
     final saveAs = context.read<SaveAs?>();
     String? picked;
     try {
-      picked = await FilePicker.getDirectoryPath(
+      // 保存目录只在桌面可改，pickDirectory() 给的是 file:// URI，
+      // 转回路径即可（Android 的 content:// 分支到不了这里）。
+      final uri = await FilePicker.pickDirectory(
         dialogTitle: l10n.downloadPickDirectory,
         initialDirectory: await saveAs?.rootPath(),
       );
+      picked = uri?.toFilePath();
     } catch (_) {
       picked = null;
     }
