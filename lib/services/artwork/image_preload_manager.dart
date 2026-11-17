@@ -5,8 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
 
 import '../../domain/models/track.dart';
-import '../app_presence.dart';
 import '../../utils/playback_cover_decode.dart';
+import '../app_presence.dart';
 import 'artwork_cache.dart';
 
 /// 预取去重键：同一 URL 的不同解码宽度是两条 ImageCache 条目。

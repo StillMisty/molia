@@ -4,7 +4,7 @@
 - 日期：2026-11-17
 - 相关：`test/architecture/module_layout_test.dart`、`test/architecture/layering_test.dart`、
   `docs/architecture.md` §1、`lib/domain/models/`、`lib/services/`、`lib/utils/`、
-  `docs/adr/0025`
+  `docs/adr/0025-cast-and-auto-out-of-scope.md`
 
 ## 背景
 
