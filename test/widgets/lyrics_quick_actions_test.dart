@@ -60,6 +60,34 @@ void main() {
     });
   });
 
+  group('行角色', () {
+    test('未同步优先，当前行不与已唱冲突', () {
+      expect(
+        lyricsLineRole(synced: false, isPast: true, isCurrent: true),
+        LyricsLineRole.unsynced,
+      );
+      expect(
+        lyricsLineRole(synced: true, isPast: true, isCurrent: true),
+        LyricsLineRole.past,
+      );
+      expect(
+        lyricsLineRole(synced: true, isPast: false, isCurrent: true),
+        LyricsLineRole.current,
+      );
+      expect(
+        lyricsLineRole(synced: true, isPast: false, isCurrent: false),
+        LyricsLineRole.upcoming,
+      );
+    });
+
+    test('当前行与未同步歌词全亮，其余降低一档', () {
+      expect(lyricsLineOpacity(LyricsLineRole.unsynced), 1.0);
+      expect(lyricsLineOpacity(LyricsLineRole.current), 1.0);
+      expect(lyricsLineOpacity(LyricsLineRole.past), 0.8);
+      expect(lyricsLineOpacity(LyricsLineRole.upcoming), 0.8);
+    });
+  });
+
   group('FAB 文案', () {
     testWidgets('无歌词也显示固定四项，顺序与文案一致', (tester) async {
       SharedPreferences.setMockInitialValues({});
