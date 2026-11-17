@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/local_cache_index_repository.dart';
@@ -217,6 +219,26 @@ void main() {
       expect(store.revision, revision);
       expect(persistence.upserts, isEmpty);
       expect(persistence.removals, isEmpty);
+    });
+
+    test('对账期间新完成的行不会被旧扫描结果删除', () async {
+      final persistence = _FakePersistence(rows: [entry('old', cachedAt: 5)]);
+      final store = LocalCacheIndexStore(persistence: persistence);
+      addTearDown(store.dispose);
+      await store.init();
+      final scan = Completer<Map<String, int>?>();
+      final reconcile = store.reconcile(
+        candidates: const [],
+        scanCache: () => scan.future,
+      );
+
+      // 扫描还没返回时完成一条新缓存：它不在旧扫描结果里，但绝不能被删。
+      await store.recordCompleted(sourceTrack('fresh'));
+      scan.complete(const {});
+      await reconcile;
+
+      expect(store.entries.map((row) => row.songId), ['fresh']);
+      expect(persistence.rows.keys, ['wy:fresh']);
     });
 
     test('对账幂等：重复执行不重复写库、不重复通知', () async {

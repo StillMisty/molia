@@ -70,6 +70,14 @@ class LibraryProvider extends ChangeNotifier {
     /// 超时把「挂住」收敛成可重试的失败态；查询本身没有取消语义，晚到的结果
     /// 不再采用，用户点「重试」即可重新读。
     this._readTimeout = const Duration(seconds: 10),
+
+    /// 删除 / 清空播放历史前的缓存确认对账（设备本地缓存索引）。
+    ///
+    /// 播放侧在切歌时取消移动端缓存源订阅；如果下载在切歌后才真正完成，
+    /// 完成事件可能丢失。删除历史前用当前历史条目对账一次，只补确认存在
+    /// 缓存文件的行，避免「删历史 → 本地歌曲缓存行消失」。失败只记日志，
+    /// 不阻断历史删除。
+    this._beforeHistoryRemoval,
   }) : _playback = playbackProvider {
     _historyRead = ReadReconciliation(
       initialValue: const [],
@@ -111,6 +119,8 @@ class LibraryProvider extends ChangeNotifier {
 
   final LibraryStore _repository;
   final PlaybackProvider _playback;
+  final Future<void> Function(List<PlayHistoryEntry> entries)?
+  _beforeHistoryRemoval;
   StreamSubscription<void>? _subscription;
   final Duration _readTimeout;
 
@@ -879,6 +889,7 @@ class LibraryProvider extends ChangeNotifier {
   Future<LibraryMutationOutcome> deleteHistoryEntry(
     PlayHistoryEntry entry,
   ) async {
+    await _reconcileBeforeHistoryRemoval();
     // 乐观更新本地缓存（列表即时移除，不等待变更流回载）；写失败回滚。
     final previous = _historyRead.value;
     _historyRead.patch(
@@ -904,6 +915,7 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   Future<LibraryMutationOutcome> clearHistory() async {
+    await _reconcileBeforeHistoryRemoval();
     // 乐观清空本地缓存（UI 立即显示空态，不等待变更流回载）；写失败回滚。
     final previous = _historyRead.value;
     final wasLoaded = _historyRead.loaded;
@@ -919,6 +931,22 @@ class LibraryProvider extends ChangeNotifier {
         _notify();
       }
       return LibraryMutationOutcome.failed(e);
+    }
+  }
+
+  /// 历史删除前的最佳努力对账：只读当前内存历史，写索引由注入方完成。
+  ///
+  /// 必须在乐观 patch 之前调用：patch 后历史已是删除后的形状，晚完成的缓存
+  /// 会失去元数据候选。对账失败不影响删除（下一次启动对账仍可兜底）。
+  Future<void> _reconcileBeforeHistoryRemoval() async {
+    final callback = _beforeHistoryRemoval;
+    if (callback == null) return;
+    final entries = List<PlayHistoryEntry>.unmodifiable(_historyRead.value);
+    if (entries.isEmpty) return;
+    try {
+      await callback(entries);
+    } catch (e) {
+      debugPrint('[Library] 删除历史前缓存对账失败（继续删除）: $e');
     }
   }
 
@@ -1199,6 +1227,7 @@ class LibraryProvider extends ChangeNotifier {
     List<PlayHistoryEntry> entries,
   ) async {
     if (entries.isEmpty) return const LibraryMutationOutcome.unchanged();
+    await _reconcileBeforeHistoryRemoval();
     final previous = _historyRead.value;
     final keys = {
       for (final entry in entries) '${entry.sourceKey}:${entry.songId}',

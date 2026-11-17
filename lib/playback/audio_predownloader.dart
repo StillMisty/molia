@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint;
 
@@ -80,21 +79,18 @@ class CacheAudioPredownloader implements AudioPredownloader {
       headers: stream.headers.isEmpty ? null : stream.headers,
     );
     if (task == null) return null;
-    // 预取写入后执行一次 LRU 淘汰（与边播边缓存的策略一致）。完成上报
-    // 与淘汰在同一条链上：只有最终文件存在才算「缓存写完」。
+    // LRU 淘汰与完成上报分开监听：淘汰保持原有「任务完成即触发」的时序，
+    // 不等待异步文件确认 / 数据库写入（全量测试负载下也稳定）。
+    unawaited(task.done.whenComplete(() => _cache.enforceAudioLimit()));
+    // 只有最终缓存文件确认写完（`.predl` 原子改名成功）才上报索引。
     unawaited(
-      task.done
-          .then((_) async {
-            try {
-              if (await File(audioCacheFilePath(directory, fileName))
-                  .exists()) {
-                _onCompleted?.call(track);
-              }
-            } catch (e) {
-              debugPrint('[AudioPredownload] 缓存完成确认失败: $e');
-            }
+      task.succeeded
+          .then((succeeded) {
+            if (succeeded) _onCompleted?.call(track);
           })
-          .whenComplete(() => _cache.enforceAudioLimit()),
+          .catchError((Object e) {
+            debugPrint('[AudioPredownload] 缓存完成上报失败: $e');
+          }),
     );
     return task;
   }

@@ -30,6 +30,7 @@ AudioPredownloadTask? startAudioPredownload({
   final dio = _dio();
   final cancelToken = CancelToken();
   final completer = Completer<void>();
+  final success = Completer<bool>();
   var cancelled = false;
 
   Future<void> run() async {
@@ -60,8 +61,12 @@ AudioPredownloadTask? startAudioPredownload({
       if (cancelled) {
         await _deleteQuietly(partFile);
       } else {
-        // 原子落位：播放侧只认最终文件名，不会读到半成品。
+        // 原子落位：播放侧只认最终文件名，不会读到半成品。落位后再确认
+        // 最终文件存在，成功信号只有在文件真的可播时才为 true。
         await partFile.rename(targetPath);
+        if (await File(targetPath).exists()) {
+          if (!success.isCompleted) success.complete(true);
+        }
       }
     } catch (_) {
       // 失败/取消静默：清理半成品，真正播放时正常取链流播。
@@ -70,6 +75,7 @@ AudioPredownloadTask? startAudioPredownload({
       } catch (_) {}
       await _deleteQuietly(partFile);
     } finally {
+      if (!success.isCompleted) success.complete(false);
       if (!completer.isCompleted) completer.complete();
     }
   }
@@ -77,6 +83,7 @@ AudioPredownloadTask? startAudioPredownload({
   unawaited(run());
   return AudioPredownloadTask(
     done: completer.future,
+    succeeded: success.future,
     onCancel: () {
       cancelled = true;
       cancelToken.cancel();

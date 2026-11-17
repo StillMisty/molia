@@ -36,6 +36,7 @@ import 'data/diagnostics/source_snapshot.dart';
 import 'data/molia_database.dart';
 import 'data/settings/settings_keys.dart';
 import 'data/settings/settings_module.dart';
+import 'domain/models/local_cache_index.dart';
 import 'managers/app_memory_manager.dart';
 import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
@@ -51,6 +52,7 @@ import 'services/diagnostics/app_info.dart';
 import 'services/diagnostics/diagnostics_export.dart';
 import 'services/diagnostics/source_health_checker.dart';
 import 'services/app_presence.dart';
+import 'services/cache_service.dart';
 import 'services/global_hotkeys.dart';
 import 'services/notification_service.dart';
 import 'services/shortcut_actions.dart';
@@ -286,6 +288,15 @@ void main() async {
   final libraryProvider = LibraryProvider(
     repository: library.libraryRepository,
     playbackProvider: playback.playbackProvider,
+    // 删除 / 清空历史前兜底一次缓存确认对账：移动端切歌后晚完成的缓存
+    // 不会丢完成事件对应的索引行（历史只作为元数据候选）。
+    beforeHistoryRemoval: (entries) => local.localCacheIndex.reconcile(
+      candidates: [
+        for (final entry in entries)
+          LocalCacheIndexEntry.fromHistoryEntry(entry),
+      ],
+      scanCache: CacheService.instance.audioCacheCompleteIndexOrNull,
+    ),
   );
   // 当前渠道的唯一所有者：发现内容与搜索共用，持久化 / 跨设备重载 /
   // 失效回退规则都在模块内（页面与 Ctrl+F 不再手工同步两份渠道）。

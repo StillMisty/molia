@@ -157,6 +157,10 @@ class LocalCacheIndexStore extends ChangeNotifier {
     required Future<Map<String, int>?> Function() scanCache,
   }) async {
     await init();
+    // 扫描期间的完成事件不能被旧扫描结果误删：只清理扫描开始时已经存在、
+    // 且扫描期间没有被替换的行。记录对象身份比 cachedAt 更精确——完成事件
+    // 总会生成新对象，哪怕同一毫秒内重写也不会被旧结果删掉。
+    final before = Map<String, LocalCacheIndexEntry>.of(_entries);
     final files = await scanCache();
     if (files == null) return;
     await _serialize(() async {
@@ -171,6 +175,8 @@ class LocalCacheIndexStore extends ChangeNotifier {
       final removals = <LocalCacheIndexKey>[];
       for (final row in _entries.values) {
         if (_cacheFileCount(files, row) > 0) continue;
+        // 扫描开始后新完成 / 被重新缓存的行由后续对账处理，不能用旧快照删。
+        if (!identical(before[row.key], row)) continue;
         next.remove(row.key);
         removals.add(_keyOf(row));
       }

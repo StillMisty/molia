@@ -5,11 +5,15 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/library_repository.dart';
+import 'package:molia/data/local_cache_index_repository.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/domain/models/library.dart';
+import 'package:molia/domain/models/local_cache_index.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/audio_cache_store.dart';
+import 'package:molia/services/local_cache_index_store.dart';
 
 import 'support/sync_test_support.dart';
 
@@ -837,6 +841,57 @@ void main() {
     await provider.clearHistory();
     await settle();
     expect(provider.history, isEmpty);
+  });
+
+  test('删除 / 清空历史前对账：缓存存在则先补索引行', () async {
+    final indexRepository = LocalCacheIndexRepository(
+      databaseProvider: () => db,
+    );
+    final index = LocalCacheIndexStore(persistence: indexRepository);
+    addTearDown(index.dispose);
+    await index.init();
+
+    Future<void> reconcile(List<PlayHistoryEntry> entries) => index.reconcile(
+      candidates: [
+        for (final entry in entries)
+          LocalCacheIndexEntry.fromHistoryEntry(entry),
+      ],
+      // 真实 scanCache 是完整缓存目录列举；这里固定成两条都在，避免把
+      // 「只看本次候选」误当成目录结果。
+      scanCache: () async => {
+        AudioCacheStore.key(sourceKey: 'wy', songId: '1'): 1024,
+        AudioCacheStore.key(sourceKey: 'wy', songId: '2'): 1024,
+      },
+    );
+
+    final indexed = LibraryProvider(
+      repository: repository,
+      playbackProvider: playback,
+      beforeHistoryRemoval: reconcile,
+    );
+    addTearDown(indexed.dispose);
+
+    await repository.addHistoryEntry(entry('1', playedAt: 1));
+    await repository.addHistoryEntry(entry('2', playedAt: 2));
+    await indexed.refreshHistory(force: true);
+    expect(indexed.history, hasLength(2));
+
+    // 单条删除前对账：两条当前历史都有缓存文件，先补进索引；删掉的历史
+    // 条目仍然保留索引行。
+    await indexed.deleteHistoryEntry(
+      indexed.history.firstWhere((item) => item.songId == '1'),
+    );
+    expect(index.entries.map((row) => row.songId).toSet(), {'1', '2'});
+    expect(indexed.history.map((item) => item.songId), ['2']);
+
+    // 清空前对账：剩余历史同样兜底；清空后索引不被删。
+    await indexed.clearHistory();
+    // 等 quiet 重载落地：删除事件与清空的乐观更新可能交错。
+    await Future<void>.delayed(Duration.zero);
+    final pending = indexed.pendingReload;
+    if (pending != null) await pending;
+    expect(index.entries.map((row) => row.songId).toSet(), {'1', '2'});
+    expect(indexed.history, isEmpty);
   });
 
   test('批量操作：新建 / 复制 / 重排 / 批量移除 / 批量删历史', () async {

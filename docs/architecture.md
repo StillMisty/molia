@@ -673,9 +673,11 @@
   排除回环 / link-local / zone，私网优先排序；过滤判定
   `isRoutablePeerAddress` 与服务 / 传输共用）是地址列表、附近设备探测与探测
   `addrs` 候选的同一口径。
-  主库 schema（drift，`schemaVersion = 2`，库文件 `molia_database_v2.sqlite`；
+  主库 schema（drift，`schemaVersion = 4`，库文件 `molia_database_v2.sqlite`；
   旧 `molia_database.sqlite` 保留但不读、不迁移）含播放会话两表
   （`playback_session_payloads` / `playback_session_cursors`）、
+  设备本地缓存索引 `local_cache_index`（只存本机确认写完的音频缓存曲目，
+  不参与同步 / 同步日志 / 全库最大戳扫描，展示前仍实时扫描缓存目录）、
   `playlists.syncId` / 行级
   `versionPhysical + versionCounter + deviceId` / `sync_tombstones`（版本三列 +
   真实删除时间）/ `sync_known`（已知版本登记）/ `play_events`（syncKey +

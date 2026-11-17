@@ -571,6 +571,7 @@ void main() {
       final completed = <String>[];
       final targetPaths = <String>[];
       final completers = <Completer<void>>[];
+      final successes = <Completer<bool>>[];
       final downloader = CacheAudioPredownloader(
         cacheService: CacheService(
           storage: _FakeCacheStorage(audioDir: dir.path),
@@ -579,8 +580,14 @@ void main() {
         starter: ({required uri, required targetPath, headers}) {
           targetPaths.add(targetPath);
           final completer = Completer<void>();
+          final success = Completer<bool>();
           completers.add(completer);
-          return AudioPredownloadTask(done: completer.future, onCancel: () {});
+          successes.add(success);
+          return AudioPredownloadTask(
+            done: completer.future,
+            succeeded: success.future,
+            onCancel: () {},
+          );
         },
         onCompleted: (track) => completed.add(track.id),
       );
@@ -595,6 +602,7 @@ void main() {
       expect(completed, isEmpty);
       await File(targetPaths[0]).writeAsBytes(const [1, 2, 3]);
       completers[0].complete();
+      successes[0].complete(true);
       await ok!.done;
       await pumpEventQueue();
       expect(completed, ['wy:ok']);
@@ -604,6 +612,7 @@ void main() {
       await File('${targetPaths[1]}$audioCachePredownloadSuffix')
           .writeAsBytes(const [1]);
       completers[1].complete();
+      successes[1].complete(false);
       await failed!.done;
       await pumpEventQueue();
       expect(completed, ['wy:ok'], reason: '半成品不能当成缓存完成');
@@ -666,6 +675,7 @@ void main() {
       expect(File(target).existsSync(), isTrue);
       expect(await File(target).readAsBytes(), const [1, 2, 3, 4]);
       expect(File('$target.predl').existsSync(), isFalse);
+      expect(await task.succeeded, isTrue);
 
       // 已缓存：不再启动下载。
       expect(startAudioPredownload(uri: uri, targetPath: target), isNull);
@@ -722,6 +732,7 @@ void main() {
 
       expect(File(target).existsSync(), isFalse);
       expect(File('$target.predl').existsSync(), isFalse);
+      expect(await task.succeeded, isFalse);
     });
   });
 }
