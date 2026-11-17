@@ -31,8 +31,6 @@ const Set<String> _sizeWhitelist = {
   'lib/domain/models/ai_dj.dart',
   'lib/domain/models/device_sync.dart',
   'lib/pages/ai_dj_page.dart',
-  'lib/pages/annual_report_page.dart',
-  'lib/pages/play_statistics_page.dart',
   'lib/pages/sources_page.dart',
   'lib/playback/local_playback_service.dart',
   'lib/playback/playback_session_coordinator.dart',
