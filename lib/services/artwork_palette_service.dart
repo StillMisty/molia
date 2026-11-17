@@ -293,6 +293,14 @@ class ArtworkPaletteService {
   }
 
   Future<ArtworkPalette?> _extract(String url, {String? cacheKey}) async {
+    // `file://` 封面（下载 / 自定义）可能已被删除：先看文件是否还在。
+    // 直接交给 FileImage 会在取图流里抛 PathNotFoundException，再被记成
+    // 「封面取色失败」告警；这种失效引用是预期路径（删下载 / 清缓存），
+    // 不是异常。
+    if (localFileImageProvider(url) != null && !await _localFileExists(url)) {
+      _logger.fine('封面文件不存在（视为无封面）: $url');
+      return null;
+    }
     try {
       final imageProvider = await _providerFor(url);
       // 取色只需要 100px 的色调信息：把显示路径的原图解码降到采样尺寸。
@@ -305,11 +313,24 @@ class ArtworkPaletteService {
       );
       final pixels = await _extractPixels(sampleProvider);
       return await _paletteFromPixels(cacheKey ?? url, pixels);
+    } on PathNotFoundException {
+      // 检查后到取图前文件被删（下载清理 / 外部进程）：保持现色即可。
+      _logger.fine('封面文件在取色时消失（保持现色）: $url');
+      return null;
     } catch (e) {
       // 省流未命中（ArtworkNetworkBlockedException）/ 网络失败 / 解码失败：
       // 保持现色，不打断主题与歌词显示。
       _logger.warning('封面取色失败（保持现色）: $e');
       return null;
+    }
+  }
+
+  /// 本地 `file://` 文件是否存在；URI 异常按不存在处理。
+  static Future<bool> _localFileExists(String url) async {
+    try {
+      return await File.fromUri(Uri.parse(url)).exists();
+    } catch (_) {
+      return false;
     }
   }
 

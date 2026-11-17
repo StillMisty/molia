@@ -138,6 +138,23 @@ void main() {
       expect(providerCalls, 0, reason: '默认封面是占位，不参与取色');
     });
 
+    test('load：本地封面文件不存在时直接返回 null，不进入取图', () async {
+      var providerCalls = 0;
+      final service = ArtworkPaletteService(
+        providerFor: (url) async {
+          providerCalls++;
+          return _SolidColorImageProvider(const Color(0xFF00BB00));
+        },
+      );
+
+      final palette = await service.load(
+        'file:///definitely/missing/cover.jpg',
+      );
+
+      expect(palette, isNull);
+      expect(providerCalls, 0, reason: '失效的 file:// 引用应直接视为无封面');
+    });
+
     testWidgets('提取纯色封面：seed → 双亮度方案，缓存命中不重复取图', (tester) async {
       var providerCalls = 0;
       final service = ArtworkPaletteService(
