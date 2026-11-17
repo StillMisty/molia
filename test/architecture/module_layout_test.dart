@@ -51,7 +51,6 @@ const Set<String> _sizeWhitelist = {
   'lib/widgets/discover_playlists_tab.dart',
   'lib/widgets/lyrics.dart',
   'lib/widgets/player.dart',
-  'lib/widgets/player_cover_deck.dart',
   'lib/widgets/search_results_view.dart',
   'lib/widgets/settings/settings_tiles.dart',
 };
