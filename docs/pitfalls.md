@@ -114,7 +114,7 @@
     仍会 `isAnimating == true` 约 0.3-0.4s（距离/速度双容差），直接拿它当「过渡进行中」
     会踩两类坑：新切歌动画被「续走」分支饿死（进度≈1 时 animateTo(1) 一步到位）、
     新手势/新动画被挡在门外。要按**进度阈值**判定（如 `isAnimating && value < 0.99`，
-    见 `player_cover_deck.dart::_coverSwapMidFlight`）；落定状态（completed/dismissed）
+    见 `lib/widgets/player_cover_deck/deck_controller.dart::_coverSwapMidFlight`）；落定状态（completed/dismissed）
     永远取决于**目标值 vs `initialValue`**，需要用状态回调时要显式传 `initialValue`
     （如迷你⇄完整展开传 0 再 `value = 1`）。另外 `animateTo` 的 `withVelocity` 单位是
     **值域/秒**，手势速度要按进度换算（如 `-pxVelocity / range`）。
@@ -1020,7 +1020,7 @@
     时必须生成并持有一份会话内洗牌顺序（当前曲目置首，不落盘），恢复快照的
     next / upNext 与恢复播放共用这一份。留空会让播放页右侧「下一首」首帧为空；
     点播放后 `LocalPlaybackService` 重新洗牌，live 快照突然有了 next，
-    `PlayerCoverDeck._refreshIdleSlots()` 把 null → 非空视为槽位身份变化，启动
+    `lib/widgets/player_cover_deck/deck_visual_state.dart::_refreshIdleSlots` 把 null → 非空视为槽位身份变化，启动
     180ms 交叉淡化且过渡期以当前封面作占位——冷启动表现为封面「先空、再出现
     当前封面副本、最后淡成真正的下一首」。正确做法：协调者
     `_ensureRestoredShuffleOrder` 按会话队列长度生成，`PlaybackRequest.shuffleIndices`

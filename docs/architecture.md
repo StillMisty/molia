@@ -1384,7 +1384,11 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
 
 ### 播放页封面堆叠（cover deck）
 
-- **模块**：`lib/widgets/player_cover_deck.dart`（组件 + 横滑手势 + 会话的效果宿主）、
+- **模块**：`lib/widgets/player_cover_deck.dart`（barrel：组件与 key / 占位工具）、
+  `lib/widgets/player_cover_deck/player_cover_deck.dart`（组件 + 横滑手势 + 会话效果宿主）、
+  `deck_controller.dart`（动画 / 拖拽 / 会话时机）、`deck_artwork_stack.dart`（三封面渲染）、
+  `deck_visual_state.dart`（中心换图 / 槽位身份淡化）、`deck_handoff_tracker.dart`
+  （接管快照 / tail 生命周期）、
   `player_cover_session.dart`（`CoverSwapSession` 状态机 + `CoverSwapHost` 意图接口）、
   `cover_appearance.dart`（`CoverAppearance` 外观 / `CoverFlight` + `CoverFlightLayer`
   飞行 / `CoverCard` 卡片 / `MorphCover` 副本内容 / 封面 URL·key 归一化）、
