@@ -7,7 +7,7 @@ import '../providers/playback_provider.dart';
 import '../providers/sleep_timer.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'simple_modal_body.dart';
 
 /// 自定义时长范围（分钟）与滑杆步进。

@@ -19,7 +19,7 @@ import '../services/lyrics_display/lyric_timing_policy.dart';
 import '../services/lyrics_display/lyrics_display_settings.dart';
 import '../services/notification_service.dart';
 import '../theme/motion_policy.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'lyric_karaoke_text.dart';
 import 'lyrics_display_settings_action.dart';
 import 'lyrics_selection_page.dart';

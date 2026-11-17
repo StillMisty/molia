@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
 
 import '../../domain/models/track.dart';
-import '../../utils/playback_cover_decode.dart';
+import '../../widgets/playback_cover_decode.dart';
 import '../app_presence.dart';
 import 'artwork_cache.dart';
 

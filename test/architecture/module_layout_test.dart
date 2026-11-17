@@ -71,21 +71,6 @@ const Set<String> _uiDataImportWhitelist = {
   'lib/widgets/lxmc_import.dart',
 };
 
-/// 现存不纯的 utils 文件（只减不增，后续阶段清）。
-const Set<String> _utilsImpureWhitelist = {
-  'lib/utils/data_saver_subtitle.dart',
-  'lib/utils/download_failure_label.dart',
-  'lib/utils/download_task_label.dart',
-  'lib/utils/listened_duration.dart',
-  'lib/utils/lyrics_provider_label.dart',
-  'lib/utils/poster_render_style.dart',
-  'lib/utils/responsive.dart',
-  'lib/utils/save_as_label.dart',
-  'lib/utils/smart_list_rows.dart',
-  'lib/utils/source_quality_label.dart',
-  'lib/utils/track_local_data_label.dart',
-};
-
 const List<String> _utilsForbiddenPathPrefixes = [
   'lib/widgets/',
   'lib/providers/',
@@ -197,20 +182,14 @@ void main() {
     );
   });
 
-  test('lib/utils/** 保持纯工具（白名单只减不增）', () {
+  test('lib/utils/** 保持纯工具（白名单为空，只减不增）', () {
     final offenders = <String>[];
-    final stillViolating = <String>{};
     for (final path in files.where((path) => path.startsWith('lib/utils/'))) {
       for (final ref in _importsOf(path)) {
         if (!_violatesUtilsPurity(path, ref)) continue;
-        stillViolating.add(path);
-        if (!_utilsImpureWhitelist.contains(path)) {
-          offenders.add('$path -> $ref');
-        }
+        offenders.add('$path -> $ref');
       }
     }
-    final stale = _utilsImpureWhitelist.difference(stillViolating).toList()
-      ..sort();
 
     expect(
       offenders,
@@ -219,11 +198,6 @@ void main() {
           'lib/utils 不允许依赖 widgets/providers/services/data/pages/l10n '
           '或 material_ui / material_3_expressive；请把 UI 相关逻辑移到消费方：\n'
           '${offenders.join('\n')}',
-    );
-    expect(
-      stale,
-      isEmpty,
-      reason: 'utils 纯度白名单条目已不再违规，请删除：\n${stale.join('\n')}',
     );
   });
 }

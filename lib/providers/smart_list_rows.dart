@@ -5,7 +5,7 @@
 library;
 
 import '../domain/models/library_browse.dart';
-import '../providers/collection_presenter.dart';
+import 'collection_presenter.dart';
 
 class SmartListDisplayRows {
   const SmartListDisplayRows({required this.rows, required this.versionCounts});

@@ -14,7 +14,7 @@ import '../../services/scrobble/scrobble_service.dart';
 import '../../services/source_swap/source_swap_settings.dart';
 import '../../services/window/app_tray.dart';
 import '../../services/window/tray_settings.dart';
-import '../../utils/responsive.dart';
+import '../responsive.dart';
 
 /// 设置首屏各卡的「这一行现在能不能出现」：可选子系统是否已挂载、平台能力
 /// 是否具备，都在这里一次解析。

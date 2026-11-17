@@ -18,7 +18,7 @@ import 'package:molia/services/poster/poster_share_file.dart';
 import 'package:molia/services/library/playlist_folder_prefs.dart';
 import 'package:molia/services/save_as_types.dart';
 import 'package:molia/l10n/app_localizations.dart';
-import 'package:molia/utils/save_as_label.dart';
+import 'package:molia/widgets/labels/save_as_label.dart';
 import 'package:material_ui/material_ui.dart';
 
 void main() {

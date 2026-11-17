@@ -16,7 +16,7 @@ import '../../services/haptics.dart';
 import '../../theme/m3e_context.dart';
 import '../../theme/motion_policy.dart';
 import '../../utils/collection_row_query.dart';
-import '../../utils/responsive.dart';
+import '../../widgets/responsive.dart';
 import '../../widgets/app_search_bar.dart';
 import '../../widgets/collection_spine.dart';
 import '../../widgets/icon_swap.dart';

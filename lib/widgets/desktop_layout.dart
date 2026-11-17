@@ -1,7 +1,7 @@
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'track_row.dart';
 
 /// 按当前 context 解析桌面布局（[DesktopLayout.of] 的回退与壳层提供共用）。

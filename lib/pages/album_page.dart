@@ -18,7 +18,7 @@ import '../domain/models/album.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/paged_list_controller.dart';
-import '../utils/responsive.dart';
+import '../widgets/responsive.dart';
 import '../widgets/detail_page/detail_cover_header.dart';
 import '../widgets/favorite_action.dart';
 import '../widgets/favorite_track_tile.dart';

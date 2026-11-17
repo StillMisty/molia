@@ -5,11 +5,11 @@ library;
 
 import 'package:material_ui/material_ui.dart';
 
-import '../services/poster/poster_style_settings.dart';
-import '../services/system_fonts_service.dart';
-import '../theme/m3e_context.dart';
-import '../theme/poster_palette.dart';
-import '../theme/scheme_builder.dart';
+import 'poster_style_settings.dart';
+import '../system_fonts_service.dart';
+import '../../theme/m3e_context.dart';
+import '../../theme/poster_palette.dart';
+import '../../theme/scheme_builder.dart';
 
 typedef PosterRenderStyle = ({
   PosterPalette palette,

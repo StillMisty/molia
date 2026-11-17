@@ -17,7 +17,7 @@ import '../../providers/collection_mode.dart';
 import '../../providers/collection_presenter.dart';
 import '../../providers/local_library_provider.dart';
 import '../../theme/m3e_context.dart';
-import '../../utils/responsive.dart';
+import '../../widgets/responsive.dart';
 import '../../utils/sync_format.dart';
 import '../../widgets/adaptive_layout.dart';
 import '../../widgets/collection_mode_switch.dart';

@@ -21,7 +21,7 @@ import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
-import '../utils/save_as_label.dart';
+import 'labels/save_as_label.dart';
 import 'app_network_image.dart';
 import 'm3e_page_route.dart';
 

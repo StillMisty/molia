@@ -11,7 +11,7 @@ import 'dart:math' as math;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'row_extent.dart';
 
 /// 发现页宽屏判定（内容宽度）：歌单切网格、热榜加列都用这一档。

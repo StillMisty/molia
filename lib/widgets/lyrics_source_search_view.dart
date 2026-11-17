@@ -12,7 +12,7 @@ import '../services/lyrics/lyrics_source_registry.dart';
 import '../services/lyrics/lyrics_source_strategy.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
-import '../utils/lyrics_provider_label.dart';
+import 'labels/lyrics_provider_label.dart';
 import 'detail_page/detail_page_chrome.dart';
 import 'source_swap/source_swap_chrome.dart';
 import 'track_row.dart';

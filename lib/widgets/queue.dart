@@ -10,7 +10,7 @@ import '../l10n/app_localizations.dart';
 import '../domain/models/play_mode.dart';
 import '../providers/playback_provider.dart';
 import '../theme/m3e_context.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'row_actions.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';

@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import '../../services/haptics.dart';
 import '../../services/notification_service.dart';
 import '../../utils/color_hex.dart';
-import '../../utils/responsive.dart';
+import '../responsive.dart';
 import '../card_list_surface.dart';
 import '../m3e_page_route.dart';
 

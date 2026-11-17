@@ -14,7 +14,7 @@ import '../domain/models/comment.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/comments_provider.dart';
-import '../utils/responsive.dart';
+import '../widgets/responsive.dart';
 import '../widgets/comment_list_view.dart';
 import '../widgets/detail_page/detail_page_chrome.dart';
 

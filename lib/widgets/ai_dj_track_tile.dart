@@ -9,7 +9,7 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../theme/m3e_context.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'card_list_surface.dart';
 import 'current_track_cover.dart';
 import 'favorite_action.dart';

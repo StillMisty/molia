@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/playback_provider.dart';
 import '../services/covers/cover_resolution.dart';
-import '../utils/playback_cover_decode.dart';
+import 'playback_cover_decode.dart';
 import 'app_network_image.dart';
 import 'molia_mark.dart';
 import 'track_artwork.dart';

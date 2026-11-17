@@ -27,7 +27,7 @@ const Map<String, Set<String>> _rawComponentAllowlist = {
   'lib/pages/sync_dialogs.dart': {'SelectableText'},
   // M3E 底部弹层 / 侧边弹层的宿主不提供 Material 祖先，透明 Material 只
   // 补 ink 绘制层（弹窗本体已全部走 M3E 组件）。
-  'lib/utils/responsive.dart': {'Material'},
+  'lib/widgets/responsive.dart': {'Material'},
   // AI 提示词预览需要可选中复制。
   'lib/widgets/ai_dj_prompt_dialog.dart': {'SelectableText'},
   // 合集弹层可重排列表：M3E 1.2.0 未导出 reorder host，长期例外。

@@ -1,4 +1,4 @@
-import '../domain/models/source.dart' show SourceDescriptor;
+import '../../domain/models/source.dart' show SourceDescriptor;
 
 /// 渠道展示名：`名称 (key)`；渠道列表里查不到该 key 时回退 key 本身。
 ///

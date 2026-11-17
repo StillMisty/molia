@@ -9,7 +9,7 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
 import '../providers/source_swap_provider.dart';
-import '../utils/lyrics_provider_label.dart';
+import 'labels/lyrics_provider_label.dart';
 import 'detail_page/detail_page_chrome.dart';
 import 'source_swap/source_swap_chrome.dart';
 import 'track_row.dart';

@@ -6,7 +6,7 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/motion_policy.dart';
 import '../utils/duration_text.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'card_list_surface.dart';
 import 'current_track_cover.dart';
 import 'playback_selectors.dart';

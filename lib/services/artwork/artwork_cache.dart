@@ -11,7 +11,7 @@ import 'package:flutter/widgets.dart' show ImageProvider, VoidCallback;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:logging/logging.dart';
 
-import '../../utils/local_image_provider.dart';
+import '../covers/local_image_provider.dart';
 import '../cache_service.dart';
 import 'artwork_cache_fs.dart';
 

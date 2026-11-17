@@ -16,7 +16,7 @@ import '../services/haptics.dart';
 import '../services/lyrics_display/lyric_timing_policy.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'lyrics_poster_preview_page.dart';
 import 'playback_selectors.dart';
 import 'track_artwork.dart';

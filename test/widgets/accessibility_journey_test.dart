@@ -14,7 +14,7 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
-import 'package:molia/utils/responsive.dart';
+import 'package:molia/widgets/responsive.dart';
 import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/queue.dart';
 import 'package:molia/widgets/row_actions.dart';

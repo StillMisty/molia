@@ -3,7 +3,7 @@
 /// 秒 / 分钟 / 小时·分三档；不负责数据聚合，只把毫秒转成用户可读文案。
 library;
 
-import '../l10n/app_localizations.dart';
+import '../../l10n/app_localizations.dart';
 
 String formatListenedDuration(AppLocalizations l10n, int listenedMs) {
   final totalSeconds = listenedMs ~/ 1000;

@@ -25,7 +25,7 @@ import '../services/covers/cover_resolution.dart';
 import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'cover_viewer.dart';
 import 'simple_modal_body.dart';
 import 'track_artwork.dart';

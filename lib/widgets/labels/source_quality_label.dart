@@ -1,5 +1,5 @@
-import '../domain/models/track.dart';
-import '../l10n/app_localizations.dart';
+import '../../domain/models/track.dart';
+import '../../l10n/app_localizations.dart';
 
 /// 音源音质的本地化显示名（设置 / 音源 / 省流页共用）。
 ///

@@ -11,7 +11,7 @@ import '../providers/search_session.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'artist_row.dart';
 import 'desktop_layout.dart';
 import 'key_claim_scope.dart';

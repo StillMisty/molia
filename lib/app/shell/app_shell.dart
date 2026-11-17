@@ -42,7 +42,7 @@ import '../../services/window/window_chrome.dart';
 import '../../theme/animated_scheme.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/motion_policy.dart';
-import '../../utils/responsive.dart';
+import '../../widgets/responsive.dart';
 import '../../widgets/adaptive_layout.dart';
 import '../../widgets/cover_fallback.dart';
 import '../../widgets/desktop_layout.dart';

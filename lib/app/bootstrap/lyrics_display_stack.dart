@@ -29,7 +29,7 @@ import '../../services/lyrics_display/lyrics_display_settings.dart';
 import '../../services/lyrics_display/media_lyric_output.dart';
 import '../../services/system_wallpaper_service.dart';
 import '../../theme/scheme_builder.dart';
-import '../../utils/responsive.dart';
+import '../../widgets/responsive.dart';
 import 'catalog_stack.dart';
 import 'lyrics_stack.dart';
 import 'startup_trace.dart';

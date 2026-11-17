@@ -34,7 +34,7 @@ import '../../services/local_cache_index_store.dart';
 import '../../services/notification_service.dart';
 import '../../services/save_as.dart';
 import '../../services/track_local_data_service.dart';
-import '../../utils/responsive.dart';
+import '../../widgets/responsive.dart';
 import '../../widgets/collection_handoff.dart';
 import '../../widgets/cross_fade_swap.dart';
 import '../../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;

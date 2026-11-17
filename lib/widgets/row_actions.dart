@@ -1,7 +1,7 @@
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'track_actions_menu.dart';
 
 /// 曲目行操作动作的统一词汇：图标 + 文案 + 回调 + 是否移除类。

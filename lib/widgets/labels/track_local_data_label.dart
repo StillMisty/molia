@@ -4,9 +4,9 @@
 /// 共用，保证三处口径一致（「已缓存」与「已下载」绝不混用）。
 library;
 
-import '../l10n/app_localizations.dart';
-import '../services/cache_types.dart';
-import '../services/track_local_data_service.dart';
+import '../../l10n/app_localizations.dart';
+import '../../services/cache_types.dart';
+import '../../services/track_local_data_service.dart';
 import 'source_quality_label.dart';
 
 /// 两档状态名（唯一出处）：已下载 / 已缓存 / 未下载。

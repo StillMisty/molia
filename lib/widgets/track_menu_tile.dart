@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'favorite_action.dart';
 import 'row_actions.dart';
 import 'track_handoff.dart';

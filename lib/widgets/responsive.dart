@@ -6,10 +6,10 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
-import '../widgets/adaptive_layout.dart';
-import '../widgets/focus_restore.dart';
-import '../widgets/m3e_page_route.dart';
-import '../widgets/page_modal.dart';
+import 'adaptive_layout.dart';
+import 'focus_restore.dart';
+import 'm3e_page_route.dart';
+import 'page_modal.dart';
 
 /// 响应式设计断点常量
 /// 用于在整个应用中统一响应式行为

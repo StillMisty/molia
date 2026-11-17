@@ -11,7 +11,7 @@ import 'package:molia/services/download/download_manager.dart';
 import 'package:molia/services/download/download_queue.dart';
 import 'package:molia/services/download/download_records.dart';
 import 'package:molia/services/download/download_requests.dart';
-import 'package:molia/utils/download_failure_label.dart';
+import 'package:molia/widgets/labels/download_failure_label.dart';
 
 /// 下载请求面：资格四态、音频 / 歌词 / 封面入队与终态、批量计数。
 void main() {

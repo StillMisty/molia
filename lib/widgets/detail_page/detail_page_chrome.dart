@@ -10,7 +10,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../domain/models/track.dart';
 import '../../theme/m3e_context.dart';
-import '../../utils/responsive.dart';
+import '../responsive.dart';
 import '../empty_state.dart';
 import '../track_artwork.dart';
 

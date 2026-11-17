@@ -18,8 +18,8 @@ import '../services/notification_service.dart';
 import '../services/poster/poster_share_file.dart';
 import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
-import '../utils/responsive.dart';
-import '../utils/save_as_label.dart';
+import 'responsive.dart';
+import 'labels/save_as_label.dart';
 import 'empty_state.dart';
 import 'simple_modal_body.dart';
 

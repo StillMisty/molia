@@ -6,7 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'ai_dj_shared.dart';
 import 'settings/settings_tiles.dart';
 import 'simple_modal_body.dart';

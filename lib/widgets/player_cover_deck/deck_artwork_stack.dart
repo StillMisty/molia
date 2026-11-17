@@ -10,7 +10,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../domain/models/track.dart';
 import '../../providers/playback_provider.dart';
-import '../../utils/playback_cover_decode.dart';
+import '../playback_cover_decode.dart';
 import '../app_network_image.dart';
 import '../cover_appearance.dart';
 import '../cover_fallback.dart';

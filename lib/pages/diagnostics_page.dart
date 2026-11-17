@@ -11,7 +11,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/diagnostics_provider.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
-import '../utils/save_as_label.dart';
+import '../widgets/labels/save_as_label.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/settings/settings_subpage.dart';

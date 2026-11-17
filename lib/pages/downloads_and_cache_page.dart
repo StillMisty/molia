@@ -19,7 +19,7 @@ import '../services/download/download_manager.dart';
 import '../services/download/download_settings.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
-import '../utils/responsive.dart';
+import '../widgets/responsive.dart';
 import '../widgets/settings/cache_policy_dialog.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';

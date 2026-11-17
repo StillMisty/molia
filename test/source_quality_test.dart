@@ -4,7 +4,7 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/sources/source_track.dart'
     show capQualityFor, pickQualityFor, qualityFallbackCandidates;
-import 'package:molia/utils/source_quality_label.dart';
+import 'package:molia/widgets/labels/source_quality_label.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 省流音质上限纯函数：与 `pickQualityFor` 的回退链路组合后的行为。

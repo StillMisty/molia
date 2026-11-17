@@ -12,7 +12,7 @@ import '../domain/models/track.dart';
 import 'artwork/artwork_cache.dart';
 import '../playback/playback_power_policy.dart';
 import '../theme/scheme_builder.dart';
-import '../utils/local_image_provider.dart';
+import 'covers/local_image_provider.dart';
 import 'app_presence.dart';
 import 'artwork_palette_seed_store.dart';
 import 'covers/cover_image_identity.dart';

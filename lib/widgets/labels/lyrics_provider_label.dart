@@ -7,8 +7,8 @@
 /// - LX 脚本 / any-listen：脚本 key，经渠道列表查显示名，查不到回退 key。
 library;
 
-import '../domain/models/source.dart' show SourceDescriptor;
-import '../l10n/app_localizations.dart';
+import '../../domain/models/source.dart' show SourceDescriptor;
+import '../../l10n/app_localizations.dart';
 
 String lyricsProviderLabel(
   AppLocalizations l10n,

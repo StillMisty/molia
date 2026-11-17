@@ -9,7 +9,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../providers/paged_list_controller.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'detail_page/detail_page_chrome.dart';
 import 'paged_list_auto_load.dart';
 import 'scroll_edge_fade.dart';

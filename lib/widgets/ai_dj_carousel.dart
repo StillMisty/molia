@@ -35,7 +35,7 @@ import '../providers/ai_dj_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/ai/ai_generation_executor.dart';
 import '../theme/m3e_context.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'ai_dj_shared.dart';
 import 'ai_dj_waiting.dart';
 import 'discover_layout.dart';

@@ -1,4 +1,4 @@
-import '../l10n/app_localizations.dart';
+import '../../l10n/app_localizations.dart';
 
 /// 省流状态副标题：开启时附当前网络状态（移动数据已生效 / Wi-Fi 未生效 /
 /// 无法检测），让「仅移动数据生效」的行为对用户透明。

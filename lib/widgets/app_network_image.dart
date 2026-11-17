@@ -8,7 +8,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../services/artwork/artwork_cache.dart';
 import '../theme/motion_policy.dart';
-import '../utils/local_image_provider.dart';
+import '../services/covers/local_image_provider.dart';
 import 'molia_mark.dart';
 
 /// 统一网络图片组件：封面/头像等所有远端图片都走这里。

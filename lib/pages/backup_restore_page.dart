@@ -10,7 +10,7 @@ import '../providers/sync_provider.dart';
 import '../services/json_backup_picker.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
-import '../utils/save_as_label.dart';
+import '../widgets/labels/save_as_label.dart';
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';

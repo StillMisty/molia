@@ -8,8 +8,8 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
 import '../services/haptics.dart';
-import '../utils/responsive.dart';
-import '../utils/source_quality_label.dart';
+import 'responsive.dart';
+import 'labels/source_quality_label.dart';
 import 'detail_page/detail_page_chrome.dart';
 import 'simple_modal_body.dart';
 

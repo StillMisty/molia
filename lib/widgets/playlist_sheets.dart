@@ -14,7 +14,7 @@ import '../domain/models/playlist_folders.dart';
 import '../l10n/app_localizations.dart';
 import '../services/playlist/playlist_import_service.dart';
 import '../theme/m3e_context.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'empty_state.dart';
 import 'simple_modal_body.dart';
 

@@ -30,7 +30,7 @@ import '../services/app_branding_service.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
-import '../utils/playback_cover_decode.dart';
+import 'playback_cover_decode.dart';
 import 'cover_appearance.dart';
 import 'cross_fade_swap.dart';
 import 'favorite_action.dart';

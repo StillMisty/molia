@@ -3,8 +3,8 @@
 /// 页面只负责布局，状态词与进度格式统一在这里，避免两处各拼一套。
 library;
 
-import '../l10n/app_localizations.dart';
-import '../services/download/download_queue.dart';
+import '../../l10n/app_localizations.dart';
+import '../../services/download/download_queue.dart';
 import 'download_failure_label.dart';
 import 'track_local_data_label.dart';
 

@@ -1,5 +1,5 @@
-import '../l10n/app_localizations.dart';
-import '../services/save_as_types.dart';
+import '../../l10n/app_localizations.dart';
+import '../../services/save_as_types.dart';
 
 /// 另存成功提示：按落点类型选择文案（桌面绝对路径 / Android 系统「下载」/
 /// iOS 文件 App 相对路径）。

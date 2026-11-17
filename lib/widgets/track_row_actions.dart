@@ -18,7 +18,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/comments_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/download/download_requests.dart';
-import '../utils/download_failure_label.dart';
+import 'labels/download_failure_label.dart';
 import 'download_data_saver_guard.dart';
 import 'row_actions.dart';
 import 'track_actions.dart';

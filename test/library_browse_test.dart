@@ -6,7 +6,7 @@ import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/domain/models/smart_lists.dart';
 import 'package:molia/providers/collection_presenter.dart';
 import 'package:molia/providers/library_collections.dart';
-import 'package:molia/utils/smart_list_rows.dart';
+import 'package:molia/providers/smart_list_rows.dart';
 
 /// 专辑 / 歌手聚合、重复版本与智能列表（纯函数）。
 void main() {

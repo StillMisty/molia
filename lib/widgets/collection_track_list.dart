@@ -9,7 +9,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/collection_presenter.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'row_actions.dart';
 import 'track_row.dart';
 

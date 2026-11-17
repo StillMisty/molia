@@ -23,8 +23,8 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/track.dart';
 import '../services/artwork/artwork_cache.dart';
-import '../utils/local_image_provider.dart';
-import '../utils/playback_cover_decode.dart';
+import '../services/covers/local_image_provider.dart';
+import 'playback_cover_decode.dart';
 import 'molia_mark.dart';
 
 /// 飞行期阴影恢复的「页端进度」窗口：前 80% 不画，80%→95% 线性恢复，

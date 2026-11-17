@@ -18,7 +18,7 @@ import '../providers/sources_provider.dart';
 import '../services/data_saver_service.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
-import '../utils/source_quality_label.dart';
+import '../widgets/labels/source_quality_label.dart';
 import '../widgets/settings/settings_tiles.dart';
 
 class OnboardingFlow extends StatefulWidget {

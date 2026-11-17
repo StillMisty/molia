@@ -2,7 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
 import '../pages/lyrics_display/lyrics_content_settings_page.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 
 /// 打开「歌词显示设置」：歌词页 FAB 与播放器「更多」共用同一入口。
 ///

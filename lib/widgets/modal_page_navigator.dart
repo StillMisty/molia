@@ -12,7 +12,7 @@ import 'package:flutter/services.dart' show PredictiveBackEvent;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'adaptive_layout.dart';
 import 'm3e_page_route.dart';
 

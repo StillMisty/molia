@@ -3,7 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
 import '../theme/m3e_context.dart';
-import '../utils/responsive.dart';
+import 'responsive.dart';
 import 'detail_page/detail_cover_header.dart';
 import 'detail_page/detail_page_chrome.dart';
 import 'row_extent.dart';
