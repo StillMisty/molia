@@ -151,9 +151,12 @@ class AudioSessionLifecycle {
   }
 
   /// 中断结束且没有续播：此时才允许开始暂停释放计时。
+  ///
+  /// 结算**不**代表焦点已经回来：iOS 的不可续播结束映射成 `unknown`，系统
+  /// 没有承诺会话仍激活。`_focusMayBeLost` 只由成功激活 / `onPlaybackStarted`
+  /// 清除，下一次起播会重新 `setActive(true)`（已持有焦点时是 no-op）。
   void onInterruptionSettled() {
     if (!_port.supported || _playing || _disposed) return;
-    _focusMayBeLost = false;
     if (_state != _AudioSessionState.active) return;
     _scheduleRelease();
   }

@@ -110,7 +110,7 @@ void main() {
     });
   });
 
-  test('中断结算后焦点已回：宽限内起播不重复激活', () {
+  test('中断结算不等于焦点已回：宽限内起播仍重新激活', () {
     fakeAsync((async) {
       startNow(async);
       lifecycle.onPlaybackStarted();
@@ -119,8 +119,13 @@ void main() {
       async.flushMicrotasks();
 
       expect(startNow(async), isTrue);
-      expect(port.activateCalls, 1);
+      expect(
+        port.activateCalls,
+        2,
+        reason: '结算事件（iOS 可能是 unknown）不能证明 setActive 仍有效',
+      );
       expect(port.deactivateCalls, 0);
+      lifecycle.onPlaybackStarted();
     });
   });
 
