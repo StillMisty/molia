@@ -12,9 +12,16 @@ import 'package:audio_session/audio_session.dart';
 /// 事件流在 [start] 之后有效（移动端实现要等 `AudioSession.instance` 解析
 /// 完成）；桌面 no-op 的流始终为空。
 abstract class PlatformAudioPort {
-  /// 是否有真实平台实现。桌面 no-op 为 false：生命周期仍然可调用，但不做
-  /// 配置 / 激活 / 释放，桌面播放行为与改动前完全一致。
+  /// 是否有真实平台实现。桌面 no-op / 桌面输出监听为 false：生命周期仍然
+  /// 可调用，但不做配置 / 激活 / 释放，桌面会话行为与改动前完全一致。
   bool get supported;
+
+  /// 是否会产生 [outputLost] 事件。
+  ///
+  /// 与 [supported] 分开：桌面输出监听没有 `audio_session` 实现，但播放服务
+  /// 必须订阅它的输出丢失事件（ADR-0036）。移动端为 true，桌面监听端口也为
+  /// true，纯 no-op 端口为 false。
+  bool get emitsOutputLost;
 
   Stream<AudioInterruptionEvent> get interruptions;
   Stream<void> get outputLost;
@@ -40,6 +47,9 @@ class NoopPlatformAudioPort implements PlatformAudioPort {
 
   @override
   bool get supported => false;
+
+  @override
+  bool get emitsOutputLost => false;
 
   @override
   Stream<AudioInterruptionEvent> get interruptions => const Stream.empty();

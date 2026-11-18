@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "audio_output_watcher.h"
 #include "single_instance.h"
 #include "taskbar_thumb_bar.h"
 #include "utils.h"
@@ -26,6 +27,10 @@ constexpr char kTaskbarChannelName[] = "top.stillmisty.molia/taskbar";
 
 // 窗口显示通道：与 Dart 侧 `lib/services/window/window_chrome_io.dart` 成对。
 constexpr char kWindowChannelName[] = "top.stillmisty.molia/window";
+
+// 桌面输出丢失通道：与 Dart 侧 `lib/playback/desktop_audio_output_port_io.dart`
+// 成对。原生只发 `outputLost`（无参数）。
+constexpr char kAudioOutputChannelName[] = "top.stillmisty.molia/audio_output";
 
 // 首帧没到达时的恢复兜底：避免 DWM cloak 残留导致窗口一直不可见。
 constexpr UINT_PTR kShowFallbackTimerId = 0x4D4F4C49;  // 'MOLI'
@@ -307,6 +312,21 @@ bool FlutterWindow::OnCreate() {
   // 单实例宿主窗口必须早于托盘隐藏创建：第二实例启动时靠它找到本进程。
   CreateInstanceHostWindow();
 
+  // 默认输出设备丢失：IMMNotificationClient 回调只投递窗口消息，平台线程
+  // 再通过本通道通知 Dart（ADR-0036）。注册失败静默降级（不阻塞播放）。
+  audio_output_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), kAudioOutputChannelName,
+          &flutter::StandardMethodCodec::GetInstance());
+  audio_output_watcher_ = std::make_unique<AudioOutputWatcher>();
+  if (!audio_output_watcher_->Start(GetHandle(), [this]() {
+        if (audio_output_channel_ != nullptr) {
+          audio_output_channel_->InvokeMethod("outputLost", nullptr);
+        }
+      })) {
+    audio_output_watcher_.reset();
+  }
+
   thumb_bar_ = std::make_unique<TaskbarThumbBar>();
   thumb_bar_->Attach(
       GetHandle(),
@@ -383,6 +403,12 @@ void FlutterWindow::RequestDestroy() {
 }
 
 void FlutterWindow::OnDestroy() {
+  // 先注销输出设备通知：COM 回调可能还在 worker 线程上排队，必须在窗口 /
+  // 引擎销毁前停掉；Stop 幂等（析构会再调一次）。
+  if (audio_output_watcher_ != nullptr) {
+    audio_output_watcher_->Stop();
+    audio_output_watcher_.reset();
+  }
   if (instance_host_window_ != nullptr) {
     ::DestroyWindow(instance_host_window_);
     instance_host_window_ = nullptr;
@@ -397,6 +423,10 @@ void FlutterWindow::OnDestroy() {
   if (window_channel_ != nullptr) {
     window_channel_->SetMethodCallHandler(nullptr);
     window_channel_.reset();
+  }
+  if (audio_output_channel_ != nullptr) {
+    audio_output_channel_->SetMethodCallHandler(nullptr);
+    audio_output_channel_.reset();
   }
   if (GetHandle() != nullptr) {
     ::KillTimer(GetHandle(), kShowFallbackTimerId);
@@ -476,6 +506,15 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // 默认输出设备事件已由 COM 回调投递到窗口线程：此刻才能安全枚举设备并
+  // 调 Flutter 通道（ADR-0036）。
+  if (message == AudioOutputWatcher::kOutputLostMessage) {
+    if (audio_output_watcher_ != nullptr) {
+      audio_output_watcher_->HandlePlatformMessage();
+    }
+    return 0;
+  }
+
   // 任务栏缩略图按钮点击：WM_COMMAND 的低字是按钮 id、高字是 THBN_CLICKED，
   // 命中本工具栏时直接吃掉（其余 WM_COMMAND 照旧交给 Flutter / 基类）。
   if (message == WM_COMMAND && thumb_bar_ != nullptr &&

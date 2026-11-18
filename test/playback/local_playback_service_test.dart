@@ -278,9 +278,11 @@ void main() {
     bool playWithOtherApps = true,
     void Function()? onActivate,
     bool failFirstPlay = false,
+    bool sessionSupported = true,
   }) async {
     final player = _FakeAudioPlayer()..failPlay = failFirstPlay;
-    final port = FakePlatformAudioPort()..onActivate = onActivate;
+    final port = FakePlatformAudioPort(supported: sessionSupported)
+      ..onActivate = onActivate;
     final settings = ValueNotifier<bool>(playWithOtherApps);
     final lifecycle = AudioSessionLifecycle(
       port: port,
@@ -1532,6 +1534,86 @@ void main() {
       await service.setMode(PlayMode.listLoop);
       await service.setMode(PlayMode.shuffle);
       expect(calls, 0, reason: '关闭后完全走均匀随机，不查历史');
+    });
+  });
+
+  group('桌面输出丢失（端口 → 急停）', () {
+    test('会话 unsupported 也订阅 outputLost：急停一次、不淡变', () async {
+      final ctx = await startSession(
+        sessionSupported: false,
+        fadeDuration: const Duration(milliseconds: 300),
+      );
+      expect(ctx.service.isPlaying, isTrue);
+      ctx.player.calls.clear();
+      ctx.player.volumeCalls.clear();
+
+      ctx.port.emitOutputLost();
+      await pumpEventQueue();
+
+      expect(ctx.player.calls.where((call) => call == 'pause'), hasLength(1));
+      expect(ctx.player.volumeCalls, isEmpty, reason: '输出丢失不能走淡出');
+      expect(ctx.service.isPlaying, isFalse);
+
+      ctx.port.emitOutputLost();
+      await pumpEventQueue();
+      expect(
+        ctx.player.calls.where((call) => call == 'pause'),
+        hasLength(1),
+        reason: '重复事件 / 已暂停时保持幂等',
+      );
+    });
+
+    test('无曲目时输出丢失是无害空操作', () async {
+      final player = _FakeAudioPlayer();
+      final port = FakePlatformAudioPort(supported: false);
+      final settings = ValueNotifier<bool>(true);
+      final lifecycle = AudioSessionLifecycle(
+        port: port,
+        playWithOtherApps: settings,
+        platform: TargetPlatform.linux,
+      );
+      final service = LocalPlaybackService(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+        player: player,
+        audioSession: lifecycle,
+        playWithOtherApps: settings,
+      );
+      addTearDown(service.dispose);
+      addTearDown(settings.dispose);
+      await pumpEventQueue();
+      player.calls.clear();
+
+      port.emitOutputLost();
+      await pumpEventQueue();
+
+      expect(player.calls, isEmpty);
+      expect(service.isPlaying, isFalse);
+    });
+
+    test('dispose 与退出收尾都只释放一次端口', () async {
+      final player = _FakeAudioPlayer();
+      final port = FakePlatformAudioPort(supported: false);
+      final settings = ValueNotifier<bool>(true);
+      final lifecycle = AudioSessionLifecycle(
+        port: port,
+        playWithOtherApps: settings,
+        platform: TargetPlatform.linux,
+      );
+      final service = LocalPlaybackService(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+        player: player,
+        audioSession: lifecycle,
+        playWithOtherApps: settings,
+      );
+      await service.playTracks([_track(index: 0)], 0);
+      await pumpEventQueue();
+
+      await service.shutdownAudioForQuit();
+      service.dispose();
+      settings.dispose();
+      expect(port.disposeCalls, 1);
     });
   });
 

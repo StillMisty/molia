@@ -18,6 +18,9 @@ class MobileAudioSessionPort implements PlatformAudioPort {
   bool get supported => true;
 
   @override
+  bool get emitsOutputLost => true;
+
+  @override
   Stream<AudioInterruptionEvent> get interruptions =>
       _session?.interruptionEventStream ?? const Stream.empty();
 

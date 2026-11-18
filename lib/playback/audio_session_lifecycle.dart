@@ -74,8 +74,11 @@ class AudioSessionLifecycle {
 
   StreamSubscription<AudioInterruptionEvent>? _interruptions;
 
-  /// 端口是否具备真实平台实现（桌面 no-op 为 false）。
+  /// 端口是否具备真实平台实现（桌面 no-op / 桌面输出监听为 false）。
   bool get supported => _port.supported;
+
+  /// 端口是否会送出 [outputLost]（桌面输出监听为 true，纯 no-op 为 false）。
+  bool get emitsOutputLost => _port.emitsOutputLost;
 
   Stream<AudioInterruptionEvent> get interruptions => _port.interruptions;
   Stream<void> get outputLost => _port.outputLost;

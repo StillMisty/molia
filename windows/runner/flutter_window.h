@@ -8,6 +8,7 @@
 
 #include <memory>
 
+#include "audio_output_watcher.h"
 #include "taskbar_thumb_bar.h"
 #include "win32_window.h"
 
@@ -54,6 +55,12 @@ class FlutterWindow : public Win32Window {
   bool SetWindowCloaked(bool cloak);
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       window_channel_;
+
+  // 桌面输出丢失（Windows 默认 render 设备被移除 / 禁用）：
+  // Dart 侧 `desktop_audio_output_port_io.dart` 监听 `outputLost`。
+  std::unique_ptr<AudioOutputWatcher> audio_output_watcher_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      audio_output_channel_;
 
   // 单实例宿主窗口：隐藏的顶层窗口，只用来接收第二实例的注册消息。
   // 它必须早于 Flutter 窗口的托盘隐藏存在，否则第二实例找不到通知目标。

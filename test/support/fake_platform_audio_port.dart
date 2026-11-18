@@ -8,10 +8,13 @@ import 'package:audio_session/audio_session.dart';
 import 'package:molia/playback/platform_audio_port.dart';
 
 class FakePlatformAudioPort implements PlatformAudioPort {
-  FakePlatformAudioPort({this.supported = true});
+  FakePlatformAudioPort({this.supported = true, this.emitsOutputLost = true});
 
   @override
   bool supported;
+
+  @override
+  bool emitsOutputLost;
 
   final List<String> calls = [];
   final List<AudioSessionConfiguration> configurations = [];

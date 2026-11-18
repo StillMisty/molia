@@ -9,6 +9,7 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
+  "audio_output_watcher.cpp"
   "shell_identity.cpp"
   "single_instance.cpp"
   "taskbar_thumb_bar.cpp"

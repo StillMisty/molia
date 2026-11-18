@@ -507,18 +507,23 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 启动端口并装配中断 / 耳机拔出 / 输出设备监听。
   ///
-  /// 端口没有真实实现（桌面 / 测试）时只有空流，接线保持 no-op；移动端
-  /// 配置 / 激活 / 释放全部由 [AudioSessionLifecycle] 决定。
+  /// 会话配置 / 激活 / 释放只对 [AudioSessionLifecycle.supported] 的端口装配；
+  /// 桌面输出监听端口没有会话实现，但会送 `outputLost`（`emitsOutputLost`），
+  /// 因此事件接线独立于会话能力位，不能再用 `supported` 一并短路（ADR-0036）。
   Future<void> _startAudioSession() async {
     try {
       await _audioSession.start();
     } catch (e) {
       debugPrint('[LocalPlayback] 音频会话启动失败: $e');
     }
-    if (!_audioSession.supported || _playerDisposed) return;
-    _attachFocusGuard(_audioSession.interruptions);
-    _attachBecomingNoisy(_audioSession.outputLost);
-    _attachDeviceChanges(_audioSession.deviceChanges);
+    if (_playerDisposed) return;
+    if (_audioSession.supported) {
+      _attachFocusGuard(_audioSession.interruptions);
+      _attachDeviceChanges(_audioSession.deviceChanges);
+    }
+    if (_audioSession.supported || _audioSession.emitsOutputLost) {
+      _attachBecomingNoisy(_audioSession.outputLost);
+    }
   }
 
   /// 装配音频焦点守卫：事件 → 纯策略动作 → 暂停 / 压低 / 续播 / 恢复。
