@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -10,11 +11,14 @@ import 'package:molia/playback/audio_predownload.dart';
 import 'package:molia/playback/audio_predownloader.dart';
 import 'package:molia/playback/audio_cache_completion_recorder.dart';
 import 'package:molia/playback/audio_cache_source.dart';
+import 'package:molia/playback/audio_cache_writer_registry.dart';
 import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/playback/next_track_preloader.dart';
 import 'package:molia/playback/playing_track_cache_writer.dart';
 import 'package:molia/sources/source_track.dart';
+import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
+import 'package:path/path.dart' as p;
 
 /// 可脚本化播放器：只实现 [LocalPlaybackService] 用到的状态与控制接口，
 /// 不触碰 just_audio 的平台通道。
@@ -1496,15 +1500,208 @@ void main() {
     await pumpEventQueue();
     expect(completedTracks, [trackIdOf('test', 0), trackIdOf('test', 1)]);
   });
+
+  group('音频缓存单写者约束（#60）', () {
+    Future<Directory> tempCacheDir() async {
+      final dir = await Directory.systemTemp.createTemp('molia_audio_cache');
+      addTearDown(() async {
+        if (await dir.exists()) await dir.delete(recursive: true);
+      });
+      return dir;
+    }
+
+    ({_FakeAudioPlayer player, LocalPlaybackService service}) buildService(
+      Directory dir, {
+      required CachingAudioSourceHandle Function(Uri uri, String cachePath)
+      createSource,
+      bool cacheEnabled = true,
+    }) {
+      final player = _FakeAudioPlayer();
+      final service = LocalPlaybackService(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('https://cdn.example/${track.id}.mp3')),
+        player: player,
+        cacheService: _CompletionCacheService(
+          audioDir: dir.path,
+          enabled: cacheEnabled,
+        ),
+        audioCachePlatformSupported: () => true,
+        cachingAudioSourceFactory: (uri, path, {headers = const {}}) =>
+            createSource(uri, path),
+      );
+      addTearDown(service.dispose);
+      return (player: player, service: service);
+    }
+
+    test('同一缓存文件已有 writer：重播不再建第二个 writer', () async {
+      final dir = await tempCacheDir();
+      final completers = <Completer<bool>>[];
+      final paths = <String>[];
+      final (:player, :service) = buildService(
+        dir,
+        createSource: (uri, cachePath) {
+          final completer = Completer<bool>();
+          completers.add(completer);
+          paths.add(cachePath);
+          return CachingAudioSourceHandle(
+            source: AudioSource.uri(uri),
+            completed: completer.future,
+            cancel: () {},
+          );
+        },
+      );
+
+      await service.playTracks([_track(index: 0)], 0);
+      await pumpEventQueue();
+      expect(completers, hasLength(1));
+
+      // 换队列 / 重播同一首：旧 writer 还在写同一个 `.part`。
+      await service.playTracks([_track(index: 0)], 0);
+      await pumpEventQueue();
+      expect(completers, hasLength(1), reason: '同一路径只能有一个 writer');
+      final source = player.lastAudioSource;
+      expect(source, isA<UriAudioSource>());
+      expect((source! as UriAudioSource).uri.scheme, 'https');
+
+      // 在途 writer 结束：所有权释放，下次起播可以重新写。
+      completers[0].complete(false);
+      await pumpEventQueue();
+      await service.playTracks([_track(index: 0)], 0);
+      await pumpEventQueue();
+      expect(completers, hasLength(2));
+      expect(paths.toSet(), hasLength(1), reason: '同一曲目始终同一缓存文件');
+    });
+
+    test('完整缓存已在位：直接 file://，不建 writer，并清掉残留 .part', () async {
+      final dir = await tempCacheDir();
+      final track = _track(index: 0);
+      final complete = File(
+        p.join(dir.path, AudioCacheStore.keyForSource(track)),
+      )..writeAsBytesSync(const [1, 2, 3]);
+      final partial = File('${complete.path}.part')
+        ..writeAsBytesSync(const [4, 5]);
+      var factoryCalls = 0;
+      final (:player, :service) = buildService(
+        dir,
+        createSource: (uri, cachePath) {
+          factoryCalls++;
+          return CachingAudioSourceHandle(
+            source: AudioSource.uri(uri),
+            completed: Future<bool>.value(false),
+            cancel: () {},
+          );
+        },
+      );
+
+      await service.playTracks([track], 0);
+      await pumpEventQueue();
+
+      expect(factoryCalls, 0, reason: '完整缓存已在位不应再建 writer');
+      expect(partial.existsSync(), isFalse, reason: '残留半成品会挡住 file:// 命中');
+      expect(complete.existsSync(), isTrue);
+      final source = player.lastAudioSource;
+      expect(source, isA<UriAudioSource>());
+      expect((source! as UriAudioSource).uri.toFilePath(), complete.path);
+    });
+
+    test('音频缓存开关关闭：仍命中完整文件，只是不再写新缓存', () async {
+      final dir = await tempCacheDir();
+      final track = _track(index: 0);
+      final complete = File(
+        p.join(dir.path, AudioCacheStore.keyForSource(track)),
+      )..writeAsBytesSync(const [1, 2, 3]);
+      var factoryCalls = 0;
+      final (:player, :service) = buildService(
+        dir,
+        cacheEnabled: false,
+        createSource: (uri, cachePath) {
+          factoryCalls++;
+          return CachingAudioSourceHandle(
+            source: AudioSource.uri(uri),
+            completed: Completer<bool>().future,
+            cancel: () {},
+          );
+        },
+      );
+
+      await service.playTracks([track], 0);
+      await pumpEventQueue();
+
+      expect(factoryCalls, 0);
+      final source = player.lastAudioSource;
+      expect((source! as UriAudioSource).uri.toFilePath(), complete.path);
+    });
+
+    test('只有 .part 半成品（上次中断）：仍建 writer 接管', () async {
+      final dir = await tempCacheDir();
+      final track = _track(index: 0);
+      final cachePath = p.join(dir.path, AudioCacheStore.keyForSource(track));
+      File('$cachePath.part').writeAsBytesSync(const [4, 5]);
+      var factoryCalls = 0;
+      final (:player, :service) = buildService(
+        dir,
+        createSource: (uri, cachePath) {
+          factoryCalls++;
+          return CachingAudioSourceHandle(
+            source: AudioSource.uri(uri),
+            completed: Completer<bool>().future,
+            cancel: () {},
+          );
+        },
+      );
+
+      await service.playTracks([track], 0);
+      await pumpEventQueue();
+
+      expect(factoryCalls, 1);
+      final source = player.lastAudioSource;
+      expect((source! as UriAudioSource).uri.scheme, 'https');
+    });
+
+    test('登记表：写入者完成 / 失败后释放同一路径', () async {
+      final registry = AudioCacheWriterRegistry();
+      final first = Completer<bool>();
+      final firstHandle = CachingAudioSourceHandle(
+        source: AudioSource.uri(Uri.parse('https://cdn.example/a.mp3')),
+        completed: first.future,
+        cancel: () {},
+      );
+      final secondHandle = CachingAudioSourceHandle(
+        source: AudioSource.uri(Uri.parse('https://cdn.example/a.mp3')),
+        completed: Completer<bool>().future,
+        cancel: () {},
+      );
+
+      expect(registry.acquire('/tmp/a', firstHandle), isTrue);
+      expect(registry.acquire('/tmp/a', secondHandle), isFalse);
+      expect(registry.isWriting('/tmp/a'), isTrue);
+      expect(registry.count, 1);
+
+      first.complete(false);
+      await pumpEventQueue();
+      expect(registry.isWriting('/tmp/a'), isFalse);
+      expect(registry.acquire('/tmp/a', secondHandle), isTrue);
+    });
+  });
 }
 
 /// 只覆盖缓存源装配用到的三个方法：单测不碰真实目录 / prefs。
 class _CompletionCacheService extends CacheService {
-  @override
-  Future<bool> audioEnabled() async => true;
+  _CompletionCacheService({
+    this.audioDir = '/tmp/molia-test-audio-cache',
+    this.enabled = true,
+  });
+
+  final String audioDir;
+
+  /// 「音频缓存」开关（关闭时只读已有完整文件，不再写新缓存）。
+  final bool enabled;
 
   @override
-  Future<String?> audioCacheDirPath() async => '/tmp/molia-test-audio-cache';
+  Future<bool> audioEnabled() async => enabled;
+
+  @override
+  Future<String?> audioCacheDirPath() async => audioDir;
 
   @override
   Future<int> enforceAudioLimit({bool force = false}) async => 0;

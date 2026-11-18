@@ -6,6 +6,7 @@ import 'audio_cache_completion.dart';
 import 'audio_cache_source_io.dart' as platform;
 
 export 'audio_cache_completion.dart' show CachingAudioSourceHandle;
+export 'audio_cache_source_io.dart' show AudioCacheFileState;
 
 /// 创建边播边缓存源的门面（测试注入假 handle，不触碰 just_audio 平台通道）。
 typedef CachingAudioSourceFactory = CachingAudioSourceHandle? Function(
@@ -28,3 +29,11 @@ CachingAudioSourceHandle? createCachingAudioSource(
 /// 拼接音频缓存文件路径（各平台分隔符差异由实现处理）。
 String audioCacheFilePath(String directory, String fileName) =>
     platform.audioCacheFilePath(directory, fileName);
+
+/// 探测缓存文件落位状态（完整 / 只有半成品 / 都没有）。
+platform.AudioCacheFileState audioCacheFileState(String cacheFilePath) =>
+    platform.audioCacheFileState(cacheFilePath);
+
+/// 清掉完整缓存旁边的 `.part` 残留（调用方须确认同路径没有本进程 writer）。
+void discardAudioCachePartial(String cacheFilePath) =>
+    platform.discardAudioCachePartial(cacheFilePath);

@@ -13,6 +13,13 @@ import 'audio_predownload_task.dart';
 Dio? _sharedDio;
 Dio _dio() => _sharedDio ??= createAppDio();
 
+/// 正在被预取写入的最终缓存路径。
+///
+/// 同一路径同时只允许一个预取 writer：取消是异步的（CancelToken + 流循环
+/// 里才看到标志），紧接着为同一曲目再起一份会在同一个 `.predl` 上双写，
+/// 先结束的一方还会把另一方正在写的半成品删掉。
+final Set<String> _activeTargets = {};
+
 /// 启动预取；目标已缓存时返回 null。
 ///
 /// [headers] 为 null / 空时不设置请求头（Dio 默认 UA 即可）。
@@ -23,6 +30,8 @@ AudioPredownloadTask? startAudioPredownload({
 }) {
   // 已有完整缓存文件：边播边缓存会直接命中，无需重复下载。
   if (File(targetPath).existsSync()) return null;
+  // 同一路径已有在途预取：让现有 writer 写完，不并行写同一份半成品。
+  if (!_activeTargets.add(targetPath)) return null;
 
   // 半成品用独立后缀：just_audio 的 LockCachingAudioSource 使用
   // `audioCachePartSuffix`，两边不能共用同一路径（取消清理会误删对方正在写的文件）。
@@ -58,7 +67,7 @@ AudioPredownloadTask? startAudioPredownload({
       await sink.flush();
       await sink.close();
       sink = null;
-      if (cancelled) {
+      if (cancelled || !_canLand(targetPath)) {
         await _deleteQuietly(partFile);
       } else {
         // 原子落位：播放侧只认最终文件名，不会读到半成品。落位后再确认
@@ -75,6 +84,7 @@ AudioPredownloadTask? startAudioPredownload({
       } catch (_) {}
       await _deleteQuietly(partFile);
     } finally {
+      _activeTargets.remove(targetPath);
       if (!success.isCompleted) success.complete(false);
       if (!completer.isCompleted) completer.complete();
     }
@@ -89,6 +99,14 @@ AudioPredownloadTask? startAudioPredownload({
       cancelToken.cancel();
     },
   );
+}
+
+/// 落位前复查：下载期间同一路径可能已经被别人（边播边缓存的 writer）接手，
+/// 此时再 rename 会与 `.part` 并存、甚至覆盖刚写好的完整缓存（issue #60）。
+bool _canLand(String targetPath) {
+  if (File(targetPath).existsSync()) return false;
+  if (File('$targetPath$audioCachePartSuffix').existsSync()) return false;
+  return true;
 }
 
 Future<void> _deleteQuietly(File file) async {

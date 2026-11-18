@@ -13,8 +13,9 @@ import '../services/audio_cache_platform.dart';
 import '../services/audio_cache_store.dart';
 import '../services/cache_service.dart';
 import '../sources/source_track.dart';
-import 'audio_cache_source.dart';
 import 'audio_cache_completion_recorder.dart';
+import 'audio_cache_source.dart';
+import 'audio_cache_writer_registry.dart';
 import 'audio_focus_guard.dart';
 import 'audio_focus_policy.dart';
 import 'audio_output_policy.dart';
@@ -140,6 +141,12 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 缓存完成记录器：完成监听不随切歌 / 卸载旧源取消。
   final AudioCacheCompletionRecorder _cacheCompletionRecorder;
+
+  /// 边播边缓存的单写者登记（见 [AudioCacheWriterRegistry]）。
+  ///
+  /// 同一缓存文件（含 `.part`）在任一时刻只能有一个 writer；重播 / 失败
+  /// 重取 / 换队列重播时宁可本次不写缓存，也不与在途 writer 抢同一路径。
+  final AudioCacheWriterRegistry _cacheWriters = AudioCacheWriterRegistry();
 
   /// 已知平台后端不支持 StreamAudioSource（如桌面 media_kit）：
   /// 本会话内不再尝试边播边缓存，直接流播。
@@ -1267,38 +1274,65 @@ class LocalPlaybackService extends ChangeNotifier {
 
     if (cacheable) {
       try {
-        if (await cache.audioEnabled()) {
-          final directory = await cache.audioCacheDirPath();
-          if (directory != null) {
-            final fileName = AudioCacheStore.keyForSource(
-              track,
-              quality: quality ?? '',
-            );
-            final source = _createCachingAudioSource(
-              uri,
-              audioCacheFilePath(directory, fileName),
-              headers: headers,
-            );
-            if (source != null) {
-              try {
-                _sourceRegistrations++;
-                await _player
-                    .setAudioSource(source.source)
-                    .timeout(const Duration(seconds: 30));
-                // 源已落位才交给 app 生命周期的 recorder：之后切歌 / 卸载
-                // 旧源都不会取消完成监听，缓存真正写完仍会写索引。
-                _cacheCompletionRecorder.record(track, source);
-                // 写入开始后执行一次 LRU 淘汰（策略上限）。
-                unawaited(cache.enforceAudioLimit());
-                return PlaybackCachePath.caching;
-              } on UnsupportedError catch (e) {
-                // 防御性兜底：平台后端不支持 StreamAudioSource 时本会话停用。
-                _audioCacheUnsupported = true;
-                source.cancel();
-                debugPrint('[LocalPlayback] 平台不支持音频缓存，改用直接流播: $e');
-              } catch (e) {
-                source.cancel();
-                debugPrint('[LocalPlayback] 音频缓存源失败，回退直接流播: $e');
+        final directory = await cache.audioCacheDirPath();
+        if (directory != null) {
+          final fileName = AudioCacheStore.keyForSource(
+            track,
+            quality: quality ?? '',
+          );
+          final cacheFilePath = audioCacheFilePath(directory, fileName);
+          if (audioCacheFileState(cacheFilePath) ==
+              AudioCacheFileState.complete) {
+            // 完整缓存已在位：直接 file:// 播放，不再创建 writer。否则会在完整
+            // 文件旁边写出第二个 `.part`（issue #60），命中判定也会因为残留
+            // 半成品永远落空。同路径有本进程 writer 时不动半成品。
+            //
+            // 与「音频缓存」开关无关：命中已有文件不产生新写入，`localUriFor`
+            // 的读取侧同样不看这个开关。
+            if (!_cacheWriters.isWriting(cacheFilePath)) {
+              discardAudioCachePartial(cacheFilePath);
+            }
+            _sourceRegistrations++;
+            await _player
+                .setAudioSource(AudioSource.uri(Uri.file(cacheFilePath)))
+                .timeout(const Duration(seconds: 30));
+            return PlaybackCachePath.file;
+          }
+          if (await cache.audioEnabled()) {
+            if (_cacheWriters.isWriting(cacheFilePath)) {
+              // 同一路径已有 writer（重播 / 失败重取 / 换队列重播落在旧写入
+              // 未完成时）：本次直接流播，不并行写同一份 `.part`。
+              debugPrint('[LocalPlayback] 缓存文件已有写入者，本次不写缓存: $fileName');
+            } else {
+              final source = _createCachingAudioSource(
+                uri,
+                cacheFilePath,
+                headers: headers,
+              );
+              if (source != null &&
+                  _cacheWriters.acquire(cacheFilePath, source)) {
+                try {
+                  _sourceRegistrations++;
+                  await _player
+                      .setAudioSource(source.source)
+                      .timeout(const Duration(seconds: 30));
+                  // 源已落位才交给 app 生命周期的 recorder：之后切歌 / 卸载
+                  // 旧源都不会取消完成监听，缓存真正写完仍会写索引。
+                  _cacheCompletionRecorder.record(track, source);
+                  // 写入开始后执行一次 LRU 淘汰（策略上限）。
+                  unawaited(cache.enforceAudioLimit());
+                  return PlaybackCachePath.caching;
+                } on UnsupportedError catch (e) {
+                  // 防御性兜底：平台后端不支持 StreamAudioSource 时本会话停用。
+                  _audioCacheUnsupported = true;
+                  source.cancel();
+                  debugPrint('[LocalPlayback] 平台不支持音频缓存，改用直接流播: $e');
+                } catch (e) {
+                  source.cancel();
+                  debugPrint('[LocalPlayback] 音频缓存源失败，回退直接流播: $e');
+                }
+              } else {
+                source?.cancel();
               }
             }
           }
@@ -2039,6 +2073,7 @@ class LocalPlaybackService extends ChangeNotifier {
     _nextTrackPreloader?.cancelAll();
     _cacheWriter?.cancel();
     _cacheCompletionRecorder.dispose();
+    _cacheWriters.clear();
     _playWithOtherApps.removeListener(_onPlayWithOtherAppsChanged);
     unawaited(_becomingNoisySubscription?.cancel());
     unawaited(_audioDevicesSubscription?.cancel());

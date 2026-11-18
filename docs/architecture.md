@@ -1250,6 +1250,13 @@
   （同一文件不双写）；桌面 writer 切歌 / 停止 / 销毁取消，移动端完成监听由
   app 生命周期 `AudioCacheCompletionRecorder` 持有（不随切歌取消，超时 / 退出
   才清理）；省流生效时两侧都跳过；
+- **同一缓存文件单写者**（issue #60）：半成品名固定为 `<cacheFile>.part`，两个
+  writer 会互相截断并在完成时各自 rename。`LocalPlaybackService` 用
+  `AudioCacheWriterRegistry` 按缓存文件路径登记在途 writer，重复起播宁可本次直接
+  流播也不并行写；创建缓存源前先探测落位状态（`audioCacheFileState`），完整文件
+  已在位时直接 `file://`（不看音频缓存开关，读取侧 `localUriFor` 同样不看）并清掉
+  没有 writer 认领的 `.part` 残留（否则命中判定会被残留半成品永久挡住）；字节预取
+  同样按目标路径去重，落位前复查目标文件 / `.part`，播放侧接手后不再改名覆盖；
 - **离线播放**：封面走本地文件（`AppNetworkImage` / `ArtworkCache` 对
   `file://` 走 `FileImage`）；歌词由组合根的歌词加载器读
   `downloads/lyrics/`（翻译 `.t.lrc` 边车），且 `LyricsService` 对本地

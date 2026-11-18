@@ -734,5 +734,67 @@ void main() {
       expect(File('$target.predl').existsSync(), isFalse);
       expect(await task.succeeded, isFalse);
     });
+
+    test('同一目标已有在途预取：不启动第二个 writer', () async {
+      final dir = await Directory.systemTemp.createTemp('molia_predownload');
+      addTearDown(() => dir.delete(recursive: true));
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      final gate = Completer<void>();
+      server.listen((request) async {
+        request.response.add(const [1]);
+        await request.response.flush();
+        await gate.future;
+        request.response.add(const [2]);
+        await request.response.close();
+      });
+
+      final target = p.join(dir.path, 'dup.mp3');
+      final uri = Uri.parse('http://127.0.0.1:${server.port}/dup.mp3');
+      final first = startAudioPredownload(uri: uri, targetPath: target);
+      expect(first, isNotNull);
+      // 取消是异步的：旧任务还没收尾时再起一份会在同一 `.predl` 上双写。
+      expect(startAudioPredownload(uri: uri, targetPath: target), isNull);
+
+      gate.complete();
+      await first!.done;
+
+      expect(File(target).existsSync(), isTrue);
+      expect(File('$target.predl').existsSync(), isFalse);
+      expect(await first.succeeded, isTrue);
+      // 落位后依旧按「已缓存」跳过，不依赖登记表残留。
+      expect(startAudioPredownload(uri: uri, targetPath: target), isNull);
+    });
+
+    test('下载期间播放侧接手同一缓存文件（.part）：预取不落位', () async {
+      final dir = await Directory.systemTemp.createTemp('molia_predownload');
+      addTearDown(() => dir.delete(recursive: true));
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      final gate = Completer<void>();
+      server.listen((request) async {
+        request.response.add(const [1]);
+        await request.response.flush();
+        await gate.future;
+        request.response.add(const [2]);
+        await request.response.close();
+      });
+
+      final target = p.join(dir.path, 'racing.mp3');
+      final task = startAudioPredownload(
+        uri: Uri.parse('http://127.0.0.1:${server.port}/racing.mp3'),
+        targetPath: target,
+      );
+      expect(task, isNotNull);
+      // 播放侧开始边播边缓存：同一缓存文件的 `.part` 出现了。
+      File('$target.part').writeAsBytesSync(const [7]);
+
+      gate.complete();
+      await task!.done;
+
+      expect(File(target).existsSync(), isFalse, reason: '不能与 .part writer 并存');
+      expect(File('$target.predl').existsSync(), isFalse);
+      expect(await task.succeeded, isFalse);
+    });
   });
 }

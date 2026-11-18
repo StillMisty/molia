@@ -104,4 +104,38 @@ void main() {
       expect(await cancelled.completed, isFalse);
     });
   });
+
+  group('缓存文件落位探测（#60）', () {
+    test('区分「完整已在位」「只有半成品」「都没有」', () {
+      final dir = Directory.systemTemp.createTempSync('molia_cache_state');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final path = p.join(dir.path, 'wy_1_320k');
+
+      expect(audioCacheFileState(path), AudioCacheFileState.missing);
+
+      File('$path.part').writeAsBytesSync(const [1]);
+      expect(audioCacheFileState(path), AudioCacheFileState.partial);
+
+      File(path).writeAsBytesSync(const [1, 2]);
+      expect(
+        audioCacheFileState(path),
+        AudioCacheFileState.complete,
+        reason: '完整文件优先：半成品只是中断残留，不能反过来挡住命中',
+      );
+    });
+
+    test('清残留半成品不动完整文件', () {
+      final dir = Directory.systemTemp.createTempSync('molia_cache_state');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final path = p.join(dir.path, 'wy_1_320k');
+      final complete = File(path)..writeAsBytesSync(const [1, 2]);
+      final partial = File('$path.part')..writeAsBytesSync(const [9]);
+
+      discardAudioCachePartial(path);
+
+      expect(partial.existsSync(), isFalse);
+      expect(complete.readAsBytesSync(), const [1, 2]);
+      expect(audioCacheFileState(path), AudioCacheFileState.complete);
+    });
+  });
 }

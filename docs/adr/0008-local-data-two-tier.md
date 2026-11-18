@@ -146,3 +146,20 @@
   `lib/providers/local_songs_collection.dart`、`lib/playback/*`（完成信号 /
   recorder）、`lib/app/bootstrap/*`（组合根接线与首帧初始化）、
   `docs/architecture.md`。
+
+### 2026-11-18 补丁：同一缓存文件单写者（issue #60）
+
+验证上面这条链路时发现同一曲目的完整文件与约 942KB 的 `.part` 并存：缓存源
+可以因为重播 / 播放失败原地重取 / 换队列后重播同一首而再次创建，而
+`LockCachingAudioSource` 的半成品名固定为 `<cacheFile>.part`——第二个 writer
+会截断同一文件、完成时各自 rename，最坏覆盖正在使用的有效缓存。约束收口为：
+
+- `LocalPlaybackService` 用 `AudioCacheWriterRegistry` 按缓存文件路径登记在途
+  writer：已有 writer 时本次直接流播（不写缓存），等在途 writer 落位后重播即
+  命中 `file://`；所有权在 `completed`（完成 / 失败 / 超时取消）后释放。
+- 创建缓存源前先探测落位状态：完整文件已在位时直接 `file://`，绝不再建 writer；
+  同路径没有本进程 writer 时顺手清掉 `.part` 残留，否则
+  `AudioCacheStore.hitPathForTrack` 会永远判定「还在写」，此后每次都绕开命中。
+- 字节预取（`audio_predownload_io.dart`）按目标路径去重，并在改名落位前复查
+  目标文件 / `.part`：播放侧已经接手同一文件时删掉自己的 `.predl`，不与
+  `.part` 并存，也不覆盖刚写好的完整缓存。
