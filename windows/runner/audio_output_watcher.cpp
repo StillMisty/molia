@@ -21,7 +21,7 @@ bool AudioOutputWatcher::Start(HWND window,
   if (started_) return true;
   if (window == nullptr || !on_output_lost) return false;
 
-  window_ = window;
+  window_.store(window);
   on_output_lost_ = std::move(on_output_lost);
 
   IMMDeviceEnumerator* enumerator = nullptr;
@@ -39,7 +39,7 @@ bool AudioOutputWatcher::Start(HWND window,
   if (FAILED(register_result)) {
     enumerator_->Release();
     enumerator_ = nullptr;
-    window_ = nullptr;
+    window_.store(nullptr);
     on_output_lost_ = nullptr;
     return false;
   }
@@ -56,7 +56,7 @@ void AudioOutputWatcher::Stop() {
     enumerator_ = nullptr;
   }
   started_ = false;
-  window_ = nullptr;
+  window_.store(nullptr);
   on_output_lost_ = nullptr;
   std::lock_guard<std::mutex> lock(pending_mutex_);
   pending_removed_devices_.clear();
@@ -67,17 +67,29 @@ void AudioOutputWatcher::Stop() {
 
 std::wstring AudioOutputWatcher::CurrentDefaultDevice() const {
   if (enumerator_ == nullptr) return std::wstring();
-  IMMDevice* device = nullptr;
-  const HRESULT result =
-      enumerator_->GetDefaultAudioEndpoint(eRender, eConsole, &device);
-  if (FAILED(result) || device == nullptr) return std::wstring();
-  LPWSTR id = nullptr;
-  std::wstring name;
-  if (SUCCEEDED(device->GetId(&id)) && id != nullptr) {
-    name = id;
-    ::CoTaskMemFree(id);
-  }
-  device->Release();
+
+  // mpv（just_audio_media_kit 的播放后端）在
+  // `audio/out/ao_wasapi_changenotify.c` 里只跟随 eMultimedia：
+  // `if (flow == eCapture || role != eMultimedia) return S_OK;`。
+  // 第三方音频切换器可能让每个 role 的默认设备不同，因此优先查询
+  // eMultimedia；没有该 role 的默认值时才退回 eConsole。
+  const auto query_role = [this](ERole role) -> std::wstring {
+    IMMDevice* device = nullptr;
+    const HRESULT result =
+        enumerator_->GetDefaultAudioEndpoint(eRender, role, &device);
+    if (FAILED(result) || device == nullptr) return std::wstring();
+    LPWSTR id = nullptr;
+    std::wstring name;
+    if (SUCCEEDED(device->GetId(&id)) && id != nullptr) {
+      name = id;
+      ::CoTaskMemFree(id);
+    }
+    device->Release();
+    return name;
+  };
+
+  std::wstring name = query_role(eMultimedia);
+  if (name.empty()) name = query_role(eConsole);
   return name;
 }
 
@@ -97,13 +109,14 @@ bool AudioOutputWatcher::IsDeviceActive(const std::wstring& device_id) const {
 }
 
 void AudioOutputWatcher::PostPlatformMessage() {
-  if (window_ == nullptr) return;
+  const HWND window = window_.load();
+  if (window == nullptr) return;
   {
     std::lock_guard<std::mutex> lock(pending_mutex_);
     if (platform_message_pending_) return;
     platform_message_pending_ = true;
   }
-  if (::PostMessageW(window_, kOutputLostMessage, 0, 0) == FALSE) {
+  if (::PostMessageW(window, kOutputLostMessage, 0, 0) == FALSE) {
     std::lock_guard<std::mutex> lock(pending_mutex_);
     platform_message_pending_ = false;
   }
@@ -188,8 +201,9 @@ HRESULT STDMETHODCALLTYPE AudioOutputWatcher::OnDeviceRemoved(
 
 HRESULT STDMETHODCALLTYPE AudioOutputWatcher::OnDefaultDeviceChanged(
     EDataFlow flow, ERole role, LPCWSTR default_device_id) {
-  // 只跟踪播放用的系统默认输出（eConsole）；通信设备 / 录音设备变化无关。
-  if (flow != eRender || role != eConsole) return S_OK;
+  // 播放后端（mpv/WASAPI）跟随 eMultimedia；部分系统上它与 eConsole 的默认
+  // 值不同，所以两个 role 都接受。录音 / 通信设备变化无关。
+  if (flow != eRender || (role != eMultimedia && role != eConsole)) return S_OK;
   {
     std::lock_guard<std::mutex> lock(pending_mutex_);
     pending_default_device_ = ToWString(default_device_id);
@@ -223,9 +237,14 @@ ULONG STDMETHODCALLTYPE AudioOutputWatcher::AddRef() {
 }
 
 ULONG STDMETHODCALLTYPE AudioOutputWatcher::Release() {
-  const ULONG count = ref_count_.fetch_sub(1) - 1;
-  if (count == 0) {
-    delete this;
+  // 对象由 FlutterWindow 的 unique_ptr 持有，COM 不调用 AddRef / Release。
+  // 即使未来有人调用，也只能递减计数，绝不能在这里 delete（会双重释放）。
+  // 保底保留基引用 1。
+  ULONG current = ref_count_.load();
+  while (current > 1) {
+    if (ref_count_.compare_exchange_weak(current, current - 1)) {
+      return current - 1;
+    }
   }
-  return count;
+  return current;
 }

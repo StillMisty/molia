@@ -1210,6 +1210,18 @@
      `OnDestroy` 必须先 `UnregisterEndpointNotificationCallback` 再销毁引擎，
      否则析构期仍有回调，而 `CoUninitialize` 还在更外层。
 
+     **role 要跟播放后端一致**：mpv 的 `ao_wasapi_changenotify.c` 只接受
+     `eMultimedia`（`role != eMultimedia` 直接返回），所以默认设备查询必须
+     优先 `eMultimedia`、再退回 `eConsole`，`OnDefaultDeviceChanged` 两个 role
+     都接收；只跟 `eConsole` 在 role 默认值不同的系统上会跟丢耳机拔出。
+
+     **lifetime 归窗口**：`RegisterEndpointNotificationCallback` /
+     `Unregister` 不会调用客户端的 `AddRef` / `Release`（MS 文档明确由调用方
+     持有），对象归 `FlutterWindow` 的 `unique_ptr`。`Release` 只能递减计数、
+     绝不能 `delete this`，否则未来一次 Release 会与 unique_ptr 双重释放。
+     `window_` 由窗口线程写、COM 回调线程读，必须是 `std::atomic<HWND>`；
+     `on_output_lost_` 只在窗口线程调用，可以保持普通成员。
+
 116. **CoreAudio 的 property listener block 不保证主线程，移除也要在主队列**：
     `AudioObjectAddPropertyListenerBlock` 用 `DispatchQueue.main` 投递，但回调
     注册本身来自 HAL；不要在 block 里直接做 Flutter 调用以外的长操作。默认输出

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -18,7 +17,7 @@ class PlaybackMenu {
   /// 为 false，不注入就覆盖不到命令路由与载荷去重。
   PlaybackMenu({MethodChannel? channel, bool? supported})
     : _channel = channel ?? _defaultChannel,
-      _supported = supported ?? Platform.isMacOS;
+      _supported = supported ?? defaultTargetPlatform == TargetPlatform.macOS;
 
   /// 与 `macos/Runner/AppDelegate.swift` 的通道名成对出现，改一处必须改两处。
   static const MethodChannel _defaultChannel = MethodChannel(

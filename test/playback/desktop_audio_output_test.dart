@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/playback/desktop_audio_output_port_io.dart';
 import 'package:molia/playback/pactl_sink_events.dart';
+import 'package:molia/playback/pactl_sink_tracker.dart';
 
 /// 桌面输出监听的两块可测逻辑：`pactl` 行解析（纯函数）与平台通道端口
 /// （假 MethodChannel，不碰真实原生）。ADR-0036。
@@ -73,6 +74,120 @@ void main() {
     test('大 id 正常解析', () {
       final event = parsePactlEvent("Event 'remove' on sink #4294967295");
       expect(event!.id, 4294967295);
+    });
+  });
+
+  group('PactlSinkTracker 默认 sink 决策', () {
+    PactlSinkTracker trackerWith({
+      String? defaultSink,
+      Map<int, String> sinks = const {},
+    }) {
+      final tracker = PactlSinkTracker();
+      tracker.applySnapshot(
+        PactlSinkSnapshot(sinkNamesById: sinks, defaultSink: defaultSink),
+      );
+      return tracker;
+    }
+
+    test('默认 sink 被移除：立即上报，刷新只更新快照', () {
+      final tracker = trackerWith(
+        defaultSink: 'alsa_output.headphones',
+        sinks: {1: 'alsa_output.headphones', 2: 'alsa_output.speakers'},
+      );
+      final action = tracker.onEvent(
+        parsePactlEvent("Event 'remove' on sink #1")!,
+      );
+      expect(action.emitOutputLost, isTrue);
+      expect(action.refresh, isTrue);
+      expect(action.notifyIfDefaultMissing, isFalse);
+    });
+
+    test('非默认 sink 被移除：不暂停，只刷新并保留兜底判定', () {
+      final tracker = trackerWith(
+        defaultSink: 'alsa_output.headphones',
+        sinks: {1: 'alsa_output.headphones', 2: 'alsa_output.usb-dac'},
+      );
+      final action = tracker.onEvent(
+        parsePactlEvent("Event 'remove' on sink #2")!,
+      );
+      expect(action.emitOutputLost, isFalse);
+      expect(action.refresh, isTrue);
+      expect(action.notifyIfDefaultMissing, isTrue);
+    });
+
+    test('source / sink-input 移除不是输出丢失', () {
+      final tracker = trackerWith(defaultSink: 'a', sinks: {1: 'a'});
+      for (final line in [
+        "Event 'remove' on source #7",
+        "Event 'remove' on sink-input #9",
+      ]) {
+        final action = tracker.onEvent(parsePactlEvent(line)!);
+        expect(action.refresh, isFalse, reason: line);
+        expect(action.emitOutputLost, isFalse, reason: line);
+      }
+    });
+
+    test('new / change 只刷新，不暂停', () {
+      final tracker = trackerWith(defaultSink: 'a', sinks: {1: 'a'});
+      final sinkChange = tracker.onEvent(
+        parsePactlEvent("Event 'change' on sink #1")!,
+      );
+      expect(sinkChange.refresh, isTrue);
+      expect(sinkChange.notifyIfDefaultMissing, isFalse);
+      expect(sinkChange.emitOutputLost, isFalse);
+
+      final serverChange = tracker.onEvent(
+        parsePactlEvent("Event 'change' on server")!,
+      );
+      expect(serverChange.refresh, isTrue);
+      expect(serverChange.notifyIfDefaultMissing, isTrue);
+      expect(serverChange.emitOutputLost, isFalse);
+    });
+
+    test('server change：旧默认名消失才上报', () {
+      final tracker = trackerWith(defaultSink: 'a', sinks: {1: 'a', 2: 'b'});
+      final action = tracker.onEvent(
+        parsePactlEvent("Event 'change' on server")!,
+      );
+      expect(action.notifyIfDefaultMissing, isTrue);
+      // 主动切到仍存活的 b：旧默认 a 还在，不暂停。
+      expect(
+        tracker.applySnapshot(
+          const PactlSinkSnapshot(
+            sinkNamesById: {1: 'a', 2: 'b'},
+            defaultSink: 'b',
+          ),
+        ),
+        isFalse,
+      );
+      // 旧默认 a 已从列表消失：输出丢失（用独立 tracker 保留旧状态，
+      // 上一步的主动切换已经更新了默认值）。
+      final lostTracker = trackerWith(
+        defaultSink: 'a',
+        sinks: {1: 'a', 2: 'b'},
+      );
+      expect(
+        lostTracker.applySnapshot(
+          const PactlSinkSnapshot(sinkNamesById: {2: 'b'}, defaultSink: 'b'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('默认查询失败保留上一默认值，不会永久关闭检测', () {
+      final tracker = trackerWith(defaultSink: 'a', sinks: {1: 'a'});
+      expect(
+        tracker.applySnapshot(
+          const PactlSinkSnapshot(
+            sinkNamesById: {1: 'a'},
+            defaultSink: null,
+            defaultSinkKnown: false,
+          ),
+        ),
+        isFalse,
+      );
+      expect(tracker.defaultSink, 'a');
+      expect(tracker.sinkNamesById, {1: 'a'});
     });
   });
 

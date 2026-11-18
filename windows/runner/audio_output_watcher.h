@@ -52,7 +52,10 @@ class AudioOutputWatcher : public IMMNotificationClient {
   HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR device_id,
                                                    const PROPERTYKEY key) override;
 
-  // IUnknown：
+  // IUnknown。生命周期归 `FlutterWindow` 的 unique_ptr 所有：
+  // RegisterEndpointNotificationCallback / Unregister 不调用客户端的
+  // AddRef / Release（MS 文档明确由调用方持有客户端），因此 AddRef / Release
+  // 只维护计数，Release **绝不** `delete this`，否则会与 unique_ptr 双重释放。
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** object) override;
   ULONG STDMETHODCALLTYPE AddRef() override;
   ULONG STDMETHODCALLTYPE Release() override;
@@ -63,7 +66,12 @@ class AudioOutputWatcher : public IMMNotificationClient {
   void PostPlatformMessage();
 
   std::atomic<ULONG> ref_count_{1};
-  HWND window_ = nullptr;
+
+  // Start / Stop 在窗口线程写，COM 回调线程在 PostPlatformMessage 里读：
+  // 必须原子，避免 Stop 之后回调把消息投给已销毁的窗口句柄。
+  std::atomic<HWND> window_{nullptr};
+
+  // 只在窗口线程读取 / 调用（COM 回调从不直接碰它）。
   std::function<void()> on_output_lost_;
   IMMDeviceEnumerator* enumerator_ = nullptr;
   bool started_ = false;

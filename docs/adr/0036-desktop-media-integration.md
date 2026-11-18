@@ -4,7 +4,8 @@
 - 日期：2026-11-18
 - 相关：ADR-0010、ADR-0020、ADR-0035、issue #63、
   `lib/playback/platform_audio_port.dart`、`lib/playback/desktop_audio_output_port_io.dart`、
-  `lib/playback/pactl_sink_events.dart`、`lib/playback/pactl_output_watcher.dart`、
+  `lib/playback/pactl_sink_events.dart`、`lib/playback/pactl_sink_tracker.dart`、
+  `lib/playback/pactl_output_watcher.dart`、
   `lib/services/window/playback_menu_io.dart`、`windows/runner/audio_output_watcher.*`、
   `macos/Runner/AppDelegate.swift`、`linux/packaging/share/applications/top.stillmisty.molia.desktop`、
   `docs/pitfalls.md` #115–#118
@@ -50,13 +51,22 @@
 ### Windows 检测
 
 - 在 runner 实现 `IMMNotificationClient`（`audio_output_watcher.*`），注册到
-  `IMMDeviceEnumerator`，只跟踪 `eRender` + `eConsole`。
+  `IMMDeviceEnumerator`，只跟踪 `eRender` 的播放输出。默认设备查询优先
+  **`eMultimedia`**、失败才退回 `eConsole`；默认变化事件接受这两个 role。
+  依据是播放后端 mpv 的 `audio/out/ao_wasapi_changenotify.c` 明确只跟随
+  `eMultimedia`（`role != eMultimedia` 直接返回）；第三方音频切换器可能让
+  两个 role 的默认值不同，只跟 `eConsole` 会跟丢 mpv 实际使用的设备。
 - 缓存当前默认 render 端点。默认变化时仅当**旧端点不再 ACTIVE** 才上报；跟踪的
   端点被删除 / 变为非 ACTIVE 上报；新默认为空上报。旧端点仍存活时继续播放。
 - COM 回调在任意 worker 线程：回调只登记待处理事件并 `PostMessage`，平台线程
   （窗口过程）再做设备枚举、存活判断与 `top.stillmisty.molia/audio_output` 的
   `outputLost` 调用。注册在窗口与通道创建之后，`OnDestroy` 先
   `UnregisterEndpointNotificationCallback` 再销毁引擎 / 反初始化 COM。
+- **对象生命周期归 `FlutterWindow` 的 `unique_ptr`**：MS 文档明确
+  `RegisterEndpointNotificationCallback` / `Unregister` 不调用客户端的
+  `AddRef` / `Release`，因此 `Release` 只递减计数、绝不 `delete this`（否则与
+  `unique_ptr` 双重释放）。`Start` / `Stop` 在窗口线程写、COM 回调线程读的
+  `HWND` 用原子量，`on_output_lost_` 只在窗口线程调用，保持普通成员。
 - 只用系统 COM / WASAPI；runner 的 CMake 增加源码，不引入第三方库。
 
 ### macOS 检测
@@ -74,10 +84,15 @@
 - 使用 `pactl subscribe`（PulseAudio 与 PipeWire-pulse 共用），启动时 / server
   变化时用 `pactl list short sinks` 建立 id→name 表，用 `pactl get-default-sink`
   （旧版本回退 `pactl info` 的 `Default Sink:`）跟踪默认 sink。
-- 只有在被移除的 sink 是当前跟踪的默认 sink 时才上报；`remove` 发生在
-  source / sink-input 不是输出丢失；`new` / `change` 只刷新快照。server 事件刷新
-  后若旧默认名已不在 sink 列表里，也按丢失处理（部分服务器先发 change 再发
-  remove）。
+- 决策收在纯 `PactlSinkTracker`（`pactl_sink_tracker.dart`）：接收
+  `PactlEvent` 与 sink 快照，返回「是否刷新 / 刷新后是否按旧默认名消失上报」；
+  进程 I/O 只在 `PactlOutputWatcher`。只有在被移除的 sink 是当前跟踪的默认 sink
+  时才立即上报；`remove` 发生在 source / sink-input 不是输出丢失；`new` /
+  `change` 只刷新快照。server 事件刷新后若旧默认名已不在 sink 列表里，也按丢失
+  处理（部分服务器先发 change 再发 remove）。
+- 默认 sink 查询失败（命令不存在 / 服务器瞬时无响应）**保留上一默认值**，不能
+  用 null 覆盖；成功但没有默认值才清空。并发刷新按代次只应用最新快照，被取代
+  查询的「旧默认消失」通知由下一次成功快照补发。
 - 解析器 `pactl_sink_events.dart` 是纯函数：损坏行、CRLF、空行、超大 id 都返回
   null / 类型化事件，不抛异常，CI 不需要声音服务器。
 - `pactl` 缺失、Flatpak 沙箱拒绝、服务器重启 → 静默停用（不重试、不弹窗）；
@@ -104,6 +119,8 @@
 
 - 在 `AppDelegate.applicationDidFinishLaunching` 程序化插入顶层「播放」菜单
   （View 之后、Window 之前），不改 nib。三个菜单项：播放 / 暂停、上一首、下一首。
+  首帧前先用英文 `Playback` 兜底标题，Dart 第一份 `update` 再本地化；若启动时
+  `FlutterViewController` 尚未就绪，首个窗口 key 时重试一次（安装方法幂等）。
 - **不设 key equivalent**：媒体键与应用内可自定义快捷键是唯一键位来源，避免
   第二套不可配置的绑定。菜单项在 Dart 发出第一份状态且存在曲目时启用；无曲目 /
   首帧前禁用。
@@ -142,7 +159,8 @@
 ## 验证
 
 - 纯 `pactl` 解析（remove sink / source / sink-input、new / change、损坏行、
-  CRLF、空行、大 id）。
+  CRLF、空行、大 id）与 `PactlSinkTracker` 决策（默认 / 非默认移除、server
+  change、查询失败保留旧默认值）。
 - 假端口 → 服务：一次 `outputLost` 只产生一次 urgent pause、不走淡变；已暂停 /
   无曲目无副作用；dispose 与退出收尾只释放端口一次。
 - 假 MethodChannel：`outputLost` 到达流、未知方法忽略、dispose 后无事件；

@@ -40,13 +40,34 @@ class AppDelegate: FlutterAppDelegate {
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     super.applicationDidFinishLaunching(notification)
+    installDesktopBridges()
+    // 首帧前 FlutterViewController 偶尔还不在 NSApp.windows 里：首个窗口成为
+    // key window 时再试一次（两个安装方法都幂等）。
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleWindowBecameKey(_:)),
+      name: NSWindow.didBecomeKeyNotification,
+      object: nil
+    )
+  }
+
+  override func applicationWillTerminate(_ notification: Notification) {
+    NotificationCenter.default.removeObserver(
+      self,
+      name: NSWindow.didBecomeKeyNotification,
+      object: nil
+    )
+    stopAudioOutputWatcher()
+    super.applicationWillTerminate(notification)
+  }
+
+  private func installDesktopBridges() {
     installPlaybackMenu()
     startAudioOutputWatcher()
   }
 
-  override func applicationWillTerminate(_ notification: Notification) {
-    stopAudioOutputWatcher()
-    super.applicationWillTerminate(notification)
+  @objc private func handleWindowBecameKey(_ notification: Notification) {
+    installDesktopBridges()
   }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -204,6 +225,8 @@ class AppDelegate: FlutterAppDelegate {
     playbackChannel = channel
 
     let topItem = NSMenuItem()
+    // 首帧前先显示英文兜底标题；Dart 第一份 update 会按界面语言覆盖。
+    topItem.title = "Playback"
     let menu = NSMenu(title: "Playback")
     menu.autoenablesItems = false
     let playPause = NSMenuItem(

@@ -15,6 +15,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'pactl_sink_events.dart';
+import 'pactl_sink_tracker.dart';
 
 /// 读取 `pactl` 并回调默认 sink 消失事件。
 ///
@@ -32,10 +33,17 @@ class PactlOutputWatcher {
   Process? _process;
   StreamSubscription<String>? _stdout;
   StreamSubscription<String>? _stderr;
-  final Map<int, String> _sinkNames = <int, String>{};
-  String? _defaultSink;
+  final PactlSinkTracker _tracker = PactlSinkTracker();
   bool _disposed = false;
   bool _loggedFailure = false;
+
+  /// 并发刷新代次：只有最新一次刷新的结果可以覆盖快照。被更新事件取代的
+  /// 旧查询直接丢弃，避免慢查询把较新的默认 sink 写回旧值。
+  int _refreshGeneration = 0;
+
+  /// 被更新刷新取代 / 合并的「旧默认名消失」通知：不能因为后一次刷新只关心
+  /// 快照就把前一次的输出丢失吞掉；下一次成功应用快照时补发。
+  bool _notifyOnNextSnapshot = false;
 
   /// 启动订阅。失败（无 `pactl` / 无服务器）静默返回，调用方继续播放。
   Future<void> start() async {
@@ -101,38 +109,25 @@ class PactlOutputWatcher {
     if (_disposed) return;
     final event = parsePactlEvent(line);
     if (event == null) return;
-    switch (event.facility) {
-      case 'server':
-        // 默认 sink 切换 / 服务器状态变化：刷新快照；若旧默认 sink 已不在
-        // 列表里（部分服务器先发 change 再发 remove），按输出丢失处理。
-        if (event.kind == PactlEventKind.changed ||
-            event.kind == PactlEventKind.added) {
-          unawaited(_refreshSinks(notifyIfDefaultMissing: true));
-        }
-      case 'sink':
-        if (event.kind == PactlEventKind.removed) {
-          final removedName = event.id == null ? null : _sinkNames[event.id];
-          final wasDefault = removedName != null && removedName == _defaultSink;
-          // 已知是默认 sink 时只刷新快照（避免同一事件重复上报）；id 不在表里
-          // 时才靠「旧默认名已从列表消失」兜底判断。
-          unawaited(_refreshSinks(notifyIfDefaultMissing: !wasDefault));
-          if (wasDefault) _emit();
-        } else if (event.kind == PactlEventKind.added ||
-            event.kind == PactlEventKind.changed) {
-          // 新增 / 变化只刷新 id→name 与默认值，不暂停：用户可能只是主动
-          // 切换输出。
-          unawaited(_refreshSinks(notifyIfDefaultMissing: false));
-        }
-      default:
-        // source / sink-input / client / card 等与播放输出无关。
-        break;
+    final action = _tracker.onEvent(event);
+    if (action.emitOutputLost) {
+      // 已知默认 sink 被移除：立即上报，刷新只更新快照。
+      unawaited(
+        _refreshSinks(notifyIfDefaultMissing: action.notifyIfDefaultMissing),
+      );
+      _emit();
+    } else if (action.refresh) {
+      unawaited(
+        _refreshSinks(notifyIfDefaultMissing: action.notifyIfDefaultMissing),
+      );
     }
   }
 
   Future<void> _refreshSinks({required bool notifyIfDefaultMissing}) async {
     if (_disposed) return;
-    final previousDefault = _defaultSink;
-    final names = <String>{};
+    final generation = ++_refreshGeneration;
+    if (notifyIfDefaultMissing) _notifyOnNextSnapshot = true;
+
     final idNames = <int, String>{};
     try {
       final list = await Process.run(executable, const [
@@ -148,7 +143,6 @@ class PactlOutputWatcher {
         final name = fields[1].trim();
         if (id == null || name.isEmpty) continue;
         idNames[id] = name;
-        names.add(name);
       }
     } on ProcessException catch (error) {
       _logFailureOnce(error);
@@ -156,35 +150,45 @@ class PactlOutputWatcher {
     } catch (_) {
       return;
     }
-    if (_disposed) return;
-    final currentDefault = await _queryDefaultSink();
-    if (_disposed) return;
-    _sinkNames
-      ..clear()
-      ..addAll(idNames);
-    _defaultSink = currentDefault;
-    final disappeared =
-        previousDefault != null &&
-        previousDefault.isNotEmpty &&
-        !names.contains(previousDefault);
-    if (notifyIfDefaultMissing && disappeared) _emit();
+    // 旧查询晚到：不覆盖更新的快照；累积的通知由最新查询补发。
+    if (_disposed || generation != _refreshGeneration) return;
+
+    final query = await _queryDefaultSink();
+    if (_disposed || generation != _refreshGeneration) return;
+
+    final lost = _tracker.applySnapshot(
+      PactlSinkSnapshot(
+        sinkNamesById: idNames,
+        defaultSink: query.name,
+        defaultSinkKnown: query.succeeded,
+      ),
+    );
+    final notify = _notifyOnNextSnapshot;
+    _notifyOnNextSnapshot = false;
+    if (notify && lost) _emit();
   }
 
   /// `pactl get-default-sink`（PulseAudio 14+ / PipeWire）；旧版本退回解析
   /// `pactl info` 的 `Default Sink:` 行。
-  Future<String?> _queryDefaultSink() async {
+  ///
+  /// [succeeded] 区分「服务器没有默认 sink」（成功但 name 为 null）与「查询
+  /// 失败」：后者必须保留 tracker 里的上一默认值，否则一次瞬时失败就会让本
+  /// 会话永久失去输出检测。
+  Future<({String? name, bool succeeded})> _queryDefaultSink() async {
     try {
       final direct = await Process.run(executable, const ['get-default-sink']);
       if (direct.exitCode == 0) {
         final name = '${direct.stdout}'.trim();
-        return name.isEmpty ? null : name;
+        return (name: name.isEmpty ? null : name, succeeded: true);
       }
       final info = await Process.run(executable, const ['info']);
-      if (info.exitCode != 0) return null;
+      if (info.exitCode != 0) {
+        return (name: null, succeeded: false);
+      }
       for (final line in const LineSplitter().convert('${info.stdout}')) {
         if (line.startsWith('Default Sink:')) {
           final name = line.substring('Default Sink:'.length).trim();
-          return name.isEmpty ? null : name;
+          return (name: name.isEmpty ? null : name, succeeded: true);
         }
       }
     } on ProcessException catch (error) {
@@ -192,7 +196,7 @@ class PactlOutputWatcher {
     } catch (_) {
       // 查询失败不是输出丢失：保持已知默认值，等下一次事件重试。
     }
-    return null;
+    return (name: null, succeeded: false);
   }
 
   void _emit() {
