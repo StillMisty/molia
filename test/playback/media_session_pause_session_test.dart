@@ -21,6 +21,8 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/domain/models/play_mode.dart';
+import 'package:molia/app/bootstrap/playback_stack.dart';
+import 'package:molia/playback/audio_session_lifecycle.dart';
 import 'package:molia/playback/local_audio_handler.dart';
 import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/playback/media_session_copy.dart';
@@ -34,6 +36,7 @@ import 'package:molia/sources/source_track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_media_session_backend.dart';
+import '../support/fake_platform_audio_port.dart';
 import '../support/fakes.dart';
 import '../support/settings_test_support.dart';
 
@@ -482,4 +485,63 @@ void main() {
     expect(await store.loadRaw(), isNull);
     expect(await PlaybackSessionStore().load(), isNull);
   });
+
+  test('组合根：媒体会话成功返回后才通知音频会话生命周期（失败不通知）', () async {
+    final harness = _Harness();
+    addTearDown(harness.dispose);
+
+    Future<_AudioSessionRun> run({
+      required LocalAudioHandler? returnedHandler,
+    }) async {
+      final port = FakePlatformAudioPort();
+      final settings = ValueNotifier<bool>(true);
+      addTearDown(settings.dispose);
+      final lifecycle = AudioSessionLifecycle(
+        port: port,
+        playWithOtherApps: settings,
+        platform: TargetPlatform.android,
+      );
+      var factoryCalls = 0;
+      final handler = await activateSystemMediaSessionForPlayback(
+        factory: (service, session) async {
+          factoryCalls++;
+          // 组合根把同一个服务与生命周期交给工厂 / 启动钩子。
+          expect(service, same(harness.service));
+          expect(session, same(harness.session));
+          return returnedHandler;
+        },
+        service: harness.service,
+        session: harness.session,
+        audioSession: lifecycle,
+      );
+      await lifecycle.dispose();
+      return (handler: handler, port: port, factoryCalls: factoryCalls);
+    }
+
+    final failed = await run(returnedHandler: null);
+    expect(failed.handler, isNull);
+    expect(failed.factoryCalls, 1);
+    expect(
+      failed.port.calls.where((call) => call != 'dispose'),
+      isEmpty,
+      reason: '没有媒体会话就没有绕过端口的平台激活，不该释放/重配置',
+    );
+
+    final succeeded = await run(returnedHandler: harness.handler);
+    expect(succeeded.handler, same(harness.handler));
+    expect(succeeded.factoryCalls, 1);
+    expect(succeeded.port.calls.take(3), [
+      'start',
+      'configure',
+      'deactivate:notify',
+    ]);
+    expect(succeeded.port.deactivateCalls, 1);
+    expect(succeeded.port.deactivateNotifyOthers, [true]);
+  });
 }
+
+typedef _AudioSessionRun = ({
+  LocalAudioHandler? handler,
+  FakePlatformAudioPort port,
+  int factoryCalls,
+});

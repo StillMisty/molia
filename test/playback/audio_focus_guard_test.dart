@@ -8,13 +8,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/playback/audio_focus_guard.dart';
+import 'package:molia/playback/audio_focus_policy.dart';
+import 'package:molia/playback/audio_session_lifecycle.dart';
 import 'package:molia/playback/local_playback_service.dart';
 
-/// 记录型暂停动作（守卫的注入 seam）。
-class _RecordingPause {
-  int calls = 0;
+import '../support/fake_platform_audio_port.dart';
 
-  /// 本次暂停是否真的发生了（无曲目 / 本来已暂停 → false）。
+/// 记录型动作（守卫的注入 seam）。
+class _RecordingBoolAction {
+  int calls = 0;
   bool result = true;
 
   Future<bool> call() async {
@@ -23,7 +25,7 @@ class _RecordingPause {
   }
 }
 
-class _RecordingResume {
+class _RecordingAction {
   int calls = 0;
 
   Future<void> call() async {
@@ -32,20 +34,15 @@ class _RecordingResume {
 }
 
 /// 只记录暂停调用的服务替身：不触碰播放器平台通道，验证真实接线
-/// （中断流 → 守卫 → `LocalPlaybackService.pause`）。
+/// （端口事件流 → 守卫 → `LocalPlaybackService.pause`）。
 class _RecordingService extends LocalPlaybackService {
   _RecordingService({
-    required Stream<AudioInterruptionEvent> interruptions,
+    required AudioSessionLifecycle audioSession,
     super.playWithOtherApps,
-    Stream<void>? becomingNoisy,
-    Stream<AudioDevicesChangedEvent>? devicesChanged,
   }) : super(
          resolver: (track, {String? quality}) async =>
              PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
-         // 注入假流：走 `_configureAudioSession` 的守卫装配，不初始化插件会话。
-         audioInterruptions: interruptions,
-         audioBecomingNoisy: becomingNoisy,
-         audioDevicesChanged: devicesChanged,
+         audioSession: audioSession,
        );
 
   int pauseCalls = 0;
@@ -67,21 +64,40 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('AudioFocusGuard', () {
-    late bool shouldPause;
-    late _RecordingPause pause;
-    late _RecordingResume resume;
+    late bool playWithOtherApps;
+    late TargetPlatform platform;
+    late _RecordingBoolAction pause;
+    late _RecordingBoolAction duck;
+    late _RecordingAction resume;
+    late _RecordingAction restore;
+    late _RecordingAction settled;
     late StreamController<AudioInterruptionEvent> events;
     late AudioFocusGuard guard;
 
     setUp(() {
-      shouldPause = true;
-      pause = _RecordingPause();
-      resume = _RecordingResume();
+      playWithOtherApps = true;
+      platform = TargetPlatform.android;
+      pause = _RecordingBoolAction();
+      duck = _RecordingBoolAction();
+      resume = _RecordingAction();
+      restore = _RecordingAction();
+      settled = _RecordingAction();
       events = StreamController<AudioInterruptionEvent>();
       guard = AudioFocusGuard(
-        shouldPause: () => shouldPause,
-        onFocusLoss: pause.call,
-        onFocusGain: resume.call,
+        actionFor:
+            (event, {required pausedForFocus, required duckedForFocus}) =>
+                audioFocusActionFor(
+                  event: event,
+                  playWithOtherApps: playWithOtherApps,
+                  platform: platform,
+                  pausedForFocus: pausedForFocus,
+                  duckedForFocus: duckedForFocus,
+                ),
+        onPause: pause.call,
+        onResume: resume.call,
+        onDuck: duck.call,
+        onRestore: restore.call,
+        onSettled: settled.call,
       );
       guard.attach(events.stream);
     });
@@ -91,80 +107,132 @@ void main() {
       await events.close();
     });
 
-    test('丢失焦点（begin）→ 暂停一次；系统可续播的 end → 续播一次', () async {
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
+    Future<void> addAndPump(AudioInterruptionEvent event) async {
+      events.add(event);
       await pumpEventQueue();
+    }
+
+    test('关闭混播：丢失焦点 → 暂停；可续播的 end → 续播', () async {
+      playWithOtherApps = false;
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.pause),
+      );
       expect(pause.calls, 1);
 
-      events.add(AudioInterruptionEvent(false, AudioInterruptionType.pause));
-      await pumpEventQueue();
+      await addAndPump(
+        AudioInterruptionEvent(false, AudioInterruptionType.pause),
+      );
       expect(resume.calls, 1);
+      expect(settled.calls, 1);
     });
 
-    test('策略关闭暂停时：begin / end 都不动作', () async {
-      shouldPause = false;
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
-      await pumpEventQueue();
+    test('开启混播：duck begin 压低、duck end 恢复一次', () async {
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.duck),
+      );
+      expect(duck.calls, 1);
       expect(pause.calls, 0);
 
-      events.add(AudioInterruptionEvent(false, AudioInterruptionType.pause));
-      await pumpEventQueue();
+      await addAndPump(
+        AudioInterruptionEvent(false, AudioInterruptionType.duck),
+      );
+      expect(restore.calls, 1);
       expect(resume.calls, 0);
     });
 
-    test('duck 类型的 begin 按暂停处理，duck end 不续播', () async {
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.duck));
-      await pumpEventQueue();
-      expect(pause.calls, 1);
+    test('永久失焦（unknown）在混播开启时忽略', () async {
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.unknown),
+      );
+      expect(pause.calls, 0);
+      expect(duck.calls, 0);
 
-      events.add(AudioInterruptionEvent(false, AudioInterruptionType.duck));
-      await pumpEventQueue();
+      await addAndPump(
+        AudioInterruptionEvent(false, AudioInterruptionType.unknown),
+      );
+      expect(resume.calls, 0);
+      expect(restore.calls, 0);
+    });
+
+    test('未压低过的 duck end 不恢复；未暂停过的 pause end 不续播', () async {
+      await addAndPump(
+        AudioInterruptionEvent(false, AudioInterruptionType.duck),
+      );
+      expect(restore.calls, 0);
+
+      await addAndPump(
+        AudioInterruptionEvent(false, AudioInterruptionType.pause),
+      );
       expect(resume.calls, 0);
     });
 
-    test('不可续播的结束事件（unknown）不续播', () async {
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
-      await pumpEventQueue();
-      expect(pause.calls, 1);
+    test('可续播的结束事件是 unknown 时不续播，但清掉暂停记账', () async {
+      playWithOtherApps = false;
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.pause),
+      );
+      await addAndPump(
+        AudioInterruptionEvent(false, AudioInterruptionType.unknown),
+      );
+      expect(resume.calls, 0);
 
-      events.add(AudioInterruptionEvent(false, AudioInterruptionType.unknown));
-      await pumpEventQueue();
+      // 记账已清：再来的 pause end 不会补播。
+      await addAndPump(
+        AudioInterruptionEvent(false, AudioInterruptionType.pause),
+      );
       expect(resume.calls, 0);
     });
 
     test('暂停动作返回 false（本来没在播）→ 结束时不续播', () async {
+      playWithOtherApps = false;
       pause.result = false;
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
-      await pumpEventQueue();
-      expect(pause.calls, 1);
-
-      events.add(AudioInterruptionEvent(false, AudioInterruptionType.pause));
-      await pumpEventQueue();
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.pause),
+      );
+      await addAndPump(
+        AudioInterruptionEvent(false, AudioInterruptionType.pause),
+      );
       expect(resume.calls, 0);
     });
 
-    test('连续 begin 事件每次都暂停（幂等性由动作侧负责）', () async {
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.unknown));
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
-      await pumpEventQueue();
-      expect(pause.calls, 2);
+    test('压低动作返回 false（暂停 / 停止中）→ 结束时也不恢复', () async {
+      duck.result = false;
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.duck),
+      );
+      expect(duck.calls, 1);
+      await addAndPump(
+        AudioInterruptionEvent(false, AudioInterruptionType.duck),
+      );
+      expect(restore.calls, 0);
     });
 
-    test('end 事件在前、begin 在后：只有 begin 触发', () async {
-      events.add(AudioInterruptionEvent(false, AudioInterruptionType.unknown));
-      await pumpEventQueue();
+    test('用户手动操作取消待续播与待恢复', () async {
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.duck),
+      );
+      guard.cancelPendingInterruption();
+      await addAndPump(
+        AudioInterruptionEvent(false, AudioInterruptionType.duck),
+      );
+      expect(restore.calls, 0);
+
+      playWithOtherApps = false;
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.pause),
+      );
+      guard.cancelPendingInterruption();
+      await addAndPump(
+        AudioInterruptionEvent(false, AudioInterruptionType.pause),
+      );
+      expect(resume.calls, 0);
+    });
+
+    test('end 事件在前、begin 在后：不动作', () async {
+      await addAndPump(
+        AudioInterruptionEvent(false, AudioInterruptionType.unknown),
+      );
       expect(pause.calls, 0);
-      expect(resume.calls, 0);
-    });
-
-    test('手动取消待续播后，焦点归还不抢播', () async {
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
-      await pumpEventQueue();
-      expect(pause.calls, 1);
-
-      guard.cancelPendingResume();
-      events.add(AudioInterruptionEvent(false, AudioInterruptionType.pause));
-      await pumpEventQueue();
       expect(resume.calls, 0);
     });
 
@@ -173,8 +241,9 @@ void main() {
       addTearDown(replacement.close);
       guard.attach(replacement.stream);
 
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
-      await pumpEventQueue();
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.pause),
+      );
       expect(pause.calls, 0);
 
       replacement.add(
@@ -185,6 +254,7 @@ void main() {
     });
 
     test('detach 后已排队的暂停不再执行', () async {
+      playWithOtherApps = false;
       events.add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
       await guard.detach();
       await pumpEventQueue();
@@ -192,79 +262,129 @@ void main() {
     });
 
     test('策略运行期切换：下一次事件按新值处理', () async {
-      shouldPause = false;
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
-      await pumpEventQueue();
-      expect(pause.calls, 0);
-
-      shouldPause = true;
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
-      await pumpEventQueue();
+      playWithOtherApps = false;
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.pause),
+      );
       expect(pause.calls, 1);
+
+      playWithOtherApps = true;
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.pause),
+      );
+      expect(pause.calls, 2, reason: 'planner 每次事件读取最新设置');
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.duck),
+      );
+      expect(duck.calls, 1);
+    });
+
+    test('duck 中收到永久失焦：恢复音量，避免 duck-end 丢失后一直发闷', () async {
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.duck),
+      );
+      expect(duck.calls, 1);
+
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.unknown),
+      );
+      expect(restore.calls, 1);
     });
   });
 
   group('LocalPlaybackService 接线', () {
-    test('开启同时播放（默认）→ 焦点丢失不暂停', () async {
-      final events = StreamController<AudioInterruptionEvent>();
-      addTearDown(events.close);
-      final service = _RecordingService(interruptions: events.stream);
-      await pumpEventQueue();
+    late FakePlatformAudioPort port;
+    late ValueNotifier<bool> settings;
 
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
-      await pumpEventQueue();
-      expect(service.pauseCalls, 0);
+    setUp(() {
+      port = FakePlatformAudioPort();
+      settings = ValueNotifier<bool>(true);
     });
 
-    test('关闭同时播放 → 焦点丢失暂停；设置切换即时生效', () async {
-      final events = StreamController<AudioInterruptionEvent>();
-      addTearDown(events.close);
-      final settings = ValueNotifier<bool>(false);
-      addTearDown(settings.dispose);
+    tearDown(() async {
+      settings.dispose();
+      await port.dispose();
+    });
+
+    AudioSessionLifecycle lifecycle() => AudioSessionLifecycle(
+      port: port,
+      playWithOtherApps: settings,
+      platform: TargetPlatform.android,
+    );
+
+    test('开启同时播放 → 其他播放器出声暂停、duck 不暂停', () async {
       final service = _RecordingService(
-        interruptions: events.stream,
+        audioSession: lifecycle(),
         playWithOtherApps: settings,
       );
       await pumpEventQueue();
 
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
+      port.emitInterruption(
+        AudioInterruptionEvent(true, AudioInterruptionType.unknown),
+      );
+      await pumpEventQueue();
+      expect(service.pauseCalls, 0);
+
+      port.emitInterruption(
+        AudioInterruptionEvent(true, AudioInterruptionType.pause),
+      );
+      await pumpEventQueue();
+      expect(service.pauseCalls, 1, reason: '混播只忽略永久失焦，不忽略暂停型中断');
+
+      port.emitInterruption(
+        AudioInterruptionEvent(true, AudioInterruptionType.duck),
+      );
+      await pumpEventQueue();
+      expect(service.pauseCalls, 1, reason: 'duck 走压低，不暂停');
+    });
+
+    test('关闭同时播放 → 任何焦点丢失都暂停；设置切换即时生效', () async {
+      settings.value = false;
+      final service = _RecordingService(
+        audioSession: lifecycle(),
+        playWithOtherApps: settings,
+      );
+      await pumpEventQueue();
+
+      port.emitInterruption(
+        AudioInterruptionEvent(true, AudioInterruptionType.pause),
+      );
       await pumpEventQueue();
       expect(service.pauseCalls, 1);
 
       settings.value = true;
-      events.add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
+      port.emitInterruption(
+        AudioInterruptionEvent(true, AudioInterruptionType.pause),
+      );
       await pumpEventQueue();
-      expect(service.pauseCalls, 1, reason: '开启后不再因为焦点丢失暂停');
+      expect(service.pauseCalls, 2, reason: '混播开启后 pause 型中断仍应暂停');
+      port.emitInterruption(
+        AudioInterruptionEvent(true, AudioInterruptionType.unknown),
+      );
+      await pumpEventQueue();
+      expect(service.pauseCalls, 2, reason: '开启后永久失焦忽略');
     });
 
     test('耳机拔出事件 → 暂停（just_audio 内建处理已关闭）', () async {
-      final events = StreamController<AudioInterruptionEvent>();
-      final noisy = StreamController<void>();
-      addTearDown(events.close);
-      addTearDown(noisy.close);
       final service = _RecordingService(
-        interruptions: events.stream,
-        becomingNoisy: noisy.stream,
+        audioSession: lifecycle(),
+        playWithOtherApps: settings,
       );
       await pumpEventQueue();
 
-      noisy.add(null);
+      port.emitOutputLost();
       await pumpEventQueue();
       expect(service.pauseCalls, 1);
     });
 
     test('蓝牙输出断开 → 暂停（设备回调不依赖音频焦点）', () async {
-      final events = StreamController<AudioInterruptionEvent>();
-      final devices = StreamController<AudioDevicesChangedEvent>();
-      addTearDown(events.close);
-      addTearDown(devices.close);
       final service = _RecordingService(
-        interruptions: events.stream,
-        devicesChanged: devices.stream,
+        audioSession: lifecycle(),
+        playWithOtherApps: settings,
       );
       await pumpEventQueue();
 
-      devices.add(
+      port.emitDeviceChanges(
         AudioDevicesChangedEvent(
           devicesRemoved: {_device('bt', AudioDeviceType.bluetoothA2dp)},
         ),
@@ -274,17 +394,13 @@ void main() {
     });
 
     test('内置扬声器被移除（路由切到耳机）→ 不暂停', () async {
-      final events = StreamController<AudioInterruptionEvent>();
-      final devices = StreamController<AudioDevicesChangedEvent>();
-      addTearDown(events.close);
-      addTearDown(devices.close);
       final service = _RecordingService(
-        interruptions: events.stream,
-        devicesChanged: devices.stream,
+        audioSession: lifecycle(),
+        playWithOtherApps: settings,
       );
       await pumpEventQueue();
 
-      devices.add(
+      port.emitDeviceChanges(
         AudioDevicesChangedEvent(
           devicesRemoved: {_device('speaker', AudioDeviceType.builtInSpeaker)},
         ),
@@ -293,15 +409,15 @@ void main() {
       expect(service.pauseCalls, 0);
     });
 
-    test('未注入中断流时构造不抛（无插件实现路径）', () async {
+    test('未注入生命周期时构造不抛（桌面 no-op 端口）', () async {
       final service = LocalPlaybackService(
         resolver: (track, {String? quality}) async =>
             PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
       );
       await pumpEventQueue();
-      // 测试环境没有 audio_session 插件：配置失败只记日志，不影响服务可用。
       expect(service.hasTrack, isFalse);
       expect(service.isPlaying, isFalse);
+      service.dispose();
     });
   });
 }

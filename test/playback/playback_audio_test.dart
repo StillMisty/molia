@@ -5,6 +5,7 @@ import 'audio_cache_completion_recorder_cases.dart' as cache_completion;
 import 'audio_cache_source_cases.dart' as audio_cache_source;
 import 'audio_focus_policy_cases.dart' as audio_focus_policy;
 import 'audio_output_policy_cases.dart' as audio_output_policy;
+import 'audio_session_lifecycle_cases.dart' as audio_session_lifecycle;
 import 'local_playback_shutdown_cases.dart' as local_playback_shutdown;
 import 'playback_power_policy_cases.dart' as playback_power_policy;
 
@@ -14,6 +15,7 @@ void main() {
   group('audio cache source', audio_cache_source.main);
   group('audio focus policy', audio_focus_policy.main);
   group('audio output policy', audio_output_policy.main);
+  group('audio session lifecycle', audio_session_lifecycle.main);
   group('local playback shutdown', local_playback_shutdown.main);
   group('playback power policy', playback_power_policy.main);
 }

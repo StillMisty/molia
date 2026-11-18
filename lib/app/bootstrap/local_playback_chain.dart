@@ -16,6 +16,7 @@ import '../../data/playback/playback_engine.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/music_source.dart' show PlayableStream;
 import '../../playback/audio_cache_completion_recorder.dart';
+import '../../playback/audio_session_lifecycle.dart';
 import '../../playback/local_playback_service.dart';
 import '../../playback/next_track_preloader.dart';
 import '../../playback/playback_power_policy.dart';
@@ -78,12 +79,14 @@ class LocalPlaybackChain {
 
   LocalPlaybackService buildService({
     required ValueListenable<bool> playWithOtherApps,
+    required AudioSessionLifecycle audioSession,
     Future<Set<String>> Function()? recentTrackIds,
   }) => LocalPlaybackService(
     preferredQuality: preferredQuality,
     resolver: resolveSourceStream,
     powerPolicy: powerPolicy,
     playWithOtherApps: playWithOtherApps,
+    audioSession: audioSession,
     recentTrackIds: recentTrackIds,
     // 下一首预载：起播后预热直链（命中取链缓存）+ 音频字节预取到缓存。
     nextTrackPreloader: NextTrackPreloader(

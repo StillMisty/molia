@@ -761,7 +761,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsPlayWithOtherAppsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Navigation and videos won\'t interrupt music'**
+  /// **'Navigation and voice prompts lower the music instead of stopping it'**
   String get settingsPlayWithOtherAppsSubtitle;
 
   /// No description provided for @settingsLibraryAddPosition.

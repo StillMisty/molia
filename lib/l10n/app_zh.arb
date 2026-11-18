@@ -131,7 +131,7 @@
   "settingsRestoreSessionTitle": "启动时恢复上次播放",
   "settingsRestoreSessionSubtitle": "恢复上次的曲目、队列与进度",
   "settingsPlayWithOtherApps": "与其他应用同时播放",
-  "settingsPlayWithOtherAppsSubtitle": "导航、视频等声音不会打断音乐",
+  "settingsPlayWithOtherAppsSubtitle": "导航、语音提示等声音会压低音乐，而不是打断播放",
   "settingsLibraryAddPosition": "加入收藏与列表的位置",
   "settingsLibraryAddPositionSubtitle": "",
   "settingsLibraryAddPositionTop": "顶部",

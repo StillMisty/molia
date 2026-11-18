@@ -7,6 +7,7 @@ import 'package:just_audio/just_audio.dart';
 
 import '../app/perf/playback_start_trace.dart';
 import '../data/files/local_locator.dart';
+import '../domain/models/failure.dart';
 import '../domain/ports/music_source.dart' show PlayableStream;
 import '../domain/models/play_mode.dart';
 import '../services/audio_cache_platform.dart';
@@ -19,8 +20,10 @@ import 'audio_cache_writer_registry.dart';
 import 'audio_focus_guard.dart';
 import 'audio_focus_policy.dart';
 import 'audio_output_policy.dart';
+import 'audio_session_lifecycle.dart';
 import 'fade_envelope.dart';
 import 'next_track_preloader.dart';
+import 'platform_audio_port_factory.dart';
 import 'playback_order.dart';
 import 'playback_power_policy.dart';
 import 'playing_track_cache_writer.dart';
@@ -152,34 +155,18 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 本会话内不再尝试边播边缓存，直接流播。
   bool _audioCacheUnsupported = false;
 
-  /// 音频中断事件流（audio_session 的 `interruptionEventStream`）。
+  /// 平台音频会话生命周期（配置 / 激活 / 释放的唯一所有者，ADR-0035）。
   ///
-  /// 生产路径为 null：服务在 [_configureAudioSession] 里从 `AudioSession.instance`
-  /// 取（桌面无插件实现时跳过，保持桌面端现状）；测试注入假流，
-  /// 不触碰插件通道即可验证「焦点丢失 → 暂停」接线。
-  final Stream<AudioInterruptionEvent>? _interruptionsOverride;
-
-  /// 耳机拔出事件流（audio_session 的 `becomingNoisyEventStream`）。
-  ///
-  /// 同样只给测试注入；生产从会话取。just_audio 的内建中断处理被关闭后，
-  /// 这个原本由它负责的「拔耳机即暂停」必须在服务里补上。
-  final Stream<void>? _becomingNoisyOverride;
-
-  /// 输出设备增删事件流（audio_session 的 `devicesChangedEventStream`）。
-  ///
-  /// 为什么需要它：audio_session 的 noisy receiver 只在持有音频焦点时注册，
-  /// 永久失焦（开了「与其他应用同时播放」后很常见）会被插件反注册，此后
-  /// 拔线 / 蓝牙断链收不到 `becomingNoisyEventStream`。设备回调不依赖焦点，
-  /// 作为「换输出路由必须暂停」的兜底；测试注入假流，生产从会话取。
-  final Stream<AudioDevicesChangedEvent>? _audioDevicesOverride;
+  /// 生产由组合根创建并注入（组合根同时持有它，媒体会话激活后调用
+  /// `onSystemMediaSessionActivated`）；测试注入记录型假端口。
+  late final AudioSessionLifecycle _audioSession;
 
   /// 「与其他应用同时播放」偏好（设置 › 播放，默认开）。
   ///
-  /// 事件到达时读当前值，开关切换即时生效；同时作为会话配置的变更信号
-  /// （iOS / macOS 需要切换 `mixWithOthers`）。
+  /// 事件到达时读当前值；会话配置的变更监听在生命周期内部（同一实例）。
   final ValueListenable<bool> _playWithOtherApps;
 
-  /// 音频焦点守卫（其他应用出声 → [pause]），[_configureAudioSession] 内装配。
+  /// 音频焦点守卫（暂停 / 压低 / 续播 / 恢复），[_startAudioSession] 内装配。
   AudioFocusGuard? _focusGuard;
 
   StreamSubscription<void>? _becomingNoisySubscription;
@@ -197,8 +184,18 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 持久化、不暴露第二套音量 API，[volume] 也只回报这个基值。
   double _baseVolume = 1.0;
 
-  /// 当前包络倍数（0..1）；播放器实际音量 = 基值 × 包络。
+  /// 当前包络倍数（0..1）；播放器实际音量 = 基值 × 包络 × duck。
   double _envelope = 1.0;
+
+  /// 系统语音提示压低音乐的倍数（正常 1.0，duck 中默认 0.2）。
+  ///
+  /// 只经 [_applyEffectiveVolume] 生效：用户音量 / 静音仍是基值，duck 复位
+  /// 回到「当前基值 × 当前包络」，不会覆盖用户中途改过的音量。
+  double _duckGain = 1.0;
+
+  /// duck 的短斜坡：直接跳变会有可闻的「咔」声；只有 80ms，不参与暂停淡变。
+  static const Duration _duckRampDuration = Duration(milliseconds: 80);
+  Timer? _duckTimer;
 
   /// 用户暂停 / 播放淡变时长；[Duration.zero] = 关闭。
   Duration _fadeDuration;
@@ -300,7 +297,7 @@ class LocalPlaybackService extends ChangeNotifier {
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
-  String? _lastError;
+  Object? _lastError;
 
   StreamSubscription<PlayerState>? _playerStateSubscription;
   StreamSubscription<PlayerException>? _errorSubscription;
@@ -326,8 +323,12 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 「当前曲目播完即停止」的一次性标志（定时关闭用）。
   bool _stopAfterCurrentTrack = false;
 
-  static AudioPlayer _newAudioPlayer() =>
-      AudioPlayer(handleInterruptions: false);
+  static AudioPlayer _newAudioPlayer() => AudioPlayer(
+    // 中断归 AudioFocusGuard，激活归 AudioSessionLifecycle：just_audio 自己
+    // 在 play() 里激活会话会让「打开应用」或「暂停后」都抢音频（ADR-0035）。
+    handleInterruptions: false,
+    handleAudioSessionActivation: false,
+  );
 
   LocalPlaybackService({
     required this._resolver,
@@ -339,9 +340,7 @@ class LocalPlaybackService extends ChangeNotifier {
     CachingAudioSourceFactory? cachingAudioSourceFactory,
     this._audioCachePlatformSupported,
     AudioCacheCompletionRecorder? cacheCompletionRecorder,
-    Stream<AudioInterruptionEvent>? audioInterruptions,
-    Stream<void>? audioBecomingNoisy,
-    Stream<AudioDevicesChangedEvent>? audioDevicesChanged,
+    AudioSessionLifecycle? audioSession,
     ValueListenable<bool>? playWithOtherApps,
     PlaybackPowerPolicy? powerPolicy,
     // 组合根注入的「最近听过」只读证据；只有播放层拿到的 Set，没有统计 /
@@ -365,9 +364,6 @@ class LocalPlaybackService extends ChangeNotifier {
        _cacheCompletionRecorder =
            cacheCompletionRecorder ??
            AudioCacheCompletionRecorder(onCompleted: (_) {}),
-       _interruptionsOverride = audioInterruptions,
-       _becomingNoisyOverride = audioBecomingNoisy,
-       _audioDevicesOverride = audioDevicesChanged,
        _playWithOtherApps = playWithOtherApps ?? _alwaysPlayWithOtherApps,
        _powerPolicy = powerPolicy ?? PlaybackPowerPolicy(),
        // ignore: prefer_initializing_formals
@@ -377,8 +373,13 @@ class LocalPlaybackService extends ChangeNotifier {
        // ignore: prefer_initializing_formals
        _smartShuffleEnabled = smartShuffleEnabled,
        _shuffleOrder = PlaybackShuffleOrder(random: random) {
+    _audioSession =
+        audioSession ??
+        AudioSessionLifecycle(
+          port: createPlatformAudioPort(),
+          playWithOtherApps: _playWithOtherApps,
+        );
     _playerStateSubscription = _player.playerStateStream.listen(_onPlayerState);
-    _playWithOtherApps.addListener(_onPlayWithOtherAppsChanged);
     // 曲末解码错误也要收：源文件最后一帧损坏时不会走 completed，见
     // [_onPlayerError] / 已知坑 78。
     _errorSubscription = _player.errorStream.listen(_onPlayerError);
@@ -386,10 +387,9 @@ class LocalPlaybackService extends ChangeNotifier {
     // 轮询；后台暂停 = 不采样），切换时先取消旧订阅 / Timer。
     _powerPolicy.addListener(_syncPositionSampling);
     _syncPositionSampling();
-    // 配置系统音频会话（音乐类型）：iOS 后台播放、Android 音频焦点/duck，
-    // 并按「与其他应用同时播放」接入中断 / 耳机拔出 / 输出设备变化。不阻塞
-    // 构造；不支持的平台内部跳过。
-    unawaited(_configureAudioSession());
+    // 配置平台音频会话并接入中断 / 耳机拔出 / 输出设备变化。会话的配置与
+    // 激活归生命周期；这里只负责把事件接到播放动作。不阻塞构造。
+    unawaited(_startAudioSession());
   }
 
   /// 当前位置采样档位（测试观察用；生产只经 [_syncPositionSampling] 演进）。
@@ -505,83 +505,39 @@ class LocalPlaybackService extends ChangeNotifier {
     _handleTrackCompleted();
   }
 
-  /// 是否有 audio_session 插件实现（Linux/Windows 没有）。
-  bool get _usesAudioSession =>
-      defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.iOS ||
-      defaultTargetPlatform == TargetPlatform.macOS;
-
-  /// 当前偏好对应的音乐会话配置（平台差异见 `audio_focus_policy.dart`）。
-  AudioSessionConfiguration get _sessionConfiguration =>
-      audioSessionConfigurationFor(
-        playWithOtherApps: _playWithOtherApps.value,
-        platform: defaultTargetPlatform,
-      );
-
-  /// 配置 audio_session + 装配音频焦点 / 耳机拔出 / 输出设备监听。
+  /// 启动端口并装配中断 / 耳机拔出 / 输出设备监听。
   ///
-  /// 注入假流（测试）时只走守卫接线，不触碰插件通道；Linux/Windows 没有
-  /// audio_session 实现，按平台跳过，保持桌面端现状。
-  Future<void> _configureAudioSession() async {
-    final injectedInterruptions = _interruptionsOverride;
-    final injectedNoisy = _becomingNoisyOverride;
-    final injectedDevices = _audioDevicesOverride;
-    if (injectedInterruptions != null ||
-        injectedNoisy != null ||
-        injectedDevices != null) {
-      if (injectedInterruptions != null) {
-        _attachFocusGuard(injectedInterruptions);
-      }
-      if (injectedNoisy != null) {
-        _attachBecomingNoisy(injectedNoisy);
-      }
-      if (injectedDevices != null) {
-        _attachDeviceChanges(injectedDevices);
-      }
-      return;
-    }
-    if (!_usesAudioSession) return;
+  /// 端口没有真实实现（桌面 / 测试）时只有空流，接线保持 no-op；移动端
+  /// 配置 / 激活 / 释放全部由 [AudioSessionLifecycle] 决定。
+  Future<void> _startAudioSession() async {
     try {
-      final session = await AudioSession.instance;
-      await session.configure(_sessionConfiguration);
-      _attachFocusGuard(session.interruptionEventStream);
-      _attachBecomingNoisy(session.becomingNoisyEventStream);
-      _attachDeviceChanges(session.devicesChangedEventStream);
+      await _audioSession.start();
     } catch (e) {
-      debugPrint('[LocalPlayback] 音频会话配置失败: $e');
+      debugPrint('[LocalPlayback] 音频会话启动失败: $e');
     }
+    if (!_audioSession.supported || _playerDisposed) return;
+    _attachFocusGuard(_audioSession.interruptions);
+    _attachBecomingNoisy(_audioSession.outputLost);
+    _attachDeviceChanges(_audioSession.deviceChanges);
   }
 
-  /// 设置切换后重新应用会话配置（iOS / macOS 的 `mixWithOthers`）。
-  Future<void> _reconfigureAudioSession() async {
-    if (_interruptionsOverride != null ||
-        _becomingNoisyOverride != null ||
-        _audioDevicesOverride != null) {
-      return;
-    }
-    if (!_usesAudioSession) return;
-    try {
-      final session = await AudioSession.instance;
-      await session.configure(_sessionConfiguration);
-    } catch (e) {
-      debugPrint('[LocalPlayback] 音频会话重新配置失败: $e');
-    }
-  }
-
-  void _onPlayWithOtherAppsChanged() {
-    unawaited(_reconfigureAudioSession());
-  }
-
-  /// 装配音频焦点守卫：其他应用夺走焦点时按设置暂停（语义见 [AudioFocusGuard]）。
+  /// 装配音频焦点守卫：事件 → 纯策略动作 → 暂停 / 压低 / 续播 / 恢复。
   void _attachFocusGuard(Stream<AudioInterruptionEvent> interruptions) {
     final guard = _focusGuard ??= AudioFocusGuard(
-      shouldPause: () => shouldPauseForAudioFocus(
-        playWithOtherApps: _playWithOtherApps.value,
-        platform: defaultTargetPlatform,
-      ),
-      // fromInterruption 不取消自身登记的「待续播」。
-      onFocusLoss: () => pause(fromInterruption: true),
-      onFocusGain: _resumeAfterAudioFocus,
+      actionFor: (event, {required pausedForFocus, required duckedForFocus}) =>
+          audioFocusActionFor(
+            event: event,
+            playWithOtherApps: _playWithOtherApps.value,
+            platform: _audioSession.platform,
+            pausedForFocus: pausedForFocus,
+            duckedForFocus: duckedForFocus,
+          ),
+      // fromInterruption 不取消自身登记的「待续播 / 待恢复」。
+      onPause: () => pause(fromInterruption: true),
+      onResume: _resumeAfterAudioFocus,
+      onDuck: _duckForInterruption,
+      onRestore: _restoreFromDuck,
+      onSettled: _onInterruptionSettled,
     );
     guard.attach(interruptions);
   }
@@ -623,11 +579,66 @@ class LocalPlaybackService extends ChangeNotifier {
     _resumeCurrentTrack(fadeIn: true);
   }
 
+  /// 所有「开始出声」路径的唯一入口：先激活会话，再让播放器 play。
+  ///
+  /// 激活被拒（通话 / 其他应用占着焦点）时在生命周期里保留意图、等一次
+  /// 中断结束重试，最多约 5 秒；超时按可重试的播放失败上报，不静默挂起。
+  /// [requestId] 用于丢弃已被新一次装载取代的起播请求。
+  Future<bool> _activateAndPlay({required bool fadeIn, int? requestId}) async {
+    if (_playerDisposed) return false;
+    final granted = await _audioSession.onStartRequested();
+    if (_playerDisposed) return false;
+    if (requestId != null && requestId != _playRequestId) return false;
+    if (!granted) {
+      _lastError = const SourceFailure(
+        kind: FailureKind.playback,
+        message: 'audio session unavailable',
+        retryable: true,
+      );
+      _wantsPlayback = false;
+      _isPlaying = false;
+      notifyListeners();
+      return false;
+    }
+    // 起播即复位 duck：上一首的 duck-end 即使丢失，也不会让新歌发闷。
+    _resetDuck();
+    final rampIn = fadeIn && await _prepareFadeIn();
+    _audioSession.onPlaybackStarted();
+    unawaited(
+      _player.play().catchError((Object e) {
+        if (requestId != null && requestId != _playRequestId) return;
+        _lastError = e.toString();
+        _isPlaying = false;
+        notifyListeners();
+      }),
+    );
+    if (rampIn) unawaited(_runEnvelope(1.0, _fadeDuration));
+    return true;
+  }
+
+  /// 压低当前播放（系统语音提示）；暂停 / 停止 / 无曲目时忽略。
+  Future<bool> _duckForInterruption() async {
+    if (_playerDisposed || !_isPlaying || _currentTrack == null) return false;
+    _rampDuckTo(0.2);
+    return true;
+  }
+
+  /// 恢复用户自己的音量（含 duck 期间改过 / 静音的值）。
+  Future<void> _restoreFromDuck() async {
+    _rampDuckTo(1.0);
+  }
+
+  /// 中断结束且没有续播：这时才允许生命周期开始暂停释放计时。
+  Future<void> _onInterruptionSettled() async {
+    if (_wantsPlayback || _isPlaying || _currentTrack == null) return;
+    _audioSession.onInterruptionSettled();
+  }
+
   bool get hasTrack => _currentTrack != null;
   bool get isPlaying => _isPlaying;
   bool get isLoading => _isLoading;
   PlayMode get mode => _mode;
-  String? get lastError => _lastError;
+  Object? get lastError => _lastError;
   SourceTrack? get currentSourceTrack => _currentTrack;
 
   /// 当前曲目本次播放选用的音质（`PlaybackEngine` 快照用）。
@@ -838,6 +849,7 @@ class LocalPlaybackService extends ChangeNotifier {
       await _player.setVolume(volume);
     } catch (_) {}
     _envelope = 1.0;
+    _resetDuck(apply: false);
     _lastWrittenVolume = volume;
     _lastProcessingState = ProcessingState.idle;
     _sourceRegistrations = 0;
@@ -1070,11 +1082,12 @@ class LocalPlaybackService extends ChangeNotifier {
     // 继续出声（[_reloadCurrentStream]）。
     _wantsPlayback = autoplay;
     _pauseIntentPending = false;
-    // 切歌 / 换音质 / 换源都不继承半淡的音量：新源从用户音量开始。
+    // 切歌 / 换音质 / 换源都不继承半淡 / duck 的音量：新源从用户音量开始。
     // 淡入路径留给起播前自己把电平压到静音（见 [_prepareFadeIn]）。
+    _resetDuck(apply: false);
     if (!fadeIn) await _resetEnvelopeForSource();
-    // 新曲目 = 用户主动选择，撤销音频中断的待续播。
-    _focusGuard?.cancelPendingResume();
+    // 新曲目 = 用户主动选择，撤销音频中断的待续播 / 待恢复。
+    _focusGuard?.cancelPendingInterruption();
     // 切到不同曲目时把「离开的当前曲目」压入播放顺序；显式回退不重复压栈。
     if (recordHistory && _currentTrack != null && _currentIndex != index) {
       _order.record(_currentIndex);
@@ -1181,21 +1194,9 @@ class LocalPlaybackService extends ChangeNotifier {
       if (autoplay) {
         // 只有「从空 / 暂停的同一首重新起播」才淡入：播放启动前先把当前
         // 有效音量压到起点（暂停时是 0），避免出现第一声硬切。
-        final rampIn = fadeIn && await _prepareFadeIn();
-        // 播放启动后立即返回：just_audio 的 play() Future 在「播完/暂停」才
-        // 完成，挂在这里会拖住调用方（自动切歌完成处理器）并吞掉后续
-        // completed 事件；启动失败单独捕获进 lastError。
+        // 起播统一走会话激活 + play（激活失败时不启动）。
         startTrace?.markPlayRequested();
-        unawaited(
-          _player.play().catchError((Object e) {
-            if (requestId == _playRequestId) {
-              _lastError = e.toString();
-              _isPlaying = false;
-              notifyListeners();
-            }
-          }),
-        );
-        if (rampIn) unawaited(_runEnvelope(1.0, _fadeDuration));
+        await _activateAndPlay(fadeIn: fadeIn, requestId: requestId);
       } else if (_player.playing) {
         // 暂停中切换音质：只换源 + 对齐进度，不重新起播。
         await _player.pause();
@@ -1371,11 +1372,13 @@ class LocalPlaybackService extends ChangeNotifier {
     bool fromInterruption = false,
     bool urgent = false,
   }) async {
-    if (!fromInterruption) _focusGuard?.cancelPendingResume();
+    if (!fromInterruption) _focusGuard?.cancelPendingInterruption();
     if (_playerDisposed || _currentTrack == null) return false;
     if (!_player.playing) return false;
     // 用户 / 系统暂停即撤销播放意图（焦点中断由守卫在归还时重新起播）。
     _wantsPlayback = false;
+    // 暂停同时结束 duck；恢复播放时从用户音量重新开始（不会带着 0.2）。
+    _resetDuck();
     final immediate =
         urgent ||
         fromInterruption ||
@@ -1389,6 +1392,8 @@ class LocalPlaybackService extends ChangeNotifier {
       _sleepFadeActive = false;
       _pauseIntentPending = false;
       await _player.pause();
+      // 中断暂停先不放弃焦点（等守卫结算，否则 Android 收不到 gain）。
+      _audioSession.onPaused(deferRelease: fromInterruption);
       return true;
     }
     // 睡眠淡出进行中：交回普通短淡出（从当前电平继续），不重复补一次。
@@ -1398,6 +1403,7 @@ class LocalPlaybackService extends ChangeNotifier {
     if (!completed) return false;
     _pauseIntentPending = false;
     await _player.pause();
+    _audioSession.onPaused(deferRelease: fromInterruption);
     return true;
   }
 
@@ -1412,16 +1418,8 @@ class LocalPlaybackService extends ChangeNotifier {
     final reversingPause = _pauseIntentPending;
     _pauseIntentPending = false;
     if (reversingPause) {
-      _focusGuard?.cancelPendingResume();
-      final fadeIn = await _prepareFadeIn();
-      unawaited(
-        _player.play().catchError((Object e) {
-          _lastError = e.toString();
-          _isPlaying = false;
-          notifyListeners();
-        }),
-      );
-      if (fadeIn) unawaited(_runEnvelope(1.0, _fadeDuration));
+      _focusGuard?.cancelPendingInterruption();
+      await _activateAndPlay(fadeIn: true);
       return;
     }
     if (isPlaying) return;
@@ -1453,23 +1451,15 @@ class LocalPlaybackService extends ChangeNotifier {
       );
       return;
     }
-    // 用户主动续播：撤销任何中断待续播，避免焦点归还时重复动播放器。
-    _focusGuard?.cancelPendingResume();
+    // 用户主动续播：撤销任何中断待续播 / 待恢复，避免焦点归还时重复动播放器。
+    _focusGuard?.cancelPendingInterruption();
     // 已到曲末（含 media_kit 暂停在 EOF、processingState 仍为 ready 的情况）
     // 先回零：直接 play() 在结尾不会重新出声。
     if (_isAtTrackEnd) {
       await _restartFromStart();
     }
     _wantsPlayback = true;
-    final fadeIn = await _prepareFadeIn();
-    unawaited(
-      _player.play().catchError((Object e) {
-        _lastError = e.toString();
-        _isPlaying = false;
-        notifyListeners();
-      }),
-    );
-    if (fadeIn) unawaited(_runEnvelope(1.0, _fadeDuration));
+    await _activateAndPlay(fadeIn: true);
   }
 
   Future<void> seek(Duration position) async {
@@ -1526,10 +1516,10 @@ class LocalPlaybackService extends ChangeNotifier {
   @visibleForTesting
   double get envelopeGain => _envelope;
 
-  /// 设置应用内音量：只更新基值，立即按当前包络重算实际音量。
+  /// 设置应用内音量：只更新基值，立即按当前包络 × duck 重算实际音量。
   ///
-  /// 拖动滑杆 / 静音都走这里：淡变进行中改音量不会重启淡变，剩余段从新
-  /// 基值继续；静音（基值 0）在整个淡变里保持无声。
+  /// 拖动滑杆 / 静音都走这里：淡变 / duck 进行中改音量不会重启它们，剩余
+  /// 段从新基值继续；静音（基值 0）在整个淡变里保持无声。
   Future<void> setVolume(double volume) async {
     _baseVolume = volume.clamp(0.0, 1.0);
     await _applyEffectiveVolume();
@@ -1548,14 +1538,18 @@ class LocalPlaybackService extends ChangeNotifier {
     _smartShuffleEnabled = enabled;
   }
 
-  /// 把「基值 × 包络」写给播放器；淡变进行中允许跳过中间步。
+  /// 播放器实际应使用的音量：基值 × 淡变包络 × duck 倍数。
+  double get _effectiveVolume =>
+      (_baseVolume * _envelope * _duckGain).clamp(0.0, 1.0);
+
+  /// 把「基值 × 包络 × duck」写给播放器；淡变进行中允许跳过中间步。
   Future<void> _applyEffectiveVolume() {
-    final target = (_baseVolume * _envelope).clamp(0.0, 1.0);
+    final target = _effectiveVolume;
     // 静音必须立刻归零：即使上一次写入在途，也要排队一次 0，不能等下一
     // 个淡变 tick 才静下来。
     if (target <= 0) return _enqueueVolumeWrite(0);
     // 只有分步淡变在跑时才允许跳步；普通赋值必须落在平台上。
-    if (_fadeTimer != null) {
+    if (_fadeTimer != null || _duckTimer != null) {
       _offerVolume(target);
       return Future<void>.value();
     }
@@ -1612,7 +1606,7 @@ class LocalPlaybackService extends ChangeNotifier {
     if (ramp.isImmediate) {
       _envelope = ramp.to;
       unawaited(
-        _enqueueVolumeWrite(_baseVolume * _envelope).then((_) {
+        _enqueueVolumeWrite(_effectiveVolume).then((_) {
           if (identical(_fadeCompleter, completer)) _fadeCompleter = null;
           if (!completer.isCompleted) completer.complete(true);
         }),
@@ -1625,7 +1619,7 @@ class LocalPlaybackService extends ChangeNotifier {
       final elapsed = watch.elapsed;
       if (!ramp.isComplete(elapsed)) {
         _envelope = ramp.gainAt(elapsed);
-        _offerVolume(_baseVolume * _envelope);
+        _offerVolume(_effectiveVolume);
         return;
       }
       _fadeTimer?.cancel();
@@ -1633,7 +1627,7 @@ class LocalPlaybackService extends ChangeNotifier {
       _envelope = ramp.to;
       // 最终值一定写出并等待完成，暂停只能在静音落地之后发生。
       unawaited(
-        _enqueueVolumeWrite(_baseVolume * _envelope).then((_) {
+        _enqueueVolumeWrite(_effectiveVolume).then((_) {
           if (identical(_fadeCompleter, completer)) _fadeCompleter = null;
           if (!completer.isCompleted) completer.complete(true);
         }),
@@ -1653,22 +1647,64 @@ class LocalPlaybackService extends ChangeNotifier {
     final base = _baseVolume;
     if (base <= 0 || _fadeDuration < kMinimumAudibleFade) {
       _envelope = 1.0;
-      await _enqueueVolumeWrite(base);
+      await _enqueueVolumeWrite(base * _duckGain);
       return false;
     }
     final from = _player.playing ? _envelope.clamp(0.0, 1.0) : 0.0;
     _envelope = from;
-    await _enqueueVolumeWrite(base * from);
+    await _enqueueVolumeWrite(base * from * _duckGain);
     return true;
   }
 
-  /// 新音源落位后取消包络并回到基值：切歌不能继承半淡的音量。
+  /// 新音源落位后取消包络并回到基值：切歌不能继承半淡 / duck 的音量。
   Future<void> _resetEnvelopeForSource() async {
     _cancelActiveRamp();
+    _resetDuck(apply: false);
     _sleepFadeActive = false;
     _pauseIntentPending = false;
     _envelope = 1.0;
-    await _enqueueVolumeWrite(_baseVolume);
+    await _enqueueVolumeWrite(_effectiveVolume);
+  }
+
+  /// duck 短斜坡：从当前倍数推到 [target]；结束一定写出最终值。
+  void _rampDuckTo(double target) {
+    _duckTimer?.cancel();
+    _duckTimer = null;
+    final to = target.clamp(0.0, 1.0);
+    final ramp = FadeRamp(
+      from: _duckGain.clamp(0.0, 1.0),
+      to: to,
+      duration: _duckRampDuration,
+    );
+    if (ramp.isImmediate) {
+      _duckGain = to;
+      unawaited(_applyEffectiveVolume());
+      return;
+    }
+    final watch = Stopwatch()..start();
+    _duckTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
+      final elapsed = watch.elapsed;
+      if (!ramp.isComplete(elapsed)) {
+        _duckGain = ramp.gainAt(elapsed);
+        _offerVolume(_effectiveVolume);
+        return;
+      }
+      timer.cancel();
+      _duckTimer = null;
+      _duckGain = to;
+      unawaited(_enqueueVolumeWrite(_effectiveVolume));
+    });
+  }
+
+  /// 取消 duck 并回到正常音量（暂停 / 停止 / 切歌 / 播放开始时复位）。
+  ///
+  /// 必须由事件驱动：duck-end 可能丢失，不能指望下一次淡变顺手清掉。
+  void _resetDuck({bool apply = true}) {
+    _duckTimer?.cancel();
+    _duckTimer = null;
+    if (_duckGain == 1.0) return;
+    _duckGain = 1.0;
+    if (apply) unawaited(_applyEffectiveVolume());
   }
 
   /// 定时关闭的专用淡出：只降音量，不暂停（暂停由命令面单独下发）。
@@ -1807,12 +1843,17 @@ class LocalPlaybackService extends ChangeNotifier {
     _wantsPlayback = false;
     _stopAfterCurrentTrack = false;
     _suppressPositionUpdates = false;
+    // 停止是用户动作：撤销中断待续播 / 待恢复，duck 随之结束。
+    _focusGuard?.cancelPendingInterruption();
+    _resetDuck(apply: false);
     _nextTrackPreloader?.cancelAll();
     _cacheWriter?.cancel();
     try {
       await _player.stop();
     } catch (_) {}
     _isPlaying = false;
+    // 停止立即释放会话 / 焦点（暂停才等宽限期）。
+    await _audioSession.onStopped();
     // 显式 stop 不是切歌空窗：底层保留当前源，后续 play() 按正常续播处理。
     _sourceUnloaded = false;
     if (clear) {
@@ -1992,6 +2033,8 @@ class LocalPlaybackService extends ChangeNotifier {
       debugPrint('[LocalPlayback] 曲末暂停失败: $e');
     }
     _isPlaying = false;
+    // 播完停住也是一次暂停：仍给宽限期，避免曲末长时间占着焦点。
+    _audioSession.onPaused();
     notifyListeners();
   }
 
@@ -2002,17 +2045,7 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 单曲）保持硬切，避免每次循环都做一次音量起伏。
   void _resumeCurrentTrack({bool fadeIn = false}) {
     _wantsPlayback = true;
-    unawaited(() async {
-      final rampIn = fadeIn && await _prepareFadeIn();
-      unawaited(
-        _player.play().catchError((Object e) {
-          _lastError = e.toString();
-          _isPlaying = false;
-          notifyListeners();
-        }),
-      );
-      if (rampIn) unawaited(_runEnvelope(1.0, _fadeDuration));
-    }());
+    unawaited(_activateAndPlay(fadeIn: fadeIn));
   }
 
   void _scheduleNotify() {
@@ -2055,12 +2088,16 @@ class LocalPlaybackService extends ChangeNotifier {
     } catch (e) {
       debugPrint('[LocalPlayback] 退出前释放播放器失败: $e');
     }
+    // 退出立即释放会话 / 焦点，并关掉端口（桌面 watcher 的收尾也走这里）。
+    await _audioSession.dispose();
   }
 
   @override
   void dispose() {
     _playRequestId++;
     _cancelActiveRamp();
+    _duckTimer?.cancel();
+    _duckTimer = null;
     _sleepFadeActive = false;
     _pauseIntentPending = false;
     _stopAfterCurrentTrack = false;
@@ -2074,12 +2111,13 @@ class LocalPlaybackService extends ChangeNotifier {
     _cacheWriter?.cancel();
     _cacheCompletionRecorder.dispose();
     _cacheWriters.clear();
-    _playWithOtherApps.removeListener(_onPlayWithOtherAppsChanged);
     unawaited(_becomingNoisySubscription?.cancel());
     unawaited(_audioDevicesSubscription?.cancel());
     unawaited(_trackCompletions.close());
     final guard = _focusGuard;
     if (guard != null) unawaited(guard.detach());
+    // 生命周期同时持有端口：播放器 dispose 与退出收尾都走同一个幂等入口。
+    unawaited(_audioSession.dispose());
     if (!_playerDisposed) {
       _playerDisposed = true;
       _player.dispose();

@@ -360,7 +360,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPlayWithOtherAppsSubtitle =>
-      'Navigation and videos won\'t interrupt music';
+      'Navigation and voice prompts lower the music instead of stopping it';
 
   @override
   String get settingsLibraryAddPosition => 'Position of added songs';

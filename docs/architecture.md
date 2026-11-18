@@ -213,14 +213,23 @@
   provider 命令只此一份；各宿主只保留按钮变体 / 尺寸 / 布局。`PlaybackSeekBar`
   持有 `SeekPreviewController` 生命周期与低频 `Selector`，宿主只选时间标签档位。
   无曲目时播放 / 切歌禁用，模式仍可切换。
-- **音频焦点与定时关闭**：`AudioFocusGuard`（`lib/playback/audio_focus_guard.dart`，
-  受设置「与其他应用同时播放」控制，默认开：Android 忽略焦点丢失、iOS / macOS 用
-  `mixWithOthers` 混播；关闭后其他应用出声 → 暂停，系统可续播时自动补播；
-  `androidWillPauseWhenDucked` 把 duck 升级为暂停语义）由 `LocalPlaybackService`
-  持有。just_audio 的内建中断处理已关闭（`handleInterruptions: false`），耳机拔出
-  由服务自己订阅 `becomingNoisyEventStream`；该流在丢失音频焦点后可能被
-  audio_session 反注册，另以 `devicesChangedEventStream` 兜底（只对非内置输出
-  设备被移除暂停，规则见 `audio_output_policy.dart`）；倒计时定时关闭为**绝对 deadline**
+- **平台音频会话与焦点**：`PlatformAudioPort`（`lib/playback/platform_audio_port.dart`）
+  是平台音频的唯一边界：会话配置 / 激活 / 释放、中断 / 输出丢失 / 设备变化流、
+  `start` / `dispose` 与能力位；移动端包 `audio_session`，桌面 no-op，P1 的输出
+  监听复用同一端口。`AudioSessionLifecycle`（`audio_session_lifecycle.dart`）是
+  配置 / 激活 / 释放的唯一所有者：起播先激活，暂停 20 秒宽限后释放，停止 /
+  dispose / 退出立即释放；中断导致的暂停要等 `AudioFocusGuard` 结算（不放弃
+  焦点，否则 Android 收不到后续 gain）；iOS 媒体会话激活后重配置并空闲释放
+  （ADR-0035）。`just_audio` 的内建中断处理与音频会话激活都已关闭
+  （`handleInterruptions: false` / `handleAudioSessionActivation: false`）。
+  焦点动作由纯决策 `audio_focus_policy.dart::audioFocusActionFor` 给出：Android
+  开启「与其他应用同时播放」时永久失焦忽略、transient 暂停、duck 压低
+  （0.2，经基值 × 包络 × duck 的唯一音量路径，短斜坡，暂停 / 停止 / 切歌 /
+  起播复位）；关闭时任何中断暂停。`AudioFocusGuard` 只在本应用真的暂停 / 压低
+  过时续播 / 恢复，手动操作会取消记账。耳机拔出由端口
+  `outputLost` 立即暂停；该流在丢失音频焦点后可能被 audio_session 反注册，
+  另以设备变化流兜底（只对非内置输出设备被移除暂停，规则见
+  `audio_output_policy.dart`）；倒计时定时关闭为**绝对 deadline**
   （tick / 快照变化 / 回前台三路补触发），并按平台挂 `SleepTimerAlarm`
   （`lib/services/sleep_timer_alarm*.dart` → Android `SleepTimerChannelHandler` /
   iOS `SleepTimerChannelHandler.swift`）：熄屏 / Doze 下 Dart timer 被节流或

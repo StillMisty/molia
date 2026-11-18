@@ -169,13 +169,31 @@
   （组合根注入播放命令面的 `pause`：与通知 / UI 暂停同一阶段路由，返回前
   已提交会话）。剩余时间每秒走 `ValueListenable`（不进聚合通知），
   不持久化，`stopLocalPlayback` 一并撤销。
+- **Platform audio port（平台音频端口）** — `lib/playback/platform_audio_port.dart`：
+  平台音频的唯一可替换边界（会话配置 / 激活 / 释放、中断 / 输出丢失 / 设备变化
+  三条流、`start` / `dispose`、`supported`）。移动端适配器包 `audio_session`
+  （`mobile_audio_session_port.dart`），桌面（含 macOS）no-op；P1 的桌面输出监听
+  扩展同一接口。除适配器外任何模块不得直接调 `audio_session` / 平台音频 API。
+- **Audio session lifecycle（音频会话生命周期）** — `lib/playback/audio_session_lifecycle.dart`：
+  配置 / 激活 / 释放的唯一所有者，状态机 `inactive → active → releasePending →
+  inactive`。起播先激活；暂停 20 秒宽限后释放；停止 / dispose / 退出立即释放；
+  释放定时器带代次（取消的 timer 不会关掉新激活的会话）；中断暂停等守卫结算后
+  才计时；播放中切设置重配置（Android 重新请求一次焦点）；iOS 媒体会话激活后
+  重配置并空闲 notify-others 释放。见 ADR-0035。
+- **Audio focus action（焦点动作）** — `audio_focus_policy.dart::audioFocusActionFor`
+  的纯决策：`none` / `pause` / `duck` / `resume` / `restore`。Android 混播开启时
+  永久失焦忽略、transient 暂停、duck 压低；关闭时任何 begin 暂停。结束事件只在
+  本应用做过对应动作时恢复（`resume` 仅暂停过、`restore` 仅压过）。
+- **Duck gain（压低倍数）** — 系统语音提示期间的有效音量乘数（默认 0.2），经
+  基值 × 淡变包络 × duck 的唯一路径生效，80ms 斜坡；暂停 / 停止 / 切歌 / 永久
+  失焦 / 起播复位为 1，恢复回到当前用户基值（含中途静音）。
 - **Audio focus guard（音频焦点守卫）** — `lib/playback/audio_focus_guard.dart`：
-  「其他应用出声时暂停 / 继续播放」的唯一实现，受设置「与其他应用同时播放」
-  （默认开）控制。just_audio 的内建中断处理已关闭（`AudioPlayer(handleInterruptions:
-  false)`），焦点事件与耳机拔出全部由本模块 / 播放服务处理。开启时 Android 忽略
-  焦点丢失、iOS / macOS 用 `mixWithOthers` 混播；关闭后中断 `begin == true`
-  （含 duck / 永久丢失）→ 暂停，系统发回可续播的结束事件（`type == pause`）时
-  自动补播，但用户手动暂停过则不抢播。桌面无插件实现时 no-op。
+  把平台中断事件翻译成焦点动作并调用暂停 / 压低 / 续播 / 恢复。串行处理事件，
+  只在本应用真的暂停过 / 压低过时续播 / 恢复；用户手动暂停、切歌、停止会取消
+  两种记账（正在执行的结果也不再写回）。just_audio 的内建中断处理与音频会话
+  激活都已关闭（`AudioPlayer(handleInterruptions: false,
+  handleAudioSessionActivation: false)`），激活归生命周期唯一所有。桌面 no-op
+  端口不产生事件。
 
 - **Seek preview（进度预览模块）** — `lib/widgets/seek_preview.dart` +
   `lib/widgets/seek_bar.dart`：进度拖动预览的唯一实现（拖动期显示本地值；

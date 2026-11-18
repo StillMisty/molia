@@ -11,13 +11,17 @@
 ///   [buildPlaybackStack] 参数构建，调用点仍在 `runApp` 之前。
 library;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import '../../domain/ports/playback_facade.dart';
 import '../../domain/ports/ui_messenger.dart';
 import '../../data/settings/settings_keys.dart';
 import '../../data/settings/settings_module.dart';
 import '../../data/settings/settings_registry.dart';
+import '../../playback/audio_session_lifecycle.dart';
 import '../../playback/local_audio_handler.dart';
 import '../../playback/local_playback_service.dart';
+import '../../playback/platform_audio_port_factory.dart';
 import '../../playback/playback_power_policy.dart';
 import '../../playback/playback_session_coordinator.dart';
 import '../../providers/playback_provider.dart';
@@ -64,6 +68,10 @@ typedef PlaybackStack = ({
 
   /// 音频焦点偏好（设置 › 播放；播放服务与设置页共用同一实例）。
   AudioFocusSettings audioFocusSettings,
+
+  /// 平台音频会话生命周期（组合根唯一实例；注入播放服务，媒体会话激活后
+  /// 也由组合根通知它）。未建真实播放服务时为 null。
+  AudioSessionLifecycle? audioSessionLifecycle,
 });
 
 /// 装配本地播放链路、播放 provider 与系统媒体会话。
@@ -109,6 +117,7 @@ Future<PlaybackStack> buildPlaybackStack({
 
   final LocalPlaybackService? localPlaybackService;
   final PlaybackFacade playbackFacade;
+  AudioSessionLifecycle? audioSessionLifecycle;
   final injectedFacade = facade;
   if (injectedFacade != null) {
     // 测试 / 特殊宿主：外部给播放引擎，其余接线（观察者 / provider / 媒体
@@ -121,8 +130,16 @@ Future<PlaybackStack> buildPlaybackStack({
       local: local,
       powerPolicy: policy,
     );
+    // 平台音频会话的唯一所有者：服务负责报告起播 / 暂停 / 停止，组合根在
+    // 系统媒体会话激活后补一次「重配置 + 空闲释放」（iOS 冷启动不抢音频）。
+    final audioSession = AudioSessionLifecycle(
+      port: createPlatformAudioPort(),
+      playWithOtherApps: audioFocusSettings,
+    );
+    audioSessionLifecycle = audioSession;
     final service = chain.buildService(
       playWithOtherApps: audioFocusSettings,
+      audioSession: audioSession,
       recentTrackIds: recentTracks.recentTrackIds,
     );
     localPlaybackService = service;
@@ -223,7 +240,12 @@ Future<PlaybackStack> buildPlaybackStack({
     // 系统控制（通知 / 锁屏 / 耳机键）经 handler 翻译成会话命令：暂停 / 停止 /
     // 切播放顺序 / seek 的 stage 路由与「返回前已落盘」由协调者负责，这里不再
     // 回填第二个落盘回调。
-    audioHandler = await factory(service, sessionCoordinator);
+    audioHandler = await activateSystemMediaSessionForPlayback(
+      factory: factory,
+      service: service,
+      session: sessionCoordinator,
+      audioSession: audioSessionLifecycle,
+    );
     markStartupStep('sub.mediaSession.activate', mediaSessionWatch);
   }
 
@@ -246,5 +268,24 @@ Future<PlaybackStack> buildPlaybackStack({
     sessionStore: sessionStore,
     sessionCoordinator: sessionCoordinator,
     audioFocusSettings: audioFocusSettings,
+    audioSessionLifecycle: audioSessionLifecycle,
   );
+}
+
+/// 系统媒体会话初始化 + 音频会话启动通知的唯一接线。
+///
+/// 媒体会话工厂返回 null（平台不支持 / 初始化失败）时**不通知**生命周期：
+/// 没有媒体会话就没有人绕过端口激活平台会话，也就不该触发 iOS 的释放。
+@visibleForTesting
+Future<LocalAudioHandler?> activateSystemMediaSessionForPlayback({
+  required MediaSessionFactory factory,
+  required LocalPlaybackService service,
+  required PlaybackSessionCoordinator session,
+  required AudioSessionLifecycle? audioSession,
+}) async {
+  final handler = await factory(service, session);
+  if (handler != null) {
+    await audioSession?.onSystemMediaSessionActivated();
+  }
+  return handler;
 }

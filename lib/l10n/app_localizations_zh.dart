@@ -350,7 +350,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPlayWithOtherApps => '与其他应用同时播放';
 
   @override
-  String get settingsPlayWithOtherAppsSubtitle => '导航、视频等声音不会打断音乐';
+  String get settingsPlayWithOtherAppsSubtitle => '导航、语音提示等声音会压低音乐，而不是打断播放';
 
   @override
   String get settingsLibraryAddPosition => '加入收藏与列表的位置';

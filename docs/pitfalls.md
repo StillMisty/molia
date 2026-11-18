@@ -1177,3 +1177,26 @@
      纹理回收）。Dart 侧的 1s 去抖 + 退后台过渡窗口只能兜底，挡不住后台停留超过 2s
      的 `BACKGROUND` 信号。诊断包里 224 次「系统低内存」对应 199 次退后台、实际清理
      76 次就是这么来的。
+
+113. **iOS 上「先配置 category、后激活」与「先激活、后配置」是两种效果**：
+     `AVAudioSession.setCategory` 只改配置，`setActive(true)` 才真正占用音频；
+     但反过来在激活之后改 category / options 时，`mixWithOthers` 等选项不会
+     自动应用到**已经激活**的会话。`flutter_media_session` 的 Darwin 后端在
+     `activate()` 里先 `setCategory(.playback, mode: .default)` 再
+     `setActive(true)`，会覆盖 `audio_session` 之前配置的 `mixWithOthers`；
+     只调用 `audio_session.configure()` 而不重新激活，设置看起来生效、冷启动
+     后实际仍会打断其他应用。Molia 的口径是：媒体会话激活成功后由
+     `AudioSessionLifecycle.onSystemMediaSessionActivated` 重新配置，再在空闲
+     时带 `notifyOthersOnDeactivation` 释放（ADR-0035）。排查时先看调用顺序，
+     不要只查「配置写没写」。
+
+114. **系统媒体会话插件从不释放音频会话，别指望它收尾**：
+     `flutter_media_session` 的 `activate` 会在 iOS 主动 `setActive(true)`，
+     但它的 `deactivate` 只拆远程命令 / Now Playing，不调用
+     `AVAudioSession.setActive(false)`；`just_audio` 也只在 `play()` 里激活、
+     从不释放。两者叠加的结果是「只打开应用就占音频、暂停后永不归还」。因此
+     Molia 把激活 / 释放收进 `PlatformAudioPort` + `AudioSessionLifecycle`
+     唯一拥有，`just_audio` 构造固定 `handleAudioSessionActivation: false`；
+     停止 / 退出直接释放，暂停 20 秒宽限后释放，中断暂停必须等守卫结算（提前
+     放弃焦点会让 Android 收不到 gain，通话结束后无法自动续播）。改动这段时
+     不要给媒体会话后端加第二套激活 / 释放逻辑。

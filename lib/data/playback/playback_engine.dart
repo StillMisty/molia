@@ -66,7 +66,7 @@ class PlaybackEngine implements PlaybackFacade {
   /// 深比较走 `identical` 短路。
   List<Track> _cachedUpNext = const [];
 
-  String? _cachedErrorRaw;
+  Object? _cachedErrorRaw;
   SourceFailure? _cachedError;
 
   /// 身份缓存条目数（测试观察用）：队列 revision 变化后应只剩当前队列。

@@ -145,7 +145,7 @@
   "settingsRestoreSessionTitle": "Resume last playback",
   "settingsRestoreSessionSubtitle": "Remembers track, queue and position",
   "settingsPlayWithOtherApps": "Play with other apps",
-  "settingsPlayWithOtherAppsSubtitle": "Navigation and videos won't interrupt music",
+  "settingsPlayWithOtherAppsSubtitle": "Navigation and voice prompts lower the music instead of stopping it",
   "settingsLibraryAddPosition": "Position of added songs",
   "settingsLibraryAddPositionSubtitle": "",
   "settingsLibraryAddPositionTop": "Top",

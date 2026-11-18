@@ -198,3 +198,13 @@ LocalPlaybackService ──监听──▶ LocalAudioHandler ──▶ MediaSess
   正常。验证见 pitfalls #102、Molia #58 与上游 wyrindev/flutter-media-session#62。
 - 无 session bus：插件 `activate` 不抛异常，只是不占用 MPRIS 名字；播放链路
   照常，没有用户可见错误，与历史降级口径一致。
+
+## 后续（2026-11-18：平台音频会话生命周期）
+
+ADR-0035 收回了本文隐含的「播放器自行激活音频会话」假设：iOS Darwin 后端的
+激活路径只应在系统媒体会话层面生效，`audio_session` 的配置 / 激活 / 释放改由
+`PlatformAudioPort` + `AudioSessionLifecycle` 唯一拥有。媒体会话后端不再承担
+音频会话职责；组合根在 `initSystemMediaSession` 返回 handler 后通知生命周期，
+iOS 冷启动会恢复 `mixWithOthers` 并在空闲时带 notify-others 释放会话。
+`just_audio` 的 `handleAudioSessionActivation` 生产固定为 false。细节、20 秒
+宽限与 Android 混播焦点见 `docs/adr/0035-platform-audio-session-lifecycle.md`。

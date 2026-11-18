@@ -2,16 +2,19 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
+import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/playback/audio_predownload.dart';
 import 'package:molia/playback/audio_predownloader.dart';
 import 'package:molia/playback/audio_cache_completion_recorder.dart';
 import 'package:molia/playback/audio_cache_source.dart';
 import 'package:molia/playback/audio_cache_writer_registry.dart';
+import 'package:molia/playback/audio_session_lifecycle.dart';
 import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/playback/next_track_preloader.dart';
 import 'package:molia/playback/playing_track_cache_writer.dart';
@@ -19,6 +22,8 @@ import 'package:molia/sources/source_track.dart';
 import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:path/path.dart' as p;
+
+import '../support/fake_platform_audio_port.dart';
 
 /// 可脚本化播放器：只实现 [LocalPlaybackService] 用到的状态与控制接口，
 /// 不触碰 just_audio 的平台通道。
@@ -249,6 +254,221 @@ void main() {
     expect(service.isPlaying, isTrue);
     return (service: service, player: player);
   }
+
+  /// 带真实生命周期 + 假端口的服务（Android 混播策略，不触碰平台通道）。
+  Future<
+    ({
+      LocalPlaybackService service,
+      _FakeAudioPlayer player,
+      FakePlatformAudioPort port,
+      ValueNotifier<bool> settings,
+    })
+  >
+  startSession({
+    Duration fadeDuration = Duration.zero,
+    Duration activationWait = AudioSessionLifecycle.defaultActivationWait,
+    bool playWithOtherApps = true,
+    void Function()? onActivate,
+  }) async {
+    final player = _FakeAudioPlayer();
+    final port = FakePlatformAudioPort()..onActivate = onActivate;
+    final settings = ValueNotifier<bool>(playWithOtherApps);
+    final lifecycle = AudioSessionLifecycle(
+      port: port,
+      playWithOtherApps: settings,
+      platform: TargetPlatform.android,
+      activationWait: activationWait,
+    );
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async =>
+          PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+      player: player,
+      fadeDuration: fadeDuration,
+      audioSession: lifecycle,
+      playWithOtherApps: settings,
+    );
+    addTearDown(service.dispose);
+    addTearDown(settings.dispose);
+    addTearDown(port.dispose);
+    await service.playTracks([_track(index: 0)], 0);
+    await pumpEventQueue();
+    return (service: service, player: player, port: port, settings: settings);
+  }
+
+  test('起播先激活会话、激活早于播放器 play；停止才释放', () async {
+    final player = _FakeAudioPlayer();
+    final port = FakePlatformAudioPort();
+    final settings = ValueNotifier<bool>(true);
+    final lifecycle = AudioSessionLifecycle(
+      port: port,
+      playWithOtherApps: settings,
+      platform: TargetPlatform.android,
+    );
+    port.onActivate = () {
+      expect(player.calls, isNot(contains('play')), reason: '必须先激活再 play');
+    };
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async =>
+          PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+      player: player,
+      fadeDuration: Duration.zero,
+      audioSession: lifecycle,
+      playWithOtherApps: settings,
+    );
+    addTearDown(service.dispose);
+    addTearDown(settings.dispose);
+
+    await service.playTracks([_track(index: 0)], 0);
+    await pumpEventQueue();
+
+    expect(port.calls, ['start', 'configure', 'activate']);
+    expect(port.activateCalls, 1);
+    expect(player.platformPlays, 1);
+
+    await service.pause();
+    expect(port.deactivateCalls, 0, reason: '暂停后仍在 20 秒宽限期内');
+
+    await service.stop();
+    expect(port.deactivateCalls, 1);
+    expect(port.deactivateNotifyOthers, [true]);
+    expect(player.calls.last, 'stop');
+  });
+
+  test('宽限内续播与切歌复用已激活会话，不重复激活 / 不提前释放', () async {
+    final ctx = await startSession();
+    await ctx.service.pause();
+    await pumpEventQueue();
+    expect(ctx.port.deactivateCalls, 0);
+
+    await ctx.service.play();
+    await pumpEventQueue();
+    // 队列只有一首：列表循环的下一首就是自己，仍走同一条起播路径。
+    await ctx.service.skipToNext();
+    await pumpEventQueue();
+
+    expect(ctx.port.activateCalls, 1);
+    expect(ctx.port.deactivateCalls, 0);
+    expect(ctx.service.isPlaying, isTrue);
+  });
+
+  test('退出收尾释放会话（notify-others）且只释放一次', () async {
+    final ctx = await startSession();
+    await ctx.service.shutdownAudioForQuit();
+    await ctx.service.shutdownAudioForQuit();
+
+    expect(ctx.port.deactivateCalls, 1);
+    expect(ctx.port.deactivateNotifyOthers, [true]);
+  });
+
+  test('激活被拒：不起播、上报可重试失败', () async {
+    final player = _FakeAudioPlayer();
+    final port = FakePlatformAudioPort()..activateResults.add(false);
+    final settings = ValueNotifier<bool>(true);
+    final lifecycle = AudioSessionLifecycle(
+      port: port,
+      playWithOtherApps: settings,
+      platform: TargetPlatform.android,
+      activationWait: const Duration(milliseconds: 20),
+    );
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async =>
+          PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+      player: player,
+      fadeDuration: Duration.zero,
+      audioSession: lifecycle,
+      playWithOtherApps: settings,
+    );
+    addTearDown(service.dispose);
+    addTearDown(settings.dispose);
+
+    await service.playTracks([_track(index: 0)], 0);
+    await pumpEventQueue();
+
+    expect(player.platformPlays, 0);
+    expect(service.isPlaying, isFalse);
+    final error = service.lastError;
+    expect(error, isA<SourceFailure>());
+    expect((error as SourceFailure).retryable, isTrue);
+  });
+
+  test('duck 压低到基值 × 0.2，结束后恢复；中途改音量 / 静音都保留', () async {
+    final ctx = await startSession();
+    final player = ctx.player;
+    final port = ctx.port;
+
+    port.emitInterruption(
+      AudioInterruptionEvent(true, AudioInterruptionType.duck),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 140));
+    expect(player.volumeCalls.last, closeTo(0.2, 0.01));
+
+    await ctx.service.setVolume(0.5);
+    expect(player.volumeCalls.last, closeTo(0.1, 0.01));
+
+    port.emitInterruption(
+      AudioInterruptionEvent(false, AudioInterruptionType.duck),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 140));
+    expect(player.volumeCalls.last, closeTo(0.5, 0.001));
+
+    // duck 中静音：恢复后仍是静音，不跳回旧值。
+    port.emitInterruption(
+      AudioInterruptionEvent(true, AudioInterruptionType.duck),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 140));
+    await ctx.service.setVolume(0);
+    port.emitInterruption(
+      AudioInterruptionEvent(false, AudioInterruptionType.duck),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 140));
+    expect(player.volumeCalls.last, 0);
+  });
+
+  test('暂停 / 停止中的 duck 被忽略；暂停会复位 duck', () async {
+    final ctx = await startSession();
+    final player = ctx.player;
+    final port = ctx.port;
+
+    port.emitInterruption(
+      AudioInterruptionEvent(true, AudioInterruptionType.duck),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 140));
+    expect(player.volumeCalls.last, closeTo(0.2, 0.01));
+
+    await ctx.service.pause(urgent: true);
+    expect(player.volumeCalls.last, closeTo(1.0, 0.001), reason: '暂停复位 duck');
+
+    final before = player.volumeCalls.length;
+    port.emitInterruption(
+      AudioInterruptionEvent(true, AudioInterruptionType.duck),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 140));
+    expect(player.volumeCalls.length, before, reason: '暂停中不压低');
+  });
+
+  test('淡变中收到 duck：压低与包络相乘，不重置淡变', () async {
+    final ctx = await startSession(fadeDuration: const Duration(seconds: 1));
+    final player = ctx.player;
+    final port = ctx.port;
+
+    port.emitInterruption(
+      AudioInterruptionEvent(true, AudioInterruptionType.duck),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+
+    expect(ctx.service.envelopeGain, lessThan(1.0));
+    expect(ctx.service.envelopeGain, greaterThan(0.0));
+    expect(
+      player.volumeCalls.last,
+      lessThan(0.2),
+      reason: '基值 × 未完成的包络 × 0.2，不能先回到满音量',
+    );
+
+    port.emitInterruption(
+      AudioInterruptionEvent(false, AudioInterruptionType.duck),
+    );
+    await ctx.service.stop();
+  });
 
   test('换队列 / 显式停止时回收播放器，清空 just_audio source 注册表', () async {
     final players = <_FakeAudioPlayer>[];
