@@ -27,7 +27,9 @@ class AudioOutputWatcher : public IMMNotificationClient {
   static constexpr UINT kOutputLostMessage = WM_APP + 0x4F;  // 'O'
 
   AudioOutputWatcher();
-  ~AudioOutputWatcher() override;
+  // IMMNotificationClient 是 COM 接口，没有虚析构；不能用 override。
+  // 对象由 FlutterWindow 的 unique_ptr 持有，生命周期不交给 COM。
+  ~AudioOutputWatcher();
 
   AudioOutputWatcher(const AudioOutputWatcher&) = delete;
   AudioOutputWatcher& operator=(const AudioOutputWatcher&) = delete;
