@@ -208,3 +208,12 @@ ADR-0035 收回了本文隐含的「播放器自行激活音频会话」假设�
 iOS 冷启动会恢复 `mixWithOthers` 并在空闲时带 notify-others 释放会话。
 `just_audio` 的 `handleAudioSessionActivation` 生产固定为 false。细节、20 秒
 宽限与 Android 混播焦点见 `docs/adr/0035-platform-audio-session-lifecycle.md`。
+
+## 后续（2026-11-18：平台媒体基线）
+
+平台身份、权限 / 后台模式 / entitlement、自动守卫与人工验证口径已收进
+`docs/platform_media_checklist.md`（唯一维护处）；本文的「平台配置」段保留为
+当时决策记录，不再作为当前要求清单。跨文件身份由
+`test/architecture/platform_config_test.dart` 守卫；Linux MPRIS
+`CanRaise` / `CanQuit` 恒 false 与 no-op 方法记录在该 checklist 的已知限制里。
+曲间无缝已单独决策为暂不实现，见 `docs/adr/0037-gapless-playback.md`。

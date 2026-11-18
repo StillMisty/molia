@@ -398,6 +398,9 @@
   在返回前 await `PlaybackSessionStore.pendingWrite`；不再由 handler 回填落盘回调；
   停止先落盘再清空队列），保证
   「系统暂停 → 冷启动」能恢复上一首 + 队列 + 模式 + 进度且不自动起播。
+  平台身份（AUMID / MPRIS DesktopEntry / bundle id）、必需与禁用的权限 / 后台模式 /
+  entitlement、自动守卫覆盖与人工验证 recipe 统一见
+  `docs/platform_media_checklist.md`；本节只描述会话行为，不重复平台声明清单。
 - **流请求头（PlayableStream.headers）**：`SourceManagerMusicSource.resolve` 把取链结果
   （uri + headers + expiresIn）原样返回；`LocalPlaybackService` 同时传给
   `AudioSource.uri` 与 `LockCachingAudioSource`，`NextTrackPreloader` /
