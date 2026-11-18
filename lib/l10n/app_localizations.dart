@@ -140,6 +140,12 @@ abstract class AppLocalizations {
   /// **'Playback failed: {error}'**
   String playbackFailed(String error);
 
+  /// No description provided for @playbackAudioSessionUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio is busy right now. Try again in a moment.'**
+  String get playbackAudioSessionUnavailable;
+
   /// No description provided for @searchHint.
   ///
   /// In en, this message translates to:

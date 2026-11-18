@@ -38,6 +38,9 @@ class AppUiMessenger implements UiMessenger {
       case 'downloadFileMissing':
         // 本地下载文件缺失：播放取链时归一化出的可读提示。
         return l10n.downloadFileMissing;
+      case 'playbackAudioSessionUnavailable':
+        // 音频焦点被通话 / 独占应用占用：短文案说明「稍后重试」。
+        return l10n.playbackAudioSessionUnavailable;
       case null:
       case 'playbackFailed':
         return l10n.playbackFailed(failure.message);

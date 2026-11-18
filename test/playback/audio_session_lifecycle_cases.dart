@@ -35,12 +35,14 @@ void main() {
   });
 
   /// 在 fake_async 里启动一个异步调用并跑完它的微任务。
-  bool startNow(FakeAsync async) {
+  bool startNowOn(FakeAsync async, AudioSessionLifecycle target) {
     var granted = false;
-    unawaited(lifecycle.onStartRequested().then((value) => granted = value));
+    unawaited(target.onStartRequested().then((value) => granted = value));
     async.flushMicrotasks();
     return granted;
   }
+
+  bool startNow(FakeAsync async) => startNowOn(async, lifecycle);
 
   test('起播前先配置再激活；宽限期内暂停不释放', () {
     fakeAsync((async) {
@@ -89,6 +91,36 @@ void main() {
 
       async.elapse(const Duration(seconds: 2));
       expect(port.deactivateCalls, 1);
+    });
+  });
+
+  test('中断暂停未结算（永久失焦）：下一次起播重新激活焦点', () {
+    fakeAsync((async) {
+      startNow(async);
+      lifecycle.onPlaybackStarted();
+      // 永久失焦没有 end 事件：onInterruptionSettled 永远不会到。
+      lifecycle.onPaused(deferRelease: true);
+      async.elapse(const Duration(minutes: 2));
+      expect(port.deactivateCalls, 0, reason: '中断未结算不释放');
+
+      expect(startNow(async), isTrue);
+      expect(port.activateCalls, 2, reason: '不能走已激活快速路径，必须重新请求焦点');
+      expect(port.deactivateCalls, 0, reason: '重新请求前不主动释放旧会话');
+      lifecycle.onPlaybackStarted();
+    });
+  });
+
+  test('中断结算后焦点已回：宽限内起播不重复激活', () {
+    fakeAsync((async) {
+      startNow(async);
+      lifecycle.onPlaybackStarted();
+      lifecycle.onPaused(deferRelease: true);
+      lifecycle.onInterruptionSettled();
+      async.flushMicrotasks();
+
+      expect(startNow(async), isTrue);
+      expect(port.activateCalls, 1);
+      expect(port.deactivateCalls, 0);
     });
   });
 
@@ -180,6 +212,37 @@ void main() {
     });
   });
 
+  test('播放中重配置焦点被拒：标记焦点丢失，下一次起播重新请求', () {
+    fakeAsync((async) {
+      port.activateResults.addAll([true, false]);
+      startNow(async);
+      lifecycle.onPlaybackStarted();
+
+      settings.value = false;
+      async.flushMicrotasks();
+      expect(port.activateCalls, 2, reason: '放弃旧焦点后重新请求一次');
+
+      port.activateResult = true;
+      expect(startNow(async), isTrue);
+      expect(port.activateCalls, 3, reason: '下一次起播不能假定仍持有焦点');
+    });
+  });
+
+  test('端口激活抛异常（插件不可用）→ 降级为无会话播放，不等待 5 秒', () {
+    fakeAsync((async) {
+      port.throwOnActivate = true;
+      bool? granted;
+      unawaited(lifecycle.onStartRequested().then((value) => granted = value));
+      async.flushMicrotasks();
+
+      expect(granted, isTrue);
+      expect(port.activateCalls, 1);
+      // 不应留下等待中断的定时器。
+      async.elapse(const Duration(seconds: 5));
+      expect(granted, isTrue);
+    });
+  });
+
   test('激活被拒后保留意图，中断结束时重试一次并成功', () {
     fakeAsync((async) {
       port.activateResults.addAll([false, true]);
@@ -247,28 +310,51 @@ void main() {
     });
   });
 
-  test('系统媒体会话冷启动：先重配置，没有播放就带 notify 立即释放', () {
+  test('iOS 冷启动：先重配置，没有播放就带 notify 立即释放', () {
+    final iosPort = FakePlatformAudioPort();
+    final iosLifecycle = AudioSessionLifecycle(
+      port: iosPort,
+      playWithOtherApps: settings,
+      platform: TargetPlatform.iOS,
+    );
+    addTearDown(iosLifecycle.dispose);
     fakeAsync((async) {
-      unawaited(lifecycle.onSystemMediaSessionActivated());
+      unawaited(iosLifecycle.onSystemMediaSessionActivated());
       async.flushMicrotasks();
 
-      expect(port.calls, ['start', 'configure', 'deactivate:notify']);
-      expect(port.activateCalls, 0);
-      expect(port.deactivateNotifyOthers, [true]);
+      expect(iosPort.calls, ['start', 'configure', 'deactivate:notify']);
+      expect(iosPort.activateCalls, 0);
+      expect(iosPort.deactivateNotifyOthers, [true]);
     });
   });
 
-  test('系统媒体会话激活时已在播放：只重配置，不释放', () {
+  test('iOS 媒体会话激活时已在播放：只重配置，不释放', () {
+    final iosPort = FakePlatformAudioPort();
+    final iosLifecycle = AudioSessionLifecycle(
+      port: iosPort,
+      playWithOtherApps: settings,
+      platform: TargetPlatform.iOS,
+    );
+    addTearDown(iosLifecycle.dispose);
     fakeAsync((async) {
-      startNow(async);
-      lifecycle.onPlaybackStarted();
-      final before = port.configureCalls;
+      expect(startNowOn(async, iosLifecycle), isTrue);
+      iosLifecycle.onPlaybackStarted();
+      final before = iosPort.configureCalls;
 
+      unawaited(iosLifecycle.onSystemMediaSessionActivated());
+      async.flushMicrotasks();
+
+      expect(iosPort.configureCalls, before + 1);
+      expect(iosPort.deactivateCalls, 0);
+    });
+  });
+
+  test('Android 媒体会话激活不触发会话重配置 / 释放', () {
+    fakeAsync((async) {
       unawaited(lifecycle.onSystemMediaSessionActivated());
       async.flushMicrotasks();
 
-      expect(port.configureCalls, before + 1);
-      expect(port.deactivateCalls, 0);
+      expect(port.calls, isEmpty, reason: 'Android 媒体会话后端不请求音频焦点');
     });
   });
 

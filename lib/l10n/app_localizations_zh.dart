@@ -33,6 +33,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get playbackAudioSessionUnavailable => '当前无法使用音频，请稍后重试';
+
+  @override
   String get searchHint => '搜索歌曲、歌手或歌词';
 
   @override

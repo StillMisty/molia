@@ -33,6 +33,14 @@ class _RecordingAction {
   }
 }
 
+class _ThrowingAction extends _RecordingAction {
+  @override
+  Future<void> call() async {
+    calls++;
+    throw StateError('action failed');
+  }
+}
+
 /// 只记录暂停调用的服务替身：不触碰播放器平台通道，验证真实接线
 /// （端口事件流 → 守卫 → `LocalPlaybackService.pause`）。
 class _RecordingService extends LocalPlaybackService {
@@ -93,11 +101,11 @@ void main() {
                   pausedForFocus: pausedForFocus,
                   duckedForFocus: duckedForFocus,
                 ),
-        onPause: pause.call,
-        onResume: resume.call,
-        onDuck: duck.call,
-        onRestore: restore.call,
-        onSettled: settled.call,
+        onPause: () => pause.call(),
+        onResume: () => resume.call(),
+        onDuck: () => duck.call(),
+        onRestore: () => restore.call(),
+        onSettled: () => settled.call(),
       );
       guard.attach(events.stream);
     });
@@ -289,6 +297,20 @@ void main() {
         AudioInterruptionEvent(true, AudioInterruptionType.unknown),
       );
       expect(restore.calls, 1);
+    });
+
+    test('续播 / 恢复动作抛错时仍然结算中断（不卡住释放计时）', () async {
+      playWithOtherApps = false;
+      resume = _ThrowingAction();
+      await addAndPump(
+        AudioInterruptionEvent(true, AudioInterruptionType.pause),
+      );
+      await addAndPump(
+        AudioInterruptionEvent(false, AudioInterruptionType.pause),
+      );
+
+      expect(resume.calls, 1);
+      expect(settled.calls, 1);
     });
   });
 

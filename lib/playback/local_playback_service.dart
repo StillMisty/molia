@@ -593,6 +593,7 @@ class LocalPlaybackService extends ChangeNotifier {
       _lastError = const SourceFailure(
         kind: FailureKind.playback,
         message: 'audio session unavailable',
+        l10nKey: 'playbackAudioSessionUnavailable',
         retryable: true,
       );
       _wantsPlayback = false;
@@ -600,6 +601,9 @@ class LocalPlaybackService extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    // 激活可能等了中断结束（延迟授权）：恢复「用户要播」的意图，否则后续
+    // 失败恢复 / 重取链会误判成已暂停。
+    _wantsPlayback = true;
     // 起播即复位 duck：上一首的 duck-end 即使丢失，也不会让新歌发闷。
     _resetDuck();
     final rampIn = fadeIn && await _prepareFadeIn();
@@ -609,6 +613,10 @@ class LocalPlaybackService extends ChangeNotifier {
         if (requestId != null && requestId != _playRequestId) return;
         _lastError = e.toString();
         _isPlaying = false;
+        _resetDuck();
+        // 播放启动失败时平台可能已经拿到焦点；按一次暂停处理，让生命周期
+        // 走宽限释放，避免坏源把会话一直占着。
+        _audioSession.onPaused();
         notifyListeners();
       }),
     );
@@ -629,8 +637,12 @@ class LocalPlaybackService extends ChangeNotifier {
   }
 
   /// 中断结束且没有续播：这时才允许生命周期开始暂停释放计时。
+  ///
+  /// 即使守卫正在续播也要上报：生命周期会先清掉「焦点可能已丢」，随后的
+  /// `onPlaybackStarted` 再取消这次释放计时。若续播因装载 / 无曲目没发生，
+  /// 这次上报正好把宽限期接上。
   Future<void> _onInterruptionSettled() async {
-    if (_wantsPlayback || _isPlaying || _currentTrack == null) return;
+    if (_isPlaying || _currentTrack == null) return;
     _audioSession.onInterruptionSettled();
   }
 

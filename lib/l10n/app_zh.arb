@@ -7,6 +7,7 @@
   "close": "关闭",
   "loading": "正在加载",
   "playbackFailed": "播放失败: {error}",
+  "playbackAudioSessionUnavailable": "当前无法使用音频，请稍后重试",
   "searchHint": "搜索歌曲、歌手或歌词",
   "searchIdleHint": "输入关键词搜索歌曲、歌手或歌词",
   "clearSearch": "清除搜索",

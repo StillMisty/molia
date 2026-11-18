@@ -52,6 +52,14 @@ class AudioSessionLifecycle {
 
   _AudioSessionState _state = _AudioSessionState.inactive;
   bool _playing = false;
+
+  /// 最近一次暂停是中断造成的，且还没有结算 / 重新拿回焦点。
+  ///
+  /// 永久失焦（`unknown`）在 Android 上没有对应的 `end` 事件：暂停后
+  /// `_state` 仍是 active，但平台焦点已经不在本应用手里。下一次起播必须
+  /// 重新请求一次，不能走「已激活」的快速路径。
+  bool _focusMayBeLost = false;
+
   bool _configured = false;
   bool _configDirty = false;
   bool _disposed = false;
@@ -98,7 +106,9 @@ class AudioSessionLifecycle {
     if (!_port.supported) return true;
     await start();
     _cancelRelease();
-    if (_state == _AudioSessionState.active) return true;
+    if (_state == _AudioSessionState.active && !_focusMayBeLost) {
+      return true;
+    }
 
     final pending = _pendingActivation;
     if (pending != null && !pending.isCompleted) return pending.future;
@@ -106,6 +116,7 @@ class AudioSessionLifecycle {
     await _ensureConfigured();
     if (await _tryActivate()) {
       _state = _AudioSessionState.active;
+      _focusMayBeLost = false;
       return true;
     }
     if (_disposed) return false;
@@ -115,6 +126,7 @@ class AudioSessionLifecycle {
   /// 播放真正开始（播放器已下发 play）：保持会话、取消待释放。
   void onPlaybackStarted() {
     _playing = true;
+    _focusMayBeLost = false;
     if (!_port.supported) return;
     _cancelRelease();
     _completePendingActivation(false);
@@ -128,7 +140,11 @@ class AudioSessionLifecycle {
   void onPaused({bool deferRelease = false}) {
     _playing = false;
     if (!_port.supported) return;
-    if (deferRelease) return;
+    if (deferRelease) {
+      // 永久失焦没有 end 事件；记录「焦点可能已丢」，下一次起播重新激活。
+      _focusMayBeLost = true;
+      return;
+    }
     if (_state == _AudioSessionState.releasePending) return;
     if (_state != _AudioSessionState.active) return;
     _scheduleRelease();
@@ -137,6 +153,7 @@ class AudioSessionLifecycle {
   /// 中断结束且没有续播：此时才允许开始暂停释放计时。
   void onInterruptionSettled() {
     if (!_port.supported || _playing || _disposed) return;
+    _focusMayBeLost = false;
     if (_state != _AudioSessionState.active) return;
     _scheduleRelease();
   }
@@ -144,6 +161,7 @@ class AudioSessionLifecycle {
   /// 停止：立即释放（取消待释放 / 待激活）。
   Future<void> onStopped() async {
     _playing = false;
+    _focusMayBeLost = false;
     _cancelRelease();
     _completePendingActivation(false);
     await _deactivate();
@@ -155,6 +173,9 @@ class AudioSessionLifecycle {
   /// 覆盖 `audio_session` 的 `mixWithOthers` 并打断其他应用。这里恢复配置；
   /// 若还没有播放就带 notify-others 立刻释放，让冷启动保持安静。
   Future<void> onSystemMediaSessionActivated() async {
+    // 只有 iOS 的 Darwin 后端会在激励媒体会话时自行激活 AVAudioSession；
+    // Android 的媒体会话后端不请求焦点，也没有需要恢复的 mix 选项。
+    if (platform != TargetPlatform.iOS) return;
     if (!_port.supported || _disposed) return;
     await start();
     await _ensureConfigured(force: true);
@@ -183,8 +204,15 @@ class AudioSessionLifecycle {
     try {
       await _port.deactivate(notifyOthers: false);
       final granted = await _port.activate();
-      if (!granted) _state = _AudioSessionState.inactive;
+      if (!granted) {
+        // 旧焦点已放弃、新请求被拒：播放还在继续但已经没有焦点。标记后
+        // 下一次起播会重新请求，不留在静默无焦点状态。
+        _focusMayBeLost = true;
+        _state = _AudioSessionState.inactive;
+        debugPrint('[AudioSessionLifecycle] 重配置后重新获取音频焦点被拒');
+      }
     } catch (e) {
+      _focusMayBeLost = true;
       debugPrint('[AudioSessionLifecycle] 重新请求音频焦点失败: $e');
     }
   }
@@ -211,8 +239,10 @@ class AudioSessionLifecycle {
     try {
       return await _port.activate();
     } catch (e) {
-      debugPrint('[AudioSessionLifecycle] 激活音频会话失败: $e');
-      return false;
+      // 端口异常（插件缺失 / 平台通道坏）不是焦点被拒：降级为「无声会
+      // 话也能播」，否则一次插件故障会永久挡住播放。显式 false 才是拒绝。
+      debugPrint('[AudioSessionLifecycle] 音频会话不可用，降级为无会话播放: $e');
+      return true;
     }
   }
 
@@ -238,7 +268,10 @@ class AudioSessionLifecycle {
     final granted = await _tryActivate();
     _retryingActivation = false;
     if (_disposed) return;
-    if (granted) _state = _AudioSessionState.active;
+    if (granted) {
+      _state = _AudioSessionState.active;
+      _focusMayBeLost = false;
+    }
     _completePendingActivation(granted);
   }
 
@@ -307,6 +340,7 @@ class AudioSessionLifecycle {
     // 事件循环；销毁流程不能让一次退订把释放卡住。
     unawaited(interruptions?.cancel());
     _playing = false;
+    _focusMayBeLost = false;
     await _deactivate();
     try {
       await _port.dispose();

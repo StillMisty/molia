@@ -53,6 +53,9 @@ class _FakeAudioPlayer extends AudioPlayer {
   Duration? _duration;
   double _volume = 1.0;
 
+  /// 模拟平台拒绝 play（坏源 / 后端错误），下一次 play 抛错。
+  bool failPlay = false;
+
   /// 下一次 `setAudioSource` 解析出的时长（模拟换源后更短的音频）；用完即清。
   Duration? nextSourceDuration;
 
@@ -104,6 +107,10 @@ class _FakeAudioPlayer extends AudioPlayer {
   @override
   Future<void> play() async {
     calls.add('play');
+    if (failPlay) {
+      failPlay = false;
+      throw StateError('play failed');
+    }
     // 与 just_audio 一致：已在播放请求态时直接返回，不会再次下发平台 play。
     if (_playing) return;
     platformPlays++;
@@ -267,10 +274,12 @@ void main() {
   startSession({
     Duration fadeDuration = Duration.zero,
     Duration activationWait = AudioSessionLifecycle.defaultActivationWait,
+    Duration pauseGrace = AudioSessionLifecycle.defaultPauseGrace,
     bool playWithOtherApps = true,
     void Function()? onActivate,
+    bool failFirstPlay = false,
   }) async {
-    final player = _FakeAudioPlayer();
+    final player = _FakeAudioPlayer()..failPlay = failFirstPlay;
     final port = FakePlatformAudioPort()..onActivate = onActivate;
     final settings = ValueNotifier<bool>(playWithOtherApps);
     final lifecycle = AudioSessionLifecycle(
@@ -278,6 +287,7 @@ void main() {
       playWithOtherApps: settings,
       platform: TargetPlatform.android,
       activationWait: activationWait,
+      pauseGrace: pauseGrace,
     );
     final service = LocalPlaybackService(
       resolver: (track, {String? quality}) async =>
@@ -389,6 +399,67 @@ void main() {
     final error = service.lastError;
     expect(error, isA<SourceFailure>());
     expect((error as SourceFailure).retryable, isTrue);
+  });
+
+  test('起播被拒后中断结束重试成功：保留播放意图并可继续控制', () async {
+    final player = _FakeAudioPlayer();
+    final port = FakePlatformAudioPort()..activateResults.addAll([false, true]);
+    final settings = ValueNotifier<bool>(true);
+    final lifecycle = AudioSessionLifecycle(
+      port: port,
+      playWithOtherApps: settings,
+      platform: TargetPlatform.android,
+    );
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async =>
+          PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+      player: player,
+      fadeDuration: Duration.zero,
+      audioSession: lifecycle,
+      playWithOtherApps: settings,
+    );
+    addTearDown(service.dispose);
+    addTearDown(settings.dispose);
+
+    final play = service.playTracks([_track(index: 0)], 0);
+    await pumpEventQueue();
+    expect(player.platformPlays, 0, reason: '焦点被拒时不能起播');
+
+    port.emitInterruption(
+      AudioInterruptionEvent(false, AudioInterruptionType.pause),
+    );
+    await play;
+    await pumpEventQueue();
+
+    expect(port.activateCalls, 2);
+    expect(service.isPlaying, isTrue);
+    expect(player.platformPlays, 1);
+    // 原地重取链按 `_wantsPlayback` 决定是否继续出声：延迟授权必须保留
+    // 「用户要播」的意图，否则重取后会停在暂停态。
+    await service.reloadCurrentStream();
+    await pumpEventQueue();
+    expect(service.isPlaying, isTrue);
+    // 暂停 / 再播仍按正常路径工作。
+    expect(await service.pause(), isTrue);
+    await service.play();
+    await pumpEventQueue();
+    expect(service.isPlaying, isTrue);
+    expect(player.platformPlays, 2);
+  });
+
+  test('play() 失败：上报暂停，宽限后释放会话', () async {
+    final ctx = await startSession(
+      pauseGrace: const Duration(milliseconds: 20),
+      failFirstPlay: true,
+    );
+    await pumpEventQueue();
+
+    expect(ctx.service.isPlaying, isFalse);
+    expect(ctx.port.deactivateCalls, 0, reason: '失败后先给宽限期，不立即释放');
+
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(ctx.port.deactivateCalls, 1);
+    expect(ctx.port.deactivateNotifyOthers, [true]);
   });
 
   test('duck 压低到基值 × 0.2，结束后恢复；中途改音量 / 静音都保留', () async {

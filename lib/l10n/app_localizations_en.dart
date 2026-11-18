@@ -33,6 +33,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get playbackAudioSessionUnavailable =>
+      'Audio is busy right now. Try again in a moment.';
+
+  @override
   String get searchHint => 'Search songs, artists or lyrics';
 
   @override

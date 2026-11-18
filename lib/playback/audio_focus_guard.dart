@@ -164,12 +164,18 @@ class AudioFocusGuard {
     final wasDucked = _duckedForInterruption;
     _pausedForInterruption = false;
     _duckedForInterruption = false;
-    if (action == AudioFocusAction.resume && wasPaused) {
-      await _onResume();
-    } else if (wasDucked) {
-      // 正常 duck-end 或丢失的 duck-end（永久失焦）都恢复；只会恢复本守卫
-      // 压过的那一次。
-      await _onRestore();
+    try {
+      if (action == AudioFocusAction.resume && wasPaused) {
+        await _onResume();
+      } else if (wasDucked) {
+        // 正常 duck-end 或丢失的 duck-end（永久失焦）都恢复；只会恢复本守卫
+        // 压过的那一次。
+        await _onRestore();
+      }
+    } catch (e) {
+      // 播放动作抛错也要让服务知道「中断已结算」，否则暂停释放计时永远
+      // 不会开始。
+      debugPrint('[AudioFocusGuard] 焦点恢复动作失败: $e');
     }
     if (_detached || attachGeneration != _attachGeneration) return;
     await _onSettled?.call();

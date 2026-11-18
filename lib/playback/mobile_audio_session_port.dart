@@ -68,13 +68,10 @@ class MobileAudioSessionPort implements PlatformAudioPort {
 
   @override
   Future<bool> activate() async {
-    try {
-      final session = await _open();
-      return await session.setActive(true);
-    } catch (e) {
-      debugPrint('[PlatformAudioPort] 激活音频会话失败: $e');
-      return false;
-    }
+    // 显式 false = 平台拒绝焦点（通话 / 独占应用）；异常 = 端口不可用。
+    // 两者必须区分：前者交给生命周期等待重试，后者降级为无会话播放。
+    final session = await _open();
+    return session.setActive(true);
   }
 
   @override

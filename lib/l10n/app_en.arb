@@ -14,6 +14,7 @@
       }
     }
   },
+  "playbackAudioSessionUnavailable": "Audio is busy right now. Try again in a moment.",
   "searchHint": "Search songs, artists or lyrics",
   "searchIdleHint": "Search songs, artists or lyrics",
   "clearSearch": "Clear search",

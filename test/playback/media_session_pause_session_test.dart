@@ -492,6 +492,7 @@ void main() {
 
     Future<_AudioSessionRun> run({
       required LocalAudioHandler? returnedHandler,
+      TargetPlatform platform = TargetPlatform.iOS,
     }) async {
       final port = FakePlatformAudioPort();
       final settings = ValueNotifier<bool>(true);
@@ -499,7 +500,7 @@ void main() {
       final lifecycle = AudioSessionLifecycle(
         port: port,
         playWithOtherApps: settings,
-        platform: TargetPlatform.android,
+        platform: platform,
       );
       var factoryCalls = 0;
       final handler = await activateSystemMediaSessionForPlayback(
@@ -525,6 +526,17 @@ void main() {
       failed.port.calls.where((call) => call != 'dispose'),
       isEmpty,
       reason: '没有媒体会话就没有绕过端口的平台激活，不该释放/重配置',
+    );
+
+    final android = await run(
+      returnedHandler: harness.handler,
+      platform: TargetPlatform.android,
+    );
+    expect(android.handler, same(harness.handler));
+    expect(
+      android.port.calls.where((call) => call != 'dispose'),
+      isEmpty,
+      reason: 'Android 媒体会话后端不请求音频焦点，启动钩子应为 no-op',
     );
 
     final succeeded = await run(returnedHandler: harness.handler);
