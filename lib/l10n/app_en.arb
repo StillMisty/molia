@@ -2607,6 +2607,7 @@
     }
   },
   "trayShowWindow": "Show window",
+  "playbackMenu": "Playback",
   "trayPrevious": "Previous track",
   "trayNext": "Next track",
   "trayQuit": "Quit",

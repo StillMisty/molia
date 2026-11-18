@@ -8362,6 +8362,12 @@ abstract class AppLocalizations {
   /// **'Show window'**
   String get trayShowWindow;
 
+  /// No description provided for @playbackMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback'**
+  String get playbackMenu;
+
   /// No description provided for @trayPrevious.
   ///
   /// In en, this message translates to:

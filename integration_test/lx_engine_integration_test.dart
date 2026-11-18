@@ -354,6 +354,7 @@ void main() {
 
     const labels = TrayMenuLabels(
       showWindow: 'Show window',
+      menuTitle: 'Playback',
       play: 'Play',
       pause: 'Pause',
       previous: 'Previous track',

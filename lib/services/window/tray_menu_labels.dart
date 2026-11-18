@@ -7,6 +7,7 @@
 class TrayMenuLabels {
   const TrayMenuLabels({
     required this.showWindow,
+    required this.menuTitle,
     required this.play,
     required this.pause,
     required this.previous,
@@ -17,6 +18,9 @@ class TrayMenuLabels {
   });
 
   final String showWindow;
+
+  /// macOS 顶层「播放」菜单标题（托盘 / 任务栏不使用）。
+  final String menuTitle;
   final String play;
   final String pause;
   final String previous;

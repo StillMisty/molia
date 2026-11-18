@@ -4685,6 +4685,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trayShowWindow => 'Show window';
 
   @override
+  String get playbackMenu => 'Playback';
+
+  @override
   String get trayPrevious => 'Previous track';
 
   @override

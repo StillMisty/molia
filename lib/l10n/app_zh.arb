@@ -2218,6 +2218,7 @@
     }
   },
   "trayShowWindow": "显示主窗口",
+  "playbackMenu": "播放",
   "trayPrevious": "上一首",
   "trayNext": "下一首",
   "trayQuit": "退出",

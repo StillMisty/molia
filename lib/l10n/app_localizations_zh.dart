@@ -4495,6 +4495,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trayShowWindow => '显示主窗口';
 
   @override
+  String get playbackMenu => '播放';
+
+  @override
   String get trayPrevious => '上一首';
 
   @override

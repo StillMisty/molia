@@ -26,6 +26,7 @@ import '../../services/app_presence.dart';
 import '../../services/language_service.dart';
 import '../../services/play_statistics_service.dart';
 import '../../services/window/app_tray.dart';
+import '../../services/window/playback_menu.dart';
 import '../../services/window/taskbar_thumb_bar.dart';
 import '../../services/window/tray_settings.dart';
 import '../../services/window/window_chrome.dart';
@@ -146,6 +147,10 @@ Future<DesktopStack> buildDesktopStack({
   // 非 Windows 平台上所有方法都是空操作。
   final taskbar = TaskbarThumbBar();
 
+  // macOS 顶层「播放」菜单：命令落到下面同一批闭包（恢复态路由 / 会话落盘
+  // 只在 provider 命令面一处）；非 macOS 平台是空操作（ADR-0036）。
+  final playbackMenu = PlaybackMenu();
+
   // 菜单动作（托盘菜单与任务栏按钮共用）：全部落到既有 provider。
   void togglePlay() => unawaited(playback.togglePlayPause());
   void skipToPrevious() => unawaited(playback.skipToPrevious());
@@ -255,6 +260,11 @@ Future<DesktopStack> buildDesktopStack({
       isPlaying: snapshot.isPlaying,
     );
     taskbar.setFavorite(isFavorite);
+    playbackMenu.sync(
+      labels: labels,
+      hasTrack: track != null,
+      isPlaying: snapshot.isPlaying,
+    );
     // 任务栏 / 窗口列表标题：显示当前曲目（无曲目回退应用名）。与托盘
     // tooltip 同一份文案来源，切歌 / 播放态变化都在这里一次同步。
     unawaited(
@@ -307,6 +317,17 @@ Future<DesktopStack> buildDesktopStack({
           onPrevious: skipToPrevious,
           onNext: skipToNext,
           onToggleFavorite: toggleFavorite,
+        ),
+      );
+      // macOS 播放菜单：与上面两个入口共用同一批动作闭包。
+      unawaited(
+        playbackMenu.init(
+          labels: _trayLabels(),
+          hasTrack: playback.snapshot.current != null,
+          isPlaying: playback.snapshot.isPlaying,
+          onTogglePlay: togglePlay,
+          onPrevious: skipToPrevious,
+          onNext: skipToNext,
         ),
       );
     },
@@ -423,6 +444,7 @@ TrayMenuLabels _trayLabels() {
   final l10n = lookupAppLocalizations(resolved);
   return TrayMenuLabels(
     showWindow: l10n.trayShowWindow,
+    menuTitle: l10n.playbackMenu,
     play: l10n.play,
     pause: l10n.pause,
     previous: l10n.trayPrevious,
