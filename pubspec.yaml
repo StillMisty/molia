@@ -30,8 +30,6 @@ dependencies:
   audio_session: ^0.2.4
   share_plus: ^13.3.1
   file_picker: ^13.4.0
-  # SAF 目录选项（AndroidSAFOptions：lifetime + 只读 + 不复制）由 file_picker
-  # 的 Android 实现提供；它本来就在依赖树里，直接依赖只为拿到选项类型。
   android_file_picker: ^2.2.0
   pointycastle: ^4.0.0
   # 0.13.1 被 Flutter SDK 固定在 0.13.0（sdk-version-pinning）；SDK 升级后跟最新。
@@ -42,11 +40,9 @@ dependencies:
   just_audio_media_kit: ^2.1.0
   media_kit_libs_linux: ^1.2.1
   media_kit_libs_windows_audio: ^1.0.9
-  # 3.2.1-pre.1 修了 Linux MPRIS Seek / SetPosition 丢位置（上游 #62）；
-  # 正式版发布后改回稳定约束。
-  flutter_media_session: ^3.2.1-pre.1
+  flutter_media_session: ^3.2.1
   material_ui: ^1.11.1
-  material_3_expressive: ^1.2.2
+  material_3_expressive: ^1.2.3
   motor: ^1.1.0
   quickjs_engine: ^0.1.7
   dio: ^5.11.1

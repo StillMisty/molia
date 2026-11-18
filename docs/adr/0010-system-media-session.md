@@ -193,9 +193,8 @@ LocalPlaybackService ──监听──▶ LocalAudioHandler ──▶ MediaSess
   `repeat` / `shuffle` 媒体动作，应用无法得知目标模式，因此不映射成 toggle、
   也不绕过 `PlaybackCommandPort`——这两个属性只反映应用内模式，切换仍走应用内
   / Android 通知动作。MPRIS `Seek` / `SetPosition` 在 3.2.0 丢位置（插件发顶层
-  `positionMs`、Dart 通道读 `args`），已在 3.2.1-pre.1 修复（Linux 改发 `args`，
+  `positionMs`、Dart 通道读 `args`），已在 3.2.1 修复（Linux 改发 `args`，
   Dart 同时兜底旧键）；修复前只影响系统 / `playerctl` 的 seek，应用内 seek
-  正常。依赖暂固定 pre-release，正式版发布后改回稳定约束（验证见 pitfalls
-  #102、Molia #58 与上游 wyrindev/flutter-media-session#62）。
+  正常。验证见 pitfalls #102、Molia #58 与上游 wyrindev/flutter-media-session#62。
 - 无 session bus：插件 `activate` 不抛异常，只是不占用 MPRIS 名字；播放链路
   照常，没有用户可见错误，与历史降级口径一致。
