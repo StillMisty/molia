@@ -13,6 +13,8 @@
 | 架构与分层（as-built） | `docs/architecture.md` | 分层约束由 `test/architecture/` 强制执行 |
 | 模块布局 / 文件体积守卫 | `docs/adr/0034-module-layout-and-file-size-guardrails.md` | domain/models 唯一模型位置、lib/utils 纯工具、800 行棘轮、pages/widgets 禁止 data import |
 | 平台音频会话 / Android 混播焦点 | `docs/adr/0035-platform-audio-session-lifecycle.md` | 唯一激活 / 释放所有者、20 秒暂停宽限、iOS 启动释放、duck 音量 |
+| 桌面输出丢失 / Windows 身份 / macOS 播放菜单 / Linux 桌面入口 | `docs/adr/0036-desktop-media-integration.md` | 一个端口、只暂停消失的旧输出、三端检测与平台通道、刻意不声明文件关联 |
+| Linux 桌面入口打包资产 | `linux/packaging/README.md` | 每个 `.desktop` 字段的理由与图标再生成 |
 | 领域术语与模块职责 | `GLOSSARY.md` | 新术语落地时登记 |
 | 已知坑（编号被源码引用） | `docs/pitfalls.md` | 编号不可重排，新增追加到末尾 |
 | LX 音源、引擎、验证清单 | `docs/lx_sources.md` | 引擎 / 音源改动先看这里 |

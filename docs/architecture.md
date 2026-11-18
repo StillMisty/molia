@@ -215,8 +215,12 @@
   无曲目时播放 / 切歌禁用，模式仍可切换。
 - **平台音频会话与焦点**：`PlatformAudioPort`（`lib/playback/platform_audio_port.dart`）
   是平台音频的唯一边界：会话配置 / 激活 / 释放、中断 / 输出丢失 / 设备变化流、
-  `start` / `dispose` 与能力位；移动端包 `audio_session`，桌面 no-op，P1 的输出
-  监听复用同一端口。`AudioSessionLifecycle`（`audio_session_lifecycle.dart`）是
+  `start` / `dispose` 与能力位（`supported` 表示会话实现，`emitsOutputLost`
+  表示只提供输出丢失事件）；移动端包 `audio_session`，桌面由
+  `desktop_audio_output_port_io.dart` 补 `outputLost`（Windows
+  `IMMNotificationClient` / macOS CoreAudio / Linux `pactl subscribe`，ADR-0036），
+  会话配置 / 激活 / 释放仍只走 `supported` 的移动端路径。
+  `AudioSessionLifecycle`（`audio_session_lifecycle.dart`）是
   配置 / 激活 / 释放的唯一所有者：起播先激活，暂停 20 秒宽限后释放，停止 /
   dispose / 退出立即释放；中断导致的暂停要等 `AudioFocusGuard` 结算（不放弃
   焦点，否则 Android 收不到后续 gain）；iOS 媒体会话激活后重配置并空闲释放
@@ -226,10 +230,11 @@
   开启「与其他应用同时播放」时永久失焦忽略、transient 暂停、duck 压低
   （0.2，经基值 × 包络 × duck 的唯一音量路径，短斜坡，暂停 / 停止 / 切歌 /
   起播复位）；关闭时任何中断暂停。`AudioFocusGuard` 只在本应用真的暂停 / 压低
-  过时续播 / 恢复，手动操作会取消记账。耳机拔出由端口
+  过时续播 / 恢复，手动操作会取消记账。耳机拔出与桌面默认输出消失都走端口
   `outputLost` 立即暂停；该流在丢失音频焦点后可能被 audio_session 反注册，
-  另以设备变化流兜底（只对非内置输出设备被移除暂停，规则见
-  `audio_output_policy.dart`）；倒计时定时关闭为**绝对 deadline**
+  移动端另以设备变化流兜底（只对非内置输出设备被移除暂停，规则见
+  `audio_output_policy.dart`）；桌面事件只表示「旧默认输出已不可用」，主动切换
+  两台存活设备不暂停。倒计时定时关闭为**绝对 deadline**
   （tick / 快照变化 / 回前台三路补触发），并按平台挂 `SleepTimerAlarm`
   （`lib/services/sleep_timer_alarm*.dart` → Android `SleepTimerChannelHandler` /
   iOS `SleepTimerChannelHandler.swift`）：熄屏 / Doze 下 Dart timer 被节流或
@@ -1581,6 +1586,10 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   双击品牌 / 按钮不最大化）+ 设置 + 窗口按钮（仅 Linux / Windows 自画；macOS
   保留原生标题栏与红绿灯，`WindowChrome.usesCustomTitleBar` 为 false；图标
   按钮一律不做悬浮提示，语义走 `semanticLabel`，全应用同口径——见「按钮选型」）。
+  macOS 另有程序化顶层「播放」菜单（`macos/Runner/AppDelegate.swift` +
+  `lib/services/window/playback_menu_io.dart`）：播放 / 暂停、上一首、下一首，
+  无 key equivalent；命令回落到托盘 / 任务栏同一批 provider 闭包，文案 / 启用态
+  由组合根在 `syncTray` 同一处下发（ADR-0036）。
   **全局搜索**是 Ctrl+F / 品牌区打开的全屏遮罩（`lib/widgets/global_search_overlay.dart`）：
   壳层在内容区中上放一个隐形占位盒，遮罩打开时实测它的矩形，把搜索条与结果面板
   摆在同一条位置（自建 route 挂在根导航器上，坐标是整窗口径）；结果与资料库共用

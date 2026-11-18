@@ -1200,3 +1200,38 @@
      停止 / 退出直接释放，暂停 20 秒宽限后释放，中断暂停必须等守卫结算（提前
      放弃焦点会让 Android 收不到 gain，通话结束后无法自动续播）。改动这段时
      不要给媒体会话后端加第二套激活 / 释放逻辑。
+
+115. **Windows 的 `IMMNotificationClient` 回调不在窗口线程**：拔耳机 / 蓝牙断开时
+     COM 会把 `OnDeviceRemoved` / `OnDefaultDeviceChanged` 投递到任意 worker
+     线程，回调里直接调 Flutter 通道、读界面对象或长时间枚举设备都是崩溃 / 卡顿
+     风险。Molia 的回调只登记待处理设备 id 并 `PostMessage`；窗口过程收到私有
+     消息后再做 `GetDevice` / `GetState` 存活判断与 `outputLost` 调用
+     （`windows/runner/audio_output_watcher.*`）。只在窗口与通道创建之后注册；
+     `OnDestroy` 必须先 `UnregisterEndpointNotificationCallback` 再销毁引擎，
+     否则析构期仍有回调，而 `CoUninitialize` 还在更外层。
+
+116. **CoreAudio 的 property listener block 不保证主线程，移除也要在主队列**：
+    `AudioObjectAddPropertyListenerBlock` 用 `DispatchQueue.main` 投递，但回调
+    注册本身来自 HAL；不要在 block 里直接做 Flutter 调用以外的长操作。默认输出
+    变化时先比较新设备与上一台，只有旧设备 `DeviceIsAlive == 0` 或新默认未知才
+    上报「输出丢失」；两台存活设备之间的主动切换必须继续播放。退出时用保存的
+    block 与 address 调 `AudioObjectRemovePropertyListenerBlock`，不要依赖
+    AppDelegate 析构顺序（macOS 的 `applicationWillTerminate` 是最后一个可靠
+    时机）。
+
+117. **`pactl subscribe` 是可选工具，子进程必须收干净**：Flatpak / 精简容器里
+    没有 `pactl`，声音服务器重启会让 child 直接退出；这些都不是播放错误，不能
+    弹 UI、不能重试风暴。Linux watcher 只在 `remove` 的 sink id 等于跟踪的默认
+    sink 时暂停（`remove` source / sink-input 不是输出丢失），`new` / `change`
+    只刷新 id→name 与默认名；解析器 `pactl_sink_events.dart` 必须对损坏行 /
+    CRLF / 超大 id 返回 null 而不抛异常。dispose 要 `kill()` 后 `await exitCode`
+    并关闭 stdout / stderr；`_disposed` 之后晚到的行必须忽略，否则退出路径会
+    在端口销毁后继续触发暂停。
+
+118. **Windows 音量合成器的名字来自 `JustAudioMediaKit.title`，不是应用显示名**：
+    `just_audio_media_kit` 在创建播放器 / 初始化时读取这个静态值标记音频会话，
+    默认值是插件名 `JustAudioMediaKit`。Molia 在
+    `desktop_audio_init_io.dart` 的 `ensureInitialized()` 之前固定设为品牌名
+    `Molia`（与 AUMID、可执行文件元数据、Linux `.desktop` 的 `Name` 同层）。
+    改应用内可自定义显示标题不会影响它；`media_kit` 也不会热更新已有播放器，
+    要联动是另一次改动。排查混音器名称时先确认这行仍在初始化之前。

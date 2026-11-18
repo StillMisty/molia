@@ -171,9 +171,27 @@
   不持久化，`stopLocalPlayback` 一并撤销。
 - **Platform audio port（平台音频端口）** — `lib/playback/platform_audio_port.dart`：
   平台音频的唯一可替换边界（会话配置 / 激活 / 释放、中断 / 输出丢失 / 设备变化
-  三条流、`start` / `dispose`、`supported`）。移动端适配器包 `audio_session`
-  （`mobile_audio_session_port.dart`），桌面（含 macOS）no-op；P1 的桌面输出监听
-  扩展同一接口。除适配器外任何模块不得直接调 `audio_session` / 平台音频 API。
+  三条流、`start` / `dispose`、`supported` / `emitsOutputLost`）。移动端适配器包
+  `audio_session`（`mobile_audio_session_port.dart`）；桌面由输出监听端口
+  （`desktop_audio_output_port_io.dart`）只补 `outputLost`，`supported` 仍为
+  false，不碰会话配置 / 激活 / 释放（ADR-0036）。除适配器外任何模块不得直接调
+  `audio_session` / 平台音频 API。
+- **Desktop audio output watcher（桌面输出监听）** — 桌面端口背后的三端实现：
+  Windows `IMMNotificationClient`（`windows/runner/audio_output_watcher.*`）、
+  macOS 系统对象的默认输出 CoreAudio listener（`AppDelegate.swift`）、Linux
+  `pactl subscribe` 子进程（`lib/playback/pactl_output_watcher.dart`）。只回答
+  「之前的默认输出是否已不可用」，不处理设备新增 / 主动切换；失败静默降级。
+  见 ADR-0036。
+- **Desktop output loss（桌面输出丢失）** — `outputLost` 的语义：之前正在使用的
+  默认输出（耳机 / 蓝牙 / USB DAC / 唯一输出）消失或变为不可用。经
+  `LocalPlaybackService` 现有的 becoming-noisy 接线落到 `pause(urgent: true)`：
+  立即暂停、不走淡变、不自动恢复、无用户设置。重复事件幂等；Android / iOS 的
+  设备移除暂停走各自既有路径，语义一致但实现不同。
+- **Desktop playback menu（桌面播放菜单）** — macOS 顶层「播放」菜单
+  （`macos/Runner/AppDelegate.swift` + `lib/services/window/playback_menu_io.dart`）：
+  播放 / 暂停、上一首、下一首，无 key equivalent（媒体键与应用内快捷键仍是唯一
+  键位来源）。命令回落到托盘 / 任务栏同一批 provider 闭包；文案由 Dart 按语言
+  下发，原生只应用变化值。非 macOS 为空操作。见 ADR-0036。
 - **Audio session lifecycle（音频会话生命周期）** — `lib/playback/audio_session_lifecycle.dart`：
   配置 / 激活 / 释放的唯一所有者，状态机 `inactive → active → releasePending →
   inactive`。起播先激活；暂停 20 秒宽限后释放；停止 / dispose / 退出立即释放；
