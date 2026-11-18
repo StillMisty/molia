@@ -33,6 +33,11 @@ void initDesktopAudioIfNeeded() {
       // 下载 / 下一首预取走独立 HTTP 直写磁盘，不受此值影响（见
       // docs/memory.md）。
       JustAudioMediaKit.bufferSize = 8 * 1024 * 1024;
+      // Windows 音量合成器 / 音频会话的进程身份：just_audio_media_kit 用这个
+      // 静态标题标记会话，默认值是插件名 "JustAudioMediaKit"，用户无法在
+      // 混音器里认出 Molia。必须在 ensureInitialized / 创建播放器之前设置
+      // （ADR-0036）；这是进程品牌身份，不跟应用内可改的显示名联动。
+      JustAudioMediaKit.title = 'Molia';
       JustAudioMediaKit.ensureInitialized();
       desktopAudioAvailable = true;
       desktopAudioInitError = null;

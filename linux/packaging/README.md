@@ -18,6 +18,26 @@
 `activate` 转发给已有实例，并带上 startup notification token（Wayland 聚焦）。
 没有 session bus 时回退非唯一模式，由 Dart 文件锁兜底（ADR-0020）。
 
+## `.desktop` 字段与取舍
+
+- `Name=Molia` 全平台统一且**不本地化**：品牌名跟系统语言变化会让用户在菜单里
+  找不到同一个应用；解释性文字放 `GenericName`。
+- `GenericName` / `GenericName[zh_CN]`：让 GNOME / KDE 的启动器能按「音乐播放器 /
+  Music Player」理解应用；只做翻译，不改品牌。
+- `Keywords` / `Keywords[zh_CN]`：搜索词（音乐 / 播放器 / 音频 / 播放），值必须以
+  分号结尾，否则 `desktop-file-validate` 会报格式错误。
+- `X-GNOME-UsesNotifications=true`：GNOME 把应用发出的通知归到 Molia 名下。
+- `SingleMainWindow=true`：应用是单实例（ADR-0020），声明后 GNOME 启动第二次时
+  聚焦已有窗口而不是暗示要开第二个主窗口。
+- `StartupNotify=true`：启动器在进程启动期间显示忙碌反馈（与单实例激活携带的
+  startup notification token 一致）。
+- **刻意不写** `MimeType` / `Actions` / `DBusActivatable`：当前应用不解析命令行文件
+  参数，也没有文件打开动作。声明音频 MIME 会让文件管理器把 Molia 列为「打开方式」，
+  用户点开却无法播放。文件关联是独立功能，先做到这两个键就够。
+- `Categories` / `StartupWMClass` / `Exec` / `Icon` 的口径不变（见上文）；
+  `test/packaging/linux_desktop_test.dart` 钉住以上字段与「没有 MimeType」的契约，
+  `desktop-file-validate`（可用时）是最后一道门禁。
+
 ## 图标再生成（品牌更新时）
 
 源图 `assets/icons/molia_icon_full_bleed.svg`（2048²，圆角矩形 + mark）。逐尺寸

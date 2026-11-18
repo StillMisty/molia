@@ -36,11 +36,26 @@ void main() {
     expect(entries['Name'], 'Molia');
     // 品牌名全平台统一 Molia：不使用本地化名字（有 zh 覆盖就会跟系统语言变）。
     expect(entries['Name[zh_CN]'], isNull);
+    expect(entries['GenericName'], 'Music Player');
+    expect(entries['GenericName[zh_CN]'], '音乐播放器');
     expect(entries['Exec'], 'molia');
     expect(entries['Icon'], appId);
     expect(entries['StartupWMClass'], appId);
     expect(entries['Categories'], endsWith(';'));
     expect(entries['Terminal'], 'false');
+    // 启动器搜索 / 归属 / 单窗口 / 启动反馈：GNOME 与 KDE 共用这些键。
+    expect(entries['Keywords'], 'Music;Player;Audio;Playback;');
+    expect(entries['Keywords[zh_CN]'], '音乐;播放器;音频;播放;');
+    expect(entries['Keywords'], endsWith(';'));
+    expect(entries['Keywords[zh_CN]'], endsWith(';'));
+    expect(entries['X-GNOME-UsesNotifications'], 'true');
+    expect(entries['SingleMainWindow'], 'true');
+    expect(entries['StartupNotify'], 'true');
+    // 应用不解析 argv 文件参数：刻意不声明文件关联 / 动作 / D-Bus 激活，
+    // 避免文件管理器把音频文件错误地交给 Molia。
+    expect(entries['MimeType'], isNull);
+    expect(entries['Actions'], isNull);
+    expect(entries['DBusActivatable'], isNull);
   });
 
   test('hicolor 图标齐全，目录尺寸与 PNG 实际尺寸一致', () {
