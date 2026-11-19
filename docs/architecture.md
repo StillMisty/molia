@@ -62,7 +62,12 @@
    模型只在 `lib/domain/models/`、服务在 `lib/services/`，`lib/utils/**` 不反向
    依赖 UI / 状态 / 数据层，`lib/**` 单文件 ≤800 行，`pages/widgets` 禁止
    import `lib/data/**`（白名单已清空，新增违规必须修复）；现存超限文件仍在
-   体积白名单登记，只减不增。
+   体积白名单登记，只减不增；
+7. 原生互操作边界由 `test/architecture/native_interop_test.dart` 强制（ADR-0038）：
+   生成绑定与薄适配器只在 `lib/platform/**`；`domain` / `providers` / `pages` /
+   `widgets` 禁止直接 import `dart:ffi`、`package:jni/`、`package:jni_flutter/`、
+   `package:win32/`、`package:posix/`、`package:objective_c/` 或 `lib/platform/**`。
+   阶段 0 的现存手写 FFI 是只减不增的白名单，阶段 1–2 迁移后清空。
 
 ## 2. 领域层
 
