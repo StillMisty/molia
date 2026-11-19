@@ -6,19 +6,25 @@ native interop preview（preview、无 Windows / Linux、官方不建议生产�
 
 ## 约定
 
-- 每个域一份 schema：`tool/pigeon/<域>.dart`（如 `sleep_timer.dart`）；
+- 每个域一份 schema：`tool/pigeon/<域>.dart`（如 `apple_system.dart`）；
 - 生成物统一 `lib/platform/pigeon/<域>.g.dart`，提交进仓库；
 - 命令：`dart run pigeon --input tool/pigeon/<域>.dart`，平台 / 包名参数在
   schema 文件头部固定，避免每条命令各写一份；
 - Apple 域生成 Dart + Swift host：Swift 实现在 `ios/Runner` / `macos/Runner`，
-  共享逻辑可复用 `sharedDarwinSource` 风格；不需要 `package:objective_c`，
-  也不生成 Objective-C / FFIgen 绑定；
+  同一份契约分别生成到两端；不需要 `package:objective_c`，也不生成
+  Objective-C / FFIgen 绑定；
 - 正在迁 JNI / FFI 的通道不做 Pigeon 迁移，避免同一域两份契约；
 - 旧的手写 `MethodChannel` 实现保留到契约测试通过，再删旧路径。
 
-## 阶段 0 状态
+## 当前契约
 
-本目录目前只有约定，没有 schema，也没有生成物。阶段 3 先接 Apple（系统字体 /
-低电量模式，Swift host），阶段 4 再按其余域逐个添加；此时 CI 的生成物 drift
-任务只运行 `dart run build_runner build`、`dart run tool/jnigen.dart`、
-`dart run tool/ffigen_system.dart`。
+| schema | Dart | Swift host | 原生实现 |
+| --- | --- | --- | --- |
+| `apple_system.dart` | `lib/platform/pigeon/apple_system.g.dart` | `ios/Runner/AppleSystemApi.g.swift`、`macos/Runner/AppleSystemApi.g.swift` | `ios/Runner/AppleSystemHostImpl.swift`、`macos/Runner/AppleSystemHostImpl.swift` |
+
+`apple_system` 只包含 Apple 纯查询：设备字体族、电池 / 省电模式。Dart 侧经
+`lib/platform/pigeon/apple_system_adapter.dart` 做平台守卫与失败降级，业务层
+（`services/`）不直接碰生成代码。Android 对应能力走 JNI（ADR-0038 阶段 2）。
+
+生成物由 CI 的 drift job 校验：改 schema 后必须重新生成并提交 Dart 与两份
+Swift 产物，否则 `git status --porcelain` 会失败。

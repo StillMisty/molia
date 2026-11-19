@@ -2,6 +2,9 @@
 
 - 状态：已采纳
 - 日期：2026-10-25
+- 2026-11-20 更新：Apple 最低支持已提升到 iOS 27 / macOS 27（见 `AGENTS.md`
+  工具链与 ADR-0038 阶段 3）；正文的 12+ / 15.0 是决策当时的背景，结构与
+  窗口 / 托盘决策不变。
 - 相关：`macos/`、`lib/services/window/**`、`lib/app/bootstrap/desktop_stack.dart`、
   `lib/playback/desktop_audio_init_io.dart`、`docs/media_kit_native_libs.md`、
   `.github/workflows/release.yml`、`ios/Runner.xcodeproj/project.pbxproj`

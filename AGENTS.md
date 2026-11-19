@@ -13,7 +13,7 @@ Flutter / Dart 3.50.0 / 3.14.0；JDK 27+；Gradle 9.9.1 / AGP 9.5.1 / Kotlin 2.4
 compileSdk 37.2 / targetSdk 37，minSdk 35；build-tools 37.0.0；NDK 30.0.16248370；
 Android CLI 1.1.16919734。
 这里是版本来源；其它文档与技能只引用本节、不复列版本号，改 CI / 发布工作流前先改本行。
-最低支持：iOS 18 / macOS 12（Xcode；macOS 走 just_audio 原生 AVPlayer，不需要 libmpv）。
+最低支持：iOS 27 / macOS 27（Xcode；macOS 走 just_audio 原生 AVPlayer，不需要 libmpv）。
 
 版本策略：本仓刻意跟最新 stable（工具链与依赖都是），不因“更稳妥”降级。
 升级门槛是 `flutter analyze` + `flutter test` + 发布矩阵 dry-run 全绿；确实要压制的
@@ -73,9 +73,10 @@ tool/agent/worktree_prepare.sh <dir> [branch]  # 新 worktree：分支 / 签名 
   tool/jnigen.dart`（Android JNI，先编译 Kotlin 再生成，产物
   `lib/platform/android/*.g.dart`；生成 JDK 21、构建仍 JDK 27）、
   `dart run tool/ffigen_system.dart`（桌面 C 系统绑定，
-  产物 `lib/platform/desktop/*.g.dart`）；Pigeon 契约在 `tool/pigeon/`，阶段 3（Apple）/
-  4（其余域）起按域运行 `dart run pigeon --input tool/pigeon/<域>.dart`，生成 Dart +
-  Swift host。生成物一律提交进仓库，勿手改。
+  产物 `lib/platform/desktop/*.g.dart`）；
+- 改 Pigeon 契约（`tool/pigeon/`）→ `dart run pigeon --input tool/pigeon/<域>.dart`
+  （产物 `lib/platform/pigeon/*.g.dart` + `ios/Runner` / `macos/Runner` 的 Swift host）。
+  生成物一律提交进仓库，勿手改。
 
 发布：`git tag -s v1.2.3 -m "Molia 1.2.3" && git push origin v1.2.3`（tag 即版本；
 流程、secrets 与产物清单见 `.agents/skills/molia-release/`）。

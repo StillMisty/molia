@@ -2039,7 +2039,7 @@ flutter build apk --release --split-per-abi --split-debug-info=build/symbols --o
 
 - any-listen 真实协议（WS IPC）接入（当前为 HTTP 占位端点，抽象已就绪）；
 - 投屏 / Android Auto 保持在范围外（ADR-0025）；恢复前先补真实设备与单会话方案验证；
-- 真机验证：Android 17 通知/耳机键、iOS 18+ 后台播放；歌词显示的模拟器交互与通知栏验证、
+- 真机验证：Android 17 通知/耳机键、iOS 27+ 后台播放；歌词显示的模拟器交互与通知栏验证、
   A2DP 车载字段映射（见 `docs/lyrics_display.md` §9）；
 - 桌面歌词平台输出等 Flutter windowing stable（见 `docs/lyrics_display.md` §9）；
   M3E 组件目视复核（弹层观感/间距）；

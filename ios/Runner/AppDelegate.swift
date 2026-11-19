@@ -2,7 +2,7 @@ import Flutter
 import UIKit
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   /// 定时关闭原生唤醒通道（强引用持有待触发的 DispatchWorkItem）。
   private var sleepTimerHandler: SleepTimerChannelHandler?
 
@@ -10,49 +10,25 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
-
-    // 设备字体枚举：供设置「应用字体」与海报字体选择使用。
-    if let controller = window?.rootViewController as? FlutterViewController {
-      let fontsChannel = FlutterMethodChannel(
-        name: "top.stillmisty.molia/system_fonts",
-        binaryMessenger: controller.binaryMessenger)
-      fontsChannel.setMethodCallHandler { call, result in
-        if call.method == "listFamilies" {
-          result(UIFont.familyNames.sorted())
-        } else {
-          result(FlutterMethodNotImplemented)
-        }
-      }
-
-      // 电池状态：同步调度器的省电等级判定。
-      let batteryChannel = FlutterMethodChannel(
-        name: "top.stillmisty.molia/battery",
-        binaryMessenger: controller.binaryMessenger)
-      batteryChannel.setMethodCallHandler { call, result in
-        if call.method == "snapshot" {
-          UIDevice.current.isBatteryMonitoringEnabled = true
-          let level = UIDevice.current.batteryLevel
-          let state = UIDevice.current.batteryState
-          let charging = state == .charging || state == .full
-          let payload: [String: Any] = [
-            "level": level < 0 ? -1 : Int((level * 100).rounded()),
-            "charging": charging,
-            "powerSave": ProcessInfo.processInfo.isLowPowerModeEnabled,
-          ]
-          result(payload)
-        } else {
-          result(FlutterMethodNotImplemented)
-        }
-      }
-
-      // 定时关闭：原生定时器到点唤醒 Dart，补熄屏下 Dart timer 被挂起的
-      // 缺口（后台音频期间进程保持活跃；真正暂停仍由 Dart 控制器执行）。
-      sleepTimerHandler = SleepTimerChannelHandler(
-        messenger: controller.binaryMessenger)
-    }
-
+    // UIScene 生命周期下启动早期还拿不到 Flutter 的根控制器；插件与通道
+    // 统一在 `didInitializeImplicitFlutterEngine` 注册（见 Flutter 的 UIScene
+    // 迁移），这里只保留父类行为。
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    let messenger = engineBridge.applicationRegistrar.messenger()
+
+    // 设备字体枚举 / 电池状态：Pigeon 生成的 Swift host（ADR-0038 阶段 3）。
+    AppleSystemHostSetup.setUp(
+      binaryMessenger: messenger,
+      api: AppleSystemHostImpl())
+
+    // 定时关闭：原生定时器到点唤醒 Dart，补熄屏下 Dart timer 被挂起的
+    // 缺口（后台音频期间进程保持活跃；真正暂停仍由 Dart 控制器执行）。
+    sleepTimerHandler = SleepTimerChannelHandler(messenger: messenger)
   }
 }
 

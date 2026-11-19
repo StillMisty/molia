@@ -4,11 +4,13 @@ import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 
 import '../platform/android/system_interop_adapter.dart' as android_interop;
+import '../platform/pigeon/apple_system_adapter.dart' as apple_interop;
 
 /// 电池状态快照（探针输出）。
 ///
 /// [level] 为百分比（0–100），-1 = 未知（桌面平台未实现 / 读取失败）。
-/// 桌面端没有系统省电模式与充电状态的统一来源，`powerSave` 恒为 false。
+/// macOS 没有电池读取的统一来源，`level` 恒为 -1；系统省电模式在
+/// iOS / macOS 都可用。
 class BatterySnapshot {
   const BatterySnapshot({
     this.level = -1,
@@ -26,16 +28,22 @@ class BatterySnapshot {
   static const BatterySnapshot unknown = BatterySnapshot();
 }
 
-/// 电池探针：Android 优先走 JNI，其余平台 / JNI 失败回退平台通道。
+/// 电池探针：Android 优先走 JNI，Apple 走 Pigeon，其余平台回退平台通道。
 ///
-/// 平台实现：Android（Kotlin `SystemInterop`，通道 handler 委托同一对象）与
-/// iOS（`AppDelegate`）；其余平台没有实现，调用返回 [BatterySnapshot.unknown]
-/// （探针失败一律按「未知」处理，调度器不会因此误判省电等级）。
+/// 平台实现：Android（Kotlin `SystemInterop`，通道 handler 委托同一对象）、
+/// iOS / macOS（Pigeon `AppleSystemHost`）；其余平台没有实现，调用返回
+/// [BatterySnapshot.unknown]（探针失败一律按「未知」处理，调度器不会因此
+/// 误判省电等级）。
 class BatteryProbe {
-  BatteryProbe({MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel('top.stillmisty.molia/battery');
+  BatteryProbe({
+    MethodChannel? channel,
+    apple_interop.AppleSystemAdapter? apple,
+  }) : _channel =
+           channel ?? const MethodChannel('top.stillmisty.molia/battery'),
+       _apple = apple ?? apple_interop.AppleSystemAdapter();
 
   final MethodChannel _channel;
+  final apple_interop.AppleSystemAdapter _apple;
   final Logger _logger = Logger('molia.battery');
 
   Future<BatterySnapshot> read() async {
@@ -50,6 +58,16 @@ class BatteryProbe {
           powerSave: snapshot.powerSave,
         );
       }
+    }
+    // Apple：Pigeon Swift host；失败按未知处理，不再回退旧 Map 通道。
+    if (_apple.supported) {
+      final snapshot = await _apple.readBatterySnapshot();
+      if (snapshot == null) return BatterySnapshot.unknown;
+      return BatterySnapshot(
+        level: snapshot.level,
+        charging: snapshot.charging,
+        powerSave: snapshot.powerSave,
+      );
     }
     try {
       final result = await _channel.invokeMapMethod<String, Object?>(

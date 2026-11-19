@@ -1,8 +1,9 @@
 import 'dart:io';
+import 'dart:typed_data';
 
-import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../platform/pigeon/apple_system_adapter.dart';
 import 'sfnt_families.dart';
 
 /// 设备已安装字体族枚举（应用字体 / 海报字体选择的公共数据源）。
@@ -13,7 +14,7 @@ import 'sfnt_families.dart';
 ///   与 Skia 的字体匹配逻辑一致。该配置属于字体数据（`font_data_file`，
 ///   app.te 明确允许应用读取），Flutter 引擎自身也解析同一文件构建字体族；
 /// - iOS/macOS：`UIFont.familyNames` / `NSFontManager.availableFontFamilies`
-///   （Runner 注册的 `system_fonts` 通道）；
+///   （Pigeon `AppleSystemHost` 的 Swift host）；
 /// - Linux：`fc-list : family`（fontconfig，与桌面端渲染同源）；
 /// - Windows：扫描系统 / 用户字体目录并合并注册表
 ///   （`…\CurrentVersion\Fonts` 的 HKLM + HKCU，覆盖自定义安装目录），
@@ -24,9 +25,7 @@ import 'sfnt_families.dart';
 class SystemFontsService {
   SystemFontsService._();
 
-  static const MethodChannel _channel = MethodChannel(
-    'top.stillmisty.molia/system_fonts',
-  );
+  static final AppleSystemAdapter _appleSystem = AppleSystemAdapter();
 
   /// Android 字体族定义文件（不同系统版本/厂商分区，存在即解析；
   /// 权限不可读的路径静默跳过）。
@@ -149,9 +148,7 @@ class SystemFontsService {
       if (Platform.isAndroid) {
         families = await _androidFamilies();
       } else if (Platform.isIOS || Platform.isMacOS) {
-        families =
-            await _channel.invokeListMethod<String>('listFamilies') ??
-            const <String>[];
+        families = await _appleSystem.listFontFamilies();
       } else if (Platform.isLinux) {
         families = await _linuxFamilies();
       } else if (Platform.isWindows) {

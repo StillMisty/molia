@@ -97,6 +97,7 @@ tool/agent/app.sh run -d linux --headless  # 无图形显示：显式 Xvfb
 | 内置平台响应 | `node tool/gen_search_fixtures.mjs` 等 `tool/gen_*_fixtures.mjs` | `test/` 下的 fixture |
 | Windows 任务栏图标 | `python3 tool/gen_taskbar_icons.py` | `windows/runner/resources/thumbbar/` 下的 `.ico` |
 | 品牌图标 | `swift tool/gen_macos_icons.swift` / `dart run icons_launcher:create` | macOS / iOS / Windows 图标 |
+| Pigeon 契约（`tool/pigeon/<域>.dart`） | `dart run pigeon --input tool/pigeon/<域>.dart` | `lib/platform/pigeon/*.g.dart` + `ios/Runner` / `macos/Runner` 的 Swift host |
 
 规则：生成物提交进仓库；**改源再生成**，不要反向改产物。改表结构时不能只跑
 `dart run build_runner build`：还要用 `make-migrations` 生成快照，再用 `stepByStep`

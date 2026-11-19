@@ -101,8 +101,8 @@ Molia 是一个用 Flutter 写的音乐播放器：内置 QQ 音乐、网易音�
 | Android | Android 15（API 35）及以上 | `molia-<version>-android-arm64.apk`、`armv7`、`x86_64`，或 `.aab` |
 | Windows | Windows 10 / 11 x64 | `molia-<version>-windows-x64.zip`（便携版）或 `setup.exe`（安装版） |
 | Linux | x64，需系统安装 `mpv` / `libmpv2` | `molia-<version>-linux-x64.tar.gz`，解压后可 `./install.sh` 安装桌面入口 |
-| iOS | iOS 18 及以上，需自行签名 / 侧载 | `molia-<version>-ios-unsigned.zip`（无签名，仅供验证） |
-| macOS | macOS 12 及以上（Apple Silicon / Intel 视构建机架构） | `molia-<version>-macos-<arch>-unsigned.zip`（ad-hoc 签名、未公证，仅供验证） |
+| iOS | iOS 27 及以上，需自行签名 / 侧载 | `molia-<version>-ios-unsigned.zip`（无签名，仅供验证） |
+| macOS | macOS 27 及以上（Apple Silicon / Intel 视构建机架构） | `molia-<version>-macos-<arch>-unsigned.zip`（ad-hoc 签名、未公证，仅供验证） |
 
 > Android 的应用内更新需要允许「安装未知应用」；Linux 的托盘图标需要系统有 StatusNotifier 宿主（GNOME 需 AppIndicator 扩展），缺失时会自动降级为无托盘。macOS 不提供应用内更新：在「系统设置 › 隐私与安全性」放行首次打开后，后续版本从发布页手动下载覆盖。
 
