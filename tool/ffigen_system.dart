@@ -2,10 +2,8 @@
 ///
 /// 用法：`dart run tool/ffigen_system.dart`
 ///
-/// 阶段 0 只建立流程与边界，不生成业务绑定：`inputs` 为空时脚本打印说明并
-/// 正常退出，CI 的生成物 drift 任务因此不会失败。阶段 1（桌面 C）在
-/// `inputs` 里登记 vendored 头文件后，脚本会产出
-/// `lib/platform/<output>.g.dart`（调用方在 `output` 里写 `desktop/...`）。
+/// 阶段 0 建立流程与边界；阶段 1 起在 `inputs` 里登记 vendored 头文件，脚本
+/// 产出 `lib/platform/<output>.g.dart`（调用方在 `output` 里写 `desktop/...`）。
 ///
 /// Apple 不在此脚本：系统字体、低电量模式统一走 Swift + Pigeon，不生成
 /// Objective-C 绑定，也不直接依赖 `package:objective_c`。
@@ -35,14 +33,22 @@ class FfigenInput {
   final List<String> compilerOptions;
 }
 
-/// 当前登记的输入。阶段 0 刻意留空。
-const List<FfigenInput> inputs = <FfigenInput>[];
+/// 当前登记的输入：阶段 1 桌面 C（POSIX / allocator）。
+///
+/// Win32 不在这里生成：直接复用 `package:win32` 6.4 的上游生成绑定，避免
+/// 自己维护 Windows 声明（ADR-0038）。
+const List<FfigenInput> inputs = <FfigenInput>[
+  FfigenInput(
+    output: 'desktop/system_ffi',
+    header: 'third_party/system_shim/system_shim.h',
+  ),
+];
 
 Future<void> main(List<String> args) async {
   if (inputs.isEmpty) {
     stdout.writeln(
-      'ffigen: 阶段 0 未配置绑定输入，跳过（ADR-0038）。\n'
-      '  阶段 1 在 tool/ffigen_system.dart 的 inputs 中登记桌面 C 头文件后重跑。',
+      'ffigen: 未配置绑定输入，跳过（ADR-0038）。\n'
+      '  在 tool/ffigen_system.dart 的 inputs 中登记头文件后重跑。',
     );
     return;
   }
@@ -78,12 +84,33 @@ Future<void> main(List<String> args) async {
         dart: DartOutput(path: output.absolute.uri),
         preamble: '// 生成物：dart run tool/ffigen_system.dart；勿手改（ADR-0038）。\n',
       ),
+      // FFIgen 23 的声明默认全部排除，必须用 visitor 显式纳入。libc 的
+      // `__errno_location` / `__error` 以 `_` 开头，在 Dart 里是库私有；这里
+      // 改名并让生成器写出 `symbol:` 保留真实符号名，适配器才能跨库调用。
+      visitors: [
+        Visitor(
+          func: (node) {
+            node.isIncluded = true;
+            node.name = _dartFunctionName(node.originalName);
+          },
+        ),
+      ],
     );
     await generator.generate();
   }
 
   stdout.writeln('ffigen: 已生成 ${inputs.length} 个绑定到 lib/platform/');
 }
+
+/// 生成绑定的 Dart 函数名。
+///
+/// 只有 libc 的两个 errno 入口需要改名（`_` 前缀 = Dart 库私有）；其它函数
+/// 保持原名，生成器不会额外写 `symbol:`。
+String _dartFunctionName(String originalName) => switch (originalName) {
+  '__errno_location' => 'errnoLocation',
+  '__error' => 'darwinErrno',
+  _ => originalName,
+};
 
 /// 仓库根：优先从脚本位置（`tool/` 的上一级）推断，其次要求 CWD 是仓库根。
 Directory _packageRoot() {

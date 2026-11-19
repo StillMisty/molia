@@ -67,9 +67,11 @@ jobs:
       - uses: actions/checkout@v7
 
       # 与 analyze-test 共用同一份 GTK / X11 依赖：native assets 的构建 hook
-      # 在生成器与后续编译中都会被加载。
-      - name: 系统依赖（native assets：GTK / X11）
+      # 在生成器与后续编译中都会被加载。FFIgen 还需要系统 libclang。
+      - name: 系统依赖（native assets：GTK / X11 + libclang）
         uses: ./.github/actions/linux-system-deps
+        with:
+          packages: libclang-dev
 
       - uses: subosito/flutter-action@v2
         with:
@@ -80,9 +82,8 @@ jobs:
       - name: pub get
         run: flutter pub get --enforce-lockfile
 
-      # 本阶段能跑的生成器：drift（数据库）与原生互操作脚本骨架。
-      # JNIgen / FFIgen 在阶段 0 没有输入，会打印「跳过」并正常退出；
-      # FFIgen 阶段 1（桌面 C）、JNIgen 阶段 2（Android）才有真实绑定输出，
+      # 本阶段能跑的生成器：drift（数据库）与原生互操作脚本。
+      # FFIgen 阶段 1 起有真实桌面 C 输出，JNIgen 阶段 2（Android）接入，
       # Pigeon 阶段 3（Apple Swift host）起接入，届时这一步才真正守住漂移。
       - name: 重新生成（drift + 原生互操作）
         run: |

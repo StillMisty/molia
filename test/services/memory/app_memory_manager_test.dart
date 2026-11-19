@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/platform/desktop/memory_release.dart';
 import 'package:molia/services/memory/app_memory_manager.dart';
 import 'package:molia/services/app_presence.dart';
 
@@ -485,5 +486,10 @@ void main() {
 
     expect(releases, 0);
     presence.markVisible();
+  });
+
+  test('releaseFreedMemoryToOs 冒烟：当前平台调用不抛异常', () {
+    // 只验证平台适配器的公开面：符号缺失 / 平台不支持都必须静默。
+    expect(releaseFreedMemoryToOs, returnsNormally);
   });
 }

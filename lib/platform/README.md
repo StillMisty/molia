@@ -9,6 +9,7 @@ ADR-0038 的唯一落点：所有 JNIgen / FFIgen / Pigeon 生成绑定与它们
 lib/platform/
   android/   # JNIgen 生成物：<name>.g.dart（Java / Kotlin 系统调用）
   desktop/   # FFIgen C 生成物：<name>.g.dart（Win32 / POSIX / macOS 进程级 C 符号）
+             # + 桌面薄适配器：process_liveness / foreground_activation / memory_release
   pigeon/    # Pigeon 生成 Dart：<name>.g.dart；Apple Swift host 在 ios/Runner / macos/Runner
   <域>.dart  # 手写的薄适配器：把生成绑定投影成端口需要的最小 Dart 面
 ```
@@ -17,6 +18,12 @@ lib/platform/
   `dart run pigeon` 写出并提交进仓库；`*.g.dart` 不参与
   `test/architecture/module_layout_test.dart` 的单文件体积棘轮。
 - 手写文件只做参数校验、平台守卫、失败静默与类型投影；不承载业务规则。
+- 桌面 C 绑定优先复用上游生成绑定（`package:win32` / `package:posix`）；上游
+  缺失或语义不适配的符号（allocator trim、需要精确 errno 分支的 `kill`）用
+  `third_party/system_shim/system_shim.h` + `tool/ffigen_system.dart` 生成
+  `desktop/system_ffi.g.dart`。阶段 1 实际使用 `package:win32` + FFIgen shim，
+  不使用 `package:posix.kill`（它把 errno 包装成抛异常，无法保留 ESRCH / EPERM
+  分支）。
 - Apple 原生实现统一 Swift + Pigeon（Swift host 在 `ios/Runner` /
   `macos/Runner`，共享逻辑可复用 `sharedDarwinSource` 风格）；不使用 FFIgen
   Objective-C，也不在 Dart 生成物里碰 Objective-C。
