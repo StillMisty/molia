@@ -69,8 +69,10 @@ tool/agent/worktree_prepare.sh <dir> [branch]  # 新 worktree：分支 / 签名 
   （产物 `windows/runner/resources/thumbbar/*.ico` 提交进仓库；需 `rsvg-convert`）；
 - 改品牌图标 → `swift tool/gen_macos_icons.swift`（产物 `macos/Runner/Assets.xcassets/AppIcon.appiconset/*.png`
   提交进仓库；iOS / Windows 图标走 `dart run icons_launcher:create`）；
-- 改原生互操作输入（ADR-0038）→ `dart run tool/jnigen.dart`（Android JNI，产物
-  `lib/platform/android/*.g.dart`）、`dart run tool/ffigen_system.dart`（桌面 C 系统绑定，
+- 改原生互操作输入（ADR-0038）→ `JAVA_HOME=/usr/lib/jvm/java-21-openjdk dart run
+  tool/jnigen.dart`（Android JNI，先编译 Kotlin 再生成，产物
+  `lib/platform/android/*.g.dart`；生成 JDK 21、构建仍 JDK 27）、
+  `dart run tool/ffigen_system.dart`（桌面 C 系统绑定，
   产物 `lib/platform/desktop/*.g.dart`）；Pigeon 契约在 `tool/pigeon/`，阶段 3（Apple）/
   4（其余域）起按域运行 `dart run pigeon --input tool/pigeon/<域>.dart`，生成 Dart +
   Swift host。生成物一律提交进仓库，勿手改。
