@@ -82,13 +82,14 @@ jobs:
       - name: pub get
         run: flutter pub get --enforce-lockfile
 
-      # 本阶段能跑的生成器：drift（数据库）与原生互操作脚本。
-      # FFIgen 阶段 1 起有真实桌面 C 输出，JNIgen 阶段 2（Android）接入，
-      # Pigeon 阶段 3（Apple Swift host）起接入，届时这一步才真正守住漂移。
-      - name: 重新生成（drift + 原生互操作）
+      # 本阶段能跑的生成器：drift（数据库）与桌面 FFI。
+      # JNIgen 阶段 2 需要 JDK 21 + Android SDK + Gradle 编译 Kotlin 源（见
+      # ADR-0038「阶段 2 结论」），本 job 只有默认 JDK / 无 Android 构建，
+      # 暂不纳入 drift；本地用 `JAVA_HOME=…java-21… dart run tool/jnigen.dart`
+      # 生成并提交。Pigeon 阶段 3 起在这一步追加。
+      - name: 重新生成（drift + 桌面 FFI）
         run: |
           dart run build_runner build
-          dart run tool/jnigen.dart
           dart run tool/ffigen_system.dart
 
       - name: 生成物必须与提交一致
