@@ -40,6 +40,9 @@ format_files=()
 skipped=()
 for file in "${files[@]}"; do
   [[ -f "$file" ]] || continue
+  # 生成物按生成器原样提交（Pigeon / build_runner 等），
+  # 手工格式化会让 CI 的生成物 drift 检查误报。
+  [[ "$file" == *.g.dart ]] && continue
   # 同一路径既有暂存内容又有未暂存改动：格式化会污染本次提交的边界。
   if ! git diff --quiet -- "$file"; then
     skipped+=("$file")
