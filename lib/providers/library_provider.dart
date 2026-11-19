@@ -277,15 +277,18 @@ class LibraryProvider extends ChangeNotifier {
     if (result.failed) {
       debugPrint('[Library] 加载列表曲目失败: ${result.error}');
     }
-    if (result.accepted && result.succeeded) {
-      _storePlaylistTracks(playlistId, result.value!);
+    final value = result.value;
+    if (result.accepted && value != null) {
+      _storePlaylistTracks(playlistId, value);
     }
     if (mode == _LoadMode.explicit || result.accepted) {
       _notify();
     }
-    return result.succeeded
-        ? result.value!
-        : mode == _LoadMode.explicit
+    // quiet 读取在「列表还没有缓存值」时会被读投影直接跳过（canReadQuietly），
+    // 返回没有值也没有错误的结果；这里必须按「本次没有新数据」处理，不能
+    // 假定成功就一定有 value。
+    if (value != null) return value;
+    return mode == _LoadMode.explicit
         ? _touchPlaylistTracks(playlistId) ?? const []
         : const [];
   }
@@ -383,6 +386,11 @@ class LibraryProvider extends ChangeNotifier {
         ]);
         unawaited(_pendingReload!);
       case LibraryPlaylistsChange():
+        // 只改列表行（名称 / 描述 / 分组 / 封面 / 增删），曲目集合没变：
+        // 不能按全量失效处理，否则正在浏览的列表会被丢掉曲目读投影、整页
+        // 重新进入 loading（换封面后一直转圈）。
+        _pendingReload = _reloadPlaylistMetadata();
+        unawaited(_pendingReload!);
       case LibraryImportChange():
         _invalidateAll();
     }
@@ -621,6 +629,39 @@ class LibraryProvider extends ChangeNotifier {
       _refreshFavoritesQuietly(),
     ]);
     unawaited(_pendingReload!);
+  }
+
+  /// 列表元数据（名称 / 描述 / 分组 / 封面 / 增删）变化：只刷列表清单。
+  ///
+  /// 这些写入不碰 `playlist_tracks`：照全量失效处理会把当前列表的曲目读
+  /// 投影一起丢掉，收藏页随即按「列表曲目加载中」渲染整页 spinner（换封面
+  /// 后一直转圈）。历史 / 收藏键也不受影响，不需要跟着重读。
+  ///
+  /// 被删掉的列表要作废它的曲目读投影：既释放 raw payload，也防止在途读取
+  /// 落地后把已删除列表又写回缓存。
+  Future<void> _reloadPlaylistMetadata() async {
+    await _loadPlaylists(_LoadMode.quiet, notify: false);
+    if (_disposed) return;
+    // 读取失败且没有任何旧清单时不清理曲目缓存：此时「列表都不见了」是读取
+    // 失败造成的假象，按空集合裁剪会把仍然有效的缓存全部丢掉。
+    if (_playlistsRead.state.isReady) {
+      _dropPlaylistTracksReadsForMissingPlaylists();
+    }
+    _notify();
+  }
+
+  void _dropPlaylistTracksReadsForMissingPlaylists() {
+    final active = _activePlaylistId;
+    final ids = {for (final playlist in _playlistsRead.value) playlist.id};
+    if (active != null && !ids.contains(active)) _activePlaylistId = null;
+    _playlistTracksReads.removeWhere((playlistId, read) {
+      if (ids.contains(playlistId)) return false;
+      // dispose 而不是只 invalidate：ensure 的微任务可能已经捕获了这份投影，
+      // 只作废代际的话它会按新代际开一次读取并把结果写回（给已删除列表复活
+      // 缓存）；dispose 让该投影上的读取一律不受理。
+      read.dispose();
+      return true;
+    });
   }
 
   /// 全量失效时清掉列表曲目值，但保留仍在途的投影。
