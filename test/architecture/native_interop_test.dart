@@ -46,12 +46,9 @@ const List<String> _businessDependencyPrefixes = [
 
 /// 阶段 0 临时白名单：文件 → 仍然存在的原生 import。
 ///
-/// 只减不增：条目必须对应当前真实的 import；文件迁入 `lib/platform/**` 或
-/// 改用端口后，测试会因「陈旧条目」失败并要求删除。
-const Map<String, Set<String>> _legacyWhitelist = {
-  'lib/services/diagnostics/app_info.dart': {'dart:ffi'},
-  'lib/services/update/update_installer_io.dart': {'dart:ffi'},
-};
+/// 只减不增：阶段 1 迁走桌面 3 条、阶段 2 ABI 迁移后已清空；新增违规一律
+/// 直接失败，不要再往这里加条目。
+const Map<String, Set<String>> _legacyWhitelist = {};
 
 void main() {
   final files = _libFiles();

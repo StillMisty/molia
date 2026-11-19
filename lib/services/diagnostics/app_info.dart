@@ -1,13 +1,13 @@
 /// 应用 / 运行环境信息（不读取设备名、账号、广告 ID 等唯一标识）。
 library;
 
-import 'dart:ffi' show Abi;
 import 'dart:io';
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kDebugMode, kProfileMode;
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../../platform/abi.dart';
 import 'diagnostics_bundle.dart';
 
 /// 包信息 / 平台 / OS / ABI / 语言 / 构建模式 / 更新渠道。
@@ -35,7 +35,7 @@ class DiagnosticsAppInfoGatherer {
     }
     String abi;
     try {
-      abi = Abi.current().toString();
+      abi = currentAbiLabel();
     } catch (_) {
       abi = 'unknown';
     }
