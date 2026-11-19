@@ -32,7 +32,8 @@ Flutter 3.50 把 FFIgen（C / Objective-C）与 JNIgen（Java / Kotlin）转为 
 ```
 lib/platform/
   android/   # JNIgen：<name>.g.dart
-  desktop/   # FFIgen C：<name>.g.dart（Win32 / POSIX / macOS 进程级 C 符号）
+  desktop/   # POSIX / allocator 的 FFIgen C 生成物（<name>.g.dart）；Win32 复用
+             # package:win32，不在这里生成；桌面薄适配器也在这里
   pigeon/    # Pigeon 生成 Dart；Apple Swift host 在 ios/Runner / macos/Runner
   <域>.dart  # 手写薄适配器：平台守卫、参数校验、失败静默、类型投影
 ```
@@ -81,6 +82,16 @@ runner 工程内（`ios/Runner`、`macos/Runner`），需要共享的 Darwin 逻
 | Pigeon（channel 模式） | 生成两端接口的 typed MethodChannel；Apple host 用 Swift | stable | Android / iOS / macOS / Windows / Linux | 平台线程执行，回复回 UI isolate；无共享内存 | 只多生成代码（Dart + Swift host），无原生库 | 继续走通道、需要消除手写 Map / 方法名的域；Apple 纯查询 | **采用**（阶段 3 Apple / 4 其余域） |
 | Pigeon native interop preview | 生成 direct interop | **preview** | 不支持 Windows / Linux | 与 direct interop 相同，但契约未稳定 | 预览期行为可能变化 | 无 | **不采用**（不上生产） |
 | 手写 MethodChannel（现状） | 字符串方法名 + Map 编解码 | 稳定 | 全部 | 平台线程 | 无 | 权限、Activity result、前台服务、SAF、runner / 菜单 / 音频路由 | **保留**（不迁） |
+
+桌面 C 绑定的来源（阶段 1）：Win32 / POSIX **优先复用上游生成绑定**
+（`package:win32` / `package:posix`），不自己声明系统 API；上游没有、或语义
+不适配的符号用 vendored 头 `third_party/system_shim/system_shim.h` +
+`tool/ffigen_system.dart` 生成 `lib/platform/desktop/system_ffi.g.dart`。本阶段
+实际使用 `package:win32`（`OpenProcess` / `WaitForSingleObject` /
+`AllowSetForegroundWindow` / `EmptyWorkingSet`）加 FFIgen shim（`kill` / errno /
+`malloc_trim` / `malloc_zone_pressure_relief`）；不使用 `package:posix` 的
+`kill`：它把 errno 包装成抛异常的 `PosixException`，无法保留现有
+ESRCH（已退出）/ EPERM（存活）分支。
 
 ### 3. 线程规则
 

@@ -50,10 +50,7 @@ const List<String> _businessDependencyPrefixes = [
 /// 改用端口后，测试会因「陈旧条目」失败并要求删除。
 const Map<String, Set<String>> _legacyWhitelist = {
   'lib/services/diagnostics/app_info.dart': {'dart:ffi'},
-  'lib/services/memory/app_memory_manager.dart': {'dart:ffi'},
   'lib/services/update/update_installer_io.dart': {'dart:ffi'},
-  'lib/services/window/foreground_activation.dart': {'dart:ffi'},
-  'lib/services/window/process_liveness.dart': {'dart:ffi'},
 };
 
 void main() {
@@ -127,7 +124,7 @@ void main() {
       isEmpty,
       reason:
           '生成绑定 / 手写 FFI 只能放在 lib/platform/（ADR-0038）；'
-          '阶段 1 桌面迁移 3 条、阶段 2 ABI 迁移 2 条后白名单清空：\n'
+          '阶段 1 已迁走桌面 3 条，阶段 2 ABI 迁移 2 条后白名单清空：\n'
           '${offenders.join('\n')}',
     );
   });

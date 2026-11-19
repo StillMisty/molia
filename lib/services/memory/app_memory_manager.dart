@@ -26,14 +26,14 @@
 library;
 
 import 'dart:async';
-import 'dart:ffi';
-import 'dart:io' show Platform, ProcessInfo;
+import 'dart:io' show ProcessInfo;
 import 'dart:math' as math;
 
 import 'package:flutter/painting.dart' show ImageCache, PaintingBinding;
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:logging/logging.dart';
 
+import '../../platform/desktop/memory_release.dart';
 import '../app_presence.dart';
 
 /// 图片缓存的最小操作面（测试注入假实现；生产走 [PaintingImageCache]）。
@@ -121,76 +121,11 @@ const Duration kMemoryPressureDebounce = Duration(seconds: 1);
 /// 这里只防仍把退后台当低内存上报的 OEM / 其它平台。
 const Duration kMemoryPressureTransitionGuard = Duration(seconds: 2);
 
-/// glibc `malloc_trim(0)` 的 Dart 签名（size_t → IntPtr）。
-typedef _MallocTrimNative = Int32 Function(IntPtr pad);
-typedef _MallocTrimDart = int Function(int pad);
-
-/// `EmptyWorkingSet(HANDLE)` 的 Dart 签名（BOOL；伪句柄 -1 = 当前进程）。
-typedef _EmptyWorkingSetNative = Int32 Function(IntPtr process);
-typedef _EmptyWorkingSetDart = int Function(int process);
-
-/// `malloc_zone_pressure_relief(zone, goal)` 的 Dart 签名（size_t）。
-typedef _MallocZonePressureReliefNative = IntPtr Function(
-  Pointer<Void> zone,
-  IntPtr goal,
-);
-typedef _MallocZonePressureReliefDart = int Function(
-  Pointer<Void> zone,
-  int goal,
-);
-
 /// 把已 free / 可换出的页交还系统（平台或符号不可用时静默跳过）。
 ///
-/// 为什么需要：清空图片缓存只是把像素 free 回 allocator，空闲页留在 arena /
-/// 工作集里不会自动归还，系统观测（RSS / 任务管理器）看不到下降；浏览器 /
-/// 播放器这类「缩到托盘」的应用普遍在释放后补一次 trim。
-///
-/// - Linux/glibc：`malloc_trim(0)` 归还 arena 的空闲页；
-/// - macOS：`malloc_zone_pressure_relief(NULL, 0)` 让所有 zone 归还空闲页；
-/// - Windows：`EmptyWorkingSet` 把工作集里可换出的页移出。任务管理器的
-///   「内存」列是专用工作集（不是已 free 字节数），free 后不会自动缩；
-///   这里只影响工作集，「提交大小」仍由上面的 `imageCache.clear()` 决定。
-///
-/// mpv 自带 allocator 与 Dart 堆不受这里影响，只解决 allocator / 页表这一层。
-void _releaseFreedMemoryToOs() {
-  if (Platform.isLinux) {
-    try {
-      final trim = DynamicLibrary.process()
-          .lookupFunction<_MallocTrimNative, _MallocTrimDart>('malloc_trim');
-      trim(0);
-    } catch (_) {
-      // musl / 静态链接等场景没有该符号：跳过即可，不影响释放逻辑本身。
-    }
-    return;
-  }
-  if (Platform.isMacOS) {
-    try {
-      final relief = DynamicLibrary.process()
-          .lookupFunction<
-            _MallocZonePressureReliefNative,
-            _MallocZonePressureReliefDart
-          >('malloc_zone_pressure_relief');
-      // zone = NULL：对所有 zone 生效；goal = 0：尽力归还全部可释放页。
-      relief(nullptr, 0);
-    } catch (_) {
-      // 符号缺失（极少见）：跳过，系统仍会在内存压力下自行回收。
-    }
-    return;
-  }
-  if (Platform.isWindows) {
-    try {
-      final psapi = DynamicLibrary.open('psapi.dll');
-      final emptyWorkingSet = psapi
-          .lookupFunction<_EmptyWorkingSetNative, _EmptyWorkingSetDart>(
-            'EmptyWorkingSet',
-          );
-      // 伪句柄 -1 = 当前进程（GetCurrentProcess）。
-      emptyWorkingSet(-1);
-    } catch (_) {
-      // psapi 不可用 / 符号缺失：跳过；系统仍会在内存压力下自行回收。
-    }
-  }
-}
+/// 具体平台分支与失败静默在 `lib/platform/desktop/memory_release.dart`
+/// （ADR-0038）；这里只保留注入 seam 的默认值。
+void _releaseFreedMemoryToOs() => releaseFreedMemoryToOs();
 
 /// 托盘期内存守卫（单例入口 [AppMemoryManager.instance]）。
 class AppMemoryManager {
