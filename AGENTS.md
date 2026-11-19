@@ -68,7 +68,12 @@ tool/agent/worktree_prepare.sh <dir> [branch]  # 新 worktree：分支 / 签名 
 - 改 `tool/gen_taskbar_icons.py`（Windows 任务栏按钮字形 / 档位）→ `python3 tool/gen_taskbar_icons.py`
   （产物 `windows/runner/resources/thumbbar/*.ico` 提交进仓库；需 `rsvg-convert`）；
 - 改品牌图标 → `swift tool/gen_macos_icons.swift`（产物 `macos/Runner/Assets.xcassets/AppIcon.appiconset/*.png`
-  提交进仓库；iOS / Windows 图标走 `dart run icons_launcher:create`）。
+  提交进仓库；iOS / Windows 图标走 `dart run icons_launcher:create`）；
+- 改原生互操作输入（ADR-0038）→ `dart run tool/jnigen.dart`（Android JNI，产物
+  `lib/platform/android/*.g.dart`）、`dart run tool/ffigen_system.dart`（桌面 C 系统绑定，
+  产物 `lib/platform/desktop/*.g.dart`）；Pigeon 契约在 `tool/pigeon/`，阶段 3（Apple）/
+  4（其余域）起按域运行 `dart run pigeon --input tool/pigeon/<域>.dart`，生成 Dart +
+  Swift host。生成物一律提交进仓库，勿手改。
 
 发布：`git tag -s v1.2.3 -m "Molia 1.2.3" && git push origin v1.2.3`（tag 即版本；
 流程、secrets 与产物清单见 `.agents/skills/molia-release/`）。
@@ -80,13 +85,17 @@ lib/
   domain/                     # 纯 Dart：models + ports
   data/ sources/ playback/    # 端口实现：db/catalog/cache/update、音源（builtin/lx/any_listen）、播放后端
   providers/ services/ app/   # UI 状态、领域服务、应用壳（可挂载）+ bootstrap/ 组合根 stack builders
+  platform/                   # 原生互操作层：JNIgen / FFIgen / Pigeon 生成物 + 薄适配器（ADR-0038）
   pages/ widgets/ + main.dart # UI 与唯一 composition root（薄壳，禁止被其它 lib 文件 import）
 ```
 
 分层硬约束由 `test/architecture/layering_test.dart` 扫描 import 强制：domain 纯 Dart；
 data/sources/playback 不碰 UI；providers 不 import `main.dart`；UI（pages/widgets）不直接 import
 sources/playback。模块布局与体积由 `test/architecture/module_layout_test.dart` 强制
-（模型只在 `domain/models/`、服务在 `services/`、`utils` 纯度、800 行棘轮，ADR-0034）。
+（模型只在 `domain/models/`、服务在 `services/`、`utils` 纯度、800 行棘轮，ADR-0034）；
+原生互操作边界由 `test/architecture/native_interop_test.dart` 强制（只有 `lib/platform/`
+可直连 JNI / FFI / Win32 / POSIX 绑定；Apple 走 Swift + Pigeon，`objective_c` 仅允许作为
+上游插件的传递依赖，ADR-0038）。
 
 关键不变量（改相关代码前确认）：
 

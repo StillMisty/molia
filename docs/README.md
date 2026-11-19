@@ -16,6 +16,7 @@
 | 桌面输出丢失 / Windows 身份 / macOS 播放菜单 / Linux 桌面入口 | `docs/adr/0036-desktop-media-integration.md` | 一个端口、只暂停消失的旧输出、三端检测与平台通道、刻意不声明文件关联 |
 | 平台媒体身份 / 会话 / 权限 / entitlement / 验证口径 | `docs/platform_media_checklist.md` | 唯一维护处；跨文件身份由 `test/architecture/platform_config_test.dart` 守卫，真机 / 合并 manifest 仍为人工步骤 |
 | 曲间无缝（gapless） | `docs/adr/0037-gapless-playback.md` | 已决定暂不实现；若推进先做本地文件 / 完成缓存的窄路径 |
+| 原生互操作层 / 生成流程 / 跨平台 CI | `docs/adr/0038-native-interop.md` | 只迁该迁的：FFIgen 仅桌面 C、JNIgen Android、Apple 走 Swift + Pigeon；`lib/platform/**` 唯一落点，不直接依赖 objective_c，白名单只减不增 |
 | Linux 桌面入口打包资产 | `linux/packaging/README.md` | 每个 `.desktop` 字段的理由与图标再生成 |
 | 领域术语与模块职责 | `GLOSSARY.md` | 新术语落地时登记 |
 | 已知坑（编号被源码引用） | `docs/pitfalls.md` | 编号不可重排，新增追加到末尾 |
