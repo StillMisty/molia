@@ -8,8 +8,8 @@ ADR-0038 的唯一落点：所有 JNIgen / FFIgen / Pigeon 生成绑定与它们
 ```
 lib/platform/
   android/   # JNIgen 生成物：<name>.g.dart（Java / Kotlin 系统调用）
-  desktop/   # FFIgen C 生成物：<name>.g.dart（Win32 / POSIX / macOS 进程级 C 符号）
-             # + 桌面薄适配器：process_liveness / foreground_activation / memory_release
+  desktop/   # POSIX / allocator 的 FFIgen C 生成物（<name>.g.dart）；Win32 复用
+             # package:win32，不在这里生成；桌面薄适配器也在这里
   pigeon/    # Pigeon 生成 Dart：<name>.g.dart；Apple Swift host 在 ios/Runner / macos/Runner
   <域>.dart  # 手写的薄适配器：把生成绑定投影成端口需要的最小 Dart 面
 ```

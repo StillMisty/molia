@@ -21,7 +21,12 @@ void main() {
     expect(isProcessAlive(0x7fffffff), isFalse);
   }, skip: !Platform.isLinux);
 
-  test('非 Windows 不允许设置前台窗口', () {
-    expect(allowSetForegroundWindow(pid), isFalse);
-  });
+  test(
+    '非 Windows 不允许设置前台窗口',
+    () {
+      expect(allowSetForegroundWindow(pid), isFalse);
+    },
+    // Windows 上 AllowSetForegroundWindow 可能成功；该分支靠 CI 冒烟。
+    skip: Platform.isWindows,
+  );
 }

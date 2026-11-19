@@ -32,8 +32,8 @@ Flutter 3.50 把 FFIgen（C / Objective-C）与 JNIgen（Java / Kotlin）转为 
 ```
 lib/platform/
   android/   # JNIgen：<name>.g.dart
-  desktop/   # FFIgen C：<name>.g.dart（Win32 / POSIX / macOS 进程级 C 符号）
-             # + 桌面薄适配器（进程存活 / 前台激活 / 内存回收）
+  desktop/   # POSIX / allocator 的 FFIgen C 生成物（<name>.g.dart）；Win32 复用
+             # package:win32，不在这里生成；桌面薄适配器也在这里
   pigeon/    # Pigeon 生成 Dart；Apple Swift host 在 ios/Runner / macos/Runner
   <域>.dart  # 手写薄适配器：平台守卫、参数校验、失败静默、类型投影
 ```
