@@ -300,8 +300,14 @@ class MainActivity : FlutterActivity() {
         }
 
         // 下载通知通道（Android 前台服务）：任务生命周期 start / update / stop。
+        // Pigeon `DownloadNotificationsApi` 是主路径（issue #82）；下面的旧
+        // MethodChannel handler 保留为 fallback，两条入口共用 DownloadNotifications。
         // 原生只做通知与前台服务启停，失败一律 no-op（Dart 侧还会再吞一层异常并
         // 只记日志）；未授予通知权限时降级为无通知，下载本身不受影响。
+        top.stillmisty.molia.pigeon.DownloadNotificationsApi.setUp(
+            flutterEngine.dartExecutor.binaryMessenger,
+            top.stillmisty.molia.pigeon.DownloadNotificationsImpl(applicationContext),
+        )
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             DownloadNotifications.CHANNEL
