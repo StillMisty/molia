@@ -20,6 +20,7 @@ import 'src/commands/win.dart';
 import 'src/commands/test.dart';
 import 'src/context.dart';
 import 'src/data_report.dart';
+import 'src/desktop_size.dart';
 import 'src/docs_check.dart';
 import 'src/perf_report.dart';
 import 'src/timeline_report.dart';
@@ -39,7 +40,7 @@ molia 跨端工具（Linux / macOS / Windows 同一套命令）
   app <命令>               run / reload / restart / stop / log / status（--machine 控制通道）
   emu <命令>               start / stop / status（Android 模拟器）
   win <命令>               Windows 采样：mem / scroll / frames / startup（Dart + FFI）
-  size apk [<apk>...]       APK 分组体积与 native 库约束
+  size apk|desktop [<路径>...]  APK / 桌面 bundle 体积与 native 库约束
   perf <子命令>             frames / startup / data / cpu / memory / size（后端 perf.sh）
   perf report [<目录>]      frames 结果汇总成 summary.md（本命令为 Dart 实现）
   perf timeline <json>      VM timeline 帧归因（--out 指定 markdown 路径）
@@ -71,13 +72,20 @@ const String _depsUsage = '''
 ''';
 
 const String _sizeUsage = '''
-用法: dart run tool/agent/cli.dart size apk [选项] [<apk>...]
+用法: dart run tool/agent/cli.dart size <apk|desktop> [选项] [<路径>...]
 
-不给路径时取 build/app/outputs/flutter-apk/ 下最新的 .apk。
+apk: APK 分组体积与 native 库约束。
+  不给路径时取 build/app/outputs/flutter-apk/ 下最新的 .apk。
+  选项:
+    --check   校验发布约束（禁止 libmpv / libcnativeapi 等，必需 sqlite3 / quickjs）
+    --json    输出 JSON（脚本消费）
 
-选项:
-  --check   校验发布约束（禁止 libmpv / libcnativeapi 等，必需 sqlite3 / quickjs）
-  --json    输出 JSON（脚本消费）
+desktop: Linux / Windows release bundle 的原生库清单与发布约束。
+  不给路径时按当前平台取 build/linux/x64/release/bundle 或
+  build/windows/x64/runner/Release。
+  选项:
+    --check   禁止 dartjni；Linux 必须有 libapp.so / libflutter_linux_gtk.so；
+              Windows 必须有入口 exe 与 data/flutter_assets
 ''';
 
 const String _perfUsage = '''
@@ -310,12 +318,18 @@ Future<void> _runSize(ToolContext context, List<String> args) async {
   if (_wantsHelp(args.first)) {
     return stdout.write(_sizeUsage);
   }
-  if (args.first != 'apk') {
-    stderr.writeln('[agent] 未知子命令：${args.first}（目前只有 apk）');
-    exitCode = 2;
-    return;
+  switch (args.first) {
+    case 'apk':
+      await _runSizeApk(context, args.sublist(1));
+    case 'desktop':
+      _runSizeDesktop(args.sublist(1));
+    default:
+      stderr.writeln('[agent] 未知子命令：${args.first}（目前有 apk / desktop）');
+      exitCode = 2;
   }
-  args = args.sublist(1);
+}
+
+Future<void> _runSizeApk(ToolContext context, List<String> args) async {
   var check = false;
   var json = false;
   final paths = <String>[];
@@ -367,6 +381,70 @@ Future<void> _runSize(ToolContext context, List<String> args) async {
   }
   if (failed) exitCode = 1;
 }
+
+/// `size desktop [--check] [<bundle>...]`：Linux / Windows release bundle。
+///
+/// release 工作流在删除未使用的 JNI 运行时之后调用；本地不给路径时按当前
+/// 平台取默认构建目录，避免 CI 与手工命令出现两套路径。
+void _runSizeDesktop(List<String> args) {
+  var check = false;
+  final paths = <String>[];
+  for (final arg in args) {
+    switch (arg) {
+      case '--check':
+        check = true;
+      default:
+        if (arg.startsWith('-')) {
+          stderr.writeln('[agent] 未知选项：$arg（-h 看用法）');
+          exitCode = 2;
+          return;
+        }
+        paths.add(arg);
+    }
+  }
+
+  final targets = paths.isNotEmpty
+      ? paths
+      : [?_defaultDesktopBundle(Platform.operatingSystem)];
+  if (targets.isEmpty) {
+    stderr.writeln(
+      '[agent] 没有可检查的桌面 bundle：先 flutter build linux|windows --release，'
+      '或显式传 bundle 目录',
+    );
+    exitCode = 2;
+    return;
+  }
+
+  var failed = false;
+  for (final path in targets) {
+    final report = inspectDesktopBundle(Directory(path));
+    if (report == null) {
+      stderr.writeln('[agent] 目录不存在：$path');
+      failed = true;
+      continue;
+    }
+    if (check) {
+      final errors = checkDesktopBundle(report);
+      if (errors.isEmpty) {
+        stderr.writeln('[OK] $path: native 库约束通过');
+      } else {
+        failed = true;
+        for (final error in errors) {
+          stderr.writeln('[FAIL] $path: $error');
+        }
+      }
+    }
+    stdout.write(renderDesktopBundleMarkdown(report));
+  }
+  if (failed) exitCode = 1;
+}
+
+String? _defaultDesktopBundle(String operatingSystem) =>
+    switch (operatingSystem) {
+      'linux' => 'build/linux/x64/release/bundle',
+      'windows' => 'build/windows/x64/runner/Release',
+      _ => null,
+    };
 
 List<String> _latestApkPaths(ToolContext context) {
   final all = <File>[];
