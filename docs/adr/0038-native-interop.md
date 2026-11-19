@@ -1,8 +1,8 @@
 # ADR-0038：原生互操作层、生成流程与迁移边界
 
-- 状态：草案（阶段 0–2 已落地；阶段 3–5 按本文推进）
+- 状态：草案（阶段 0–2、5 已落地；阶段 3–4 按本文推进）
 - 日期：2026-11-19
-- 相关：issue #65、issue #66、`lib/platform/`、`tool/jnigen.dart`、
+- 相关：issue #65、issue #66、issue #71、`lib/platform/`、`tool/jnigen.dart`、
   `tool/ffigen_system.dart`、`tool/pigeon/`、`test/architecture/native_interop_test.dart`、
   `.github/workflows/ci.yml`、ADR-0020、ADR-0031、ADR-0034、ADR-0036
 
@@ -121,8 +121,9 @@ ESRCH（已退出）/ EPERM（存活）分支。
   `NoSuchMethodError`）。
 - 不为互操作关闭 minify / shrinkResources；只加最小 keep 规则。
 - release APK 启动冒烟是发布门禁：至少覆盖 JNI 类加载与一次系统 getter 调用。
-- 桌面发布包剔除未使用的 JNI 原生库；体积检查加入跨端工具 CLI，防止回流
-  （阶段 5）。Android 现有原生库排除规则不变，不误删运行期真正需要的库。
+- 桌面发布包剔除未使用的 JNI 原生库；`size desktop --check` 扫描 bundle 拦回
+  回流（阶段 5 已落地，见 §8）。Android 现有原生库排除规则不变，不误删运行期
+  真正需要的库。
 
 ### 5. 生成流程
 
@@ -204,6 +205,30 @@ dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 3（Apple Swift host�
   无 `ClassNotFoundException` / `NoSuchMethodError`。本地 release 构建需先
   让 Flutter 以 release 模式重写插件注册文件（`flutter build apk --release`
   不带 `--no-pub`），否则 debug 遗留的 `integration_test` 注册会编译失败。
+
+### 8. 阶段 5 实际结论（2026-11-19）
+
+- **桌面不加载 JNI**：`jni` / `jni_flutter` 只为 Android 的 JNIgen 试点存在；
+  Linux / Windows 构建仍会把运行时装进发布 bundle（`libdartjni.so` /
+  `dartjni.dll`），但桌面代码没有调用方，属于死重量。
+- **发布剔除**：`release.yml` 的 Linux job 在 `flutter build linux --release`
+  之后、`tool/agent/check_linux_bundle.sh` / strip 之前，只删除
+  `bundle/lib/libdartjni.so`（同机实测 157,288 B），不碰 `libsqlite3.so` /
+  quickjs / `libcnativeapi.so`；Windows job 在构建后、复制到 `$stage` 之前，
+  按 `*dartjni*` glob 删除 `build/windows/x64/runner/Release` 下的运行时
+  （实际文件名以 CI 日志为准）。两处删除后都显式复查，存在即失败。
+- **门禁**：`dart run tool/agent/cli.dart size desktop --check <bundle>`
+  递归扫描原生库（`.so` / `.dll` / `.dylib`）：文件名含 `dartjni` 即违规；
+  Linux bundle 必须保留 `libapp.so` 与 `libflutter_linux_gtk.so`；Windows
+  要求入口 exe 与 `data/flutter_assets/`。release 的 Linux / Windows 打包
+  步骤都调用它，人为把库放回 bundle 会在发布前失败。
+- **不动 Android**：`android/app/build.gradle` 的 `jniLibs.excludes` 与
+  `libsqlite3.so` / quickjs / dartjni 的保留规则不变；桌面剔除只针对桌面
+  bundle，不影响 APK / AAB。
+- **验证**：Linux release bundle 删除后仍能首帧启动（直接运行 release 二进制，
+  Xvfb + 软件 GL，首帧 167ms）；strip 前后体积见
+  `docs/performance.md` §10.1。Windows 没有本机环境，删除与门禁由 release CI
+  验证；CI 通过前按「实现但未验证」标注，不合并发布。
 
 ## 阶段与验收
 

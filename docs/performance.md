@@ -393,6 +393,35 @@ bundle-only tar.gz。下表同机实测（Linux x64 / Flutter 3.47.9）；MB 为
   15,713,160 B、symbols 7,678,048 B。与上表的差异来自封面风格代码 / 未使用
   `package:image` 路径被移除；上表仍保留 split / strip 的独立 A/B 口径。
 
+### 10.1 桌面剔除未使用的 JNI 运行时（2026-11-19）
+
+`jni` / `jni_flutter` 只为 Android 的 JNIgen 试点（ADR-0038 阶段 2）服务，
+桌面没有任何调用方；但 Flutter 构建仍会把 JNI 运行时装进桌面 bundle。阶段 5
+在发布流程里只删除这一个库，并用 `size desktop --check` 挡住回流。
+
+同机实测（Linux x64，`flutter build linux --release --no-pub`，
+未加 `--split-debug-info`，因此绝对值高于 §10 的 CI 参数产物；这里只看差值）：
+
+| 项 | 字节 | 说明 |
+| --- | ---: | --- |
+| `bundle/lib/libdartjni.so` | 157,288 B | 删除前 |
+| bundle（strip 前） | 45,779,787 B（45.78MB） | 含 JNI 运行时 |
+| bundle（删除 JNI 后） | 45,622,499 B | −157,288 B |
+| bundle（strip 后） | 44,765,547 B（44.77MB） | 再 −856,952 B（7 个第三方库） |
+| 净变化 | −1,014,240 B（−2.22%） | 删除 + strip |
+
+- **顺序**：`flutter build linux --release` → 删除
+  `bundle/lib/libdartjni.so`（复查不存在）→ `tool/agent/check_linux_bundle.sh`
+  → `tool/strip_linux_bundle.sh` → `size desktop --check <bundle>`。
+  strip 白名单仍保留 `libdartjni.so`，只为本地未删除它的 perf 构建还能剥符号；
+  发布包在 strip 前已删除，白名单条目是空操作。
+- **运行时验证**：删除后直接运行 release 二进制（Xvfb + 软件 GL）首帧
+  167ms，`molia.startup` 后续子项正常；没有 JNI 相关加载失败。普通
+  `smoke linux` 走的是 debug 构建（`build/linux/x64/debug/bundle` 仍含
+  `libdartjni.so`），只能证明应用整体能启动，不能证明「没有该库也行」。
+- **Windows**：同一决策在 release CI 按 `*dartjni*` glob 删除并跑同一个
+  `size desktop --check`；本机无 Windows 环境，数字待 CI 记录。
+
 ## 11. Android 打包体积（2026-11）
 
 `libcnativeapi.so` 是 nativeapi 的桌面 C++ 核，Android 侧所有入口都有

@@ -1247,3 +1247,13 @@
     `Molia`（与 AUMID、可执行文件元数据、Linux `.desktop` 的 `Name` 同层）。
     改应用内可自定义显示标题不会影响它；`media_kit` 也不会热更新已有播放器，
     要联动是另一次改动。排查混音器名称时先确认这行仍在初始化之前。
+
+119. **source_gen 会删除与手写文件同名的 `foo.g.dart`**：build_runner 的
+     source_gen 把 `foo.g.dart` 当成 `foo.dart` 的生成输出；手写一个
+     `foo.dart` 和生成器产出的 `foo.g.dart` 放在同一目录时，下一次
+     build_runner 会把 `.g.dart` 判成陈旧输出并删除（阶段 2 在
+     `lib/platform/android/` 踩过：`system_interop.dart` 适配器与 JNIgen 的
+     `system_interop.g.dart` 同名，生成绑定被删到重新生成才恢复）。规则：
+     生成物 `foo.g.dart` 的 basename 不能被任何手写 Dart 文件占用；薄适配器
+     用 `<source>_adapter.dart` 命名（现在就是 `system_interop_adapter.dart`），
+     新增 JNIgen / FFIgen / Pigeon 输出前先检查同目录有没有同名手写文件。
