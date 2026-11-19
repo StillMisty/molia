@@ -1,6 +1,6 @@
 # ADR-0038：原生互操作层、生成流程与迁移边界
 
-- 状态：草案（阶段 0–2、5 已落地；阶段 3–4 按本文推进；widget native interop 试点见 §9）
+- 状态：草案（阶段 0–2、5 已落地；阶段 4 DownloadsPublisher channel 已落地，见 §10；widget native interop 试点见 §9）
 - 日期：2026-11-19
 - 相关：issue #65、issue #66、issue #71、`lib/platform/`、`tool/jnigen.dart`、
   `tool/ffigen_system.dart`、`tool/pigeon/`、`test/architecture/native_interop_test.dart`、
@@ -154,9 +154,10 @@ tool/pigeon/generate.sh            # widget native interop 试点（JDK 21）：
   `sharedDarwinSource` 风格），不需要 `package:objective_c`；正在迁 JNI / FFI
   的通道不做 Pigeon 迁移；
 - CI（`.github/workflows/ci.yml`）：Ubuntu 跑 `build_runner` + 上述生成器并
-  `git diff --exit-code`（阶段 0 对三者都是 no-op：FFIgen 阶段 1（桌面 C）、
-  JNIgen 阶段 2（Android）、Pigeon 阶段 3（Apple Swift host）/ 4 起才有真实
-  输出）；Windows 编译 `flutter build windows --debug`；
+  `git diff --exit-code`。当前纳入 drift 的是 desktop FFI 与 Pigeon channel
+  （`downloads_publisher.dart`，阶段 4）；JNIgen（阶段 2）、Apple Swift host
+  （阶段 3）与 widget native interop 试点（§9）需要 macOS / JDK 21 / Android
+  构建环境，仍在本机生成并提交。Windows 编译 `flutter build windows --debug`；
   macOS 编译 `flutter build macos --debug` 与
   `flutter build ios --no-codesign`。发布工作流 `release.yml` 不改。
 
@@ -269,6 +270,44 @@ Pigeon native interop 仍是 preview；本节只记录 **widget 一个域**的�
     不改生成逻辑。
 - **回滚**：删除适配器里的 native 分支即可回到旧通道；Kotlin host 与生成物
   可整体删除，不影响其他域。
+
+## 10. 阶段 4 Pigeon channel：DownloadsPublisher（2026-11-20，Android）
+
+与 §9 的 widget native interop 试点区分：DownloadsPublisher 是文件 / MediaStore
+I/O 域，使用 Pigeon 的 **stable channel 模式**（issue #80），不用 `useJni` /
+`useFfi`；生成只需 Dart + Linux，不要求 JDK 21 或 Android classpath。
+
+- **契约**：`tool/pigeon/downloads_publisher.dart` 定义
+  `@HostApi() DownloadsPublisherApi`：`publicRoot()` → `String?`、
+  `publish(sourcePath, displayName, mimeType, relativeDir)` → `String?`、
+  `remove(uri)` → `bool`，参数顺序 / 可空性与 `DownloadsPublisher` 端口一致。
+- **生成物**（提交进仓库，重复运行无 diff）：
+  `lib/platform/pigeon/downloads_publisher.g.dart` +
+  `android/app/src/main/kotlin/top/stillmisty/molia/pigeon/DownloadsPublisherApi.g.kt`。
+  CI 的 `generated-drift` job 已纳入该命令（Linux 可跑）；widget 的
+  `tool/pigeon/generate.sh`（JDK 21）链不受影响。
+- **原生复用**：MediaStore 的 `publicRoot` / `publish` / `remove` 抽到
+  `top.stillmisty.molia.downloads.DownloadsPublisherHost`（只持有
+  applicationContext），旧 `top.stillmisty.molia/downloads` 通道与
+  `DownloadsPublisherImpl` 共用一份实现；参数校验与旧语义一致（空
+  `sourcePath` / `displayName` → null，空 uri → false）。`MainActivity
+  .configureFlutterEngine` 注册 `DownloadsPublisherApi.setUp(...)`，旧通道 handler 保留。
+- **Dart 适配器**：`lib/platform/pigeon/downloads_publisher_adapter.dart` 只封装
+  Pigeon transport（平台守卫、空参数校验、异常静默并标记不可用）；fallback
+  组合放在 `lib/data/downloads/downloads_publisher_io.dart`
+  （`PigeonFirstDownloadsPublisher`）——平台层不得反向 import data 层（§1）。
+  Android 优先 Pigeon，transport 未注册 / 首次调用异常时回退旧
+  `MethodChannelDownloadsPublisher`；Pigeon 正常返回 null / false 视为真实结果，
+  不重试，避免重复发布公共副本。非 Android 保持 `NoopDownloadsPublisher`。
+- **失败语义**：best-effort，null / false 由调用方只记日志，不抛到 UI；旧通道
+  保留到契约测试与 Android 冒烟通过，不删 transport。
+- **验证**：适配器单测覆盖成功 / null / 异常 / 非 Android 与 fallback 选择；
+  `integration_test/downloads_publisher_pigeon_test.dart` 在 Android 上验证
+  Pigeon host 的 `publicRoot`、publish → remove 闭环与旧通道 fallback；
+  release APK 启动（configureFlutterEngine 内注册 host）无
+  `ClassNotFoundException` / `NoSuchMethodError`。
+- **回滚**：删除 `downloads_publisher_io.dart` 里的 Pigeon 分支即可回到旧通道；
+  Kotlin host 与生成物可整体删除，不影响其他域。
 
 ## 阶段与验收
 

@@ -38,8 +38,15 @@ done < <(git diff --cached --name-only --diff-filter=ACMR -z -- '*.dart')
 
 format_files=()
 skipped=()
+generated=()
 for file in "${files[@]}"; do
   [[ -f "$file" ]] || continue
+  # 生成物由生成器决定格式；格式化会让 CI 的 `git diff --exit-code` 漂移
+  # （ADR-0038：生成物重复生成必须无 diff）。
+  if [[ "$file" == *.g.dart ]]; then
+    generated+=("$file")
+    continue
+  fi
   # 同一路径既有暂存内容又有未暂存改动：格式化会污染本次提交的边界。
   if ! git diff --quiet -- "$file"; then
     skipped+=("$file")
@@ -47,6 +54,10 @@ for file in "${files[@]}"; do
   fi
   format_files+=("$file")
 done
+
+if ((${#generated[@]})); then
+  printf 'pre-commit: 跳过生成物格式化（%d 个 *.g.dart）\n' "${#generated[@]}"
+fi
 
 if ((${#skipped[@]})); then
   printf 'pre-commit: 以下文件有未暂存改动，跳过自动格式化：\n' >&2

@@ -1,13 +1,10 @@
 package top.stillmisty.molia
 
-import android.content.ContentValues
 import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.provider.MediaStore
 import android.provider.Settings
 import androidx.annotation.NonNull
 import androidx.appcompat.app.AppCompatDelegate
@@ -20,10 +17,6 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity : FlutterActivity() {
-    /// 公共 Downloads 里的应用子目录（与桌面 `~/Downloads/Molia`、iOS 文档
-    /// 目录 `Molia/` 对齐；`Environment.DIRECTORY_DOWNLOADS` = "Download"）。
-    private val publicDownloadsRelativePath = "${Environment.DIRECTORY_DOWNLOADS}/Molia"
-
     private var methodChannel: MethodChannel? = null
     private var lyricsChannel: top.stillmisty.molia.lyrics.LyricsChannelHandler? = null
     private var batteryChannel: top.stillmisty.molia.battery.BatteryChannelHandler? = null
@@ -31,6 +24,11 @@ class MainActivity : FlutterActivity() {
         top.stillmisty.molia.sync.LocalNetworkPermissionChannelHandler? = null
     private var sleepTimerChannel: top.stillmisty.molia.sleep.SleepTimerChannelHandler? = null
     private var safChannel: top.stillmisty.molia.saf.SafChannelHandler? = null
+
+    /// 公共 Downloads 发布逻辑的唯一实现；旧通道与 Pigeon host 共用。
+    private val downloadsPublisherHost by lazy {
+        top.stillmisty.molia.downloads.DownloadsPublisherHost(applicationContext)
+    }
 
     /// 通知权限请求的挂起结果（Android 13+）：权限回调后一次性完成。
     private var notificationPermissionResult: MethodChannel.Result? = null
@@ -256,13 +254,20 @@ class MainActivity : FlutterActivity() {
         // API 29+ 走 MediaStore insert + openOutputStream（应用自己创建的行，
         // 无需任何存储权限）；更低版本返回 null 表示不支持（本应用 minSdk 35，
         // 实际不会走到，保留分支只作语义声明）。
+        //
+        // Pigeon `DownloadsPublisherApi` 是主路径（issue #80）；本通道保留为
+        // fallback，两者共用 downloadsPublisherHost，逻辑不复制。
+        top.stillmisty.molia.pigeon.DownloadsPublisherApi.setUp(
+            flutterEngine.dartExecutor.binaryMessenger,
+            top.stillmisty.molia.pigeon.DownloadsPublisherImpl(applicationContext),
+        )
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "top.stillmisty.molia/downloads"
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "publicRoot" -> {
-                    result.success(publicDownloadsRootPath())
+                    result.success(downloadsPublisherHost.publicRoot())
                 }
                 "publish" -> {
                     val sourcePath = call.argument<String>("sourcePath")
@@ -273,7 +278,7 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_ARGUMENT", "sourcePath / displayName is required", null)
                     } else {
                         result.success(
-                            publishToPublicDownloads(
+                            downloadsPublisherHost.publish(
                                 sourcePath,
                                 displayName,
                                 mimeType,
@@ -287,7 +292,7 @@ class MainActivity : FlutterActivity() {
                     if (uriString.isNullOrEmpty()) {
                         result.success(false)
                     } else {
-                        result.success(removeFromPublicDownloads(uriString))
+                        result.success(downloadsPublisherHost.remove(uriString))
                     }
                 }
                 else -> result.notImplemented()
@@ -376,83 +381,6 @@ class MainActivity : FlutterActivity() {
         safChannel?.dispose()
         safChannel = null
         super.cleanUpFlutterEngine(flutterEngine)
-    }
-
-    /// 公共 Downloads 的展示根（Dart 只用于设置页 / 保存结果提示）。
-    @Suppress("DEPRECATION")
-    private fun publicDownloadsRootPath(): String =
-        File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            "Molia",
-        ).absolutePath
-
-    /// 把应用私有文件发布到公共 Downloads（MediaStore），返回 content URI；
-    /// 不支持（API < 29）/ 失败返回 null（Dart 侧 best-effort，只记日志）。
-    ///
-    /// 公共副本是**发布副本**：播放取链仍只认应用目录里的原文件，删除下载时
-    /// 经 `remove` 一并删除。`IS_PENDING` 保证写入期间其它 App 读不到半成品；
-    /// 失败时删掉可能已插入的行，避免公共目录残留空文件。
-    /// [relativeDir] 是 `Molia/` 下的可选子目录（导出 / 海报分类），空 = 根下。
-    private fun publishToPublicDownloads(
-        sourcePath: String,
-        displayName: String,
-        mimeType: String?,
-        relativeDir: String?
-    ): String? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
-        val source = File(sourcePath)
-        if (!source.exists()) return null
-        var inserted: android.net.Uri? = null
-        return try {
-            val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
-                put(MediaStore.MediaColumns.MIME_TYPE, mimeType ?: "application/octet-stream")
-                put(MediaStore.MediaColumns.RELATIVE_PATH, publicRelativePath(relativeDir))
-                put(MediaStore.MediaColumns.IS_PENDING, 1)
-            }
-            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                ?: return null
-            inserted = uri
-            val output = contentResolver.openOutputStream(uri)
-                ?: throw java.io.IOException("openOutputStream returned null")
-            output.use { out ->
-                source.inputStream().use { input -> input.copyTo(out) }
-            }
-            contentResolver.update(
-                uri,
-                ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) },
-                null,
-                null
-            )
-            uri.toString()
-        } catch (e: Exception) {
-            inserted?.let { runCatching { contentResolver.delete(it, null, null) } }
-            null
-        }
-    }
-
-    /// `Download/Molia[/<relativeDir>]`；拒绝 `..` / 绝对路径，避免越界。
-    private fun publicRelativePath(relativeDir: String?): String {
-        val segments = relativeDir
-            ?.split('/')
-            ?.map { it.trim() }
-            ?.filter { it.isNotEmpty() && it != "." && it != ".." }
-            ?: emptyList()
-        return if (segments.isEmpty()) {
-            publicDownloadsRelativePath
-        } else {
-            "$publicDownloadsRelativePath/${segments.joinToString("/")}"
-        }
-    }
-
-    /// 删除公共副本；行已不存在（用户在文件管理器里删掉）也算成功（幂等）。
-    private fun removeFromPublicDownloads(uriString: String): Boolean {
-        return try {
-            contentResolver.delete(android.net.Uri.parse(uriString), null, null)
-            true
-        } catch (e: Exception) {
-            false
-        }
     }
 
     /// 把下载好的 APK 交给系统安装器。

@@ -1,12 +1,13 @@
 # Pigeon 契约（`tool/pigeon/`）
 
-Pigeon 按域小步迁移，每域一份 schema。**默认**使用 stable 的 channel 模式；
-widget 域是 **native interop（`useJni`）preview 试点**（issue #78），只此一域，
-旧通道保留为 fallback。选型与迁移边界见 `docs/adr/0038-native-interop.md` §9。
+Pigeon 按域小步迁移，每域一份 schema。**默认**使用 stable 的 channel 模式
+（当前：`downloads_publisher.dart`）；widget 域是 **native interop（`useJni`）
+preview 试点**（issue #78），只此一域，旧通道保留为 fallback。选型与迁移边界见
+`docs/adr/0038-native-interop.md` §9 / §10。
 
 ## 约定
 
-- schema：`tool/pigeon/<域>.dart`（如 `sleep_timer.dart`、`widget.dart`）；
+- schema：`tool/pigeon/<域>.dart`（如 `downloads_publisher.dart`、`widget.dart`）；
 - channel 模式生成物：`lib/platform/pigeon/<域>.g.dart`，提交进仓库；
 - 命令：`dart run pigeon --input tool/pigeon/<域>.dart`，平台 / 包名参数在
   schema 文件头部固定；
@@ -17,6 +18,46 @@ widget 域是 **native interop（`useJni`）preview 试点**（issue #78），�
 - 旧的手写 `MethodChannel` 实现保留到契约测试通过，再删旧路径；
 - 手写适配器不得与生成物同名（`<域>_adapter.dart`），否则 source_gen 会删除
   同名 `.g.dart`。
+
+## DownloadsPublisher（Android，channel 模式）
+
+issue #80；选型结论见 ADR-0038 §10。**不用** `useJni` / `useFfi`：生成只需要
+Dart + Linux，不要求 JDK 21 或 Android classpath。
+
+```bash
+dart run pigeon --input tool/pigeon/downloads_publisher.dart \
+  --dart_out lib/platform/pigeon/downloads_publisher.g.dart \
+  --kotlin_out android/app/src/main/kotlin/top/stillmisty/molia/pigeon/DownloadsPublisherApi.g.kt \
+  --kotlin_package top.stillmisty.molia.pigeon
+```
+
+生成物（提交进仓库，重复运行无 diff）：
+
+- `lib/platform/pigeon/downloads_publisher.g.dart`
+- `android/app/src/main/kotlin/top/stillmisty/molia/pigeon/DownloadsPublisherApi.g.kt`
+
+运行时契约：
+
+- 原生 MediaStore 逻辑在 `DownloadsPublisherHost`，旧
+  `top.stillmisty.molia/downloads` 通道与 `DownloadsPublisherImpl` 共用；
+  `MainActivity.configureFlutterEngine` 注册 `DownloadsPublisherApi.setUp(...)`。
+- Dart 适配器 `lib/platform/pigeon/downloads_publisher_adapter.dart` 只封装
+  Pigeon transport；fallback 组合在
+  `lib/data/downloads/downloads_publisher_io.dart`（平台层不得 import data）。
+  transport 异常 / 未注册时回退旧通道；正常返回 null / false 不重试。
+- 非 Android 保持 `NoopDownloadsPublisher` 语义。
+- CI 的 `generated-drift` job 已包含上面的生成命令（`tool/pigeon/generate.sh`
+  的 widget native interop 链不受影响，仍需 JDK 21）。
+
+验证：
+
+```bash
+flutter analyze --no-pub
+flutter test --no-pub
+flutter build apk --debug --no-pub
+flutter test integration_test/downloads_publisher_pigeon_test.dart -d <android-device>
+# release R8 冒烟：安装 release APK 启动，确认无 ClassNotFoundException
+```
 
 ## widget native interop 试点（Android JNI）
 
