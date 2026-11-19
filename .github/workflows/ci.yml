@@ -3,6 +3,8 @@ name: CI
 # PR / main 的快速校验：静态分析 + 单元测试。
 # 发布构建走 release.yml；真实引擎的集成测试不进 CI，本地用 dart run tool/agent/cli.dart test
 # 在 Linux / Android 上运行，CI 只跑 analyze + 单元测试。
+# 原生互操作 / 跨平台任务（ADR-0038）按路径过滤：生成物 drift、Windows 编译、
+# macOS / iOS 编译只在碰到平台层、生成器、依赖或平台工程时运行。
 on:
   pull_request:
   push:
@@ -14,6 +16,134 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 原生互操作 / 跨平台构建的变更判定（ADR-0038）：只有碰到平台层、生成器、
+  # 依赖或平台工程时才跑重任务；判定失败 / 首次推送时保守跑全量。
+  native-changes:
+    name: 原生互操作变更范围
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.filter.outputs.run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        name: 判断是否需要生成物 / 跨平台构建
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=""
+          case "${{ github.event_name }}" in
+            pull_request) base="origin/${{ github.base_ref }}" ;;
+            push) base="${{ github.event.before }}" ;;
+          esac
+
+          files=""
+          if [ -n "$base" ] && git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            files=$(git diff --name-only "$base"...HEAD)
+          fi
+
+          if [ -z "$files" ]; then
+            run=true
+          elif printf '%s\n' "$files" | grep -qE '^(pubspec\.(yaml|lock)|analysis_options\.yaml|\.github/workflows/ci\.yml|tool/(jnigen\.dart|ffigen_system\.dart|pigeon/.*)|lib/platform/.*|lib/data/molia_database.*|android/.*|ios/.*|macos/.*|windows/.*|linux/.*)$'; then
+            run=true
+          else
+            run=false
+          fi
+
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "changed files:"
+          printf '%s\n' "$files"
+
+  generated-drift:
+    name: 生成物 drift
+    needs: native-changes
+    if: needs.native-changes.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # 与 analyze-test 共用同一份 GTK / X11 依赖：native assets 的构建 hook
+      # 在生成器与后续编译中都会被加载。
+      - name: 系统依赖（native assets：GTK / X11）
+        uses: ./.github/actions/linux-system-deps
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.50.0
+          channel: stable
+          cache: true
+
+      - name: pub get
+        run: flutter pub get --enforce-lockfile
+
+      # 本阶段能跑的生成器：drift（数据库）与原生互操作脚本骨架。
+      # jnigen / ffigen 在阶段 0 没有输入，会打印「跳过」并正常退出。
+      - name: 重新生成（drift + 原生互操作）
+        run: |
+          dart run build_runner build
+          dart run tool/jnigen.dart
+          dart run tool/ffigen_system.dart
+
+      - name: 生成物必须与提交一致
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::生成物与提交不一致；本地重跑生成器并提交产物（ADR-0038）。"
+            git status --short
+            git diff
+            exit 1
+          fi
+
+  windows-build:
+    name: Windows 编译（debug）
+    needs: native-changes
+    if: needs.native-changes.outputs.run == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      # Windows runner 预装 Visual Studio C++ 工具链；只装 Flutter 与依赖。
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.50.0
+          channel: stable
+          cache: true
+
+      - name: pub get
+        run: flutter pub get --enforce-lockfile
+
+      - name: build windows（debug）
+        run: flutter build windows --debug --no-pub
+
+  macos-build:
+    name: macOS / iOS 编译（debug）
+    needs: native-changes
+    if: needs.native-changes.outputs.run == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      # macOS runner 预装 Xcode / CocoaPods；iOS 只做无签名编译验证。
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.50.0
+          channel: stable
+          cache: true
+
+      - name: pub get
+        run: flutter pub get --enforce-lockfile
+
+      - name: build macos（debug）
+        run: flutter build macos --debug --no-pub
+
+      - name: build ios（无签名）
+        run: flutter build ios --no-codesign --no-pub
+
   analyze-test:
     name: Analyze / Test
     runs-on: ubuntu-latest
