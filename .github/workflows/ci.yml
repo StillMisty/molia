@@ -82,8 +82,8 @@ jobs:
 
       # 本阶段能跑的生成器：drift（数据库）与原生互操作脚本骨架。
       # JNIgen / FFIgen 在阶段 0 没有输入，会打印「跳过」并正常退出；
-      # FFIgen 阶段 1（桌面）/ 3（Apple）、JNIgen 阶段 2（Android）起才会有
-      # 真实绑定输出，届时这一步才真正守住生成物漂移。
+      # FFIgen 阶段 1（桌面 C）、JNIgen 阶段 2（Android）才有真实绑定输出，
+      # Pigeon 阶段 3（Apple Swift host）起接入，届时这一步才真正守住漂移。
       - name: 重新生成（drift + 原生互操作）
         run: |
           dart run build_runner build

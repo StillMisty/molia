@@ -70,9 +70,10 @@ tool/agent/worktree_prepare.sh <dir> [branch]  # 新 worktree：分支 / 签名 
 - 改品牌图标 → `swift tool/gen_macos_icons.swift`（产物 `macos/Runner/Assets.xcassets/AppIcon.appiconset/*.png`
   提交进仓库；iOS / Windows 图标走 `dart run icons_launcher:create`）；
 - 改原生互操作输入（ADR-0038）→ `dart run tool/jnigen.dart`（Android JNI，产物
-  `lib/platform/android/*.g.dart`）、`dart run tool/ffigen_system.dart`（桌面 / Apple 系统绑定，
-  产物 `lib/platform/**/*.g.dart`）；Pigeon 契约在 `tool/pigeon/`，阶段 4 起按域运行
-  `dart run pigeon --input tool/pigeon/<域>.dart`。生成物一律提交进仓库，勿手改。
+  `lib/platform/android/*.g.dart`）、`dart run tool/ffigen_system.dart`（桌面 C 系统绑定，
+  产物 `lib/platform/desktop/*.g.dart`）；Pigeon 契约在 `tool/pigeon/`，阶段 3（Apple）/
+  4（其余域）起按域运行 `dart run pigeon --input tool/pigeon/<域>.dart`，生成 Dart +
+  Swift host。生成物一律提交进仓库，勿手改。
 
 发布：`git tag -s v1.2.3 -m "Molia 1.2.3" && git push origin v1.2.3`（tag 即版本；
 流程、secrets 与产物清单见 `.agents/skills/molia-release/`）。
@@ -93,7 +94,8 @@ data/sources/playback 不碰 UI；providers 不 import `main.dart`；UI（pages/
 sources/playback。模块布局与体积由 `test/architecture/module_layout_test.dart` 强制
 （模型只在 `domain/models/`、服务在 `services/`、`utils` 纯度、800 行棘轮，ADR-0034）；
 原生互操作边界由 `test/architecture/native_interop_test.dart` 强制（只有 `lib/platform/`
-可直连 JNI / FFI / Win32 / POSIX / Objective-C 绑定，ADR-0038）。
+可直连 JNI / FFI / Win32 / POSIX 绑定；Apple 走 Swift + Pigeon，`objective_c` 仅允许作为
+上游插件的传递依赖，ADR-0038）。
 
 关键不变量（改相关代码前确认）：
 

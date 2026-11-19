@@ -5,9 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// ADR-0038 原生互操作边界：
 /// - 生成绑定与薄适配器只能在 `lib/platform/**`；
 /// - 业务层（domain / providers / pages / widgets / app）不得直接 import JNI /
-///   FFI / Win32 / POSIX / Objective-C 绑定包，也不得直接 import
+///   FFI / Win32 / POSIX / objective_c 绑定包，也不得直接 import
 ///   `lib/platform/**`；
 /// - 平台层是薄适配器，不得反向依赖 domain / data / services 等业务层；
+/// - Apple 走 Swift + Pigeon；`package:objective_c/` 只允许作为上游插件的
+///   传递依赖，我们的代码不得直接 import 或使用；
 /// - 阶段 0 的现存手写 FFI 登记为只减不增的白名单，阶段 1–2 迁入平台层后
 ///   逐条删除；新增违规即使不在白名单也必须失败。
 const List<String> _nativeImports = [

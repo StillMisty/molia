@@ -8,18 +8,24 @@ ADR-0038 的唯一落点：所有 JNIgen / FFIgen / Pigeon 生成绑定与它们
 ```
 lib/platform/
   android/   # JNIgen 生成物：<name>.g.dart（Java / Kotlin 系统调用）
-  apple/     # FFIgen 生成物：<name>.g.dart（Objective-C / 系统字体、低电量模式）
-  desktop/   # FFIgen 生成物：<name>.g.dart（Win32 / POSIX / allocator trim）
+  desktop/   # FFIgen C 生成物：<name>.g.dart（Win32 / POSIX / macOS 进程级 C 符号）
+  pigeon/    # Pigeon 生成 Dart：<name>.g.dart；Apple Swift host 在 ios/Runner / macos/Runner
   <域>.dart  # 手写的薄适配器：把生成绑定投影成端口需要的最小 Dart 面
 ```
 
-- 生成物统一 `<name>.g.dart`，由 `tool/jnigen.dart` / `tool/ffigen_system.dart`
-  写出并提交进仓库；`*.g.dart` 不参与 `test/architecture/module_layout_test.dart`
-  的单文件体积棘轮。
+- 生成物统一 `<name>.g.dart`，由 `tool/jnigen.dart` / `tool/ffigen_system.dart` /
+  `dart run pigeon` 写出并提交进仓库；`*.g.dart` 不参与
+  `test/architecture/module_layout_test.dart` 的单文件体积棘轮。
 - 手写文件只做参数校验、平台守卫、失败静默与类型投影；不承载业务规则。
+- Apple 原生实现统一 Swift + Pigeon（Swift host 在 `ios/Runner` /
+  `macos/Runner`，共享逻辑可复用 `sharedDarwinSource` 风格）；不使用 FFIgen
+  Objective-C，也不在 Dart 生成物里碰 Objective-C。
 - `domain` / `providers` / `pages` / `widgets` / `app` 禁止直接 import
   `dart:ffi`、`package:jni/`、`package:jni_flutter/`、`package:win32/`、
   `package:posix/`、`package:objective_c/`，也禁止直接 import 本目录的生成物；
+  `objective_c` 只作为上游插件（`path_provider_foundation` /
+  `shared_preferences_foundation`）的传递依赖存在，我们的代码不得直接
+  import 或使用；
 - 本目录也不得反向依赖 `domain` / `data` / `sources` / `playback` / `services` /
   `providers` / `pages` / `widgets` / `app` / `main.dart`：薄适配器只做投影；
 - 边界由 `test/architecture/native_interop_test.dart` 强制。
