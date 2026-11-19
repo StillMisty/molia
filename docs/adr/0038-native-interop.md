@@ -1,6 +1,6 @@
 # ADR-0038：原生互操作层、生成流程与迁移边界
 
-- 状态：草案（阶段 0–2 已落地；阶段 3–5 按本文推进）
+- 状态：草案（阶段 0–3 已落地；阶段 4–5 按本文推进）
 - 日期：2026-11-19
 - 相关：issue #65、issue #66、`lib/platform/`、`tool/jnigen.dart`、
   `tool/ffigen_system.dart`、`tool/pigeon/`、`test/architecture/native_interop_test.dart`、
