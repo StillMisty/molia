@@ -167,6 +167,41 @@ void main() {
     });
   });
 
+  group('totalSpaceBytes', () {
+    test('成功结果只查询一次并缓存', () async {
+      var calls = 0;
+      final storage = IoCacheStorage(
+        totalSpaceReader: () async {
+          calls++;
+          return 512 * 1024 * 1024;
+        },
+      );
+
+      expect(await storage.totalSpaceBytes(), 512 * 1024 * 1024);
+      expect(await storage.totalSpaceBytes(), 512 * 1024 * 1024);
+      expect(calls, 1);
+    });
+
+    test('失败不缓存：下次仍重试并可采用成功值', () async {
+      var calls = 0;
+      final storage = IoCacheStorage(
+        totalSpaceReader: () async {
+          calls++;
+          return calls == 1 ? null : 1024;
+        },
+      );
+
+      expect(await storage.totalSpaceBytes(), isNull);
+      expect(await storage.totalSpaceBytes(), 1024);
+      expect(calls, 2);
+    });
+
+    test('非 Android 默认 reader 返回 null（不碰 JNI / 通道）', () async {
+      if (Platform.isAndroid) return; // 模拟器上由集成冒烟覆盖。
+      expect(await IoCacheStorage().totalSpaceBytes(), isNull);
+    });
+  });
+
   group('sweepArtwork', () {
     test('先删过期（含嵌套目录），再按 mtime 从旧到新删超量', () async {
       final dir = '${tempRoot.path}/artwork_cache';
