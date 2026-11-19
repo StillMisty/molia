@@ -33,6 +33,8 @@ const List<String> _businessLayers = [
 const List<String> _businessDependencyPrefixes = [
   'lib/domain/',
   'lib/data/',
+  'lib/sources/',
+  'lib/playback/',
   'lib/services/',
   'lib/providers/',
   'lib/pages/',

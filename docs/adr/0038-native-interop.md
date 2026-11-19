@@ -48,9 +48,9 @@ lib/platform/
   依赖既有端口。组合根不设例外：平台适配器由 services 在内部消费并通过既有
   端口注入，`lib/app/**` 只做装配，不直接拿生成绑定。若将来确有组合根装配
   需求，再在本文开最小路径例外，不静默放过；
-- `lib/platform/**` 是薄适配器，反向依赖 `lib/domain|data|services|providers|
-  pages|widgets|app` 或 `lib/main.dart` 同样失败：绑定层不能持有业务规则、降级
-  策略或端口实现；
+- `lib/platform/**` 是薄适配器，反向依赖 `lib/domain|data|sources|playback|
+  services|providers|pages|widgets|app` 或 `lib/main.dart` 同样失败：绑定层
+  不能持有业务规则、降级策略、音源 / 播放后端或端口实现；
 - 阶段 0 白名单里的现存手写 FFI 共 5 条：
   - 阶段 1 桌面迁移：`services/memory/app_memory_manager.dart`、
     `services/window/foreground_activation.dart`、
@@ -131,8 +131,8 @@ dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 4；→ lib/platform/p
 - Pigeon 每个域一份 schema，命令参数写在 schema 头部；正在迁 JNI / FFI 的
   通道不做 Pigeon 迁移；
 - CI（`.github/workflows/ci.yml`）：Ubuntu 跑 `build_runner` + 上述生成器并
-  `git diff --exit-code`（阶段 0 对 JNIgen / FFIgen 是 no-op，阶段 1 / 2 起才
-  有真实输出）；Windows 编译 `flutter build windows --debug`；
+  `git diff --exit-code`（阶段 0 对两者都是 no-op：FFIgen 阶段 1 / 3、JNIgen
+  阶段 2 起才有真实输出）；Windows 编译 `flutter build windows --debug`；
   macOS 编译 `flutter build macos --debug` 与
   `flutter build ios --no-codesign`。发布工作流 `release.yml` 不改。
 

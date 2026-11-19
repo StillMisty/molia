@@ -17,10 +17,12 @@ lib/platform/
   写出并提交进仓库；`*.g.dart` 不参与 `test/architecture/module_layout_test.dart`
   的单文件体积棘轮。
 - 手写文件只做参数校验、平台守卫、失败静默与类型投影；不承载业务规则。
-- `domain` / `providers` / `pages` / `widgets` 禁止直接 import `dart:ffi`、
-  `package:jni/`、`package:jni_flutter/`、`package:win32/`、`package:posix/`、
-  `package:objective_c/`，也禁止直接 import 本目录的生成物；
-  边界由 `test/architecture/native_interop_test.dart` 强制。
+- `domain` / `providers` / `pages` / `widgets` / `app` 禁止直接 import
+  `dart:ffi`、`package:jni/`、`package:jni_flutter/`、`package:win32/`、
+  `package:posix/`、`package:objective_c/`，也禁止直接 import 本目录的生成物；
+- 本目录也不得反向依赖 `domain` / `data` / `sources` / `playback` / `services` /
+  `providers` / `pages` / `widgets` / `app` / `main.dart`：薄适配器只做投影；
+- 边界由 `test/architecture/native_interop_test.dart` 强制。
 - 现存 `lib/services/**` 的手写 FFI 作为阶段 0 临时白名单保留：阶段 1 桌面
   （进程存活 / 前台激活 / 内存回收）迁入 `desktop/` 并删除 3 条；阶段 2 ABI
   读取改由 `lib/platform/abi.dart` 承担，删除 `app_info.dart` /

@@ -3,8 +3,9 @@
 /// 用法：`dart run tool/ffigen_system.dart`
 ///
 /// 阶段 0 只建立流程与边界，不生成业务绑定：`inputs` 为空时脚本打印说明并
-/// 正常退出，CI 的生成物 drift 任务因此不会失败。阶段 1 / 3 在 `inputs` 里
-/// 登记 vendored 头文件后，脚本会产出 `lib/platform/<output>.g.dart`。
+/// 正常退出，CI 的生成物 drift 任务因此不会失败。阶段 1（桌面）/ 3（Apple）
+/// 在 `inputs` 里登记 vendored 头文件后，脚本会产出
+/// `lib/platform/<output>.g.dart`。
 ///
 /// 阶段 3 的 Apple 生成物会 import `package:objective_c`；生成前必须把它从
 /// 传递依赖转为直接依赖（否则触发 `depend_on_referenced_packages`）。

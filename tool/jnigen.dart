@@ -3,8 +3,9 @@
 /// 用法：`dart run tool/jnigen.dart`
 ///
 /// 阶段 0 只建立流程与边界，不生成业务绑定：`inputs` 为空时脚本打印说明并
-/// 正常退出，CI 的生成物 drift 任务因此不会失败。阶段 2 在 `inputs` 里登记
-/// Java / Kotlin 源目录后，脚本会产出 `lib/platform/android/<name>.g.dart`。
+/// 正常退出，CI 的生成物 drift 任务因此不会失败。阶段 2（Android）在
+/// `inputs` 里登记 Java / Kotlin 源目录后，脚本会产出
+/// `lib/platform/android/<name>.g.dart`。
 ///
 /// 生成用 JDK 21（JNIgen 官方支持 17–21），构建仍用 AGENTS.md 的构建 JDK；
 /// 两者是不同阶段，不要为了生成升级整个仓库。

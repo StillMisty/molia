@@ -68,7 +68,8 @@
    `widgets` / `app` 禁止直接 import `dart:ffi`、`package:jni/`、
    `package:jni_flutter/`、`package:win32/`、`package:posix/`、
    `package:objective_c/` 或 `lib/platform/**`；平台层也不得反向依赖
-   domain / data / services / providers / pages / widgets / app / main。
+   domain / data / sources / playback / services / providers / pages /
+   widgets / app / main。
    阶段 0 的现存手写 FFI 是只减不增的白名单：阶段 1 桌面迁移（进程存活 /
    前台激活 / 内存回收）删除 3 条，阶段 2 的 ABI 读取改为平台层纯 Dart helper
    后删除 2 条，随后白名单清空，只允许修复新违规。
