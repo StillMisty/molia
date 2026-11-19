@@ -76,7 +76,9 @@ tool/agent/worktree_prepare.sh <dir> [branch]  # 新 worktree：分支 / 签名 
   `dart run tool/ffigen_system.dart`（桌面 C 系统绑定，
   产物 `lib/platform/desktop/*.g.dart`）；Pigeon 契约在 `tool/pigeon/`，阶段 3（Apple）/
   4（其余域）起按域运行 `dart run pigeon --input tool/pigeon/<域>.dart`，生成 Dart +
-  Swift host。生成物一律提交进仓库，勿手改。
+  Swift host；widget 的 native interop 试点（issue #78）走 `tool/pigeon/generate.sh`
+  （JDK 21，先编译 Kotlin 再跑 Pigeon/JNIgen，产物含 `widget*.g.dart` +
+  `android/.../pigeon/WidgetApi.g.kt`）。生成物一律提交进仓库，勿手改。
 
 发布：`git tag -s v1.2.3 -m "Molia 1.2.3" && git push origin v1.2.3`（tag 即版本；
 流程、secrets 与产物清单见 `.agents/skills/molia-release/`）。
