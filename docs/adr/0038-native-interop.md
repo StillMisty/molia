@@ -1,6 +1,6 @@
 # ADR-0038：原生互操作层、生成流程与迁移边界
 
-- 状态：草案（阶段 0–2、5 已落地；阶段 4 DownloadsPublisher channel 已落地，见 §10；widget native interop 试点见 §9）
+- 状态：草案（阶段 0–2、5 已落地；阶段 4 DownloadsPublisher / DownloadNotifications channel 已落地，见 §10 / §11；widget native interop 试点见 §9）
 - 日期：2026-11-19
 - 相关：issue #65、issue #66、issue #71、`lib/platform/`、`tool/jnigen.dart`、
   `tool/ffigen_system.dart`、`tool/pigeon/`、`test/architecture/native_interop_test.dart`、
@@ -307,6 +307,47 @@ I/O 域，使用 Pigeon 的 **stable channel 模式**（issue #80），不用 `u
   release APK 启动（configureFlutterEngine 内注册 host）无
   `ClassNotFoundException` / `NoSuchMethodError`。
 - **回滚**：删除 `downloads_publisher_io.dart` 里的 Pigeon 分支即可回到旧通道；
+  Kotlin host 与生成物可整体删除，不影响其他域。
+
+## 11. 阶段 4 Pigeon channel：DownloadNotifications（2026-11-20，Android）
+
+与 §9 的 widget native interop 试点区分：前台服务 / 通知是 Android 平台生命周期
+域，使用 Pigeon 的 **stable channel 模式**（issue #82），不用 `useJni` / `useFfi`；
+生成只需 Dart + Linux，不要求 JDK 21 或 Android classpath。
+
+- **契约**：`tool/pigeon/download_notifications.dart` 定义
+  `@HostApi() DownloadNotificationsApi`：`start(StartRequest)`、
+  `update(UpdateRequest)`、`stop(id)`。结构化字段与 `DownloadNotifications` 端口
+  一致（id / title / subtitle / index / total / progress / max）；`StartRequest`
+  额外带 `channel` 的 wire 字符串（`downloads` / `update`），`UpdateRequest`
+  的可空字段保持「null = 不改」，`max = 0` 仍是「总大小未知」。
+  `KotlinOptions(errorClassName: 'DownloadNotificationsPigeonError')` 避免同包
+  widget / DownloadsPublisher 生成物重复定义 `FlutterError`。
+- **生成物**（提交进仓库，重复运行无 diff）：
+  `lib/platform/pigeon/download_notifications.g.dart` +
+  `android/app/src/main/kotlin/top/stillmisty/molia/pigeon/DownloadNotificationsApi.g.kt`。
+  CI 的 `generated-drift` job 已纳入该命令（Linux 可跑）。
+- **原生复用**：`DownloadNotificationsImpl`（`@Keep`，只持 applicationContext）
+  委托现有 `top.stillmisty.molia.DownloadNotifications` 对象；Pigeon 的 Dart `int`
+  在 Kotlin 侧是 `Long`，host 统一 `toInt()`。`MainActivity
+  .configureFlutterEngine` 注册 `DownloadNotificationsApi.setUp(...)`，旧
+  `top.stillmisty.molia/download_notifications` 通道 handler 保留，两条入口共用
+  同一对象。通知权限不可用时原生 no-op（下载继续），不向 Dart 抛异常。
+- **Dart 适配器**：`lib/platform/pigeon/download_notifications_adapter.dart` 只封装
+  Pigeon transport（平台守卫、空 id 不调用、异常静默并永久标记不可用）；
+  fallback 组合放在 `lib/data/downloads/download_notifications_io.dart`
+  （`PigeonFirstDownloadNotifications`）——平台层不得反向 import data 层（§1）。
+  Android 优先 Pigeon，transport 未注册 / 首次调用异常时回退旧
+  `MethodChannelDownloadNotifications`；Pigeon 正常完成（含原生权限降级 no-op）
+  视为真实结果，不重试。非 Android 保持 `NoopDownloadNotifications`。
+- **失败语义**：best-effort，异常不抛到下载链路；旧通道保留到契约测试与 Android
+  冒烟通过，不删 transport。
+- **验证**：适配器单测覆盖成功 / 空 id / 异常 / 非 Android 与 fallback 选择；
+  `integration_test/download_notifications_pigeon_test.dart` 在 Android 上验证
+  Pigeon host 的 start / update / stop 与旧通道 fallback；release APK 启动
+  （configureFlutterEngine 内注册 host）无 `ClassNotFoundException` /
+  `NoSuchMethodError`。
+- **回滚**：删除 `download_notifications_io.dart` 里的 Pigeon 分支即可回到旧通道；
   Kotlin host 与生成物可整体删除，不影响其他域。
 
 ## 阶段与验收

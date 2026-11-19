@@ -1,9 +1,9 @@
 # Pigeon 契约（`tool/pigeon/`）
 
 Pigeon 按域小步迁移，每域一份 schema。**默认**使用 stable 的 channel 模式
-（当前：`downloads_publisher.dart`）；widget 域是 **native interop（`useJni`）
-preview 试点**（issue #78），只此一域，旧通道保留为 fallback。选型与迁移边界见
-`docs/adr/0038-native-interop.md` §9 / §10。
+（当前：`downloads_publisher.dart`、`download_notifications.dart`）；widget 域是
+**native interop（`useJni`）preview 试点**（issue #78），只此一域，旧通道保留为
+fallback。选型与迁移边界见 `docs/adr/0038-native-interop.md` §9 / §10 / §11。
 
 ## 约定
 
@@ -56,6 +56,52 @@ flutter analyze --no-pub
 flutter test --no-pub
 flutter build apk --debug --no-pub
 flutter test integration_test/downloads_publisher_pigeon_test.dart -d <android-device>
+# release R8 冒烟：安装 release APK 启动，确认无 ClassNotFoundException
+```
+
+## DownloadNotifications（Android，channel 模式）
+
+issue #82；选型结论见 ADR-0038 §11。前台服务 / 通知走 stable channel，**不用**
+`useJni` / `useFfi`：生成只需要 Dart + Linux。
+
+```bash
+dart run pigeon --input tool/pigeon/download_notifications.dart \
+  --dart_out lib/platform/pigeon/download_notifications.g.dart \
+  --kotlin_out android/app/src/main/kotlin/top/stillmisty/molia/pigeon/DownloadNotificationsApi.g.kt \
+  --kotlin_package top.stillmisty.molia.pigeon
+```
+
+生成物（提交进仓库，重复运行无 diff）：
+
+- `lib/platform/pigeon/download_notifications.g.dart`
+- `android/app/src/main/kotlin/top/stillmisty/molia/pigeon/DownloadNotificationsApi.g.kt`
+
+运行时契约：
+
+- 契约是 `start(StartRequest)` / `update(UpdateRequest)` / `stop(id)`；结构化字段
+  与端口一致，渠道用 wire 字符串（`downloads` / `update`），`update` 的 null 表示
+  「不改」、`max = 0` 表示「总大小未知」。错误类名
+  `DownloadNotificationsPigeonError` 与同包其它生成物隔离。
+- 原生逻辑仍在 `DownloadNotificationService.kt` 的 `DownloadNotifications`；
+  旧 `top.stillmisty.molia/download_notifications` 通道与
+  `DownloadNotificationsImpl` 共用。`MainActivity.configureFlutterEngine`
+  注册 `DownloadNotificationsApi.setUp(...)`。
+- Pigeon 的 Dart `int` 在 Kotlin 侧是 `Long`，host 实现统一 `toInt()`。
+- Dart 适配器 `lib/platform/pigeon/download_notifications_adapter.dart` 只封装
+  Pigeon transport；fallback 组合在
+  `lib/data/downloads/download_notifications_io.dart`
+  （`PigeonFirstDownloadNotifications`）。transport 异常 / 未注册时回退旧通道；
+  正常完成（含原生权限降级 no-op）不重试；非 Android 保持
+  `NoopDownloadNotifications`。
+- CI 的 `generated-drift` job 已包含上面的生成命令。
+
+验证：
+
+```bash
+flutter analyze --no-pub
+flutter test --no-pub
+flutter build apk --debug --no-pub
+flutter test integration_test/download_notifications_pigeon_test.dart -d <android-device>
 # release R8 冒烟：安装 release APK 启动，确认无 ClassNotFoundException
 ```
 
