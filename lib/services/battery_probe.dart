@@ -3,7 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 
-import '../platform/android/system_interop.dart' as android_interop;
+import '../platform/android/system_interop_adapter.dart' as android_interop;
 
 /// 电池状态快照（探针输出）。
 ///

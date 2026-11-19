@@ -422,7 +422,7 @@ android` 已自动调用）；不需要 `unzip`，并会拦住 `libmpv.so` /
 ## 12. Android JNI vs MethodChannel（2026-11-19，模拟器）
 
 ADR-0038 阶段 2 的互操作基准：同一台 Android 37 模拟器（headless，
-x86_64），JNI 走 `lib/platform/android/system_interop.dart` 的真实适配器，
+x86_64），JNI 走 `lib/platform/android/system_interop_adapter.dart` 的真实适配器，
 通道走现有 `top.stillmisty.molia/device_storage` handler。每次调用单独计时，
 预热 100 次，取 10,000 次的中位 / P99（微秒）；桌面歌词 4Hz 的
 `desktop.update` 预热 20 次、取 200 次。

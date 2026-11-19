@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:molia/platform/android/system_interop.dart';
+import 'package:molia/platform/android/system_interop_adapter.dart';
 
 /// Android 互操作基准（ADR-0038 阶段 2，手动运行，不进默认套件）：
 ///

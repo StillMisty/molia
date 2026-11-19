@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../data/files/app_data_directory.dart';
-import '../platform/android/system_interop.dart' as android_interop;
+import '../platform/android/system_interop_adapter.dart' as android_interop;
 import 'cache_types.dart';
 
 /// IO 平台（Android/iOS/桌面）缓存存储：`dart:io` + 应用数据目录 helper。

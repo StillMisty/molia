@@ -9,7 +9,7 @@ ADR-0038 的唯一落点：所有 JNIgen / FFIgen / Pigeon 生成绑定与它们
 lib/platform/
   abi.dart   # 纯 Dart ABI / 架构命名（供诊断与更新清单；不做 FFI 调用）
   android/   # JNIgen 生成物：<name>.g.dart（Java / Kotlin 系统调用）
-             # + system_interop.dart 薄适配器（电池 / StatFs）
+             # + system_interop_adapter.dart 薄适配器（电池 / StatFs）
   desktop/   # POSIX / allocator 的 FFIgen C 生成物（<name>.g.dart）；Win32 复用
              # package:win32，不在这里生成；桌面薄适配器也在这里
   pigeon/    # Pigeon 生成 Dart：<name>.g.dart；Apple Swift host 在 ios/Runner / macos/Runner
@@ -45,7 +45,7 @@ lib/platform/
   Kotlin 源先由 Gradle 编译（`:app:compileReleaseKotlin`）再交给 JNIgen 的
   `asm` 后端，因此生成需要仓库 Android SDK / Gradle；生成 JDK 固定 21，
   构建 JDK 仍按 `AGENTS.md`。JNIgen 暂不进 CI drift，原因与移除条件见
-  ADR-0038 §7。`system_interop.dart` 只做 Android 守卫、类型投影与
+  ADR-0038 §7。`system_interop_adapter.dart` 只做 Android 守卫、类型投影与
   `JLongArray.release()`，失败返回 null；`BatteryProbe` / `IoCacheStorage`
   再按各自端口语义回退通道。
 
