@@ -131,6 +131,10 @@ void main() {
     final result = await pending;
     expect(result.accepted, isFalse);
     expect(read.value, isEmpty, reason: '释放前的读取不能写回');
+    // 作废必须同时回收显式占位：落地结果走不到 _finishRead 的清理分支，
+    // 标志留着会让 ensure 永远无法重新发起读取（永久 loading）。
+    expect(read.explicitLoading, isFalse);
+    expect(read.markExplicitLoading(), isTrue, reason: '作废后应允许重新读取');
   });
 
   test('markExplicitLoading 同步占位，读取落地后回收', () async {

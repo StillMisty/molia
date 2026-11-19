@@ -199,7 +199,14 @@ class ReadReconciliation<T, W> {
     bool discardValue = false,
     bool discardPending = false,
   }) {
-    if (staleReads) _generation++;
+    if (staleReads) {
+      _generation++;
+      // 作废在途读取的同时回收显式占位：落地结果会因代际不匹配而走不到
+      // `_finishRead` 的清理分支，标志留着会让 ensure 永远发不出新读取
+      //（页面停在 loading，只有重建投影才能恢复）。
+      _explicitLoading = false;
+      _explicitQueued = false;
+    }
     _loaded = false;
     _authoritative = false;
     if (discardPending) _pending = const [];

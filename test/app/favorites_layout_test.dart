@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/domain/models/local_cache_index.dart';
 import 'package:molia/domain/ports/local_cache_index.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/providers/library_provider.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/download/download_records.dart';
 import 'package:molia/services/local_cache_index_store.dart';
@@ -85,6 +87,25 @@ void main() {
     expect(find.text(l10n.sortByTitle), findsOneWidget);
     expect(find.text(l10n.sortByArtist), findsOneWidget);
     expect(find.text(l10n.playlistCoverChange), findsOneWidget);
+  });
+
+  testWidgets('更换列表封面不把列表打回加载态', (tester) async {
+    await pumpFavorites(tester);
+    // 首屏自己的 skeleton → 正文交叉淡化先跑完，避免把离场层误判成本次回归。
+    await tester.pumpAndSettle();
+
+    final library = Provider.of<LibraryProvider>(
+      tester.element(find.text('Performance Track 0')),
+      listen: false,
+    );
+    final favorites = library.playlists.singleWhere((p) => p.isFavorites);
+
+    await library.setPlaylistCoverKey(favorites.id, 'playlist:__favorites__');
+    // 只推进一帧：旧实现会在这里清掉曲目读投影并渲染整页 loading。
+    await tester.pump();
+
+    expect(find.byType(M3ELoadingIndicator), findsNothing);
+    expect(find.text('Performance Track 0'), findsOneWidget);
   });
 
   testWidgets('合集弹层：曲库固定入口 + 智能列表默认收起', (tester) async {

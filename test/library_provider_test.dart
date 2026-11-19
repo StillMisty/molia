@@ -1055,6 +1055,98 @@ void main() {
       expect(view.tracks!.single.songId, '1');
     });
 
+    test('列表元数据变化（封面 / 改名）不清列表曲目缓存', () async {
+      final playlistId = await repository.createPlaylist('测试列表');
+      await repository.addTrackToPlaylist(
+        playlistId,
+        PlaylistTrack(
+          playlistId: playlistId,
+          sourceKey: 'wy',
+          songId: '1',
+          title: 'Song 1',
+          addedAt: 0,
+        ),
+      );
+      await provider.refreshPlaylists(force: true);
+      await provider.loadPlaylistTracks(playlistId);
+      await settle();
+      expect(provider.playlistTracksView(playlistId).tracks, hasLength(1));
+      final attempts = repository.playlistTracksAttempts;
+
+      // 换封面 / 改名都只写列表行：收藏页不能因此重新进入曲目加载态。
+      await provider.setPlaylistCoverKey(playlistId, 'playlist:$playlistId');
+      await settle();
+      await provider.renamePlaylist(playlistId, '改名后');
+      await settle();
+
+      final view = provider.playlistTracksView(playlistId);
+      expect(view.ready, isTrue, reason: '元数据更新不能把列表打回 loading');
+      expect(view.tracks, hasLength(1));
+      expect(
+        repository.playlistTracksAttempts,
+        attempts,
+        reason: '列表行写入不应触发曲目重读',
+      );
+      expect(provider.playlists.single.name, '改名后');
+      expect(provider.playlists.single.coverKey, 'playlist:$playlistId');
+    });
+
+    test('删除列表作废它的曲目读投影', () async {
+      final playlistId = await repository.createPlaylist('待删除');
+      await repository.addTrackToPlaylist(
+        playlistId,
+        PlaylistTrack(
+          playlistId: playlistId,
+          sourceKey: 'wy',
+          songId: '1',
+          title: 'Song 1',
+          addedAt: 0,
+        ),
+      );
+      await provider.refreshPlaylists(force: true);
+      await provider.loadPlaylistTracks(playlistId);
+      await settle();
+      expect(provider.playlistTracksView(playlistId).tracks, hasLength(1));
+
+      await repository.deletePlaylist(playlistId);
+      await settle();
+
+      expect(provider.playlists, isEmpty);
+      final view = provider.playlistTracksView(playlistId);
+      expect(view.tracks, isNull);
+      expect(view.loading, isTrue, reason: '删除后曲目缓存必须丢弃');
+    });
+
+    test('未缓存列表的曲目读取在途时收到曲目变更：不崩溃，落地后 ready', () async {
+      final playlistId = await repository.createPlaylist('在途');
+      await provider.refreshPlaylists(force: true);
+      await settle();
+
+      final track = PlaylistTrack(
+        playlistId: playlistId,
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+        addedAt: 0,
+      );
+      final gate = Completer<List<PlaylistTrack>>();
+      repository.nextPlaylistTracksSnapshot = gate;
+      provider.ensurePlaylistTracks(playlistId);
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.playlistTracksView(playlistId).loading, isTrue);
+
+      // 在途读取期间写入曲目：quiet 重载会命中「列表还没有缓存值」并跳过
+      //（旧实现会在这里对 null 值强解包，抛未捕获异常）。
+      await repository.addTrackToPlaylist(playlistId, track);
+      await settle();
+
+      gate.complete([track]);
+      await settle();
+      final view = provider.playlistTracksView(playlistId);
+      expect(view.ready, isTrue);
+      expect(view.tracks, hasLength(1));
+    });
+
     test('releaseBrowseCaches：清列表曲目 / 错误，保留收藏键、清单与历史；在途读取作废', () async {
       final playlistId = await repository.createPlaylist('测试列表');
       await repository.addTrackToPlaylist(
