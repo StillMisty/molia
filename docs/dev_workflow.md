@@ -40,7 +40,7 @@ tool/agent/setup.sh               # 可选：Android 模拟器 / SDK 组件（�
   Gradle 的 KGP/AGP 实际版本与 Android CLI 版本；结果写到 `$RUN_DIR/deps-*`，升级前跑一次。
 - **跨端入口**：`dart run tool/agent/cli.dart <命令>` 是 Linux / macOS / Windows 同一套
   工具入口（`-h` 看命令表）。已原生迁移：`info`、`deps`、`analyze`、`test`、`smoke`、
-  `app`、`emu`、`size apk`、`perf report`；采样与注入类（`perf` / `startup` / `cpu` /
+  `app`、`emu`、`size apk` / `size desktop`、`perf report`；采样与注入类（`perf` / `startup` / `cpu` /
   `memory` / `io` / `seed`）由 CLI 透传到平台后端（Linux/macOS 走 `tool/agent/*.sh`，
   Windows 采样走 `win mem|scroll|frames|startup`，Dart + FFI），入口不再分两套。
   `.ps1` 仅保留为 Windows 侧验证前的兜底，验证通过后删除；迁移顺序与退役条件

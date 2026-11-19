@@ -27,6 +27,8 @@ command -v ldd >/dev/null 2>&1 || die "找不到 ldd，无法校验动态库依�
 # 避免把 Flutter 自身的库误 strip。
 LIBS=(
   libcnativeapi.so
+  # 桌面发布包不使用 JNI 运行时：release 在 strip 前删除它（ADR-0038 阶段 5）。
+  # 保留条目只是让本地未删除的 perf 构建仍能剥符号，发布流程里是空操作。
   libdartjni.so
   libsqlite3.so
   libquickjs_c_bridge_plugin.so

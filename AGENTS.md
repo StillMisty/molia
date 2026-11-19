@@ -42,6 +42,7 @@ dart run tool/agent/cli.dart test android      # 同一套跑模拟器（先 emu
 dart run tool/agent/cli.dart smoke linux       # 启动首帧烟测（真实 main + provider tree；Xvfb，抓 runApp 前崩溃）
 dart run tool/agent/cli.dart deps              # 依赖/工具链体检：pub outdated + analyze suggestions + Gradle 实际版本
 dart run tool/agent/cli.dart size apk --check <apk>   # APK 分组体积与 native 库约束（无需 unzip）
+dart run tool/agent/cli.dart size desktop --check <bundle>  # 桌面 release 包：禁止 dartjni，校验 AOT / 引擎 / exe 结构
 dart run tool/agent/cli.dart docs check        # 文档引用 / 工具链一致性（CI 与 pre-commit 自动跑）
 tool/agent/seed.sh android|linux <cmd>         # 数据注入：favorites/covers/history/session/lang/mock-source/status/clear/restore
 tool/agent/startup.sh                          # 启动耗时采样（release 冷启动 N 次取中位；基线与结论见 docs/performance.md）

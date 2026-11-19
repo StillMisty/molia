@@ -273,9 +273,23 @@ jobs:
             --dart-define=MOLIA_LASTFM_API_SECRET=$env:MOLIA_LASTFM_API_SECRET
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+          # 桌面包不使用 JNI（ADR-0038 阶段 5）：jni 插件只为 Android 生成
+          # dartjni 运行时，Windows 构建仍会把它放进 Release。先按 glob 删除
+          # （防大小写 / 后缀差异），再确认没有残留。
+          $release = "build/windows/x64/runner/Release"
+          Get-ChildItem -Path $release -Recurse -File -Filter "*dartjni*" |
+            Remove-Item -Force
+          $leftover = @(Get-ChildItem -Path $release -Recurse -File -Filter "*dartjni*")
+          if ($leftover.Count -gt 0) {
+            throw "未能删除未使用的 JNI 运行时：$($leftover.FullName -join ', ')"
+          }
+
           $stage = "dist/molia-$v-windows-x64"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item -Recurse -Force "build/windows/x64/runner/Release/*" $stage
+          # 体积门禁在真正要发布的目录上跑：禁止 dartjni，并识别 exe / 资源结构。
+          dart run tool/agent/cli.dart size desktop --check $stage
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Compress-Archive -Path $stage -DestinationPath "dist/molia-$v-windows-x64.zip" -Force
 
           # 安装器的版本资源必须是纯数字（预发布后缀进不了 x.y.z.w）。
@@ -331,10 +345,21 @@ jobs:
             --split-debug-info=build/symbols/linux \
             --dart-define=MOLIA_LASTFM_API_KEY="${MOLIA_LASTFM_API_KEY:-}" \
             --dart-define=MOLIA_LASTFM_API_SECRET="${MOLIA_LASTFM_API_SECRET:-}"
+          # 桌面包不使用 JNI：jni / jni_flutter 只为 Android 生成 libdartjni.so，
+          # Linux 构建仍会把它装进 bundle（实测 157,288 B）。发布包明确剔除，
+          # 只删这一个库；随后 `size desktop --check` 挡住回流（ADR-0038 阶段 5）。
+          jni_lib="build/linux/x64/release/bundle/lib/libdartjni.so"
+          rm -f "$jni_lib"
+          if [[ -e "$jni_lib" ]]; then
+            echo "::error::未能删除未使用的 JNI 运行时：$jni_lib"
+            exit 1
+          fi
           # 统一守卫：kernel_blob 残留 / 非 release 引擎都直接失败。
           tool/agent/check_linux_bundle.sh build/linux/x64/release/bundle
           # 只 strip 第三方插件库；libapp.so / libflutter_linux_gtk.so 保持原样。
           tool/strip_linux_bundle.sh build/linux/x64/release/bundle
+          # 体积门禁：Linux bundle 必须有 AOT / 引擎库，且不得再出现 dartjni。
+          dart run tool/agent/cli.dart size desktop --check build/linux/x64/release/bundle
           stage="dist/molia-$v-linux-x64"
           mkdir -p "$stage"
           cp -a build/linux/x64/release/bundle/. "$stage"/
