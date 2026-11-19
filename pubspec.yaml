@@ -54,7 +54,8 @@ dependencies:
   flutter_cache_manager: ^3.5.0
   file: ^7.0.1
   # 原生互操作（ADR-0038）：只有 lib/platform/ 直接使用；jni / jni_flutter
-  # 原先经 nativeapi 传递，改为显式依赖以免上游调整时被静默移除。
+  # 原先经 shared_preferences_android / path_provider_android 传递，改为显式
+  # 依赖，避免上游调整插件依赖时被静默移除。
   jni: ^1.1.2
   jni_flutter: ^1.0.4
   win32: ^6.4.0

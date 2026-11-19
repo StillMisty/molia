@@ -71,7 +71,7 @@ tool/agent/worktree_prepare.sh <dir> [branch]  # 新 worktree：分支 / 签名 
   提交进仓库；iOS / Windows 图标走 `dart run icons_launcher:create`）；
 - 改原生互操作输入（ADR-0038）→ `dart run tool/jnigen.dart`（Android JNI，产物
   `lib/platform/android/*.g.dart`）、`dart run tool/ffigen_system.dart`（桌面 / Apple 系统绑定，
-  产物 `lib/platform/**/*.g.dart`）；Pigeon 契约在 `tool/pigeon/`，阶段 5 起按域运行
+  产物 `lib/platform/**/*.g.dart`）；Pigeon 契约在 `tool/pigeon/`，阶段 4 起按域运行
   `dart run pigeon --input tool/pigeon/<域>.dart`。生成物一律提交进仓库，勿手改。
 
 发布：`git tag -s v1.2.3 -m "Molia 1.2.3" && git push origin v1.2.3`（tag 即版本；

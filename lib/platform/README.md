@@ -21,8 +21,10 @@ lib/platform/
   `package:jni/`、`package:jni_flutter/`、`package:win32/`、`package:posix/`、
   `package:objective_c/`，也禁止直接 import 本目录的生成物；
   边界由 `test/architecture/native_interop_test.dart` 强制。
-- 现存 `lib/services/**` 的手写 FFI 作为阶段 0 临时白名单保留，阶段 1–2 迁入
-  `desktop/` 后逐条删除；白名单只减不增。
+- 现存 `lib/services/**` 的手写 FFI 作为阶段 0 临时白名单保留：阶段 1 桌面
+  （进程存活 / 前台激活 / 内存回收）迁入 `desktop/` 并删除 3 条；阶段 2 ABI
+  读取改由 `lib/platform/abi.dart` 承担，删除 `app_info.dart` /
+  `update_installer_io.dart` 两条，白名单清空。白名单只减不增。
 
 线程规则、R8 keep、生成流程与明确不做的项目见
 `docs/adr/0038-native-interop.md`。

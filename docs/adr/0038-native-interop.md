@@ -41,15 +41,27 @@ lib/platform/
 
 边界规则（`test/architecture/native_interop_test.dart` 强制）：
 
-- `lib/domain/**`、`lib/providers/**`、`lib/pages/**`、`lib/widgets/**`
-  禁止直接 import `dart:ffi`、`package:jni/`、`package:jni_flutter/`、
-  `package:win32/`、`package:posix/`、`package:objective_c/`，也禁止直接
-  import `lib/platform/**`；业务层继续只依赖既有端口；
-- `lib/platform/` 之外的原生 import 只能是阶段 0 白名单里的现存手写 FFI
-  （`services/diagnostics/app_info.dart`、`services/memory/app_memory_manager.dart`、
-  `services/update/update_installer_io.dart`、`services/window/foreground_activation.dart`、
-  `services/window/process_liveness.dart`）。白名单**只减不增**：文件迁走或
-  改用端口后，测试因陈旧条目失败，强制删除；
+- `lib/domain/**`、`lib/providers/**`、`lib/pages/**`、`lib/widgets/**`、
+  `lib/app/**` 禁止直接 import `dart:ffi`、`package:jni/`、
+  `package:jni_flutter/`、`package:win32/`、`package:posix/`、
+  `package:objective_c/`，也禁止直接 import `lib/platform/**`；业务层继续只
+  依赖既有端口。组合根不设例外：平台适配器由 services 在内部消费并通过既有
+  端口注入，`lib/app/**` 只做装配，不直接拿生成绑定。若将来确有组合根装配
+  需求，再在本文开最小路径例外，不静默放过；
+- `lib/platform/**` 是薄适配器，反向依赖 `lib/domain|data|services|providers|
+  pages|widgets|app` 或 `lib/main.dart` 同样失败：绑定层不能持有业务规则、降级
+  策略或端口实现；
+- 阶段 0 白名单里的现存手写 FFI 共 5 条：
+  - 阶段 1 桌面迁移：`services/memory/app_memory_manager.dart`、
+    `services/window/foreground_activation.dart`、
+    `services/window/process_liveness.dart` 改为 `lib/platform/desktop/**` 的
+    生成绑定，删除 3 条；
+  - 阶段 2 ABI 迁移：新增 `lib/platform/abi.dart`（纯 Dart，包装
+    `Abi.current()` 的平台 / 架构映射，不做 FFI 调用），
+    `UpdateInstaller.platformInfo` 与 `AppInfo` 改用它，删除
+    `services/diagnostics/app_info.dart` 与
+    `services/update/update_installer_io.dart` 2 条；此时白名单清空；
+  - 白名单**只减不增**：文件迁走或改用端口后，测试因陈旧条目失败，强制删除；
 - 生成物统一 `<name>.g.dart`，由脚本写出并提交进仓库；`*.g.dart` 已被
   `module_layout_test.dart` 排除在单文件体积棘轮之外，不另开豁免。
 
@@ -57,9 +69,9 @@ lib/platform/
 
 | 方案 | 类型 | 稳定性 | 平台 | 线程 / 引用 | 打包成本 | 适用 | 结论 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| JNIgen | Java / Kotlin 直接互操作，生成 `package:jni` 绑定 | stable（Flutter 3.50） | Android（JVM 测试也可用） | 调用线程需 attached；`package:jni` 管理本地 / 全局引用；阻塞调用不能放 UI isolate | 运行期成本低，JNI 插件已在依赖树；需 `@Keep` / R8 规则 | 微秒级系统 getter：`StatFs` 总容量、电池快照、ABI | **采用**（阶段 3，先试点） |
-| FFIgen | C / Objective-C 直接互操作，生成 `dart:ffi` 绑定 | stable（Flutter 3.50） | Windows / Linux / macOS / iOS | 同步 C 调用；阻塞调用移出 UI isolate；ObjC UI 类需主线程 | 桌面无需额外运行时；Apple 走 static link + 生成的 `.m` | 进程存活、前台激活、工作集 / allocator trim、纯查询系统 API | **采用**（阶段 2 / 4） |
-| Pigeon（channel 模式） | 生成两端接口的 typed MethodChannel | stable | Android / iOS / macOS / Windows / Linux | 平台线程执行，回复回 UI isolate；无共享内存 | 只多生成代码，无原生库 | 继续走通道、需要消除手写 Map / 方法名的域 | **采用**（阶段 5，按域） |
+| JNIgen | Java / Kotlin 直接互操作，生成 `package:jni` 绑定 | stable（Flutter 3.50） | Android（JVM 测试也可用） | 调用线程需 attached；`package:jni` 管理本地 / 全局引用；阻塞调用不能放 UI isolate | 运行期成本低，JNI 插件已在依赖树；需 `@Keep` / R8 规则 | 微秒级系统 getter：`StatFs` 总容量、电池快照、ABI | **采用**（阶段 2，先试点） |
+| FFIgen | C / Objective-C 直接互操作，生成 `dart:ffi` 绑定 | stable（Flutter 3.50） | Windows / Linux / macOS / iOS | 同步 C 调用；阻塞调用移出 UI isolate；ObjC UI 类需主线程 | 桌面无需额外运行时；Apple 走 static link + 生成的 `.m` | 进程存活、前台激活、工作集 / allocator trim、纯查询系统 API | **采用**（阶段 1 / 3） |
+| Pigeon（channel 模式） | 生成两端接口的 typed MethodChannel | stable | Android / iOS / macOS / Windows / Linux | 平台线程执行，回复回 UI isolate；无共享内存 | 只多生成代码，无原生库 | 继续走通道、需要消除手写 Map / 方法名的域 | **采用**（阶段 4，按域） |
 | Pigeon native interop preview | 生成 direct interop | **preview** | 不支持 Windows / Linux | 与 direct interop 相同，但契约未稳定 | 预览期行为可能变化 | 无 | **不采用**（不上生产） |
 | 手写 MethodChannel（现状） | 字符串方法名 + Map 编解码 | 稳定 | 全部 | 平台线程 | 无 | 权限、Activity result、前台服务、SAF、runner / 菜单 / 音频路由 | **保留**（不迁） |
 
@@ -74,6 +86,9 @@ lib/platform/
   失败静默；任何可能阻塞的 C 调用放到 worker isolate。
 - **Objective-C**：只迁纯查询（字体族、低电量模式）；UIKit / AppKit 的 UI 与
   菜单调用必须在主线程，且继续走通道或现有 runner，不在 FFI 里直接触碰。
+  阶段 3 的 FFIgen 生成物会 import `package:objective_c`：生成前必须把它从
+  传递依赖转为直接依赖（否则触发 `depend_on_referenced_packages`），生成的
+  `.m` 交给 build hook 编译。
 - **Pigeon / MethodChannel**：契约调用本身不保证主线程；实现侧继续按平台要求
   切线程，Dart 侧仍按 Future 消费，不新增同步等待。
 - 所有迁移点保留现有失败降级语义：查询失败返回「未知 / 空 / 保守存活」，
@@ -89,7 +104,7 @@ lib/platform/
 - 不为互操作关闭 minify / shrinkResources；只加最小 keep 规则。
 - release APK 启动冒烟是发布门禁：至少覆盖 JNI 类加载与一次系统 getter 调用。
 - 桌面发布包剔除未使用的 JNI 原生库；体积检查加入跨端工具 CLI，防止回流
-  （阶段 6）。Android 现有原生库排除规则不变，不误删运行期真正需要的库。
+  （阶段 5）。Android 现有原生库排除规则不变，不误删运行期真正需要的库。
 
 ### 5. 生成流程
 
@@ -99,7 +114,7 @@ lib/platform/
 ```bash
 dart run tool/jnigen.dart          # 输入：tool/jnigen.dart 的 inputs → lib/platform/android/*.g.dart
 dart run tool/ffigen_system.dart   # 输入：tool/ffigen_system.dart 的 inputs → lib/platform/**/*.g.dart
-dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 5；→ lib/platform/pigeon/<域>.g.dart
+dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 4；→ lib/platform/pigeon/<域>.g.dart
 ```
 
 - 阶段 0 的输入为空：脚本打印「未配置输入，跳过」并正常退出；登记的输入
@@ -107,13 +122,17 @@ dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 5；→ lib/platform/p
 - 生成阶段固定 JDK 21（JNIgen 官方支持 17–21），构建阶段继续用 AGENTS.md
   的构建 JDK；两者不要求一致，也不为生成升降整仓 JDK；
   阶段 0 的 CI 生成物 drift 任务不预装 21（脚本没有 JNI 输入，且
-  `docs check` 会把工作流里的 JDK 与 AGENTS.md 的构建 JDK 对比）。阶段 3
+  `docs check` 会把工作流里的 JDK 与 AGENTS.md 的构建 JDK 对比）。阶段 2
   真正接入 JNI 生成时，应把「生成 JDK」登记为工作流里的显式例外，而不是
   把构建 JDK 降到 21；
+- JNIgen 配置固定 `androidSdk: AndroidSdk(addGradleDeps: true,
+  androidExample: <仓库根>)`，输入源目录 / 输出文件都用绝对 `Uri`；FFIgen
+  的 `entryPoints` 与输出同样用绝对 `Uri`，两者都不依赖调用时的 CWD；
 - Pigeon 每个域一份 schema，命令参数写在 schema 头部；正在迁 JNI / FFI 的
   通道不做 Pigeon 迁移；
 - CI（`.github/workflows/ci.yml`）：Ubuntu 跑 `build_runner` + 上述生成器并
-  `git diff --exit-code`；Windows 编译 `flutter build windows --debug`；
+  `git diff --exit-code`（阶段 0 对 JNIgen / FFIgen 是 no-op，阶段 1 / 2 起才
+  有真实输出）；Windows 编译 `flutter build windows --debug`；
   macOS 编译 `flutter build macos --debug` 与
   `flutter build ios --no-codesign`。发布工作流 `release.yml` 不改。
 
@@ -147,5 +166,5 @@ dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 5；→ lib/platform/p
 - 业务层不会新增原生 import；现有 5 个手写 FFI 文件是显性技术债，迁移一条
   删一条。
 - 生成物可重复生成，漂移由 CI 发现；Pigeon 只解决契约一致性，不宣称性能。
-- 桌面发布包不再为未使用的 JNI 运行时付体积成本（阶段 6 验收）。
+- 桌面发布包不再为未使用的 JNI 运行时付体积成本（阶段 5 验收）。
 - 本 ADR 不改变任何当前运行时行为；阶段 0 只新增目录、脚本、测试与 CI。

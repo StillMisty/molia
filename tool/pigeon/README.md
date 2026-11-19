@@ -15,6 +15,6 @@ native interop preview（preview、无 Windows / Linux、官方不建议生产�
 
 ## 阶段 0 状态
 
-本目录目前只有约定，没有 schema，也没有生成物。阶段 5 按域逐个添加；此时
+本目录目前只有约定，没有 schema，也没有生成物。阶段 4 按域逐个添加；此时
 CI 的生成物 drift 任务只运行 `dart run build_runner build`、
 `dart run tool/jnigen.dart`、`dart run tool/ffigen_system.dart`。

@@ -4,8 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// ADR-0038 原生互操作边界：
 /// - 生成绑定与薄适配器只能在 `lib/platform/**`；
-/// - 业务层（domain / providers / pages / widgets）不得直接 import JNI / FFI /
-///   Win32 / POSIX / Objective-C 绑定包，也不得直接 import `lib/platform/**`；
+/// - 业务层（domain / providers / pages / widgets / app）不得直接 import JNI /
+///   FFI / Win32 / POSIX / Objective-C 绑定包，也不得直接 import
+///   `lib/platform/**`；
+/// - 平台层是薄适配器，不得反向依赖 domain / data / services 等业务层；
 /// - 阶段 0 的现存手写 FFI 登记为只减不增的白名单，阶段 1–2 迁入平台层后
 ///   逐条删除；新增违规即使不在白名单也必须失败。
 const List<String> _nativeImports = [
@@ -24,6 +26,18 @@ const List<String> _businessLayers = [
   'lib/providers/',
   'lib/pages/',
   'lib/widgets/',
+  'lib/app/',
+];
+
+/// 平台层不能反向依赖的业务层前缀（`lib/main.dart` 单独判断）。
+const List<String> _businessDependencyPrefixes = [
+  'lib/domain/',
+  'lib/data/',
+  'lib/services/',
+  'lib/providers/',
+  'lib/pages/',
+  'lib/widgets/',
+  'lib/app/',
 ];
 
 /// 阶段 0 临时白名单：文件 → 仍然存在的原生 import。
@@ -49,7 +63,7 @@ void main() {
     );
   });
 
-  test('domain / providers / pages / widgets 不直接依赖原生互操作', () {
+  test('业务层（domain / providers / pages / widgets / app）不直接依赖原生互操作', () {
     final offenders = <String>[];
     for (final path in files.where(_isBusinessLayer)) {
       for (final ref in _importsOf(path)) {
@@ -71,6 +85,29 @@ void main() {
     );
   });
 
+  test('lib/platform/** 不反向依赖业务层（薄适配器只做投影）', () {
+    final offenders = <String>[];
+    for (final path in files.where(
+      (path) => path.startsWith(_platformPrefix),
+    )) {
+      for (final ref in _importsOf(path)) {
+        final target = _resolve(path, ref);
+        if (target == 'lib/main.dart' ||
+            _businessDependencyPrefixes.any(target.startsWith)) {
+          offenders.add('$path -> $ref');
+        }
+      }
+    }
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          '平台层反向依赖业务层会形成环，也会把端口 / 降级规则搬进绑定层'
+          '（ADR-0038）；请改为由业务层注入最小参数：\n'
+          '${offenders.join('\n')}',
+    );
+  });
+
   test('原生互操作 import 只出现在 lib/platform/（阶段 0 白名单只减不增）', () {
     final offenders = <String>[];
     for (final path in files) {
@@ -86,7 +123,8 @@ void main() {
       isEmpty,
       reason:
           '生成绑定 / 手写 FFI 只能放在 lib/platform/（ADR-0038）；'
-          '阶段 1–2 迁移完成后白名单会清空：\n${offenders.join('\n')}',
+          '阶段 1 桌面迁移 3 条、阶段 2 ABI 迁移 2 条后白名单清空：\n'
+          '${offenders.join('\n')}',
     );
   });
 
