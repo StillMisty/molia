@@ -106,6 +106,10 @@ dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 5；→ lib/platform/p
   缺失时打印缺失路径并以非零码退出，不静默生成半份绑定；
 - 生成阶段固定 JDK 21（JNIgen 官方支持 17–21），构建阶段继续用 AGENTS.md
   的构建 JDK；两者不要求一致，也不为生成升降整仓 JDK；
+  阶段 0 的 CI 生成物 drift 任务不预装 21（脚本没有 JNI 输入，且
+  `docs check` 会把工作流里的 JDK 与 AGENTS.md 的构建 JDK 对比）。阶段 3
+  真正接入 JNI 生成时，应把「生成 JDK」登记为工作流里的显式例外，而不是
+  把构建 JDK 降到 21；
 - Pigeon 每个域一份 schema，命令参数写在 schema 头部；正在迁 JNI / FFI 的
   通道不做 Pigeon 迁移；
 - CI（`.github/workflows/ci.yml`）：Ubuntu 跑 `build_runner` + 上述生成器并
