@@ -1,6 +1,6 @@
 # ADR-0038：原生互操作层、生成流程与迁移边界
 
-- 状态：草案（阶段 0–2、5 已落地；阶段 3–4 按本文推进）
+- 状态：草案（阶段 0–2、5 已落地；阶段 3–4 按本文推进；widget native interop 试点见 §9）
 - 日期：2026-11-19
 - 相关：issue #65、issue #66、issue #71、`lib/platform/`、`tool/jnigen.dart`、
   `tool/ffigen_system.dart`、`tool/pigeon/`、`test/architecture/native_interop_test.dart`、
@@ -80,7 +80,7 @@ runner 工程内（`ios/Runner`、`macos/Runner`），需要共享的 Darwin 逻
 | JNIgen | Java / Kotlin 直接互操作，生成 `package:jni` 绑定 | stable（Flutter 3.50） | Android（JVM 测试也可用） | 调用线程需 attached；`package:jni` 管理本地 / 全局引用；阻塞调用不能放 UI isolate | 运行期成本低，JNI 插件已在依赖树；需 `@Keep` / R8 规则 | 微秒级系统 getter：`StatFs` 总容量、电池快照、ABI | **采用**（阶段 2，先试点） |
 | FFIgen | C 直接互操作，生成 `dart:ffi` 绑定 | stable（Flutter 3.50） | Windows / Linux；macOS 仅进程级 C 符号 | 同步 C 调用；阻塞调用移出 UI isolate；不生成 Objective-C / `.m` | 桌面无需额外运行时 | 进程存活、前台激活、工作集 / allocator trim、macOS 进程级 C 符号 | **采用**（阶段 1，仅桌面 C） |
 | Pigeon（channel 模式） | 生成两端接口的 typed MethodChannel；Apple host 用 Swift | stable | Android / iOS / macOS / Windows / Linux | 平台线程执行，回复回 UI isolate；无共享内存 | 只多生成代码（Dart + Swift host），无原生库 | 继续走通道、需要消除手写 Map / 方法名的域；Apple 纯查询 | **采用**（阶段 3 Apple / 4 其余域） |
-| Pigeon native interop preview | 生成 direct interop | **preview** | 不支持 Windows / Linux | 与 direct interop 相同，但契约未稳定 | 预览期行为可能变化 | 无 | **不采用**（不上生产） |
+| Pigeon native interop preview | 生成 direct interop | **preview** | 不支持 Windows / Linux | 与 direct interop 相同，但契约未稳定 | 预览期行为可能变化 | Android widget 试点：`WidgetApi.update`（issue #78，§9） | **仅试点**（其余域不采用、不上生产） |
 | 手写 MethodChannel（现状） | 字符串方法名 + Map 编解码 | 稳定 | 全部 | 平台线程 | 无 | 权限、Activity result、前台服务、SAF、runner / 菜单 / 音频路由 | **保留**（不迁） |
 
 桌面 C 绑定的来源（阶段 1）：Win32 / POSIX **优先复用上游生成绑定**
@@ -135,6 +135,8 @@ dart run tool/jnigen.dart          # 输入：tool/jnigen.dart 的 inputs → li
 dart run tool/ffigen_system.dart   # 桌面 C：tool/ffigen_system.dart 的 inputs → lib/platform/desktop/*.g.dart
 dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 3（Apple Swift host）/ 4（其余域）
                                                  # → lib/platform/pigeon/<域>.g.dart + ios|macos/Runner 的 Swift host
+tool/pigeon/generate.sh            # widget native interop 试点（JDK 21）：编译 Kotlin → Pigeon/JNIgen
+                                   # → lib/platform/pigeon/widget*.dart + android/.../pigeon/WidgetApi.g.kt
 ```
 
 - 阶段 0 的输入为空：脚本打印「未配置输入，跳过」并正常退出；登记的输入
@@ -161,6 +163,8 @@ dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 3（Apple Swift host�
 ### 6. 明确不做
 
 - Pigeon native interop preview（preview、无 Windows / Linux、官方不建议生产）；
+  **唯一例外**是 widget 域的 Android 试点（§9），保留旧通道 fallback，不推广
+  到其他域或 Windows / Linux；
 - 把 17 条通道全量 JNI 化；
 - 把 Windows runner 的 COM / 窗口 / 任务栏，或 Linux GTK runner 改成 C ABI；
 - 直接 Swift FFI（swiftgen 实验）：Apple 走 Pigeon 的 Swift host，不生成
@@ -229,6 +233,42 @@ dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 3（Apple Swift host�
   Xvfb + 软件 GL，首帧 167ms）；strip 前后体积见
   `docs/performance.md` §10.1。Windows 没有本机环境，删除与门禁由 release CI
   验证；CI 通过前按「实现但未验证」标注，不合并发布。
+
+## 9. 阶段 4 native interop 试点（2026-11-20，widget）
+
+Pigeon native interop 仍是 preview；本节只记录 **widget 一个域**的试点
+（issue #78），不改变其他域继续走 channel 模式的结论。
+
+- **范围**：仅 `tool/pigeon/widget.dart`（`@HostApi() WidgetApi.update` +
+  `WidgetPayload`），Android `useJni`。不迁 Activity / Service / 回调域，不用
+  `@TaskQueue` / `@EventChannelApi` / `@ProxyApi`，不碰 Apple / iOS / macOS。
+- **保留 fallback**：旧 `top.stillmisty.molia/widget` 通道与 handler 不删；
+  Dart 适配器（`lib/platform/pigeon/widget_adapter.dart`）先调 native
+  interop，解析 / 调用失败后永久回退通道，非 Android no-op。契约测试与
+  release 冒烟通过前不删除 transport。
+- **Android 实现**：`MusicWidgetUpdater` 承载「取所有 widget id → 逐个更新」
+  的唯一逻辑，旧通道与 `WidgetApiImpl` 共用；`MainActivity.configureFlutterEngine`
+  注册 `WidgetApiRegistrar`，实现类 `@Keep` 且只持有 `applicationContext`。
+  proguard 增加 `-keep class top.stillmisty.molia.pigeon.** { *; }`。
+- **线程规则**：HostApi 在调用线程同步执行；根 isolate 即平台主线程，widget
+  更新是低频单向调用，允许在 UI isolate 调用；阻塞 I/O 仍必须后台 isolate。
+- **平台边界**：Windows / Linux / Apple 没有 native interop 路径，继续走原有
+  channel；本试点不承诺性能收益，目标是消除 widget 域两端手写方法名 / Map
+  字段漂移。
+- **生成**：`tool/pigeon/generate.sh`（JDK 21）先编译 Kotlin，再运行 Pigeon，
+  产物提交进仓库；`jniClassPaths` 取 AGP9 内置 Kotlin 的
+  `build/app/intermediates/built_in_kotlinc/release/compileReleaseKotlin/classes`。
+  重复运行无 diff，命令与生成物清单见 `tool/pigeon/README.md`。
+- **已知阻塞 / 兼容补丁**（preview 期，均由生成脚本确定性处理）：
+  - Gradle 9.9 + `org.gradle.parallel=true` 下 jnigen 的 Gradle stub 报
+    “Resolution … without an exclusive lock”：生成期间临时关闭并行；
+  - jnigen 1.1.0 期望 `package:jni` 1.2.0，但 pub 最新仍是 1.1.2：校正
+    `JniVersionCheck`，并用 `lib/platform/pigeon/jni_compat.dart` 补
+    `JReference.nonNullPointer`；jni 发布 1.2.0 后删除补丁；
+  - 生成物在 Flutter 模板分析器下的 3 条已知诊断用 file-level ignore 压掉，
+    不改生成逻辑。
+- **回滚**：删除适配器里的 native 分支即可回到旧通道；Kotlin host 与生成物
+  可整体删除，不影响其他域。
 
 ## 阶段与验收
 

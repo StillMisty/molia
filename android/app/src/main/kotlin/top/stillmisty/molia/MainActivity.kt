@@ -100,41 +100,32 @@ class MainActivity : FlutterActivity() {
         // JNI 互操作对象（StatFs / 电池）尽早拿到 applicationContext：
         // Dart 侧可能在首帧前就查询缓存上限 / 电量（ADR-0038 阶段 2）。
         top.stillmisty.molia.interop.SystemInterop.initialize(applicationContext)
-        
-        // Widget 控制通道
+
+        // Widget 的 Pigeon native interop host（issue #78，preview 试点）。
+        // 实现只持有 applicationContext；Dart 侧失败会回退下面的旧通道。
+        top.stillmisty.molia.pigeon.WidgetApiRegistrar().register(
+            top.stillmisty.molia.pigeon.WidgetApiImpl(applicationContext),
+            flutterEngine,
+        )
+
+        // Widget 控制通道（Pigeon 失败时的 fallback，契约稳定前不删）
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "top.stillmisty.molia/widget")
         methodChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "updateWidget" -> {
-                    val songName = call.argument<String>("songName")
-                    val artistName = call.argument<String>("artistName")
-                    val albumArtUrl = call.argument<String>("albumArtUrl")
-                    val isPlaying = call.argument<Boolean>("isPlaying")
-                    
-                    // 获取所有小部件ID并更新
-                    val appWidgetManager = android.appwidget.AppWidgetManager.getInstance(this)
-                    val appWidgetIds = appWidgetManager.getAppWidgetIds(
-                        android.content.ComponentName(this, MusicWidget::class.java)
+                    MusicWidgetUpdater.update(
+                        context = this,
+                        songName = call.argument<String>("songName"),
+                        artistName = call.argument<String>("artistName"),
+                        albumArtUrl = call.argument<String>("albumArtUrl"),
+                        isPlaying = call.argument<Boolean>("isPlaying") ?: false,
                     )
-                    
-                    // 更新所有小部件
-                    for (appWidgetId in appWidgetIds) {
-                        MusicWidget.updateAppWidget(
-                            context = this,
-                            appWidgetManager = appWidgetManager,
-                            appWidgetId = appWidgetId,
-                            songName = songName,
-                            artistName = artistName,
-                            albumArtUrl = albumArtUrl,
-                            isPlaying = isPlaying ?: false
-                        )
-                    }
                     result.success(null)
                 }
                 else -> result.notImplemented()
             }
         }
-        
+
         // 语言设置通道
         val languageChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "language_channel")
         languageChannel.setMethodCallHandler { call, result ->

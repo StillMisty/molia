@@ -193,6 +193,11 @@ void main() {
 
 bool _isSizeExcluded(String path) =>
     path.endsWith('.g.dart') ||
+    // Pigeon native interop 伴生生成物（issue #78）：同一份 schema 的产物，
+    // 不参与单文件棘轮。
+    path.endsWith('.g.jni.dart') ||
+    path.endsWith('.g.ffi.dart') ||
+    path.endsWith('.native_interop.g.dart') ||
     path.startsWith('lib/l10n/') ||
     _sizeExcludedFiles.contains(path);
 
