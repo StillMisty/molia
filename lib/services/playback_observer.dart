@@ -21,9 +21,6 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
-import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter/widgets.dart'
     show GlobalKey, NavigatorState, WidgetsBinding;
 import 'package:logging/logging.dart';
@@ -33,6 +30,7 @@ import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/library_store.dart';
 import '../domain/ports/playback_facade.dart';
+import '../platform/pigeon/widget_adapter.dart' as widget_adapter;
 import 'artwork/image_preload_manager.dart';
 import '../playback/playback_power_policy.dart';
 import 'covers/cover_resolution.dart';
@@ -42,23 +40,17 @@ import 'notification_permission.dart';
 
 final _logger = Logger('molia.playback_observer');
 
-/// 桌面小组件更新器（Android `top.stillmisty.molia/widget` 通道）。
+/// 桌面小组件更新器（Android；Pigeon native interop 优先，旧通道兜底）。
 ///
-/// 默认实现见 [_updateAndroidWidget]；测试注入记录器断言调用与顺序。
+/// 默认实现见 `lib/platform/pigeon/widget_adapter.dart`；测试注入记录器断言
+/// 调用与顺序。
 typedef PlaybackWidgetUpdater = Future<void> Function(
   Map<String, Object?> payload,
 );
 
 /// 默认小组件更新：非 Android 是空操作，失败静默（不影响播放主流程）。
-Future<void> _updateAndroidWidget(Map<String, Object?> payload) async {
-  if (defaultTargetPlatform != TargetPlatform.android) return;
-  try {
-    await const MethodChannel('top.stillmisty.molia/widget')
-        .invokeMethod<void>('updateWidget', payload);
-  } catch (e) {
-    // 更新失败静默：桌面小组件不影响播放主流程。
-  }
-}
+Future<void> _updateAndroidWidget(Map<String, Object?> payload) =>
+    widget_adapter.updateAndroidWidget(payload);
 
 /// 播放快照副作用观察者：由组合根创建、挂接，与 provider 同生命周期。
 ///
