@@ -96,6 +96,10 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // JNI 互操作对象（StatFs / 电池）尽早拿到 applicationContext：
+        // Dart 侧可能在首帧前就查询缓存上限 / 电量（ADR-0038 阶段 2）。
+        top.stillmisty.molia.interop.SystemInterop.initialize(applicationContext)
         
         // Widget 控制通道
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "top.stillmisty.molia/widget")
@@ -187,12 +191,11 @@ class MainActivity : FlutterActivity() {
         deviceStorageChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getTotalBytes" -> {
-                    try {
-                        val stat = android.os.StatFs(filesDir.absolutePath)
-                        result.success(stat.blockCountLong * stat.blockSizeLong)
-                    } catch (e: Exception) {
-                        result.error("STORAGE_ERROR", e.message, null)
-                    }
+                    // 与 JNI 共用 SystemInterop 的 StatFs 读取；失败返回 -1 由
+                    // Dart 侧按「未知」回退默认缓存上限。
+                    result.success(
+                        top.stillmisty.molia.interop.SystemInterop.totalBytes()
+                    )
                 }
                 else -> result.notImplemented()
             }
@@ -355,8 +358,8 @@ class MainActivity : FlutterActivity() {
             "top.stillmisty.molia/updater"
         ).setMethodCallHandler { call, result ->
             when (call.method) {
-                "supportedAbi" ->
-                    result.success(Build.SUPPORTED_ABIS.firstOrNull() ?: "")
+                // ABI 由 Dart 侧 `Abi.current()` 纯 Dart 读取（ADR-0038），
+                // 这里不再维护第二份 `Build.SUPPORTED_ABIS` 映射。
                 "canInstallPackages" ->
                     result.success(packageManager.canRequestPackageInstalls())
                 "installApk" -> installApk(call.argument<String>("path"), result)

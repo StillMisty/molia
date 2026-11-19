@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../data/files/app_data_directory.dart';
+import '../platform/android/system_interop_adapter.dart' as android_interop;
 import 'cache_types.dart';
 
 /// IO 平台（Android/iOS/桌面）缓存存储：`dart:io` + 应用数据目录 helper。
@@ -23,7 +24,9 @@ class IoCacheStorage implements CacheStorage {
     this._audioDirOverride,
     this._artworkDirOverride,
     Future<Directory> Function()? supportDirectory,
-  }) : _supportDirectory = supportDirectory ?? appDataDirectory;
+    Future<int?> Function()? totalSpaceReader,
+  }) : _supportDirectory = supportDirectory ?? appDataDirectory,
+       _totalSpaceReader = totalSpaceReader ?? _readDeviceTotalSpace;
 
   static const String audioDirName = 'audio_cache';
   static const String artworkDirName = 'artwork_cache';
@@ -37,6 +40,9 @@ class IoCacheStorage implements CacheStorage {
   final String? _artworkDirOverride;
   final Future<Directory> Function() _supportDirectory;
 
+  /// 容量读取 seam：默认 Android 走 JNI，失败回退通道；测试注入假 reader。
+  final Future<int?> Function() _totalSpaceReader;
+
   String? _resolvedAudioDir;
   String? _resolvedArtworkDir;
   int? _totalSpaceCache;
@@ -45,16 +51,21 @@ class IoCacheStorage implements CacheStorage {
   Future<int?> totalSpaceBytes() async {
     final cached = _totalSpaceCache;
     if (cached != null) return cached;
-    final value = await _queryTotalSpaceBytes();
-    // 只缓存成功结果：查询失败（通道时序 / 平台异常）下次仍可重试。
+    final value = await _totalSpaceReader();
+    // 只缓存成功结果：查询失败（JNI / 通道时序 / 平台异常）下次仍可重试。
     if (value != null) _totalSpaceCache = value;
     return value;
   }
 
   /// Android 经原生 StatFs 读内部存储分区总容量；其余平台/失败返回 null
   /// （上层回退固定默认值）。
-  Future<int?> _queryTotalSpaceBytes() async {
+  ///
+  /// 优先 JNI（与通道共用的 Kotlin `SystemInterop.totalBytes()`），失败再回
+  /// 退 `device_storage` 通道：JNI 类未初始化 / 引擎早期都能保持旧行为。
+  static Future<int?> _readDeviceTotalSpace() async {
     if (!Platform.isAndroid) return null;
+    final viaJni = android_interop.readTotalSpaceBytes();
+    if (viaJni != null) return viaJni;
     try {
       final bytes = await _deviceStorageChannel.invokeMethod<num>(
         'getTotalBytes',

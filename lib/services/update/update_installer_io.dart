@@ -1,4 +1,3 @@
-import 'dart:ffi' show Abi;
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -6,6 +5,7 @@ import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../platform/abi.dart';
 import 'update_installer_types.dart';
 
 /// 更新安装策略（各平台分支见类文档）。
@@ -32,20 +32,24 @@ class UpdateInstaller {
   /// 当前平台标识与产物架构（清单里 platform / arch 的取值）。
   Future<UpdatePlatformInfo> platformInfo() async {
     if (Platform.isAndroid) {
-      final abi = await _safeInvoke<String>('supportedAbi') ?? '';
-      return UpdatePlatformInfo(platform: 'android', arch: _androidArch(abi));
+      // 运行时 ABI 纯 Dart 读取：不再经通道问 Kotlin `Build.SUPPORTED_ABIS`，
+      // 避免清单架构与进程实际 ABI 不一致（ADR-0038）。
+      return UpdatePlatformInfo(
+        platform: 'android',
+        arch: currentAndroidArchName(),
+      );
     }
     if (Platform.isIOS) {
-      return UpdatePlatformInfo(platform: 'ios', arch: _dartArch());
+      return UpdatePlatformInfo(platform: 'ios', arch: currentArchName());
     }
     if (Platform.isWindows) {
-      return UpdatePlatformInfo(platform: 'windows', arch: _dartArch());
+      return UpdatePlatformInfo(platform: 'windows', arch: currentArchName());
     }
     if (Platform.isLinux) {
-      return UpdatePlatformInfo(platform: 'linux', arch: _dartArch());
+      return UpdatePlatformInfo(platform: 'linux', arch: currentArchName());
     }
     if (Platform.isMacOS) {
-      return UpdatePlatformInfo(platform: 'macos', arch: _dartArch());
+      return UpdatePlatformInfo(platform: 'macos', arch: currentArchName());
     }
     return UpdatePlatformInfo(platform: Platform.operatingSystem, arch: 'any');
   }
@@ -557,33 +561,5 @@ exit 0
       _logger.fine('更新通道调用 $method 失败: $e');
       return null;
     }
-  }
-
-  String _androidArch(String abi) {
-    final normalized = abi.toLowerCase();
-    if (normalized.contains('arm64')) return 'arm64';
-    if (normalized.contains('armeabi') || normalized == 'arm') return 'armv7';
-    if (normalized.contains('x86_64')) return 'x86_64';
-    return 'any';
-  }
-
-  String _dartArch() {
-    final abi = Abi.current();
-    return switch (abi) {
-      Abi.androidArm64 ||
-      Abi.iosArm64 ||
-      Abi.fuchsiaArm64 ||
-      Abi.linuxArm64 ||
-      Abi.macosArm64 ||
-      Abi.windowsArm64 => 'arm64',
-      Abi.androidArm || Abi.iosArm || Abi.linuxArm => 'armv7',
-      Abi.androidX64 ||
-      Abi.iosX64 ||
-      Abi.fuchsiaX64 ||
-      Abi.linuxX64 ||
-      Abi.macosX64 ||
-      Abi.windowsX64 => 'x64',
-      _ => 'any',
-    };
   }
 }

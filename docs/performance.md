@@ -418,3 +418,33 @@ library 剔除；分组收益以 A/B 表为准。
 APK 内容明细用 `dart run tool/agent/cli.dart size apk --check <apk>`（`perf.sh size
 android` 已自动调用）；不需要 `unzip`，并会拦住 `libmpv.so` /
 `libmediakitandroidhelper.so` / `libcnativeapi.so` 回流。
+
+## 12. Android JNI vs MethodChannel（2026-11-19，模拟器）
+
+ADR-0038 阶段 2 的互操作基准：同一台 Android 37 模拟器（headless，
+x86_64），JNI 走 `lib/platform/android/system_interop_adapter.dart` 的真实适配器，
+通道走现有 `top.stillmisty.molia/device_storage` handler。每次调用单独计时，
+预热 100 次，取 10,000 次的中位 / P99（微秒）；桌面歌词 4Hz 的
+`desktop.update` 预热 20 次、取 200 次。
+
+| 调用 | 中位（µs） | P99（µs） | 均值（µs） |
+| --- | ---: | ---: | ---: |
+| `totalBytes` JNI | **17** | **141** | 25.5 |
+| `totalBytes` MethodChannel | **158** | **1749** | 220.4 |
+| 桌面歌词 `desktop.update` 通道 | **150** | **1328** | 212.5 |
+
+复测：
+
+```bash
+dart run tool/agent/cli.dart emu start
+flutter test integration_test/interop_benchmark_test.dart -d emulator-5554
+```
+
+结论：
+
+- JNI 中位约为通道的 1/9，且不受主线程消息队列排队影响（P99 141µs vs
+  1749µs）；`StatFs` / 电池这类微秒级 getter 值得走 JNI。
+- 桌面歌词一次更新周期 250ms（4Hz），单次通道成本中位 150µs（占周期的
+  0.06%），P99 也在 1.3ms 内；改 direct interop 不会带来用户可感收益，
+  **不迁移**桌面歌词与小组件更新（与 ADR-0038 的结论一致）。
+- 模拟器数字只用于同机 A/B；真机需后续补采（本阶段不承诺真机性能）。

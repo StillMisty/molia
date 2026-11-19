@@ -7,7 +7,9 @@ ADR-0038 的唯一落点：所有 JNIgen / FFIgen / Pigeon 生成绑定与它们
 
 ```
 lib/platform/
+  abi.dart   # 纯 Dart ABI / 架构命名（供诊断与更新清单；不做 FFI 调用）
   android/   # JNIgen 生成物：<name>.g.dart（Java / Kotlin 系统调用）
+             # + system_interop_adapter.dart 薄适配器（电池 / StatFs）
   desktop/   # POSIX / allocator 的 FFIgen C 生成物（<name>.g.dart）；Win32 复用
              # package:win32，不在这里生成；桌面薄适配器也在这里
   pigeon/    # Pigeon 生成 Dart：<name>.g.dart；Apple Swift host 在 ios/Runner / macos/Runner
@@ -36,10 +38,16 @@ lib/platform/
 - 本目录也不得反向依赖 `domain` / `data` / `sources` / `playback` / `services` /
   `providers` / `pages` / `widgets` / `app` / `main.dart`：薄适配器只做投影；
 - 边界由 `test/architecture/native_interop_test.dart` 强制。
-- 现存 `lib/services/**` 的手写 FFI 作为阶段 0 临时白名单保留：阶段 1 桌面
-  （进程存活 / 前台激活 / 内存回收）迁入 `desktop/` 并删除 3 条；阶段 2 ABI
-  读取改由 `lib/platform/abi.dart` 承担，删除 `app_info.dart` /
-  `update_installer_io.dart` 两条，白名单清空。白名单只减不增。
+- 阶段 0 的现存手写 FFI 白名单已清空：阶段 1 桌面（进程存活 / 前台激活 /
+  内存回收）迁入 `desktop/`；阶段 2 ABI 读取改由 `abi.dart` 承担。白名单只减
+  不增，新增违规直接失败。
+- Android（阶段 2）：`tool/jnigen.dart` 生成 `android/system_interop.g.dart`。
+  Kotlin 源先由 Gradle 编译（`:app:compileReleaseKotlin`）再交给 JNIgen 的
+  `asm` 后端，因此生成需要仓库 Android SDK / Gradle；生成 JDK 固定 21，
+  构建 JDK 仍按 `AGENTS.md`。JNIgen 暂不进 CI drift，原因与移除条件见
+  ADR-0038 §7。`system_interop_adapter.dart` 只做 Android 守卫、类型投影与
+  `JLongArray.release()`，失败返回 null；`BatteryProbe` / `IoCacheStorage`
+  再按各自端口语义回退通道。
 
 线程规则、R8 keep、生成流程与明确不做的项目见
 `docs/adr/0038-native-interop.md`。

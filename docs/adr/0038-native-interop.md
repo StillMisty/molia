@@ -1,6 +1,6 @@
 # ADR-0038：原生互操作层、生成流程与迁移边界
 
-- 状态：草案（阶段 0 落地护栏；阶段 1–5 按本文推进）
+- 状态：草案（阶段 0–2 已落地；阶段 3–5 按本文推进）
 - 日期：2026-11-19
 - 相关：issue #65、issue #66、`lib/platform/`、`tool/jnigen.dart`、
   `tool/ffigen_system.dart`、`tool/pigeon/`、`test/architecture/native_interop_test.dart`、
@@ -142,8 +142,7 @@ dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 3（Apple Swift host�
   的构建 JDK；两者不要求一致，也不为生成升降整仓 JDK；
   阶段 0 的 CI 生成物 drift 任务不预装 21（脚本没有 JNI 输入，且
   `docs check` 会把工作流里的 JDK 与 AGENTS.md 的构建 JDK 对比）。阶段 2
-  真正接入 JNI 生成时，应把「生成 JDK」登记为工作流里的显式例外，而不是
-  把构建 JDK 降到 21；
+  的结论见下一节：JNIgen 也没有进 drift，`docs check` 因此暂时不需要例外；
 - JNIgen 配置固定 `androidSdk: AndroidSdk(addGradleDeps: true,
   androidExample: <仓库根>)`，输入源目录 / 输出文件都用绝对 `Uri`；FFIgen
   的 `entryPoints` 与输出同样用绝对 `Uri`，两者都不依赖调用时的 CWD；
@@ -169,6 +168,42 @@ dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 3（Apple Swift host�
   4Hz 更新与桌面小组件更新；
 - 为性能改 Dart 侧图片缓存、数据库、首帧装配（另立 issue）；
 - 用 Pigeon 重写正在迁 JNI / FFI 的域，制造两份契约。
+
+### 7. 阶段 2 实际结论（2026-11-19）
+
+- **ABI**：新增 `lib/platform/abi.dart`，`UpdateInstaller.platformInfo` 与
+  `AppInfo` 改用纯 Dart `Abi.current()`（Android x64 → `x86_64`，桌面 x64 →
+  `x64`），删除 Kotlin `supportedAbi` 分支；`app_info.dart` /
+  `update_installer_io.dart` 两条白名单已删除，白名单清空。
+- **Kotlin 共用实现**：新增 `android/app/src/main/kotlin/.../interop/SystemInterop.kt`
+  （`@Keep`，`initialize` 保存 applicationContext）；`BatteryChannelHandler`
+  与 `device_storage` 通道都委托它，JNI 与通道不存在第二套读取逻辑。
+  `MainActivity.configureFlutterEngine` 首行初始化。
+- **JNIgen 生成**：`tool/jnigen.dart` 登记 `system_interop`。Kotlin 源不能被
+  javac 摘要，脚本先跑 `flutter build apk --config-only` + Gradle
+  `:app:compileReleaseKotlin`，再把编译产物 classPath 交给 `asm` 后端；
+  生成物 `lib/platform/android/system_interop.g.dart` 提交进仓库。
+- **JDK**：生成必须 JDK 21。JDK 27 下 JNIgen 自带的 ApiSummarizer 构建
+  （Gradle 9.6 + Groovy）报 `Unsupported class file major version 71`；构建
+  仍用 JDK 27，未升降整仓 JDK。
+- **生成器兼容**：jnigen 1.1.0 把 `JniVersionCheck` 期望版本硬编码为 1.2.0，
+  但 pub 上最新 `package:jni` 是 1.1.2；脚本生成后把断言校正成 `1.1`
+  （`_alignJniVersionCheck`）。移除条件：jni 发布 1.2.0 或 jnigen 修正常量。
+- **CI drift**：JNIgen 需要 JDK 21 + Android SDK + Gradle 编译，暂不进入
+  Ubuntu drift job（该 job 没有 Android 构建环境，且 `docs check` 会拦截
+  工作流里的 JDK 21）。待有 Android 生成任务后再补，期间以「本地重跑 +
+  提交生成物」为准。
+- **基准**（Android 37 模拟器，10k 次）：`totalBytes` JNI 中位 **17µs** /
+  P99 **141µs**，MethodChannel 中位 **158µs** / P99 **1749µs**；桌面歌词
+  4Hz 的 `desktop.update` 单次中位 **150µs** / P99 **1328µs**。JNI 有约 9×
+  中位收益，但桌面歌词一次 250ms 的更新中通道只占 0.06%，迁移无用户可感
+  收益：**不迁**桌面歌词 4Hz 与小组件更新，保持现状。数字与复测方式见
+  `docs/performance.md` §12。
+- **release 冒烟**：`@Keep` + proguard `-keep class ...interop.**`；R8 release
+  APK 启动后 `readBatterySnapshot()` / `readTotalSpaceBytes()` 均返回真实值，
+  无 `ClassNotFoundException` / `NoSuchMethodError`。本地 release 构建需先
+  让 Flutter 以 release 模式重写插件注册文件（`flutter build apk --release`
+  不带 `--no-pub`），否则 debug 遗留的 `integration_test` 注册会编译失败。
 
 ## 阶段与验收
 
