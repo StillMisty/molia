@@ -58,6 +58,10 @@ dependencies:
   # 依赖，避免上游调整插件依赖时被静默移除。
   jni: ^1.1.2
   jni_flutter: ^1.0.4
+  # Pigeon 生成的 channel 文件会 import package:meta（即使当前 schema 没有
+  # 数据类，pigeon 30 仍无条件生成该 import）；显式依赖避免 lint
+  # depend_on_referenced_packages。上游修正后删除。
+  meta: ^1.19.0
   win32: ^6.4.0
   posix: ^6.5.4
 dev_dependencies:

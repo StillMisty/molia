@@ -82,15 +82,21 @@ jobs:
       - name: pub get
         run: flutter pub get --enforce-lockfile
 
-      # 本阶段能跑的生成器：drift（数据库）与桌面 FFI。
+      # 本阶段能跑的生成器：drift（数据库）、桌面 FFI 与 Pigeon channel 模式。
       # JNIgen 阶段 2 需要 JDK 21 + Android SDK + Gradle 编译 Kotlin 源（见
       # ADR-0038「阶段 2 结论」），本 job 只有默认 JDK / 无 Android 构建，
       # 暂不纳入 drift；本地用 `JAVA_HOME=…java-21… dart run tool/jnigen.dart`
-      # 生成并提交。Pigeon 阶段 3 起在这一步追加。
-      - name: 重新生成（drift + 桌面 FFI）
+      # 生成并提交。widget 的 native interop 生成链（#78）同样需要 JDK 21，
+      # 仍由 tool/pigeon/generate.sh 本地生成；DownloadsPublisher 是 channel
+      # 模式，Linux 可直接跑（issue #80）。
+      - name: 重新生成（drift + 桌面 FFI + Pigeon downloads）
         run: |
           dart run build_runner build
           dart run tool/ffigen_system.dart
+          dart run pigeon --input tool/pigeon/downloads_publisher.dart \
+            --dart_out lib/platform/pigeon/downloads_publisher.g.dart \
+            --kotlin_out android/app/src/main/kotlin/top/stillmisty/molia/pigeon/DownloadsPublisherApi.g.kt \
+            --kotlin_package top.stillmisty.molia.pigeon
 
       - name: 生成物必须与提交一致
         run: |
