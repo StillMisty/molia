@@ -151,9 +151,9 @@ dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 3（Apple Swift host�
   `sharedDarwinSource` 风格），不需要 `package:objective_c`；正在迁 JNI / FFI
   的通道不做 Pigeon 迁移；
 - CI（`.github/workflows/ci.yml`）：Ubuntu 跑 `build_runner` + 上述生成器并
-  `git diff --exit-code`（阶段 0 对三者都是 no-op：FFIgen 阶段 1（桌面 C）、
-  JNIgen 阶段 2（Android）、Pigeon 阶段 3（Apple Swift host）/ 4 起才有真实
-  输出）；Windows 编译 `flutter build windows --debug`；
+  `git diff --exit-code`（当前覆盖桌面 FFI 与 Pigeon 阶段 3 的 Apple Swift
+  host；JNIgen 需要 JDK 21 + Android SDK，暂不进入该 job，见阶段 2 结论）；
+  Windows 编译 `flutter build windows --debug`；
   macOS 编译 `flutter build macos --debug` 与
   `flutter build ios --no-codesign`。发布工作流 `release.yml` 不改。
 
@@ -204,6 +204,58 @@ dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 3（Apple Swift host�
   无 `ClassNotFoundException` / `NoSuchMethodError`。本地 release 构建需先
   让 Flutter 以 release 模式重写插件注册文件（`flutter build apk --release`
   不带 `--no-pub`），否则 debug 遗留的 `integration_test` 注册会编译失败。
+
+### 8. 阶段 3 实际结论（2026-11-20）
+
+- **契约**：`tool/pigeon/apple_system.dart` 定义 `AppleSystemHost`
+  （`listFontFamilies` / `readBatterySnapshot`）与 `BatterySnapshotMessage`；
+  生成 `lib/platform/pigeon/apple_system.g.dart`，并分别生成
+  `ios/Runner/AppleSystemApi.g.swift`、`macos/Runner/AppleSystemApi.g.swift`。
+  Dart 侧只经 `lib/platform/pigeon/apple_system_adapter.dart` 访问，业务层不
+  直接 import 生成代码。
+- **Swift host**：`AppleSystemHostImpl` 在 iOS 读 `UIFont.familyNames` /
+  `UIDevice`，在 macOS 读 `NSFontManager.availableFontFamilies` 与
+  `ProcessInfo.isLowPowerModeEnabled`；macOS 没有统一的电池来源，电量 / 充电
+  保持 -1 / false。字体 / 电池 / 省电查询失败仍按空列表 / 未知降级。
+- **通道收敛**：iOS 与 macOS 的 `top.stillmisty.molia/system_fonts`、
+  `top.stillmisty.molia/battery` 手写通道已删除；睡眠定时、播放菜单、窗口、
+  音频路由继续走现有 Swift MethodChannel（阶段 4 再按域迁移）。
+- **UIScene**：iOS 采用 `FlutterImplicitEngineDelegate`，插件与通道注册移到
+  `didInitializeImplicitFlutterEngine`；`Info.plist` 增加
+  `UIApplicationSceneManifest`，`SceneDelegate` 继承 `FlutterSceneDelegate`。
+  Flutter 3.41+ 的默认生命周期，不再依赖启动期 `window?.rootViewController`。
+- **验证**：macOS `flutter build macos --debug` 通过；iOS 模拟器
+  `flutter build ios --simulator --debug` 通过；iPhoneOS 设备用
+  `xcodebuild … CODE_SIGNING_ALLOWED=NO` 编译通过。本机没有 Development Team，
+  Flutter CLI 的 `flutter build ios --no-codesign` 在设备目标上会被团队检查
+  拦截（与 Pigeon / JNI 无关）；CI 仍按原命令做无签名编译。
+- **#76 结论**：Apple 构建不链接 / 不打包 JNI。macOS `.app` 与 iOS 模拟器
+  `.app` 均没有 `*jni*` / `dartjni*` 原生库，`otool -L` 也没有 jni 依赖；
+  `package:jni` 只通过 `lib/platform/android/` 适配器被共享服务引用，Apple
+  运行期不会调用（`Platform.isAndroid` 守卫），无需新增平台 seam，也不回退
+  Android JNI。
+- **最低版本**：Apple 目标同步提升到 iOS 27 / macOS 27（与仓库“只跟最新
+  stable”策略一致）；iOS 27 模拟器与 macOS 27 构建均通过。
+
+### 9. Pigeon Native Interop 评估（2026-11-20）
+
+- **结论**：本期仍使用 Pigeon 的 channel 模式；Native Interop（`useFfi` /
+  `useJni`）不进入这个多端共享应用。
+- **原因**：
+  - pigeon 30.0.4 的 README 仍把 Native Interop 标为 **Preview**，与本文
+    §6「不上生产」的边界一致；
+  - 生成的 Dart 在 `dart.library.ffi` 下无条件 import FFI / `objective_c`
+    分支；Android、Windows、Linux 也有 FFI，会编译并加载 Apple 的 ObjC
+    绑定（生成文件顶层就有 `objc.getClass`），不是 Apple 专属 seam；
+  - 直接依赖 `objective_c` 与本文「我们的代码不直接依赖 objective_c」冲突；
+  - 系统字体 / 电池是低频查询，没有同步调用或后台 isolate 的收益；真正
+    高频的桌面歌词 4Hz 已有基准，通道只占单次更新的 0.06%（§7）。
+- **仍然退休的**：Apple 纯查询的手写 MethodChannel（`system_fonts` /
+  `battery`）已换成 Pigeon 契约；权限、Activity result、前台服务、SAF、
+  播放菜单、窗口、音频路由继续按 §6 保留。
+- **重新评估条件**：Native Interop 转 stable，且 Pigeon 能按平台分离生成
+  （Apple FFI、其它平台 channel，不把 `objective_c` 带进非 Apple 构建），
+  CI 能覆盖 Windows / Linux / Android 的编译与冒烟后再迁移。
 
 ## 阶段与验收
 
