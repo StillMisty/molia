@@ -5,12 +5,81 @@
 /// 也不会出现在输入里。
 library;
 
+import 'dart:collection';
+import 'dart:convert';
+
+import 'package:meta/meta.dart';
+
 import 'download.dart';
 import 'library.dart';
 
+/// 解码持久化 raw：与 `LibraryRepository._decodeRaw` 同一口径。
+///
+/// 非 String / 空串 / 损坏 JSON / 顶层不是 Map 都降级为 `{}`，key 统一转
+/// 字符串；浏览索引只在真正需要取链参数时调用（见 [_LazyRawMap]）。
+Map<String, dynamic> decodeBrowseRaw(Object? raw) {
+  if (raw is! String || raw.isEmpty) return const {};
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is Map) {
+      return decoded.map((key, value) => MapEntry(key.toString(), value));
+    }
+  } catch (_) {
+    // 损坏数据降级为空 raw，不影响浏览 / 播放列表展示。
+  }
+  return const {};
+}
+
+/// 只读惰性 raw 视图：首次读 key / keys / 遍历时才 jsonDecode。
+///
+/// 浏览索引会给每个智能列表行构造 `PlaylistTrack`，但大部分行不会立刻
+/// 播放 / 导出；如果 getter 立即解码，publish 会在 UI isolate 上把全库 raw
+/// 解一遍。壳把解码留到真正的 payload 读取，并缓存同一行的结果。
+class _LazyRawMap extends MapBase<String, dynamic> {
+  _LazyRawMap(this._json);
+
+  final String _json;
+  Map<String, dynamic>? _decoded;
+
+  bool get decoded => _decoded != null;
+
+  Map<String, dynamic> get _map => _decoded ??= decodeBrowseRaw(_json);
+
+  @override
+  dynamic operator [](Object? key) => _map[key];
+
+  @override
+  void operator []=(String key, dynamic value) => _readOnly();
+
+  @override
+  void clear() => _readOnly();
+
+  @override
+  dynamic remove(Object? key) => _readOnly();
+
+  @override
+  Iterable<String> get keys => _map.keys;
+
+  @override
+  bool containsKey(Object? key) => _map.containsKey(key);
+
+  @override
+  int get length => _map.length;
+
+  @override
+  void forEach(void Function(String key, dynamic value) action) =>
+      _map.forEach(action);
+
+  Never _readOnly() => throw UnsupportedError('浏览索引 raw 是只读惰性视图，不能修改');
+}
+
 /// 聚合视图里的一行曲目（代表行会从多个来源补全空字段）。
+///
+/// raw 有「DB 原串 / 已解码 Map」两种来源：DB 路径保留 [rawJson] 原样，
+/// 构建索引与合并去重都不解码；内存路径（收藏切换 / 下载记录）直接带 Map。
+/// [raw] 返回只读惰性壳，真正的 jsonDecode 延迟到首次读 payload。
 class BrowseTrack {
-  const BrowseTrack({
+  BrowseTrack({
     required this.sourceKey,
     required this.songId,
     required this.title,
@@ -18,9 +87,12 @@ class BrowseTrack {
     this.album = '',
     this.coverUrl,
     this.durationMs,
-    this.raw = const {},
+    Map<String, dynamic> raw = const {},
+    this.rawJson,
     this.addedAt = 0,
-  });
+    this.sortOrder = 0,
+  }) : assert(rawJson == null || raw.isEmpty, 'raw 与 rawJson 二选一'),
+       _raw = raw;
 
   final String sourceKey;
   final String songId;
@@ -29,12 +101,45 @@ class BrowseTrack {
   final String album;
   final String? coverUrl;
   final int? durationMs;
-  final Map<String, dynamic> raw;
+
+  /// DB 读出的原始 JSON 串；内存路径为 null。
+  final String? rawJson;
+
+  /// 内存路径的已解码 Map；DB 路径为 `{}`。
+  final Map<String, dynamic> _raw;
+
+  _LazyRawMap? _lazyRaw;
+
   final int addedAt;
+
+  /// 列表内位置（仅用于重建时按 DB 的 `sortOrder` 稳定排序）。
+  final int sortOrder;
 
   String get key => '$sourceKey:$songId';
 
   bool get hasCover => coverUrl != null && coverUrl!.isNotEmpty;
+
+  /// 取链参数：DB 原串返回只读惰性壳，首次读 key / keys / 遍历时才解码。
+  Map<String, dynamic> get raw {
+    final json = rawJson;
+    if (json == null) return _raw;
+    return _lazyRaw ??= _LazyRawMap(json);
+  }
+
+  /// 测试用：DB 路径的 raw 是否已经真正解码（内存 Map 路径恒为 false）。
+  @visibleForTesting
+  bool get debugRawDecoded => _lazyRaw?.decoded ?? false;
+
+  /// raw 是否非空（按存储形态判断，不为判定空 map 提前解码整表）。
+  ///
+  /// `jsonEncode({})` 落库是 `'{}'`，和空 Map 同义；不把这种行当成「已有
+  /// raw」，否则后面的下载 / 列表候选无法补上真正的取链参数。
+  bool get hasRaw {
+    final json = rawJson;
+    if (json == null) return _raw.isNotEmpty;
+    final trimmed = json.trim();
+    return trimmed.isNotEmpty && trimmed != '{}';
+  }
 
   /// 第一位非空歌手（按仓库规范分隔符 `, ` 拆分）；全空为空串。
   String get primaryArtist {
@@ -45,17 +150,28 @@ class BrowseTrack {
     return '';
   }
 
-  BrowseTrack mergedWith(BrowseTrack later) => BrowseTrack(
-    sourceKey: sourceKey,
-    songId: songId,
-    title: title.isNotEmpty ? title : later.title,
-    artist: artist.isNotEmpty ? artist : later.artist,
-    album: album.isNotEmpty ? album : later.album,
-    coverUrl: hasCover ? coverUrl : later.coverUrl,
-    durationMs: durationMs ?? later.durationMs,
-    raw: raw.isNotEmpty ? raw : later.raw,
-    addedAt: addedAt != 0 ? addedAt : later.addedAt,
-  );
+  BrowseTrack mergedWith(BrowseTrack later) {
+    // 直接搬运 raw 的存储形态，不为了判断「是否为空」触发整表解码。
+    //
+    // 有意取舍：索引阶段不解码，所以只能按「存储形态」判空。`'{}'` 已视为
+    // 空；但一个非空却损坏的 raw 串会被当成「已有 raw」，不再让后面的有效
+    // 候选补位。这种脏数据无法在不解码的前提下识别，优先保证 1 万行浏览重建
+    // 不在 UI isolate 上逐行 jsonDecode。
+    final useOwnRaw = hasRaw;
+    return BrowseTrack(
+      sourceKey: sourceKey,
+      songId: songId,
+      title: title.isNotEmpty ? title : later.title,
+      artist: artist.isNotEmpty ? artist : later.artist,
+      album: album.isNotEmpty ? album : later.album,
+      coverUrl: hasCover ? coverUrl : later.coverUrl,
+      durationMs: durationMs ?? later.durationMs,
+      raw: useOwnRaw ? _raw : later._raw,
+      rawJson: useOwnRaw ? rawJson : later.rawJson,
+      addedAt: addedAt != 0 ? addedAt : later.addedAt,
+      sortOrder: sortOrder,
+    );
+  }
 
   PlaylistTrack toPlaylistTrack({int playlistId = 0, required int addedAt}) =>
       PlaylistTrack(
@@ -81,6 +197,7 @@ class BrowseTrack {
     durationMs: track.durationMs,
     raw: track.raw,
     addedAt: track.addedAt,
+    sortOrder: track.sortOrder,
   );
 
   static BrowseTrack fromDownload(DownloadedTrack record) => BrowseTrack(
@@ -100,7 +217,7 @@ class BrowsePlaylist {
   const BrowsePlaylist({required this.id, required this.tracks});
 
   final int id;
-  final List<PlaylistTrack> tracks;
+  final List<BrowseTrack> tracks;
 }
 
 class BrowseSource {
@@ -110,7 +227,7 @@ class BrowseSource {
     this.downloads = const [],
   });
 
-  final List<PlaylistTrack> favorites;
+  final List<BrowseTrack> favorites;
 
   /// 用户列表（非收藏），按列表 id 升序；列表内按 `sortOrder`。
   final List<BrowsePlaylist> playlists;
@@ -193,10 +310,7 @@ List<String> splitArtistLabel(String label) {
 /// 代表行优先级：收藏 → 下载 / 导入 → 自建列表（列表 id、sortOrder 稳定）。
 /// 后面的候选只补空字段，不覆盖已有值。
 LibraryBrowseIndex buildBrowseIndex(BrowseSource source) {
-  final ordered = <BrowseTrack>[];
-  for (final track in source.favorites) {
-    ordered.add(BrowseTrack.fromPlaylistTrack(track));
-  }
+  final ordered = <BrowseTrack>[...source.favorites];
   for (final record in source.downloads) {
     if (!record.hasAudio || record.isMissing) continue;
     ordered.add(BrowseTrack.fromDownload(record));
@@ -205,9 +319,7 @@ LibraryBrowseIndex buildBrowseIndex(BrowseSource source) {
   for (final playlist in playlists) {
     final tracks = [...playlist.tracks]
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    for (final track in tracks) {
-      ordered.add(BrowseTrack.fromPlaylistTrack(track));
-    }
+    ordered.addAll(tracks);
   }
 
   final byKey = <String, int>{};

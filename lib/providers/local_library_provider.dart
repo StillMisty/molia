@@ -6,9 +6,11 @@
 library;
 
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
+import '../app/perf/data_path_trace.dart';
 import '../data/library_repository.dart';
 import '../data/play_statistics_repository.dart';
 import '../domain/models/download.dart';
@@ -35,6 +37,7 @@ class LocalLibraryProvider extends ChangeNotifier {
     required this.library,
     required this.statistics,
     this.debounce = const Duration(milliseconds: 150),
+    this.isolateThreshold = 2000,
   }) {
     _subscriptions = [
       repository.changes.listen(_onLibraryChange),
@@ -50,6 +53,12 @@ class LocalLibraryProvider extends ChangeNotifier {
   final LibraryProvider library;
   final PlayStatisticsRepository statistics;
   final Duration debounce;
+
+  /// 浏览索引超过该行数时搬到 isolate 构建（测试注入小值）。
+  ///
+  /// 10k 行主线程 decode + 去重 / 分组 / 排序约 70ms，远超单帧 8.33ms 预算；
+  /// 行快照本身是纯数据（raw 原串 / 浅 Map），传输成本低于在主线程解码排序。
+  final int isolateThreshold;
 
   SmartListMetric _mostPlayedMetric = SmartListMetric.playCount;
 
@@ -72,6 +81,14 @@ class LocalLibraryProvider extends ChangeNotifier {
 
   /// 已读入的输入：只有对应部分失效时才重读，其余直接复用。
   LibraryBrowseIndex? _browseIndex;
+
+  /// 上一次构建索引用的输入。单曲收藏切换只改这里的一行后重建，
+  /// 不重读 `playlist_tracks`；常驻 ~1 万个小对象，raw 仍是 DB 原串。
+  BrowseSource? _browseSource;
+
+  /// 下次 refresh 必须整库重读（批量 / 换源 / 同步 / 导入 / 下载变化）。
+  bool _browseNeedsFullReload = true;
+
   List<PlayStatTrackEntry> _stats = const [];
   List<PlayStatTrackEntry> _statsByTime = const [];
   Set<String>? _playedKeys;
@@ -92,12 +109,15 @@ class LocalLibraryProvider extends ChangeNotifier {
 
   /// 按失效范围标记输入并防抖重建；旧快照在完成前保持可见。
   ///
-  /// [browse] 是整库浏览索引（收藏 + 全部列表 + 下载，需重读
-  /// `playlist_tracks` 并解码 raw）；[stats] 是统计榜与已听曲目集合。
-  /// 单条播放历史只影响智能列表行，两者都可以不传。
+  /// [browse] 是整库浏览索引输入（收藏 + 全部列表 + 下载，需要重读
+  /// `playlist_tracks`）；单曲收藏切换走缓存增量，不经过本方法。[stats] 是
+  /// 统计榜与已听曲目集合。单条播放历史只影响智能列表行，两者都可以不传。
   void schedule({bool browse = true, bool stats = true}) {
     if (_disposed) return;
-    if (browse) _browseDirty = true;
+    if (browse) {
+      _browseDirty = true;
+      _browseNeedsFullReload = true;
+    }
     if (stats) _statsDirty = true;
     _rowsDirty = true;
     _armTimer();
@@ -116,27 +136,92 @@ class LocalLibraryProvider extends ChangeNotifier {
         schedule(browse: false, stats: false);
       case LibraryImportChange():
         schedule();
-      case LibraryFavoritesChange():
+      case LibraryFavoritesChange(:final toggle):
+        if (toggle != null) {
+          _applyFavoriteToggle(toggle);
+        } else {
+          // 批量 / 换源 / 同步 / 导入：无法用单行表达，整库校准。
+          schedule(browse: true, stats: false);
+        }
       case LibraryPlaylistsChange():
       case LibraryPlaylistTracksChange():
         schedule(browse: true, stats: false);
     }
   }
 
+  /// 单曲收藏切换：只改缓存的 [BrowseSource] 一行再重建索引，不重读整表。
+  ///
+  /// 取消收藏只删 favorites 里的键；该曲若仍在下载 / 用户列表里，重建时的
+  /// 合并优先级（收藏 → 下载 / 导入 → 自建列表）会把它补回来。批量 / 换源 /
+  /// 同步不带 toggle，仍走整库重读；已有整库重读在排队或进行中时不能拿旧缓存
+  /// 增量，否则会丢掉那次重读要校准的数据。
+  void _applyFavoriteToggle(FavoriteToggle toggle) {
+    final source = _browseSource;
+    if (source == null || _browseNeedsFullReload || _running) {
+      schedule(browse: true, stats: false);
+      return;
+    }
+    final favorites = [...source.favorites];
+    if (toggle.favorite) {
+      final track = toggle.track;
+      if (track == null) {
+        schedule(browse: true, stats: false);
+        return;
+      }
+      favorites.removeWhere((item) => item.key == toggle.key);
+      final row = BrowseTrack.fromPlaylistTrack(track);
+      // DB 顺序是 sortOrder → addedAt；默认追加在末尾，顶部插入也保持同序。
+      var index = favorites.length;
+      while (index > 0 &&
+          _compareFavoriteOrder(favorites[index - 1], row) > 0) {
+        index--;
+      }
+      favorites.insert(index, row);
+    } else {
+      favorites.removeWhere((item) => item.key == toggle.key);
+    }
+    _browseSource = BrowseSource(
+      favorites: favorites,
+      playlists: source.playlists,
+      downloads: source.downloads,
+    );
+    // 只重建索引，不置整库重读标记。
+    _browseDirty = true;
+    _rowsDirty = true;
+    _armTimer();
+  }
+
+  static int _compareFavoriteOrder(BrowseTrack a, BrowseTrack b) {
+    final byOrder = a.sortOrder.compareTo(b.sortOrder);
+    return byOrder != 0 ? byOrder : a.addedAt.compareTo(b.addedAt);
+  }
+
   void _onDownloadsChanged() => schedule(browse: true, stats: false);
 
-  /// 资料库 provider 的通知远多于真实数据变化：只有历史 / 列表清单的引用
-  /// 换了才需要重新聚合（懒加载完成后的首次数据也靠这条兜底）。
+  /// 资料库 provider 的通知远多于真实数据变化：只有历史引用或列表 id 集合
+  /// 变了才需要重新聚合（懒加载完成后的首次数据也靠这条兜底）。收藏计数
+  /// 补丁会生成新的 `playlists` 列表引用，但 id 集合不变，不应触发整库重读。
   void _onLibraryProviderChanged() {
     if (_disposed) return;
     final history = library.history;
     final playlists = library.playlists;
-    final playlistsChanged = !identical(playlists, _seenPlaylists);
+    final playlistsChanged = _playlistIdsChanged(playlists, _seenPlaylists);
     final historyChanged = !identical(history, _seenHistory);
     if (!playlistsChanged && !historyChanged) return;
     _seenHistory = history;
     _seenPlaylists = playlists;
     schedule(browse: playlistsChanged, stats: false);
+  }
+
+  static bool _playlistIdsChanged(
+    List<PlaylistInfo> current,
+    List<PlaylistInfo>? previous,
+  ) {
+    if (previous == null || current.length != previous.length) return true;
+    for (var i = 0; i < current.length; i++) {
+      if (current[i].id != previous[i].id) return true;
+    }
+    return false;
   }
 
   Future<void> refresh() async {
@@ -147,23 +232,33 @@ class LocalLibraryProvider extends ChangeNotifier {
     }
     _running = true;
     var needBrowse = false;
+    var needBrowseFull = false;
     var needStats = false;
     var needRows = false;
     try {
       needBrowse = _browseDirty;
+      needBrowseFull = _browseNeedsFullReload;
       needStats = _statsDirty;
       needRows = _rowsDirty;
       // 先清标记再读：读取期间到达的变化会重新置位，下一轮不会漏。
       _browseDirty = false;
+      _browseNeedsFullReload = false;
       _statsDirty = false;
       _rowsDirty = false;
-      if (needBrowse) await _reloadBrowse();
+      if (needBrowse) {
+        if (needBrowseFull || _browseSource == null) {
+          await _reloadBrowse();
+        } else {
+          await _rebuildBrowseFromSource();
+        }
+      }
       if (needStats) await _reloadStats();
       if (needRows || needBrowse || needStats) _publish();
     } catch (e) {
       // 读取失败保留失效标记：下一次事件 / 定时器再试，不留「永久缺一块」
       // 的快照（旧快照仍继续展示）。
       _browseDirty = _browseDirty || needBrowse;
+      _browseNeedsFullReload = _browseNeedsFullReload || needBrowseFull;
       _statsDirty = _statsDirty || needStats;
       _rowsDirty = _rowsDirty || needRows;
       debugPrint('[Molia] 曲库聚合读取失败: $e');
@@ -178,14 +273,55 @@ class LocalLibraryProvider extends ChangeNotifier {
 
   Future<void> _reloadBrowse() async {
     final browseTracks = await repository.loadBrowseTracks();
-    final downloadList = downloads.downloads;
-    _browseIndex = buildBrowseIndex(
-      BrowseSource(
-        favorites: browseTracks.favorites,
-        playlists: browseTracks.playlists,
-        downloads: downloadList,
-      ),
+    _browseSource = BrowseSource(
+      favorites: browseTracks.favorites,
+      playlists: browseTracks.playlists,
+      downloads: downloads.downloads,
     );
+    await _rebuildBrowseFromSource(sourcePath: 'sql');
+  }
+
+  /// 只用缓存输入重建索引（单曲收藏切换路径，不查库）。
+  Future<void> _rebuildBrowseFromSource({
+    String sourcePath = 'incremental',
+  }) async {
+    final source = _browseSource;
+    if (source == null) return;
+    _browseIndex = await _buildBrowseIndex(source, sourcePath: sourcePath);
+  }
+
+  /// 大库把去重 / 分组 / 排序移到 isolate；小库直接同步构建。
+  ///
+  /// 直接把 [BrowseSource] 送进 isolate：`BrowseTrack` / `DownloadedTrack` 与
+  /// 惰性 raw 壳都只含 String / Map 等纯数据，Dart 直接复制对象即可；额外
+  /// 构造一层 wire map 反而会在 UI isolate 上多付一次全量分配。若以后这些
+  /// 类型里出现不可发送字段（平台对象、闭包等），`Isolate.run` 会抛错并走
+  /// 下面的主线程回退，结果仍然可用。
+  Future<LibraryBrowseIndex> _buildBrowseIndex(
+    BrowseSource source, {
+    required String sourcePath,
+  }) {
+    final rows = _rowCountOf(source);
+    final useIsolate = rows > isolateThreshold;
+    // path 只看「这一轮实际走哪条」：isolate 优先于 sql / incremental 来源。
+    final path = useIsolate ? 'isolate' : sourcePath;
+    return DataPathTrace.async('browse.build', () async {
+      if (!useIsolate) return buildBrowseIndex(source);
+      try {
+        return await Isolate.run(() => buildBrowseIndex(source));
+      } catch (e) {
+        debugPrint('[Molia] 浏览索引 isolate 构建失败，回退主线程: $e');
+        return buildBrowseIndex(source);
+      }
+    }, fields: () => {'rows': rows, 'path': path});
+  }
+
+  static int _rowCountOf(BrowseSource source) {
+    var count = source.favorites.length + source.downloads.length;
+    for (final playlist in source.playlists) {
+      count += playlist.tracks.length;
+    }
+    return count;
   }
 
   Future<void> _reloadStats() async {
@@ -209,24 +345,36 @@ class LocalLibraryProvider extends ChangeNotifier {
   void _publish() {
     final index = _browseIndex;
     if (_disposed || index == null) return;
-    final downloadList = downloads.downloads;
-    final sources = SmartListSources(
-      downloads: downloadList,
-      history: library.history,
-      stats: _mostPlayedMetric == SmartListMetric.listeningTime
-          ? _statsByTime
-          : _stats,
-      browse: index,
-      playedKeys: _playedKeys,
+    DataPathTrace.sync(
+      'browse.publish',
+      () {
+        final downloadList = downloads.downloads;
+        final sources = SmartListSources(
+          downloads: downloadList,
+          history: library.history,
+          stats: _mostPlayedMetric == SmartListMetric.listeningTime
+              ? _statsByTime
+              : _stats,
+          browse: index,
+          playedKeys: _playedKeys,
+        );
+        _smartRows = <String, List<CollectionRow>>{
+          for (final id in SmartListIds.all)
+            id: _rowsFor(id, sources, downloadList),
+        };
+        _snapshot = LibraryBrowseSnapshot(index: index);
+        _seenHistory = library.history;
+        _seenPlaylists = library.playlists;
+        notifyListeners();
+      },
+      fields: () => {
+        'smart_rows': _smartRows.values.fold<int>(
+          0,
+          (sum, rows) => sum + rows.length,
+        ),
+        'index_tracks': index.tracks.length,
+      },
     );
-    _smartRows = <String, List<CollectionRow>>{
-      for (final id in SmartListIds.all)
-        id: _rowsFor(id, sources, downloadList),
-    };
-    _snapshot = LibraryBrowseSnapshot(index: index);
-    _seenHistory = library.history;
-    _seenPlaylists = library.playlists;
-    notifyListeners();
   }
 
   List<CollectionRow> _rowsFor(
@@ -251,18 +399,7 @@ class LocalLibraryProvider extends ChangeNotifier {
         metric: _mostPlayedMetric,
       ))
         TrackCollectionRow(
-          PlaylistTrack(
-            playlistId: 0,
-            sourceKey: track.sourceKey,
-            songId: track.songId,
-            title: track.title,
-            artist: track.artist,
-            album: track.album,
-            coverUrl: track.coverUrl,
-            durationMs: track.durationMs,
-            raw: track.raw,
-            addedAt: track.addedAt,
-          ),
+          track.toPlaylistTrack(playlistId: 0, addedAt: track.addedAt),
         ),
     ];
   }

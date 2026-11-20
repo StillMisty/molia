@@ -790,7 +790,7 @@ void main() {
           title: 'Song $id',
           artist: 'Artist',
           album: '',
-          raw: const {},
+          raw: {'songmid': id},
           addedAt: 1,
           sortOrder: sortOrder,
         );
@@ -803,6 +803,10 @@ void main() {
 
     final data = await repository.loadBrowseTracks();
     expect(data.favorites.map((track) => track.songId), ['1']);
+    expect(data.favorites.single.rawJson, '{"songmid":"1"}', reason: 'DB 原串透传');
+    expect(data.favorites.single.toPlaylistTrack(addedAt: 1).raw, {
+      'songmid': '1',
+    });
     expect(data.playlists.map((playlist) => playlist.id), [first, second]);
     expect(data.playlists.first.tracks.map((track) => track.songId), [
       '2',

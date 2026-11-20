@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
@@ -10,7 +12,7 @@ import 'package:molia/providers/smart_list_rows.dart';
 
 /// 专辑 / 歌手聚合、重复版本与智能列表（纯函数）。
 void main() {
-  PlaylistTrack track(
+  BrowseTrack track(
     String source,
     String id, {
     String title = '标题',
@@ -19,8 +21,7 @@ void main() {
     String? cover,
     int? duration = 200000,
     int addedAt = 0,
-  }) => PlaylistTrack(
-    playlistId: 0,
+  }) => BrowseTrack(
     sourceKey: source,
     songId: id,
     title: title,
@@ -154,6 +155,213 @@ void main() {
       expect(
         index.artists.firstWhere((group) => group.artist == 'Earth').tracks,
         hasLength(1),
+      );
+    });
+
+    test('BrowseTrack raw 只读惰性壳：首次读 payload 才解码，损坏数据降级空 map', () {
+      final fromDb = BrowseTrack(
+        sourceKey: 'wy',
+        songId: '1',
+        title: '字符串路径',
+        rawJson: '{"songmid":"abc","n":1}',
+      );
+      expect(fromDb.debugRawDecoded, isFalse);
+      final shell = fromDb.raw;
+      expect(
+        fromDb.debugRawDecoded,
+        isFalse,
+        reason: 'raw getter 只建壳，不 jsonDecode',
+      );
+      expect(identical(shell, fromDb.raw), isTrue, reason: '同一行复用同一个壳');
+
+      final decoded = fromDb.toPlaylistTrack(addedAt: 1);
+      expect(
+        fromDb.debugRawDecoded,
+        isFalse,
+        reason: 'toPlaylistTrack 只透传壳，不触发解码',
+      );
+      expect(decoded.raw, decodeBrowseRaw(fromDb.rawJson));
+      expect(fromDb.debugRawDecoded, isTrue, reason: '显式读 payload 才解码');
+      expect(
+        fromDb.toPlaylistTrack(addedAt: 2).raw,
+        same(shell),
+        reason: '同一行只解码一次并缓存',
+      );
+      expect(fromDb.rawJson, '{"songmid":"abc","n":1}');
+
+      expect(
+        () => decoded.raw['x'] = 1,
+        throwsUnsupportedError,
+        reason: '只读壳不能静默写入',
+      );
+      expect(() => decoded.raw.remove('songmid'), throwsUnsupportedError);
+      expect(decoded.raw.clear, throwsUnsupportedError);
+
+      for (final broken in ['', '{', '[1,2]', '"字符串"']) {
+        final track = BrowseTrack(
+          sourceKey: 'wy',
+          songId: 'bad',
+          title: '损坏',
+          rawJson: broken,
+        );
+        expect(
+          track.toPlaylistTrack(addedAt: 0).raw,
+          isEmpty,
+          reason: '损坏 / 非 Map / 空串都降级，不抛异常：$broken',
+        );
+      }
+
+      final fromMemory = BrowseTrack(
+        sourceKey: 'wy',
+        songId: '2',
+        title: 'Map 路径',
+        raw: const {'songmid': 'memory'},
+      );
+      expect(fromMemory.debugRawDecoded, isFalse);
+      expect(fromMemory.toPlaylistTrack(addedAt: 0).raw, {'songmid': 'memory'});
+    });
+
+    test('合并去重优先非空 raw，字符串 / Map 两种形态都不丢', () {
+      BrowseTrack rawJson(String id) => BrowseTrack(
+        sourceKey: 'wy',
+        songId: id,
+        title: 'F',
+        rawJson: '{"own":true}',
+      );
+      final keepString = buildBrowseIndex(
+        BrowseSource(
+          favorites: [rawJson('1')],
+          playlists: [
+            BrowsePlaylist(
+              id: 2,
+              tracks: [
+                BrowseTrack(
+                  sourceKey: 'wy',
+                  songId: '1',
+                  title: 'P',
+                  raw: const {'later': true},
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      expect(keepString.tracks.single.raw, {'own': true});
+
+      final fillMap = buildBrowseIndex(
+        BrowseSource(
+          favorites: [BrowseTrack(sourceKey: 'wy', songId: '2', title: 'F')],
+          playlists: [
+            BrowsePlaylist(
+              id: 2,
+              tracks: [
+                BrowseTrack(
+                  sourceKey: 'wy',
+                  songId: '2',
+                  title: 'P',
+                  rawJson: '{"later":true}',
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      expect(fillMap.tracks.single.raw, {'later': true});
+
+      final emptyJsonFallsBack = buildBrowseIndex(
+        BrowseSource(
+          favorites: [
+            BrowseTrack(
+              sourceKey: 'wy',
+              songId: '3',
+              title: 'F',
+              rawJson: '{}',
+            ),
+          ],
+          playlists: [
+            BrowsePlaylist(
+              id: 2,
+              tracks: [
+                BrowseTrack(
+                  sourceKey: 'wy',
+                  songId: '3',
+                  title: 'P',
+                  raw: const {'later': true},
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      expect(emptyJsonFallsBack.tracks.single.raw, {
+        'later': true,
+      }, reason: '空对象原串与空 Map 同义，后面的候选要能补 raw');
+    });
+
+    test('isolate 直接发送 BrowseSource 后构建结果一致', () async {
+      final source = BrowseSource(
+        favorites: [
+          BrowseTrack(
+            sourceKey: 'wy',
+            songId: '1',
+            title: '收藏',
+            artist: 'A',
+            album: '专辑',
+            rawJson: '{"own":1}',
+          ),
+          track('wy', '2', title: '收藏二', artist: 'B', album: '专辑二'),
+        ],
+        playlists: [
+          BrowsePlaylist(
+            id: 3,
+            tracks: [
+              BrowseTrack(
+                sourceKey: 'wy',
+                songId: '1',
+                title: '列表',
+                artist: '',
+                album: '',
+                raw: const {'later': 2},
+              ),
+              BrowseTrack(
+                sourceKey: 'wy',
+                songId: '4',
+                title: '列表四',
+                artist: 'C',
+                album: '专辑三',
+                rawJson: '{"own":4}',
+              ),
+            ],
+          ),
+        ],
+        downloads: [download('5', title: '下载', artist: 'D')],
+      );
+      final direct = buildBrowseIndex(source);
+      final remote = await Isolate.run(() => buildBrowseIndex(source));
+
+      expect(remote.tracks.map((track) => track.key), [
+        for (final track in direct.tracks) track.key,
+      ]);
+      expect(remote.tracks.first.raw, {'own': 1});
+      expect(
+        remote.albums.map(
+          (group) =>
+              '${group.sortKey}|${group.tracks.map((t) => t.key).join(',')}',
+        ),
+        [
+          for (final group in direct.albums)
+            '${group.sortKey}|${group.tracks.map((t) => t.key).join(',')}',
+        ],
+      );
+      expect(
+        remote.artists.map(
+          (group) =>
+              '${group.sortKey}|${group.tracks.map((t) => t.key).join(',')}',
+        ),
+        [
+          for (final group in direct.artists)
+            '${group.sortKey}|${group.tracks.map((t) => t.key).join(',')}',
+        ],
       );
     });
   });

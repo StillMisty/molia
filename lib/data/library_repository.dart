@@ -11,7 +11,6 @@
 library;
 
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
@@ -251,7 +250,10 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
 
   /// 聚合读取：收藏曲目 + 每个非收藏列表的曲目（一次 SQL，按列表 id /
   /// sortOrder 稳定排序）。专辑 / 歌手浏览与智能列表共用，避免 N 次查询。
-  Future<({List<PlaylistTrack> favorites, List<BrowsePlaylist> playlists})>
+  ///
+  /// raw 保留 DB 原串（[BrowseTrack.rawJson]），构建索引时不逐行 jsonDecode；
+  /// 只有真正要播放 / 复制时才在 `BrowseTrack.toPlaylistTrack` 解码。
+  Future<({List<BrowseTrack> favorites, List<BrowsePlaylist> playlists})>
   loadBrowseTracks() async {
     final db = _db;
     final rows = await db.customSelect('''
@@ -260,12 +262,13 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
       JOIN playlists p ON p.id = t.playlistId
       ORDER BY p.id ASC, t.sortOrder ASC, t.addedAt ASC, t.id ASC
     ''').get();
-    final favorites = <PlaylistTrack>[];
-    final byPlaylist = <int, List<PlaylistTrack>>{};
+    final favorites = <BrowseTrack>[];
+    final byPlaylist = <int, List<BrowseTrack>>{};
     for (final row in rows) {
       final data = row.data;
-      final track = PlaylistTrack(
-        playlistId: (data['playlistId'] as num).toInt(),
+      final playlistId = (data['playlistId'] as num).toInt();
+      final raw = data['raw'];
+      final track = BrowseTrack(
         sourceKey: data['sourceKey']! as String,
         songId: data['songId']! as String,
         title: data['title']! as String,
@@ -273,14 +276,14 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
         album: data['album'] as String? ?? '',
         coverUrl: data['coverUrl'] as String?,
         durationMs: (data['durationMs'] as num?)?.toInt(),
-        raw: _decodeRaw(data['raw']),
+        rawJson: raw is String ? raw : null,
         addedAt: (data['addedAt'] as num).toInt(),
         sortOrder: (data['sortOrder'] as num?)?.toInt() ?? 0,
       );
       if (data['playlistName'] == favoritesPlaylistRowName) {
         favorites.add(track);
       } else {
-        byPlaylist.putIfAbsent(track.playlistId, () => []).add(track);
+        byPlaylist.putIfAbsent(playlistId, () => []).add(track);
       }
     }
     final playlists = [
@@ -1164,18 +1167,8 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
     sortOrder: row.sortOrder,
   );
 
-  Map<String, dynamic> _decodeRaw(Object? raw) {
-    if (raw is! String || raw.isEmpty) return const {};
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map) {
-        return decoded.map((key, value) => MapEntry(key.toString(), value));
-      }
-    } catch (_) {
-      // 损坏数据降级为空 raw，不影响列表展示。
-    }
-    return const {};
-  }
+  /// 与浏览索引共用同一套 raw 解码口径（data → domain），避免两处漂移。
+  Map<String, dynamic> _decodeRaw(Object? raw) => decodeBrowseRaw(raw);
 
   @override
   Future<void> dispose() async {
