@@ -44,7 +44,8 @@ const Map<String, Set<String>> _rawComponentAllowlist = {
     'ReorderableListView',
   },
   // 热力图格子的值提示：需要 400ms wait，M3ETooltip 没有 wait API。
-  'lib/widgets/statistics/listening_heatmap.dart': {'Tooltip'},
+  // 网格级实现拆在 part 文件里（listening_heatmap.dart 的私有部分）。
+  'lib/widgets/statistics/heatmap_grid.dart': {'Tooltip'},
   // 音量浮层表面（surfaceContainerHigh + elevation）：M3E 没有等价的
   // popover 容器，保留。
   'lib/widgets/volume_control.dart': {'Material'},

@@ -11,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 const Set<String> _rawTooltipAllowlist = {
   // 格子是数据值，不是动作；且 400ms wait 是热力图刚需，M3ETooltip 没有
   // wait API。
-  'lib/widgets/statistics/listening_heatmap.dart',
+  'lib/widgets/statistics/heatmap_grid.dart',
 };
 
 /// 免给 `semanticLabel` 的 M3EIconButton：图标本身带名（由调用方给的

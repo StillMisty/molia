@@ -13,17 +13,40 @@
 /// - 命中区 = 格子 + 格距（相邻格无死区，手机 ≈17dp）；范围外（早于
 ///   高亮起点）的格子降透明度而非包 `Opacity`，避免逐格合成层；
 /// - 星期标签隔行显示（一/三/五/日）：行距小于字高时全显示会互相遮挡。
+///
+/// 性能结构（为什么不是「每格一个 Widget」）：
+/// 开页首帧曾为 700+ 格各建一个 `MouseRegion` / `Listener` /
+/// `GestureDetector` / `CustomPaint` / `State`。`ListView` 与 `LayoutBuilder`
+/// 都在 layout 阶段建子树，profile 下首帧 LAYOUT ≈45–51ms（嵌套 build ≈27ms
+/// + 同帧 GC 17–27ms），是统计页开页的唯一大头。现在整张网格只有：
+/// 一个 `CustomPaint`（色块批量绘制）+ 一个指针区域（按局部坐标反算格子）+
+/// 一个按需挂载的 `Tooltip`。格子不再有 Element / RenderObject，悬停只移动
+/// 一个放大格的 overlay，不重建网格、不 repaint 网格。
+///
+/// 语义（读屏）仍按格提供：`CustomPainter.semanticsBuilder` 为每格生成一个
+/// 纯语义节点（tooltip 文案与悬停同源），不额外建 Widget；显式语义树只在
+/// 系统开启无障碍时构建，且 `shouldRebuildSemantics` 只跟随数据 / 尺寸变化。
+///
+/// 语义节点分帧补齐：一次性建 568 个节点在开页帧实测 10–19ms（含 4 次 GC），
+/// 会把已经降到 ~25ms 的内容帧重新推回 40ms+。[_HeatGridState] 首帧只暴露
+/// 48 格，之后每帧补 48 格；节点内容不变，只是晚 ~10 帧（120Hz <100ms）出现，
+/// 换掉的是整页唯一超过 8.33ms 的语义尖峰。单格文案按格缓存，补齐时重放前缀
+/// 不再重复格式化日期 / 时长。最终内容帧剩余的大头是统计页其它卡片与文案
+/// （summary / 指标 / 榜单的首轮 text layout ≈15–20ms），不属于本文件。
 library;
 
 import 'dart:async';
 import 'dart:collection';
 import 'dart:math' as math;
 
+import 'package:flutter/semantics.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 
 import '../../theme/m3e_context.dart';
+
+part 'heatmap_grid.dart';
 
 /// 色阶档位数（0 = 无数据 + 4 档有数据）。
 const int heatmapLevelCount = 5;
@@ -68,313 +91,6 @@ class _HeatLevels {
     if (value <= t3) return 3;
     return 4;
   }
-}
-
-/// 格子轮廓路径缓存：`Morph(square → puffy)` 按进度取值并适配到格子尺寸
-/// （与包内 `M3EShapeClipper` 同一套 polygon → Path → 缩放配方）。
-///
-/// 为什么要缓存：`Morph.toPath` 每次都要重新插值全部 cubic 并重建 Path。
-/// profile 微基准（Linux / AOT，`integration_test/morph_benchmark_test.dart`）
-/// 单次 p50 8µs、均值 13–14µs；开页首帧所有格子都是 progress = 0，日历 +
-/// 作息合计 700+ 格逐个计算 ≈ 6ms，cubic / Path 的分配还会推高同帧 GC。
-/// 缓存后静态格子共用一条已适配的 Path，命中成本实测 0.01µs。
-///
-/// 键是**精确** progress + 尺寸：静止格子恒为 0 / 1，命中率接近 100%；悬停
-/// 动画每帧只产生一个新键，不会出现量化带来的形状阶梯。LRU 上限 256，
-/// 持续划过很多格子也不会无限增长。
-class _MorphCellClipCache {
-  _MorphCellClipCache._();
-
-  /// Morph 构造会做曲线匹配（较重），只构建一次。
-  static final Morph _morph = Morph(
-    M3EMaterialNewShapes.square,
-    M3EMaterialNewShapes.puffy,
-  );
-
-  static const int _maxEntries = 256;
-
-  /// `(progress, width, height) → 已适配 Path`，按访问顺序淘汰最旧项。
-  static final LinkedHashMap<(double, double, double), Path> _cache =
-      LinkedHashMap();
-
-  static Path of(double progress, Size size) {
-    if (size.isEmpty) return Path();
-    final key = (progress, size.width, size.height);
-    final cached = _cache.remove(key);
-    if (cached != null) {
-      // 重新插入把它移到队尾（LRU）。
-      _cache[key] = cached;
-      return cached;
-    }
-    final path = _build(progress, size);
-    if (path == null) return Path();
-    _cache[key] = path;
-    if (_cache.length > _maxEntries) _cache.remove(_cache.keys.first);
-    return path;
-  }
-
-  static Path? _build(double progress, Size size) {
-    final source = _morph.toPath(progress: progress);
-    final bounds = source.getBounds();
-    if (bounds.isEmpty) return null;
-    final matrix = Matrix4.identity()
-      ..scaleByDouble(
-        size.width / bounds.width,
-        size.height / bounds.height,
-        1,
-        1,
-      )
-      ..translateByDouble(-bounds.left, -bounds.top, 0, 1);
-    return source.transform(matrix.storage);
-  }
-}
-
-/// 单个热力格子（悬停/按压形变 + 放大；选中态描边）。
-///
-/// 轮廓直接画在 [CustomPaint] 上（不再 `ClipPath` + `ColoredBox` + 内层
-/// `SizedBox`）：一个格子只剩鼠标区域 / 指针监听 / 点击手势 / 自绘四层，
-/// 开页时 700+ 格子少掉约一半 RenderObject。放大也由 painter 按进度缩放，
-/// 动画期间只 markNeedsPaint，不重建 widget 子树。
-class _HeatCell extends StatefulWidget {
-  const _HeatCell({
-    super.key,
-    required this.size,
-    required this.gap,
-    required this.color,
-    this.selected = false,
-    this.tooltip,
-    this.onTap,
-  });
-
-  final double size;
-  final double gap;
-  final Color color;
-  final bool selected;
-
-  /// 格子文案（按需生成：日期 / 时长格式化在开页时逐格跑一遍并不便宜）。
-  final String Function()? tooltip;
-  final VoidCallback? onTap;
-
-  @override
-  State<_HeatCell> createState() => _HeatCellState();
-}
-
-class _HeatCellState extends State<_HeatCell>
-    with SingleTickerProviderStateMixin {
-  /// 当前缩放进度（painter 直接监听它，动画期间不重建 widget 子树）。
-  final ValueNotifier<double> _progress = ValueNotifier<double>(0);
-
-  /// 弹簧控制器按需创建：静止格子既没有动画也没有 ticker，开页时 700+ 个
-  /// controller / Ticker 的分配与同帧 GC 都能省掉。
-  SingleMotionController? _motion;
-
-  bool _hovered = false;
-  bool _pressed = false;
-
-  /// 鼠标平台只在悬停时挂载 [Tooltip]（见 [build]）；触摸平台保持常驻，
-  /// 长按提示不能丢。
-  bool _hoverOnlyTooltip = true;
-
-  /// 悬停时生成的提示文案；数据变化时重新生成。
-  String? _tooltipText;
-
-  /// 桌面 tooltip 的卸载延迟。Tooltip 默认 dismissDelay ≈100ms，这里按同一
-  /// 节奏延后卸载，避免鼠标一离开就瞬灭（视觉行为与改动前一致）。
-  Timer? _tooltipHideTimer;
-
-  bool get _active => widget.selected || _hovered || _pressed;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.selected) _progress.value = 1;
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _hoverOnlyTooltip = switch (Theme.of(context).platform) {
-      TargetPlatform.android ||
-      TargetPlatform.iOS ||
-      TargetPlatform.fuchsia => false,
-      _ => true,
-    };
-  }
-
-  @override
-  void didUpdateWidget(covariant _HeatCell oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.tooltip, widget.tooltip)) _tooltipText = null;
-    if (oldWidget.selected != widget.selected) _sync();
-  }
-
-  @override
-  void dispose() {
-    _tooltipHideTimer?.cancel();
-    _motion?.dispose();
-    _progress.dispose();
-    super.dispose();
-  }
-
-  void _setHovered(bool value) {
-    if (_hovered == value) return;
-    _hovered = value;
-    _sync();
-    if (!_hoverOnlyTooltip || widget.tooltip == null) return;
-    _tooltipHideTimer?.cancel();
-    if (value) {
-      _tooltipHideTimer = null;
-      // 悬停才挂载的 Tooltip 需要一次重建；触摸平台的常驻 Tooltip 不受影响。
-      setState(() {});
-      return;
-    }
-    _tooltipHideTimer = Timer(const Duration(milliseconds: 100), () {
-      _tooltipHideTimer = null;
-      if (!mounted || _hovered) return;
-      setState(() {});
-    });
-  }
-
-  void _setPressed(bool value) {
-    if (_pressed == value) return;
-    _pressed = value;
-    _sync();
-  }
-
-  void _sync() {
-    final target = _active ? 1.0 : 0.0;
-    var motion = _motion;
-    if (motion == null) {
-      if (target == _progress.value) return;
-      motion = SingleMotionController(
-        motion: const MaterialSpringMotion.standardSpatialFast(snapToEnd: true),
-        vsync: this,
-        initialValue: _progress.value,
-      )..addListener(_onMotionTick);
-      _motion = motion;
-    }
-    motion.animateTo(target);
-  }
-
-  void _onMotionTick() {
-    final motion = _motion;
-    if (motion != null) _progress.value = motion.value;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    final content = MouseRegion(
-      onEnter: (_) => _setHovered(true),
-      onExit: (_) => _setHovered(false),
-      child: Listener(
-        onPointerDown: (_) => _setPressed(true),
-        onPointerUp: (_) => _setPressed(false),
-        onPointerCancel: (_) => _setPressed(false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onTap,
-          child: CustomPaint(
-            size: Size.square(widget.size + widget.gap),
-            painter: _HeatCellPainter(
-              progress: _progress,
-              cellSize: widget.size,
-              color: widget.color,
-              outlineColor: scheme.primary,
-              selected: widget.selected,
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final tooltip = widget.tooltip;
-    if (tooltip == null) return content;
-    if (_hoverOnlyTooltip) {
-      // 桌面：语义 label 与 tooltip 同源，但静止格也必须暴露——否则读屏
-      // 拿不到格子数值（原实现靠逐格 Tooltip 的语义）。Tooltip 本体只在
-      // 悬停时挂载：700+ 个常驻 Tooltip 的 State / OverlayPortal 是开页
-      // 首帧的纯开销。挂载时鼠标已经在格子上方，MouseTracker 会补发
-      // enter，400ms wait 与原来一致。
-      final text = _tooltipText ??= tooltip();
-      final labelled = Semantics(
-        container: true,
-        tooltip: text,
-        child: content,
-      );
-      if (!_hovered && _tooltipHideTimer == null) return labelled;
-      return Tooltip(
-        message: text,
-        // 语义已由上面的 Semantics 提供，避免重复语义节点。
-        excludeFromSemantics: true,
-        waitDuration: const Duration(milliseconds: 400),
-        child: labelled,
-      );
-    }
-    return Tooltip(
-      message: tooltip(),
-      waitDuration: const Duration(milliseconds: 400),
-      child: content,
-    );
-  }
-}
-
-/// 格子轮廓：缓存的 morph 路径按动画进度缩放后填充（选中态多一圈描边）。
-class _HeatCellPainter extends CustomPainter {
-  _HeatCellPainter({
-    required this.progress,
-    required this.cellSize,
-    required this.color,
-    required this.outlineColor,
-    required this.selected,
-  }) : super(repaint: progress);
-
-  /// 悬停最多放大 25%（原实现放大外层 SizedBox，现在在 painter 里缩放路径）。
-  static const double _hoverScale = 0.25;
-
-  final ValueNotifier<double> progress;
-  final double cellSize;
-  final Color color;
-  final Color outlineColor;
-  final bool selected;
-
-  static final Paint _paint = Paint();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final side = cellSize * (1 + _hoverScale * progress.value);
-    if (side <= 0) return;
-    final origin = Offset((size.width - side) / 2, (size.height - side) / 2);
-    final outer = _MorphCellClipCache.of(progress.value, Size.square(side));
-
-    canvas
-      ..save()
-      ..translate(origin.dx, origin.dy);
-    if (selected && side > 3) {
-      // 选中描边：外圈 primary 形状 + 内缩 1.5dp 的格子色。
-      const inset = 1.5;
-      canvas
-        ..drawPath(outer, _paint..color = outlineColor)
-        ..save()
-        ..translate(inset, inset)
-        ..drawPath(
-          _MorphCellClipCache.of(progress.value, Size.square(side - inset * 2)),
-          _paint..color = color,
-        )
-        ..restore();
-    } else {
-      canvas.drawPath(outer, _paint..color = color);
-    }
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _HeatCellPainter oldDelegate) =>
-      oldDelegate.cellSize != cellSize ||
-      oldDelegate.color != color ||
-      oldDelegate.outlineColor != outlineColor ||
-      oldDelegate.selected != selected;
 }
 
 /// 日历热力图（横轴周、纵轴星期一~日；横向滚动，初始对齐"今天"）。
@@ -456,6 +172,7 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
   }
 
   void _jumpToToday() {
+    if (!_controller.hasClients) return;
     _controller.jumpTo(_controller.position.maxScrollExtent);
   }
 
@@ -469,7 +186,7 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
     );
     final narrow = MaterialLocalizations.of(context).narrowWeekdays;
     final levels = _HeatLevels.of(widget.values.values);
-    final rowHeight = widget.cellSize + widget.cellGap;
+    final highlightFrom = widget.highlightFrom;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -485,8 +202,101 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
           Duration(days: (weeks - rawWeeks) * 7),
         );
 
+        // 行优先色值：行 = 星期（0 = 周一），列 = 周。null = 今天之后（无格）。
+        // 档位颜色只算 5 次（外加 5 个降透明度变体）：逐格 `withValues` 会
+        // 在开页帧产生数百次颜色空间换算 / 分配。
+        final levelColors = [
+          for (var level = 0; level < heatmapLevelCount; level++)
+            heatmapLevelColor(scheme, level),
+        ];
+        final dimmedLevelColors = [
+          for (final color in levelColors)
+            color.withValues(alpha: color.a * 0.35),
+        ];
+        final colors = List<Color?>.filled(7 * weeks, null);
+        // 索引 → 日期由 gridStart + (col * 7 + row) 直接反算，不预建
+        // DateTime / 文案（tooltip 只在悬停或语义树构建时按需格式化）。
+        for (var col = 0; col < weeks; col++) {
+          for (var row = 0; row < 7; row++) {
+            final day = gridStart.add(Duration(days: col * 7 + row));
+            if (day.isAfter(widget.lastDay)) continue;
+            final inRange =
+                !day.isBefore(widget.firstDay) && !day.isAfter(widget.lastDay);
+            final value = inRange ? (widget.values[day] ?? 0) : 0;
+            final level = levels.levelOf(value);
+            // 范围外降透明度（查预计算的色板，避免逐格 Opacity 合成层）。
+            final dim =
+                inRange && highlightFrom != null && day.isBefore(highlightFrom);
+            colors[row * weeks + col] = dim
+                ? dimmedLevelColors[level]
+                : levelColors[level];
+          }
+        }
+
+        DateTime dayAt(int index) {
+          final row = index ~/ weeks;
+          final col = index % weeks;
+          return gridStart.add(Duration(days: col * 7 + row));
+        }
+
+        int? selectedIndex;
+        final selectedDay = widget.selectedDay;
+        if (selectedDay != null) {
+          final offset = selectedDay.difference(gridStart).inDays;
+          if (offset >= 0 && offset < weeks * 7) {
+            final row = offset % 7;
+            final col = offset ~/ 7;
+            final index = row * weeks + col;
+            final inRange =
+                !selectedDay.isBefore(widget.firstDay) &&
+                !selectedDay.isAfter(widget.lastDay);
+            if (inRange && colors[index] != null) selectedIndex = index;
+          }
+        }
+
+        String? tooltipAt(int index) {
+          final day = dayAt(index);
+          final inRange =
+              !day.isBefore(widget.firstDay) && !day.isAfter(widget.lastDay);
+          if (!inRange) return null;
+          return widget.tooltipFor(day, widget.values[day] ?? 0);
+        }
+
+        final onDayTap = widget.onDayTap;
+        final monthLabels = <Widget>[];
+        for (var week = 0; week < weeks; week++) {
+          // 月份标签：本周包含某月 1 日时在列首显示。只保留月份名（去 4 位
+          // 年份），否则 "September 2026" 这类长标签会与下个月标签重叠。
+          String? monthLabel;
+          for (var i = 0; i < 7; i++) {
+            final day = gridStart.add(Duration(days: week * 7 + i));
+            if (day.day == 1) {
+              final raw = MaterialLocalizations.of(context)
+                  .formatMonthYear(day);
+              monthLabel = raw.replaceAll(_yearInMonthLabel, ' ').trim();
+              break;
+            }
+          }
+          if (monthLabel == null) continue;
+          monthLabels.add(
+            Positioned(
+              left: week * pitch,
+              top: 0,
+              height: _headerHeight,
+              // 列宽只有一格，月份标签向右溢出。顶部对齐：旧实现的
+              // OverflowBox 把 16dp 紧约束传给 Text，行盒从顶边开始画；
+              // 居中会多出约 3dp 的垂直偏移。
+              width: 84,
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Text(monthLabel, style: labelStyle),
+              ),
+            ),
+          );
+        }
+
         return SizedBox(
-          height: _headerHeight + 7 * rowHeight,
+          height: _headerHeight + 7 * pitch,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -497,7 +307,7 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
                     const SizedBox(height: _headerHeight),
                     for (var row = 0; row < 7; row++)
                       SizedBox(
-                        height: rowHeight,
+                        height: pitch,
                         child: Align(
                           alignment: Alignment.centerRight,
                           child: Text(
@@ -513,16 +323,38 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
                 ),
               ),
               Expanded(
-                child: ListView.builder(
+                child: SingleChildScrollView(
                   controller: _controller,
                   scrollDirection: Axis.horizontal,
-                  itemCount: weeks,
-                  itemBuilder: (context, week) => _buildWeek(
-                    context,
-                    gridStart.add(Duration(days: week * 7)),
-                    levels,
-                    labelStyle,
-                    rowHeight,
+                  child: SizedBox(
+                    width: weeks * pitch,
+                    height: _headerHeight + 7 * pitch,
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          height: _headerHeight,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: monthLabels,
+                          ),
+                        ),
+                        _HeatGrid(
+                          rows: 7,
+                          columns: weeks,
+                          cellSize: widget.cellSize,
+                          cellGap: widget.cellGap,
+                          colors: colors,
+                          tooltipAt: tooltipAt,
+                          selectedIndex: selectedIndex,
+                          onTapAt: onDayTap == null
+                              ? null
+                              : (index) {
+                                  onDayTap(dayAt(index));
+                                },
+                          gridKey: const Key('calendarHeatmapGrid'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -530,88 +362,6 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildWeek(
-    BuildContext context,
-    DateTime start,
-    _HeatLevels levels,
-    TextStyle? labelStyle,
-    double rowHeight,
-  ) {
-    // 月份标签：本周包含某月 1 日时在列首显示。只保留月份名（去 4 位年份），
-    // 否则 "September 2026" 这类长标签会与下个月标签重叠（列距只有 4 周）。
-    String? monthLabel;
-    for (var i = 0; i < 7; i++) {
-      final day = start.add(Duration(days: i));
-      if (day.day == 1) {
-        final raw = MaterialLocalizations.of(context).formatMonthYear(day);
-        monthLabel = raw.replaceAll(_yearInMonthLabel, ' ').trim();
-        break;
-      }
-    }
-
-    return Column(
-      children: [
-        SizedBox(
-          // 列宽与格子一致；月份标签允许向右溢出（横向列表里必须给定宽，
-          // 否则 OverflowBox 在无界宽度下无法布局）。
-          width: widget.cellSize + widget.cellGap,
-          height: _headerHeight,
-          child: monthLabel == null
-              ? null
-              : OverflowBox(
-                  maxWidth: 84,
-                  alignment: Alignment.centerLeft,
-                  child: Text(monthLabel, style: labelStyle),
-                ),
-        ),
-        for (var i = 0; i < 7; i++)
-          _buildDayCell(
-            context,
-            start.add(Duration(days: i)),
-            levels,
-            rowHeight,
-          ),
-      ],
-    );
-  }
-
-  Widget _buildDayCell(
-    BuildContext context,
-    DateTime day,
-    _HeatLevels levels,
-    double rowHeight,
-  ) {
-    final hitWidth = widget.cellSize + widget.cellGap;
-    // 今天之后不渲染（窗口右端 = 今天）。
-    if (day.isAfter(widget.lastDay)) {
-      return SizedBox(width: hitWidth, height: rowHeight);
-    }
-    final inRange =
-        !day.isBefore(widget.firstDay) && !day.isAfter(widget.lastDay);
-    // 数据范围之前：补位空方格（GitHub 式底格），不可点、无 tooltip。
-    final value = inRange ? (widget.values[day] ?? 0) : 0;
-    var color = heatmapLevelColor(
-      Theme.of(context).colorScheme,
-      levels.levelOf(value),
-    );
-    final highlightFrom = widget.highlightFrom;
-    if (inRange && highlightFrom != null && day.isBefore(highlightFrom)) {
-      // 范围外降透明度（Color 直算，避免逐格 Opacity 合成层）。
-      color = color.withValues(alpha: color.a * 0.35);
-    }
-
-    final onDayTap = widget.onDayTap;
-    return _HeatCell(
-      key: ValueKey<int>(day.millisecondsSinceEpoch),
-      size: widget.cellSize,
-      gap: widget.cellGap,
-      color: color,
-      selected: inRange && widget.selectedDay == day,
-      tooltip: inRange ? () => widget.tooltipFor(day, value) : null,
-      onTap: inRange && onDayTap != null ? () => onDayTap(day) : null,
     );
   }
 }
@@ -650,8 +400,23 @@ class WeekdayHourHeatmap extends StatelessWidget {
         // 每格占位 = cell + gap（末尾也算 gap），保证 24 列与分组表头对齐。
         final ideal = (constraints.maxWidth - labelWidth) / 24 - cellGap;
         final cell = ideal.clamp(6.0, maxCellSize);
-        final contentWidth = labelWidth + 24 * (cell + cellGap);
-        final rowHeight = cell + cellGap;
+        final pitch = cell + cellGap;
+        final contentWidth = labelWidth + 24 * pitch;
+        final levelColors = [
+          for (var level = 0; level < heatmapLevelCount; level++)
+            heatmapLevelColor(scheme, level),
+        ];
+        final colors = <Color?>[
+          for (var weekday = 0; weekday < 7; weekday++)
+            for (var hour = 0; hour < 24; hour++)
+              levelColors[levels.levelOf(values[weekday][hour])],
+        ];
+        String? tooltipAt(int index) {
+          final weekday = index ~/ 24;
+          final hour = index % 24;
+          return tooltipFor(weekday, hour, values[weekday][hour]);
+        }
+
         final grid = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -662,45 +427,50 @@ class WeekdayHourHeatmap extends StatelessWidget {
                 children: [
                   for (var hour = 0; hour < 24; hour += 6)
                     SizedBox(
-                      width: 6 * (cell + cellGap),
+                      width: 6 * pitch,
                       height: 14,
                       child: Text('$hour', style: labelStyle),
                     ),
                 ],
               ),
             ),
-            for (var weekday = 0; weekday < 7; weekday++)
-              Row(
-                children: [
-                  SizedBox(
-                    width: labelWidth,
-                    height: rowHeight,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: Text(
-                          // 隔行显示（一/三/五/日）：行距小于字高时
-                          // 全显示会互相遮挡。
-                          weekday.isEven ? narrow[(weekday + 1) % 7] : '',
-                          style: labelStyle,
+            Row(
+              children: [
+                SizedBox(
+                  width: labelWidth,
+                  height: 7 * pitch,
+                  child: Column(
+                    children: [
+                      for (var weekday = 0; weekday < 7; weekday++)
+                        SizedBox(
+                          height: pitch,
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: Text(
+                                // 隔行显示（一/三/五/日）：行距小于字高时
+                                // 全显示会互相遮挡。
+                                weekday.isEven ? narrow[(weekday + 1) % 7] : '',
+                                style: labelStyle,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                    ],
                   ),
-                  for (var hour = 0; hour < 24; hour++)
-                    _HeatCell(
-                      size: cell,
-                      gap: cellGap,
-                      color: heatmapLevelColor(
-                        scheme,
-                        levels.levelOf(values[weekday][hour]),
-                      ),
-                      tooltip: () =>
-                          tooltipFor(weekday, hour, values[weekday][hour]),
-                    ),
-                ],
-              ),
+                ),
+                _HeatGrid(
+                  rows: 7,
+                  columns: 24,
+                  cellSize: cell,
+                  cellGap: cellGap,
+                  colors: colors,
+                  tooltipAt: tooltipAt,
+                  gridKey: const Key('weekdayHourHeatmapGrid'),
+                ),
+              ],
+            ),
           ],
         );
         // 极窄屏（逻辑宽 < ~310dp）放不下时退化为横向滚动，避免溢出。
