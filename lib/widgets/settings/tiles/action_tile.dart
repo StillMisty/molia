@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -104,33 +106,46 @@ class SettingsValueTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m3e = M3ETheme.of(context);
-    return SettingsTileRow(
-      icon: icon,
-      title: title,
-      subtitle: subtitle ?? '',
-      semanticLabel: '$title, $value',
-      onPressed: () {
-        HapticsService.lightImpact();
-        onTap();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 值只是当前值提示（如文件名模板）：给标题保留最低可读宽度，其余宽度
+        // 归值；仍放不下就省略，360dp 下长模板不再把行尾挤出卡片。
+        final maxValueWidth = math.max(72.0, constraints.maxWidth - 244);
+        return SettingsTileRow(
+          icon: icon,
+          title: title,
+          subtitle: subtitle ?? '',
+          semanticLabel: '$title, $value',
+          onPressed: () {
+            HapticsService.lightImpact();
+            onTap();
+          },
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxValueWidth),
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: m3e.typeScale.bodyMedium.copyWith(
+                    // 当前值是信息文本，不用强调色。
+                    color: m3e.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(width: kSettingsSmallSpacing),
+              Icon(
+                Icons.edit_rounded,
+                size: kSettingsTileActionSize,
+                color: m3e.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        );
       },
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            value,
-            style: m3e.typeScale.bodyMedium.copyWith(
-              // 当前值是信息文本，不用强调色。
-              color: m3e.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(width: kSettingsSmallSpacing),
-          Icon(
-            Icons.edit_rounded,
-            size: kSettingsTileActionSize,
-            color: m3e.colorScheme.onSurfaceVariant,
-          ),
-        ],
-      ),
     );
   }
 }

@@ -24,6 +24,7 @@ import '../../providers/local_library_provider.dart';
 import '../../providers/lyrics_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../providers/sync_provider.dart';
+import '../../services/back_claims.dart';
 import '../../services/cache_service.dart';
 import '../../services/download/download_manager.dart';
 import '../../services/download/download_requests.dart';
@@ -34,6 +35,7 @@ import '../../services/local_cache_index_store.dart';
 import '../../services/notification_service.dart';
 import '../../services/save_as.dart';
 import '../../services/track_local_data_service.dart';
+import '../../theme/motion_policy.dart';
 import '../../widgets/responsive.dart';
 import '../../widgets/collection_handoff.dart';
 import '../../widgets/cross_fade_swap.dart';
@@ -106,6 +108,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 登记给壳层的 Esc 占用判定：与 [_handleKeyEvent] 同源。
   late final bool Function() _escapeClaim = _canHandleEscape;
 
+  /// 返回占用判定：壳层 PopScope 收到系统返回时据此让位（多选 / 搜索 /
+  /// 排序这些临时状态由本页自己的 PopScope 处理）。
+  bool _backClaim() => favoritesBackClaim(
+    context: context,
+    selecting: _selecting,
+    searching: _vm.searching,
+    reordering: _vm.session.reordering,
+  );
+
   /// 合集会话 / 服务订阅 / 智能列表展开 / 定位都在 ViewModel。
   late final FavoritesViewModel _vm = FavoritesViewModel(
     controllerOf: _scrollControllerForKey,
@@ -113,6 +124,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   /// 曲库分组缓存（索引 / 模式 / 语言都没变时复用分组）。
   final FavoritesBrowseGroupsCache _browseGroups = FavoritesBrowseGroupsCache();
+
+  /// 最近一次成功渲染的合集正文视图：同合集刷新 / 切合集时数据在途，先用它
+  /// 顶住正文（顶部细进度条示意刷新），避免整块闪成居中 spinner。
+  CollectionView? _lastBodyView;
 
   bool get _selecting => _vm.selecting;
 
@@ -127,6 +142,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       HardwareKeyboard.instance.addHandler(_keyHandler);
       EscapeClaims.add(_escapeClaim);
     }
+    BackClaims.add(_backClaim);
     _listController.addListener(_vm.saveFromScroll);
     _historyScrollController.addListener(_vm.saveFromScroll);
     _localSongsScrollController.addListener(_vm.saveFromScroll);
@@ -166,6 +182,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     // 无条件注销（未注册时为空操作）：平台在测试里可能被覆盖，initState 与
     // dispose 看到的平台未必一致，漏注销会把已释放的 State 留在键盘链上。
     EscapeClaims.remove(_escapeClaim);
+    BackClaims.remove(_backClaim);
     HardwareKeyboard.instance.removeHandler(_keyHandler);
     widget.reselect?.removeListener(_handleReselect);
     widget.locatePlaying?.removeListener(_handleLocatePlaying);
@@ -231,16 +248,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _vm.exitSearch();
   }
 
-  /// 行长按：不在多选时进入多选；已经在多选时把长按行作为区间终点。
-  void _onRowLongPress(CollectionView view, String key) {
-    HapticsService.lightImpact();
-    if (_vm.selecting && _vm.selectionAnchorKey != null) {
-      _vm.selectRangeTo(view, key);
-      return;
-    }
-    _vm.selectRow(key);
-  }
-
   /// 此刻 Esc 是否由本页接管（判定与壳层占用同源，见 favorites_escape）。
   bool _canHandleEscape() =>
       favoritesCanHandleEscape(context: context, selecting: _selecting);
@@ -251,20 +258,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     canHandleEscape: _canHandleEscape,
     clearSelection: _vm.clearSelection,
   );
-
-  /// 合集行点击：桌面修饰键手势优先，其余保持既有语义（多选内切换 / 点播）。
-  void _onRowTap(
-    CollectionView view,
-    int index, {
-    bool ctrl = false,
-    bool shift = false,
-  }) {
-    final row = view.visibleRows[index];
-    if (_vm.handleRowTap(row.key, view, ctrl: ctrl, shift: shift)) {
-      return;
-    }
-    unawaited(_playViewFrom(view, index));
-  }
 
   void _enterReorder() {
     HapticsService.lightImpact();
@@ -322,15 +315,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
     index: index,
     shuffle: shuffle,
   );
-
-  Future<void> _reorderTracks(CollectionView view, int from, int to) =>
-      reorderFavoritesTracks(
-        actions: _actions,
-        view: view,
-        from: from,
-        to: to,
-        reportMutation: _reportMutation,
-      );
 
   /// 合集弹层的「导入收藏」：.lxmc 文件 或 平台歌单 / 收藏夹链接。
   Future<void> _importCollection() => importFavoritesCollection(
@@ -413,6 +397,23 @@ class _FavoritesPageState extends State<FavoritesPage> {
         ? FavoritesCollectionSurface.failed
         : view.isLibraryBrowse
         ? FavoritesCollectionSurface.libraryBrowse
+        : FavoritesCollectionSurface.body;
+
+    // 之前已有一份正文时，同一合集的刷新继续显示旧正文（顶部细进度条），
+    // 只有首帧无内容才给居中 spinner；切到别的合集 / 曲库浏览 / 失败态
+    // 不复用旧行，否则会出现「旧合集数据顶着新合集标题」的错位。
+    if (surface == FavoritesCollectionSurface.body) {
+      _lastBodyView = view;
+    } else if (surface != FavoritesCollectionSurface.loading) {
+      _lastBodyView = null;
+    }
+    final staleView =
+        surface == FavoritesCollectionSurface.loading &&
+            _lastBodyView?.collectionKey == view.collectionKey
+        ? _lastBodyView
+        : null;
+    final displaySurface = staleView == null
+        ? surface
         : FavoritesCollectionSurface.body;
 
     // 长按定位请求：加载中挂起（数据就绪后的下一次 build 再消费）；曲库
@@ -623,79 +624,67 @@ class _FavoritesPageState extends State<FavoritesPage> {
         ),
         Expanded(
           // 状态标识只看「哪一态」：同一态内的刷新不换 key、不重播过渡。
-          child: CrossFadeSwap(
-            value: surface,
-            child: switch (surface) {
-              FavoritesCollectionSurface.loading => const Center(
-                child: M3ELoadingIndicator(),
-              ),
-              FavoritesCollectionSurface.failed => buildFavoritesReadFailed(
-                context,
-                l10n: l10n,
-                onRetry: () => _vm.session.retry(sessionView.frame),
-              ),
-              FavoritesCollectionSurface.libraryBrowse =>
-                buildFavoritesLibraryBrowse(
-                  context,
-                  l10n: l10n,
-                  query: _searchController.text,
-                  groupsCache: _browseGroups,
-                  onPlay: (group, tracks, {bool shuffle = false}) =>
-                      playFavoritesBrowseTracks(
-                        context: context,
-                        tracks: tracks,
-                        contextName: group.subtitle.isEmpty
-                            ? group.title
-                            : '${group.title} · ${group.subtitle}',
-                        random: widget.shuffleRandom,
-                        shuffle: shuffle,
-                      ),
-                  onPlayTrack: (track) => playFavoritesBrowseTracks(
-                    context: context,
-                    tracks: [track],
-                    contextName: track.title,
-                    random: widget.shuffleRandom,
-                  ),
-                  onAdd: (tracks) => addFavoritesBrowseToLibrary(
-                    context: context,
-                    tracks: tracks,
-                  ),
-                  onToggleFavorite: (track) async {
-                    await _actions.toggleFavorite([
-                      TrackCollectionRow(track.toPlaylistTrack(addedAt: 0)),
-                    ]);
-                  },
-                  onRefreshLocal: (track) => refreshFavoritesBrowseLocal(
-                    context: context,
-                    l10n: l10n,
-                    record: findFavoritesLocalRecord(
-                      context.read<DownloadRecords?>(),
-                      track,
-                    ),
-                    isActive: () => mounted,
-                  ),
-                  onSwap: (track) => swapFavoritesBrowseTrack(
-                    context: context,
-                    track: track,
-                    lyrics: context.read<LyricsProvider>(),
-                  ),
-                  isFavorite: (track) => context
-                      .read<LibraryProvider>()
-                      .isFavorite(track.sourceKey, track.songId),
-                  canRefreshLocal: (track) =>
-                      findFavoritesLocalRecord(
-                        context.read<DownloadRecords?>(),
-                        track,
-                      ) !=
-                      null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (staleView != null)
+                ExcludeSemantics(
+                  child: reduceMotionOf(context)
+                      ? const M3EProgressIndicator.linear(
+                          key: Key('favoritesRefreshProgress'),
+                        )
+                      : const M3EProgressIndicator.linearWavy(
+                          key: Key('favoritesRefreshProgress'),
+                        ),
                 ),
-              FavoritesCollectionSurface.body => _buildCollectionBody(
-                context,
-                l10n,
-                view,
-                reorderActive: reorderActive,
+              Expanded(
+                child: CrossFadeSwap(
+                  value: displaySurface,
+                  child: switch (displaySurface) {
+                    FavoritesCollectionSurface.loading => const Center(
+                      child: M3ELoadingIndicator(),
+                    ),
+                    FavoritesCollectionSurface.failed =>
+                      buildFavoritesReadFailed(
+                        context,
+                        l10n: l10n,
+                        onRetry: () => _vm.session.retry(sessionView.frame),
+                      ),
+                    FavoritesCollectionSurface.libraryBrowse =>
+                      buildFavoritesBrowseTab(
+                        context,
+                        FavoritesBrowseData(
+                          l10n: l10n,
+                          query: _searchController.text,
+                          groupsCache: _browseGroups,
+                          shuffleRandom: widget.shuffleRandom,
+                          actions: _actions,
+                          downloadRecords: context.read<DownloadRecords?>(),
+                          lyrics: context.read<LyricsProvider>(),
+                          library: context.read<LibraryProvider>(),
+                          isActive: () => mounted,
+                        ),
+                      ),
+                    FavoritesCollectionSurface.body =>
+                      buildFavoritesCollectionTab(
+                        context,
+                        l10n: l10n,
+                        viewModel: _vm,
+                        view: staleView ?? view,
+                        reorderActive: staleView == null && reorderActive,
+                        selecting: _selecting,
+                        query: _searchController.text,
+                        controller: _scrollControllerForKey(
+                          (staleView ?? view).collectionKey,
+                        ),
+                        actions: _actions,
+                        isActive: () => mounted,
+                        onRowsReady: _applyLocateResult,
+                      ),
+                  },
+                ),
               ),
-            },
+            ],
           ),
         ),
       ],
@@ -719,52 +708,6 @@ class _FavoritesPageState extends State<FavoritesPage> {
         alignment: Alignment.topCenter,
         child: content,
       ),
-    );
-  }
-
-  /// 合集正文：智能列表展开行在这里落定，表格列 / 行渲染交给正文模块。
-  Widget _buildCollectionBody(
-    BuildContext context,
-    AppLocalizations l10n,
-    CollectionView view, {
-    required bool reorderActive,
-  }) {
-    final rows = view.isSmartList
-        ? _vm.displayRows(view: view, query: _searchController.text)
-        : view.visibleRows;
-    return buildFavoritesCollectionBody(
-      context,
-      l10n: l10n,
-      view: view,
-      rows: rows,
-      reorderActive: reorderActive,
-      selecting: _selecting,
-      controller: _scrollControllerForKey(view.collectionKey),
-      smartVersionCounts: _vm.smartVersionCounts,
-      isSelected: _vm.isSelected,
-      isMissingRow: (row) =>
-          view.isSmartList &&
-          view.identity.smartListId == SmartListIds.missingFiles &&
-          row is LocalSongCollectionRow &&
-          row.song.isMissing,
-      onToggleSmartVersions: _vm.toggleSmartVersions,
-      onRowTap: (index) => _onRowTap(view, index),
-      onRowTapWithModifiers: (index, {required ctrl, required shift}) =>
-          _onRowTap(view, index, ctrl: ctrl, shift: shift),
-      onRowLongPress: (key) => _onRowLongPress(view, key),
-      onReorder: (from, to) => _reorderTracks(view, from, to),
-      rowActionsFor: (rowContext, row) => buildFavoritesRowActions(
-        context: rowContext,
-        l10n: l10n,
-        session: _vm.session,
-        view: view,
-        row: row,
-        actions: _actions,
-        isActive: () => mounted,
-      ),
-      onImportLocal: () => unawaited(importLocalAudioFilesFlow(context)),
-      onRowsReady: (rows, surface) =>
-          _applyLocateResult(l10n, view, rows, surface),
     );
   }
 

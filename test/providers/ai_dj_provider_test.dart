@@ -266,6 +266,27 @@ void main() {
     expect(provider.recommendations?.items, hasLength(3));
   });
 
+  test('playHistoryBatch：从指定曲目起播，不重排批次也不改 active', () async {
+    await enableWithList();
+    final batchId = provider.activeBatchId!;
+
+    await provider.playHistoryBatch(batchId, startIndex: 2);
+
+    // 队列仍是整批原顺序；起点只决定从第几首开始播。
+    expect(backend.lastRequest?.tracks.map((t) => t.title).toList(), [
+      'Song 0',
+      'Song 1',
+      'Song 2',
+    ]);
+    expect(backend.lastRequest?.startIndex, 2);
+    expect(provider.activeBatchId, batchId);
+    expect(provider.recommendations!.items, hasLength(3));
+
+    // 越界起点由接管意图夹取，不抛给播放层。
+    await provider.playHistoryBatch(batchId, startIndex: 99);
+    expect(backend.lastRequest?.startIndex, 2);
+  });
+
   test('接管意图：起播进入准备态，历史播放保持原状态', () async {
     await enableWithList();
     final batchId = provider.activeBatchId!;

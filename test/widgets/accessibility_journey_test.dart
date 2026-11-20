@@ -202,11 +202,12 @@ void main() {
       await tester.tapAt(const Offset(8, 8));
       await tester.pumpAndSettle();
 
-      // 播放页封面标注打开目标；收藏按钮读当前状态。
+      // 进入播放页：封面的动作是播放 / 暂停（带曲名），不是「打开播放页」——
+      // 已经在播放页里，点封面不会再打开一次。
       await tester.tap(find.text('播放').last);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 600));
-      expect(find.bySemanticsLabel('打开播放页：Queue Track 0'), findsOneWidget);
+      expect(find.bySemanticsLabel('暂停 · Queue Track 0'), findsOneWidget);
       expect(find.bySemanticsLabel('收藏'), findsWidgets);
       semantics.dispose();
       debugDefaultTargetPlatformOverride = null;

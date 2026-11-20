@@ -181,4 +181,54 @@ void main() {
     expect(find.text(l10n.discoverAllTags), findsOneWidget);
     expect(find.byKey(const Key('discoverAllTagsChip')), findsOneWidget);
   });
+
+  testWidgets('输入防抖 300ms 后才提交搜索', (tester) async {
+    await tester.pumpWidget(host());
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(M3ESearchBar), '测试');
+    await tester.pump(const Duration(milliseconds: 299));
+    expect(find.text('搜索:测试'), findsNothing, reason: '防抖窗口内不发请求');
+    expect(find.text('测试歌单'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('搜索:测试'), findsOneWidget);
+  });
+
+  testWidgets('提交搜索清掉标签；选标签清空搜索词（互斥状态单点写入）', (tester) async {
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+    await tester.pumpWidget(host());
+    await tester.pumpAndSettle();
+
+    // 先选中标签，再搜索：chip 必须回到「标签」而不是继续显示「华语」。
+    await tester.tap(find.text('华语'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<M3EChip>(find.byKey(const Key('discoverTagFilter')))
+          .selected,
+      isTrue,
+    );
+
+    await tester.enterText(find.byType(M3ESearchBar), '测试');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('搜索:测试'), findsOneWidget);
+    final chip = tester.widget<M3EChip>(
+      find.byKey(const Key('discoverTagFilter')),
+    );
+    expect(chip.selected, isFalse, reason: '搜索提交后标签筛选已清空');
+    expect(find.text(l10n.discoverTags), findsOneWidget);
+
+    // 选标签：输入框与搜索词一起清空，列表回到标签浏览。
+    await tester.tap(find.text('华语'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+      isEmpty,
+    );
+    expect(find.text('测试歌单'), findsOneWidget);
+  });
 }

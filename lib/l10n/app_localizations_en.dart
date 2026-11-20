@@ -231,7 +231,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAdvancedTitle => 'Advanced settings';
 
   @override
-  String get settingsAdvancedSubtitle => 'Less-used options';
+  String get settingsAdvancedSubtitle => 'Font, cover, window, updates';
 
   @override
   String get settingsDownloadsAndCacheTitle => 'Downloads & cache';
@@ -5667,4 +5667,68 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get listeningSyncNeedsConsent => 'Confirm what is sent again';
+
+  @override
+  String get done => 'Done';
+
+  @override
+  String get settingsAdvancedAppearanceTitle => 'Font & cover';
+
+  @override
+  String get settingsAdvancedLibraryAddTitle => 'Where added songs go';
+
+  @override
+  String get settingsAdvancedGeneralTitle => 'Haptics & app name';
+
+  @override
+  String get settingsAdvancedDesktopTitle => 'Window';
+
+  @override
+  String get settingsAdvancedDataSaverTitle => 'Data saver quality';
+
+  @override
+  String get settingsAdvancedUpdateSourceTitle => 'Update source & mirror';
+
+  @override
+  String get settingsStartupPageHiddenHint =>
+      'Turn a hidden entry on under Bottom navigation first, then you can set it as the start page.';
+
+  @override
+  String get localDataQualityLockedHint =>
+      'Delete the download to choose a different quality.';
+
+  @override
+  String get aiDjClearConfigConfirm =>
+      'You will need to enter the server address, key and model again.';
+
+  @override
+  String get aiDjHistoryDeleteBody =>
+      'This batch cannot be recovered after deletion. Songs already queued are not affected.';
+
+  @override
+  String get shortcutsResetAllConfirm =>
+      'Changed shortcuts in this group go back to defaults at once. This cannot be undone.';
+
+  @override
+  String get downloadsWaitingShowAll => 'Show all';
+
+  @override
+  String get downloadsWaitingCollapse => 'Collapse';
+
+  @override
+  String downloadsWaitingTotal(int count) {
+    return '$count waiting';
+  }
+
+  @override
+  String get lyricsPageTranslationSwitch => 'In-app lyrics · Translation';
+
+  @override
+  String get lyricsPageRomaSwitch => 'In-app lyrics · Romanization';
+
+  @override
+  String get lyricsSharedTranslationSwitch => 'All outputs · Translation';
+
+  @override
+  String get lyricsSharedRomaSwitch => 'All outputs · Romanization';
 }

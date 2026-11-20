@@ -595,10 +595,12 @@ class AiDjProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 历史「播放这批」：加载 → 设为 active → 强制替换队列并起播。
+  /// 历史「播放这批」：加载 → 设为 active → 强制替换队列并从 [startIndex] 起播。
   ///
+  /// 起点只影响从哪首开始，不重排批次：历史页展开后点任意曲目也能从那一首
+  /// 起播，同时保有「整批接管当前队列」的语义。越界起点由接管意图夹取。
   /// 功能关闭时按普通队列播放（不启动自动补歌）。
-  Future<void> playHistoryBatch(String id) async {
+  Future<void> playHistoryBatch(String id, {int startIndex = 0}) async {
     final batch = await loadHistoryBatch(id);
     if (batch == null || batch.items.isEmpty || _radio.queueBusy) return;
     _radio.clearStoppedByUser();
@@ -606,6 +608,7 @@ class AiDjProvider extends ChangeNotifier {
     await _history.setActive(id);
     final takeover = AiRadioTakeOver(
       items: batch.items,
+      startIndex: startIndex,
       contextName: _enabled ? kAiDjContextName : null,
       adopt: _enabled,
       // 历史播放不是生成准备；失败也只写 lastError，不改电台状态。

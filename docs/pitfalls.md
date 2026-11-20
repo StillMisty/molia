@@ -915,8 +915,8 @@
     不 clamp，交给 `Curves` 前先 `clamp(0,1)`；收敛判定要用 `snapToEnd`（否则
     0.999… 会让 `progress < 1` 的分支残留）。
 88. **本地库已切到 v2 基线：旧 `molia_database.sqlite` 是有意不读的**：当前库文件
-    是 `molia_database_v2.sqlite`（fresh 基线 `schemaVersion = 1`；v2 新增播放
-    会话两表并保留 v1 数据）。更早的迁移链、旧 `drift_schemas` 快照已退役。
+    是 `molia_database_v2.sqlite`；fresh 基线从 `schemaVersion = 1` 起逐版增量迁移，
+    当前版本与表结构见 `docs/architecture.md` §3。更早的迁移链、旧 `drift_schemas` 快照已退役。
     旧库文件保留在磁盘上，但不打开、不迁移；不要为它补迁移、兼容分支或
     「检测旧库」逻辑，需要旧数据时走 JSON 备份 / 跨设备同步重建。
 89. **macOS 目标默认开 App Sandbox：网络 / 下载目录 / 自定义目录都靠 entitlements**：
@@ -964,7 +964,7 @@
     进度这类高频小字段只 UPDATE 单行 cursor，且只在动作时写，不要用定时器
     周期性落盘。旧 prefs 会话键要一次性删除，否则小设置写入仍会反复重写那
     2MB 大对象。
-94. **搜索渠道要跟随全局唯一当前渠道，而不是在构造期固定**：`main.dart` 在首帧前
+94. **搜索渠道要跟随全局唯一当前渠道，而不是在构造期固定**：组合根在首帧前
     构造 `SearchProvider`，那时通常只有 B 站同时具备搜索与原生取链，五个音乐平台
     要等 LX 脚本加载后才可搜索。`lib/providers/channel_selection.dart` 的
     `ChannelSelection` 是唯一渠道偏好（同时决定热榜 / 歌单与搜索），发现内容与

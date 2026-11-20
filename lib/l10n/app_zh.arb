@@ -90,7 +90,7 @@
   "coverSaveOriginal": "保存原图",
   "coverLoadFailed": "封面加载失败，请稍后重试",
   "settingsAdvancedTitle": "高级设置",
-  "settingsAdvancedSubtitle": "低频选项",
+  "settingsAdvancedSubtitle": "字体、封面、窗口与更新源",
   "settingsDownloadsAndCacheTitle": "下载与缓存",
   "settingsDownloadsAndCacheSubtitle": "保存位置、任务与清理",
   "settingsDataSaverQualitySubtitle": "省流开启时生效",
@@ -2707,5 +2707,31 @@
       }
     }
   },
-  "listeningSyncNeedsConsent": "需要重新确认发送内容"
+  "listeningSyncNeedsConsent": "需要重新确认发送内容",
+  "done": "完成",
+  "settingsAdvancedAppearanceTitle": "字体与封面",
+  "settingsAdvancedLibraryAddTitle": "曲库加入位置",
+  "settingsAdvancedGeneralTitle": "震动与应用名称",
+  "settingsAdvancedDesktopTitle": "窗口",
+  "settingsAdvancedDataSaverTitle": "省流音质",
+  "settingsAdvancedUpdateSourceTitle": "更新源与镜像",
+  "settingsStartupPageHiddenHint": "隐藏的入口要先在「底部导航」里打开，才能设为启动页",
+  "localDataQualityLockedHint": "删除下载后可重新选择音质",
+  "aiDjClearConfigConfirm": "清除后需要重新填写服务器地址、密钥与模型。",
+  "aiDjHistoryDeleteBody": "删除后这批记录不可恢复；已加入队列的歌曲不受影响。",
+  "shortcutsResetAllConfirm": "这一组里改过的快捷键会一次性恢复默认，无法撤销。",
+  "downloadsWaitingShowAll": "查看全部",
+  "downloadsWaitingCollapse": "收起",
+  "downloadsWaitingTotal": "等待中 {count} 首",
+  "@downloadsWaitingTotal": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lyricsPageTranslationSwitch": "应用内歌词 · 翻译",
+  "lyricsPageRomaSwitch": "应用内歌词 · 罗马音",
+  "lyricsSharedTranslationSwitch": "全部输出 · 翻译",
+  "lyricsSharedRomaSwitch": "全部输出 · 罗马音"
 }

@@ -31,6 +31,23 @@ bool favoritesCanHandleEscape({
   return true;
 }
 
+/// 此刻系统返回是否由收藏页接管（壳层 `BackClaims` 与页面 `PopScope` 同源）。
+///
+/// 多选 / 搜索 / 排序是页面的临时状态：返回应先退出它们，而不是让壳层
+/// 切目的地。隐藏页不接管（常驻挂载的登记不能截胡别的页面）。
+bool favoritesBackClaim({
+  required BuildContext context,
+  required bool selecting,
+  required bool searching,
+  required bool reordering,
+}) {
+  if (!(selecting || searching || reordering)) return false;
+  return context
+          .getInheritedWidgetOfExactType<ShellPageVisibility>()
+          ?.visible !=
+      false;
+}
+
 /// 桌面 Esc：退出选择模式；不接管时返回 false 放行。
 bool handleFavoritesEscapeKey(
   KeyEvent event, {

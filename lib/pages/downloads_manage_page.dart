@@ -52,6 +52,9 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   /// 维护动作（清扫 / 补发布 / 孤儿删除）单独占用，不影响下载操作。
   bool _busy = false;
 
+  /// 等待队列超过首屏行数时，是否展开显示全部（默认折叠，避免长列表）。
+  bool _showAllQueued = false;
+
   /// 下载根目录 Future：只在维护端口实例变化时重建，记录 / 任务变化不重新
   /// 解析。
   DownloadMaintenance? _rootMaintenance;
@@ -92,7 +95,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
           ),
           onSelected: (value) {
             if (value == 'cancelAll' && downloads != null) {
-              _cancelQueued(downloads);
+              unawaited(_cancelQueued(downloads));
             } else if (value == 'cleanupOrphans' && maintenance != null) {
               unawaited(_cleanupOrphans(maintenance));
             }
@@ -105,7 +108,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
               enabled:
                   !_busy &&
                   downloads != null &&
-                  downloads.taskGroups.queued.length > 1,
+                  downloads.taskGroups.queued.isNotEmpty,
               isDestructive: true,
             ),
             M3EMenuEntry(
@@ -242,7 +245,9 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
         final running = groups.running;
         final queued = groups.queued;
         final failed = groups.failed;
-        final visibleQueued = queued.take(_maxQueuedRows).toList();
+        final visibleQueued = _showAllQueued
+            ? queued
+            : queued.take(_maxQueuedRows).toList();
         final hiddenQueued = queued.length - visibleQueued.length;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -260,12 +265,22 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                 else ...[
                   for (final task in [...running, ...visibleQueued])
                     _taskTile(l10n, downloads, task),
-                  if (hiddenQueued > 0)
-                    SettingsInfoTile(
-                      key: const Key('downloadsWaitingMore'),
-                      icon: Icons.hourglass_bottom_rounded,
-                      title: l10n.downloadsWaitingMore(hiddenQueued),
-                      subtitle: '',
+                  if (queued.length > _maxQueuedRows)
+                    SettingsNavTile(
+                      key: const Key('downloadsWaitingToggle'),
+                      icon: _showAllQueued
+                          ? Icons.expand_less_rounded
+                          : Icons.expand_more_rounded,
+                      // 收起态说「还有 N 首」；展开后总数已经全部铺在列表中，
+                      // 标题改成「等待中 N 首」，不再重复「还有」的暗示。
+                      title: _showAllQueued
+                          ? l10n.downloadsWaitingTotal(queued.length)
+                          : l10n.downloadsWaitingMore(hiddenQueued),
+                      subtitle: _showAllQueued
+                          ? l10n.downloadsWaitingCollapse
+                          : l10n.downloadsWaitingShowAll,
+                      onTap: () =>
+                          setState(() => _showAllQueued = !_showAllQueued),
                     ),
                 ],
               ],
@@ -320,7 +335,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
             variant: M3EIconButtonVariant.standard,
             icon: const Icon(Icons.close_rounded),
             semanticLabel: l10n.downloadCancel,
-            onPressed: task.isActive
+            onPressed: _canCancel(task.status)
                 ? () => downloads.cancelTrack(task.track)
                 : null,
           ),
@@ -494,8 +509,45 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     }
   }
 
+  /// 等待 / 运行中都能行内取消；完成、失败（失败区有单独动作）与已取消
+  /// 不再提供取消键。
+  ///
+  /// 显式按状态判断而不是复用 `task.isActive`：这条规则的语义是「这个任务
+  /// 还能被撤销吗」，与队列内部「是否还占活动位」是两件事，后续状态增加时
+  /// 不会静默继承错误的可点态。
+  static bool _canCancel(DownloadTaskStatus status) =>
+      status == DownloadTaskStatus.queued ||
+      status == DownloadTaskStatus.running;
+
   /// 取消全部等待任务（运行中的由行内取消按钮处理）。
-  void _cancelQueued(DownloadManager downloads) {
+  ///
+  /// 一次取消几十条不可撤销，先确认；确认后再读一次队列，避免弹窗期间新
+  /// 入队的任务被漏掉或已开跑的任务被误算。
+  Future<void> _cancelQueued(DownloadManager downloads) async {
+    final l10n = AppLocalizations.of(context)!;
+    final queued = downloads.taskGroups.queued;
+    if (queued.isEmpty) return;
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final confirmed = await M3EDialog.show<bool>(
+      context,
+      dialog: M3EDialog(
+        title: l10n.downloadsCancelAll,
+        content: Text(l10n.downloadsWaitingMore(queued.length)),
+        actions: [
+          M3EButton.text(
+            onPressed: () => navigator.pop(false),
+            child: Text(l10n.cancel),
+          ),
+          settingsDestructiveAction(
+            context,
+            key: const Key('downloadsCancelAllConfirm'),
+            onPressed: () => navigator.pop(true),
+            label: l10n.downloadsCancelAll,
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     for (final task in downloads.taskGroups.queued) {
       downloads.cancelTrack(task.track);
     }
@@ -594,9 +646,10 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
             onPressed: () => navigator.pop(false),
             child: Text(l10n.cancel),
           ),
-          M3EButton.filled(
+          settingsDestructiveAction(
+            context,
             onPressed: () => navigator.pop(true),
-            child: Text(l10n.delete),
+            label: l10n.delete,
           ),
         ],
       ),

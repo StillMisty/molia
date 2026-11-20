@@ -422,7 +422,8 @@
 - **Cache**：`RequestCache`（single-flight + LRU 64 + TTL + 可注入时钟）。
 - **省流**：`DataSaverService`（services 层，默认关闭）持有「开启 + 音质上限 +
   封面省流」策略与 connectivity_plus 网络探测；仅在移动数据（`active`）时生效：
-  - 取链：main.dart 的 resolver 以 `effectiveQuality(preferred)` 套 `capQualityFor`
+  - 取链：组合根（`lib/app/bootstrap/local_playback_chain.dart`）的 resolver
+    以 `effectiveQuality(preferred)` 套 `capQualityFor`
     压低音质（缓存键含音质，切换网络自然重解析）；
   - 封面：`ArtworkCache.networkImageBlocked` 网关让 `ArtworkCacheManager.getFileStream`
     只读本地缓存（未命中抛 `ArtworkNetworkBlockedException` → 占位图标），
@@ -1106,8 +1107,8 @@
 `lib/services/download/download_service.dart` 是单曲下载的唯一编排实现
 （下载一首 / 一批：取链 / 缓存拷贝 / 分项 / 标签 / 发布 / 落库），
 `download_queue.dart` 是任务队列（严格串行 FIFO / 去重 / 取消 / 重试 /
-进度通道）；组合根（`main.dart`）注入取链 / 取词 / 取图 / 缓存 / 设置与省流
-上限；任务队列、命名 / 放置、任务产物、记录装配、记录写入、文件维护、提交
+进度通道）；组合根（`lib/app/bootstrap/local_data_stack.dart`）注入取链 / 取词 /
+取图 / 缓存 / 设置与省流上限；任务队列、命名 / 放置、任务产物、记录装配、记录写入、文件维护、提交
 日志与通知 presenter 是独立 module（见下）：
 
 - **下载请求**：`lib/services/download/download_requests.dart` 的
@@ -1200,8 +1201,8 @@
   默认目录，取消静默；Android / iOS 直接写默认目录并提示位置；对话框不可用时
   回退直接写。布局：音频在 `Molia/` 根下，备份 / 听歌统计进 `exports/`，海报
   PNG 进 `posters/`，封面原图进 `covers/`；导出文件不落库、不参与同步；
-- **缓存优先**：所选音质的完整音频缓存（`CacheService.audioCacheKeyForTrack`
-  同名且无 `.part`）命中时直接拷贝不触网；歌词经注入的 `LyricsService`（缓存 →
+- **缓存优先**：所选音质的完整音频缓存（`AudioCacheStore.hitPathForTrack` /
+  `keyForTrack`，不含 `.part`）命中时直接拷贝不触网；歌词经注入的 `LyricsService`（缓存 →
   原生取词 → 跨平台回退，与播放页同一链路）；封面经 `ArtworkCache.bytesOf`
   命中直读、未命中取图后 `putBytes` 回填；
 - **两档本地数据（ADR-0008）**：缓存（易失）与下载（持久）分开命名、合在一个
@@ -1229,7 +1230,7 @@
   （页内「写入中」）。启动清扫中断残留半成品；磁盘约定（命名 / 完整判据 /
   索引 / 清扫）的唯一实现在
   `lib/services/audio_cache_store.dart`（Audio cache store），`CacheService`
-  的同名静态方法是薄委托；缓存文件名写入侧（`SourceTrack.songId`）与读取侧
+  的同名实例方法是薄委托；缓存文件名写入侧（`SourceTrack.songId`）与读取侧
   （`TrackId.id`）必须同名（回归测试见
   `test/services/track_local_data_service_test.dart`）；
 - **落库**：drift `downloads` 表（`filePath` 可空——记录可以只含
@@ -1623,11 +1624,12 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   左侧 `M3ENavigationRail` **恒折叠** 96dp（`alwaysCollapse` + `alwaysShow`：
   无展开按钮、标签常显，改窗口宽不改变形态；有标签时选中指示器是包内
   56×32 胶囊，无标签会退化成 56×56 圆，横向展开在桌面大图标下很违和）。
-  底部播放条只在非播放页出现：宽度 ≥720 时 80dp（左：封面/歌名/收藏 · 中：上一首/
-  播放/暂停/下一首 + 可拖波浪进度 + 时间 · 右：播放模式 / 音量（图标 + 弹出
-  滑杆）/ 队列入口；模式按钮与播放页进度排同源 `PlaybackModeButton`，见
-  ADR-0030）；更窄（贴靠区 / 最小 480）换成 64dp 紧凑单行（封面/歌名/收藏 +
-  传输三键 + 队列，模式与音量留在播放页），不再把 720 内容等比缩成小字：
+  底部播放条只在非播放页出现：宽度 ≥720 时 80dp（左：封面/歌名（左/中约 4:6，
+  中区封顶 520）· 中：上一首/播放/暂停/下一首 + 可拖波浪进度 + 时间 · 右：收藏 /
+  播放模式 / 音量（图标 + 弹出滑杆）/ 队列入口；模式按钮与播放页进度排同源
+  `PlaybackModeButton`，见 ADR-0030）；更窄（贴靠区 / 最小 480）换成 64dp 紧凑
+  单行（封面/歌名 + 传输三键 + 收藏 + 队列，模式与音量留在播放页），不再把 720
+  内容等比缩成小字：
   播放页是沉浸主场，整条让位（瞬时，不做收起动画——进入方向的共享飞行以底栏
   封面为起点，动画会把起点拖走）。队列是播放页右栏的一栏：底栏队列入口 =
   跳播放页 + 切队列 tab（`NowPlayingController`），Esc 的可配置「关闭队列」
@@ -1675,6 +1677,13 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   壳层可配置命令**（用户把别的命令绑到 Esc 也一样让位）；登记方自己的按键处理器
   接 Esc（与登记同源、不依赖焦点位置；收藏页多选与音量弹层都是 `HardwareKeyboard`
   处理器）。
+  系统返回 / Esc 的层级：壳层用一个 `PopScope` 按「展开的播放器 → 收起；非家
+  目的地 → 回上一目的地；家页面收起态 → 允许系统退出」处理（桌面 Esc 复用同一
+  判定，播放页右栏停在队列时仍优先收队列）。`NowPlayingController.expanded` /
+  `activeTab` 是页面回写给壳层的只读状态，`collapse()` 是意图；页面级临时状态
+  （收藏多选 / 搜索 / 排序）经 `lib/services/back_claims.dart` 登记，壳层在
+  `BackClaims.any` 时让位——`ModalRoute.onPopInvokedWithResult` 会把一次返回
+  广播给路由上所有 `PopScope`，没有这层仲裁会同时退页面状态与目的地。
   内容版式（结构判据统一在 `AdaptiveLayoutScope`；结构档位仍只由宽度给出，
   高度只额外提供一个「短横屏」布尔 `isShortViewport`（窗口高 < 480），
   宽度来源仍是窗口宽 / 窗口宽 − 侧栏折叠宽，页面不自己量窗口）：宽屏表格列（`TrackRowModel` /
@@ -1737,7 +1746,8 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
 - 主题出口：`lib/theme/app_theme.dart::buildAppThemeData(ColorScheme)` 是唯一 ThemeData 构建处，
   并注册语义色扩展 `AppSemanticColors`（success/warning，固定色调、随亮度派生）；
   `ColorScheme` 派生唯一入口 `lib/theme/scheme_builder.dart::buildColorScheme`；
-  `main.dart` 经 `AnimatedSchemeBuilder`（450ms）平滑过渡方案色，两套主题同源重建。
+  `lib/app/shell/themed_app.dart` 经 `AnimatedSchemeBuilder`（450ms）平滑过渡方案色，
+  两套主题同源重建。
 - 封面取色：`lib/services/artwork_palette_service.dart` 是唯一取色入口（像素 → seed →
   双亮度方案 + LRU），由组合根监听 `PlaybackProvider` 触发（任何页面/后台切歌同一链路；
   省流时本地缓存可取色、未命中保持现色，无封面清除回退）。**任何模块不得二次提取
@@ -1853,10 +1863,14 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   曲库与存储 / 数据与备份 / 通用 / 桌面〔仅桌面〕/ 关于与更新），不设纯目录
   子页；同一域只在一张卡，卡内按「常用 → 少用、开关 → 入口」排序，低频长表单
   与低频旋钮下沉子页（底部导航、备份与恢复、高级设置；见 ADR-0027 / ADR-0033）。
-  首屏目标 ≤30 行：下载设置 / 下载管理 / 缓存管理合并为「下载与缓存」，通知·锁屏
+  首屏目标 ≤30 行：下载设置 / 下载管理 / 缓存管理合并为「下载与缓存」（下载模板 /
+  标签 / 通知与三类缓存保留策略都在该页），通知·锁屏
   与车机歌词并入「歌词与输出」；字体、默认封面、淡入淡出、智能随机、加入位置、
-  震动、应用名称、窗口记忆、省流音质、下载模板 / 标签 / 通知、缓存保留策略与
-  更新地址收进「高级设置」。副标题只写状态、后果、权限或不可逆提示，不解释实现。
+  震动、应用名称、窗口记忆、省流音质与更新地址收进「高级设置」。高级页分组按
+  内容命名（字体与封面 / 曲库加入位置 / 震动与应用名称 / 窗口 / 省流音质 /
+  更新源与镜像），不复用首屏一级卡名；「开关打开才出现」的从属行用
+  `SettingsReveal`（AnimatedSize，减弱动效零时长），卡内行形状只按可见行计算。
+  副标题只写状态、后果、权限或不可逆提示，不解释实现。
   各卡的可选子系统与平台能力（同步 / 统计 /
   歌词输出 / 托盘…）由
   `lib/widgets/settings/settings_section_availability.dart::SettingsSectionAvailability`
@@ -1876,7 +1890,10 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   短标签行可配逐项图标——选中段的对勾替换图标，M3E 选中形态；长标签行
   （Repeat all / Sequential / Single repeat）保持纯文字分段，图标或勾都会挤断文案）、
   ≥5 项或长文案 → Dropdown（必设 `fieldStyle.hintText`）、区间数值 → Slider、
-  大范围绝对量（缓存上限）→ Value + 输入弹层（带常用预设）；
+  大范围绝对量（缓存上限）→ Value + 输入弹层（带常用预设）；分段行在实测标签
+  放不下时自动降级 Dropdown（不再静默省略），宽屏能放下的 4 段仍保持分段；
+  确认层的危险动作走 `settingsDestructiveAction`（error 文字），取消是普通
+  text，危险动作不再占用 filled 主按钮；
   子页（音源 / 底部导航 / 备份与恢复 / 高级设置 / 歌词与输出〔含通知·锁屏 /
   车机蓝牙 / 高级〕/ 桌面歌词〔含高级〕/ AI 推歌 / 下载与缓存 / 统计 /
   同步 / 更新）经设置弹层壳

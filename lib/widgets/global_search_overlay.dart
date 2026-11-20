@@ -45,6 +45,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../pages/artist_page.dart';
 import '../providers/channel_selection.dart';
 import '../providers/discover_provider.dart';
 import '../providers/search_assist_controller.dart';
@@ -77,6 +78,18 @@ const Duration _openDuration = M3EMotion.short4;
 
 /// 内容入场缩放起点：只做「轻微」缩放，避免整块像弹窗一样飞进来。
 const double _enterScale = 0.97;
+
+/// 遮罩里点了歌手行：先关遮罩，等 route 退场后再由宿主打开歌手页。
+///
+/// 不在视图内部 pop 后立刻 `showArtistPage`：歌手页（桌面档侧边弹层）是
+/// 非不透明 route，遮罩的离场动画还没走完就叠上去时，搜索条会留在新页面
+/// 下面继续存在一帧；把请求作为 route 结果带出来，等 `_open()` 的 await
+/// 返回（遮罩已完全关闭）再推页，顺序才是真的「先关后开」。
+typedef _ArtistRequest = ({
+  String sourceKey,
+  String artistId,
+  String? fallbackName,
+});
 
 /// 壳层搜索遮罩宿主：静止位置占位盒 + 自建搜索视图（打开入口见
 /// [GlobalSearchController.focus]）。
@@ -201,7 +214,7 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
       return;
     }
     _setOpen(true);
-    await showGeneralDialog<void>(
+    final artistRequest = await showGeneralDialog<_ArtistRequest>(
       context: context,
       barrierDismissible: true,
       barrierLabel: _l10n(context).searchClose,
@@ -218,6 +231,16 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
     // 视图已被 pop（返回键 / Esc / 点结果行 / 点遮罩）：复位开合状态。
     if (!mounted) return;
     _setOpen(false);
+    // 歌手行：遮罩已经完全关闭，再打开歌手页（见 [_ArtistRequest]）。
+    final request = artistRequest;
+    if (request != null) {
+      await showArtistPage(
+        context,
+        request.sourceKey,
+        request.artistId,
+        fallbackName: request.fallbackName,
+      );
+    }
   }
 
   /// 出现 / 消失：内容淡入淡出 + 轻微缩放（scrim 由路由 barrier 自己随动画淡入）。
@@ -488,6 +511,21 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     _close();
   }
 
+  /// 歌手预览行：带着请求 pop 出遮罩，宿主在 route 完全关闭后再推歌手页。
+  Future<void> _requestArtist(
+    String sourceKey,
+    String artistId, {
+    String? fallbackName,
+  }) async {
+    if (_closing) return;
+    _closing = true;
+    Navigator.of(context).pop<_ArtistRequest>((
+      sourceKey: sourceKey,
+      artistId: artistId,
+      fallbackName: fallbackName,
+    ));
+  }
+
   /// 遮罩内按键：只有输入框聚焦时拦截 ↑↓；Ctrl+Enter 始终打开完整结果。
   ///
   /// 输入法组合中全部放行，不抢候选词选择 / 上屏。
@@ -620,6 +658,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
                                 onCorrectionTap: _assist.acceptCorrection,
                                 onOpenAllResults: _openAllResults,
                                 onPlayItem: _playItem,
+                                onOpenArtist: _requestArtist,
                               ),
                       ),
                       if (showHint)
@@ -658,6 +697,7 @@ class _GlobalSearchResults extends StatelessWidget {
     required this.session,
     required this.onOpenAllResults,
     required this.onPlayItem,
+    required this.onOpenArtist,
     this.correction,
     this.onCorrectionTap,
   });
@@ -665,6 +705,7 @@ class _GlobalSearchResults extends StatelessWidget {
   final SearchSession session;
   final VoidCallback onOpenAllResults;
   final void Function(SearchRow row) onPlayItem;
+  final OpenSearchArtist onOpenArtist;
   final String? correction;
   final VoidCallback? onCorrectionTap;
 
@@ -676,5 +717,6 @@ class _GlobalSearchResults extends StatelessWidget {
     onCorrectionTap: onCorrectionTap,
     onPlay: onPlayItem,
     onOpenAllResults: onOpenAllResults,
+    onOpenArtist: onOpenArtist,
   );
 }

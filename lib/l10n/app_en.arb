@@ -104,7 +104,7 @@
   "coverSaveOriginal": "Save original",
   "coverLoadFailed": "Couldn’t load the cover. Try again",
   "settingsAdvancedTitle": "Advanced settings",
-  "settingsAdvancedSubtitle": "Less-used options",
+  "settingsAdvancedSubtitle": "Font, cover, window, updates",
   "settingsDownloadsAndCacheTitle": "Downloads & cache",
   "settingsDownloadsAndCacheSubtitle": "Save location, tasks and cleanup",
   "settingsDataSaverQualitySubtitle": "Applies while Data Saver is on",
@@ -3124,5 +3124,31 @@
       }
     }
   },
-  "listeningSyncNeedsConsent": "Confirm what is sent again"
+  "listeningSyncNeedsConsent": "Confirm what is sent again",
+  "done": "Done",
+  "settingsAdvancedAppearanceTitle": "Font & cover",
+  "settingsAdvancedLibraryAddTitle": "Where added songs go",
+  "settingsAdvancedGeneralTitle": "Haptics & app name",
+  "settingsAdvancedDesktopTitle": "Window",
+  "settingsAdvancedDataSaverTitle": "Data saver quality",
+  "settingsAdvancedUpdateSourceTitle": "Update source & mirror",
+  "settingsStartupPageHiddenHint": "Turn a hidden entry on under Bottom navigation first, then you can set it as the start page.",
+  "localDataQualityLockedHint": "Delete the download to choose a different quality.",
+  "aiDjClearConfigConfirm": "You will need to enter the server address, key and model again.",
+  "aiDjHistoryDeleteBody": "This batch cannot be recovered after deletion. Songs already queued are not affected.",
+  "shortcutsResetAllConfirm": "Changed shortcuts in this group go back to defaults at once. This cannot be undone.",
+  "downloadsWaitingShowAll": "Show all",
+  "downloadsWaitingCollapse": "Collapse",
+  "downloadsWaitingTotal": "{count} waiting",
+  "@downloadsWaitingTotal": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lyricsPageTranslationSwitch": "In-app lyrics · Translation",
+  "lyricsPageRomaSwitch": "In-app lyrics · Romanization",
+  "lyricsSharedTranslationSwitch": "All outputs · Translation",
+  "lyricsSharedRomaSwitch": "All outputs · Romanization"
 }

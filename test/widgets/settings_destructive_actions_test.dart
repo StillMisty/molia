@@ -96,8 +96,13 @@ void main() {
       ],
     );
 
-    // 下载：保存位置 + 任务入口；缓存：三块用量与清理仍在同页。
+    // 下载：保存位置 + 模板 / 标签 + 任务入口；缓存：用量、保留策略与清理同页。
     expect(find.byKey(const Key('downloadSaveLocationItem')), findsOneWidget);
+    expect(
+      find.byKey(const Key('downloadFilenameTemplateItem')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('downloadEmbedTagsSwitch')), findsOneWidget);
     expect(
       find.byKey(const Key('settingsDownloadsManageItem')),
       findsOneWidget,
@@ -105,6 +110,8 @@ void main() {
     expect(find.byKey(const Key('cacheClearAudioItem')), findsOneWidget);
     expect(find.byKey(const Key('cacheClearLyricsItem')), findsOneWidget);
     expect(find.byKey(const Key('cacheClearArtworkItem')), findsOneWidget);
+    expect(find.text('歌词保留时长'), findsOneWidget);
+    expect(find.text('封面数量上限'), findsOneWidget);
   });
 
   testWidgets('下载管理的批量破坏动作只在顶栏 ⋮ 里', (tester) async {

@@ -13,7 +13,7 @@
 Windows `EmptyWorkingSet`），让释放体现在系统观测上。实测：Linux 关到托盘
 瞬间 RSS 下降 63–73 MB（98.9 MB 图片缓存场景）；Windows 播放中专用工作集
 201.7 → 14.6 MB（0.3s），随后稳定在 107–122 MB（旧构建约 214 MB），暂停态
-161.5 → 4.8 MB。mpv 解复用缓存上限从 64 MiB 降到 32 MiB。
+161.5 → 4.8 MB。mpv 解复用缓存上限从 64 MiB 降到 16 MiB（demux + back 各 8 MiB）。
 
 ## 2. 背景：托盘态本来在占什么
 
@@ -40,7 +40,7 @@ Windows `EmptyWorkingSet`），让释放体现在系统观测上。实测：Linu
 | `lib/services/playback_observer.dart` | 后台期跳过封面预取；恢复后等重建帧落定补一次 |
 | `lib/services/artwork_palette_service.dart` | `ArtworkThemeSync` 后台期只记 URL 不取色；恢复后补一次且同 URL 不重复应用 |
 | `lib/app/tray_dormant_gate.dart` | 托盘隐藏卸载整棵 `MaterialApp`（导航 / 常驻页面 / 弹层），恢复重建 |
-| `lib/playback/desktop_audio_init_io.dart` | `JustAudioMediaKit.bufferSize = 16 MiB`（上限 64 → 32 MiB） |
+| `lib/playback/desktop_audio_init_io.dart` | `JustAudioMediaKit.bufferSize = 8 MiB`（demux + back 合计约 16 MiB） |
 
 **为什么还要平台 trim**：清空图片缓存只是把像素 `free` 回 allocator，空闲页
 留在 arena / 工作集里不会自动归还内核，系统观测（RSS / 任务管理器）看不到
@@ -56,7 +56,7 @@ allocator 与 Dart 堆不受它影响。
 缓存**（通常短暂且要跟手恢复），只停后台解码类工作。
 
 mpv 缓冲的取舍：只影响**当前流播曲目**的内存缓冲（弱网抗抖动 / 回看重取），
-16 MiB ≈ 320kbps 6.7 分钟、无损 ~2 分钟；下载与下一首预取是独立 HTTP 直写
+8 MiB ≈ 320kbps 3.3 分钟、无损 ~1 分钟；下载与下一首预取是独立 HTTP 直写
 磁盘，不受影响。缓存过的曲目按 `file://` 本地文件播放，缓存上限本来就被文件
 大小封顶。
 
@@ -201,7 +201,8 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
 - `RequestCache` 增加 TTL 清理 / `clear()`；专辑 / 歌手上限 64→16、评论 96→32。
 - `PlaybackSessionCoordinator.stopPlayback()` 清 `_lastWrittenSession`；
   `PlaybackEngine` 在队列 revision 变化时裁剪 `_trackCache` 旧身份。
-- 组合根在 `main.dart` 注册这些 releaser；AppMemoryManager 不反向依赖 provider。
+- 组合根在 `lib/app/bootstrap/wiring/memory_wiring.dart` 注册这些 releaser；
+  AppMemoryManager 不反向依赖 provider。
 
 验证：`test/services/memory/app_memory_manager_test.dart` 等 17 个新增用例覆盖
 「托盘触发 / 最小化不触发 / 快速可见往返跳过 / 在途读取作废 / 停止播放清队列引用」。
@@ -219,7 +220,7 @@ raw payload / 多列表详情场景请按 §4 的隔离 HOME + 真实库复测�
 
 | 位置 | 行为 |
 | --- | --- |
-| `lib/main.dart` | `ensureInitialized()` 后、`AppMemoryManager` 首次访问前把全局 `imageCache.maximumSizeBytes` 显式设为 64 MiB（`kFullImageCacheLimitBytes`）；注册 `WidgetsBindingObserver.didHaveMemoryPressure` |
+| `lib/app/bootstrap/platform_bootstrap.dart` + `lib/app/bootstrap/wiring/memory_wiring.dart` | 启动时、`AppMemoryManager` 首次访问前把全局 `imageCache.maximumSizeBytes` 显式设为 64 MiB（`kFullImageCacheLimitBytes`）；注册 `WidgetsBindingObserver.didHaveMemoryPressure` |
 | `lib/services/memory/app_memory_manager.dart` | 完整上限 `kFullImageCacheLimitBytes = 64 MiB`，托盘 / 后台保持 16 MiB；`onAppBackground()` / `onAppForeground()` 供移动端生命周期使用（不写 `AppPresence`）：退后台 30s 后 `imageCache.clear()`（**不** `clearLiveImages()`）+ 上限压到 16 MiB，回前台取消计时并恢复 64 MiB；token + 重复事件幂等 |
 | 同上 | `addLowMemoryReleaser()` / `onMemoryPressure()`：只有系统低内存才释放浏览 / 搜索 / 目录缓存；Android 的 `TRIM_MEMORY_UI_HIDDEN` 也会映射成 `didHaveMemoryPressure`，用 1s 去抖 + 退后台过渡窗口取消，避免每次切后台清列表 |
 | `lib/providers/library_provider.dart` | `_tracksByPlaylist` 改 LRU，上限 5 个列表；`playlistTracksView` / `ensurePlaylistTracks` 触碰最近使用，淘汰时跳过当前展示列表；`releaseBrowseCaches()` 语义不变（全清） |
@@ -274,7 +275,7 @@ pending / keepAlive，当前展示的封面不受影响。
 | 位置 | 行为 |
 | --- | --- |
 | `lib/services/memory/app_memory_manager.dart` | 托盘隐藏完成后再延迟 `kTrayLateTrimDelay = 2s` 调一次平台 trim：第一次发生在原生窗口 hide 之前，窗口 / 引擎收尾 touch 的页需要再归还一次；恢复或再次隐藏用 token 取消。`releaseToOs` 可注入，便于测试计数。托盘内暂停稳定 10s 后再补一次 trim（`scheduleTrayPausedTrim`），播放恢复 / 窗口可见时取消 |
-| `lib/main.dart` + `lib/data/sync/**` | 托盘 / 低内存 releaser 增加：统计导出缓存、同步轮次 `_lastEnvelope` / 收集 / 聚合缓存、统计 / 播放列表 / 历史 / 封面适配器的上轮记录缓存、内置平台响应 / 原生取词 / 取图缓存、封面补取缓存。完整备份导出后也立即释放这些缓存；在途轮次不释放，下一次 collect 按需重建 |
+| `lib/app/bootstrap/wiring/memory_wiring.dart` + `lib/data/sync/**` | 托盘 / 低内存 releaser 增加：统计导出缓存、同步轮次 `_lastEnvelope` / 收集 / 聚合缓存、统计 / 播放列表 / 历史 / 封面适配器的上轮记录缓存、内置平台响应 / 原生取词 / 取图缓存、封面补取缓存。完整备份导出后也立即释放这些缓存；在途轮次不释放，下一次 collect 按需重建 |
 | `lib/sources/builtin/**`、`lib/services/covers/cover_backfill_service.dart` | 新增幂等 `clearCache()`：只清已完成结果，不动平台 / 脚本注册表；在途请求的 identity 校验阻止旧结果写回 |
 | `lib/widgets/ai_dj_carousel.dart` | AI 推荐卡封面按 `256 × DPR` 解码，不再按原图；布局仍由 carousel 槽位决定 |
 | `lib/app/tray_dormant_gate.dart` | 改为 `childBuilder`：托盘隐藏期间不构造整棵 `MaterialApp` 配置（原先 child 实参在 build 前已求值） |
@@ -323,7 +324,7 @@ pending / keepAlive，当前展示的封面不受影响。
 | 位置 | 行为 |
 | --- | --- |
 | `lib/services/memory/app_memory_manager.dart` | 新增 `addLowMemoryFlusher()`；真实低内存去抖通过后，先并发启动现场保存，再释放浏览 / 搜索 / 目录缓存。单个保存失败只记日志，不阻塞其它保存与缓存清理；UI_HIDDEN 伪低内存仍在退后台时取消，不白写盘 |
-| `lib/main.dart` | 注册唯一保存入口：`suspendPlaybackSession()` + `playStatisticsService.flush()`。与缓存 releaser 分开注册，managers 层不反向依赖 playback / library 类型 |
+| `lib/app/bootstrap/wiring/memory_wiring.dart` | 注册唯一保存入口：`suspendPlaybackSession()` + `playStatisticsService.flush()`。与缓存 releaser 分开注册，managers 层不反向依赖 playback / library 类型 |
 | `test/services/memory/app_memory_manager_test.dart` | 覆盖「去抖后才保存」「伪低内存不保存」「单个保存抛错不影响其它保存与缓存释放」 |
 
 为什么不接金标联盟（ITGSA）的 `TRIM` / `KILL` 广播：那套协议要求 3s 内通过 Binder 回执，主要服务内存大户与商店评测；Molia 实测 PSS 约 300–400MB，离 Android 17 的 per-app 上限（4GB 设备前台约 2GB）很远。这里只复用 Android 官方 `onTrimMemory` → `didHaveMemoryPressure` 语义：真实低内存时顺手把会话与统计落盘，成本一次 prefs / DB 写，不做厂商分叉、不主动杀进程。

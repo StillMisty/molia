@@ -136,123 +136,125 @@ class _SourcesPageState extends State<SourcesPage> {
     final hasActive = provider.hasActiveSource;
     final alert = provider.lastUpdateAlert;
 
-    final Widget statusRow = CardListSurface(
-      position: SettingsRowPosition.of(context),
-      padding: kSettingsRowPadding,
-      onPressed: null,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SettingsTileIcon(
-            icon: hasActive
-                ? Icons.check_circle_rounded
-                : Icons.error_outline_rounded,
-            containerColor: hasActive
-                ? semantic.successContainer
-                : scheme.errorContainer,
-            foregroundColor: hasActive
-                ? semantic.onSuccessContainer
-                : scheme.onErrorContainer,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        active == null
-                            ? l10n.sourcesNoneActive
-                            : l10n.sourcesActiveSource(
-                                active.name,
-                                active.version,
-                              ),
-                        style: m3e.typeScale.bodyLarge.copyWith(
-                          color: scheme.onSurface,
-                        ),
-                      ),
-                    ),
-                    if (provider.isActivating) ...[
-                      const SizedBox(width: kSettingsSmallSpacing),
-                      const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: M3EProgressIndicator.circular(
-                          size: 18,
-                          strokeWidth: 2,
-                        ),
-                      ),
-                      const SizedBox(width: kSettingsSmallSpacing),
-                      Text(
-                        l10n.sourcesActivating,
-                        style: m3e.typeScale.bodySmall.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                if (provider.activeError != null)
-                  Text(
-                    l10n.sourcesActivationFailed(provider.activeError!),
-                    style: m3e.typeScale.bodySmall.copyWith(
-                      color: scheme.error,
-                    ),
-                  ),
-                // 引擎已被熔断（失败后自动停在 failed）时给一个立即重试入口：
-                // 等自动冷却可能还要几十秒，用户刚换好网络时应当能直接再试。
-                // 只在有已保存的激活脚本时出现：脚本不存在之类的错误重试无意义。
-                if (provider.activeError != null &&
-                    provider.activeScriptId != null)
-                  Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: M3EButton.icon(
-                      key: const Key('sourcesRetryEngine'),
-                      onPressed: _retryingEngine || provider.isActivating
-                          ? null
-                          : () => unawaited(_retryEngine(provider)),
-                      style: M3EButtonStyle.text,
-                      icon: _retryingEngine
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: M3EProgressIndicator.circular(
-                                size: 16,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Icon(Icons.refresh_rounded),
-                      label: Text(l10n.retry),
-                    ),
-                  ),
-                if (active != null && active.author.isNotEmpty)
-                  Text(
-                    l10n.sourcesAuthor(active.author),
-                    style: m3e.typeScale.bodySmall.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                if (sources.isNotEmpty) ...[
-                  const SizedBox(height: kSettingsSmallSpacing),
-                  Wrap(
-                    spacing: kSettingsSmallSpacing,
-                    runSpacing: kSettingsSmallSpacing,
-                    children: [
-                      for (final decl in sources)
-                        M3EChip(
-                          type: M3EChipType.assist,
-                          label: '${decl.name} · ${decl.actions.join('/')}',
-                        ),
-                    ],
-                  ),
-                ],
-              ],
+    final Widget statusRow = Builder(
+      builder: (context) => CardListSurface(
+        position: SettingsRowPosition.of(context),
+        padding: kSettingsRowPadding,
+        onPressed: null,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SettingsTileIcon(
+              icon: hasActive
+                  ? Icons.check_circle_rounded
+                  : Icons.error_outline_rounded,
+              containerColor: hasActive
+                  ? semantic.successContainer
+                  : scheme.errorContainer,
+              foregroundColor: hasActive
+                  ? semantic.onSuccessContainer
+                  : scheme.onErrorContainer,
             ),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          active == null
+                              ? l10n.sourcesNoneActive
+                              : l10n.sourcesActiveSource(
+                                  active.name,
+                                  active.version,
+                                ),
+                          style: m3e.typeScale.bodyLarge.copyWith(
+                            color: scheme.onSurface,
+                          ),
+                        ),
+                      ),
+                      if (provider.isActivating) ...[
+                        const SizedBox(width: kSettingsSmallSpacing),
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: M3EProgressIndicator.circular(
+                            size: 18,
+                            strokeWidth: 2,
+                          ),
+                        ),
+                        const SizedBox(width: kSettingsSmallSpacing),
+                        Text(
+                          l10n.sourcesActivating,
+                          style: m3e.typeScale.bodySmall.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (provider.activeError != null)
+                    Text(
+                      l10n.sourcesActivationFailed(provider.activeError!),
+                      style: m3e.typeScale.bodySmall.copyWith(
+                        color: scheme.error,
+                      ),
+                    ),
+                  // 引擎已被熔断（失败后自动停在 failed）时给一个立即重试入口：
+                  // 等自动冷却可能还要几十秒，用户刚换好网络时应当能直接再试。
+                  // 只在有已保存的激活脚本时出现：脚本不存在之类的错误重试无意义。
+                  if (provider.activeError != null &&
+                      provider.activeScriptId != null)
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: M3EButton.icon(
+                        key: const Key('sourcesRetryEngine'),
+                        onPressed: _retryingEngine || provider.isActivating
+                            ? null
+                            : () => unawaited(_retryEngine(provider)),
+                        style: M3EButtonStyle.text,
+                        icon: _retryingEngine
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: M3EProgressIndicator.circular(
+                                  size: 16,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.refresh_rounded),
+                        label: Text(l10n.retry),
+                      ),
+                    ),
+                  if (active != null && active.author.isNotEmpty)
+                    Text(
+                      l10n.sourcesAuthor(active.author),
+                      style: m3e.typeScale.bodySmall.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  if (sources.isNotEmpty) ...[
+                    const SizedBox(height: kSettingsSmallSpacing),
+                    Wrap(
+                      spacing: kSettingsSmallSpacing,
+                      runSpacing: kSettingsSmallSpacing,
+                      children: [
+                        for (final decl in sources)
+                          M3EChip(
+                            type: M3EChipType.assist,
+                            label: '${decl.name} · ${decl.actions.join('/')}',
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
 
@@ -261,44 +263,46 @@ class _SourcesPageState extends State<SourcesPage> {
       children: [
         statusRow,
         if (alert != null)
-          CardListSurface(
-            position: SettingsRowPosition.of(context),
-            padding: kSettingsRowPadding,
-            // 「有可用更新」是提醒语义：统一 warning 容器色。
-            color: semantic.warningContainer,
-            onPressed: null,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      size: 20,
-                      color: semantic.onWarningContainer,
-                    ),
-                    const SizedBox(width: kSettingsSmallSpacing),
-                    Expanded(
-                      child: Text(
-                        l10n.sourcesUpdateAlertTitle,
-                        style: m3e.typeScale.titleSmall.copyWith(
-                          color: semantic.onWarningContainer,
+          Builder(
+            builder: (context) => CardListSurface(
+              position: SettingsRowPosition.of(context),
+              padding: kSettingsRowPadding,
+              // 「有可用更新」是提醒语义：统一 warning 容器色。
+              color: semantic.warningContainer,
+              onPressed: null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 20,
+                        color: semantic.onWarningContainer,
+                      ),
+                      const SizedBox(width: kSettingsSmallSpacing),
+                      Expanded(
+                        child: Text(
+                          l10n.sourcesUpdateAlertTitle,
+                          style: m3e.typeScale.titleSmall.copyWith(
+                            color: semantic.onWarningContainer,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  alert.log,
-                  style: m3e.typeScale.bodySmall.copyWith(
-                    color: semantic.onWarningContainer,
+                    ],
                   ),
-                ),
-                const SizedBox(height: kSettingsSmallSpacing),
-                _buildUpdateAlertActions(context, l10n, provider, active),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    alert.log,
+                    style: m3e.typeScale.bodySmall.copyWith(
+                      color: semantic.onWarningContainer,
+                    ),
+                  ),
+                  const SizedBox(height: kSettingsSmallSpacing),
+                  _buildUpdateAlertActions(context, l10n, provider, active),
+                ],
+              ),
             ),
           ),
       ],
@@ -664,9 +668,10 @@ class _SourcesPageState extends State<SourcesPage> {
             onPressed: () => navigator.pop(false),
             child: Text(l10n.cancel),
           ),
-          M3EButton.filled(
+          settingsDestructiveAction(
+            context,
             onPressed: () => navigator.pop(true),
-            child: Text(l10n.delete),
+            label: l10n.delete,
           ),
         ],
       ),

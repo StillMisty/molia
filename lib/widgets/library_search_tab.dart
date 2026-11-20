@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -7,9 +8,11 @@ import '../providers/ai_dj_provider.dart';
 import '../providers/discover_provider.dart';
 import '../providers/search_assist_controller.dart';
 import '../providers/search_provider.dart';
+import '../theme/motion_policy.dart';
 import 'adaptive_layout.dart';
 import 'ai_dj_carousel.dart';
 import 'channel_search_bar.dart';
+import 'cross_fade_swap.dart';
 import 'discover_layout.dart';
 import 'empty_state.dart';
 import 'search_assist_panel.dart';
@@ -156,17 +159,35 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
               ),
               // 浏览态：AI 推歌推荐流（搜索激活时让位给结果区；短横屏不渲染，
               // 见上方 shortViewport 的纵向预算说明）。
-              if (!isSearchActive && !shortViewport) const AiDjCarousel(),
+              //
+              // 用 AnimatedSize 收起而不是直接拔掉：轮播占 198 + 间距，搜索激活
+              // 时整块突然消失会让下方输入区向上跳约 256dp。减弱动效时
+              // `effectDurationOf` 归零，等价于原来的硬切。
+              if (!shortViewport)
+                AnimatedSize(
+                  duration: effectDurationOf(context, M3EMotion.short4),
+                  curve: M3EMotion.emphasized,
+                  alignment: Alignment.topCenter,
+                  clipBehavior: Clip.hardEdge,
+                  child: isSearchActive
+                      ? const SizedBox(width: double.infinity)
+                      : const AiDjCarousel(),
+                ),
               Expanded(
                 child: RepaintBoundary(
-                  child: isSearchActive
-                      ? SearchSection(
-                          controller: widget.controller,
-                          assist: _assist,
-                        )
-                      : (aiDjEnabled && !shortViewport
-                            ? const SizedBox.shrink()
-                            : _buildIdle(context)),
+                  // 浏览态 ↔ 结果态是整块内容换身份：CrossFadeSwap 保留旧层
+                  // 做离场，不会出现中间一帧空白。
+                  child: CrossFadeSwap(
+                    value: isSearchActive,
+                    child: isSearchActive
+                        ? SearchSection(
+                            controller: widget.controller,
+                            assist: _assist,
+                          )
+                        : (aiDjEnabled && !shortViewport
+                              ? const SizedBox.shrink()
+                              : _buildIdle(context)),
+                  ),
                 ),
               ),
             ],

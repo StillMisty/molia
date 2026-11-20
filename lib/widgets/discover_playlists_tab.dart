@@ -64,6 +64,13 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
   String _query = '';
   late final PagedListController<DiscoverPlaylist> _paged;
 
+  /// 输入防抖：停止输入 300ms 后才提交搜索（与搜索会话同一节奏）。
+  ///
+  /// 直接每次按键都发请求会把分页控制器打成一串过期代际；回车仍然立即提交。
+  Timer? _searchDebounce;
+
+  static const Duration _searchDebounceDelay = Duration(milliseconds: 300);
+
   /// 当前已加载数据的平台（切换平台时重置并重载）。
   String? _loadedSourceKey;
 
@@ -116,6 +123,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _paged.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -133,6 +141,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     if (!provider.hasDiscoverSource) return;
     if (_loadedSourceKey == provider.channelKey) return;
     _loadedSourceKey = provider.channelKey;
+    _searchDebounce?.cancel();
     _hotTags = const [];
     _tagCategories = const [];
     _selectedTag = '';
@@ -168,24 +177,37 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
   /// 失败态；它自身在 `isLoading` 时会早退（重复下拉不会叠加请求）。
   Future<void> _refresh() => Future.wait([_loadTags(), _paged.loadFirstPage()]);
 
+  /// 筛选条件的唯一提交入口：搜索词与标签互斥，chip / 输入框只反映这里
+  /// 写入的状态，避免出现「chip 显示标签、列表却是搜索结果」的撒谎。
+  void _applyFilters({required String query, required String tagId}) {
+    final nextQuery = query.trim();
+    if (nextQuery == _query && tagId == _selectedTag) return;
+    _searchDebounce?.cancel();
+    // 互斥的另一半被清空时输入框也跟着清：选标签后不能还留着一串旧搜索词。
+    if (nextQuery.isEmpty && _searchController.text.isNotEmpty) {
+      _searchController.clear();
+    }
+    setState(() {
+      _query = nextQuery;
+      _selectedTag = tagId;
+    });
+    _reload();
+  }
+
   void _selectTag(String tagId) {
     if (_selectedTag == tagId) return;
-    setState(() => _selectedTag = tagId);
-    _reload();
+    _applyFilters(query: '', tagId: tagId);
   }
 
   void _submitSearch(String value) {
-    final query = value.trim();
-    if (query == _query) return;
-    setState(() => _query = query);
-    _reload();
+    // 提交搜索即放弃标签筛选（两者互斥）。
+    _applyFilters(query: value, tagId: '');
   }
 
   void _clearSearch() {
+    _searchDebounce?.cancel();
     _searchController.clear();
-    if (_query.isEmpty) return;
-    setState(() => _query = '');
-    _reload();
+    _applyFilters(query: '', tagId: _selectedTag);
   }
 
   void _openPlaylist(DiscoverPlaylist playlist) {
@@ -391,8 +413,20 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                                     onPressed: _openLinkDialog,
                                   ),
                                   onChanged: (value) {
-                                    // 提交式搜索：仅当清空（清除键或手动删空）时回到全部歌单。
-                                    if (value.trim().isEmpty) _clearSearch();
+                                    // 输入防抖：停止输入 300ms 后提交；
+                                    // 清空（清除键或手动删空）立即回到全部。
+                                    _searchDebounce?.cancel();
+                                    if (value.trim().isEmpty) {
+                                      _clearSearch();
+                                      return;
+                                    }
+                                    _searchDebounce = Timer(
+                                      _searchDebounceDelay,
+                                      () {
+                                        if (!mounted) return;
+                                        _submitSearch(value);
+                                      },
+                                    );
                                   },
                                   onSubmitted: _submitSearch,
                                 ),

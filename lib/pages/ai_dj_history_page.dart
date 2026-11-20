@@ -18,6 +18,7 @@ import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
 import '../widgets/ai_dj_shared.dart';
 import '../widgets/card_list_surface.dart';
+import '../widgets/settings/settings_tiles.dart';
 
 class AiDjHistoryPage extends StatefulWidget {
   const AiDjHistoryPage({super.key});
@@ -39,7 +40,17 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
     }
     setState(() => _expanded.add(id));
     if (_batches.containsKey(id) || _loading.contains(id)) return;
-    setState(() => _loading.add(id));
+    await _loadBatch(id, provider);
+  }
+
+  /// 展开时的单批加载；失败只记这一批，重试也走这里（不触发重新生成）。
+  Future<void> _loadBatch(String id, AiDjProvider provider) async {
+    if (_loading.contains(id)) return;
+    setState(() {
+      _loading.add(id);
+      _failed.remove(id);
+      _batches.remove(id);
+    });
     final batch = await provider.loadHistoryBatch(id);
     if (!mounted) return;
     setState(() {
@@ -47,8 +58,46 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
       if (batch == null) {
         _failed.add(id);
       } else {
+        _failed.remove(id);
         _batches[id] = batch;
       }
+    });
+  }
+
+  /// 删除单批前先确认：历史页删除不可撤销，误触会丢整批记录。
+  Future<void> _deleteBatch(
+    AiDjHistoryEntry entry,
+    AiDjProvider provider,
+  ) async {
+    final l10n = AppLocalizations.of(context)!;
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final confirmed = await M3EDialog.show<bool>(
+      context,
+      dialog: M3EDialog(
+        title: l10n.aiDjHistoryDelete,
+        content: Text(l10n.aiDjHistoryDeleteBody),
+        actions: [
+          M3EButton.text(
+            onPressed: () => navigator.pop(false),
+            child: Text(l10n.cancel),
+          ),
+          settingsDestructiveAction(
+            context,
+            key: Key('aiDjHistoryDeleteConfirm_${entry.id}'),
+            onPressed: () => navigator.pop(true),
+            label: l10n.delete,
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await provider.deleteHistoryBatch(entry.id);
+    if (!mounted) return;
+    setState(() {
+      _expanded.remove(entry.id);
+      _batches.remove(entry.id);
+      _failed.remove(entry.id);
+      _loading.remove(entry.id);
     });
   }
 
@@ -65,10 +114,11 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
             onPressed: () => navigator.pop(false),
             child: Text(l10n.cancel),
           ),
-          M3EButton.filled(
+          settingsDestructiveAction(
+            context,
             key: const Key('aiDjHistoryClearConfirm'),
             onPressed: () => navigator.pop(true),
-            child: Text(l10n.aiDjHistoryClear),
+            label: l10n.aiDjHistoryClear,
           ),
         ],
       ),
@@ -267,7 +317,7 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
                 semanticLabel: l10n.aiDjHistoryDelete,
                 onPressed: provider.isBusy
                     ? null
-                    : () => unawaited(provider.deleteHistoryBatch(entry.id)),
+                    : () => unawaited(_deleteBatch(entry, provider)),
               ),
             ],
           ),
@@ -290,18 +340,36 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
                 child: Center(child: M3ELoadingIndicator()),
               )
             else if (_failed.contains(entry.id))
-              Text(
-                l10n.aiDjHistoryLoadFailed,
-                style: context.typeScale.bodySmall.copyWith(
-                  color: scheme.error,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      l10n.aiDjHistoryLoadFailed,
+                      style: context.typeScale.bodySmall.copyWith(
+                        color: scheme.error,
+                      ),
+                    ),
+                  ),
+                  M3EButton.text(
+                    key: Key('aiDjHistoryRetry_${entry.id}'),
+                    onPressed: provider.isBusy
+                        ? null
+                        : () => unawaited(_loadBatch(entry.id, provider)),
+                    child: Text(l10n.retry),
+                  ),
+                ],
               )
             else if (batch != null)
-              for (final item in batch.items) ...[
+              for (final (index, item) in batch.items.indexed)
                 M3ETappable(
                   onTap: provider.queueBusy
                       ? null
-                      : () => unawaited(provider.playHistoryBatch(entry.id)),
+                      : () => unawaited(
+                          provider.playHistoryBatch(
+                            entry.id,
+                            startIndex: index,
+                          ),
+                        ),
                   enabled: !provider.queueBusy,
                   mouseCursor: SystemMouseCursors.click,
                   semanticButton: true,
@@ -335,7 +403,6 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
                         ),
                       ),
                 ),
-              ],
           ],
         ],
       ),

@@ -79,14 +79,14 @@ class _LyricsContentSettingsPageState extends State<LyricsContentSettingsPage>
         children: [
           SettingsSwitchTile(
             icon: Icons.translate_rounded,
-            title: l10n.lyricsDisplayTranslation,
+            title: l10n.lyricsPageTranslationSwitch,
             subtitle: l10n.lyricsPageTranslationSubtitle,
             value: settings.pageTranslationEnabled,
             onChanged: settings.setPageTranslationEnabled,
           ),
           SettingsSwitchTile(
             icon: Icons.record_voice_over_rounded,
-            title: l10n.lyricsDisplayRoma,
+            title: l10n.lyricsPageRomaSwitch,
             subtitle: l10n.lyricsPageRomaSubtitle,
             value: settings.pageRomaEnabled,
             onChanged: settings.setPageRomaEnabled,

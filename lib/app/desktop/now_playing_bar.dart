@@ -1,12 +1,14 @@
 /// 桌面骨架的常驻底部播放条（80dp）。
 ///
-/// 左：封面 + 歌名/作者 + 收藏（点击进播放页，封面与播放页共享元素飞行）；
+/// 左：封面 + 歌名/作者（点击进播放页，封面与播放页共享元素飞行）；
 /// 中：上一首 / 播放暂停 / 下一首 + 可拖波浪进度 + 时间；
-/// 右：播放模式 + 音量（图标 + 弹出滑杆）+ 队列。
+/// 右：收藏 + 播放模式 + 音量（图标 + 弹出滑杆）+ 队列。
 ///
 /// 只在非播放页出现：播放页是沉浸主场，整条由壳层让位（见
 /// `app/desktop/desktop_shell.dart` 的 `bottomNavigationBar`）。
 library;
+
+import 'dart:math' as math;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -57,6 +59,10 @@ class DesktopNowPlayingBar extends StatelessWidget {
   /// 紧凑单行（[compactBarHeight]），不再把整条内容等比缩成小字。
   static const double _minComfortableWidth = 720;
 
+  /// 中区（传输 + 进度排）宽度上限：宽屏时再宽也换不来更好读的进度条，
+  /// 余量还给左区标题（见 [build] 的 4:5 分配）。
+  static const double _maxCenterWidth = 520;
+
   /// 顶栏 ↔ 播放页共享元素控制器：封面锚点与「播放页激活时收起封面」。
   final PlayerMorphController morph;
 
@@ -73,13 +79,39 @@ class DesktopNowPlayingBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
+          // 左 / 中按约 4:6 分配除右区之外的宽度，且左区至少 200；中区封顶
+          // 520 后剩余宽度全部给左区（宽屏标题不再被固定比例压窄）。
           Expanded(
-            flex: 3,
-            child: _TrackSection(morph: morph, onOpenPlayer: onOpenPlayer),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // 中区优先拿 60%，但左区至少留 200（封面 48 + 间距 12 +
+                // 标题约 140）；宽屏再由 [_maxCenterWidth] 封顶，余量回给标题。
+                final centerWidth = math.max(
+                  0.0,
+                  math.min(
+                    math.min(
+                      constraints.maxWidth * 0.6,
+                      constraints.maxWidth - 200,
+                    ),
+                    _maxCenterWidth,
+                  ),
+                );
+                return Row(
+                  children: [
+                    SizedBox(
+                      width: constraints.maxWidth - centerWidth,
+                      child: _TrackSection(
+                        morph: morph,
+                        onOpenPlayer: onOpenPlayer,
+                      ),
+                    ),
+                    SizedBox(width: centerWidth, child: const _BarControls()),
+                  ],
+                );
+              },
+            ),
           ),
-          // 中区（传输三键 + 进度排）吃右区之外的余量：右区按内容宽贴右缘，
-          // 省下的空白全归进度排——进度条是这条底栏上唯一需要宽度的控件。
-          const Expanded(flex: 6, child: _BarControls()),
+          // 右区按内容宽贴右缘：中区封顶后余量给左区，不再从进度排身上扣。
           _BarActions(onOpenQueue: onOpenQueue),
         ],
       ),
@@ -112,8 +144,10 @@ class DesktopNowPlayingBar extends StatelessWidget {
                       variant: M3EIconButtonVariant.tonal,
                     ),
                     const PlaybackNextButton(),
-                    // 模式 / 音量在播放页都有落点；窄底栏只保留队列入口，
+                    // 紧凑版式保留收藏（宽版式已把它移进右区动作组）；
+                    // 模式 / 音量在播放页都有落点，这里只多留队列入口，
                     // 保证「看接下来放什么」仍然一步可达。
+                    const NowPlayingFavoriteButton(),
                     M3EIconButton(
                       key: openQueueKey,
                       variant: M3EIconButtonVariant.standard,
@@ -135,13 +169,13 @@ class DesktopNowPlayingBar extends StatelessWidget {
   }
 }
 
-/// 左区：封面 + 歌名/作者 + 收藏。
+/// 左区：封面 + 歌名/作者。
 ///
 /// 封面复用顶栏那套隐藏语义（[PlayerMorphController.barHeaderHidden]：
 /// 播放页激活或飞行中淡出，避免与页面大封面重复）；但封面槽**占位宽度
 /// 不变**——收起时整条文字区不跳动，也保证共享飞行的起止锚点稳定。
-/// 摘要内容（封面 / 文本 / 收藏）由 `now_playing_summary.dart` 收口，
-/// 这里只决定底栏的尺寸与尾部位置。
+/// 摘要内容（封面 / 文本）由 `now_playing_summary.dart` 收口，收藏等
+/// 动作放在右区（[_BarActions]），左区只留给标题。
 class _TrackSection extends StatelessWidget {
   const _TrackSection({
     required this.morph,
@@ -170,7 +204,6 @@ class _TrackSection extends StatelessWidget {
               hidden: !showTrack,
             ),
           ),
-          trailing: const NowPlayingFavoriteButton(),
         );
       },
     );
@@ -203,12 +236,13 @@ class _BarControls extends StatelessWidget {
   }
 }
 
-/// 右区：播放模式 + 音量 + 队列入口。
+/// 右区：收藏 + 播放模式 + 音量 + 队列入口。
 ///
-/// 模式按钮与播放页进度排同源（[PlaybackModeButton]）：两处都是「当前会话的
-/// 播放顺序」的一步切换，图标 / 标签 / 触感只在共享模块维护一份。按内容宽
-/// 收口（不吃 Expanded）：底栏的余量让给中区进度排，见
-/// [DesktopNowPlayingBar.build]。
+/// 收藏从左侧标题区移到这里：它和模式 / 音量 / 队列一样是「播放动作」，
+/// 左区只负责当前曲目。模式按钮与播放页进度排同源（[PlaybackModeButton]）：
+/// 两处都是「当前会话的播放顺序」的一步切换，图标 / 标签 / 触感只在共享
+/// 模块维护一份。按内容宽收口（不吃 Expanded），余量让给中区进度排与左区
+/// 标题，见 [DesktopNowPlayingBar.build]。
 class _BarActions extends StatelessWidget {
   const _BarActions({required this.onOpenQueue});
 
@@ -220,6 +254,7 @@ class _BarActions extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        const NowPlayingFavoriteButton(),
         // 模式图标 / 标签 / 触感 / 命令在共享传输模块，播放页进度排同源。
         const PlaybackModeButton(),
         VolumeControl(

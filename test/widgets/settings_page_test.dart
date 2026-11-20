@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/data/play_statistics_repository.dart';
+import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/settings_page.dart';
 import 'package:molia/providers/nav_provider.dart';
@@ -14,6 +15,7 @@ import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/library/library_add_settings.dart';
 import 'package:molia/services/play_statistics_service.dart';
 import 'package:molia/services/window/tray_settings.dart';
+import 'package:molia/widgets/settings/settings_tiles.dart';
 
 import '../support/cover_test_support.dart';
 import '../support/fakes.dart';
@@ -193,6 +195,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('高级设置'), findsWidgets);
+    // 分组按内容命名，不复用首屏一级卡名。
+    expect(find.text('字体与封面'), findsOneWidget);
+    expect(find.text('曲库加入位置'), findsOneWidget);
+    expect(find.text('震动与应用名称'), findsOneWidget);
+    // 下载模板已并回「下载与缓存」页。
+    expect(find.byKey(const Key('downloadFilenameTemplateItem')), findsNothing);
     // 外观 / 通用：字体、默认封面、震动、应用名称。
     expect(find.byKey(const Key('settingsAppFontItem')), findsOneWidget);
     expect(find.byKey(const Key('settingsDefaultCoverItem')), findsOneWidget);
@@ -228,6 +236,106 @@ void main() {
     await tester.tap(entry);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('360 宽：播放模式标签不省略，640 宽仍用分段', (tester) async {
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+    await pumpSettings(tester);
+    tester.view.physicalSize = const Size(360, 1600);
+    await tester.pumpAndSettle();
+
+    /// 当前渲染形态下，每个选项文案都必须完整放下（TextPainter 量宽度，
+    /// 不靠「有没有溢出告警」——分段按钮的截断是静默省略）。
+    void expectLabelsFit<T>(Key rowKey, List<String> labels) {
+      final row = find.byKey(rowKey);
+      final segmented = find.descendant(
+        of: row,
+        matching: find.byType(M3ESegmentedButton<T>),
+      );
+      final context = tester.element(row);
+      final style = M3ETheme.of(context).typeScale;
+      if (segmented.evaluate().isNotEmpty) {
+        final width = tester.getSize(segmented).width;
+        final available = (width - labels.length) / labels.length - 24;
+        for (final label in labels) {
+          final painter = TextPainter(
+            text: TextSpan(text: label, style: style.labelLarge),
+            textDirection: TextDirection.ltr,
+            textScaler: MediaQuery.textScalerOf(context),
+            maxLines: 1,
+          )..layout();
+          expect(
+            painter.width,
+            lessThanOrEqualTo(available),
+            reason: '「$label」在分段行里被省略',
+          );
+        }
+        return;
+      }
+      final dropdown = find.descendant(
+        of: row,
+        matching: find.byType(M3EDropdownMenu<T>),
+      );
+      expect(dropdown, findsOneWidget, reason: '既不是分段也不是下拉');
+      final width = tester.getSize(dropdown).width;
+      final available = width - 56;
+      for (final label in labels) {
+        final painter = TextPainter(
+          text: TextSpan(text: label, style: style.bodyMedium),
+          textDirection: TextDirection.ltr,
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: 1,
+        )..layout();
+        expect(
+          painter.width,
+          lessThanOrEqualTo(available),
+          reason: '「$label」在下拉里被省略',
+        );
+      }
+    }
+
+    final labels = [
+      l10n.playModeListLoop,
+      l10n.playModeSequential,
+      l10n.playModeSingleRepeat,
+      l10n.playModeShuffle,
+    ];
+    // 360：四段放不下，降级为下拉。
+    expect(find.byType(SettingsDropdownRow<PlayMode>), findsOneWidget);
+    expect(find.byType(M3ESegmentedButton<PlayMode>), findsNothing);
+    expectLabelsFit<PlayMode>(const Key('settingsDefaultPlayModeItem'), labels);
+    expect(tester.takeException(), isNull);
+
+    // 640 宽放得下：保持分段（一次点击选中）。
+    tester.view.physicalSize = const Size(640, 1600);
+    await tester.pumpAndSettle();
+    expect(find.byType(M3ESegmentedButton<PlayMode>), findsOneWidget);
+    expect(find.byType(SettingsDropdownRow<PlayMode>), findsNothing);
+    expectLabelsFit<PlayMode>(const Key('settingsDefaultPlayModeItem'), labels);
+  });
+
+  testWidgets('360 宽：自定义配色行展开不溢出', (tester) async {
+    await pumpSettings(tester);
+    tester.view.physicalSize = const Size(360, 1600);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settingsSeedColorItem')), findsNothing);
+
+    await tester.tap(find.text('自定义颜色'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('settingsSeedColorItem')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('隐藏的启动页目的地：卡底说明去哪打开', (tester) async {
+    final hidden = ShellDestination.values.firstWhere(
+      (destination) => destination != nav.homeDestination,
+    );
+    expect(await nav.setVisible(hidden, false), isTrue);
+    await pumpSettings(tester);
+
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+    expect(find.text(l10n.settingsStartupPageHiddenHint), findsOneWidget);
   });
 
   testWidgets('底部导航入口打开独立子页，拖拽列表不再占首屏', (tester) async {

@@ -539,13 +539,17 @@ Widget buildFavoritesSelectionBar(
                 semanticLabel: data.l10n.cancel,
                 onPressed: data.onClose,
               ),
-              // 计数是纯文本（没有上限，也没有胶囊 / 警告色）。
-              Text(
-                data.l10n.selectionCountSelected(data.selectedCount),
-                key: const Key('collectionSelectionCount'),
-                style: m3e.typeScale.titleSmall.copyWith(color: foreground),
+              // 计数是纯文本（没有上限，也没有胶囊 / 警告色）。吃掉剩余宽度：
+              // 360dp + 三位数 / 大字号时省略而不是把右侧动作挤出屏幕。
+              Expanded(
+                child: Text(
+                  data.l10n.selectionCountSelected(data.selectedCount),
+                  key: const Key('collectionSelectionCount'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: m3e.typeScale.titleSmall.copyWith(color: foreground),
+                ),
               ),
-              const Spacer(),
               // 全选只负责选中；清空 / 退出只走 ✕。
               M3EIconButton(
                 key: const Key('collectionSelectionSelectAll'),

@@ -51,6 +51,7 @@ class _AnyListenPageState extends State<AnyListenPage> {
   bool _testing = false;
   bool _tokenVisible = false;
   String? _serverUrlError;
+  String? _enableError;
   String? _testMessage;
   bool _testOk = false;
 
@@ -110,8 +111,11 @@ class _AnyListenPageState extends State<AnyListenPage> {
 
   /// 文本变化：清掉旧错误并安排一次落盘。
   void _onFieldChanged() {
-    if (_serverUrlError != null) {
-      setState(() => _serverUrlError = null);
+    if (_serverUrlError != null || _enableError != null) {
+      setState(() {
+        _serverUrlError = null;
+        _enableError = null;
+      });
     }
     _scheduleSave();
   }
@@ -142,15 +146,24 @@ class _AnyListenPageState extends State<AnyListenPage> {
   }
 
   /// 启用开关：先校验地址，再立即落盘（不等防抖）。
+  ///
+  /// 校验失败时同时把原因写到开关副标题：错误只挂在输入框上时，用户从开关
+  /// 方向看过来只会看到「开了又弹回去」，不知道是地址不合法。
   Future<void> _setEnabled(bool value) async {
     if (value) {
       final error = _validateAddress(_l10n(context));
       if (error != null) {
-        setState(() => _serverUrlError = error);
+        setState(() {
+          _serverUrlError = error;
+          _enableError = error;
+        });
         return;
       }
     }
-    setState(() => _enabled = value);
+    setState(() {
+      _enabled = value;
+      _enableError = null;
+    });
     _scheduleSave();
     await _persist();
   }
@@ -251,7 +264,10 @@ class _AnyListenPageState extends State<AnyListenPage> {
                       switchKey: const Key('anyListenEnableSwitch'),
                       icon: Icons.cloud_rounded,
                       title: l10n.anyListenEnable,
-                      subtitle: l10n.anyListenEnableSubtitle,
+                      subtitle: _enableError ?? l10n.anyListenEnableSubtitle,
+                      subtitleColor: _enableError == null
+                          ? null
+                          : M3ETheme.of(context).colorScheme.error,
                       value: _enabled,
                       onChanged: (value) => unawaited(_setEnabled(value)),
                     ),

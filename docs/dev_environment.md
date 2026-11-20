@@ -11,7 +11,7 @@ PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解�
 
 ## macOS 桌面运行要求
 
-- **macOS 12 及以上 + Xcode**：macOS 与 iOS 目标都只用 Swift Package Manager（不跑
+- **macOS + Xcode（最低版本见 `AGENTS.md`「工具链」）**：macOS 与 iOS 目标都只用 Swift Package Manager（不跑
   `pod install`，仓库里没有 `macos/Podfile` / `ios/Podfile`；插件都提供 `Package.swift`）。
   不需要在 Xcode 里选开发者团队——模板用 ad-hoc 签名（`CODE_SIGN_IDENTITY = "-"`），
   `flutter build macos --release` 可直接出包。
@@ -25,8 +25,8 @@ PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解�
   退出）；点 Dock 图标会经窗口通道恢复窗口。
 - **更新走手动**：macOS 没有应用内安装，发布产物是 `-unsigned.zip`；本地调试用
   `flutter run -d macos`，不需要签名证书。
-- **iOS 最低版本 18.0**：Xcode 工程的 `IPHONEOS_DEPLOYMENT_TARGET` 已同步；真机 /
-  模拟器需 iOS 18+。
+- **iOS 最低版本见 `AGENTS.md`「工具链」**：Xcode 工程的
+  `IPHONEOS_DEPLOYMENT_TARGET` 已同步；真机 / 模拟器需同版本以上。
 
 ## Linux 桌面运行要求
 
@@ -45,8 +45,8 @@ PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解�
 - 本地数据库（最近播放 / 资料库 / 听歌统计）走 drift：原生 SQLite 由
   `sqlite3` 的 Dart build hooks 提供（`flutter test` / 构建时自动生成，无需
   `sqlite3_flutter_libs`）；库文件 `molia_database_v2.sqlite` 在应用支持目录
-  （Windows `%APPDATA%\top.stillmisty\molia`、Linux
-  `~/.local/share/top.stillmisty.molia`）。旧 `molia_database.sqlite` 保留在
+  （Windows `%LOCALAPPDATA%\top.stillmisty\molia`，旧 Roaming 目录只做迁移回退；
+  Linux `~/.local/share/top.stillmisty.molia`）。旧 `molia_database.sqlite` 保留在
   原处但不读、不迁移。表结构 / `schemaVersion` 见 `docs/architecture.md` §3，
   迁移流程见 ADR-0005。
 - **集成测试默认 headless**：`dart run tool/agent/cli.dart test linux` 无条件套 `xvfb-run -a`
@@ -101,8 +101,8 @@ tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
   均按它操作：`-d linux` 起的桌面会话不会误发给 adb，反之亦然。
 - 模拟器默认 16 KB 页（`google_apis_ps16k` 镜像，`emu.sh status` 会打印页大小）；
   回 4 KB 需另建 AVD（`-k "system-images;android-37.0;google_apis;x86_64"`）并 `AVD_NAME=... emu.sh start`。
-  应用最低支持 API 35；默认镜像仍是 API 37（覆盖 targetSdk 37 的局域网权限等行为），
-  验最低版本时另建 API 35 AVD 并 `AVD_NAME=... emu.sh start`。
+  应用最低支持版本与 targetSdk 见 `AGENTS.md`「工具链」；默认镜像取当前 targetSdk
+  （覆盖局域网权限等行为），验最低版本时另建对应 API 的 AVD 并 `AVD_NAME=... emu.sh start`。
 - 日志 / 截图 / pid 统一放在 `${TMPDIR:-/tmp}/molia-agent`（默认 `/tmp/molia-agent`，
   可用 `RUN_DIR` 覆盖；临时目录，重启可清）；集成测试日志为
   `it-<platform>-<时间戳>.log`，同批次的 `.status` 在跑完时写入退出码（`starting` 表示

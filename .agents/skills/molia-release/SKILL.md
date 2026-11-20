@@ -16,9 +16,11 @@ description: 发布 Molia 版本，或改动发布产物 / 更新清单 / 平台
 
 | 工作流 | 触发 | 做什么 |
 |---|---|---|
-| `ci.yml` | PR / push main / 手动 | `flutter analyze` + `flutter test` |
-| `integration.yml` | 每日 02:00（UTC+8）/ 手动 | Linux 端到端（真实引擎 + 本地 mock；不含播放，见 `docs/pitfalls.md` #33；xvfb） |
+| `ci.yml` | PR / push main / 手动 | docs check + analyze + 单测 + 工具 CLI 冒烟 + 生成物 drift + Windows / macOS debug |
 | `release.yml` | 推 `v*` tag | 矩阵构建 → 产物 + sha256 + `latest.json` → GitHub Release |
+
+集成测试不进 CI（需要真实设备 / 显示，见 `docs/dev_workflow.md` §5.3）；本地用
+`dart run tool/agent/cli.dart test linux|android`。
 
 工具链版本（Flutter / Dart / JDK / Gradle / AGP / Kotlin / SDK / NDK）只以 `AGENTS.md`
 的「工具链」一行为准，这里不复列；改版本时先改那一行，再让 `.github/workflows/` 与

@@ -115,6 +115,76 @@ void main() {
     expect(provider.config?.model, 'model-b');
   });
 
+  testWidgets('配置表单有显式完成按钮，收起前补存未落盘的输入', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final registry = testSettingsRegistry();
+    await AiSettingsStore(settings: registry).saveConfig(
+      const LlmConfig(
+        baseUrl: 'https://api.example.com/v1',
+        apiKey: 'sk-test',
+        model: 'model-a',
+      ),
+    );
+    final playback = buildTestPlaybackProvider(
+      settings: registry,
+      facade: FakePlaybackFacade(),
+    );
+    await playback.preferencesReady;
+    final library = LibraryProvider(
+      repository: FakeLibraryRepository(),
+      playbackProvider: playback,
+    );
+    final provider = AiDjProvider(
+      playbackProvider: playback,
+      libraryProvider: library,
+      recommendationService: FakeAiDjGenerator(),
+      settingsStore: AiSettingsStore(settings: registry),
+      recommendationStore: testAiRecommendationStore(),
+    );
+    await provider.init();
+    addTearDown(() {
+      provider.dispose();
+      library.dispose();
+      playback.dispose();
+    });
+
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AiDjProvider>.value(
+        value: provider,
+        child: M3EMaterialApp(
+          data: M3EThemeData.fromMaterial(ThemeData.light()),
+          theme: ThemeData.light(),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          home: const AiDjPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('aiDjManageConfigButton')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('aiDjConfigDoneButton')), findsOneWidget);
+    expect(find.widgetWithText(M3EButton, '完成'), findsOneWidget);
+
+    // 不等 400ms 防抖：完成按钮本身就是「保存并收起」。
+    await tester.enterText(find.byKey(const Key('aiDjModelField')), 'model-b');
+    await tester.tap(find.byKey(const Key('aiDjConfigDoneButton')));
+    await tester.pumpAndSettle();
+
+    expect(provider.config?.model, 'model-b');
+    expect(find.byKey(const Key('aiDjConfigDoneButton')), findsNothing);
+    expect(find.text('https://api.example.com/v1'), findsOneWidget);
+  });
+
   testWidgets('播放全部 / 换一批收成分裂按钮，历史固定在顶栏', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final l10n = lookupAppLocalizations(const Locale('zh'));

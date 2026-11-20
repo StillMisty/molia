@@ -83,6 +83,27 @@ void main() {
     expect(manager.anyListenConfig.serverUrl, isEmpty);
   });
 
+  testWidgets('非法地址开启开关：错误同时出现在开关副标题', (tester) async {
+    await pumpPage(tester);
+
+    await tester.enterText(
+      find.byType(M3ETextField).first,
+      'ftp://example.com',
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('anyListenEnableSwitch')));
+    await tester.pumpAndSettle();
+
+    // 输入框 errorText + 开关副标题各一处：从开关方向看过来也知道为什么没开。
+    expect(
+      find.textContaining('服务器地址必须以 http:// 或 https:// 开头'),
+      findsNWidgets(2),
+    );
+    expect(manager.anyListenConfig.enabled, isFalse);
+  });
+
   testWidgets('启用开关先校验地址，合法时立即写入', (tester) async {
     await pumpPage(tester);
 

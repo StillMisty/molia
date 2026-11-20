@@ -247,39 +247,77 @@ class _SearchBackdropBlur extends StatelessWidget {
 ///
 /// 搜索入口不占顶栏一条搜索框，落点收到这个品牌块上（Ctrl+F 同路径）。
 /// 不做悬浮提示：整块贴着窗口左上角、文案（应用名）自解释，键位提示只留在
-/// 设置 › 快捷键。
-class _BrandSearchEntry extends StatelessWidget {
+/// 设置 › 快捷键。桌面鼠标用户需要可点线索：hover 时给一层胶囊底色 +
+/// 手型光标，文字与标志本身不位移（左缘仍贴 titleInset）。
+class _BrandSearchEntry extends StatefulWidget {
   const _BrandSearchEntry({super.key, required this.onTap});
 
   final VoidCallback onTap;
 
   @override
+  State<_BrandSearchEntry> createState() => _BrandSearchEntryState();
+}
+
+class _BrandSearchEntryState extends State<_BrandSearchEntry> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final duration = effectDurationOf(context, M3EMotion.short2);
     return Semantics(
       button: true,
-      child: GestureDetector(
-        // 刻意不用 M3ETappable：它点击时会请求焦点（打断页内输入），
-        // GestureDetector 与顶栏其它手势宿主保持同一取舍。
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: SizedBox(
-          height: DesktopShell.toolRowHeight(context),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const MoliaMark(size: 24),
-              const SizedBox(width: 8),
-              ValueListenableBuilder<String>(
-                valueListenable: AppBrandingService.titleNotifier,
-                builder: (context, title, _) => Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  // 品牌位与顶栏应用名同一口径：强调字阶，不手写字重。
-                  style: context.emphasizedTypeScale.titleMedium,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          // 刻意不用 M3ETappable：它点击时会请求焦点（打断页内输入），
+          // GestureDetector 与顶栏其它手势宿主保持同一取舍。
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: SizedBox(
+            height: DesktopShell.toolRowHeight(context),
+            child: Stack(
+              alignment: Alignment.centerLeft,
+              children: [
+                // 背景层不参与布局：只做 hover 反馈，不改变品牌块左缘。
+                Positioned.fill(
+                  left: 4,
+                  child: IgnorePointer(
+                    child: AnimatedContainer(
+                      duration: duration,
+                      curve: M3EMotion.emphasizedDecelerate,
+                      decoration: BoxDecoration(
+                        color: _hovered
+                            ? scheme.surfaceContainerHigh
+                            : scheme.surfaceContainerHigh.withValues(alpha: 0),
+                        borderRadius: const BorderRadius.all(
+                          Radius.circular(M3EShapes.full),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ],
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const MoliaMark(size: 24),
+                    const SizedBox(width: 8),
+                    ValueListenableBuilder<String>(
+                      valueListenable: AppBrandingService.titleNotifier,
+                      builder: (context, title, _) => Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        // 品牌位与顶栏应用名同一口径：强调字阶，不手写字重。
+                        style: context.emphasizedTypeScale.titleMedium,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

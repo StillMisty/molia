@@ -451,13 +451,17 @@ class DeckArtworkStack extends StatelessWidget {
     );
     if (onTap != null) {
       final slot = pressSlot!;
-      card = DeckSlotPressScale(
-        scale: pressScaleFor(slot),
-        onPointerDown: () => onPressStart(slot),
-        onPointerUp: onPressEnd,
-        onPointerCancel: onPressEnd,
+      card = DeckSideCoverSemantics(
+        left: slot == DeckSlot.left,
         onTap: onTap,
-        child: card,
+        child: DeckSlotPressScale(
+          scale: pressScaleFor(slot),
+          onPointerDown: () => onPressStart(slot),
+          onPointerUp: onPressEnd,
+          onPointerCancel: onPressEnd,
+          onTap: onTap,
+          child: card,
+        ),
       );
     }
     final ValueListenable<double>? revealListenable = reveal;

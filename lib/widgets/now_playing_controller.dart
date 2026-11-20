@@ -17,14 +17,38 @@ const int nowPlayingQueueTabIndex = 0;
 const int nowPlayingLyricsTabIndex = 1;
 const int nowPlayingInfoTabIndex = 2;
 
-/// 播放页 tab 切换请求。
+/// 播放页 tab 切换请求 + 壳层可见的展开态。
 ///
 /// 由组合根创建并注入 `NowPlaying`；调用方只发请求，不读界面状态。
+/// 壳层需要两件事做返回层级（Android back / 桌面 Esc）：
+/// - [expanded]：迷你 ⇄ 完整是否处于展开态（由页面在布局 / 动画落定时写）；
+/// - [activeTab]：右栏当前 tab（判断「队列是否已打开」）。
+/// 两者是只读快照，不参与请求分发。
 class NowPlayingController extends ChangeNotifier {
   int? _requestedTab;
+  int _requestVersion = 0;
+  bool _collapseRequested = false;
+
+  /// 播放页是否处于完整（展开）态；宽版式 / 桌面两栏恒为 false
+  /// （这些版式没有迷你态，返回层级应直接回上一目的地）。
+  final ValueNotifier<bool> expanded = ValueNotifier<bool>(false);
+
+  /// 播放页当前内容 tab（桌面右栏 / 移动 PageView 落定后的值）。
+  final ValueNotifier<int> activeTab = ValueNotifier<int>(
+    nowPlayingLyricsTabIndex,
+  );
 
   /// 最近一次被请求的页（[nowPlayingQueueTabIndex] 等）；从未请求时为 null。
   int? get requestedTab => _requestedTab;
+
+  /// tab 请求版本：每次 [showQueueTab] / [showLyricsTab] / [showInfoTab] 自增。
+  ///
+  /// 与 [collapse] 共用同一个 [ChangeNotifier]：页面按版本判断「这次通知
+  /// 到底有没有新的 tab 请求」，避免收起播放器时重放上一次 tab。
+  int get requestVersion => _requestVersion;
+
+  /// 是否有待消费的「收起播放器」意图（壳层返回键 / Esc）。
+  bool get collapseRequested => _collapseRequested;
 
   /// 请求切到队列页。
   void showQueueTab() => _request(nowPlayingQueueTabIndex);
@@ -35,9 +59,34 @@ class NowPlayingController extends ChangeNotifier {
   /// 请求切到歌曲信息页。
   void showInfoTab() => _request(nowPlayingInfoTabIndex);
 
+  /// 请求收起播放页（迷你态）；无迷你态的版式由页面忽略并回写
+  /// [expanded] = false，下一次返回就能继续回上一目的地。
+  ///
+  /// 意图而不是状态：页面可能尚未挂载完，重复请求不叠加。
+  void collapse() {
+    if (_collapseRequested) return;
+    _collapseRequested = true;
+    notifyListeners();
+  }
+
+  /// 页面消费一次收起意图；无待处理请求时返回 false。
+  bool takeCollapseRequest() {
+    if (!_collapseRequested) return false;
+    _collapseRequested = false;
+    return true;
+  }
+
   /// 请求是动作不是状态：重复请求同一页也要通知，订阅方自行决定是否已到位。
   void _request(int index) {
     _requestedTab = index;
+    _requestVersion++;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    expanded.dispose();
+    activeTab.dispose();
+    super.dispose();
   }
 }

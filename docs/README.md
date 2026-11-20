@@ -31,7 +31,7 @@
 | 文案规范 | `docs/copy_style.md` | 黑话对照与长度约定 |
 | 发布 secrets / 产物清单 / 各平台限制 | `.agents/skills/molia-release/SKILL.md` | 版本号先改 `AGENTS.md` |
 | 各版本发布公告 / 应用内更新说明 | `docs/releases/` | `<tag>.md` 是 Release 正文，`<tag>.summary.txt` 是 `latest.json` 的 notes |
-| 包体积 / 内存 / worktree / seed 工具 | `.agents/skills/molia-perf-tooling/SKILL.md` | 详细口径与踩坑 |
+| 包体积 / 内存 / worktree 工具 | `.agents/skills/molia-perf-tooling/SKILL.md` | 详细口径与踩坑；seed 命令回 `docs/dev_environment.md` |
 | 设备调试（模拟器 / 热重载 / 截图） | `.agents/skills/molia-device-debug/SKILL.md` | 环境细节指向 `docs/dev_environment.md` |
 | Issue、标签、领域文档约定 | `docs/agents/` | GitHub issues 为规格来源 |
 | 决策记录（ADR） | `docs/adr/` | 只追加，不重写历史 |

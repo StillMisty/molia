@@ -39,25 +39,38 @@ class SettingsSectionGrid extends StatelessWidget {
       startColumn.every((index) => index >= 0 && index < children.length),
       'startColumn 必须是 children 的下标',
     );
+    // Tab 顺序按视觉阅读序（左列第 1 张 → 右列第 1 张 → 左列第 2 张…）：
+    // 几何顺序里左列是一整棵子树，默认遍历会先走完左列再回右列；显式
+    // NumericFocusOrder 用 [children] 的阅读顺序覆盖几何顺序，列分配不变。
+    final ordered = [
+      for (var i = 0; i < children.length; i++)
+        FocusTraversalOrder(
+          order: NumericFocusOrder(i.toDouble()),
+          child: children[i],
+        ),
+    ];
+    final Widget grid;
     if (!twoColumn || children.length < 2) {
-      return _buildColumn(children);
+      grid = _buildColumn(ordered);
+    } else {
+      final left = <Widget>[];
+      final right = <Widget>[];
+      for (var i = 0; i < ordered.length; i++) {
+        final toStart = startColumn.isEmpty
+            ? i.isEven
+            : startColumn.contains(i);
+        (toStart ? left : right).add(ordered[i]);
+      }
+      grid = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: _buildColumn(left)),
+          const SizedBox(width: kSettingsSectionSpacing),
+          Expanded(child: _buildColumn(right)),
+        ],
+      );
     }
-
-    final left = <Widget>[];
-    final right = <Widget>[];
-    for (var i = 0; i < children.length; i++) {
-      final toStart = startColumn.isEmpty ? i.isEven : startColumn.contains(i);
-      (toStart ? left : right).add(children[i]);
-    }
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: _buildColumn(left)),
-        const SizedBox(width: kSettingsSectionSpacing),
-        Expanded(child: _buildColumn(right)),
-      ],
-    );
+    return FocusTraversalGroup(policy: OrderedTraversalPolicy(), child: grid);
   }
 
   Widget _buildColumn(List<Widget> sections) {

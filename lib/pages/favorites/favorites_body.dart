@@ -5,17 +5,24 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../domain/models/library_browse.dart';
+import '../../domain/models/smart_lists.dart';
 import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/collection_actions.dart';
 import '../../providers/collection_mode.dart';
 import '../../providers/collection_presenter.dart';
+import '../../providers/favorites_view_model.dart';
+import '../../providers/library_provider.dart';
 import '../../providers/local_library_provider.dart';
+import '../../providers/lyrics_provider.dart';
+import '../../services/download/download_records.dart';
 import '../../theme/m3e_context.dart';
 import '../../widgets/responsive.dart';
 import '../../utils/sync_format.dart';
@@ -25,9 +32,11 @@ import '../../widgets/collection_track_list.dart';
 import '../../widgets/desktop_layout.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/library_browse_view.dart';
+import '../../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;
 import '../../widgets/row_actions.dart';
 import '../../widgets/track_row.dart';
 import '../../widgets/track_table_header.dart';
+import 'favorites_actions.dart';
 
 /// 正文列表 / 表格分支的输入。
 class FavoritesBodyData {
@@ -390,6 +399,81 @@ class FavoritesBrowseGroupsCache {
   }
 }
 
+/// 曲库浏览正文的接线输入：页面只给数据与端口，点播 / 加入曲库 / 换源 /
+/// 刷新本地的编排留在本文件，避免页面为五条回调再堆一段。
+class FavoritesBrowseData {
+  const FavoritesBrowseData({
+    required this.l10n,
+    required this.query,
+    required this.groupsCache,
+    required this.shuffleRandom,
+    required this.actions,
+    required this.downloadRecords,
+    required this.lyrics,
+    required this.library,
+    required this.isActive,
+  });
+
+  final AppLocalizations l10n;
+  final String query;
+  final FavoritesBrowseGroupsCache groupsCache;
+  final math.Random? shuffleRandom;
+  final CollectionActions actions;
+  final DownloadRecords? downloadRecords;
+  final LyricsProvider lyrics;
+  final LibraryProvider library;
+  final bool Function() isActive;
+}
+
+/// 曲库浏览分支（含搜索词与缓存索引状态的接线）。
+Widget buildFavoritesBrowseTab(BuildContext context, FavoritesBrowseData data) {
+  final l10n = data.l10n;
+  return buildFavoritesLibraryBrowse(
+    context,
+    l10n: l10n,
+    query: data.query,
+    groupsCache: data.groupsCache,
+    onPlay: (group, tracks, {bool shuffle = false}) =>
+        playFavoritesBrowseTracks(
+          context: context,
+          tracks: tracks,
+          contextName: group.subtitle.isEmpty
+              ? group.title
+              : '${group.title} · ${group.subtitle}',
+          random: data.shuffleRandom,
+          shuffle: shuffle,
+        ),
+    onPlayTrack: (track) => playFavoritesBrowseTracks(
+      context: context,
+      tracks: [track],
+      contextName: track.title,
+      random: data.shuffleRandom,
+    ),
+    onAdd: (tracks) =>
+        addFavoritesBrowseToLibrary(context: context, tracks: tracks),
+    onToggleFavorite: (track) async {
+      await data.actions.toggleFavorite([
+        TrackCollectionRow(track.toPlaylistTrack(addedAt: 0)),
+      ]);
+    },
+    onRefreshLocal: (track) => refreshFavoritesBrowseLocal(
+      context: context,
+      l10n: l10n,
+      record: findFavoritesLocalRecord(data.downloadRecords, track),
+      isActive: data.isActive,
+    ),
+    onSwap: (track) => swapFavoritesBrowseTrack(
+      context: context,
+      track: track,
+      lyrics: data.lyrics,
+    ),
+    isFavorite: (track) =>
+        data.library.isFavorite(track.sourceKey, track.songId),
+    canRefreshLocal: (track) =>
+        findFavoritesLocalRecord(data.downloadRecords, track) != null,
+  );
+}
+
 /// 曲库：只在这里出现专辑 / 歌手切换；搜索走页面标题行的搜索态。
 ///
 /// 模式 / 索引订阅是本分支自己的 UI 依赖（只在浏览曲库时建立），因此留在
@@ -466,5 +550,91 @@ Widget buildFavoritesLibraryBrowse(
         ),
       ),
     ],
+  );
+}
+
+/// 合集正文（智能列表展开 / 表格列 / 行点击与批量动作接线）。
+///
+/// 页面只给 ViewModel、当前合集与滚动控制器；行回调与定位结果都从这里
+/// 组装，避免页面为了一个 `buildFavoritesCollectionBody` 再铺三十行。
+Widget buildFavoritesCollectionTab(
+  BuildContext context, {
+  required AppLocalizations l10n,
+  required FavoritesViewModel viewModel,
+  required CollectionView view,
+  required bool reorderActive,
+  required bool selecting,
+  required String query,
+  required ScrollController controller,
+  required CollectionActions actions,
+  required bool Function() isActive,
+  required void Function(
+    AppLocalizations l10n,
+    CollectionView view,
+    List<CollectionRow> rows,
+    TrackRowSurface surface,
+  )
+  onRowsReady,
+}) {
+  final rows = view.isSmartList
+      ? viewModel.displayRows(view: view, query: query)
+      : view.visibleRows;
+  return buildFavoritesCollectionBody(
+    context,
+    l10n: l10n,
+    view: view,
+    rows: rows,
+    reorderActive: reorderActive,
+    selecting: selecting,
+    controller: controller,
+    smartVersionCounts: viewModel.smartVersionCounts,
+    isSelected: viewModel.isSelected,
+    isMissingRow: (row) =>
+        view.isSmartList &&
+        view.identity.smartListId == SmartListIds.missingFiles &&
+        row is LocalSongCollectionRow &&
+        row.song.isMissing,
+    onToggleSmartVersions: viewModel.toggleSmartVersions,
+    onRowTap: (index) {
+      final row = view.visibleRows[index];
+      if (viewModel.handleRowTap(row.key, view)) return;
+      unawaited(playFavoritesView(actions: actions, view: view, index: index));
+    },
+    onRowTapWithModifiers: (index, {required ctrl, required shift}) {
+      final row = view.visibleRows[index];
+      if (viewModel.handleRowTap(row.key, view, ctrl: ctrl, shift: shift)) {
+        return;
+      }
+      unawaited(playFavoritesView(actions: actions, view: view, index: index));
+    },
+    onRowLongPress: (key) {
+      if (viewModel.selecting && viewModel.selectionAnchorKey != null) {
+        viewModel.selectRangeTo(view, key);
+        return;
+      }
+      viewModel.selectRow(key);
+    },
+    onReorder: (from, to) => reorderFavoritesTracks(
+      actions: actions,
+      view: view,
+      from: from,
+      to: to,
+      reportMutation: (outcome) {
+        if (outcome.isFailure && context.mounted) {
+          M3ESnackbar.show(context, message: l10n.operationFailed);
+        }
+      },
+    ),
+    rowActionsFor: (rowContext, row) => buildFavoritesRowActions(
+      context: rowContext,
+      l10n: l10n,
+      session: viewModel.session,
+      view: view,
+      row: row,
+      actions: actions,
+      isActive: isActive,
+    ),
+    onImportLocal: () => unawaited(importLocalAudioFilesFlow(context)),
+    onRowsReady: (rows, surface) => onRowsReady(l10n, view, rows, surface),
   );
 }

@@ -2,7 +2,7 @@
 
 > 本文只记**可复现的数字**与**为什么这样改**。改动前的每一步都用同一脚本在同一台机器
 > 上采样（release / 冷启动 / 5 次取中位），「首帧」那行即用户可感总时长
-> （`main.dart` 的 `molia.startup` 埋点，release 也输出）。
+> （`lib/app/bootstrap/startup_trace.dart` 的 `molia.startup` 埋点，release 也输出）。
 >
 > 采样脚本：`tool/agent/startup.sh`（见 §3）。启动全表基线：2026-10-18（Linux）；
 > Windows 基线：2026-10-21（§4.1）。全链路体检与后续复测归档见
