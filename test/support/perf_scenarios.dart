@@ -1,4 +1,4 @@
-/// 帧体检共用场景动作：切目的地、滚动收藏列表。
+/// 帧体检共用场景动作：切目的地、滚动收藏列表、直推统计页。
 ///
 /// 为什么单独一个文件：`integration_test/perf_flows_test.dart`（自己打点的
 /// `molia.frame` 汇总）与 `integration_test/perf_timeline_test.dart`（VM
@@ -8,12 +8,15 @@
 /// 测试框架等成静止。
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:molia/pages/play_statistics_page.dart';
 import 'package:molia/widgets/collection_track_list.dart';
+import 'package:molia/widgets/statistics/listening_heatmap.dart';
 
 import 'perf_app_harness.dart';
 
@@ -61,4 +64,24 @@ Future<void> scrollList(WidgetTester tester, {int times = 10}) async {
   if (position.pixels == before) {
     fail('列表没有产生滚动位移（场景无效）');
   }
+}
+
+/// 直接把统计页压在根 Navigator 上，并等首屏（时段热力图）出现。
+///
+/// 走设置页入口会先经过桌面骨架的折叠二级页，把「开页」成本混进导航动画；
+/// 这里测的是页面自身首帧。等待条件只看首屏要素，不做 settle：range 切换 /
+/// 榜单图片占位这些异步还在继续，settle 会把它们的帧从采样里排掉。
+Future<void> pushStatisticsPage(WidgetTester tester) async {
+  final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+  unawaited(
+    navigator.push<void>(
+      MaterialPageRoute<void>(builder: (_) => const PlayStatisticsPage()),
+    ),
+  );
+  await pumpUntil(
+    tester,
+    () => find.byType(WeekdayHourHeatmap).evaluate().isNotEmpty,
+    timeout: const Duration(seconds: 30),
+    reason: '统计页首屏（时段热力图）未出现',
+  );
 }

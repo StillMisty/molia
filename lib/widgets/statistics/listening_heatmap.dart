@@ -15,6 +15,7 @@
 /// - 星期标签隔行显示（一/三/五/日）：行距小于字高时全显示会互相遮挡。
 library;
 
+import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -68,12 +69,20 @@ class _HeatLevels {
   }
 }
 
-/// 格子轮廓：`Morph(square → puffy)` 按进度取值并适配到格子尺寸
+/// 格子轮廓路径缓存：`Morph(square → puffy)` 按进度取值并适配到格子尺寸
 /// （与包内 `M3EShapeClipper` 同一套 polygon → Path → 缩放配方）。
-class _MorphCellClipper extends CustomClipper<Path> {
-  const _MorphCellClipper(this.progress);
-
-  final double progress;
+///
+/// 为什么要缓存：`Morph.toPath` 每次都要重新插值全部 cubic 并重建 Path。
+/// profile 微基准（Linux / AOT，`integration_test/morph_benchmark_test.dart`）
+/// 单次 p50 8µs、均值 13–14µs；开页首帧所有格子都是 progress = 0，日历 +
+/// 作息合计 700+ 格逐个计算 ≈ 6ms，cubic / Path 的分配还会推高同帧 GC。
+/// 缓存后静态格子共用一条已适配的 Path，命中成本实测 0.01µs。
+///
+/// 键是**精确** progress + 尺寸：静止格子恒为 0 / 1，命中率接近 100%；悬停
+/// 动画每帧只产生一个新键，不会出现量化带来的形状阶梯。LRU 上限 256，
+/// 持续划过很多格子也不会无限增长。
+class _MorphCellClipCache {
+  _MorphCellClipCache._();
 
   /// Morph 构造会做曲线匹配（较重），只构建一次。
   static final Morph _morph = Morph(
@@ -81,12 +90,32 @@ class _MorphCellClipper extends CustomClipper<Path> {
     M3EMaterialNewShapes.puffy,
   );
 
-  @override
-  Path getClip(Size size) {
+  static const int _maxEntries = 256;
+
+  /// `(progress, width, height) → 已适配 Path`，按访问顺序淘汰最旧项。
+  static final LinkedHashMap<(double, double, double), Path> _cache =
+      LinkedHashMap();
+
+  static Path of(double progress, Size size) {
     if (size.isEmpty) return Path();
+    final key = (progress, size.width, size.height);
+    final cached = _cache.remove(key);
+    if (cached != null) {
+      // 重新插入把它移到队尾（LRU）。
+      _cache[key] = cached;
+      return cached;
+    }
+    final path = _build(progress, size);
+    if (path == null) return Path();
+    _cache[key] = path;
+    if (_cache.length > _maxEntries) _cache.remove(_cache.keys.first);
+    return path;
+  }
+
+  static Path? _build(double progress, Size size) {
     final source = _morph.toPath(progress: progress);
     final bounds = source.getBounds();
-    if (bounds.isEmpty) return Path();
+    if (bounds.isEmpty) return null;
     final matrix = Matrix4.identity()
       ..scaleByDouble(
         size.width / bounds.width,
@@ -97,13 +126,14 @@ class _MorphCellClipper extends CustomClipper<Path> {
       ..translateByDouble(-bounds.left, -bounds.top, 0, 1);
     return source.transform(matrix.storage);
   }
-
-  @override
-  bool shouldReclip(covariant _MorphCellClipper oldClipper) =>
-      oldClipper.progress != progress;
 }
 
 /// 单个热力格子（悬停/按压形变 + 放大；选中态描边）。
+///
+/// 轮廓直接画在 [CustomPaint] 上（不再 `ClipPath` + `ColoredBox` + 内层
+/// `SizedBox`）：一个格子只剩鼠标区域 / 指针监听 / 点击手势 / 自绘四层，
+/// 开页时 700+ 格子少掉约一半 RenderObject。放大也由 painter 按进度缩放，
+/// 动画期间只 markNeedsPaint，不重建 widget 子树。
 class _HeatCell extends StatefulWidget {
   const _HeatCell({
     super.key,
@@ -119,7 +149,9 @@ class _HeatCell extends StatefulWidget {
   final double gap;
   final Color color;
   final bool selected;
-  final String? tooltip;
+
+  /// 格子文案（按需生成：日期 / 时长格式化在开页时逐格跑一遍并不便宜）。
+  final String Function()? tooltip;
   final VoidCallback? onTap;
 
   @override
@@ -128,29 +160,52 @@ class _HeatCell extends StatefulWidget {
 
 class _HeatCellState extends State<_HeatCell>
     with SingleTickerProviderStateMixin {
-  static const double _hoverScale = 0.25;
+  /// 当前缩放进度（painter 直接监听它，动画期间不重建 widget 子树）。
+  final ValueNotifier<double> _progress = ValueNotifier<double>(0);
 
-  /// hover / press / 选中缩放：motor 弹簧（M3E standard spatial fast），
-  /// 快速划过格子时带速度续跑。
-  late final SingleMotionController _progress = SingleMotionController(
-    motion: const MaterialSpringMotion.standardSpatialFast(snapToEnd: true),
-    vsync: this,
-    initialValue: widget.selected ? 1 : 0,
-  );
+  /// 弹簧控制器按需创建：静止格子既没有动画也没有 ticker，开页时 700+ 个
+  /// controller / Ticker 的分配与同帧 GC 都能省掉。
+  SingleMotionController? _motion;
 
   bool _hovered = false;
   bool _pressed = false;
 
+  /// 鼠标平台只在悬停时挂载 [Tooltip]（见 [build]）；触摸平台保持常驻，
+  /// 长按提示不能丢。
+  bool _hoverOnlyTooltip = true;
+
+  /// 悬停时生成的提示文案；离开时清空，数据变化时重新生成。
+  String? _tooltipText;
+
   bool get _active => widget.selected || _hovered || _pressed;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.selected) _progress.value = 1;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _hoverOnlyTooltip = switch (Theme.of(context).platform) {
+      TargetPlatform.android ||
+      TargetPlatform.iOS ||
+      TargetPlatform.fuchsia => false,
+      _ => true,
+    };
+  }
 
   @override
   void didUpdateWidget(covariant _HeatCell oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.tooltip, widget.tooltip)) _tooltipText = null;
     if (oldWidget.selected != widget.selected) _sync();
   }
 
   @override
   void dispose() {
+    _motion?.dispose();
     _progress.dispose();
     super.dispose();
   }
@@ -158,7 +213,10 @@ class _HeatCellState extends State<_HeatCell>
   void _setHovered(bool value) {
     if (_hovered == value) return;
     _hovered = value;
+    if (!value) _tooltipText = null;
     _sync();
+    // 悬停才挂载的 Tooltip 需要一次重建；触摸平台的常驻 Tooltip 不受影响。
+    if (_hoverOnlyTooltip && widget.tooltip != null) setState(() {});
   }
 
   void _setPressed(bool value) {
@@ -168,13 +226,28 @@ class _HeatCellState extends State<_HeatCell>
   }
 
   void _sync() {
-    _progress.animateTo(_active ? 1 : 0);
+    final target = _active ? 1.0 : 0.0;
+    var motion = _motion;
+    if (motion == null) {
+      if (target == _progress.value) return;
+      motion = SingleMotionController(
+        motion: const MaterialSpringMotion.standardSpatialFast(snapToEnd: true),
+        vsync: this,
+        initialValue: _progress.value,
+      )..addListener(_onMotionTick);
+      _motion = motion;
+    }
+    motion.animateTo(target);
+  }
+
+  void _onMotionTick() {
+    final motion = _motion;
+    if (motion != null) _progress.value = motion.value;
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final hitSize = widget.size + widget.gap;
 
     final content = MouseRegion(
       onEnter: (_) => _setHovered(true),
@@ -186,38 +259,14 @@ class _HeatCellState extends State<_HeatCell>
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
-          child: SizedBox(
-            width: hitSize,
-            height: hitSize,
-            child: Center(
-              child: AnimatedBuilder(
-                animation: _progress,
-                builder: (context, _) {
-                  final side =
-                      widget.size * (1 + _hoverScale * _progress.value);
-                  final clipper = _MorphCellClipper(_progress.value);
-                  return SizedBox(
-                    width: side,
-                    height: side,
-                    child: ClipPath(
-                      clipper: clipper,
-                      child: widget.selected
-                          // 选中描边：略大的 primary 形状 + 内嵌格子色。
-                          ? ColoredBox(
-                              color: scheme.primary,
-                              child: Padding(
-                                padding: const EdgeInsets.all(1.5),
-                                child: ClipPath(
-                                  clipper: clipper,
-                                  child: ColoredBox(color: widget.color),
-                                ),
-                              ),
-                            )
-                          : ColoredBox(color: widget.color),
-                    ),
-                  );
-                },
-              ),
+          child: CustomPaint(
+            size: Size.square(widget.size + widget.gap),
+            painter: _HeatCellPainter(
+              progress: _progress,
+              cellSize: widget.size,
+              color: widget.color,
+              outlineColor: scheme.primary,
+              selected: widget.selected,
             ),
           ),
         ),
@@ -226,12 +275,81 @@ class _HeatCellState extends State<_HeatCell>
 
     final tooltip = widget.tooltip;
     if (tooltip == null) return content;
+    if (_hoverOnlyTooltip) {
+      // 悬停时才创建 Tooltip：700+ 个常驻 Tooltip 的 State / 语义节点 /
+      // OverlayPortal 在开页首帧里是纯开销。挂载时鼠标已经在格子上方，
+      // MouseTracker 会补发 enter，400ms wait 与原来一致。
+      if (!_hovered) return content;
+      _tooltipText ??= tooltip();
+      return Tooltip(
+        message: _tooltipText!,
+        waitDuration: const Duration(milliseconds: 400),
+        child: content,
+      );
+    }
     return Tooltip(
-      message: tooltip,
+      message: tooltip(),
       waitDuration: const Duration(milliseconds: 400),
       child: content,
     );
   }
+}
+
+/// 格子轮廓：缓存的 morph 路径按动画进度缩放后填充（选中态多一圈描边）。
+class _HeatCellPainter extends CustomPainter {
+  _HeatCellPainter({
+    required this.progress,
+    required this.cellSize,
+    required this.color,
+    required this.outlineColor,
+    required this.selected,
+  }) : super(repaint: progress);
+
+  /// 悬停最多放大 25%（原实现放大外层 SizedBox，现在在 painter 里缩放路径）。
+  static const double _hoverScale = 0.25;
+
+  final ValueNotifier<double> progress;
+  final double cellSize;
+  final Color color;
+  final Color outlineColor;
+  final bool selected;
+
+  static final Paint _paint = Paint();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final side = cellSize * (1 + _hoverScale * progress.value);
+    if (side <= 0) return;
+    final origin = Offset((size.width - side) / 2, (size.height - side) / 2);
+    final outer = _MorphCellClipCache.of(progress.value, Size.square(side));
+
+    canvas
+      ..save()
+      ..translate(origin.dx, origin.dy);
+    if (selected && side > 3) {
+      // 选中描边：外圈 primary 形状 + 内缩 1.5dp 的格子色。
+      const inset = 1.5;
+      canvas
+        ..drawPath(outer, _paint..color = outlineColor)
+        ..save()
+        ..translate(inset, inset)
+        ..drawPath(
+          _MorphCellClipCache.of(progress.value, Size.square(side - inset * 2)),
+          _paint..color = color,
+        )
+        ..restore();
+    } else {
+      canvas.drawPath(outer, _paint..color = color);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _HeatCellPainter oldDelegate) =>
+      oldDelegate.cellSize != cellSize ||
+      oldDelegate.color != color ||
+      oldDelegate.outlineColor != outlineColor ||
+      oldDelegate.selected != selected;
 }
 
 /// 日历热力图（横轴周、纵轴星期一~日；横向滚动，初始对齐"今天"）。
@@ -313,7 +431,6 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
   }
 
   void _jumpToToday() {
-    if (!_controller.hasClients) return;
     _controller.jumpTo(_controller.position.maxScrollExtent);
   }
 
@@ -468,7 +585,7 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
       gap: widget.cellGap,
       color: color,
       selected: inRange && widget.selectedDay == day,
-      tooltip: inRange ? widget.tooltipFor(day, value) : null,
+      tooltip: inRange ? () => widget.tooltipFor(day, value) : null,
       onTap: inRange && onDayTap != null ? () => onDayTap(day) : null,
     );
   }
@@ -554,7 +671,8 @@ class WeekdayHourHeatmap extends StatelessWidget {
                         scheme,
                         levels.levelOf(values[weekday][hour]),
                       ),
-                      tooltip: tooltipFor(weekday, hour, values[weekday][hour]),
+                      tooltip: () =>
+                          tooltipFor(weekday, hour, values[weekday][hour]),
                     ),
                 ],
               ),

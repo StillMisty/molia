@@ -127,11 +127,13 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       ],
       body: Consumer<PlayStatisticsProvider>(
         builder: (context, provider, _) {
-          if (!provider.hasLoaded && provider.isLoading) {
-            return const Center(child: M3ELoadingIndicator());
-          }
-          if (!provider.hasLoaded && provider.hasError) {
-            return _errorState(l10n, provider);
+          // 首帧 provider 还没开始加载（加载在 post-frame 里启动）：先显示
+          // 加载态。否则会用空快照先建一遍日历（80 周 × 7 = 560 个格子），
+          // 数据回来后再整页重建一次——开页实测白付一帧 20ms+ 和同帧 GC。
+          if (!provider.hasLoaded) {
+            return provider.hasError
+                ? _errorState(l10n, provider)
+                : const Center(child: M3ELoadingIndicator());
           }
           return _content(l10n, provider);
         },

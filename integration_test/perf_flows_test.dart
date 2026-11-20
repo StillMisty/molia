@@ -9,13 +9,11 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/perf/frame_stats.dart';
 import 'package:molia/domain/models/playback.dart';
-import 'package:molia/pages/play_statistics_page.dart';
 import 'package:molia/pages/statistics/statistics_heatmap.dart';
 import 'package:molia/services/app_logging.dart';
 import 'package:molia/widgets/collection_track_list.dart';
 import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/player.dart';
-import 'package:molia/widgets/statistics/listening_heatmap.dart';
 import 'package:motor/motor.dart';
 
 import '../test/support/perf_app_harness.dart';
@@ -315,17 +313,7 @@ void main() {
     );
     FrameStats.instance.beginScenario('desktop-statistics-open');
     // 直接压根 Navigator：设置页入口在桌面骨架里还有折叠二级页，直推更稳。
-    unawaited(
-      navigator.push<void>(
-        MaterialPageRoute<void>(builder: (_) => const PlayStatisticsPage()),
-      ),
-    );
-    await pumpUntil(
-      tester,
-      () => find.byType(WeekdayHourHeatmap).evaluate().isNotEmpty,
-      timeout: const Duration(seconds: 30),
-      reason: '统计页首屏（时段热力图）未出现',
-    );
+    await pushStatisticsPage(tester);
     // 覆盖首屏布局与图片占位后的稳定帧：热力图 / 榜单 / 指标都在这一屏。
     await pumpFrames(tester, frames: 60);
     FrameStats.instance.reportNow('end');
