@@ -37,9 +37,7 @@ import 'dart:core' show Object, String;
 import 'package:jni/_internal.dart' as jni$_;
 import 'package:jni/jni.dart' as jni$_;
 
-import 'jni_compat.dart';
-
-const _$jniVersionCheck = jni$_.JniVersionCheck(1, 1);
+const _$jniVersionCheck = jni$_.JniVersionCheck(1, 2);
 
 /// from: `top.stillmisty.molia.pigeon.FlutterError`
 extension type FlutterError._(jni$_.JObject _$this)

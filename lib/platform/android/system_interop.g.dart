@@ -39,7 +39,7 @@ import 'dart:core' show Object, String;
 import 'package:jni/_internal.dart' as jni$_;
 import 'package:jni/jni.dart' as jni$_;
 
-const _$jniVersionCheck = jni$_.JniVersionCheck(1, 1);
+const _$jniVersionCheck = jni$_.JniVersionCheck(1, 2);
 
 /// from: `top.stillmisty.molia.interop.SystemInterop`
 extension type SystemInterop._(jni$_.JObject _$this) implements jni$_.JObject {

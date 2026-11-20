@@ -4,7 +4,7 @@
 # 生成链固定 JDK 21（JNIgen 官方支持 17–21；构建仍用 AGENTS.md 的 JDK 27）：
 # 1. Kotlin 源先由 Gradle 编译成 class（JNIgen 的 asm 后端只读字节码）；
 # 2. Pigeon 生成 Kotlin bridge，再自动调用 JNIgen 生成 Dart JNI 绑定；
-# 3. 校正 jnigen 1.1.0 写死的 JniVersionCheck（见文末说明）。
+# 3. 补生成物在 Flutter 模板分析器下的 file-level ignore（见文末说明）。
 #
 # 用法（在任意目录）：
 #   tool/pigeon/generate.sh
@@ -73,17 +73,7 @@ fi
 
 run_pigeon
 
-# jnigen 1.1.0 把期望的 package:jni 版本硬编码为 1.2.0，但 pub 最新仍是
-# 1.1.2；不校正时生成文件的常量断言会在 analyze / 运行期失败。移除条件：
-# package:jni 发布 1.2.0（或 jnigen 修正常量）。与 tool/jnigen.dart 同一处理。
-sed -i -E 's/JniVersionCheck\(1, 2\)/JniVersionCheck(1, 1)/' "$jni_dart"
-
-# jnigen 1.1.0 还会调用 jni 1.2.0 才有的 JReference.nonNullPointer；用
-# lib/platform/pigeon/jni_compat.dart 的扩展补上（语义与 1.2.0 一致）。
-# 同时压掉生成物在 Flutter 模板分析器下的已知诊断（不改生成逻辑）。
-if ! grep -q "^import 'jni_compat.dart';$" "$jni_dart"; then
-  sed -i "/^import 'package:jni\/jni.dart' as jni\\\$_;$/a import 'jni_compat.dart';" "$jni_dart"
-fi
+# 压掉生成物在 Flutter 模板分析器下的已知诊断（不改生成逻辑）。
 if ! grep -q 'ignore_for_file: override_on_non_overriding_member' "$jni_dart"; then
   sed -i "/^\/\/ ignore_for_file: use_super_parameters$/a // ignore_for_file: override_on_non_overriding_member" "$jni_dart"
 fi
@@ -95,7 +85,8 @@ if ! grep -q 'ignore_for_file: unused_element' lib/platform/pigeon/widget.native
 fi
 
 # Pigeon / jnigen 输出不保证行尾干净；统一格式化，提交物无 trailing whitespace。
-dart format "$dart_out" lib/platform/pigeon/widget.native_interop.g.dart "$jni_dart" >/dev/null
+dart format "$dart_out" lib/platform/pigeon/widget.native_interop.g.dart "$jni_dart" \
+  tool/pigeon/widget_jnigen_config.dart >/dev/null
 
 echo "generate.sh: 完成；生成物："
 echo "  $dart_out"

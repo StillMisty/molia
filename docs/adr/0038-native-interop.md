@@ -192,9 +192,9 @@ tool/pigeon/generate.sh            # widget native interop 试点（JDK 21）：
 - **JDK**：生成必须 JDK 21。JDK 27 下 JNIgen 自带的 ApiSummarizer 构建
   （Gradle 9.6 + Groovy）报 `Unsupported class file major version 71`；构建
   仍用 JDK 27，未升降整仓 JDK。
-- **生成器兼容**：jnigen 1.1.0 把 `JniVersionCheck` 期望版本硬编码为 1.2.0，
-  但 pub 上最新 `package:jni` 是 1.1.2；脚本生成后把断言校正成 `1.1`
-  （`_alignJniVersionCheck`）。移除条件：jni 发布 1.2.0 或 jnigen 修正常量。
+- **生成器兼容**：jnigen 1.1.0 生成的绑定要求 `package:jni` 1.2；本仓已升到
+  1.2.1，`JniVersionCheck` 与 `JReference.nonNullPointer` 都由上游提供，不再
+  需要版本校正（早期 `_alignJniVersionCheck` 已随升级删除）。
 - **CI drift**：JNIgen 需要 JDK 21 + Android SDK + Gradle 编译，暂不进入
   Ubuntu drift job（该 job 没有 Android 构建环境，且 `docs check` 会拦截
   工作流里的 JDK 21）。待有 Android 生成任务后再补，期间以「本地重跑 +
@@ -263,9 +263,8 @@ Pigeon native interop 仍是 preview；本节只记录 **widget 一个域**的�
 - **已知阻塞 / 兼容补丁**（preview 期，均由生成脚本确定性处理）：
   - Gradle 9.9 + `org.gradle.parallel=true` 下 jnigen 的 Gradle stub 报
     “Resolution … without an exclusive lock”：生成期间临时关闭并行；
-  - jnigen 1.1.0 期望 `package:jni` 1.2.0，但 pub 最新仍是 1.1.2：校正
-    `JniVersionCheck`，并用 `lib/platform/pigeon/jni_compat.dart` 补
-    `JReference.nonNullPointer`；jni 发布 1.2.0 后删除补丁；
+  - `package:jni` 1.2.1 起 `JniVersionCheck` / `JReference.nonNullPointer` 由
+    上游提供，不再需要版本校正与 `jni_compat.dart` 垫片（已随升级删除）；
   - 生成物在 Flutter 模板分析器下的 3 条已知诊断用 file-level ignore 压掉，
     不改生成逻辑。
 - **回滚**：删除适配器里的 native 分支即可回到旧通道；Kotlin host 与生成物

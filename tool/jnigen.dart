@@ -114,24 +114,9 @@ Future<void> main(List<String> args) async {
       ),
     );
     await generator.generate();
-    await _alignJniVersionCheck(output);
   }
 
   stdout.writeln('jnigen: 已生成 ${inputs.length} 个绑定到 lib/platform/android/');
-}
-
-/// 校正生成物里的 `JniVersionCheck`。
-///
-/// jnigen 1.1.0 把期望版本硬编码成 `1.2`，但 pub 上最新的 `package:jni` 仍是
-/// 1.1.2：不校正时所有 import 生成物的测试 / 构建都会在常量断言处失败。
-/// 移除条件：`package:jni` 发布 1.2.0（或 jnigen 修正该常量）后删除本函数。
-Future<void> _alignJniVersionCheck(File output) async {
-  final text = await output.readAsString();
-  final patched = text.replaceFirst(
-    RegExp(r'JniVersionCheck\(1,\s*2\)'),
-    'JniVersionCheck(1, 1)',
-  );
-  if (patched != text) await output.writeAsString(patched);
 }
 
 /// 编译 app 的 Kotlin 源，返回「完整类名 → 编译输出根目录」。
