@@ -542,7 +542,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         width: 28,
         height: 28,
         borderRadius: M3EShapes.radiusSmall,
-        memCacheWidth: (28 * MediaQuery.of(context).devicePixelRatio).round(),
+        memCacheWidth: (28 * MediaQuery.devicePixelRatioOf(context)).round(),
         fallbackIconSize: 16,
       ),
     );
@@ -624,7 +624,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                   left: previewLayout.horizontalPadding,
                   right: previewLayout.horizontalPadding,
                   top: 16,
-                  bottom: 16 + MediaQuery.of(context).padding.bottom,
+                  bottom: 16 + MediaQuery.paddingOf(context).bottom,
                 ),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surface,

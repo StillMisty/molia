@@ -26,6 +26,11 @@ import '../../theme/m3e_context.dart';
 /// 色阶档位数（0 = 无数据 + 4 档有数据）。
 const int heatmapLevelCount = 5;
 
+/// 月份标签去掉 4 位年份（zh 的 `2026年9月` / en 的 `September 2026`）。
+///
+/// 每列都会走一次；`RegExp` 构造含 pattern 解析，提到顶层复用。
+final RegExp _yearInMonthLabel = RegExp(r'\s*\d{4}\s*年?');
+
 /// 档位 → 颜色（唯一色阶来源；图例与格子共用）。
 Color heatmapLevelColor(ColorScheme scheme, int level) => switch (level) {
   0 => scheme.surfaceContainerHighest,
@@ -400,7 +405,7 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
       final day = start.add(Duration(days: i));
       if (day.day == 1) {
         final raw = MaterialLocalizations.of(context).formatMonthYear(day);
-        monthLabel = raw.replaceAll(RegExp(r'\s*\d{4}\s*年?'), ' ').trim();
+        monthLabel = raw.replaceAll(_yearInMonthLabel, ' ').trim();
         break;
       }
     }

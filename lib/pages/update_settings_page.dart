@@ -12,6 +12,11 @@ import '../providers/update_provider.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
+// 固定 pattern 与 locale 无关，按模块复用：`DateFormat` 构造要解析 pattern，
+// 每次 build 新建是纯浪费（同 `utils/sync_format.dart` 的做法）。
+final DateFormat _releaseDateFormat = DateFormat('yyyy-MM-dd');
+final DateFormat _checkedAtDateFormat = DateFormat('yyyy-MM-dd HH:mm');
+
 /// 「关于与更新」子页：渠道 / 自动检查 / 检查更新 / 新版本下载安装 / 高级 / 关于。
 ///
 /// 从设置首屏「通用与数据」进入（入口副标题显示当前版本或可更新版本）。
@@ -149,9 +154,7 @@ class _ReleaseSection extends StatelessWidget {
           title: l10n.updateReleaseTitle(release.version),
           subtitle: releasedAt == null
               ? l10n.updateReleaseDateUnknown
-              : l10n.updateReleaseDate(
-                  DateFormat('yyyy-MM-dd').format(releasedAt),
-                ),
+              : l10n.updateReleaseDate(_releaseDateFormat.format(releasedAt)),
         ),
         if (size != null)
           SettingsInfoTile(
@@ -435,7 +438,7 @@ String updateStatusText(AppLocalizations l10n, UpdateProvider provider) {
       final last = provider.lastCheckedAt;
       return last == null
           ? l10n.updateStatusIdle
-          : l10n.updateLastChecked(DateFormat('yyyy-MM-dd HH:mm').format(last));
+          : l10n.updateLastChecked(_checkedAtDateFormat.format(last));
     case UpdateStatus.checking:
       return l10n.updateStatusChecking;
     case UpdateStatus.upToDate:

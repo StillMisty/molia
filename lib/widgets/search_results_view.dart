@@ -436,6 +436,11 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     final showEmpty =
         preview.totalItems == 0 && !projection.isBusy && !anyFailure;
     final currentKeys = {for (final item in preview.items) item.key};
+    // 在 build 里裁剪高亮 GlobalKey 缓存：只影响缓存本身（删掉已不在结果里的
+    // 行的 key），不 setState、不改变任何参与布局的值，因此不会触发重建或
+    // 时序问题；`_itemKey` 同样在 build 里 putIfAbsent。放到 didUpdateWidget
+    // 不行（结果来自 session/preview 通知，不走 widget 更新），另挂监听反而
+    // 多一条生命周期要维护。
     _highlightKeys.removeWhere((key, _) => !currentKeys.contains(key));
     _scheduleEnsureHighlighted(widget.session.preview.highlightedKey);
 

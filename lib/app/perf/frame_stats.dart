@@ -15,6 +15,10 @@ import 'package:logging/logging.dart';
 ///
 /// 为什么不用 DevTools 当唯一口径：体检需要在同一台机器上反复跑同一组场景，
 /// 脚本要能直接读到 p50/p95/p99；DevTools 用于对最差帧做一次归因。
+///
+/// 掉帧口径按刷新率分：120Hz 看 `jank8`（帧预算 8.33ms），60Hz 看 `jank16`
+/// （16.7ms）。两者都以 `work = build + raster` 判定，`totalSpan` 只另行给出
+/// `latency16`，不能当卡顿依据。
 class FrameStats {
   FrameStats._();
 
@@ -116,6 +120,7 @@ class FrameWindow {
   final List<double> _work = [];
   final List<double> _vsync = [];
   final List<double> _total = [];
+  int _jank8 = 0;
   int _jank16 = 0;
   int _jank33 = 0;
   int _latency16 = 0;
@@ -135,6 +140,8 @@ class FrameWindow {
     _total.add(totalMs);
     // 判定「掉帧」看 build + raster（Flutter 官方口径）；totalSpan 还包含
     // vsync 等待 / 流水线延迟，正常 60Hz 帧也可能到 20ms，不能当卡顿。
+    // jank8 是 120Hz 帧预算（8.33ms）的同一口径，60Hz 设备上只作参考。
+    if (workMs > 8.33) _jank8++;
     if (workMs > 16.7) _jank16++;
     if (workMs > 33.3) _jank33++;
     if (totalMs > 16.7) _latency16++;
@@ -159,6 +166,7 @@ class FrameWindow {
       'total_p50': _round(percentile(_total, 50)),
       'total_p95': _round(percentile(_total, 95)),
       'total_p99': _round(percentile(_total, 99)),
+      'jank8': _jank8,
       'jank16': _jank16,
       'jank33': _jank33,
       'latency16': _latency16,
@@ -169,6 +177,7 @@ class FrameWindow {
     _work.clear();
     _vsync.clear();
     _total.clear();
+    _jank8 = 0;
     _jank16 = 0;
     _jank33 = 0;
     _latency16 = 0;

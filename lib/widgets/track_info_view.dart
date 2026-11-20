@@ -218,7 +218,7 @@ class TrackInfoView extends StatelessWidget {
                         size: 32,
                         borderRadius: M3EShapes.radiusSmall,
                         memCacheWidth:
-                            (32 * MediaQuery.of(context).devicePixelRatio)
+                            (32 * MediaQuery.devicePixelRatioOf(context))
                                 .round(),
                         fallbackIconSize: 16,
                       ),

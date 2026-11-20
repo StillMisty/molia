@@ -251,7 +251,7 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
                 // 方形预览按 cover 裁切；原图查看走 cover_viewer 的 contain。
                 fit: BoxFit.cover,
                 borderRadius: M3EShapes.radiusLarge,
-                memCacheWidth: (120 * MediaQuery.of(context).devicePixelRatio)
+                memCacheWidth: (120 * MediaQuery.devicePixelRatioOf(context))
                     .round(),
                 fallbackIconSize: 48,
                 // 列表封面没有全局默认封面语义：缺图就是中性占位。

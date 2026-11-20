@@ -319,6 +319,8 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                       return CoverChangeBuilder(
                         builder: (context, covers) {
                           final scheme = Theme.of(context).colorScheme;
+                          final devicePixelRatio =
+                              MediaQuery.devicePixelRatioOf(context);
                           final coverUrl = _displayCoverUrl(covers);
                           return Container(
                             margin: const EdgeInsets.symmetric(
@@ -339,11 +341,8 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                                   width: 72,
                                   height: 72,
                                   borderRadius: M3EShapes.radiusMedium,
-                                  memCacheWidth:
-                                      (72 *
-                                              MediaQuery.of(context)
-                                                  .devicePixelRatio)
-                                          .round(),
+                                  memCacheWidth: (72 * devicePixelRatio)
+                                      .round(),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
@@ -462,7 +461,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
         left: detailLayout.horizontalPadding,
         right: detailLayout.horizontalPadding,
         top: 16,
-        bottom: 16 + MediaQuery.of(context).padding.bottom,
+        bottom: 16 + MediaQuery.paddingOf(context).bottom,
       ),
       decoration: BoxDecoration(
         // 嵌入时让背景来自宿主（宽屏是 M3E 弹层容器，窄屏是外层 Scaffold

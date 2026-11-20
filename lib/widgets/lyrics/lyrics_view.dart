@@ -197,13 +197,13 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   /// 顶栏遮挡：渐隐带 + 系统状态栏。
   double _topOverlay() =>
-      kTopFadeBandHeight + MediaQuery.of(context).padding.top;
+      kTopFadeBandHeight + MediaQuery.paddingOf(context).top;
 
   /// 底栏遮挡：快捷操作栏（FAB menu 的 FAB）可见时 = 屏边距 + FAB 尺寸
   /// + 底部安全区；隐藏时为 0。
   double _bottomOverlay() {
     if (!_viewSession.quickActionsBarVisible) return 0.0;
-    final padding = MediaQuery.of(context).padding;
+    final padding = MediaQuery.paddingOf(context);
     return padding.bottom + _quickActionsScreenOffset + _quickActionsFabSize;
   }
 
@@ -377,8 +377,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 1000.0,
               ), // 预建附近行，减少兜底跳转
               padding: EdgeInsets.only(
-                top: 80 + MediaQuery.of(context).padding.top,
-                bottom: 40 + MediaQuery.of(context).padding.bottom,
+                top: 80 + MediaQuery.paddingOf(context).top,
+                bottom: 40 + MediaQuery.paddingOf(context).bottom,
               ),
               itemCount: _session.lines.length + 1,
               itemBuilder: (context, index) {
@@ -475,7 +475,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
               right: _quickActionsScreenOffset,
               bottom:
                   _quickActionsScreenOffset +
-                  MediaQuery.of(context).padding.bottom,
+                  MediaQuery.paddingOf(context).bottom,
               child: IgnorePointer(
                 ignoring: !shouldShowQuickActions,
                 child: ExcludeSemantics(
@@ -495,7 +495,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                             (1 - raw) *
                                 (2 * _quickActionsScreenOffset +
                                     _quickActionsFabSize +
-                                    MediaQuery.of(context).padding.bottom),
+                                    MediaQuery.paddingOf(context).bottom),
                           ),
                           child: child,
                         ),

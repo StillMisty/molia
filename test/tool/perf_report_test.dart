@@ -52,4 +52,14 @@ void main() {
   test('没有样本时给出明确结论', () {
     expect(renderFrameSummary(const []), contains('没有采到 `molia.frame` 样本'));
   });
+
+  test('120Hz 口径 jank8 进入汇总列', () {
+    expect(frameColumns, contains('jank8'));
+    expect(
+      renderFrameSummary(const [
+        {'scenario': 'a', 'label': 'end', 'jank8': 3},
+      ]),
+      contains('| 3 |'),
+    );
+  });
 }

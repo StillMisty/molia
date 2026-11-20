@@ -104,7 +104,7 @@ class SettingsAdvancedPage extends StatelessWidget {
               listenForChanges: false,
               size: 40,
               borderRadius: M3EShapes.radiusMedium,
-              memCacheWidth: (40 * MediaQuery.of(context).devicePixelRatio)
+              memCacheWidth: (40 * MediaQuery.devicePixelRatioOf(context))
                   .round(),
               fallbackIconSize: 20,
             ),

@@ -25,6 +25,7 @@ const List<String> frameColumns = [
   'total_p50',
   'total_p95',
   'total_p99',
+  'jank8',
   'jank16',
   'jank33',
   'latency16',

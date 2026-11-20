@@ -116,7 +116,7 @@ class AiDjTrackTile extends StatelessWidget {
                 track: track,
                 size: 44,
                 borderRadius: M3EShapes.radiusMedium,
-                memCacheWidth: (44 * MediaQuery.of(context).devicePixelRatio)
+                memCacheWidth: (44 * MediaQuery.devicePixelRatioOf(context))
                     .round(),
               );
               return isCurrent

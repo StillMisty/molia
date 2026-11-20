@@ -17,6 +17,9 @@ import '../widgets/empty_state.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
+// 固定 pattern 与 locale 无关，按模块复用：渠道检查行与失败行共用同一实例。
+final DateFormat _shortTimeFormat = DateFormat('MM-dd HH:mm');
+
 /// 问题排查页：概览 / 最近问题 / 渠道检查 / 导出一个主操作。
 ///
 /// 只读内存快照与一次包信息读取；打开页面不触发渠道检查、数据库扫描或
@@ -252,7 +255,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
               icon: Icons.schedule_rounded,
               title: l10n.diagnosticsChannelCheckSection,
               subtitle: l10n.diagnosticsCheckedAt(
-                DateFormat('MM-dd HH:mm').format(run.startedAt),
+                _shortTimeFormat.format(run.startedAt),
               ),
             ),
         ],
@@ -329,7 +332,7 @@ class _FailureRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final m3e = M3ETheme.of(context);
-    final time = DateFormat('MM-dd HH:mm').format(record.at);
+    final time = _shortTimeFormat.format(record.at);
     final reason = diagnosticFailureReason(l10n, record.kind);
     return CardListSurface(
       position: SettingsRowPosition.of(context),
