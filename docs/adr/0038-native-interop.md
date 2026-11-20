@@ -398,6 +398,34 @@ I/O 域，使用 Pigeon 的 **stable channel 模式**（issue #80），不用 `u
   `createSafBridge()` 直接返回 `MethodChannelSafBridge`）即可回到旧通道；
   Kotlin host 与生成物可整体删除，不影响其他域。
 
+## 13. Windows / Linux runner 通道保留（2026-11-20）
+
+结论：`window`、`taskbar`、`audio_output`、`playback_menu` **保留 MethodChannel**，
+不迁 JNI / FFI / Pigeon native interop。它们不是性能路径，而是 runner / 平台
+生命周期边界；直接互操作会把 COM / GObject / NSMenu 的所有权与线程问题搬进
+Dart，收益与风险不成比例。
+
+| 通道 | 平台 | 原生机制 | 方向 / 频率 |
+| --- | --- | --- | --- |
+| `window` | Windows / Linux / macOS | Win32 + COM（虚拟桌面 / DWM）、GApplication、AppDelegate | 启动 / 托盘 / 关闭；原生→Dart `reopen` / `closeRequested` |
+| `taskbar` | Windows | `ITaskbarList3` COM、`TaskbarButtonCreated` / `TaskbarCreated` | 切歌 / 播放态 / 收藏；原生→Dart `pressed` |
+| `audio_output` | Windows / macOS | COM 音频通知 / CoreAudio；Linux 用 `pactl` 子进程，无通道 | 输出丢失，偶发；原生→Dart `outputLost` |
+| `playback_menu` | macOS | `NSMenu`（主线程） | 切歌 / 播放态；原生→Dart 菜单命令 |
+
+- **低频、双向、强生命周期**：窗口按会话个位数、任务栏按切歌、输出丢失偶发；
+  channel 单次百微秒级完全不可感。首帧前的固定等待是引擎 / 平台线程就绪，
+  不是 channel 序列化（§7 已量化）。
+- **runner 是 exe，不是库**：FFI 要先把 C++/COM/GTK 逻辑导出成稳定 C ABI，
+  或搬进 native asset DLL；任务栏 COM 的 STA、Explorer 重启、窗口消息，
+  GTK 主循环与 GObject 引用计数，都要在 Dart 侧重做。FFIgen 不支持 C++ 类；
+  Pigeon native interop 仍不支持 Windows / Linux。
+- **Pigeon channel 模式也不是“退休 transport”**：它能给这些域名做类型化
+  C++/GObject host，但 transport 仍是 channel，还要把生成代码接进 runner
+  构建；只有手写 Map 漂移成为真实维护问题时才值得做。
+- **重新评估条件**：出现 60Hz 窗口几何 / 音频可视化 / 每秒多次任务栏进度，
+  或需要从后台 isolate 同步调用 UI/COM/GTK API 时，才考虑把逻辑抽成 **C ABI
+  native asset 库**；不要直接 FFI 进 runner exe。
+
 ## 阶段与验收
 
 | 阶段 | 内容 | 验收 |
