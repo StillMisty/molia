@@ -299,6 +299,9 @@ Linux microbenchmark（非端到端启动采样，绝对值只用于比较量级
 2026-11-07 复测）统一见 `docs/performance-audit.md`；桌面内存见 `docs/memory.md`。
 复测入口为 `tool/agent/perf.sh`（`frames` / `memory` / `size` / `startup` / `data` /
 `cpu`），Windows 真实窗口帧用 `tool/agent/perf.sh frames windows --real`。
+桌面 `frames` 还包含两个 120Hz 场景：`desktop-favorites-toggle`（10k 行内存库，
+真实 `LocalLibraryProvider`）与 `desktop-statistics-open`（400 天统计直推页面）；
+两者在 Android 上跳过。
 
 ### 9.1 帧归因：`frames --timeline`（2026-11）
 
@@ -311,6 +314,9 @@ tool/agent/perf.sh frames linux --timeline     # Android 换成 android [serial]
 
 这条路径换用 `integration_test/perf_timeline_test.dart`：`traceAction` 采一段
 VM service timeline（DevTools Performance 的同一数据源），场景仍是桌面壳收藏滚动。
+统计页开页另用 `integration_test/perf_statistics_timeline_test.dart`（同一套口径，
+只是场景换成 400 天统计 + 直接 push 页面）；本机 GTK/at-spi 默认开启语义树时
+SEMANTICS 不会归零，跨环境比较前先确认。
 
 - 产物：`timeline.json`（原始 trace，可直接导入 DevTools Performance 或
   ui.perfetto.dev 看火焰图）与 `summary.md`（UI 帧百分位、BUILD / LAYOUT / PAINT /

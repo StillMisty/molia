@@ -853,3 +853,115 @@ Linux release 冷启动（`tool/agent/startup.sh --runs 5`）：
 - 未测：Android 真机 / 模拟器、Windows、托盘内存、APK / bundle 体积；
   本轮也没有「切歌时按线程 CPU」的前后对比，下次优先补
   `perf.sh cpu linux` 与真实设备上的启动 / 帧。
+
+## 2026-11-21 代码级性能：浏览索引与统计页热力图（120Hz 口径）
+
+> 目标：1 万+ 曲库下按 120Hz 检查交互路径（单帧 `work = build + raster` 预算
+> 8.33ms）。分三块：浏览索引延迟解码并移出主线程、收藏切换 / 统计页开页帧场景、
+> 统计页热力图自绘与路径缓存。采集为同机 Linux / profile / Xvfb：`raster`
+> 恒为 0，只有 build 可信；`jank8` 是本轮新增口径。
+
+### 1. 口径与场景
+
+- `FrameWindow` 新增 `jank8`（work > 8.33ms）；120Hz 看它，60Hz 仍看 `jank16` /
+  `jank33`，`totalSpan` 只用于 `latency16`；
+- `FrameStats.beginScenario` 从场景开始重新计 5s 周期：长场景不再被切成
+  「无 label 的大窗口 + 很短的 end」，汇总表也不会只剩十几帧；
+- 新场景：`desktop-favorites-toggle`（10k 行真实内存库 + `LocalLibraryProvider`，
+  触发一次收藏新增 / 移除）与 `desktop-statistics-open`（400 天统计，直接 push
+  `PlayStatisticsPage`）。两者只在桌面跑，Android 跳过 10k seed；
+- 新 timeline 入口：`integration_test/perf_statistics_timeline_test.dart`
+  （与 `perf_timeline_test.dart` 同一套 traceAction 口径，换场景）；
+- `integration_test/morph_benchmark_test.dart`：`Morph.toPath` / 裁剪路径的手动
+  微基准，不进默认套件。
+
+### 2. 浏览索引
+
+问题链路：收藏切换 / 列表曲目写入 / 下载记录变化 → `schedule(browse)` →
+150ms 防抖 → `loadBrowseTracks()` 全表读 + 逐行 `jsonDecode(raw)` →
+`buildBrowseIndex()` 全量去重 / 分桶 / 排序（全在 UI isolate）。
+
+本机微基准（10k 行；JIT = 单测口径，AOT = `dart compile exe`）：
+
+| 项 | JIT | AOT |
+| --- | ---: | ---: |
+| decode + buildIndex（原主线程链路） | 70ms | 22.7–33.1ms |
+| buildIndex（isolate 内） | — | 22.7–24.4ms |
+| `Isolate.run` spawn + 对象发送 | — | 2.3–2.6ms |
+| 遍历 10k `raw`（只建惰性壳） | — | 0.10–0.11ms |
+| 10k 全量解码（显式读 payload） | 43.7ms | 5.0–5.3ms |
+| `_publish` 智能列表行（不含解码） | — | 约 2.5ms |
+
+改法：
+
+- `loadBrowseTracks` 透传 raw 原串，索引构建 / 去重不解码；
+  `BrowseTrack.raw` 返回只读惰性 `MapBase` 壳，播放 / 导出首次读 payload 时才
+  `jsonDecode` 并缓存；
+- 单曲收藏切换按 `FavoriteToggle` 增量更新缓存的 `BrowseSource`，不再整库重读；
+  取消收藏后若该曲仍在下载 / 用户列表里，由合并优先级补回；批量 / 换源 / 同步 /
+  导入仍整库校准；
+- 超过 2000 行时 `Isolate.run(() => buildBrowseIndex(source))` 直接发送纯数据
+  对象（不再在 UI isolate 构造 wire map），失败回退主线程；
+- 新增 `browse.build`（`rows` / `path: sql|incremental|isolate`）与
+  `browse.publish`（`smart_rows` / `index_tracks`）埋点。
+
+实测（合并 main 后的最终一版，`perf.sh frames linux`）：
+
+| 场景 | frames | jank8 | work p95 | work p99 | worst |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `desktop-favorites-toggle` | 119 | **0** | 0.55 | **4.30ms** | 5.54ms |
+
+同轮日志：`browse.build` 54.1–65.5ms（全部 `path=isolate`）、
+`browse.publish` 1.69–2.49ms。场景与本改动同一轮引入，没有「改前」同场景帧数据；
+改前成本以上面的微基准和旧链路（主线程 decode）说明，不冒充帧 A/B。
+
+### 3. 统计页开页
+
+基线（本改动前）：p99 80.65–122.43ms，worst 177–216ms，`jank8=2`。
+timeline 归因（126.15ms 最差帧）：LAYOUT 44%、PAINT 25%、SEMANTICS 22%；
+PAINT 主要是 728 格逐格 `Morph.toPath`（微基准 p50 8µs），LAYOUT 里还包含
+「首帧用空快照先建 80 周 × 7 格」与同帧 GC；加载回来后再整页重建一次。
+
+改法（不改视觉）：
+
+- 格子轮廓改 `CustomPaint` 自绘，去掉逐格 `ClipPath` / `AnimatedBuilder` /
+  内层 `SizedBox`；悬停动画只 `markNeedsPaint`；
+- `Morph.toPath` 结果按 `(progress, size)` 做 256 项 LRU，静止格共用已适配 Path；
+- 弹簧控制器按需创建，静止格不分配 Ticker；
+- tooltip 文案惰性生成；桌面只在悬停格挂载 `Tooltip`，静止格保留
+  `Semantics(tooltip:)` 供读屏读取，离开后按 Tooltip 默认 ~100ms 再消失；
+- 首帧未加载一律加载态，避免空快照先建 560 格。
+
+| 版本 | frames | work p95 | work p99 | jank8 | worst |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 基线 | 63 | 0.72 | 122.43 | 2 | 215.69 |
+| 基线（同会话复测） | 61 | 0.73 | 80.65 | 2 | 177.20 |
+| 自绘 + 路径缓存 | 61 | 0.82 | 61.87 | 2 | 179.95 |
+| + 加载态 + 按需 tooltip | 61 | 0.73 | 42.50 | 2 | 148.96 |
+| + 按需控制器 | 60 | 0.50 | 45.79 | 2 | 161.78 |
+| 最终（恢复语义 + 合并 main） | 61 | 1.78 | 53.03 | 2 | 161.82 |
+
+p99 在不同轮次有 40–65ms 抖动（语义树开关、GC），方向是 **126ms → 42–53ms**，
+但**没有达到 8.33ms**。原因（都有 timeline 证据）：
+
+- 剩余重帧以 LAYOUT 为主（嵌套 build ≈27ms + 同帧 GC 17–27ms），SEMANTICS ≈12ms；
+- 剩余分配来自「每格一个交互 Widget / State / painter」；换成单 CustomPaint
+  批量绘制估算 12–15ms，仍高于 8.33ms；
+- 即使不含热力图内容，统计页 push + 页面壳 + 加载态首帧本身 9.8–11.9ms；
+- 本机 Xvfb + GTK/at-spi 默认开启语义树；无 AT 环境下 SEMANTICS 归零，
+  这部分不是所有用户都要付。
+
+结论：收藏滚动 / 10k 收藏切换已满足 120Hz 口径；统计页属于低频页面，本轮按
+「可测收益 + 不改视觉」收口，不为 8.33ms 再做批量 painter 重构。
+
+### 4. 验证与未覆盖
+
+- `flutter analyze --no-pub`：0 issue；`flutter test --no-pub`：3624 passed /
+  12 skipped；`docs check` OK；
+- 未测：Windows 真实窗口 raster（120Hz 的 raster 部分仍缺）、Android 真机 /
+  模拟器、iOS；统计页没有 golden 像素基线，视觉等价靠同路径同几何 +
+  一次性渲染核对；
+- 原始结果：`/tmp/molia-agent/perf-linux-20261121-001922`（最终）、
+  `/tmp/molia-agent/perf-linux-20261120-224917`（统计页基线）、
+  `/tmp/molia-agent/perf-linux-20261120-235104`（同会话基线）；
+  timeline：`/tmp/molia-agent/perf-linux-timeline-stats-*`。
