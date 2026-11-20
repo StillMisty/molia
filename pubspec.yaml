@@ -56,8 +56,8 @@ dependencies:
   # 原生互操作（ADR-0038）：只有 lib/platform/ 直接使用；jni / jni_flutter
   # 原先经 shared_preferences_android / path_provider_android 传递，改为显式
   # 依赖，避免上游调整插件依赖时被静默移除。
-  jni: ^1.1.2
-  jni_flutter: ^1.0.4
+  jni: ^1.2.1
+  jni_flutter: ^1.1.0
   # Pigeon 生成的 channel 文件会 import package:meta（即使当前 schema 没有
   # 数据类，pigeon 30 仍无条件生成该 import）；显式依赖避免 lint
   # depend_on_referenced_packages。上游修正后删除。

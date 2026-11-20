@@ -149,10 +149,9 @@ dart run pigeon --input tool/pigeon/widget.dart \
 - **Gradle 并行**：jnigen 用临时 Gradle stub 解析依赖，Gradle 9.9 +
   `org.gradle.parallel=true` 会报 “Resolution … without an exclusive lock”；
   脚本在生成期间临时关闭并行，退出时恢复 `android/gradle.properties`。
-- **jni 版本**：jnigen 1.1.0 期望 `package:jni` 1.2.0，pub 最新仍是 1.1.2；
-  脚本把 `JniVersionCheck(1, 2)` 校正为 `(1, 1)`（与 `tool/jnigen.dart` 同一
-  处理），并用 `lib/platform/pigeon/jni_compat.dart` 补上 1.2.0 的
-  `JReference.nonNullPointer`。移除条件：jni 发布 1.2.0。
+- **jni 版本**：jnigen 1.1.0 生成的绑定要求 `package:jni` ≥ 1.2；本仓已升到
+  1.2.1，`JniVersionCheck` 与 `JReference.nonNullPointer` 都由 `package:jni`
+  提供，不再需要版本校正与兼容垫片。
 - **生成物诊断**：补 `invalid_internal_annotation` / `unused_element` /
   `override_on_non_overriding_member` 的 file-level ignore；不改生成逻辑。
 

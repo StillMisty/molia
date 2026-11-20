@@ -51,8 +51,8 @@ lib/platform/
 - Android widget（阶段 4 试点，issue #78）：`tool/pigeon/generate.sh` 生成
   `pigeon/widget*.dart` + Kotlin `WidgetApi.g.kt`；`widget_adapter.dart` 优先
   native interop，失败回退旧 `top.stillmisty.molia/widget` 通道，非 Android
-  no-op。`jni_compat.dart` 是 jnigen 1.1.0 与 jni 1.1.2 的临时兼容垫片，
-  jni 1.2.0 发布后删除（ADR-0038 §9）。
+  no-op。jnigen 1.1.0 生成的绑定要求 `package:jni` ≥ 1.2，本仓已升到 1.2.1，
+  不再需要兼容垫片（ADR-0038 §9）。
 
 线程规则、R8 keep、生成流程与明确不做的项目见
 `docs/adr/0038-native-interop.md`。
