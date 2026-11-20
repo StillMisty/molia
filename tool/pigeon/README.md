@@ -1,9 +1,10 @@
 # Pigeon 契约（`tool/pigeon/`）
 
 Pigeon 按域小步迁移，每域一份 schema。**默认**使用 stable 的 channel 模式
-（当前：`downloads_publisher.dart`、`download_notifications.dart`）；widget 域是
-**native interop（`useJni`）preview 试点**（issue #78），只此一域，旧通道保留为
-fallback。选型与迁移边界见 `docs/adr/0038-native-interop.md` §9 / §10 / §11。
+（当前：`downloads_publisher.dart`、`download_notifications.dart`、`saf.dart`）；
+widget 域是 **native interop（`useJni`）preview 试点**（issue #78），只此一域，
+旧通道保留为 fallback。选型与迁移边界见 `docs/adr/0038-native-interop.md`
+§9 / §10 / §11 / §12。
 
 ## 约定
 
@@ -103,6 +104,60 @@ flutter test --no-pub
 flutter build apk --debug --no-pub
 flutter test integration_test/download_notifications_pigeon_test.dart -d <android-device>
 # release R8 冒烟：安装 release APK 启动，确认无 ClassNotFoundException
+```
+
+## SAF（Android，channel 模式）
+
+issue #85；选型结论见 ADR-0038 §12。SAF 是文件 / `ContentResolver` I/O 域，
+继续走 stable channel，**不用** `useJni` / `useFfi`：生成只需要 Dart + Linux。
+
+```bash
+dart run pigeon --input tool/pigeon/saf.dart \
+  --dart_out lib/platform/pigeon/saf.g.dart \
+  --kotlin_out android/app/src/main/kotlin/top/stillmisty/molia/pigeon/SafApi.g.kt \
+  --kotlin_package top.stillmisty.molia.pigeon
+```
+
+生成物（提交进仓库，重复运行无 diff）：
+
+- `lib/platform/pigeon/saf.g.dart`
+- `android/app/src/main/kotlin/top/stillmisty/molia/pigeon/SafApi.g.kt`
+
+运行时契约：
+
+- 契约是 `stat` / `listTreeBegin` / `listTreeNext` / `listTreeClose` /
+  `readHead` / `readRange`；数据类 `SafDocumentMessage` /
+  `SafTreeEntryMessage`（`skip` 非空表示跳过项）/ `SafTreeBatchMessage`
+  （`entries` + `done`）。错误类名 `SafPigeonError` 与同包其它生成物隔离。
+- 所有方法用 `@asyncCallback`：Kotlin host 由 Pigeon 的后台 task queue 回调，
+  文件 / `ContentResolver` I/O 仍交给 `SafHost` 现有 executor；**不要**在
+  平台主线程执行 SAF I/O。
+- 原生逻辑抽在 `top.stillmisty.molia.saf.SafHost`（`@Keep`），旧
+  `top.stillmisty.molia/saf` 通道 `SafChannelHandler` 与 `SafApiImpl` 共用
+  同一个 host 实例（会话 token 互通）；错误码 MISSING / PERMISSION_DENIED /
+  UNSUPPORTED / IO 由 host 统一映射，Pigeon 侧再转 `SafPigeonError`。
+  `MainActivity.configureFlutterEngine` 注册 `SafApi.setUp(...)`，
+  `cleanUpFlutterEngine` 调 `SafHost.dispose()` 关闭会话。
+- Dart 适配器 `lib/platform/pigeon/saf_adapter.dart` 只封装 Pigeon transport
+  （平台守卫、`channel-error` → `SafTransportUnavailable`、业务错误 →
+  `SafPigeonException`）；fallback 组合在
+  `lib/data/saf/pigeon_saf_bridge.dart`（`PigeonFirstSafBridge`）——平台层
+  不得 import data。
+- 流式 `listTree` 只在**首批之前** transport 失败时回退旧通道；已经产出条目
+  后中途失败抛 `SafBridgeException`，不从头重扫（避免重复条目）。原生业务
+  错误（权限撤销 / 文件缺失）不换 transport。非 Android 走 `createSafBridge()`
+  返回 null，继续 `dart:io` 文件树。
+- CI 的 `generated-drift` job 已包含上面的生成命令。
+
+验证：
+
+```bash
+flutter analyze --no-pub
+flutter test --no-pub
+flutter build apk --debug --no-pub
+flutter build apk --release --no-pub
+# release R8 冒烟：安装 release APK 启动，确认无 ClassNotFoundException /
+# NoSuchMethodError；有 SAF tree URI 时再验证 stat / readRange。
 ```
 
 ## widget native interop 试点（Android JNI）

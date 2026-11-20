@@ -11,13 +11,11 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
 import '../../data/downloads/download_notifications.dart';
 import '../../data/downloads/download_storage.dart';
 import '../../data/files/app_data_directory.dart';
 import '../../data/files/music_folder_tree_io.dart';
-import '../../data/saf/method_channel_saf_bridge.dart';
+import '../../data/saf/saf_bridge_factory.dart';
 import '../../data/saf/saf_music_folder_tree.dart';
 import '../../data/downloads/downloads_publisher.dart';
 import '../../data/downloads/downloads_repository.dart';
@@ -113,9 +111,8 @@ Future<LocalDataStack> buildLocalDataStack({
 
   // Android 的本地导入是 SAF 文档 URI：存储只把 content:// 路由到应用内
   // Kotlin bridge，下载 / 封面 / 歌词仍走 dart:io。桌面不创建 bridge。
-  final safBridge = defaultTargetPlatform == TargetPlatform.android
-      ? MethodChannelSafBridge()
-      : null;
+  // Android 上优先 Pigeon channel（issue #85），连接层失败回退旧通道。
+  final safBridge = createSafBridge();
   final downloadStorage = createDownloadStorage(
     customRoot: () => downloadSettings.saveDir,
     safBridge: safBridge,

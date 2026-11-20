@@ -24,6 +24,7 @@ class MainActivity : FlutterActivity() {
         top.stillmisty.molia.sync.LocalNetworkPermissionChannelHandler? = null
     private var sleepTimerChannel: top.stillmisty.molia.sleep.SleepTimerChannelHandler? = null
     private var safChannel: top.stillmisty.molia.saf.SafChannelHandler? = null
+    private var safHost: top.stillmisty.molia.saf.SafHost? = null
 
     /// 公共 Downloads 发布逻辑的唯一实现；旧通道与 Pigeon host 共用。
     private val downloadsPublisherHost by lazy {
@@ -220,10 +221,19 @@ class MainActivity : FlutterActivity() {
 
         // SAF（本地曲库音乐文件夹）：树枚举 / stat / 只读字节读取。
         // picker 的 lifetime 授权由 file_picker 负责持久化，这里只消费 URI。
+        // 旧通道与 Pigeon host（issue #85）共用同一个 SafHost；host 由
+        // Activity 持有，cleanUpFlutterEngine 统一回收会话与线程池。
         safChannel?.dispose()
+        safHost?.dispose()
+        val safHost = top.stillmisty.molia.saf.SafHost(applicationContext)
+        this.safHost = safHost
         safChannel = top.stillmisty.molia.saf.SafChannelHandler(
             messenger = flutterEngine.dartExecutor.binaryMessenger,
-            context = this,
+            host = safHost,
+        )
+        top.stillmisty.molia.pigeon.SafApi.setUp(
+            flutterEngine.dartExecutor.binaryMessenger,
+            top.stillmisty.molia.pigeon.SafApiImpl(safHost),
         )
 
         // 通知权限通道：请求时机由 Dart 侧业务决定；被永久拒绝时给设置深链。
@@ -386,6 +396,8 @@ class MainActivity : FlutterActivity() {
         sleepTimerChannel = null
         safChannel?.dispose()
         safChannel = null
+        safHost?.dispose()
+        safHost = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
 

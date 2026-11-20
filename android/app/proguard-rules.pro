@@ -11,6 +11,10 @@
 # host 实现的类名也会被 JNI 按字符串查找；release 冒烟覆盖该路径。
 -keep class top.stillmisty.molia.pigeon.** { *; }
 
+# Keep SAF 共享 host（issue #85）：@Keep 已标注；整包保留，避免数据类 /
+# 回调方法在 release 裁剪后 Pigeon 与旧通道共用的实例失效。
+-keep class top.stillmisty.molia.saf.** { *; }
+
 # Keep AndroidX annotations
 -keep class androidx.annotation.** { *; }
 -dontwarn androidx.annotation.**
