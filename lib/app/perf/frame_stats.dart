@@ -54,6 +54,11 @@ class FrameStats {
     // 暖场窗口（首屏加载 / 上一场景尾巴）不计入本场景。
     _window.take();
     _scenario = name;
+    // 周期汇总从场景开始重新计时：否则切分点固定在 install 时刻，长场景
+    // 会被拆成「无 label 的大窗口 + 很短的 end 窗口」，而汇总只取 end，
+    // 10k 曲库这类秒级场景的数字就会失真。
+    _timer?.cancel();
+    _timer = Timer.periodic(_reportInterval, (_) => reportNow());
   }
 
   /// 立即汇总并输出当前窗口（空窗口不输出）。

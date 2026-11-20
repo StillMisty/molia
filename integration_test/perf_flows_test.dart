@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -5,10 +9,13 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/perf/frame_stats.dart';
 import 'package:molia/domain/models/playback.dart';
+import 'package:molia/pages/play_statistics_page.dart';
+import 'package:molia/pages/statistics/statistics_heatmap.dart';
 import 'package:molia/services/app_logging.dart';
 import 'package:molia/widgets/collection_track_list.dart';
 import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/player.dart';
+import 'package:molia/widgets/statistics/listening_heatmap.dart';
 import 'package:motor/motor.dart';
 
 import '../test/support/perf_app_harness.dart';
@@ -226,4 +233,107 @@ void main() {
     }
     FrameStats.instance.reportNow('end');
   });
+
+  // 以下两个场景只跑桌面：10k 内存库 seed 与真实 drift 读路径在 Android
+  // 模拟器上会把 drive 启动拖到分钟级，移动链路的帧成本由上面几个场景覆盖。
+  testWidgets('桌面壳：10k 收藏切换（120Hz 口径）', (tester) async {
+    final realLibrary = PerfRealLibrary(favorites: 10000);
+    await pumpPerfApp(
+      tester,
+      desktopShell: true,
+      favoritesCount: 1000,
+      realLibrary: realLibrary,
+    );
+    await ctrlDigit(tester, 3);
+    // 首轮整库读 + isolate 建索引：真实 drift 路径比 fake 仓库慢，等到发布
+    // 落地再开始计时（暖场帧由 beginScenario 丢弃）。
+    await pumpUntil(
+      tester,
+      () => realLibrary.browseIndex != null,
+      timeout: const Duration(seconds: 60),
+      reason: '10k 真实曲库首轮构建未完成',
+    );
+    await pumpFrames(tester, frames: 30);
+    expect(
+      realLibrary.browseIndex!.tracks.length,
+      greaterThanOrEqualTo(10000),
+      reason: '真实浏览索引没有 10k 行',
+    );
+
+    const sourceKey = 'perf';
+    const songId = 'perf-toggle-10k';
+    bool hasTarget() => realLibrary.browseIndex!.tracks.any(
+      (track) => track.key == '$sourceKey:$songId',
+    );
+    expect(hasTarget(), isFalse, reason: '目标曲目不应预先收藏');
+
+    FrameStats.instance.beginScenario('desktop-favorites-toggle');
+    // 走真实仓库的写路径：变更事件 → 150ms 防抖 → 重建索引（10k 行搬
+    // isolate）→ publish → 收藏页 notify，全部落在计时窗口里。
+    await realLibrary.repository.toggleFavorite(
+      sourceKey: sourceKey,
+      songId: songId,
+      title: 'Toggle Target',
+      artist: 'Perf Artist',
+      album: 'Perf Album',
+      durationMs: 180000,
+      raw: const {'id': songId},
+    );
+    // 固定再泵一段：防抖 + 重建在真实异步里落地，帧样本才不止个位数。
+    await pumpFrames(tester, frames: 60);
+    await pumpUntil(tester, hasTarget, reason: '收藏新增未落到真实浏览索引');
+    expect(hasTarget(), isTrue);
+
+    await realLibrary.repository.toggleFavorite(
+      sourceKey: sourceKey,
+      songId: songId,
+      title: 'Toggle Target',
+      artist: 'Perf Artist',
+      album: 'Perf Album',
+      durationMs: 180000,
+      raw: const {'id': songId},
+    );
+    await pumpFrames(tester, frames: 60);
+    await pumpUntil(tester, () => !hasTarget(), reason: '取消收藏未从真实浏览索引移除');
+    expect(hasTarget(), isFalse);
+    FrameStats.instance.reportNow('end');
+  }, skip: defaultTargetPlatform == TargetPlatform.android);
+
+  testWidgets('桌面壳：统计页开页（120Hz 口径）', (tester) async {
+    // 400 天、每天 1–3 条：覆盖全量日历热力图与最近 30 天的时段热力图。
+    final realLibrary = PerfRealLibrary(favorites: 0, statisticsDays: 400);
+    await pumpPerfApp(
+      tester,
+      desktopShell: true,
+      favoritesCount: 1000,
+      realLibrary: realLibrary,
+    );
+    await pumpFrames(tester, frames: 20);
+
+    final navigator = tester.state<NavigatorState>(
+      find.byType(Navigator).first,
+    );
+    FrameStats.instance.beginScenario('desktop-statistics-open');
+    // 直接压根 Navigator：设置页入口在桌面骨架里还有折叠二级页，直推更稳。
+    unawaited(
+      navigator.push<void>(
+        MaterialPageRoute<void>(builder: (_) => const PlayStatisticsPage()),
+      ),
+    );
+    await pumpUntil(
+      tester,
+      () => find.byType(WeekdayHourHeatmap).evaluate().isNotEmpty,
+      timeout: const Duration(seconds: 30),
+      reason: '统计页首屏（时段热力图）未出现',
+    );
+    // 覆盖首屏布局与图片占位后的稳定帧：热力图 / 榜单 / 指标都在这一屏。
+    await pumpFrames(tester, frames: 60);
+    FrameStats.instance.reportNow('end');
+
+    expect(realLibrary.statisticsProvider.snapshot, isNotNull);
+    expect(find.byType(StatisticsCalendarHeatmapCard), findsOneWidget);
+
+    unawaited(navigator.maybePop());
+    await pumpFrames(tester, frames: 10);
+  }, skip: defaultTargetPlatform == TargetPlatform.android);
 }
