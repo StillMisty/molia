@@ -17,15 +17,16 @@
 #
 # 全局选项:
 #   --window    Linux 在真实显示上跑（默认 Xvfb 无头，不会弹到 WSLg）
-#   --with-at   headless 仍保留 GTK 无障碍桥（默认关闭，测语义树成本时才用）
+#   --with-at   frames：测试仍主动建语义 handle（默认不建；环境语义树开关另见下）
 #   --only a,b  frames：只跑指定场景（同样支持 MOLIA_PERF_ONLY 环境变量）
 #   --no-build  复用已有产物（data/cpu 的 release APK / Linux bundle；见各命令）
 #
 # 说明:
 # - Linux 默认无条件 Xvfb；`--window` 才用当前 DISPLAY。只改 DISPLAY 不够，
 #   脚本会同时 unset WAYLAND_DISPLAY + GDK_BACKEND=x11（同 cli.dart test）；
-# - headless 默认关闭 GTK 无障碍桥（NO_AT_BRIDGE/GTK_A11Y）：没有真实 AT 时
-#   开着只会把 at-spi 语义树成本混进帧 / 启动数字；测无障碍成本加 --with-at；
+# - headless 默认注入 NO_AT_BRIDGE/GTK_A11Y（best-effort）：没有真实 AT 时
+#   语义树不该计入帧预算；但 integration_test 下引擎仍可能上报 accessibility
+#   enabled，SEMANTICS 属环境成本。--with-at 只控制测试是否主动建语义 handle；
 # - data/cpu linux 自动套私有 `dbus-run-session`：WSL / 容器没有 keyring 或
 #   NetworkManager 时，系统会话总线会让同步初始化（安全存储 / 探针）卡 40s+，
 #   看起来像搜索超时；
@@ -143,10 +144,13 @@ require_frame_scenarios() {
   done
 }
 
-# frames 的 dart-define（--only 为空时保持全量）。
-FRAME_ONLY_DEFINES=()
+# frames 的额外 dart-define：--only 为空时保持全量；--with-at 才让测试建语义 handle。
+FRAME_EXTRA_DEFINES=()
 if [[ -n "$PERF_ONLY" ]]; then
-  FRAME_ONLY_DEFINES=(--dart-define="MOLIA_PERF_ONLY=$PERF_ONLY")
+  FRAME_EXTRA_DEFINES+=(--dart-define="MOLIA_PERF_ONLY=$PERF_ONLY")
+fi
+if [[ "$PERF_WITH_AT" == "1" ]]; then
+  FRAME_EXTRA_DEFINES+=(--dart-define=MOLIA_PERF_WITH_AT=true)
 fi
 
 
@@ -231,7 +235,7 @@ run_frames_linux() {
     -d linux \
     --dart-define=MOLIA_PERF_TRACE=true \
     --dart-define="MOLIA_PERF_OUT=$out_file" \
-    "${FRAME_ONLY_DEFINES[@]}" \
+    "${FRAME_EXTRA_DEFINES[@]}" \
     2>&1 | tee "$out_dir/drive.log"
 }
 
@@ -252,7 +256,7 @@ run_frames_android() {
     --target="$target" \
     -d "$serial" \
     --dart-define=MOLIA_PERF_TRACE=true \
-    "${FRAME_ONLY_DEFINES[@]}" \
+    "${FRAME_EXTRA_DEFINES[@]}" \
     2>&1 | tee "$out_dir/drive.log"
   if ((FRAME_TIMELINE)); then
     return 0
@@ -276,8 +280,9 @@ collect_timeline() {
 run_frames_windows() {
   windows_sync
   local out_dir="$1"
-  local only_define=""
-  [[ -n "$PERF_ONLY" ]] && only_define="--dart-define='MOLIA_PERF_ONLY=$PERF_ONLY' "
+  local extra_defines=""
+  [[ -n "$PERF_ONLY" ]] && extra_defines+="--dart-define='MOLIA_PERF_ONLY=$PERF_ONLY' "
+  [[ "$PERF_WITH_AT" == "1" ]] && extra_defines+="--dart-define='MOLIA_PERF_WITH_AT=true' "
   rm -f "$WIN_PERF_OUT_WSL"
   log "帧场景（Windows / profile integration）：结果 $out_dir"
   [[ -n "$PERF_ONLY" ]] && log "只跑场景：$PERF_ONLY"
@@ -291,7 +296,7 @@ run_frames_windows() {
       --target='$FRAME_TEST_TARGET' \
       -d windows \
       --dart-define=MOLIA_PERF_TRACE=true \
-      ${only_define}--dart-define='MOLIA_PERF_OUT=$WIN_PERF_OUT_WIN' \
+      ${extra_defines}--dart-define='MOLIA_PERF_OUT=$WIN_PERF_OUT_WIN' \
       2>&1 | Tee-Object -FilePath '$WIN_PROJECT\\perf-drive.log'" \
     >"$out_dir/drive.log" 2>&1 || true
   [[ -f "$WIN_PERF_OUT_WSL" ]] && cp "$WIN_PERF_OUT_WSL" "$out_dir/frames.jsonl"

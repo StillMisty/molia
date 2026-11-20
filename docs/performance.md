@@ -82,10 +82,11 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
 - **Linux 默认无头**：`perf.sh` / `startup.sh` / `dart run tool/agent/cli.dart test` 默认套 Xvfb，
   不会把窗口弹到 WSLg；只有显式 `--window` 才用当前真实显示。手动跑时也要
   `env -u WAYLAND_DISPLAY GDK_BACKEND=x11`，只 unset `DISPLAY` 不够。
-- **headless 默认关闭 GTK 无障碍桥**：没有真实 AT 时 at-spi 仍会建语义树，把
-  SEMANTICS 成本混进帧 / 启动数字（统计页 timeline 实测约 12ms）。默认注入
-  `NO_AT_BRIDGE=1 GTK_A11Y=none`；测读屏 / 语义成本用 `perf.sh --with-at`
-  （或 `MOLIA_KEEP_AT_BRIDGE=1`）。**跨轮比较先确认两边 AT 开关一致。**
+- **headless 默认注入 `NO_AT_BRIDGE=1 GTK_A11Y=none`（best-effort）**：没有真实
+  AT 时 at-spi 可能仍建语义树，把 SEMANTICS 成本混进帧 / 启动数字。实测
+  Xvfb + `integration_test` 下这两个环境变量并不会关掉引擎上报的 accessibility
+  （`semanticsEnabled: false` 也无效），所以 **SEMANTICS 仍属环境成本**；
+  `--with-at` 只控制测试是否主动建语义 handle。跨轮比较必须同机同环境。
 - **WSL / 容器要私有 D-Bus**：`perf.sh data/cpu linux` 已自动套
   `dbus-run-session`。没有 NetworkManager 时，系统会话总线会让电量 / 网络
   探针卡 40s+，症状是 `scenario.source` 迟迟不出现、搜索看起来超时。

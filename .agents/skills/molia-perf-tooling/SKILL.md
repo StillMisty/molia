@@ -35,9 +35,10 @@ description: 优化或验证 Molia 的帧 / 120Hz（jank8）、启动、包体�
   分钟级，迭代不要每轮全跑。
 - 归因：`--timeline`（收藏滚动）或 `--timeline stats`（统计页开页）；
   产物为 `timeline.json` + `summary.md`。
-- headless 默认关闭 GTK 无障碍桥（`NO_AT_BRIDGE=1 GTK_A11Y=none`）：没有真实 AT
-  时语义树不该计入帧预算；测读屏 / 语义成本才加 `--with-at`。跨轮比较先确认
-  两边的 AT 开关一致。
+- headless 默认注入 `NO_AT_BRIDGE=1 GTK_A11Y=none`（best-effort）：没有真实 AT 时
+  语义树不该计入帧预算；但实测 Xvfb + integration_test 下引擎仍会报告
+  accessibility enabled，SEMANTICS 属环境成本。`--with-at` 只控制测试是否主动建
+  语义 handle，跨轮比较保持同机同环境。
 - 新增场景：改 `test/support/perf_app_harness.dart` +
   `integration_test/perf_flows_test.dart`，并把场景名登记到 `tool/agent/perf.sh`
   的 `KNOWN_FRAME_SCENES`。
