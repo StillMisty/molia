@@ -951,16 +951,61 @@ p99 在不同轮次有 40–65ms 抖动（语义树开关、GC），方向是 **
 - 本机 Xvfb + GTK/at-spi 默认开启语义树；无 AT 环境下 SEMANTICS 归零，
   这部分不是所有用户都要付。
 
-结论：收藏滚动 / 10k 收藏切换已满足 120Hz 口径；统计页属于低频页面，本轮按
-「可测收益 + 不改视觉」收口，不为 8.33ms 再做批量 painter 重构。
+结论（第一版收口）：收藏滚动 / 10k 收藏切换已满足 120Hz 口径；统计页属于低频页面，
+第一版按「可测收益 + 不改视觉」收口。随后又做了一版网格级批量绘制，见下。
 
-### 4. 验证与未覆盖
+### 4. 热力图改网格级批量绘制（同日续）
 
-- `flutter analyze --no-pub`：0 issue；`flutter test --no-pub`：3624 passed /
+第一版收口后继续把两张热力图改成「整张网格一个 RenderObject」：
+
+- 底色一次 `CustomPaint` 批量画完（静止格共用 `progress=0` 的缓存路径），
+  数据 / 尺寸不变就不 repaint；日历图去掉「每周一个 Column」的 ListView，
+  改为横向 `SingleChildScrollView` + 单一网格；
+- `MouseRegion` / `Listener` / `GestureDetector` 提升到网格级，按局部坐标反算
+  (row, col)；悬停 / 按压只更新一个 overlay 格与一个 Tooltip 锚点，动画只
+  `markNeedsPaint`；
+- 语义改由 painter 的 `semanticsBuilder` 逐格输出（tooltip 文案与悬停同源）：
+  首帧只暴露 48 格、之后每帧补 48 格——本机开语义树时一次建 568 个节点实测
+  10–19ms，是首帧最后一个 >8.33ms 的来源；无障碍在页面打开后才开启时预算
+  直接是全量；
+- 档位色板只算 5 次（+ 5 个降透明度变体），不再逐格 `withValues`；
+- 实现拆到 `heatmap_grid.dart`（`part`，只共享私有声明），守住 800 行棘轮。
+
+3 轮同机 profile（Xvfb，raster = 0）：
+
+| 版本 | frames | jank8 | work p95 | work p99 | worst |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 改前（上一版三版区间） | 60–64 | 2 | 0.66–1.78 | 41.64–53.03 | 149–162 |
+| 网格级批量绘制 | 62–64 | **1–2** | 0.95–3.66 | **23.32–29.32** | 130–137 |
+
+- p99 中位 **49.65 → 27.07ms（−45%）**，`jank33` 1 → 0；
+- `desktop-favorites-toggle` 3 轮仍 `jank8 = 0`、p99 2.83–3.53ms，无回退；
+- timeline：最差 UI 帧 70.84 → 30.18–43.17ms，LAYOUT 51.21 → 21.64–33.41，
+  SEMANTICS 12.28 → 5.13，PAINT 4.78 → 3.16–3.59，BUILD 6.32 → 3.59–3.74。
+
+为什么仍到不了 8.33ms（两次对照）：
+
+- 热力图整体换成 `SizedBox` 占位：p99 仍 **20.02ms**、jank8 仍 2；
+- 只关热力图语义节点：p99 **23.47ms**、jank8 仍 2；
+- 内容帧 ~20ms 的地板来自其它区块（逐 RenderObject self time）：日历卡 5.16ms、
+  汇总数字块 4.82ms、作息卡 3.54ms、其它 M3E 卡 1.85 + 1.57ms、顶层 BUILD
+  1.75ms、`RenderParagraph` 布局约 8ms；PAINT 4.4ms、页面语义约 3.2ms；
+- 热力图自身只剩约 3.5ms（标签 / 滚动布局；406 次缓存路径 `drawPath` 录制
+  实测 0.12ms）；push / 加载帧 6.8–9.2ms，已贴着 8.33ms 预算。
+
+结论：热力图这一侧已收口；统计页要进 120Hz 只能动页面其它卡片 / 页面壳，
+属于跨页面重构，不在本轮范围。
+
+### 5. 验证与未覆盖
+
+- `flutter analyze --no-pub`：0 issue；`flutter test --no-pub`：3625 passed /
   12 skipped；`docs check` OK；
+- 视觉：同一 `RepaintBoundary.toImage` 在 1440×760 / 640×980 渲染改前 / 改后
+  （真实 Adwaita 字体）；640 宽度像素完全一致，1440 仅选中格 26 个抗锯齿像素
+  不同（最大差 17/255），格子形状、间距、选中描边、月份 / 星期标签一致；
 - 未测：Windows 真实窗口 raster（120Hz 的 raster 部分仍缺）、Android 真机 /
-  模拟器、iOS；统计页没有 golden 像素基线，视觉等价靠同路径同几何 +
-  一次性渲染核对；
+  模拟器、iOS；真实读屏器（Orca / TalkBack）的朗读顺序与分帧补齐体感未上机
+  验证，只做了 widget-test 语义断言；
 - 原始结果：`/tmp/molia-agent/perf-linux-20261121-001922`（最终）、
   `/tmp/molia-agent/perf-linux-20261120-224917`（统计页基线）、
   `/tmp/molia-agent/perf-linux-20261120-235104`（同会话基线）；
