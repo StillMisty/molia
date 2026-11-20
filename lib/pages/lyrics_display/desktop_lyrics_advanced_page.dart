@@ -30,7 +30,6 @@ class DesktopLyricsAdvancedPage extends StatelessWidget {
       title: l10n.lyricsDesktopAdvancedTitle,
       children: [
         SettingsSectionCard(
-          title: l10n.lyricsDesktopAdvancedTitle,
           children: [
             SettingsChoiceRow<DesktopTextAlignX>(
               icon: Icons.format_align_center_rounded,

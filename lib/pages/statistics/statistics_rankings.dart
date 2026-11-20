@@ -15,6 +15,7 @@ import '../../providers/play_statistics_provider.dart';
 import '../../services/notification_service.dart';
 import '../../services/save_as.dart';
 import '../../theme/m3e_context.dart';
+import '../../widgets/card_list_surface.dart';
 import '../../widgets/labels/listened_duration.dart';
 import '../../widgets/labels/save_as_label.dart';
 import '../../widgets/track_row.dart';
@@ -81,39 +82,37 @@ class StatisticsTopArtistsSection extends StatelessWidget {
       children: [
         Text(l10n.statsTopArtists, style: context.typeScale.titleMedium),
         const SizedBox(height: 12),
-        M3ECard(
-          variant: M3ECardVariant.filled,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Column(
-            children: [
-              for (var i = 0; i < artists.length; i++)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    children: [
-                      StatisticsRankBadge(index: i),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          artists[i].artist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: context.typeScale.bodyLarge,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        l10n.statsPlaysCount(artists[i].playCount),
-                        style: context.typeScale.labelSmall.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+        // 与 Top 曲目同一视觉层级：都用页面裸行（CardListSurface 分段形状），
+        // 不再一边裸行一边套 filled 卡。
+        for (var i = 0; i < artists.length; i++) ...[
+          if (i > 0) SizedBox(height: TrackRow.gapOf(context)),
+          CardListSurface(
+            position: calculateCardPosition(i, artists.length),
+            onPressed: null,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                StatisticsRankBadge(index: i),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    artists[i].artist,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.typeScale.bodyLarge,
                   ),
                 ),
-            ],
+                const SizedBox(width: 12),
+                Text(
+                  l10n.statsPlaysCount(artists[i].playCount),
+                  style: context.typeScale.labelSmall.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ],
     );
   }

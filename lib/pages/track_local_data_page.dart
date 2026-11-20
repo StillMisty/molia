@@ -460,6 +460,11 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     return [
       SettingsSectionCard(
         title: l10n.downloadAudioSection,
+        // 下载后音质锁定：行本身置灰，卡底说明「怎么解锁」，否则用户只会
+        // 看到一串点不动的单选项。
+        footer: downloaded
+            ? SettingsSectionHint(text: l10n.localDataQualityLockedHint)
+            : null,
         children: [
           for (final quality in qualities)
             M3EListItem(

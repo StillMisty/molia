@@ -160,6 +160,23 @@ void main() {
     expect(finished, 1);
   });
 
+  testWidgets('系统返回：非首屏退回上一步，不直接退出应用', (tester) async {
+    await pump(tester);
+    expect(find.text('音乐留在本机'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('onboardingNext')));
+    await tester.pump();
+    expect(find.text('选择音源渠道'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(
+      find.text('音乐留在本机'),
+      findsOneWidget,
+      reason: '步骤不是路由：系统返回应先退回上一步，而不是退出应用',
+    );
+  });
+
   testWidgets('渠道未就绪时禁用，就绪后绑定现有 provider', (tester) async {
     await pump(tester);
     await tester.tap(find.byKey(const Key('onboardingNext')));

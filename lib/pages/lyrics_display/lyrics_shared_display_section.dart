@@ -27,14 +27,14 @@ class LyricsSharedDisplaySection extends StatelessWidget {
       children: [
         SettingsSwitchTile(
           icon: Icons.translate_rounded,
-          title: l10n.lyricsDisplayTranslation,
+          title: l10n.lyricsSharedTranslationSwitch,
           subtitle: l10n.lyricsDisplayTranslationSubtitle,
           value: settings.translationEnabled,
           onChanged: settings.setTranslationEnabled,
         ),
         SettingsSwitchTile(
           icon: Icons.record_voice_over_rounded,
-          title: l10n.lyricsDisplayRoma,
+          title: l10n.lyricsSharedRomaSwitch,
           subtitle: l10n.lyricsDisplayRomaSubtitle,
           value: settings.romaEnabled,
           onChanged: settings.setRomaEnabled,

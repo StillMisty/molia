@@ -106,10 +106,38 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
         _ResetScopeTile(
           key: Key('shortcutResetAll_${scope.name}'),
           enabled: hasOverrides,
-          onPressed: () => unawaited(settings.resetScope(scope)),
+          onPressed: () => unawaited(_confirmResetScope(settings, scope)),
         ),
       ],
     );
+  }
+
+  /// 重置整组绑定前先确认：覆盖项会一次性丢失，且没有撤销。
+  Future<void> _confirmResetScope(
+    ShortcutSettings settings,
+    ShortcutScope scope,
+  ) async {
+    final l10n = AppLocalizations.of(context)!;
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final confirmed = await M3EDialog.show<bool>(
+      context,
+      dialog: M3EDialog(
+        title: l10n.shortcutsResetAll,
+        content: Text(l10n.shortcutsResetAllConfirm),
+        actions: [
+          M3EButton.text(
+            onPressed: () => navigator.pop(false),
+            child: Text(l10n.cancel),
+          ),
+          settingsDestructiveAction(
+            context,
+            onPressed: () => navigator.pop(true),
+            label: l10n.shortcutsResetAll,
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await settings.resetScope(scope);
   }
 
   /// 分组说明：软件内 / 全局各自的生效口径；全局在 Linux 上额外提示

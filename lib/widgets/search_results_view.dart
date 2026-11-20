@@ -82,7 +82,9 @@ class SearchResultsView extends StatefulWidget {
   /// 单曲 / 歌词行点击：播放语义归宿主。
   final void Function(SearchRow row) onPlay;
 
-  /// 页面版式的歌手导航。
+  /// 歌手导航：页面版式的歌手结果行 / 行内歌手链接，遮罩版式的歌手预览行。
+  ///
+  /// 遮罩版式传空时回退到「查看全部结果」，保留旧宿主的行为。
   final OpenSearchArtist? onOpenArtist;
 
   /// 遮罩版式的「查看全部结果」。
@@ -538,7 +540,15 @@ class _SearchResultsViewState extends State<SearchResultsView> {
           showFocusFill: true,
           onTap: () {
             HapticsService.lightImpact();
-            widget.onOpenAllResults!();
+            // 歌手行有自己的落点：先进歌手页，而不是把用户丢到「全部结果」。
+            final openArtist = widget.onOpenArtist;
+            if (openArtist == null) {
+              widget.onOpenAllResults!();
+              return;
+            }
+            unawaited(
+              openArtist(item.sourceKey, artist.id, fallbackName: artist.name),
+            );
           },
         ),
       ),

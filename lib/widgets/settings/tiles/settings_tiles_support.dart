@@ -12,6 +12,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../responsive.dart';
 import '../../card_list_surface.dart';
 import '../../m3e_page_route.dart';
+import '../../../theme/motion_policy.dart';
 
 /// 设置页统一间距常量。
 const double kSettingsPadding = 16.0;
@@ -95,6 +96,15 @@ class SettingsSectionCard extends StatelessWidget {
     final theme = Theme.of(context);
     final m3e = M3ETheme.of(context);
     final gap = m3e.listTheme.cardList.gap;
+    // 条件行（[SettingsReveal]）隐藏时高度为 0，但仍是树上的一个子项：形状
+    // 计算必须只数可见行，否则隐藏的末行会让上一条可见行停留在「内行」
+    // 4dp 圆角，卡片底部看起来是断的。
+    final visible = [
+      for (final child in children)
+        child is SettingsReveal ? child.visible : true,
+    ];
+    final visibleCount = visible.where((show) => show).length;
+    var visibleIndex = 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -110,13 +120,16 @@ class SettingsSectionCard extends StatelessWidget {
             ),
           ),
         ],
-        for (var i = 0; i < children.length; i++) ...[
-          if (i > 0) SizedBox(height: gap),
-          SettingsRowPosition(
-            position: calculateCardPosition(i, children.length),
-            child: children[i],
-          ),
-        ],
+        for (var i = 0; i < children.length; i++)
+          if (visible[i]) ...[
+            if (visibleIndex > 0) SizedBox(height: gap),
+            SettingsRowPosition(
+              position: calculateCardPosition(visibleIndex++, visibleCount),
+              child: children[i],
+            ),
+          ] else
+            // 隐藏的条件行不占行位 / 行距，只保留自身的高度动画（收为 0）。
+            children[i],
         if (footer != null) ...[
           const SizedBox(height: kSettingsSmallSpacing),
           footer!,
@@ -161,16 +174,26 @@ class SettingsRows extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final gap = M3ETheme.of(context).listTheme.cardList.gap;
+    // 与 [SettingsSectionCard] 同口径：隐藏的条件行不数进行形状，否则同一
+    // 张卡内会出现「上一条可见行内圆角、下一条却按末行画」的错位。
+    final visible = [
+      for (final child in children)
+        child is SettingsReveal ? child.visible : true,
+    ];
+    final visibleCount = visible.where((show) => show).length;
+    var visibleIndex = 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < children.length; i++) ...[
-          if (i > 0) SizedBox(height: gap),
-          SettingsRowPosition(
-            position: calculateCardPosition(i, children.length),
-            child: children[i],
-          ),
-        ],
+        for (var i = 0; i < children.length; i++)
+          if (visible[i]) ...[
+            if (visibleIndex > 0) SizedBox(height: gap),
+            SettingsRowPosition(
+              position: calculateCardPosition(visibleIndex++, visibleCount),
+              child: children[i],
+            ),
+          ] else
+            children[i],
       ],
     );
   }
@@ -363,6 +386,50 @@ class SettingsTileIcon extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 条件行展开 / 收起：高度动画（减弱动效时零时长）。
+///
+/// 用于「开关打开才出现」的从属设置行（自定义色、省流子项、配置表单等）：
+/// 直接 `if` 插拔会让卡片高度硬跳一帧，包一层后行出现 / 消失有连续过渡。
+/// 隐藏时仍占一个列表槽位（不改变其它行的卡内形状），高度收为 0。
+class SettingsReveal extends StatelessWidget {
+  const SettingsReveal({super.key, required this.visible, required this.child});
+
+  final bool visible;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSize(
+      duration: effectDurationOf(context, M3EMotion.short4),
+      curve: M3EMotion.emphasizedDecelerate,
+      alignment: Alignment.topCenter,
+      child: visible ? child : const SizedBox(width: double.infinity),
+    );
+  }
+}
+
+/// 确认弹层里的危险动作按钮：text 形态 + `error` 文字色。
+///
+/// 破坏性操作（清空统计 / 删除脚本 / 重置绑定 / 清空配置）不放 `filled`
+/// 主色：主色是「推荐动作」，这里推荐的是取消。取消用普通 `M3EButton.text`，
+/// 危险动作并排在后、视觉上明确是错误色。
+Widget settingsDestructiveAction(
+  BuildContext context, {
+  Key? key,
+  required VoidCallback onPressed,
+  required String label,
+}) {
+  final m3e = M3ETheme.of(context);
+  return M3EButton.text(
+    key: key,
+    onPressed: onPressed,
+    child: Text(
+      label,
+      style: m3e.typeScale.labelLarge.copyWith(color: m3e.colorScheme.error),
+    ),
+  );
 }
 
 /// 设置行统一标题/副标题排布（排版走 M3E typeScale，不写死字号字重）。

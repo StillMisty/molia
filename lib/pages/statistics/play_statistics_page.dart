@@ -456,9 +456,10 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
             onPressed: () => navigator.pop(false),
             child: Text(l10n.cancel),
           ),
-          M3EButton.filled(
+          settingsDestructiveAction(
+            context,
             onPressed: () => navigator.pop(true),
-            child: Text(l10n.statsClear),
+            label: l10n.statsClear,
           ),
         ],
       ),

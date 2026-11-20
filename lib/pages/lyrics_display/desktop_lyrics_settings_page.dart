@@ -44,7 +44,6 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
       title: l10n.lyricsDesktopTitle,
       children: [
         SettingsSectionCard(
-          title: l10n.lyricsDesktopTitle,
           children: [
             SettingsSwitchTile(
               icon: Icons.picture_in_picture_alt_rounded,

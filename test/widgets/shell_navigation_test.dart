@@ -1,13 +1,19 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/app_shell.dart' as shell;
+import 'package:molia/app/desktop/now_playing_bar.dart';
 import 'package:molia/domain/models/sync_nearby_pairing.dart';
 import 'package:molia/pages/favorites.dart';
 import 'package:molia/pages/library.dart';
+import 'package:molia/pages/nowplaying.dart';
+import 'package:molia/services/back_claims.dart';
 import 'package:molia/services/onboarding_store.dart';
+import 'package:molia/widgets/molia_mark.dart';
+import 'package:molia/widgets/player_morph.dart';
 
 import '../support/perf_app_harness.dart';
 
@@ -141,6 +147,194 @@ void main() {
 
     await tapDestination(tester, Icons.favorite_border_rounded);
     expect(find.byType(FavoritesPage), findsOneWidget);
+  });
+
+  testWidgets('减弱动效：切页一帧到终态且不插封面飞行副本', (tester) async {
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      size: const Size(500, 900),
+      disableAnimations: true,
+    );
+    expect(find.byType(FavoritesPage), findsOneWidget);
+
+    final nav = find.byType(M3ENavigationBar);
+    await tester.tap(
+      find.descendant(of: nav, matching: find.byType(MoliaMark)),
+    );
+    // 单帧即终态：没有 Overlay 飞行副本，出场页已经透明。
+    await tester.pump();
+
+    expect(find.byType(PlayerMorphFlight), findsNothing);
+    expect(find.byType(NowPlaying), findsOneWidget);
+    final outgoingOpacity = tester.widget<Opacity>(
+      find
+          .ancestor(
+            of: find.byType(FavoritesPage),
+            matching: find.byType(Opacity),
+          )
+          .first,
+    );
+    expect(outgoingOpacity.opacity, 0, reason: '减弱动效时出场页不保留淡出中间帧');
+    final incomingOpacity = tester.widget<Opacity>(
+      find
+          .ancestor(of: find.byType(NowPlaying), matching: find.byType(Opacity))
+          .first,
+    );
+    expect(incomingOpacity.opacity, 1);
+  });
+
+  testWidgets('出场页在过渡期间仍可 tick（TickerMode 不提前静音）', (tester) async {
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      size: const Size(500, 900),
+    );
+    expect(find.byType(FavoritesPage), findsOneWidget);
+
+    await tapDestination(tester, Icons.library_music_outlined, frames: 2);
+    final tickerMode = tester.widget<TickerMode>(
+      find
+          .ancestor(
+            of: find.byType(FavoritesPage),
+            matching: find.byType(TickerMode),
+          )
+          .first,
+    );
+    expect(
+      tickerMode.enabled,
+      isTrue,
+      reason: '出场页的淡出 / 微缩需要 ticker，过渡第一帧不能静音',
+    );
+
+    // 淡出结束后上一目的地仍保留 outgoing 标记（Offstage 语义不变），
+    // 但 ticker 必须恢复静音，避免隐藏页常驻动画空转。
+    await pumpFrames(tester, frames: 60);
+    final settled = tester.widget<TickerMode>(
+      find
+          .ancestor(
+            of: find.byType(FavoritesPage),
+            matching: find.byType(TickerMode),
+          )
+          .first,
+    );
+    expect(settled.enabled, isFalse);
+  });
+
+  testWidgets('Android 返回：非家目的地回上一页，播放页先收起不退出', (tester) async {
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      size: const Size(500, 900),
+    );
+    // 首屏 = 收藏（家目的地）。
+    expect(find.byType(FavoritesPage), findsOneWidget);
+
+    await tapDestination(tester, Icons.library_music_outlined);
+    expect(find.byType(Library), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await pumpFrames(tester, frames: 30);
+    expect(
+      find.byType(FavoritesPage),
+      findsOneWidget,
+      reason: '非家目的地返回上一页（收藏是上一目的地 / 家）',
+    );
+
+    // 进入播放页（单栏默认展开）：第一次返回只收起播放器。
+    final nav = find.byType(M3ENavigationBar);
+    await tester.tap(
+      find.descendant(of: nav, matching: find.byType(MoliaMark)),
+    );
+    await pumpFrames(tester, frames: 60);
+    expect(find.byType(NowPlaying), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await pumpFrames(tester, frames: 100);
+    expect(
+      find.byType(NowPlaying),
+      findsOneWidget,
+      reason: '展开播放页的返回是收起，不是退出目的地',
+    );
+
+    // 收起后再返回：回上一目的地（收藏）。
+    await tester.binding.handlePopRoute();
+    await pumpFrames(tester, frames: 60);
+    expect(find.byType(FavoritesPage), findsOneWidget);
+  });
+
+  testWidgets('页面级返回占用时壳层让位，第二次返回才回上一目的地', (tester) async {
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      size: const Size(500, 900),
+    );
+    await tapDestination(tester, Icons.library_music_outlined);
+    expect(find.byType(Library), findsOneWidget);
+
+    // 合成一个页面级占用（真实登记方是收藏页多选 / 搜索 / 排序；本用例只
+    // 验证 PopScope 广播不裁决时壳层按 BackClaims 让位）。
+    var pageClaimsBack = true;
+    bool claim() => pageClaimsBack;
+    BackClaims.add(claim);
+    addTearDown(BackClaims.reset);
+
+    await tester.binding.handlePopRoute();
+    await pumpFrames(tester, frames: 30);
+    expect(
+      find.byType(Library),
+      findsOneWidget,
+      reason: '页面接管这次返回时，壳层不能同时回上一目的地',
+    );
+
+    pageClaimsBack = false;
+    await tester.binding.handlePopRoute();
+    await pumpFrames(tester, frames: 30);
+    expect(find.byType(FavoritesPage), findsOneWidget);
+  });
+
+  testWidgets('桌面 Esc：先收队列，再逐级返回上一目的地', (tester) async {
+    await pumpPerfApp(
+      tester,
+      desktopShell: true,
+      favoritesCount: 3,
+      size: const Size(1280, 900),
+    );
+    await tapDestination(tester, Icons.library_music_outlined);
+    expect(find.byType(Library), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await pumpFrames(tester, frames: 30);
+    expect(
+      find.byType(FavoritesPage),
+      findsOneWidget,
+      reason: '资料库按 Esc 回上一目的地',
+    );
+
+    // 底栏队列按钮：跳播放页并打开队列。
+    await tester.tap(find.byKey(DesktopNowPlayingBar.openQueueKey));
+    await pumpFrames(tester, frames: 60);
+    expect(find.byType(NowPlaying), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await pumpFrames(tester, frames: 30);
+    expect(
+      find.byType(NowPlaying),
+      findsOneWidget,
+      reason: '队列打开时 Esc 仍优先收队列，不退回上一页',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await pumpFrames(tester, frames: 60);
+    expect(
+      find.byType(FavoritesPage),
+      findsOneWidget,
+      reason: '队列已收：下一次 Esc 才回上一目的地',
+    );
   });
 
   testWidgets('引导完成（开始使用）后进入正常壳层', (tester) async {

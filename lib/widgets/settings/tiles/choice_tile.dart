@@ -2,6 +2,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../card_list_surface.dart';
+import 'dropdown_tile.dart';
 import 'settings_tiles_support.dart';
 
 /// 单选行：图标 + 标题/副标题 + 独占整行的分段按钮（枚举 2–5 项短文案）。
@@ -10,6 +11,12 @@ import 'settings_tiles_support.dart';
 /// `Stack` + `Positioned.fill` + `Row(mainAxisSize.min)`，在放松约束的父级
 /// （`Align` / `Row` 尾位）会塌成零宽并溢出；这里把它放进
 /// `double.infinity` 的紧约束里，多个 segment 才会等宽铺满。
+///
+/// 选项在当前宽度放不下最长标签时自动降级成 [SettingsDropdownRow]：
+/// 分段按钮的标签是单行省略（`TextOverflow.ellipsis`），360dp 下四段中文
+/// 或英文长标签会被静默截断（回归见 settings_page_test 的 360 宽用例）。
+/// 宽屏放得下时仍保持分段（一次点击即可选中），下拉字段会按最长选项
+/// 自行加宽，窄屏标签始终完整可读。
 ///
 /// M3E 选中形态（[icons] 提供时）：选中段的图标位置改画对勾（勾替换图标，
 /// 不额外占宽）。只在「图标 + 文案」放得下的行使用（2–3 段、短标签：对齐 /
@@ -61,6 +68,55 @@ class SettingsChoiceRow<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (!_labelsFit(context, constraints.maxWidth)) {
+          return SettingsDropdownRow<T>(
+            icon: icon,
+            title: title,
+            subtitle: subtitle,
+            value: value,
+            options: options,
+            onChanged: onChanged,
+            enabled: enabled,
+            optionEnabled: optionEnabled,
+          );
+        }
+        return _buildSegmented(context);
+      },
+    );
+  }
+
+  /// 分段行当前宽度是否能完整显示每个标签。
+  ///
+  /// 量的是 M3ESegmentedButton 实际使用的 `labelLarge` + 段内 12dp 横向内边距
+  /// （包内 `segmentHorizontalPadding` 默认值）；选项带图标时再给对勾留 24dp。
+  /// 宽度不足就不能继续渲染分段：标签会被 `maxLines: 1` 静默省略。
+  bool _labelsFit(BuildContext context, double maxWidth) {
+    if (!maxWidth.isFinite || options.isEmpty) return true;
+    final m3e = M3ETheme.of(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    final segmentCount = options.length;
+    // 段间分隔线约 1dp / 段，按整数宽度做保守扣除。
+    final contentWidth =
+        maxWidth - kSettingsRowPadding.horizontal - segmentCount;
+    final perSegment = contentWidth / segmentCount;
+    final iconAllowance = _showSelectedIcon ? 24.0 : 0.0;
+    for (final (_, label) in options) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: m3e.typeScale.labelLarge),
+        textDirection: direction,
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      final needed = painter.width + 24 + iconAllowance;
+      if (needed > perSegment) return false;
+    }
+    return true;
+  }
+
+  Widget _buildSegmented(BuildContext context) {
     final selected = options.any((option) => option.$1 == value)
         ? <T>{value}
         : <T>{};

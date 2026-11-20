@@ -227,7 +227,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAdvancedTitle => '高级设置';
 
   @override
-  String get settingsAdvancedSubtitle => '低频选项';
+  String get settingsAdvancedSubtitle => '字体、封面、窗口与更新源';
 
   @override
   String get settingsDownloadsAndCacheTitle => '下载与缓存';
@@ -5421,4 +5421,63 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get listeningSyncNeedsConsent => '需要重新确认发送内容';
+
+  @override
+  String get done => '完成';
+
+  @override
+  String get settingsAdvancedAppearanceTitle => '字体与封面';
+
+  @override
+  String get settingsAdvancedLibraryAddTitle => '曲库加入位置';
+
+  @override
+  String get settingsAdvancedGeneralTitle => '震动与应用名称';
+
+  @override
+  String get settingsAdvancedDesktopTitle => '窗口';
+
+  @override
+  String get settingsAdvancedDataSaverTitle => '省流音质';
+
+  @override
+  String get settingsAdvancedUpdateSourceTitle => '更新源与镜像';
+
+  @override
+  String get settingsStartupPageHiddenHint => '隐藏的入口要先在「底部导航」里打开，才能设为启动页';
+
+  @override
+  String get localDataQualityLockedHint => '删除下载后可重新选择音质';
+
+  @override
+  String get aiDjClearConfigConfirm => '清除后需要重新填写服务器地址、密钥与模型。';
+
+  @override
+  String get aiDjHistoryDeleteBody => '删除后这批记录不可恢复；已加入队列的歌曲不受影响。';
+
+  @override
+  String get shortcutsResetAllConfirm => '这一组里改过的快捷键会一次性恢复默认，无法撤销。';
+
+  @override
+  String get downloadsWaitingShowAll => '查看全部';
+
+  @override
+  String get downloadsWaitingCollapse => '收起';
+
+  @override
+  String downloadsWaitingTotal(int count) {
+    return '等待中 $count 首';
+  }
+
+  @override
+  String get lyricsPageTranslationSwitch => '应用内歌词 · 翻译';
+
+  @override
+  String get lyricsPageRomaSwitch => '应用内歌词 · 罗马音';
+
+  @override
+  String get lyricsSharedTranslationSwitch => '全部输出 · 翻译';
+
+  @override
+  String get lyricsSharedRomaSwitch => '全部输出 · 罗马音';
 }

@@ -515,7 +515,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAdvancedSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Less-used options'**
+  /// **'Font, cover, window, updates'**
   String get settingsAdvancedSubtitle;
 
   /// No description provided for @settingsDownloadsAndCacheTitle.
@@ -10089,6 +10089,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Confirm what is sent again'**
   String get listeningSyncNeedsConsent;
+
+  /// No description provided for @done.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get done;
+
+  /// No description provided for @settingsAdvancedAppearanceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Font & cover'**
+  String get settingsAdvancedAppearanceTitle;
+
+  /// No description provided for @settingsAdvancedLibraryAddTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Where added songs go'**
+  String get settingsAdvancedLibraryAddTitle;
+
+  /// No description provided for @settingsAdvancedGeneralTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Haptics & app name'**
+  String get settingsAdvancedGeneralTitle;
+
+  /// No description provided for @settingsAdvancedDesktopTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Window'**
+  String get settingsAdvancedDesktopTitle;
+
+  /// No description provided for @settingsAdvancedDataSaverTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data saver quality'**
+  String get settingsAdvancedDataSaverTitle;
+
+  /// No description provided for @settingsAdvancedUpdateSourceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update source & mirror'**
+  String get settingsAdvancedUpdateSourceTitle;
+
+  /// No description provided for @settingsStartupPageHiddenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn a hidden entry on under Bottom navigation first, then you can set it as the start page.'**
+  String get settingsStartupPageHiddenHint;
+
+  /// No description provided for @localDataQualityLockedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the download to choose a different quality.'**
+  String get localDataQualityLockedHint;
+
+  /// No description provided for @aiDjClearConfigConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'You will need to enter the server address, key and model again.'**
+  String get aiDjClearConfigConfirm;
+
+  /// No description provided for @aiDjHistoryDeleteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This batch cannot be recovered after deletion. Songs already queued are not affected.'**
+  String get aiDjHistoryDeleteBody;
+
+  /// No description provided for @shortcutsResetAllConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Changed shortcuts in this group go back to defaults at once. This cannot be undone.'**
+  String get shortcutsResetAllConfirm;
+
+  /// No description provided for @downloadsWaitingShowAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all'**
+  String get downloadsWaitingShowAll;
+
+  /// No description provided for @downloadsWaitingCollapse.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse'**
+  String get downloadsWaitingCollapse;
+
+  /// No description provided for @downloadsWaitingTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} waiting'**
+  String downloadsWaitingTotal(int count);
+
+  /// No description provided for @lyricsPageTranslationSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'In-app lyrics · Translation'**
+  String get lyricsPageTranslationSwitch;
+
+  /// No description provided for @lyricsPageRomaSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'In-app lyrics · Romanization'**
+  String get lyricsPageRomaSwitch;
+
+  /// No description provided for @lyricsSharedTranslationSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'All outputs · Translation'**
+  String get lyricsSharedTranslationSwitch;
+
+  /// No description provided for @lyricsSharedRomaSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'All outputs · Romanization'**
+  String get lyricsSharedRomaSwitch;
 }
 
 class _AppLocalizationsDelegate

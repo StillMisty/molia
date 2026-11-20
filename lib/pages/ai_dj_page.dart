@@ -84,18 +84,8 @@ class _AiDjPageState extends State<AiDjPage> {
 
   @override
   void dispose() {
-    _configSaveTimer?.cancel();
     // 防抖窗口内退出：三项齐全时补写一次（不完整就不落盘，保留旧配置）。
-    final pending = _formConfig();
-    final saved = _provider.config;
-    final changed =
-        saved == null ||
-        saved.baseUrl != pending.baseUrl ||
-        saved.apiKey != pending.apiKey ||
-        saved.model != pending.model;
-    if (pending.isComplete && changed) {
-      unawaited(_provider.saveConfig(pending));
-    }
+    _flushPendingConfig();
     _baseUrlController.dispose();
     _apiKeyController.dispose();
     _modelController.dispose();
@@ -676,8 +666,40 @@ class _AiDjPageState extends State<AiDjPage> {
           leading: const Icon(Icons.smart_toy_rounded),
           onChanged: (_) => _onConfigChanged(),
         ),
+        const SizedBox(height: 4),
+        // 自动保存没有可见反馈：给一个显式出口，填完不必靠点别处或等拖到最后
+        // 一次输入。收起前把防抖窗口内的值补写一次，和 dispose 同口径。
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: M3EButton.text(
+            key: const Key('aiDjConfigDoneButton'),
+            onPressed: _finishConfigEditing,
+            child: Text(l10n.done),
+          ),
+        ),
       ],
     );
+  }
+
+  /// 收起配置表单：先冲刷防抖窗口内的保存，再回到摘要视图。
+  void _finishConfigEditing() {
+    _flushPendingConfig();
+    setState(() => _editingConfig = false);
+  }
+
+  /// 三项齐全且与已保存值不同时才落盘（dispose / 完成按钮共用）。
+  void _flushPendingConfig() {
+    _configSaveTimer?.cancel();
+    final pending = _formConfig();
+    final saved = _provider.config;
+    final changed =
+        saved == null ||
+        saved.baseUrl != pending.baseUrl ||
+        saved.apiKey != pending.apiKey ||
+        saved.model != pending.model;
+    if (pending.isComplete && changed) {
+      unawaited(_provider.saveConfig(pending));
+    }
   }
 
   Widget _configSummary(AppLocalizations l10n, AiDjProvider provider) {
@@ -763,9 +785,10 @@ class _AiDjPageState extends State<AiDjPage> {
             onPressed: () => navigator.pop(true),
             child: Text(l10n.aiDjStopKeepQueue),
           ),
-          M3EButton.filled(
+          settingsDestructiveAction(
+            context,
             onPressed: () => navigator.pop(false),
-            child: Text(l10n.aiDjStopClearQueue),
+            label: l10n.aiDjStopClearQueue,
           ),
         ],
       ),
@@ -847,6 +870,27 @@ class _AiDjPageState extends State<AiDjPage> {
   }
 
   Future<void> _clearConfig() async {
+    final l10n = AppLocalizations.of(context)!;
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final confirmed = await M3EDialog.show<bool>(
+      context,
+      dialog: M3EDialog(
+        title: l10n.aiDjClearConfig,
+        content: Text(l10n.aiDjClearConfigConfirm),
+        actions: [
+          M3EButton.text(
+            onPressed: () => navigator.pop(false),
+            child: Text(l10n.cancel),
+          ),
+          settingsDestructiveAction(
+            context,
+            onPressed: () => navigator.pop(true),
+            label: l10n.aiDjClearConfig,
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     await _provider.clearConfig();
     if (!mounted) return;
     _loadConfigIntoControllers(null);

@@ -7,6 +7,8 @@ library;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_ui/material_ui.dart';
 
+import '../../l10n/app_localizations.dart';
+
 /// 单个侧槽的 reveal 包装：直接监听飞行控制器，把卡片作为稳定 child。
 ///
 /// 逐帧只重建 opacity / IgnorePointer；位置与倾角始终是稳态，reveal<1 时
@@ -113,6 +115,40 @@ class DeckSlotPressScale extends StatelessWidget {
           child: child,
         ),
       ),
+    );
+  }
+}
+
+/// 可点击侧邻封面的读屏语义与桌面手型光标。
+///
+/// 侧邻封面是「上一首 / 下一首」按钮，不是一张可看的图：只标方向标签，
+/// 并接管子树的语义（点击动作由本节点提供）——否则读屏会把它读成无声的
+/// 图片 + 一个匿名可点区域。不可点时（拖动 / 飞行 / 无曲目）不包这层。
+class DeckSideCoverSemantics extends StatelessWidget {
+  const DeckSideCoverSemantics({
+    super.key,
+    required this.left,
+    required this.onTap,
+    required this.child,
+  });
+
+  /// true = 左槽（上一首），false = 右槽（下一首）。
+  final bool left;
+
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n =
+        AppLocalizations.of(context) ??
+        lookupAppLocalizations(const Locale('zh'));
+    return Semantics(
+      button: true,
+      label: left ? l10n.previousTrackTooltip : l10n.nextTrackTooltip,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: MouseRegion(cursor: SystemMouseCursors.click, child: child),
     );
   }
 }

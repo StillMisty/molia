@@ -23,6 +23,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
+import 'package:molia/services/back_claims.dart';
 import 'package:molia/services/escape_claims.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_service.dart';
@@ -55,6 +56,7 @@ Future<FakePlaybackFacade> pumpPerfApp(
   bool showOnboarding = false,
   bool resetPreferences = true,
   bool waitForHome = true,
+  bool disableAnimations = false,
   List<SingleChildWidget> extraProviders = const [],
 }) async {
   if (resetPreferences) {
@@ -67,6 +69,7 @@ Future<FakePlaybackFacade> pumpPerfApp(
   await ShortcutSettings.instance.resetScope(ShortcutScope.inApp);
   await ShortcutSettings.instance.resetScope(ShortcutScope.global);
   EscapeClaims.reset();
+  BackClaims.reset();
 
   final theme = ThemeProvider(settings: testSettingsRegistry());
   addTearDown(theme.dispose);
@@ -210,6 +213,13 @@ Future<FakePlaybackFacade> pumpPerfApp(
           ...GlobalMaterialLocalizations.delegates,
         ],
         supportedLocales: const [Locale('zh')],
+        // 系统「减弱动效」：部分用例验证 spatial 导航动效的直达终态。
+        builder: disableAnimations
+            ? (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(disableAnimations: true),
+                child: child!,
+              )
+            : null,
         home: MyApp(desktopShell: desktopShell, showOnboarding: showOnboarding),
       ),
     ),

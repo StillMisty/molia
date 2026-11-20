@@ -86,6 +86,7 @@ void main() {
   testWidgets('切换档位与开关立即写回 provider', (tester) async {
     await pumpSection(tester);
 
+    // 宽屏四段放得下：仍是分段（窄屏才会降级为下拉，见下一条用例）。
     await tester.tap(find.text('0.15 秒'));
     await tester.pumpAndSettle();
     expect(playback.fadePreset, PlaybackFadePreset.ms150);
@@ -93,5 +94,58 @@ void main() {
     await tester.tap(find.byKey(const Key('settingsSmartShuffleSwitch')));
     await tester.pumpAndSettle();
     expect(playback.smartShuffleEnabled, isFalse);
+  });
+
+  testWidgets('360 宽淡入淡出选项标签不被省略', (tester) async {
+    tester.view.physicalSize = const Size(360, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await pumpSection(tester);
+
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+    final labels = [
+      l10n.settingsFadeOff,
+      l10n.settingsFade150,
+      l10n.settingsFade200,
+      l10n.settingsFade300,
+    ];
+    final row = find.byKey(const Key('settingsFadeItem'));
+    final dropdown = find.descendant(
+      of: row,
+      matching: find.byType(M3EDropdownMenu<PlaybackFadePreset>),
+    );
+    final segmented = find.descendant(
+      of: row,
+      matching: find.byType(M3ESegmentedButton<PlaybackFadePreset>),
+    );
+    final context = tester.element(row);
+    final style = M3ETheme.of(context).typeScale;
+    if (dropdown.evaluate().isNotEmpty) {
+      final available = tester.getSize(dropdown).width - 56;
+      for (final label in labels) {
+        final painter = TextPainter(
+          text: TextSpan(text: label, style: style.bodyMedium),
+          textDirection: TextDirection.ltr,
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: 1,
+        )..layout();
+        expect(painter.width, lessThanOrEqualTo(available), reason: label);
+      }
+    } else {
+      expect(segmented, findsOneWidget);
+      final width = tester.getSize(segmented).width;
+      final available = (width - labels.length) / labels.length - 24;
+      for (final label in labels) {
+        final painter = TextPainter(
+          text: TextSpan(text: label, style: style.labelLarge),
+          textDirection: TextDirection.ltr,
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: 1,
+        )..layout();
+        expect(painter.width, lessThanOrEqualTo(available), reason: label);
+      }
+    }
+    expect(tester.takeException(), isNull);
   });
 }

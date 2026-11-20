@@ -60,78 +60,88 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Semantics(
-                      label: l10n.onboardingStep(_step + 1, _stepCount),
-                      child: M3EProgressIndicator.linear(
-                        value: (_step + 1) / _stepCount,
-                        linearSize: M3EProgressIndicatorSize.s,
-                        strokeWidth: 4,
+    return PopScope(
+      // 步骤不是路由：系统返回默认会直接退出应用。第一步允许退出（等价
+      // 「这次不引导了」）；后续步骤先退回上一步，首次引导不会因误触返回
+      // 被整个关掉。
+      canPop: _step == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || _finishing) return;
+        _back();
+      },
+      child: Scaffold(
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Semantics(
+                        label: l10n.onboardingStep(_step + 1, _stepCount),
+                        child: M3EProgressIndicator.linear(
+                          value: (_step + 1) / _stepCount,
+                          linearSize: M3EProgressIndicatorSize.s,
+                          strokeWidth: 4,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    l10n.onboardingStep(_step + 1, _stepCount),
-                    style: context.typeScale.labelMedium.copyWith(
-                      color: scheme.onSurfaceVariant,
+                    const SizedBox(width: 12),
+                    Text(
+                      l10n.onboardingStep(_step + 1, _stepCount),
+                      style: context.typeScale.labelMedium.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  M3EButton.text(
-                    key: const Key('onboardingSkip'),
-                    onPressed: _finishing ? null : _finish,
-                    child: Text(l10n.onboardingSkip),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                // 每一步用同一根淡入（key 变化即重跑）；减弱动效时零时长硬切。
-                // 不用 AnimatedSwitcher：它是图标切换的专用件（架构约定）。
-                child: TweenAnimationBuilder<double>(
-                  key: ValueKey<int>(_step),
-                  tween: Tween<double>(begin: 0, end: 1),
-                  duration: effectDurationOf(context, M3EMotion.short3),
-                  curve: M3EMotion.emphasizedDecelerate,
-                  builder: (context, opacity, child) =>
-                      Opacity(opacity: opacity, child: child),
-                  child: SingleChildScrollView(
-                    child: _buildStep(context, l10n, _step),
+                    const SizedBox(width: 4),
+                    M3EButton.text(
+                      key: const Key('onboardingSkip'),
+                      onPressed: _finishing ? null : _finish,
+                      child: Text(l10n.onboardingSkip),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  // 每一步用同一根淡入（key 变化即重跑）；减弱动效时零时长硬切。
+                  // 不用 AnimatedSwitcher：它是图标切换的专用件（架构约定）。
+                  child: TweenAnimationBuilder<double>(
+                    key: ValueKey<int>(_step),
+                    tween: Tween<double>(begin: 0, end: 1),
+                    duration: effectDurationOf(context, M3EMotion.short3),
+                    curve: M3EMotion.emphasizedDecelerate,
+                    builder: (context, opacity, child) =>
+                        Opacity(opacity: opacity, child: child),
+                    child: SingleChildScrollView(
+                      child: _buildStep(context, l10n, _step),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  if (_step > 0)
-                    M3EButton.text(
-                      key: const Key('onboardingBack'),
-                      onPressed: _finishing ? null : _back,
-                      child: Text(l10n.onboardingBack),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    if (_step > 0)
+                      M3EButton.text(
+                        key: const Key('onboardingBack'),
+                        onPressed: _finishing ? null : _back,
+                        child: Text(l10n.onboardingBack),
+                      ),
+                    const Spacer(),
+                    M3EButton.filled(
+                      key: const Key('onboardingNext'),
+                      onPressed: _finishing ? null : _next,
+                      child: Text(
+                        _step == _stepCount - 1
+                            ? l10n.onboardingStart
+                            : l10n.onboardingNext,
+                      ),
                     ),
-                  const Spacer(),
-                  M3EButton.filled(
-                    key: const Key('onboardingNext'),
-                    onPressed: _finishing ? null : _next,
-                    child: Text(
-                      _step == _stepCount - 1
-                          ? l10n.onboardingStart
-                          : l10n.onboardingNext,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -71,6 +71,11 @@ class _ShellPageLayer extends StatelessWidget {
         //
         // 既非「当前页」也非「上一页」（切换过渡的另一端）时，页面整体
         // Offstage：省掉整页 layout（Opacity(0) 只省 paint）。
+        //
+        // 出场层只在「还没淡完」时放行 ticker：淡出首帧若已静音，出场页
+        // 会冻在上一帧再硬切；但上一目的地会长期保留 outgoing 标记，淡完
+        // 后必须恢复静音，不能让隐藏页的常驻 ticker 一直空转。
+        final bool fadingOut = outgoing && presentation.opacity > 0;
         return ShellPageVisibility(
           visible: selected,
           child: Offstage(
@@ -78,7 +83,7 @@ class _ShellPageLayer extends StatelessWidget {
             child: IgnorePointer(
               ignoring: !selected,
               child: TickerMode(
-                enabled: selected,
+                enabled: selected || fadingOut,
                 child: Opacity(
                   opacity: presentation.opacity,
                   child: Transform.scale(

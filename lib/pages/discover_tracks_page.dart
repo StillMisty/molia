@@ -13,6 +13,7 @@ import '../widgets/detail_page/detail_cover_header.dart';
 import '../widgets/discover_actions.dart';
 import '../widgets/discover_tracks_skeleton.dart';
 import '../widgets/paged_track_collection.dart';
+import '../widgets/responsive.dart';
 import '../widgets/track_handoff.dart';
 import '../widgets/track_row.dart';
 
@@ -208,38 +209,43 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
     // 表格列判定用窗口宽 − 实际栏宽（判据唯一在 DesktopLayout）；行高按档
     // 取 M3E 列表 token（表格单行 56 / 非表格双行 72），与共享正文同源。
     final tableColumns = DesktopLayout.of(context).tableColumns;
-    return PagedTrackCollectionBody<DiscoverTrack>(
-      state: state,
-      tableColumns: tableColumns,
-      // 表头钉在滚动视口顶部（封面头部滚走后列标题仍在）。
-      pinnedTableHeader: true,
-      headerBuilder: (context, state) {
-        final detail = _collection.entity;
-        // 列表态必有实体（与曲目同一响应写入）；空值只为类型收窄。
-        if (detail == null) return const SizedBox.shrink();
-        return _buildHeader(context, detail, state.items.length);
-      },
-      rowBuilder: (context, index, count, columns) {
-        final track = _collection.items[index];
-        return DiscoverTrackTile(
-          track: track,
-          position: calculateCardPosition(index, count),
-          tableSpec: columns ? TrackRowColumnSpec.standard : null,
-          onTap: () => _playFrom(index),
-        );
-      },
-      onRetry: () => unawaited(_load()),
-      onLoadMore: () => unawaited(_collection.loadMore()),
-      emptyText: l10n.discoverNoContent,
-      emptyIcon: Icons.playlist_play_rounded,
-      failureText: l10n.discoverLoadFailed,
-      retryText: l10n.discoverRetry,
-      loadingBuilder: (context) => DiscoverTracksSkeleton(
-        title: widget.title,
+    // 详情正文按 detail 版式收口（桌面档 1080）：全宽窗口下歌单 / 榜单的
+    // 表头与行不再横跨 1600+，正文与封面头部落在同一条阅读宽度里。
+    return ResponsivePageContainer(
+      pageType: ResponsivePageType.detail,
+      child: PagedTrackCollectionBody<DiscoverTrack>(
+        state: state,
         tableColumns: tableColumns,
-        coverUrl: widget.coverUrl,
-        coverFuture: widget.coverFuture,
-        coverHeroTag: widget.coverHeroTag,
+        // 表头钉在滚动视口顶部（封面头部滚走后列标题仍在）。
+        pinnedTableHeader: true,
+        headerBuilder: (context, state) {
+          final detail = _collection.entity;
+          // 列表态必有实体（与曲目同一响应写入）；空值只为类型收窄。
+          if (detail == null) return const SizedBox.shrink();
+          return _buildHeader(context, detail, state.items.length);
+        },
+        rowBuilder: (context, index, count, columns) {
+          final track = _collection.items[index];
+          return DiscoverTrackTile(
+            track: track,
+            position: calculateCardPosition(index, count),
+            tableSpec: columns ? TrackRowColumnSpec.standard : null,
+            onTap: () => _playFrom(index),
+          );
+        },
+        onRetry: () => unawaited(_load()),
+        onLoadMore: () => unawaited(_collection.loadMore()),
+        emptyText: l10n.discoverNoContent,
+        emptyIcon: Icons.playlist_play_rounded,
+        failureText: l10n.discoverLoadFailed,
+        retryText: l10n.discoverRetry,
+        loadingBuilder: (context) => DiscoverTracksSkeleton(
+          title: widget.title,
+          tableColumns: tableColumns,
+          coverUrl: widget.coverUrl,
+          coverFuture: widget.coverFuture,
+          coverHeroTag: widget.coverHeroTag,
+        ),
       ),
     );
   }

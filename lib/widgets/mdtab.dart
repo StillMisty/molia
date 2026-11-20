@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 
 import '../services/haptics.dart';
+import '../theme/motion_policy.dart';
 
 /// 歌词/队列切换：小圆点指示器（选中态拉伸），无图标/文字。
 ///
@@ -58,6 +59,11 @@ class _LyricsQueueDotsState extends State<LyricsQueueDots> {
       return;
     }
     HapticsService.lightImpact();
+    if (reduceMotionOf(context)) {
+      // 减弱动效：圆点切换直接换页，不跑整段 PageView 滑动。
+      widget.pageController.jumpToPage(index);
+      return;
+    }
     widget.pageController.animateToPage(
       index,
       duration: M3EMotion.medium2,

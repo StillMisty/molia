@@ -34,6 +34,7 @@ import '../../providers/playback_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/app_branding_service.dart';
+import '../../services/back_claims.dart';
 import '../../services/haptics.dart';
 import '../../services/language_service.dart';
 import '../../services/onboarding_store.dart';
@@ -63,6 +64,7 @@ import '../tray_dormant_gate.dart';
 
 part 'app_keys.dart';
 part 'pairing_queue.dart';
+part 'shell_back_intent.dart';
 part 'shell_bar.dart';
 part 'shell_page_layer.dart';
 part 'shell_progress.dart';
@@ -238,6 +240,9 @@ class _MyAppState extends State<MyApp>
         widget.showOnboarding && !OnboardingStore.completedInSession;
     WidgetsBinding.instance.addObserver(this);
     _morphAnimation.addListener(_onMorphTick);
+    // 展开态变化要重算 PopScope.canPop（壳层返回层级的第一优先是收起
+    // 播放器）；页面只在动画落定 / 布局后写，不会在构建期触发这里。
+    _nowPlaying.expanded.addListener(_onNowPlayingExpandedChanged);
     // 启动首页：导航偏好在首帧前已就绪（组合根 await 过 preferencesReady），
     // 这里同步读取即可；存储值不可见时 effectiveHomeDestination 已回退到
     // 第一个可见目的地。
@@ -288,6 +293,7 @@ class _MyAppState extends State<MyApp>
     _morphEntry?.remove();
     _morphEntry = null;
     _morph.dispose();
+    _nowPlaying.expanded.removeListener(_onNowPlayingExpandedChanged);
     _nowPlaying.dispose();
     _globalSearch.dispose();
     for (final signal in _reselect.values) {
@@ -364,6 +370,14 @@ class _MyAppState extends State<MyApp>
       _selectedDestination = destination;
       _renderedDestination = destination;
     });
+    if (reduceMotionOf(context)) {
+      // 减弱动效：tab 淡入淡出与封面飞行都直达终态（不 forward(from: 0)、
+      // 不插 Overlay 飞行副本）；两端状态仍按「谁在播放页」对齐。
+      _tabTransition.value = 1;
+      _completeMorph();
+      _alignMorphEnds(onPlayerPage: enteringPlayer);
+      return;
+    }
     _tabTransition.forward(from: 0);
     if (enteringPlayer) {
       _startMorphToPage();
@@ -371,10 +385,18 @@ class _MyAppState extends State<MyApp>
       _startMorphBackToBar();
     } else {
       // 两端都不是播放页：不涉及共享元素，确保两端真身可见、侧槽落位。
-      _morph.setPageHeaderHidden(false);
-      _morph.setBarHeaderHidden(false);
-      _morph.setPageDeckReveal(1);
+      _alignMorphEnds(onPlayerPage: false);
     }
+  }
+
+  /// 两端封面状态对齐到「不在飞行中」的稳态：真身可见、侧槽落位。
+  ///
+  /// 进入 / 离开播放页的异常分支（锚点缺失、一帧内撤销、减弱动效）都走
+  /// 这一份，避免三处各写一遍后漏设某个 flag 导致真身双影或缩放残留。
+  void _alignMorphEnds({required bool onPlayerPage}) {
+    _morph.setPageDeckReveal(1);
+    _morph.setPageHeaderHidden(false);
+    _morph.setBarHeaderHidden(onPlayerPage);
   }
 
   /// 底栏队列按钮：跳播放页 + 让页内右栏切到队列 tab。
@@ -394,6 +416,12 @@ class _MyAppState extends State<MyApp>
     _nowPlaying.showLyricsTab();
   }
 
+  /// 展开态翻转 → 重算 PopScope.canPop（`setState` 是 protected，扩展里
+  /// 不能直接调用，壳层留一个 3 行的转发）。
+  void _onNowPlayingExpandedChanged() {
+    if (mounted) setState(() {});
+  }
+
   /// 底栏 → 播放页的飞行：起点与终点分两帧抓。
   ///
   /// 起点（底栏封面）只在点击这一帧存在——底栏在播放页整条让位，重建后就
@@ -406,9 +434,7 @@ class _MyAppState extends State<MyApp>
     final barCover = _morph.rectOf(_morph.barCoverKey);
     if (barCover == null) {
       // 起点不在场（启动就落在播放页等）：跳过飞行，只对齐两端状态。
-      _morph.setPageDeckReveal(1);
-      _morph.setPageHeaderHidden(false);
-      _morph.setBarHeaderHidden(true);
+      _alignMorphEnds(onPlayerPage: true);
       return;
     }
     _morph.setBarHeaderHidden(true);
@@ -420,17 +446,14 @@ class _MyAppState extends State<MyApp>
       if (_effectiveDestination != ShellDestination.nowPlaying) {
         // 一帧之内又离开了播放页：这次进入被撤销，两端状态按「不在播放页」
         // 对齐（两端真身都可见、侧槽落位）。
-        _morph.setPageDeckReveal(1);
-        _morph.setPageHeaderHidden(false);
-        _morph.setBarHeaderHidden(false);
+        _alignMorphEnds(onPlayerPage: false);
         return;
       }
       final pageCover = _morph.rectOf(_morph.pageCoverKey);
       if (pageCover == null) {
         // 终点不可用：不飞，页内封面与侧槽直接亮出（顶栏/底栏这一端不在场，
         // 无重影）。
-        _morph.setPageDeckReveal(1);
-        _morph.setPageHeaderHidden(false);
+        _alignMorphEnds(onPlayerPage: true);
         return;
       }
       _flyMorph(
@@ -460,18 +483,14 @@ class _MyAppState extends State<MyApp>
       if (_effectiveDestination == ShellDestination.nowPlaying) {
         // 一帧之内又回到播放页：这次离开被撤销，状态按「在播放页」对齐
         // （底栏封面仍收起，与启动就落在播放页时同一口径）。
-        _morph.setBarHeaderHidden(true);
-        _morph.setPageHeaderHidden(false);
-        _morph.setPageDeckReveal(1);
+        _alignMorphEnds(onPlayerPage: true);
         return;
       }
       _completeMorph();
       final geometry = _morph.captureGeometry(toPage: false);
       if (geometry == null) {
         // 锚点缺失（迷你态/首帧）：跳过飞行，两端真身可见。
-        _morph.setPageDeckReveal(1);
-        _morph.setPageHeaderHidden(false);
-        _morph.setBarHeaderHidden(false);
+        _alignMorphEnds(onPlayerPage: false);
         return;
       }
       _flyMorph(geometry);
@@ -641,27 +660,29 @@ class _MyAppState extends State<MyApp>
     // 桌面布局值在这里解析一次（窗口宽 / 平台位），页面与骨架只消费
     // （见 `widgets/desktop_layout.dart`）。
     if (_desktopShell) {
-      return AdaptiveLayoutScope.scope(
-        context,
-        child: DesktopLayout.scope(
+      return _withBackScope(
+        AdaptiveLayoutScope.scope(
           context,
-          child: DesktopShell(
-            chrome: chrome,
-            pageStack: _buildPageStack(),
-            morph: _morph,
-            // 搜索遮罩：入口（品牌区 / Ctrl+F）与「查看全部结果」分别接线。
-            // 后者落在资料库目的地：完整结果（分段 / 分页 / 歌手链接）在那里，
-            // 且共用同一个 SearchProvider 实例。
-            onViewAllResults: _openLibrarySearch,
-            onOpenSearch: _openGlobalSearch,
-            // 全局快捷键：Ctrl+F 打开搜索遮罩、Ctrl+1/2/3 切可见目的地，
-            // DesktopShell 只负责在顶层监听按键，落点由壳层回调决定。
-            searchController: _globalSearch,
-            onSelectDestinationIndex: _selectVisibleDestinationAt,
-            // 队列入口（底栏按钮）与 Esc 的「关闭队列」都要落回播放页右栏，
-            // 由壳层持有控制器后分发。
-            onOpenQueue: _openQueue,
-            onCloseQueuePanel: _closeQueuePanel,
+          child: DesktopLayout.scope(
+            context,
+            child: DesktopShell(
+              chrome: chrome,
+              pageStack: _buildPageStack(),
+              morph: _morph,
+              // 搜索遮罩：入口（品牌区 / Ctrl+F）与「查看全部结果」分别接线。
+              // 后者落在资料库目的地：完整结果（分段 / 分页 / 歌手链接）在那里，
+              // 且共用同一个 SearchProvider 实例。
+              onViewAllResults: _openLibrarySearch,
+              onOpenSearch: _openGlobalSearch,
+              // 全局快捷键：Ctrl+F 打开搜索遮罩、Ctrl+1/2/3 切可见目的地，
+              // DesktopShell 只负责在顶层监听按键，落点由壳层回调决定。
+              searchController: _globalSearch,
+              onSelectDestinationIndex: _selectVisibleDestinationAt,
+              // 队列入口（底栏按钮）与 Esc 的「关闭队列」都要落回播放页右栏，
+              // 由壳层持有控制器后分发；Esc 先过一遍层级返回。
+              onOpenQueue: _openQueue,
+              onCloseQueuePanel: _handleShellBackCommand,
+            ),
           ),
         ),
       );
@@ -700,59 +721,61 @@ class _MyAppState extends State<MyApp>
 
     final adaptive = AdaptiveLayoutScope.of(context);
     final useRail = adaptive.usesNavigationRail;
-    return AdaptiveLayoutScope.scope(
-      context,
-      child: DesktopLayout.scope(
+    return _withBackScope(
+      AdaptiveLayoutScope.scope(
         context,
-        child: Scaffold(
-          appBar: appBar,
-          // 短横屏的发现页不随键盘缩正文：手机横屏可用高本就只有 ~290，
-          // 键盘再占一半后页头（渠道 + tab）与 200% 字号会直接溢出。
-          // 搜索框在页面顶部始终可见，结果列表让键盘覆盖、继续可滚动。
-          resizeToAvoidBottomInset:
-              !(adaptive.isShortViewport &&
-                  selectedDestination == ShellDestination.library),
-          // 横屏时左右安全区（刘海 / 侧边系统栏）要留给正文：应用开了
-          // drawUnderSystemBars，Android 又用 shortEdges，不避让时导航轨会
-          // 直接压到摄像头挖孔下面。顶栏的左右留白在 ShellAppBar 内容层处理，
-          // 这里只管正文；bottom 由底栏自己的 SafeArea 承担。
-          body: SafeArea(
-            top: false,
-            bottom: false,
-            child: Row(
-              children: [
-                if (useRail)
-                  M3ENavigationRail(
-                    // 固定 96dp 窄轨（alwaysCollapse）：无展开按钮、不可展开；
-                    // 标签常显，替代 Material 侧 hover 才出现的 tooltip。
-                    type: M3ENavigationRailType.alwaysCollapse,
-                    selectedIndex: selectedIndex,
-                    onDestinationSelected: chrome.selectDestinationAt,
-                    sections: [
-                      M3ENavigationRailSection(
-                        destinations: chrome.railDestinations(),
-                      ),
-                    ],
-                  ),
-                Expanded(child: _buildPageStack()),
-              ],
+        child: DesktopLayout.scope(
+          context,
+          child: Scaffold(
+            appBar: appBar,
+            // 短横屏的发现页不随键盘缩正文：手机横屏可用高本就只有 ~290，
+            // 键盘再占一半后页头（渠道 + tab）与 200% 字号会直接溢出。
+            // 搜索框在页面顶部始终可见，结果列表让键盘覆盖、继续可滚动。
+            resizeToAvoidBottomInset:
+                !(adaptive.isShortViewport &&
+                    selectedDestination == ShellDestination.library),
+            // 横屏时左右安全区（刘海 / 侧边系统栏）要留给正文：应用开了
+            // drawUnderSystemBars，Android 又用 shortEdges，不避让时导航轨会
+            // 直接压到摄像头挖孔下面。顶栏的左右留白在 ShellAppBar 内容层处理，
+            // 这里只管正文；bottom 由底栏自己的 SafeArea 承担。
+            body: SafeArea(
+              top: false,
+              bottom: false,
+              child: Row(
+                children: [
+                  if (useRail)
+                    M3ENavigationRail(
+                      // 固定 96dp 窄轨（alwaysCollapse）：无展开按钮、不可展开；
+                      // 标签常显，替代 Material 侧 hover 才出现的 tooltip。
+                      type: M3ENavigationRailType.alwaysCollapse,
+                      selectedIndex: selectedIndex,
+                      onDestinationSelected: chrome.selectDestinationAt,
+                      sections: [
+                        M3ENavigationRailSection(
+                          destinations: chrome.railDestinations(),
+                        ),
+                      ],
+                    ),
+                  Expanded(child: _buildPageStack()),
+                ],
+              ),
             ),
-          ),
-          bottomNavigationBar: useRail
-              ? null
-              : SafeArea(
-                  bottom: false,
-                  child: M3ENavigationBar(
-                    // iOS 使用紧凑高度（M3E 最小档 64）。
-                    size: defaultTargetPlatform == TargetPlatform.iOS
-                        ? M3ENavBarSize.small
-                        : M3ENavBarSize.medium,
-                    labelBehavior: M3ENavBarLabelBehavior.alwaysShow,
-                    selectedIndex: selectedIndex,
-                    onDestinationSelected: chrome.selectDestinationAt,
-                    destinations: chrome.barDestinations(),
+            bottomNavigationBar: useRail
+                ? null
+                : SafeArea(
+                    bottom: false,
+                    child: M3ENavigationBar(
+                      // iOS 使用紧凑高度（M3E 最小档 64）。
+                      size: defaultTargetPlatform == TargetPlatform.iOS
+                          ? M3ENavBarSize.small
+                          : M3ENavBarSize.medium,
+                      labelBehavior: M3ENavBarLabelBehavior.alwaysShow,
+                      selectedIndex: selectedIndex,
+                      onDestinationSelected: chrome.selectDestinationAt,
+                      destinations: chrome.barDestinations(),
+                    ),
                   ),
-                ),
+          ),
         ),
       ),
     );

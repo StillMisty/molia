@@ -28,11 +28,19 @@ class SettingsDropdownRow<T> extends StatelessWidget {
     required this.onChanged,
     this.dropdownKey,
     this.fieldWidth = 170,
+    this.enabled = true,
+    this.optionEnabled,
   });
 
   final IconData icon;
   final String title;
   final String? subtitle;
+
+  /// 整行禁用（被上游开关接管的从属设置）：置灰 + 字段不可展开。
+  final bool enabled;
+
+  /// 单项禁用判定（平台能力不足的选项；与 `SettingsChoiceRow` 同一语义）。
+  final bool Function(T value)? optionEnabled;
 
   /// 行尾下拉字段宽度（默认 170）：是**最小**宽度，选项文案更长时按最长选项
   /// 自动加宽（见 [_resolvedFieldWidth]），避免「Hi-Res」/「Lossless」折行。
@@ -59,55 +67,62 @@ class SettingsDropdownRow<T> extends StatelessWidget {
     return CardListSurface(
       position: SettingsRowPosition.of(context),
       padding: kSettingsRowPadding,
-      semanticLabel: title,
+      semanticLabel: subtitle == null || subtitle!.isEmpty
+          ? title
+          : '$title, $subtitle',
       onPressed: null,
-      child: SettingsRowContent(
-        hasSubtitle: subtitle != null && subtitle!.isNotEmpty,
-        child: Row(
-          children: [
-            Expanded(
-              child: SettingsTileLead(
-                icon: icon,
-                title: title,
-                subtitle: subtitle,
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              // 设置弹层窄于屏幕：字段定宽，避免撑挤标题；但不能窄到折行。
-              width: _resolvedFieldWidth(context),
-              child: M3EDropdownMenu<T>(
-                key: dropdownKey,
-                items: [
-                  for (final (optionValue, label) in options)
-                    M3EDropdownItem<T>(
-                      label: label,
-                      value: optionValue,
-                      selected: optionValue == value,
-                    ),
-                ],
-                singleSelect: true,
-                showChipAnimation: false,
-                fieldStyle: M3EDropdownFieldStyle(
-                  hintText: title,
-                  selectedTextStyle: selectedTextStyle,
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.45,
+        child: SettingsRowContent(
+          hasSubtitle: subtitle != null && subtitle!.isNotEmpty,
+          child: Row(
+            children: [
+              Expanded(
+                child: SettingsTileLead(
+                  icon: icon,
+                  title: title,
+                  subtitle: subtitle,
                 ),
-                // M3E 字段的默认选中文本只带省略号、没有 `maxLines`：宽度不足
-                // 时「Hi-Res」会从连字符处折成两行顶高整行。这里自带单行文本，
-                // 折行在结构上不可能发生（宽度不足由省略号接管）。
-                selectedItemBuilder: (item) => Text(
-                  item.label,
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: selectedTextStyle,
-                ),
-                onSelectionChanged: (items) {
-                  if (items.isNotEmpty) onChanged(items.first.value);
-                },
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              SizedBox(
+                // 设置弹层窄于屏幕：字段定宽，避免撑挤标题；但不能窄到折行。
+                width: _resolvedFieldWidth(context),
+                child: M3EDropdownMenu<T>(
+                  key: dropdownKey,
+                  items: [
+                    for (final (optionValue, label) in options)
+                      M3EDropdownItem<T>(
+                        label: label,
+                        value: optionValue,
+                        disabled: !(optionEnabled?.call(optionValue) ?? true),
+                        selected: optionValue == value,
+                      ),
+                  ],
+                  singleSelect: true,
+                  enabled: enabled,
+                  showChipAnimation: false,
+                  fieldStyle: M3EDropdownFieldStyle(
+                    hintText: title,
+                    selectedTextStyle: selectedTextStyle,
+                  ),
+                  // M3E 字段的默认选中文本只带省略号、没有 `maxLines`：宽度不足
+                  // 时「Hi-Res」会从连字符处折成两行顶高整行。这里自带单行文本，
+                  // 折行在结构上不可能发生（宽度不足由省略号接管）。
+                  selectedItemBuilder: (item) => Text(
+                    item.label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: selectedTextStyle,
+                  ),
+                  onSelectionChanged: (items) {
+                    if (items.isNotEmpty) onChanged(items.first.value);
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -17,8 +17,10 @@ import '../l10n/app_localizations.dart';
 import '../services/cache_service.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_settings.dart';
+import '../services/notification_permission.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
+import '../theme/m3e_context.dart';
 import '../widgets/responsive.dart';
 import '../widgets/settings/cache_policy_dialog.dart';
 import '../widgets/settings/settings_subpage.dart';
@@ -45,10 +47,19 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
   static const int _audioMaxMinMb = 16;
   static const int _audioMaxMaxMb = 102400; // 100 GB
 
+  // 保留策略范围：0 表示「不限制 / 永不过期」（CacheService 语义）。
+  static const int _retentionDaysMin = 1;
+  static const int _retentionDaysMax = 3650; // 10 年
+  static const int _artworkMaxMin = 10;
+  static const int _artworkMaxMax = 100000;
+
   final Map<CachePartition, CacheUsage?> _usage = {};
 
   bool _audioEnabled = CacheService.defaultAudioEnabled;
   int _audioMaxMb = CacheService.defaultAudioMaxMb;
+  int _lyricsTtlDays = CacheService.defaultLyricsTtlDays;
+  int _artworkMaxObjects = CacheService.defaultArtworkMaxObjects;
+  int _artworkStaleDays = CacheService.defaultArtworkStaleDays;
   bool _busy = false;
 
   CacheService? get _service => context.read<CacheService?>();
@@ -65,14 +76,20 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
     final results = await Future.wait([
       service.audioEnabled(),
       service.audioMaxMb(),
+      service.lyricsTtlDays(),
+      service.artworkMaxObjects(),
+      service.artworkStaleDays(),
       for (final partition in CachePartition.values) service.usage(partition),
     ]);
     if (!mounted) return;
     setState(() {
       _audioEnabled = results[0] as bool;
       _audioMaxMb = results[1] as int;
+      _lyricsTtlDays = results[2] as int;
+      _artworkMaxObjects = results[3] as int;
+      _artworkStaleDays = results[4] as int;
       for (var i = 0; i < CachePartition.values.length; i++) {
-        _usage[CachePartition.values[i]] = results[2 + i] as CacheUsage;
+        _usage[CachePartition.values[i]] = results[5 + i] as CacheUsage;
       }
     });
   }
@@ -255,6 +272,37 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
             onChanged: (value) =>
                 unawaited(settings.setPublishToPublicDir(value)),
           ),
+        // 文件名模板 / 标签写入 / 下载通知：与保存位置同属「下载」域，低频
+        // 但改的时候一定是在这张卡里找，不再拆去高级设置。
+        SettingsValueTile(
+          key: const Key('downloadFilenameTemplateItem'),
+          icon: Icons.edit_note_rounded,
+          title: l10n.downloadFilenameTemplate,
+          subtitle: l10n.downloadFilenameTemplateHint,
+          value: settings.filenameTemplate,
+          onTap: () => unawaited(_editTemplate(context, settings)),
+        ),
+        SettingsSwitchTile(
+          switchKey: const Key('downloadEmbedTagsSwitch'),
+          icon: Icons.music_note_rounded,
+          title: l10n.downloadEmbedTags,
+          subtitle: l10n.downloadEmbedTagsSubtitle,
+          value: settings.embedTags,
+          onChanged: (value) => unawaited(settings.setEmbedTags(value)),
+        ),
+        // 下载通知只在 Android 有语义（前台服务 + 通知栏进度）。
+        if (downloads?.notificationsSupported ?? false)
+          SettingsSwitchTile(
+            switchKey: const Key('downloadNotificationsSwitch'),
+            icon: Icons.notifications_active_rounded,
+            title: l10n.downloadNotifications,
+            subtitle: l10n.downloadNotificationsSubtitle,
+            value: settings.notifications,
+            onChanged: (value) {
+              unawaited(settings.setNotifications(value));
+              if (value) unawaited(NotificationPermission.ensureRequested());
+            },
+          ),
         // 任务队列与批量下载：低频任务页不占首屏，从这里进入。
         SettingsNavTile(
           key: const Key('settingsDownloadsManageItem'),
@@ -306,6 +354,73 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
             setState(() => _audioMaxMb = value);
             await _service?.setAudioMaxMb(value);
           },
+        ),
+        // 歌词 / 封面保留策略：与音频容量同属缓存治理，不再拆去高级设置。
+        SettingsValueTile(
+          icon: Icons.schedule_rounded,
+          title: l10n.cachePolicyLyricsTtl,
+          value: _lyricsTtlDays <= 0
+              ? l10n.cacheNeverExpire
+              : l10n.cacheValueDays(_lyricsTtlDays),
+          onTap: () => _editCachePolicy(
+            context,
+            title: l10n.cachePolicyLyricsTtl,
+            current: _lyricsTtlDays,
+            min: _retentionDaysMin,
+            max: _retentionDaysMax,
+            unitLabel: l10n.cacheUnitDays,
+            zeroLabel: l10n.cacheNeverExpire,
+            labelOf: (value) =>
+                value <= 0 ? l10n.cacheNeverExpire : l10n.cacheValueDays(value),
+            onSelected: (value) async {
+              setState(() => _lyricsTtlDays = value);
+              await _service?.setLyricsTtlDays(value);
+            },
+          ),
+        ),
+        SettingsValueTile(
+          icon: Icons.image_rounded,
+          title: l10n.cachePolicyArtworkMax,
+          value: _artworkMaxObjects <= 0
+              ? l10n.cacheUnlimited
+              : l10n.cacheValueItems(_artworkMaxObjects),
+          onTap: () => _editCachePolicy(
+            context,
+            title: l10n.cachePolicyArtworkMax,
+            current: _artworkMaxObjects,
+            min: _artworkMaxMin,
+            max: _artworkMaxMax,
+            unitLabel: l10n.cacheUnitItems,
+            zeroLabel: l10n.cacheUnlimited,
+            labelOf: (value) =>
+                value <= 0 ? l10n.cacheUnlimited : l10n.cacheValueItems(value),
+            onSelected: (value) async {
+              setState(() => _artworkMaxObjects = value);
+              await _service?.setArtworkMaxObjects(value);
+            },
+          ),
+        ),
+        SettingsValueTile(
+          icon: Icons.update_rounded,
+          title: l10n.cachePolicyArtworkStale,
+          value: _artworkStaleDays <= 0
+              ? l10n.cacheNeverExpire
+              : l10n.cacheValueDays(_artworkStaleDays),
+          onTap: () => _editCachePolicy(
+            context,
+            title: l10n.cachePolicyArtworkStale,
+            current: _artworkStaleDays,
+            min: _retentionDaysMin,
+            max: _retentionDaysMax,
+            unitLabel: l10n.cacheUnitDays,
+            zeroLabel: l10n.cacheNeverExpire,
+            labelOf: (value) =>
+                value <= 0 ? l10n.cacheNeverExpire : l10n.cacheValueDays(value),
+            onSelected: (value) async {
+              setState(() => _artworkStaleDays = value);
+              await _service?.setArtworkStaleDays(value);
+            },
+          ),
         ),
         // 用量行 + 行尾清理按钮：破坏性动作不占整行，也不夹在普通行中间。
         for (final partition in CachePartition.values)
@@ -403,6 +518,106 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
     if (picked == null || picked.isEmpty) return;
     await settings.setSaveDir(picked);
     notifications?.showSnackBar(l10n.save);
+  }
+
+  /// 保留策略编辑：数值弹层确认后写回服务（0 = 不限制 / 永不过期）。
+  Future<void> _editCachePolicy(
+    BuildContext context, {
+    required String title,
+    required int current,
+    required int min,
+    required int max,
+    required String unitLabel,
+    required String zeroLabel,
+    required String Function(int value) labelOf,
+    required ValueChanged<int> onSelected,
+  }) async {
+    final value = await showCachePolicyValueDialog(
+      context,
+      title: title,
+      current: current,
+      min: min,
+      max: max,
+      unitLabel: unitLabel,
+      zeroLabel: zeroLabel,
+      labelOf: labelOf,
+    );
+    if (value == null || !mounted) return;
+    onSelected(value);
+  }
+
+  /// 编辑文件名模板：实时预览 + 恢复默认。
+  Future<void> _editTemplate(
+    BuildContext context,
+    DownloadSettings settings,
+  ) async {
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController(text: settings.filenameTemplate);
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final result = await M3EDialog.show<String>(
+      context,
+      dialog: StatefulBuilder(
+        builder: (context, setDialogState) {
+          final preview = DownloadSettings.applyTemplate(
+            controller.text,
+            const {'artist': '歌手', 'title': '歌名', 'album': '专辑'},
+          );
+          return M3EDialog(
+            title: l10n.downloadFilenameTemplate,
+            content: SizedBox(
+              width: settingsDialogWidth(context),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  M3ETextField(
+                    controller: controller,
+                    autofocus: true,
+                    placeholder: l10n.downloadFilenameTemplate,
+                    onChanged: (_) => setDialogState(() {}),
+                    onSubmitted: (_) => navigator.pop(controller.text),
+                  ),
+                  const SizedBox(height: kSettingsSmallSpacing),
+                  Text(
+                    l10n.downloadFilenameTemplateHint,
+                    style: context.typeScale.bodySmall.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${l10n.downloadFilenamePreview}: $preview',
+                    style: context.typeScale.bodySmall.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              M3EButton.text(
+                onPressed: () {
+                  controller.text = kDefaultFilenameTemplate;
+                  setDialogState(() {});
+                },
+                child: Text(l10n.downloadReset),
+              ),
+              M3EButton.text(
+                onPressed: () => navigator.pop(),
+                child: Text(l10n.cancel),
+              ),
+              M3EButton.filled(
+                onPressed: () => navigator.pop(controller.text),
+                child: Text(l10n.save),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    controller.dispose();
+    if (result == null) return;
+    await settings.setFilenameTemplate(result);
   }
 
   String _formatSize(int bytes) {

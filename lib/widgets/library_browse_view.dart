@@ -13,6 +13,7 @@ import '../l10n/app_localizations.dart';
 import '../theme/m3e_context.dart';
 import 'app_network_image.dart';
 import 'collection_track_list.dart';
+import 'cross_fade_swap.dart';
 import 'desktop_layout.dart';
 import 'empty_state.dart';
 import 'row_actions.dart';
@@ -90,6 +91,9 @@ class LibraryBrowseView extends StatefulWidget {
 }
 
 class _LibraryBrowseViewState extends State<LibraryBrowseView> {
+  /// 列表态的身份值：与分组 key 区分开（分组 key 可能恰好等于它）。
+  static const String _browseListValue = '__browseList__';
+
   String? _selectedKey;
   final Set<String> _expanded = {};
   final Set<String> _selectedTracks = {};
@@ -169,6 +173,9 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
                         ),
                       ),
                 headline: item.title,
+                // 专辑 / 歌手行没有封面差异可辨认时，副标题（歌手名 / 专辑名）
+                // 是列表里唯一能区分同名条目的信息。
+                supportingText: item.subtitle.isEmpty ? null : item.subtitle,
                 trailingText: '${item.tracks.length}',
                 selected: selected == item.key,
                 onTap: () => setState(() => _selectedKey = item.key),
@@ -176,7 +183,14 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
             },
           );
     if (!widget.twoPane) {
-      return detail ?? pane;
+      // 单栏在同一 widget 里切换列表 / 详情：用 fade-through 明确「换了一屏」，
+      // 旧层只负责淡出（CrossFadeSwap 自带 IgnorePointer + ExcludeSemantics），
+      // 不会出现两层同时可点。减弱动效时 CrossFadeSwap 内部时长归零。
+      return CrossFadeSwap(
+        value: _selectedKey ?? _browseListValue,
+        mode: CrossFadeMode.fadeThrough,
+        child: detail ?? pane,
+      );
     }
     return Row(
       children: [
@@ -323,11 +337,30 @@ class _LibraryBrowseViewState extends State<LibraryBrowseView> {
                 ),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: Text(
-                    group.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.typeScale.titleMedium,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        group.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.typeScale.titleMedium,
+                      ),
+                      // 分组详情标题下保留副标题：进入详情后仍能确认当前是
+                      // 哪个歌手 / 哪张专辑，不用退回列表核对。
+                      if (group.subtitle.isNotEmpty)
+                        Text(
+                          group.subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.typeScale.bodySmall.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 M3EIconButton(

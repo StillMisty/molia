@@ -245,14 +245,16 @@ class _SettingsPageState extends State<SettingsPage>
                       context.read<ThemeProvider>().setBaseColorSource(source),
                 ),
                 // 自定义色仅作基础配色时显示，避免与「壁纸」并存产生歧义。
-                if (baseColorSource == ColorBaseSource.custom)
-                  SettingsColorValueTile(
+                SettingsReveal(
+                  visible: baseColorSource == ColorBaseSource.custom,
+                  child: SettingsColorValueTile(
                     key: const Key('settingsSeedColorItem'),
                     icon: Icons.color_lens_rounded,
                     title: l10n.settingsSeedColor,
                     colorArgb: seedColor.toARGB32(),
                     onTap: () => _pickSeedColor(context),
                   ),
+                ),
                 SettingsSwitchTile(
                   switchKey: const Key('settingsPureBlackSwitch'),
                   icon: Icons.dark_mode_rounded,
@@ -479,8 +481,9 @@ class _SettingsPageState extends State<SettingsPage>
             value: dataSaver.enabled,
             onChanged: (value) => dataSaver.setEnabled(value),
           ),
-          if (dataSaver.enabled)
-            SettingsSwitchTile(
+          SettingsReveal(
+            visible: dataSaver.enabled,
+            child: SettingsSwitchTile(
               switchKey: const Key('settingsDataSaverCoversSwitch'),
               icon: Icons.image_rounded,
               title: l10n.settingsDataSaverCovers,
@@ -488,6 +491,7 @@ class _SettingsPageState extends State<SettingsPage>
               value: dataSaver.coversSaverEnabled,
               onChanged: (value) => dataSaver.setCoversSaverEnabled(value),
             ),
+          ),
         ],
         // AI 推歌：配置与开启入口（模式生效后推荐流出在发现页）。
         SettingsNavTile(

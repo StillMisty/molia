@@ -373,7 +373,6 @@ class NowPlayingSummary extends StatelessWidget {
     super.key,
     required this.cover,
     this.info = const NowPlayingTrackText.bar(),
-    this.trailing,
     this.onTap,
   });
 
@@ -382,9 +381,6 @@ class NowPlayingSummary extends StatelessWidget {
 
   /// 文本槽；缺省是跟随当前曲目的 [NowPlayingTrackText.bar]。
   final Widget info;
-
-  /// 尾部槽（桌面底栏的收藏按钮）；不参与「点击进播放页」的手势。
-  final Widget? trailing;
 
   /// 点击封面/文本进播放页；null = 当前态不可跳转（如播放页已激活）。
   final VoidCallback? onTap;
@@ -414,7 +410,6 @@ class NowPlayingSummary extends StatelessWidget {
             ),
           ),
         ),
-        ?trailing,
       ],
     );
   }

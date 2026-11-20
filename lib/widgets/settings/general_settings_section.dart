@@ -60,9 +60,16 @@ class _GeneralSettingsSectionState extends State<GeneralSettingsSection> {
     final l10n = AppLocalizations.of(context)!;
     // 测试等场景可能不提供 NavProvider：缺省时隐藏导航相关行。
     final nav = widget.availability.nav;
+    final hasHiddenDestinations =
+        nav != null && nav.visibleDestinations.length < nav.order.length;
 
     return SettingsSectionCard(
       title: l10n.settingsGeneralTitle,
+      // 启动页的隐藏目的地保持可选但置灰：卡底说明去哪打开，否则用户只会
+      // 看到一排点不动的选项。
+      footer: hasHiddenDestinations
+          ? SettingsSectionHint(text: l10n.settingsStartupPageHiddenHint)
+          : null,
       children: [
         // 行序按改动频率：启动页（常改）→ 底栏 → 语言。
         if (nav != null) ...[

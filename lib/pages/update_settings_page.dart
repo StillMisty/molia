@@ -166,15 +166,12 @@ class _ReleaseSection extends StatelessWidget {
               horizontal: 4,
               vertical: kSettingsSmallSpacing,
             ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 220),
-              child: SingleChildScrollView(
-                child: Text(
-                  release.notes,
-                  style: m3e.typeScale.bodySmall.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
+            // 更新说明直接内联：整页本身可滚动，再套一个 maxHeight 内层
+            // 滚动区会出现「滚到一半卡住」的双层滚动。
+            child: Text(
+              release.notes,
+              style: m3e.typeScale.bodySmall.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ),

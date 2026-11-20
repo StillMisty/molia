@@ -18,6 +18,7 @@ import 'cover_deck_metrics.dart';
 import 'now_playing_summary.dart';
 import 'playback_transport.dart';
 import 'player_cover_deck.dart';
+import 'player_cover_semantics.dart';
 import 'player_morph.dart';
 import 'seek_bar.dart';
 import 'track_artwork.dart';
@@ -47,6 +48,9 @@ class Player extends StatefulWidget {
 
   /// 播放页音量弹层的稳定 Key。
   static const Key volumePanelKey = Key('playerVolumePanel');
+
+  /// 迷你条根节点的稳定 Key（版式测试按它定位迷你条内的标题 / 传输键）。
+  static const Key miniBarKey = Key('playerMiniBar');
 
   /// 顶栏共享元素控制器：为封面/歌名/进度提供锚点并接收隐藏状态。
   final PlayerMorphController? morph;
@@ -404,12 +408,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Semantics(
-              // 封面不是纯装饰：播放页 / 迷你条点击它进入播放页。
-              image: true,
-              label: displayTrack == null
-                  ? _l10n(context).coverLabel
-                  : _l10n(context).openPlayerFor(displayTrack.title),
+            PageCoverSemantics(
+              track: displayTrack,
               child: PlayerCoverDeck(
                 displayTrack: displayTrack,
                 artDimension: metrics.artDimension,
@@ -573,7 +573,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
   }
 
-  /// 进度排：收藏（左）+ 可拖动波浪进度（中）+ 播放模式（右）。
+  /// 进度排：收藏（左）+ 可拖动波浪进度（中）+ 播放模式 / 音量（右）。
   ///
   /// 拖动期间本地预览、松手才提交 seek；控制器生命周期与低频快照订阅都在
   /// `PlaybackSeekBar` 内，这里只决定版式与时间标签档位。波浪只在这一处
@@ -581,7 +581,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   ///
   /// 播放模式常显在进度排：播放域动作一步可达，当前模式一眼可见
   /// （见 ADR-0007 的分域与 ADR-0030 的取舍）。
+  ///
+  /// 音量入口只在「桌面平台 + 没有传输排」的单栏播放页补：桌面骨架分栏
+  /// （[Player.desktopLayout]）的音量在传输排，底栏窄窗又会主动去掉音量，
+  /// 不补这一处 480–839 的桌面窗口就没有任何屏幕音量控件。
   Widget _buildSeekBar() {
+    final bool showVolume = isDesktopPlatform() && !widget.desktopLayout;
     return Padding(
       // 纵向不留内边距：上方 2dp 由外层排布给（小屏 / 大屏两套版式都是
       // `SizedBox(height: 2)`），下方 2dp 由时间行自己的呼吸位承担——进度排
@@ -603,6 +608,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           const SizedBox(width: 4),
           // 与收藏同一套简单图标按钮；模式图标 / 标签由共享模块唯一映射。
           const PlaybackModeButton(visualSize: Size(44, 44)),
+          if (showVolume) ...[
+            const SizedBox(width: 4),
+            // 稳定 key 与桌面骨架传输排同一个（底栏隐藏后音量只在这里可达）。
+            const VolumeControl(
+              buttonKey: Player.volumeButtonKey,
+              panelKey: Player.volumePanelKey,
+            ),
+          ],
         ],
       ),
     );
@@ -669,6 +682,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     Track? previousTrack,
   }) {
     return SizedBox(
+      key: Player.miniBarKey,
       height: miniPlayerHeight,
       child: Stack(
         children: [
@@ -682,16 +696,21 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                 children: [
                   // 卡片外观（外边圆角 8、裁剪 8、回退图标 24）由 CoverAppearance.mini
                   // 统一给出；迷你 ⇄ 完整飞行期间真身隐藏，由飞行副本承接。
+                  // 整条点击 = 展开播放页，封面的读屏语义也按这个动作标注。
                   Opacity(
                     opacity: _coverFlightActive ? 0 : 1,
-                    child: CoverCard(
-                      key: _miniCoverKey,
-                      size: 48,
-                      appearance: CoverAppearance.mini,
-                      content: (context, clip, iconSize) => _buildMiniAlbumArt(
-                        track,
-                        iconSize,
-                        previousTrack: previousTrack,
+                    child: MiniCoverSemantics(
+                      track: track,
+                      child: CoverCard(
+                        key: _miniCoverKey,
+                        size: 48,
+                        appearance: CoverAppearance.mini,
+                        content: (context, clip, iconSize) =>
+                            _buildMiniAlbumArt(
+                              track,
+                              iconSize,
+                              previousTrack: previousTrack,
+                            ),
                       ),
                     ),
                   ),
@@ -796,6 +815,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   ///
   /// 三个传输键走共享模块：无曲目（含冷启动恢复态）一律禁用，与桌面底栏 /
   /// 顶栏 / 播放页传输排同一契约。
+  ///
+  /// 350–399 只留三个传输键：M3E 的 xs/sm 命中区各 48，四个键会把标题列挤到
+  /// 72dp（360 宽下歌名全成省略号）；收藏在播放页进度排已有入口。
   Widget _buildResponsiveControlButtons(BuildContext context) {
     if (context.isCompact) {
       return const PlaybackPlayPauseButton(
@@ -809,7 +831,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildFavoriteButton(size: size, visualSize: visualSize),
+        if (!narrow) _buildFavoriteButton(size: size, visualSize: visualSize),
         PlaybackPreviousButton(size: size, visualSize: visualSize),
         PlaybackPlayPauseButton(size: size, visualSize: visualSize),
         PlaybackNextButton(size: size, visualSize: visualSize),
@@ -864,13 +886,18 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         // 标题块高度预算：桌面版式是两行（歌名 + 作者），移动 / 平板大屏单行。
-        final double textSectionFixedHeight = widget.desktopLayout
-            ? 52.0
-            : 56.0;
+        // 预算随 textScaler 放大：固定值会把 200% 字号的标题块按实际高度占位、
+        // 封面却仍按旧预算吃满，矮窗口里把进度排（含条下方时间行）顶出可视区。
+        final double textScale = MediaQuery.textScalerOf(context).scale(1.0);
+        final double textSectionFixedHeight =
+            (widget.desktopLayout ? 52.0 : 56.0) * textScale;
         const double spacingBelowArt = 2.0;
         // 桌面版式多出的传输控制排（md 播放键 56）与标题块间距 8：封面可用
-        // 高度要扣掉，否则矮窗口里进度排会被挤出可视区。
-        final double desktopExtrasHeight = widget.desktopLayout ? 64.0 : 0.0;
+        // 高度要扣掉，否则矮窗口里进度排会被挤出可视区。同样随字号放大预留：
+        // 大字号下封面让位，而不是把下方内容压出边界。
+        final double desktopExtrasHeight = widget.desktopLayout
+            ? 64.0 * textScale
+            : 0.0;
 
         // 封面两侧与文字块共用同一内边距：大屏封面的左右是硬边界
         // （导航轨 / 分栏线），堆叠不能贴上去。
@@ -889,11 +916,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Semantics(
-              image: true,
-              label: displayTrack == null
-                  ? _l10n(context).coverLabel
-                  : _l10n(context).openPlayerFor(displayTrack.title),
+            PageCoverSemantics(
+              track: displayTrack,
               child: PlayerCoverDeck(
                 displayTrack: displayTrack,
                 artDimension: metrics.artDimension,

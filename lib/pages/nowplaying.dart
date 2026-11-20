@@ -5,13 +5,11 @@ import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 import 'package:molia/services/haptics.dart';
 import 'package:molia/widgets/adaptive_layout.dart';
-import 'package:molia/widgets/desktop_layout.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/queue.dart';
 import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/now_playing_controller.dart';
-import 'package:molia/widgets/now_playing_layout_metrics.dart';
 import 'package:molia/widgets/player_morph.dart';
 import 'package:molia/widgets/scroll_edge_fade.dart';
 import 'package:molia/widgets/shell_page_visibility.dart';
@@ -19,6 +17,8 @@ import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/track_info_view.dart';
 
 import '../l10n/app_localizations.dart';
+import '../theme/motion_policy.dart';
+import 'nowplaying_desktop_layout.dart';
 
 /// 正在播放页：全屏播放器（可折叠为迷你条）+ 队列/歌词/歌曲信息三个 PageView。
 class NowPlaying extends StatefulWidget {
@@ -84,6 +84,14 @@ class _NowPlayingState extends State<NowPlaying>
   /// 重复点击请求直接忽略（不能让 `_isMini` 在宽版式被翻转）。布局期写入。
   bool _usesWideLayout = false;
 
+  /// 当前布局是否有迷你态（窄单栏）。桌面两栏 / 移动宽版式恒为 false：
+  /// 返回层级要据此决定「先收起播放器」还是直接回上一目的地。
+  bool _miniCapable = true;
+
+  /// 壳层是否把本页放在前台（布局期写入，不触发重建）。隐藏页的展开态
+  /// 不能拦返回：从资料库按返回应先回目的地，而不是收起后台的播放器。
+  bool _shellVisible = true;
+
   /// 播放器区域可用的最大高度（跟手拖拽的行程基准）。
   double _playerMaxHeight = 340;
 
@@ -103,6 +111,10 @@ class _NowPlayingState extends State<NowPlaying>
   /// 桌面版式右侧分页：0 = 队列、1 = 歌词、2 = 歌曲信息。
   late int _desktopTab;
 
+  /// 已消费到的 [NowPlayingController.requestVersion]：收起意图与 tab 请求
+  /// 共用一次通知，只有版本前进才重放 tab。
+  int _handledTabRequest = 0;
+
   /// 移动 / 平板版式当前落定的内容页（PageView 落定后更新）。
   ///
   /// 与 [_desktopTab] 分开：桌面没有 [PageView]，tab 选中态由
@@ -112,10 +124,6 @@ class _NowPlayingState extends State<NowPlaying>
   /// 用 notifier 而不是 state：翻页只需要重建 PageView 子树，不能让播放器 /
   /// 封面 deck 跟着整页 setState 重建。
   late final ValueNotifier<int> _visibleTab;
-
-  /// 桌面版式右栏内容与 tab 栏之间的间距（M3E：tab 栏与内容同为 16 口径，
-  /// 内容左右边距由各内容组件自持）。
-  static const double _desktopContentTopPadding = 16;
 
   // 页面与屏幕尺寸缓存：避免 PageView 每次重建导致歌词/队列滚动状态丢失。
   List<PageData>? _cachedPages;
@@ -133,6 +141,11 @@ class _NowPlayingState extends State<NowPlaying>
     final int? requested = widget.controller?.requestedTab;
     _desktopTab = requested ?? nowPlayingLyricsTabIndex;
     _visibleTab = ValueNotifier<int>(requested ?? nowPlayingLyricsTabIndex);
+    // 壳层返回层级读的是「当前 tab」：挂载时就同步一次，避免先点开队列
+    // 再按 Esc 时壳层还停留在默认歌词页。
+    widget.controller?.activeTab.value = requested ?? nowPlayingLyricsTabIndex;
+    // 挂载前已消费过的请求不再重放（初始页已经取过 requestedTab）。
+    _handledTabRequest = widget.controller?.requestVersion ?? 0;
     _pageController = PageController(
       initialPage: requested ?? _currentPageIndex,
     );
@@ -194,7 +207,13 @@ class _NowPlayingState extends State<NowPlaying>
 
   /// 切换动作本体（不含触感）：本次点击的轻震由调用方负责。
   void _animateToggleExpand() {
-    _expandController.animateTo(_expandController.value >= 0.5 ? 0.0 : 1.0);
+    final double target = _expandController.value >= 0.5 ? 0.0 : 1.0;
+    if (reduceMotionOf(context)) {
+      // 减弱动效：迷你 ⇄ 完整直接换态（弹簧参数本身不变，正常态仍续跑）。
+      _expandController.value = target;
+      return;
+    }
+    _expandController.animateTo(target);
   }
 
   /// 壳层重复点击「播放」目的地：与迷你条点击 / 圆点点击 / 到顶下拉同一入口。
@@ -206,13 +225,27 @@ class _NowPlayingState extends State<NowPlaying>
     _animateToggleExpand();
   }
 
-  /// 外部 tab 请求（[NowPlayingController]）：切到请求的页。
+  /// 外部 tab / 收起请求（[NowPlayingController]）。
   ///
   /// 请求是动作不是状态：重复请求、请求当前页都照样处理（页面可能刚挂载，
   /// 用户也可能手动切走后再触发一次）。
   void _handleTabRequest() {
-    final int? requested = widget.controller?.requestedTab;
-    if (requested == null || !mounted) return;
+    final controller = widget.controller;
+    if (controller == null || !mounted) return;
+
+    if (controller.takeCollapseRequest()) {
+      _collapsePlayer();
+    }
+
+    // 收起意图与 tab 请求共用一次通知：只有版本前进才重放 tab，否则收起
+    // 播放器会把上一次请求的页再切一遍。
+    final bool hasTabRequest = controller.requestVersion != _handledTabRequest;
+    if (!hasTabRequest) return;
+    _handledTabRequest = controller.requestVersion;
+
+    final int? requested = controller.requestedTab;
+    if (requested == null) return;
+    controller.activeTab.value = requested;
 
     if (widget.desktopLayout) {
       _selectDesktopTab(requested);
@@ -229,11 +262,48 @@ class _NowPlayingState extends State<NowPlaying>
       });
       return;
     }
+    if (reduceMotionOf(context)) {
+      // 减弱动效：tab 跳转直接换页，不做整段滑动。
+      _pageController.jumpToPage(requested);
+      return;
+    }
     _pageController.animateToPage(
       requested,
       duration: M3EMotion.medium2,
       curve: M3EMotion.emphasizedDecelerate,
     );
+  }
+
+  /// 收起播放器（壳层返回键 / Esc 的层级动作）。
+  ///
+  /// 无迷你态的版式（桌面两栏 / 移动宽版式）没有可收起的目标：把
+  /// [NowPlayingController.expanded] 回写为 false，下一次返回继续回上一目的地。
+  void _collapsePlayer() {
+    final controller = widget.controller;
+    if (!_miniCapable) {
+      controller?.expanded.value = false;
+      return;
+    }
+    if (reduceMotionOf(context)) {
+      _expandController.value = 0;
+      return;
+    }
+    _expandController.animateTo(0);
+  }
+
+  /// 把「当前布局是否有迷你态 + 实际是否展开」回写给壳层。
+  ///
+  /// 构建期只安排帧末写入：壳层监听 [NowPlayingController.expanded] 并
+  /// setState，直接在本帧通知会触发「构建中 markNeedsBuild」。
+  void _syncExpanded() {
+    final controller = widget.controller;
+    if (controller == null) return;
+    final bool expected = _shellVisible && _miniCapable && !_isMini;
+    if (controller.expanded.value == expected) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.controller != controller) return;
+      controller.expanded.value = expected;
+    });
   }
 
   /// 展开进度跨过阈值即同步迷你态（视觉落定口径，不等弹簧容差拖尾）。
@@ -253,6 +323,9 @@ class _NowPlayingState extends State<NowPlaying>
       // 歌词页操作按钮可见性跟随展开态，需重建页面实例。
       _cachedPages = null;
     });
+    // 动画落定的节点是壳层返回层级最可靠的信号：宽版式无迷你态，隐藏页
+    // 的展开态也不拦返回，两者都按「未展开」回写。
+    widget.controller?.expanded.value = _shellVisible && _miniCapable && !mini;
   }
 
   /// 播放器区域跟手拖拽行程基准：约 0.6 个最大高度走完整段（一次拇指
@@ -274,6 +347,11 @@ class _NowPlayingState extends State<NowPlaying>
     final double projected = _expandController.value + upVelocity / 1800;
     HapticsService.lightImpact();
     final bool expand = projected >= 0.5;
+    if (reduceMotionOf(context)) {
+      // 减弱动效：松手直接吸附到终态，不跑弹簧。
+      _expandController.value = expand ? 1.0 : 0.0;
+      return;
+    }
     final double extent = _expandDragExtent;
     _expandController.animateTo(
       expand ? 1.0 : 0.0,
@@ -380,6 +458,7 @@ class _NowPlayingState extends State<NowPlaying>
   void _handleVisiblePageChanged(int index) {
     if (!mounted || index == _visibleTab.value) return;
     _visibleTab.value = index;
+    widget.controller?.activeTab.value = index;
   }
 
   @override
@@ -564,114 +643,32 @@ class _NowPlayingState extends State<NowPlaying>
 
   /// 桌面版式右侧 tab 切换（点标签与滑动分页同一入口，外部请求也走这里）。
   void _selectDesktopTab(int index) {
-    if (index == _desktopTab) return;
+    if (index == _desktopTab) {
+      widget.controller?.activeTab.value = index;
+      return;
+    }
     setState(() => _desktopTab = index);
+    widget.controller?.activeTab.value = index;
   }
 
-  /// 桌面骨架版式：左「播放器」列 + 右「队列 / 歌词 / 歌曲信息」三 tab。
-  ///
-  /// 与移动版式的差别：没有迷你态与圆点切换（也不需要展开/收起与内容
-  /// 下拉手势），页序与默认页跟移动端一致（队列 / 歌词 / 信息，默认歌词）。
-  /// 左栏宽度按内容宽在 360–480 之间收缩，优先保右栏 420（见
-  /// `now_playing_layout_metrics.dart`）。
+  /// 桌面骨架版式：左播放器 + 右队列 / 歌词 / 信息三 tab（版式见
+  /// `nowplaying_desktop_layout.dart`；本页只传状态与控制器）。
   Widget _buildDesktopLayout(
     BuildContext context, {
     required bool shellVisible,
   }) {
-    final l10n = AppLocalizations.of(context)!;
-    final playerWidth = desktopNowPlayingPlayerWidth(
-      DesktopLayout.of(context).contentWidth,
-    );
-    return Scaffold(
-      key: const Key('desktopNowPlayingLayout'),
-      body: Row(
-        children: [
-          SizedBox(
-            key: const Key('desktopPlayerColumn'),
-            width: playerWidth,
-            // 大屏播放器布局：封面自适应 + 歌名/歌手两行 + 进度 + 传输控制
-            // （desktopLayout：传输排在播放器列里，见 player.dart）。
-            child: Player(
-              isLargeScreen: true,
-              desktopLayout: true,
-              morph: widget.morph,
-            ),
-          ),
-          Expanded(
-            key: const Key('desktopSidePane'),
-            child: Column(
-              children: [
-                Padding(
-                  // 次 tab（图标 + 文案一行）：行高由 M3ETabTheme.height（48）
-                  // 决定，纵向不再叠加自拟内边距；左右 16 与下方内容同一
-                  // 内容边距（M3E 口径）。
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: M3ETabs(
-                    // 次 tab：图标在文案左侧、同一行排布（桌面右栏是内容区里
-                    // 的分组切换，不是顶层导航）。
-                    variant: M3ETabsVariant.secondary,
-                    tabs: [
-                      M3ETab(
-                        icon: const Icon(M3EIcons.queue_music_rounded),
-                        label: l10n.queueTab,
-                      ),
-                      M3ETab(
-                        icon: const Icon(M3EIcons.lyrics_rounded),
-                        label: l10n.lyricsTab,
-                      ),
-                      M3ETab(
-                        icon: const Icon(M3EIcons.info_rounded),
-                        label: l10n.trackInfoTabTitle,
-                      ),
-                    ],
-                    selectedIndex: _desktopTab,
-                    onTabSelected: _selectDesktopTab,
-                  ),
-                ),
-                Expanded(
-                  child: M3ETabsView(
-                    selectedIndex: _desktopTab,
-                    onTabSelected: _selectDesktopTab,
-                    children: [
-                      RepaintBoundary(
-                        // 当前曲目由左侧播放器承载，队列页只列其后曲目
-                        // （includeCurrent 保持 false，不重复展示）。
-                        child: QueueDisplay(
-                          controller: _wideQueueScrollController,
-                          // tab 栏与内容之间留 16（M3E 口径）。
-                          topPadding: _desktopContentTopPadding,
-                        ),
-                      ),
-                      RepaintBoundary(
-                        // 歌词页是唯一订阅播放进度的页内 tab：停在别的 tab
-                        // 时通过 nearest scope 放弃 position 订阅（与移动版式
-                        // 的 PageView 同一语义）。
-                        child: _withTabVisibility(
-                          shellVisible: shellVisible,
-                          tabIndex: nowPlayingLyricsTabIndex,
-                          visibleTab: _desktopTab,
-                          child: LyricsWidget(
-                            // 桌面歌词区常展开（无迷你条可让位），快捷操作常显。
-                            quickActionsEnabled: true,
-                            controller: _wideLyricsScrollController,
-                          ),
-                        ),
-                      ),
-                      RepaintBoundary(
-                        // 分页左右没有圆点过渡带，顶部留白按 tab 栏下的内容间距；
-                        // 内容左右边距由内容自带（16，与 tab 栏对齐）。
-                        child: TrackInfoView(
-                          controller: _wideInfoScrollController,
-                          topPadding: _desktopContentTopPadding,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+    return NowPlayingDesktopLayout(
+      morph: widget.morph,
+      selectedTab: _desktopTab,
+      onTabSelected: _selectDesktopTab,
+      queueController: _wideQueueScrollController,
+      lyricsController: _wideLyricsScrollController,
+      infoController: _wideInfoScrollController,
+      wrapLyrics: (child) => _withTabVisibility(
+        shellVisible: shellVisible,
+        tabIndex: nowPlayingLyricsTabIndex,
+        visibleTab: _desktopTab,
+        child: child,
       ),
     );
   }
@@ -683,17 +680,23 @@ class _NowPlayingState extends State<NowPlaying>
     // 壳层可见性只读一次：页面隐藏时内部 tab 一并不活跃（见 _withTabVisibility）。
     final bool shellVisible =
         ShellPageVisibility.maybeVisibleOf(context) ?? true;
+    // 布局期写入：隐藏页的展开态不参与壳层返回层级（见 _syncExpanded）。
+    _shellVisible = shellVisible;
 
     // 桌面版式由壳层启用：宽窗口用「左播放器 + 右队列/歌词/信息」两栏；
     // 窄窗口（compact / medium）退回单栏，480 窗口下两栏必然互相挤压。
     final layout = AdaptiveLayoutScope.of(context);
     if (widget.desktopLayout && layout.isExpanded) {
+      _miniCapable = false;
+      _syncExpanded();
       return _buildDesktopLayout(context, shellVisible: shellVisible);
     }
 
     final bool usesWideLayout = _getUsesWideLayout(context);
     // 布局期写入（不触发重建）：壳层重复点击的忽略判定要读最新布局。
     _usesWideLayout = usesWideLayout;
+    _miniCapable = !usesWideLayout;
+    _syncExpanded();
 
     if (usesWideLayout) {
       return _buildCollapsedLargeLayout(context, shellVisible: shellVisible);

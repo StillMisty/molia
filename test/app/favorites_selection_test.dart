@@ -2,7 +2,9 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/pages/favorites/favorites_escape.dart';
 import 'package:molia/widgets/collection_track_list.dart';
+import 'package:molia/widgets/shell_page_visibility.dart';
 
 import '../support/perf_app_harness.dart';
 
@@ -103,5 +105,45 @@ void main() {
     await tester.tap(find.byKey(const Key('collectionSelectionClose')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('collectionSelectionClose')), findsNothing);
+  });
+
+  testWidgets('返回占用：仅当页面可见且多选 / 搜索 / 排序时接管', (tester) async {
+    Future<Map<String, bool>> evaluate({required bool visible}) async {
+      final result = <String, bool>{};
+      await tester.pumpWidget(
+        ShellPageVisibility(
+          visible: visible,
+          child: Builder(
+            builder: (context) {
+              bool claim({
+                bool selecting = false,
+                bool searching = false,
+                bool reordering = false,
+              }) => favoritesBackClaim(
+                context: context,
+                selecting: selecting,
+                searching: searching,
+                reordering: reordering,
+              );
+              result['selecting'] = claim(selecting: true);
+              result['searching'] = claim(searching: true);
+              result['reordering'] = claim(reordering: true);
+              result['idle'] = claim();
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
+      return result;
+    }
+
+    final visible = await evaluate(visible: true);
+    expect(visible['selecting'], isTrue);
+    expect(visible['searching'], isTrue);
+    expect(visible['reordering'], isTrue);
+    expect(visible['idle'], isFalse);
+
+    final hidden = await evaluate(visible: false);
+    expect(hidden['selecting'], isFalse, reason: '隐藏页的残留登记不能截胡返回');
   });
 }

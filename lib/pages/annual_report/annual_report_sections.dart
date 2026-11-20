@@ -10,6 +10,7 @@ import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/m3e_context.dart';
 import '../../theme/motion_policy.dart';
+import '../../widgets/card_list_surface.dart';
 import '../../widgets/labels/listened_duration.dart';
 import '../../widgets/track_row.dart';
 import 'annual_report_models.dart';
@@ -345,20 +346,19 @@ class AnnualReportTopArtists extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _Section(
+    return _RankList(
       title: l10n.annualReportTopArtists,
-      child: Column(
-        children: [
-          for (var index = 0; index < report.pageTopArtists.length; index++)
-            _RankRow(
-              index: index,
-              label: report.pageTopArtists[index].artist,
-              trailing: l10n.statsPlaysCount(
-                report.pageTopArtists[index].playCount,
-              ),
+      children: [
+        for (var index = 0; index < report.pageTopArtists.length; index++)
+          _RankRow(
+            index: index,
+            total: report.pageTopArtists.length,
+            label: report.pageTopArtists[index].artist,
+            trailing: l10n.statsPlaysCount(
+              report.pageTopArtists[index].playCount,
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 }
@@ -376,20 +376,19 @@ class AnnualReportTopAlbums extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _Section(
+    return _RankList(
       title: l10n.annualReportTopAlbums,
-      child: Column(
-        children: [
-          for (var index = 0; index < report.pageTopAlbums.length; index++)
-            _RankRow(
-              index: index,
-              label: report.pageTopAlbums[index].album,
-              trailing: l10n.statsPlaysCount(
-                report.pageTopAlbums[index].playCount,
-              ),
+      children: [
+        for (var index = 0; index < report.pageTopAlbums.length; index++)
+          _RankRow(
+            index: index,
+            total: report.pageTopAlbums.length,
+            label: report.pageTopAlbums[index].album,
+            trailing: l10n.statsPlaysCount(
+              report.pageTopAlbums[index].playCount,
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 }
@@ -589,23 +588,50 @@ class _Section extends StatelessWidget {
   }
 }
 
+/// 榜单块：标题 + 页面裸行（与 Top 曲目同层级），不套 filled 卡。
+class _RankList extends StatelessWidget {
+  const _RankList({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: context.typeScale.titleMedium),
+        const SizedBox(height: 12),
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0) SizedBox(height: TrackRow.gapOf(context)),
+          children[i],
+        ],
+      ],
+    );
+  }
+}
+
 /// 歌手 / 专辑榜单共用一行的排名槽与省略规则，避免同一页出现两套对齐。
 class _RankRow extends StatelessWidget {
   const _RankRow({
     required this.index,
+    required this.total,
     required this.label,
     required this.trailing,
   });
 
   final int index;
+  final int total;
   final String label;
   final String trailing;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    return CardListSurface(
+      position: calculateCardPosition(index, total),
+      onPressed: null,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
           SizedBox(
