@@ -9,7 +9,7 @@ AI 推歌（可选）、跨设备同步（WebDAV / 局域网，可选）。目�
 
 ## 工具链
 
-Flutter / Dart 3.50.0 / 3.14.0；JDK 27+；Gradle 9.9.1 / AGP 9.5.1 / Kotlin 2.4.21；
+Flutter / Dart 3.50.1 / 3.14.0；JDK 27+；Gradle 9.9.1 / AGP 9.5.1 / Kotlin 2.4.21；
 compileSdk 37.2 / targetSdk 37，minSdk 35；build-tools 37.0.0；NDK 30.0.16248370；
 Android CLI 1.1.16919734。
 这里是版本来源；其它文档与技能只引用本节、不复列版本号，改 CI / 发布工作流前先改本行。
