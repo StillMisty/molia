@@ -1,6 +1,6 @@
 # ADR-0038：原生互操作层、生成流程与迁移边界
 
-- 状态：草案（阶段 0–2、5 已落地；阶段 4 DownloadsPublisher / DownloadNotifications channel 已落地，见 §10 / §11；widget native interop 试点见 §9）
+- 状态：草案（阶段 0–2、5 已落地；阶段 4 DownloadsPublisher / DownloadNotifications / SAF channel 已落地，见 §10 / §11 / §12；widget native interop 试点见 §9）
 - 日期：2026-11-19
 - 相关：issue #65、issue #66、issue #71、`lib/platform/`、`tool/jnigen.dart`、
   `tool/ffigen_system.dart`、`tool/pigeon/`、`test/architecture/native_interop_test.dart`、
@@ -155,11 +155,12 @@ tool/pigeon/generate.sh            # widget native interop 试点（JDK 21）：
   的通道不做 Pigeon 迁移；
 - CI（`.github/workflows/ci.yml`）：Ubuntu 跑 `build_runner` + 上述生成器并
   `git diff --exit-code`。当前纳入 drift 的是 desktop FFI 与 Pigeon channel
-  （`downloads_publisher.dart`，阶段 4）；JNIgen（阶段 2）、Apple Swift host
-  （阶段 3）与 widget native interop 试点（§9）需要 macOS / JDK 21 / Android
-  构建环境，仍在本机生成并提交。Windows 编译 `flutter build windows --debug`；
-  macOS 编译 `flutter build macos --debug` 与
-  `flutter build ios --no-codesign`。发布工作流 `release.yml` 不改。
+  （`downloads_publisher.dart` / `download_notifications.dart` / `saf.dart`，
+  阶段 4）；JNIgen（阶段 2）、Apple Swift host（阶段 3）与 widget native
+  interop 试点（§9）需要 macOS / JDK 21 / Android 构建环境，仍在本机生成并
+  提交。Windows 编译 `flutter build windows --debug`；macOS 编译
+  `flutter build macos --debug` 与 `flutter build ios --no-codesign`。发布
+  工作流 `release.yml` 不改。
 
 ### 6. 明确不做
 
@@ -348,6 +349,81 @@ I/O 域，使用 Pigeon 的 **stable channel 模式**（issue #80），不用 `u
   `NoSuchMethodError`。
 - **回滚**：删除 `download_notifications_io.dart` 里的 Pigeon 分支即可回到旧通道；
   Kotlin host 与生成物可整体删除，不影响其他域。
+
+## 12. 阶段 4 Pigeon channel：SAF（2026-11-20，Android）
+
+与 §9 的 widget native interop 试点区分：SAF 是文件 / `ContentResolver` I/O
+域，使用 Pigeon 的 **stable channel 模式**（issue #85），不用 `useJni` /
+`useFfi`；生成只需 Dart + Linux，不要求 JDK 21 或 Android classpath。
+
+- **契约**：`tool/pigeon/saf.dart` 定义 `@HostApi() SafApi`：`stat` /
+  `listTreeBegin` / `listTreeNext` / `listTreeClose` / `readHead` /
+  `readRange`；数据类 `SafDocumentMessage`、`SafTreeEntryMessage`（`skip`
+  非空 = 跳过项）、`SafTreeBatchMessage`（`entries` + `done`）。所有方法标
+  `@asyncCallback`：Kotlin 侧由 Pigeon 的后台 task queue 回调，文件 I/O 仍
+  交给 `SafHost` 的 executor，平台主线程不做 SAF I/O。`KotlinOptions(
+  errorClassName: 'SafPigeonError')` 避免同包 widget / DownloadsPublisher /
+  DownloadNotifications 生成物重复定义 `FlutterError`。
+- **生成物**（提交进仓库，重复运行无 diff）：
+  `lib/platform/pigeon/saf.g.dart` +
+  `android/app/src/main/kotlin/top/stillmisty/molia/pigeon/SafApi.g.kt`。
+  CI 的 `generated-drift` job 已纳入该命令（Linux 可跑）。
+- **原生复用**：`top.stillmisty.molia.saf.SafHost`（`@Keep`）承载 stat /
+  会话 begin-next-close / readHead / readRange 与错误码映射；旧
+  `top.stillmisty.molia/saf` 通道 `SafChannelHandler` 与 `SafApiImpl`
+  共用**同一个** host 实例（`MainActivity` 持有，会话 token 两端互通）。
+  `SafApiImpl` 把 `SafFailure` 转成 `SafPigeonError`，保证 Dart 仍能区分
+  MISSING / PERMISSION_DENIED / UNSUPPORTED / IO。`cleanUpFlutterEngine`
+  调 `SafHost.dispose()` 关闭会话与线程池。分批大小、隐藏文件、深度与
+  符号链接语义不变。
+- **Dart 适配器**：`lib/platform/pigeon/saf_adapter.dart` 只封装 Pigeon
+  transport：`channel-error` / `MissingPluginException` / 编解码失败 →
+  `SafTransportUnavailable` 并永久标记不可用；原生业务错误 →
+  `SafPigeonException(code)`。fallback 组合在
+  `lib/data/saf/pigeon_saf_bridge.dart`（`PigeonFirstSafBridge`）——平台层
+  不得反向 import data（§1）。Android 优先 Pigeon，transport 不可用回退旧
+  `MethodChannelSafBridge`；`local_data_stack.dart` 改走
+  `createSafBridge()`，非 Android 返回 null（继续 `dart:io` 文件树）。
+- **流式失败语义**：`listTree` 只在**首批之前** transport 失败时回退旧通道
+  （尚未产出条目，重扫不会重复）；已经产出条目后中途失败抛
+  `SafBridgeException(io)`，由调用方整轮作废，绝不从头重扫。原生业务错误
+  （权限撤销 / 文件缺失）不换 transport。
+- **验证**：适配器 / bridge 单测覆盖成功、null、错误码映射、分批 / done /
+  skip、取消与 close、首批失败回退、中途失败不回退、非 Android；现有
+  `test/services/saf_local_library_test.dart` 的 fake 不变；Android 做
+  debug / release 构建与 release 启动冒烟，有 SAF tree URI 时再验证
+  stat / readRange。
+- **回滚**：删除 `PigeonFirstSafBridge` 的 Pigeon 分支（或让
+  `createSafBridge()` 直接返回 `MethodChannelSafBridge`）即可回到旧通道；
+  Kotlin host 与生成物可整体删除，不影响其他域。
+
+## 13. Windows / Linux runner 通道保留（2026-11-20）
+
+结论：`window`、`taskbar`、`audio_output`、`playback_menu` **保留 MethodChannel**，
+不迁 JNI / FFI / Pigeon native interop。它们不是性能路径，而是 runner / 平台
+生命周期边界；直接互操作会把 COM / GObject / NSMenu 的所有权与线程问题搬进
+Dart，收益与风险不成比例。
+
+| 通道 | 平台 | 原生机制 | 方向 / 频率 |
+| --- | --- | --- | --- |
+| `window` | Windows / Linux / macOS | Win32 + COM（虚拟桌面 / DWM）、GApplication、AppDelegate | 启动 / 托盘 / 关闭；原生→Dart `reopen` / `closeRequested` |
+| `taskbar` | Windows | `ITaskbarList3` COM、`TaskbarButtonCreated` / `TaskbarCreated` | 切歌 / 播放态 / 收藏；原生→Dart `pressed` |
+| `audio_output` | Windows / macOS | COM 音频通知 / CoreAudio；Linux 用 `pactl` 子进程，无通道 | 输出丢失，偶发；原生→Dart `outputLost` |
+| `playback_menu` | macOS | `NSMenu`（主线程） | 切歌 / 播放态；原生→Dart 菜单命令 |
+
+- **低频、双向、强生命周期**：窗口按会话个位数、任务栏按切歌、输出丢失偶发；
+  channel 单次百微秒级完全不可感。首帧前的固定等待是引擎 / 平台线程就绪，
+  不是 channel 序列化（§7 已量化）。
+- **runner 是 exe，不是库**：FFI 要先把 C++/COM/GTK 逻辑导出成稳定 C ABI，
+  或搬进 native asset DLL；任务栏 COM 的 STA、Explorer 重启、窗口消息，
+  GTK 主循环与 GObject 引用计数，都要在 Dart 侧重做。FFIgen 不支持 C++ 类；
+  Pigeon native interop 仍不支持 Windows / Linux。
+- **Pigeon channel 模式也不是“退休 transport”**：它能给这些域名做类型化
+  C++/GObject host，但 transport 仍是 channel，还要把生成代码接进 runner
+  构建；只有手写 Map 漂移成为真实维护问题时才值得做。
+- **重新评估条件**：出现 60Hz 窗口几何 / 音频可视化 / 每秒多次任务栏进度，
+  或需要从后台 isolate 同步调用 UI/COM/GTK API 时，才考虑把逻辑抽成 **C ABI
+  native asset 库**；不要直接 FFI 进 runner exe。
 
 ## 阶段与验收
 

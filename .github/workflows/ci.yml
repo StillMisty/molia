@@ -87,9 +87,9 @@ jobs:
       # ADR-0038「阶段 2 结论」），本 job 只有默认 JDK / 无 Android 构建，
       # 暂不纳入 drift；本地用 `JAVA_HOME=…java-21… dart run tool/jnigen.dart`
       # 生成并提交。widget 的 native interop 生成链（#78）同样需要 JDK 21，
-      # 仍由 tool/pigeon/generate.sh 本地生成；DownloadsPublisher（#80）与
-      # DownloadNotifications（#82）都是 channel 模式，Linux 可直接跑。
-      - name: 重新生成（drift + 桌面 FFI + Pigeon downloads / notifications）
+      # 仍由 tool/pigeon/generate.sh 本地生成；DownloadsPublisher（#80）、
+      # DownloadNotifications（#82）与 SAF（#85）都是 channel 模式，Linux 可直接跑。
+      - name: 重新生成（drift + 桌面 FFI + Pigeon downloads / notifications / SAF）
         run: |
           dart run build_runner build
           dart run tool/ffigen_system.dart
@@ -100,6 +100,10 @@ jobs:
           dart run pigeon --input tool/pigeon/download_notifications.dart \
             --dart_out lib/platform/pigeon/download_notifications.g.dart \
             --kotlin_out android/app/src/main/kotlin/top/stillmisty/molia/pigeon/DownloadNotificationsApi.g.kt \
+            --kotlin_package top.stillmisty.molia.pigeon
+          dart run pigeon --input tool/pigeon/saf.dart \
+            --dart_out lib/platform/pigeon/saf.g.dart \
+            --kotlin_out android/app/src/main/kotlin/top/stillmisty/molia/pigeon/SafApi.g.kt \
             --kotlin_package top.stillmisty.molia.pigeon
 
       - name: 生成物必须与提交一致
