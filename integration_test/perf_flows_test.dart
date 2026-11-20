@@ -26,6 +26,35 @@ import '../test/support/perf_scenarios.dart';
 ///     --driver=test_driver/integration_test.dart \
 ///     --target=integration_test/perf_flows_test.dart \
 ///     --dart-define=MOLIA_PERF_TRACE=true
+///
+/// 迭代时用 `perf.sh frames ... --only <场景,场景>` 只跑改动到的场景：
+/// 一轮完整 drive 含 10k 曲库 seed 与 400 天统计，分钟级；场景名同时登记在
+/// `tool/agent/perf.sh` 的 `KNOWN_FRAME_SCENES`。
+const String _onlyScenes = String.fromEnvironment('MOLIA_PERF_ONLY');
+
+bool _wantsScenes(Set<String> scenes) {
+  final requested = _onlyScenes
+      .split(',')
+      .map((name) => name.trim())
+      .where((name) => name.isNotEmpty)
+      .toSet();
+  return requested.isEmpty || scenes.any(requested.contains);
+}
+
+const Set<String> _desktopFlowScenes = {
+  'desktop-favorites-scroll',
+  'desktop-library-switch',
+  'desktop-track-switch',
+};
+const Set<String> _mobileFlowScenes = {
+  'mobile-nowplaying-open',
+  'mobile-nowplaying-toggle',
+  'mobile-nowplaying-leave-return',
+};
+const Set<String> _mobileMiniScenes = {'mobile-mini-expand'};
+const Set<String> _desktopToggleScenes = {'desktop-favorites-toggle'};
+const Set<String> _desktopStatsScenes = {'desktop-statistics-open'};
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() {
@@ -140,7 +169,7 @@ void main() {
       await pumpFrames(tester, frames: 24);
     }
     FrameStats.instance.reportNow('end');
-  });
+  }, skip: !_wantsScenes(_desktopFlowScenes));
 
   testWidgets('移动壳：进播放页 / 返回收藏 / 反复进出', (tester) async {
     // 手机宽度才会渲染底栏 M3ENavigationBar（1440 是导航轨，且播放页走
@@ -179,7 +208,7 @@ void main() {
       expectOnNowPlaying(tester);
     }
     FrameStats.instance.reportNow('end');
-  });
+  }, skip: !_wantsScenes(_mobileFlowScenes));
 
   testWidgets('移动壳：迷你播放器展开 / 收起（小屏）', (tester) async {
     // 1440 宽时播放页走大屏两栏版式（Player 没有 expandAnimation），所以
@@ -230,98 +259,110 @@ void main() {
       );
     }
     FrameStats.instance.reportNow('end');
-  });
+  }, skip: !_wantsScenes(_mobileMiniScenes));
 
   // 以下两个场景只跑桌面：10k 内存库 seed 与真实 drift 读路径在 Android
   // 模拟器上会把 drive 启动拖到分钟级，移动链路的帧成本由上面几个场景覆盖。
-  testWidgets('桌面壳：10k 收藏切换（120Hz 口径）', (tester) async {
-    final realLibrary = PerfRealLibrary(favorites: 10000);
-    await pumpPerfApp(
-      tester,
-      desktopShell: true,
-      favoritesCount: 1000,
-      realLibrary: realLibrary,
-    );
-    await ctrlDigit(tester, 3);
-    // 首轮整库读 + isolate 建索引：真实 drift 路径比 fake 仓库慢，等到发布
-    // 落地再开始计时（暖场帧由 beginScenario 丢弃）。
-    await pumpUntil(
-      tester,
-      () => realLibrary.browseIndex != null,
-      timeout: const Duration(seconds: 60),
-      reason: '10k 真实曲库首轮构建未完成',
-    );
-    await pumpFrames(tester, frames: 30);
-    expect(
-      realLibrary.browseIndex!.tracks.length,
-      greaterThanOrEqualTo(10000),
-      reason: '真实浏览索引没有 10k 行',
-    );
+  testWidgets(
+    '桌面壳：10k 收藏切换（120Hz 口径）',
+    (tester) async {
+      final realLibrary = PerfRealLibrary(favorites: 10000);
+      await pumpPerfApp(
+        tester,
+        desktopShell: true,
+        favoritesCount: 1000,
+        realLibrary: realLibrary,
+      );
+      await ctrlDigit(tester, 3);
+      // 首轮整库读 + isolate 建索引：真实 drift 路径比 fake 仓库慢，等到发布
+      // 落地再开始计时（暖场帧由 beginScenario 丢弃）。
+      await pumpUntil(
+        tester,
+        () => realLibrary.browseIndex != null,
+        timeout: const Duration(seconds: 60),
+        reason: '10k 真实曲库首轮构建未完成',
+      );
+      await pumpFrames(tester, frames: 30);
+      expect(
+        realLibrary.browseIndex!.tracks.length,
+        greaterThanOrEqualTo(10000),
+        reason: '真实浏览索引没有 10k 行',
+      );
 
-    const sourceKey = 'perf';
-    const songId = 'perf-toggle-10k';
-    bool hasTarget() => realLibrary.browseIndex!.tracks.any(
-      (track) => track.key == '$sourceKey:$songId',
-    );
-    expect(hasTarget(), isFalse, reason: '目标曲目不应预先收藏');
+      const sourceKey = 'perf';
+      const songId = 'perf-toggle-10k';
+      bool hasTarget() => realLibrary.browseIndex!.tracks.any(
+        (track) => track.key == '$sourceKey:$songId',
+      );
+      expect(hasTarget(), isFalse, reason: '目标曲目不应预先收藏');
 
-    FrameStats.instance.beginScenario('desktop-favorites-toggle');
-    // 走真实仓库的写路径：变更事件 → 150ms 防抖 → 重建索引（10k 行搬
-    // isolate）→ publish → 收藏页 notify，全部落在计时窗口里。
-    await realLibrary.repository.toggleFavorite(
-      sourceKey: sourceKey,
-      songId: songId,
-      title: 'Toggle Target',
-      artist: 'Perf Artist',
-      album: 'Perf Album',
-      durationMs: 180000,
-      raw: const {'id': songId},
-    );
-    // 固定再泵一段：防抖 + 重建在真实异步里落地，帧样本才不止个位数。
-    await pumpFrames(tester, frames: 60);
-    await pumpUntil(tester, hasTarget, reason: '收藏新增未落到真实浏览索引');
-    expect(hasTarget(), isTrue);
+      FrameStats.instance.beginScenario('desktop-favorites-toggle');
+      // 走真实仓库的写路径：变更事件 → 150ms 防抖 → 重建索引（10k 行搬
+      // isolate）→ publish → 收藏页 notify，全部落在计时窗口里。
+      await realLibrary.repository.toggleFavorite(
+        sourceKey: sourceKey,
+        songId: songId,
+        title: 'Toggle Target',
+        artist: 'Perf Artist',
+        album: 'Perf Album',
+        durationMs: 180000,
+        raw: const {'id': songId},
+      );
+      // 固定再泵一段：防抖 + 重建在真实异步里落地，帧样本才不止个位数。
+      await pumpFrames(tester, frames: 60);
+      await pumpUntil(tester, hasTarget, reason: '收藏新增未落到真实浏览索引');
+      expect(hasTarget(), isTrue);
 
-    await realLibrary.repository.toggleFavorite(
-      sourceKey: sourceKey,
-      songId: songId,
-      title: 'Toggle Target',
-      artist: 'Perf Artist',
-      album: 'Perf Album',
-      durationMs: 180000,
-      raw: const {'id': songId},
-    );
-    await pumpFrames(tester, frames: 60);
-    await pumpUntil(tester, () => !hasTarget(), reason: '取消收藏未从真实浏览索引移除');
-    expect(hasTarget(), isFalse);
-    FrameStats.instance.reportNow('end');
-  }, skip: defaultTargetPlatform == TargetPlatform.android);
+      await realLibrary.repository.toggleFavorite(
+        sourceKey: sourceKey,
+        songId: songId,
+        title: 'Toggle Target',
+        artist: 'Perf Artist',
+        album: 'Perf Album',
+        durationMs: 180000,
+        raw: const {'id': songId},
+      );
+      await pumpFrames(tester, frames: 60);
+      await pumpUntil(tester, () => !hasTarget(), reason: '取消收藏未从真实浏览索引移除');
+      expect(hasTarget(), isFalse);
+      FrameStats.instance.reportNow('end');
+    },
+    skip:
+        defaultTargetPlatform == TargetPlatform.android ||
+        !_wantsScenes(_desktopToggleScenes),
+  );
 
-  testWidgets('桌面壳：统计页开页（120Hz 口径）', (tester) async {
-    // 400 天、每天 1–3 条：覆盖全量日历热力图与最近 30 天的时段热力图。
-    final realLibrary = PerfRealLibrary(favorites: 0, statisticsDays: 400);
-    await pumpPerfApp(
-      tester,
-      desktopShell: true,
-      favoritesCount: 1000,
-      realLibrary: realLibrary,
-    );
-    await pumpFrames(tester, frames: 20);
+  testWidgets(
+    '桌面壳：统计页开页（120Hz 口径）',
+    (tester) async {
+      // 400 天、每天 1–3 条：覆盖全量日历热力图与最近 30 天的时段热力图。
+      final realLibrary = PerfRealLibrary(favorites: 0, statisticsDays: 400);
+      await pumpPerfApp(
+        tester,
+        desktopShell: true,
+        favoritesCount: 1000,
+        realLibrary: realLibrary,
+      );
+      await pumpFrames(tester, frames: 20);
 
-    final navigator = tester.state<NavigatorState>(
-      find.byType(Navigator).first,
-    );
-    FrameStats.instance.beginScenario('desktop-statistics-open');
-    // 直接压根 Navigator：设置页入口在桌面骨架里还有折叠二级页，直推更稳。
-    await pushStatisticsPage(tester);
-    // 覆盖首屏布局与图片占位后的稳定帧：热力图 / 榜单 / 指标都在这一屏。
-    await pumpFrames(tester, frames: 60);
-    FrameStats.instance.reportNow('end');
+      final navigator = tester.state<NavigatorState>(
+        find.byType(Navigator).first,
+      );
+      FrameStats.instance.beginScenario('desktop-statistics-open');
+      // 直接压根 Navigator：设置页入口在桌面骨架里还有折叠二级页，直推更稳。
+      await pushStatisticsPage(tester);
+      // 覆盖首屏布局与图片占位后的稳定帧：热力图 / 榜单 / 指标都在这一屏。
+      await pumpFrames(tester, frames: 60);
+      FrameStats.instance.reportNow('end');
 
-    expect(realLibrary.statisticsProvider.snapshot, isNotNull);
-    expect(find.byType(StatisticsCalendarHeatmapCard), findsOneWidget);
+      expect(realLibrary.statisticsProvider.snapshot, isNotNull);
+      expect(find.byType(StatisticsCalendarHeatmapCard), findsOneWidget);
 
-    unawaited(navigator.maybePop());
-    await pumpFrames(tester, frames: 10);
-  }, skip: defaultTargetPlatform == TargetPlatform.android);
+      unawaited(navigator.maybePop());
+      await pumpFrames(tester, frames: 10);
+    },
+    skip:
+        defaultTargetPlatform == TargetPlatform.android ||
+        !_wantsScenes(_desktopStatsScenes),
+  );
 }
