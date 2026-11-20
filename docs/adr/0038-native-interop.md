@@ -1,6 +1,7 @@
 # ADR-0038：原生互操作层、生成流程与迁移边界
 
-- 状态：草案（阶段 0–2、5 已落地；阶段 4 DownloadsPublisher / DownloadNotifications / SAF channel 已落地，见 §10 / §11 / §12；widget native interop 试点见 §9）
+- 状态：草案（阶段 0–2、4 非 Apple 域、5 已落地；阶段 3 Apple / #76 待 macOS
+  设备执行。阶段 4 见 §10–§12，widget 试点见 §9，runner 通道保留见 §13）
 - 日期：2026-11-19
 - 相关：issue #65、issue #66、issue #71、`lib/platform/`、`tool/jnigen.dart`、
   `tool/ffigen_system.dart`、`tool/pigeon/`、`test/architecture/native_interop_test.dart`、
@@ -10,9 +11,9 @@
 
 Molia 的原生能力目前分在两处：
 
-- 17 条手写 `MethodChannel`：方法名与 Map 字段靠两端约定，权限、Activity、
+- 多条手写 `MethodChannel`：方法名与 Map 字段靠两端约定，权限、Activity、
   前台服务、SAF、桌面 runner 各自手写载荷，签名漂移只能在运行期暴露；
-- 5 个文件里的手写 `dart:ffi`（进程存活、前台激活、工作集回收、`Abi` 读取、
+- 多处手写 `dart:ffi`（进程存活、前台激活、工作集回收、`Abi` 读取、
   更新安装器）：每次调用都做动态符号查找，平台分支与 ABI 细节散在业务文件里。
 
 Flutter 3.50 把 FFIgen（C / Objective-C）与 JNIgen（Java / Kotlin）转为 stable，
@@ -133,8 +134,8 @@ ESRCH（已退出）/ EPERM（存活）分支。
 ```bash
 dart run tool/jnigen.dart          # 输入：tool/jnigen.dart 的 inputs → lib/platform/android/*.g.dart
 dart run tool/ffigen_system.dart   # 桌面 C：tool/ffigen_system.dart 的 inputs → lib/platform/desktop/*.g.dart
-dart run pigeon --input tool/pigeon/<域>.dart   # 阶段 3（Apple Swift host）/ 4（其余域）
-                                                 # → lib/platform/pigeon/<域>.g.dart + ios|macos/Runner 的 Swift host
+dart run pigeon --input tool/pigeon/<域>.dart   # 按域生成 Dart + Swift/Kotlin host
+                                                 # → lib/platform/pigeon/<域>.g.dart；命令与产物见 tool/pigeon/README.md
 tool/pigeon/generate.sh            # widget native interop 试点（JDK 21）：编译 Kotlin → Pigeon/JNIgen
                                    # → lib/platform/pigeon/widget*.dart + android/.../pigeon/WidgetApi.g.kt
 ```
@@ -167,7 +168,7 @@ tool/pigeon/generate.sh            # widget native interop 试点（JDK 21）：
 - Pigeon native interop preview（preview、无 Windows / Linux、官方不建议生产）；
   **唯一例外**是 widget 域的 Android 试点（§9），保留旧通道 fallback，不推广
   到其他域或 Windows / Linux；
-- 把 17 条通道全量 JNI 化；
+- 把全部手写通道 JNI 化；
 - 把 Windows runner 的 COM / 窗口 / 任务栏，或 Linux GTK runner 改成 C ABI；
 - 直接 Swift FFI（swiftgen 实验）：Apple 走 Pigeon 的 Swift host，不生成
   Swift FFI 绑定；
@@ -200,11 +201,9 @@ tool/pigeon/generate.sh            # widget native interop 试点（JDK 21）：
   Ubuntu drift job（该 job 没有 Android 构建环境，且 `docs check` 会拦截
   工作流里的 JDK 21）。待有 Android 生成任务后再补，期间以「本地重跑 +
   提交生成物」为准。
-- **基准**（Android 37 模拟器，10k 次）：`totalBytes` JNI 中位 **17µs** /
-  P99 **141µs**，MethodChannel 中位 **158µs** / P99 **1749µs**；桌面歌词
-  4Hz 的 `desktop.update` 单次中位 **150µs** / P99 **1328µs**。JNI 有约 9×
-  中位收益，但桌面歌词一次 250ms 的更新中通道只占 0.06%，迁移无用户可感
-  收益：**不迁**桌面歌词 4Hz 与小组件更新，保持现状。数字与复测方式见
+- **基准**（Android 37 模拟器，10k 次）：JNI 中位约为通道的 1/9，P99 也低一个
+  数量级；但桌面歌词一次 250ms 的更新中通道只占 0.06%，迁移无用户可感收益：
+  **不迁**桌面歌词 4Hz 与小组件更新，保持现状。数字与复测方式见
   `docs/performance.md` §12。
 - **release 冒烟**：`@Keep` + proguard `-keep class ...interop.**`；R8 release
   APK 启动后 `readBatterySnapshot()` / `readTotalSpaceBytes()` 均返回真实值，
@@ -219,7 +218,7 @@ tool/pigeon/generate.sh            # widget native interop 试点（JDK 21）：
   `dartjni.dll`），但桌面代码没有调用方，属于死重量。
 - **发布剔除**：`release.yml` 的 Linux job 在 `flutter build linux --release`
   之后、`tool/agent/check_linux_bundle.sh` / strip 之前，只删除
-  `bundle/lib/libdartjni.so`（同机实测 157,288 B），不碰 `libsqlite3.so` /
+  `bundle/lib/libdartjni.so`，不碰 `libsqlite3.so` /
   quickjs / `libcnativeapi.so`；Windows job 在构建后、复制到 `$stage` 之前，
   按 `*dartjni*` glob 删除 `build/windows/x64/runner/Release` 下的运行时
   （实际文件名以 CI 日志为准）。两处删除后都显式复查，存在即失败。
@@ -232,8 +231,8 @@ tool/pigeon/generate.sh            # widget native interop 试点（JDK 21）：
   `libsqlite3.so` / quickjs / dartjni 的保留规则不变；桌面剔除只针对桌面
   bundle，不影响 APK / AAB。
 - **验证**：Linux release bundle 删除后仍能首帧启动（直接运行 release 二进制，
-  Xvfb + 软件 GL，首帧 167ms）；strip 前后体积见
-  `docs/performance.md` §10.1。Windows 没有本机环境，删除与门禁由 release CI
+  Xvfb + 软件 GL）；删除前后的体积与首帧见 `docs/performance.md` §10.1。
+  Windows 没有本机环境，删除与门禁由 release CI
   验证；CI 通过前按「实现但未验证」标注，不合并发布。
 
 ## 9. 阶段 4 native interop 试点（2026-11-20，widget）

@@ -8,7 +8,7 @@
 | 事实 / 主题 | 权威位置（唯一维护） | 说明 |
 | --- | --- | --- |
 | 工具链版本（Flutter / Dart / JDK / Gradle / AGP / Kotlin / SDK / NDK） | `AGENTS.md` §工具链 | 其它文档与 `molia-*` 技能不复列；`dart run tool/agent/cli.dart docs check` 校验 |
-| 开发 / 编译 / 发布流程（顺序、门禁、偏离登记） | `docs/dev_workflow.md` | 流程入口；命令细节以脚本用法为准 |
+| 开发 / 编译 / 发布顺序与门禁（偏离登记） | `docs/dev_workflow.md` | 流程入口；命令细节以脚本用法为准；secrets 与产物见下 |
 | 本地开发环境、模拟器、seed、集成测试入口 | `docs/dev_environment.md` | 工具版本仍回 `AGENTS.md` |
 | 架构与分层（as-built） | `docs/architecture.md` | 分层约束由 `test/architecture/` 强制执行 |
 | 模块布局 / 文件体积守卫 | `docs/adr/0034-module-layout-and-file-size-guardrails.md` | domain/models 唯一模型位置、lib/utils 纯工具、800 行棘轮、pages/widgets 禁止 data import |
@@ -16,7 +16,7 @@
 | 桌面输出丢失 / Windows 身份 / macOS 播放菜单 / Linux 桌面入口 | `docs/adr/0036-desktop-media-integration.md` | 一个端口、只暂停消失的旧输出、三端检测与平台通道、刻意不声明文件关联 |
 | 平台媒体身份 / 会话 / 权限 / entitlement / 验证口径 | `docs/platform_media_checklist.md` | 唯一维护处；跨文件身份由 `test/architecture/platform_config_test.dart` 守卫，真机 / 合并 manifest 仍为人工步骤 |
 | 曲间无缝（gapless） | `docs/adr/0037-gapless-playback.md` | 已决定暂不实现；若推进先做本地文件 / 完成缓存的窄路径 |
-| 原生互操作层 / 生成流程 / 跨平台 CI | `docs/adr/0038-native-interop.md` | 只迁该迁的：FFIgen 仅桌面 C、JNIgen Android、Apple 走 Swift + Pigeon；`lib/platform/**` 唯一落点，不直接依赖 objective_c，白名单只减不增 |
+| 原生互操作层 / 生成流程 / 跨平台 CI | `docs/adr/0038-native-interop.md` | 只迁该迁的：FFIgen 仅桌面 C、JNIgen Android、Apple 走 Swift + Pigeon；`lib/platform/**` 唯一落点，不直接依赖 objective_c，白名单只减不增；各域生成命令见 `tool/pigeon/README.md` |
 | Linux 桌面入口打包资产 | `linux/packaging/README.md` | 每个 `.desktop` 字段的理由与图标再生成 |
 | 领域术语与模块职责 | `GLOSSARY.md` | 新术语落地时登记 |
 | 已知坑（编号被源码引用） | `docs/pitfalls.md` | 编号不可重排，新增追加到末尾 |
@@ -29,7 +29,7 @@
 | media_kit 原生库取舍 | `docs/media_kit_native_libs.md` | 含当时环境的测量快照 |
 | 注释规范 | `docs/comment_style.md` | 噪音注释判定与清理 |
 | 文案规范 | `docs/copy_style.md` | 黑话对照与长度约定 |
-| 发布流程 / secrets / 产物清单 | `.agents/skills/molia-release/SKILL.md` | 版本号先改 `AGENTS.md` |
+| 发布 secrets / 产物清单 / 各平台限制 | `.agents/skills/molia-release/SKILL.md` | 版本号先改 `AGENTS.md` |
 | 各版本发布公告 / 应用内更新说明 | `docs/releases/` | `<tag>.md` 是 Release 正文，`<tag>.summary.txt` 是 `latest.json` 的 notes |
 | 包体积 / 内存 / worktree / seed 工具 | `.agents/skills/molia-perf-tooling/SKILL.md` | 详细口径与踩坑 |
 | 设备调试（模拟器 / 热重载 / 截图） | `.agents/skills/molia-device-debug/SKILL.md` | 环境细节指向 `docs/dev_environment.md` |

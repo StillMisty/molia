@@ -6,7 +6,7 @@
 >
 > 采样脚本：`tool/agent/startup.sh`（见 §3）。启动全表基线：2026-10-18（Linux）；
 > Windows 基线：2026-10-21（§4.1）。全链路体检与后续复测归档见
-> `docs/performance-audit.md`（最新一轮 2026-11-07）。
+> `docs/performance-audit.md`（最新一轮 2026-11-15）。
 
 ---
 

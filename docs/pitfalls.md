@@ -152,8 +152,8 @@
     新 worktree 里先跑 `tool/agent/worktree_prepare.sh <worktree-dir> [branch]`：
     优先使用用户级 `~/.config/molia/android.properties`（`storeFile` 写绝对路径），
     没有时才从源工作区复制签名文件，并补 sqlite3/cnativeapi 的 native assets hooks 缓存；
-    另外它会把 OpenCode `worktree_create` 的 detached HEAD 切到分支。JDK 27 + Gradle 9.3.1
-    会因 class file 71 直接失败（当前 wrapper 组合已验证可用）。
+    另外它会把 OpenCode `worktree_create` 的 detached HEAD 切到分支。旧 Gradle（9.3.1）
+    配 JDK 27 会因 class file 71 直接失败；当前 wrapper 组合已验证可用。
 27. **16 KB 页对齐是发布硬条件，而且属于「依赖带进来的属性」**：Android 15+ 的 16 KB
     内核设备要求 64 位 .so 的 ELF 段按 16 KB 对齐（Google Play 自 2027-02 起强制）。
     构建侧已满足（AGP ≥ 8.5.1 管 zip 页对齐、NDK r28+ 默认 16 KB 段对齐），但本项目没有

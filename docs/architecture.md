@@ -70,8 +70,10 @@
    `package:objective_c/` 或 `lib/platform/**`；平台层也不得反向依赖
    domain / data / sources / playback / services / providers / pages /
    widgets / app / main。FFIgen 只生成桌面 C 绑定；Apple 原生实现统一
-   Swift + Pigeon，`objective_c` 仅作为上游插件传递依赖，我们的代码不得直接
-   import 或使用。
+   Swift + Pigeon；Android 继续走通道的域用 Pigeon channel 模式（下载发布 /
+   下载通知 / SAF，旧通道保留 fallback），widget 是唯一 native interop
+   preview 试点；Windows / Linux runner 通道保留 MethodChannel（ADR-0038 §13）。
+   `objective_c` 仅作为上游插件传递依赖，我们的代码不得直接 import 或使用。
    阶段 0 的现存手写 FFI 是只减不增的白名单：阶段 1 桌面迁移（进程存活 /
    前台激活 / 内存回收）删除 3 条，阶段 2 的 ABI 读取改为平台层纯 Dart helper
    后删除 2 条，随后白名单清空，只允许修复新违规。
@@ -137,8 +139,9 @@
   `mtimeMs`；容器不可读时不标缺失）、`local_library_service.dart`（配置 + 扫描 + 监听 +
   探测的编排与平台开关）、`local_write_gate.dart`（扫描导入 / 手动导入 / 探测共用一条串行
   写队列）。树实现：桌面 `data/files/music_folder_tree_io.dart`（`dart:io`，保留深度 /
-  符号链接 / 隐藏文件 / 排序规则），Android `data/saf/*`（应用内 Kotlin MethodChannel
-  `top.stillmisty.molia/saf`，树枚举 + stat + readHead / readRange；不新增依赖）。
+  符号链接 / 隐藏文件 / 排序规则），Android `data/saf/*`（`SafBridge` 端口：Pigeon
+  channel 主路径、旧 `top.stillmisty.molia/saf` 通道回退；树枚举 + stat +
+  readHead / readRange，`createSafBridge()` 唯一装配点；不新增依赖）。
   本地音频 locator 的路径 / URI 规则收在 `data/files/local_locator.dart`；下载存储的
   `content://` 分支由 `data/downloads/download_storage_saf.dart` 装饰器路由到 bridge，
   下载 / 封面 / 歌词仍走 `dart:io`。SAF 曲目只读：标题编辑直接降级为「只在 Molia 中修改」，
@@ -1179,7 +1182,8 @@
   （`DownloadSettings.saveDir`，存储层每次解析读取，改设置无需重启）；
   `lyrics/` + `covers/` 子目录与 `cache/audio_cache` 完全隔离——「清理缓存」
   永不触碰下载，「删除下载」是独立动作；`DownloadStorage` 是平台 seam
-  （原生 MethodChannel 实现，存储不可用时 `supported=false`，UI 隐藏全部入口）；
+  （`dart:io` + `path_provider`，Android 的 `content://` 由 SAF 装饰器路由；
+  存储不可用时 `supported=false`，UI 隐藏全部入口）；
 - **Android 公共目录发布**（issue #17）：下载完成后把音频 best-effort 拷进
   MediaStore 的 Downloads 集合（`Download/Molia/`，与桌面同构），用户在文件
   管理器 / 其它播放器里可见。**公共副本是发布副本，不参与播放取链**：应用
@@ -1187,7 +1191,7 @@
   回收副本；API 29+ `insert + openOutputStream`（应用自己创建的行无需存储
   权限，`IS_PENDING` 防半成品可见），< 29 返回 null 不支持；平台 seam
   `DownloadsPublisher`（`lib/data/downloads/downloads_publisher.dart`：
-  MethodChannel `top.stillmisty.molia/downloads`，
+  Android 优先 Pigeon channel、旧 `top.stillmisty.molia/downloads` 通道回退；
   失败 / 通道缺失一律 no-op 只记日志）；发布开关
   `DownloadSettings.publishToPublicDir`（默认开，仅 Android 显示），管理页
   提供「补发布到公共目录」回收旧记录；
@@ -1290,10 +1294,10 @@
   `file://` 走 `FileImage`）；歌词由组合根的歌词加载器读
   `downloads/lyrics/`（翻译 `.t.lrc` 边车），且 `LyricsService` 对本地
   曲目禁用网络回退（离线播放不触网）；
-- **下载通知（Android）**：`DownloadNotificationService`（`dataSync` 前台服务）+ 通道
-  `top.stillmisty.molia/download_notifications`，Dart 侧 seam
-  `lib/data/downloads/download_notifications*.dart`（生命周期编排在通知
-  presenter 模块）；进行中显示进度（批量共享
+- **下载通知（Android）**：`DownloadNotificationService`（`dataSync` 前台服务）+
+  Dart 侧 seam `lib/data/downloads/download_notifications*.dart`（Pigeon channel
+  主路径，旧 `top.stillmisty.molia/download_notifications` 通道回退；生命周期
+  编排在通知 presenter 模块）；进行中显示进度（批量共享
   「N/N」），完成 / 失败 / 取消收尾；API 33+ 未授权通知 → 降级为无通知继续下载；
   开关 `download_notifications`（设备本地键，默认开）。
 - **同步过滤**：歌单曲目 / 历史 / 统计 / 播放会话适配器都过滤

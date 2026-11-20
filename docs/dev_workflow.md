@@ -95,6 +95,7 @@ tool/agent/app.sh run -d linux --headless  # 无图形显示：显式 Xvfb
 | 表结构（提 `schemaVersion`） | 上面 + `dart run drift_dev make-migrations` | `drift_schemas/` 快照；增量迁移见 ADR-0005 / ADR-0017 |
 | `tool/lx_prelude/` | `node tool/build_lx_prelude.mjs` + `node tool/lx_prelude_harness.mjs` | `assets/lx/lx_prelude.js`（terser 产物）+ `PROTOCOL OK` |
 | 内置平台响应 | `node tool/gen_search_fixtures.mjs` 等 `tool/gen_*_fixtures.mjs` | `test/` 下的 fixture |
+| 原生互操作（JNIgen / FFIgen / Pigeon） | ADR-0038 §5 与 `tool/pigeon/README.md` 的按域命令 | `lib/platform/**` 生成物；CI drift 只覆盖 Linux 可跑部分 |
 | Windows 任务栏图标 | `python3 tool/gen_taskbar_icons.py` | `windows/runner/resources/thumbbar/` 下的 `.ico` |
 | 品牌图标 | `swift tool/gen_macos_icons.swift` / `dart run icons_launcher:create` | macOS / iOS / Windows 图标 |
 
@@ -143,10 +144,12 @@ dart run tool/agent/cli.dart smoke linux             # 真实 main() + provider 
 
 ### 5.3 CI
 
-`.github/workflows/ci.yml` 是本地门禁的压缩版，顺序固定：
-`cli.dart docs check` → 系统依赖（native assets 的 GTK / X11）→
-`flutter pub get --enforce-lockfile` → `flutter analyze --no-pub` →
-`flutter test --no-pub`。
+`.github/workflows/ci.yml` 是本地门禁的压缩版：`cli.dart docs check` →
+系统依赖（native assets 的 GTK / X11）→ `flutter pub get --enforce-lockfile` →
+`flutter analyze --no-pub` → `flutter test --no-pub`。碰到 `lib/platform/**`、
+生成器、依赖或平台工程时，还会按路径触发 `generated-drift`（drift + 桌面 FFI +
+Pigeon channel）与 Windows / macOS debug 构建；当前纳入范围见 ADR-0038 §5，
+不在本文件复列。
 
 CI 红了的处理顺序：先本地复现同一条命令，不要先改 CI；本地绿而 CI 红，再查环境
 差异（系统包、SDK 版本、未提交的生成物）。

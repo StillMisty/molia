@@ -1,7 +1,8 @@
 /// Android SAF bridge 的纯 Dart 接口：只描述能力与结构化失败。
 ///
-/// 实际实现是应用内 Kotlin MethodChannel（`top.stillmisty.molia/saf`），
-/// 不引入第三方 SAF 包；测试注入 fake bridge，不依赖 Android 运行时。
+/// 实现见 `method_channel_saf_bridge.dart`（旧通道）与 `pigeon_saf_bridge.dart`
+/// （Pigeon 主路径 + 旧通道回退），不引入第三方 SAF 包；测试注入 fake bridge，
+/// 不依赖 Android 运行时。
 library;
 
 import 'dart:typed_data';

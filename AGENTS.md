@@ -74,9 +74,10 @@ tool/agent/worktree_prepare.sh <dir> [branch]  # 新 worktree：分支 / 签名 
   tool/jnigen.dart`（Android JNI，先编译 Kotlin 再生成，产物
   `lib/platform/android/*.g.dart`；生成 JDK 21、构建仍 JDK 27）、
   `dart run tool/ffigen_system.dart`（桌面 C 系统绑定，
-  产物 `lib/platform/desktop/*.g.dart`）；Pigeon 契约在 `tool/pigeon/`，阶段 3（Apple）/
-  4（其余域）起按域运行 `dart run pigeon --input tool/pigeon/<域>.dart`，生成 Dart +
-  Swift host；widget 的 native interop 试点（issue #78）走 `tool/pigeon/generate.sh`
+  产物 `lib/platform/desktop/*.g.dart`）；Pigeon 契约在 `tool/pigeon/`，按域运行
+  `dart run pigeon --input tool/pigeon/<域>.dart`，生成 Dart + Swift/Kotlin host
+  （各域命令见 `tool/pigeon/README.md`；Android 非 Apple 域已落地，Apple 阶段 3
+  见 #69）；widget 的 native interop 试点（issue #78）走 `tool/pigeon/generate.sh`
   （JDK 21，先编译 Kotlin 再跑 Pigeon/JNIgen，产物含 `widget*.g.dart` +
   `android/.../pigeon/WidgetApi.g.kt`）。生成物一律提交进仓库，勿手改。
 
