@@ -15,6 +15,7 @@
 /// - 星期标签隔行显示（一/三/五/日）：行距小于字高时全显示会互相遮挡。
 library;
 
+import 'dart:async';
 import 'dart:collection';
 import 'dart:math' as math;
 
@@ -174,8 +175,12 @@ class _HeatCellState extends State<_HeatCell>
   /// 长按提示不能丢。
   bool _hoverOnlyTooltip = true;
 
-  /// 悬停时生成的提示文案；离开时清空，数据变化时重新生成。
+  /// 悬停时生成的提示文案；数据变化时重新生成。
   String? _tooltipText;
+
+  /// 桌面 tooltip 的卸载延迟。Tooltip 默认 dismissDelay ≈100ms，这里按同一
+  /// 节奏延后卸载，避免鼠标一离开就瞬灭（视觉行为与改动前一致）。
+  Timer? _tooltipHideTimer;
 
   bool get _active => widget.selected || _hovered || _pressed;
 
@@ -205,6 +210,7 @@ class _HeatCellState extends State<_HeatCell>
 
   @override
   void dispose() {
+    _tooltipHideTimer?.cancel();
     _motion?.dispose();
     _progress.dispose();
     super.dispose();
@@ -213,10 +219,20 @@ class _HeatCellState extends State<_HeatCell>
   void _setHovered(bool value) {
     if (_hovered == value) return;
     _hovered = value;
-    if (!value) _tooltipText = null;
     _sync();
-    // 悬停才挂载的 Tooltip 需要一次重建；触摸平台的常驻 Tooltip 不受影响。
-    if (_hoverOnlyTooltip && widget.tooltip != null) setState(() {});
+    if (!_hoverOnlyTooltip || widget.tooltip == null) return;
+    _tooltipHideTimer?.cancel();
+    if (value) {
+      _tooltipHideTimer = null;
+      // 悬停才挂载的 Tooltip 需要一次重建；触摸平台的常驻 Tooltip 不受影响。
+      setState(() {});
+      return;
+    }
+    _tooltipHideTimer = Timer(const Duration(milliseconds: 100), () {
+      _tooltipHideTimer = null;
+      if (!mounted || _hovered) return;
+      setState(() {});
+    });
   }
 
   void _setPressed(bool value) {
@@ -276,15 +292,24 @@ class _HeatCellState extends State<_HeatCell>
     final tooltip = widget.tooltip;
     if (tooltip == null) return content;
     if (_hoverOnlyTooltip) {
-      // 悬停时才创建 Tooltip：700+ 个常驻 Tooltip 的 State / 语义节点 /
-      // OverlayPortal 在开页首帧里是纯开销。挂载时鼠标已经在格子上方，
-      // MouseTracker 会补发 enter，400ms wait 与原来一致。
-      if (!_hovered) return content;
-      _tooltipText ??= tooltip();
-      return Tooltip(
-        message: _tooltipText!,
-        waitDuration: const Duration(milliseconds: 400),
+      // 桌面：语义 label 与 tooltip 同源，但静止格也必须暴露——否则读屏
+      // 拿不到格子数值（原实现靠逐格 Tooltip 的语义）。Tooltip 本体只在
+      // 悬停时挂载：700+ 个常驻 Tooltip 的 State / OverlayPortal 是开页
+      // 首帧的纯开销。挂载时鼠标已经在格子上方，MouseTracker 会补发
+      // enter，400ms wait 与原来一致。
+      final text = _tooltipText ??= tooltip();
+      final labelled = Semantics(
+        container: true,
+        tooltip: text,
         child: content,
+      );
+      if (!_hovered && _tooltipHideTimer == null) return labelled;
+      return Tooltip(
+        message: text,
+        // 语义已由上面的 Semantics 提供，避免重复语义节点。
+        excludeFromSemantics: true,
+        waitDuration: const Duration(milliseconds: 400),
+        child: labelled,
       );
     }
     return Tooltip(

@@ -126,4 +126,58 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('w0 h0 v0'), findsOneWidget);
   });
+
+  testWidgets('桌面：离开后 tooltip 保持约 100ms 再消失', (tester) async {
+    await pumpHeatmap(
+      tester,
+      platform: TargetPlatform.linux,
+      WeekdayHourHeatmap(
+        values: [
+          for (var weekday = 0; weekday < 7; weekday++)
+            [for (var hour = 0; hour < 24; hour++) weekday * 100 + hour],
+        ],
+        tooltipFor: (weekday, hour, value) => 'w$weekday h$hour v$value',
+      ),
+    );
+
+    final cells = find.descendant(
+      of: find.byType(WeekdayHourHeatmap),
+      matching: find.byType(CustomPaint),
+    );
+    final gesture = await hover(tester, cells.first);
+    expect(find.text('w0 h0 v0'), findsOneWidget);
+
+    // 移出格子：Tooltip 默认 dismissDelay ≈100ms，不能瞬灭。
+    await gesture.moveTo(const Offset(1, 1));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.text('w0 h0 v0'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(find.text('w0 h0 v0'), findsNothing);
+  });
+
+  testWidgets('桌面：静止格保留语义 tooltip（读屏可读数值）', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await pumpHeatmap(
+      tester,
+      platform: TargetPlatform.linux,
+      WeekdayHourHeatmap(
+        values: [
+          for (var weekday = 0; weekday < 7; weekday++)
+            [for (var hour = 0; hour < 24; hour++) weekday * 100 + hour],
+        ],
+        tooltipFor: (weekday, hour, value) => 'w$weekday h$hour v$value',
+      ),
+    );
+
+    final cells = find.descendant(
+      of: find.byType(WeekdayHourHeatmap),
+      matching: find.byType(CustomPaint),
+    );
+    expect(
+      tester.getSemantics(cells.first).getSemanticsData().tooltip,
+      'w0 h0 v0',
+    );
+    semantics.dispose();
+  });
 }
