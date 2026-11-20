@@ -185,8 +185,8 @@ jobs:
           cache: true
 
       # 文档引用（路径 / 链接 / § 章节号 / 孤儿文档）与工具链版本一致性。
-      # 检查本体是 Python，但入口是 `dart run tool/agent/cli.dart`：必须排在
-      # Flutter/Dart 安装与 pub get 之后（ubuntu-26.04 runner 不再预装 Dart）。
+      # 检查本体在 tool/agent/src/docs_check.dart，入口是 `dart run tool/agent/cli.dart`：
+      # 必须排在 Flutter/Dart 安装与 pub get 之后（ubuntu-26.04 runner 不再预装 Dart）。
       - name: docs / toolchain 一致性
         run: dart run tool/agent/cli.dart docs check
 

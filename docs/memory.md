@@ -1,9 +1,9 @@
 # 桌面托盘内存：背景、改动与测量
 
-> 本文只记**可复现的数字**与**为什么这样改**。采样脚本：`tool/agent/memory.sh`
-> （Linux：RSS 曲线 + 应用自己的 `molia.memory` 转换日志）、
-> `tool/agent/memory.ps1`（Windows：专用工作集 / 提交大小）；
-> 最近一次复测：Linux 2026-10-18，Windows 2026-10-19。
+> 本文只记**可复现的数字**与**为什么这样改**。采样入口：Linux
+> `tool/agent/memory.sh`（RSS 曲线 + 应用自己的 `molia.memory` 日志），Windows
+> `dart run tool/agent/cli.dart win mem`（旧 `memory.ps1` 只作兜底）。
+> 最新一轮是 2026-11-17（§10–§11）；更早的 Linux / Windows 基线见 §4。
 
 ## 1. 结论（一行）
 
@@ -75,13 +75,12 @@ Windows：
 
 ```powershell
 flutter run -d windows                  # 或启动 release 包；debug 控制台可见 molia.memory
-powershell -ExecutionPolicy Bypass -File tool/agent/memory.ps1 -Interval 5
+dart run tool/agent/cli.dart win mem    # 旧 memory.ps1 只在 CLI 不可用时兜底
 ```
 
-托盘隐藏 / 恢复时应用会打 `molia.memory`（RSS + 图片缓存占用），脚本会连同
+托盘隐藏 / 恢复时应用会打 `molia.memory`（RSS + 图片缓存占用），采样命令会连同
 RSS 曲线一起打印；结束给出 min / 中位 / max。Windows 上 release 包没有控制台，
-以 `memory.ps1` 为准：`内存` = 专用工作集（`WorkingSetPrivate`），`提交` =
-`PrivateBytes`。
+以专用工作集（`WorkingSetPrivate`）与 `PrivateBytes` 为准。
 
 ### 4.2 基线（2026-10-18，改动前）
 
@@ -152,7 +151,7 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
 
 - **提交大小不随 trim 降**：冷启动暂停约 370 MB；播放中 818–848 MB（关闭前
   837 MB）；播放过后暂停 763–792 MB。它是 Dart 堆 / 引擎 / libmpv 的已提交
-  页，物理驻留看工作集；想压提交需要 Phase 3（释放 provider 浏览缓存）。
+  页，物理驻留看工作集；想压提交需要后续批次释放 provider 浏览缓存（§7 起）。
 - 播放中关闭瞬间的 5–15 MB 会在几秒内回弹，是音频线程 / 解码器把需要的页
   触回来；107–122 MB 是本次播放场景的功能性工作集下限。
 - 若要把「播完后暂停」的 ~105 MB 也压到个位数，可在「托盘 + 播放暂停」时
@@ -177,15 +176,15 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
 - **Windows** 已实机验证（§4.4）；nativeapi 的隐藏事件与
   `AppLifecycleState.hidden` 语义在本次往返中正常。
 - `EmptyWorkingSet` 只降工作集（物理驻留），「提交大小」不会跟着大降；播放中
-  剩余的大头是引擎 / Dart 堆 / libmpv。若以提交为准继续优化，需要 Phase 3
-  （托盘期释放 provider 浏览缓存，恢复时重拉）。
+  剩余的大头是引擎 / Dart 堆 / libmpv。若以提交为准继续优化，需要托盘期释放
+  provider 浏览缓存、恢复时重拉（后续轮次见 §7 起）。
 - 真实托盘宿主（KDE / GNOME + AppIndicator 扩展）下的隐藏 / 唤起观感：关闭
   到托盘前会多渲染一帧休眠占位（窗口随即隐藏，肉眼基本不可见）；恢复时窗口
   映射与界面重建同帧完成。
 - 恢复后列表首次滚到未缓存区可能短暂出现占位（图片从磁盘缓存重解）；当前
   曲目封面由恢复后的补发预取提前解好。
 - `tool/agent/memory.sh` 只支持桌面 Linux（Android 不在范围）；Windows 用
-  `tool/agent/memory.ps1`。
+  `dart run tool/agent/cli.dart win mem`。
 
 ## 7. 2026-10-28：托盘期业务缓存释放（第一批）
 
@@ -291,14 +290,14 @@ pending / keepAlive，当前展示的封面不受影响。
 ### 9.2 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：**2636 passed / 11 skipped**（新增：延迟 trim / 暂停 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate、会话 cursor 增量 / fresh 快照 / 最大版本应用 / 本地曲目下标映射、换队列播放器回收、系统退出请求门闩）；
+- `flutter test --no-pub` 全量通过（新增：延迟 trim / 暂停 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate、会话 cursor 增量 / fresh 快照 / 最大版本应用 / 本地曲目下标映射、换队列播放器回收、系统退出请求门闩）；
 - Windows release（2026-11-11，Windows 11 环境；顶栏关闭键 / 任务栏关闭走同一策略，`SC_CLOSE` 与 runner 转发的 `WM_CLOSE` 都覆盖）：
   - `memory_windows.ps1` 一次完整场景：空闲专用工作集 170.0MB、浏览 234.5MB、关闭前 210.4MB；托盘 +3s **4.1MB**、+15s **3.1MB**（该轮日志出现 `托盘暂停延迟 trim`，是暂停/空闲托盘，不能当作播放态收益）。
   - 另一次确认 `play.start result=ok`、播放中关到托盘：**133–143MB**，90s 内稳定（`cache_path=direct`）；原始反馈的 200MB 在同一构建未复现。
   - 提交大小 373–490MB；本轮后续已补「托盘暂停 10s 释放 player / source」，恢复播放按进度重载，但该改动尚未做 Windows 实机 A/B。
   - `WM_CLOSE` 回归（runner 转发到 Dart 关闭策略后）：`Process.CloseMainWindow()` 在 `tray_close_to_tray=true` 时只隐藏窗口、进程存活（专用工作集约 109–114MB）；同一构建把偏好设为 `false` 后同一路径退出码 0。
   - 系统退出请求：macOS Cmd+Q / Linux 应用 quit 现在先走 `quitApp` 落盘，再进入销毁窗口阶段；单测覆盖 cancel → exit 切换、并发去重与失败重试。
-- Linux 集成（Xvfb，debug）`integration_test/lx_engine_integration_test.dart`：**5 passed / 1 skipped**；新增用例 `桌面托盘内存：隐藏后清理图片缓存并压低上限，恢复后还原` 单独运行通过；
+- Linux 集成（Xvfb，debug）`integration_test/lx_engine_integration_test.dart` 通过；新增用例 `桌面托盘内存：隐藏后清理图片缓存并压低上限，恢复后还原` 单独运行通过；
   - 单跑 `[tray-memory-test] rss_before=544.3MB rss_after=519.8MB`；
   - 全套 `[tray-memory-test] rss_before=651.4MB rss_after=621.3MB`；
   - 这是 debug + Xvfb 的进程 RSS，绝对值不代表 release；断言的是 `imageCache` 归零、上限 16MiB、`liveImageCount == 0`、恢复 64MiB 与窗口 hide/show 往返。

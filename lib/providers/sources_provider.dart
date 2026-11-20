@@ -12,7 +12,7 @@ import '../sources/source_track.dart' show kLxQualityOrder;
 /// 音源管理的 UI 门面（ChangeNotifier）：把 [SourceManager]（脚本仓库 /
 /// 引擎 / any-listen 适配器）适配为纯领域视图与命令。
 ///
-/// 分层约定（docs/architecture.md §2.1 R5）：`lib/pages/**` 只依赖本
+/// 分层约定（docs/architecture.md §1 第 5 条）：`lib/pages/**` 只依赖本
 /// provider 与 `lib/domain/**`，不直接 import `lib/sources/**`。
 ///
 /// 生命周期：provider 订阅 manager 的通知并转发；**不负责** dispose

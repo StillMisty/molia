@@ -6,7 +6,7 @@ import 'lx_engine.dart';
 import 'lx_engine_types.dart';
 import 'lx_script_info.dart';
 
-/// 引擎生命周期状态（施工图 docs/architecture.md §2.5.1）。
+/// 引擎生命周期状态（`docs/lx_sources.md`「引擎要点」）。
 ///
 /// ```
 /// stopped ──start(script)──▶ starting ──ready──▶ ready

@@ -117,7 +117,7 @@ class AudioQuality {
 /// 约定：
 /// - [payload] 语义同 `SourceTrack.raw`，承载原音源数据；
 ///   **必须原样回传给脚本 `musicUrl / lyric / pic`（不得改写、不得重建）**，
-///   UI 与 providers 禁止读取该字段（见 docs/architecture.md §2.1/§5）。
+///   UI 与 providers 禁止读取该字段（见 docs/architecture.md §1/§2）。
 /// - 所有字段不可变；相等性按值比较（payload 深比较 + 引用短路），
 ///   供 `Selector` / 快照去重可靠使用。
 class Track {

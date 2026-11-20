@@ -1,4 +1,4 @@
-# 启动耗时：基线、测量方法与已做的优化
+# 性能基线：启动、包体积与互操作
 
 > 本文只记**可复现的数字**与**为什么这样改**。改动前的每一步都用同一脚本在同一台机器
 > 上采样（release / 冷启动 / 5 次取中位），「首帧」那行即用户可感总时长
@@ -178,27 +178,12 @@ I/O 空档。试法：在后台 isolate 里先 `DynamicLibrary.open` 一次（�
 几个页面无关**，因此不需要动「三个常驻页面同帧构建」这类设计（也就不用牺牲
 播放页共享元素飞行的首帧行为）。
 
-### 5.6 Windows 陈旧单实例锁 + 装配并行（2026-10-21）
+### 5.6 Windows 陈旧单实例锁（2026-10-21，已由 ADR-0020 取代）
 
-> 2026-11 起单实例改为 OS 文件锁 + sidecar metadata（ADR-0020），不再有陈旧锁
-> 判定；本节保留为当时的性能记录，`process_liveness` 目前只服务于旧 Roaming
-> 升级守卫。
-
-- **陈旧锁**：`SingleInstance.acquire()` 抢锁失败后读锁里的 pid / port，旧逻辑直接
-  `Socket.connect`；pid 已退出时 Windows 仍可能等满 `_connectTimeout=2s`，随后
-  `_retryDelay=300ms` 才清锁重抢。新增 `process_liveness.dart`：Windows 用
-  `OpenProcess(SYNCHRONIZE) + WaitForSingleObject(0)`，Linux 用 `kill(pid, 0)` +
-  errno；pid 已退出立即清锁，不为死端口等超时。只动单实例 IO 判定，不改锁协议 /
-  退出路径。
-- **装配并行**：热键注册、桌面壳（tray settings prefs）、歌词显示 / 主题预解析
-  原本串行；三者互不依赖，现并行发起、`runApp` 前统一 await。新增子阶段
-  `sub.hotkeys.attach` / `sub.desktop.build` / `sub.lyricsDisplay.build` 供回归。
-- 改后 dev54 实测：陈旧锁日志「锁进程 23080 已退出，立即重抢」，窗口就绪
-  161ms、首帧 318ms（改前 2445 / 2662ms）；干净启动 338ms / 墙钟 1.45s。
-  `sub.hotkeys.attach` 2ms、`sub.desktop.build` 0ms、`sub.lyricsDisplay.build`
-  114ms——剩余 Dart 最大段是首帧封面色预解析；并行把 hotkeys / desktop 的串行
-  等待移出关键路径，本次它们都在毫秒级，干净启动收益在噪声内。真正的收益是
-  强杀 / 更新后的 2.1s 不再出现。
+旧实现靠锁文件里的 pid / port 判断存活，强杀或更新器终止应用后会等满 loopback
+超时，额外 ~2.1s 才继续启动。2026-11 起单实例改为 OS 文件锁 + sidecar metadata，
+进程退出由系统自动释放，陈旧锁不再存在；当时的分段数字与判定过程不再维护
+（决策见 ADR-0020）。装配并行（热键 / 桌面壳 / 歌词预解析）已并入 §5.1。
 
 ### 5.7 封面 seed 缓存与启动跳过壁纸（2026-10-27）
 

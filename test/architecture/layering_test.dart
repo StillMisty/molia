@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// docs/architecture.md §2.1 分层硬规则：扫描 `lib/**` 的 import/export，
+/// docs/architecture.md §1 分层硬规则：扫描 `lib/**` 的 import/export，
 /// 防止回退（新增违规必须修复或评审后加入白名单）。
 ///
 /// 规则：

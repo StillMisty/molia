@@ -2,7 +2,6 @@
 
 > 状态：**已实施**。本文描述当前实际架构（分层、接口、通知策略、音源引擎、M3E）。
 > 历史提案已随「纯播放器化」移除，不再适用。
-> 分支：`main`。
 
 ## 1. 分层与依赖方向
 
@@ -57,7 +56,7 @@
    app_keys），桌面骨架（顶栏工具条 / 恒折叠侧栏 / 常驻底栏播放条）在
    `lib/app/desktop/**`，测试可直接挂载
    （`MyApp(desktopShell: true/false)` 可强制骨架，默认按平台判定）；
-5. UI 禁止 import `lib/sources/**`（Wave 7 后白名单已清空，新增违规必须修复）；
+5. UI 禁止 import `lib/sources/**`（白名单已清空，新增违规必须修复）；
 6. 模块布局与体积由 `test/architecture/module_layout_test.dart` 强制（ADR-0034）：
    模型只在 `lib/domain/models/`、服务在 `lib/services/`，`lib/utils/**` 不反向
    依赖 UI / 状态 / 数据层，`lib/**` 单文件 ≤800 行，`pages/widgets` 禁止
@@ -74,9 +73,8 @@
    下载通知 / SAF，旧通道保留 fallback），widget 是唯一 native interop
    preview 试点；Windows / Linux runner 通道保留 MethodChannel（ADR-0038 §13）。
    `objective_c` 仅作为上游插件传递依赖，我们的代码不得直接 import 或使用。
-   阶段 0 的现存手写 FFI 是只减不增的白名单：阶段 1 桌面迁移（进程存活 /
-   前台激活 / 内存回收）删除 3 条，阶段 2 的 ABI 读取改为平台层纯 Dart helper
-   后删除 2 条，随后白名单清空，只允许修复新违规。
+   手写 FFI 白名单已清空（`native_interop_test.dart` 只保留空表），新增原生
+   import 一律失败，只允许修复新违规。
 
 ## 2. 领域层
 
@@ -455,7 +453,7 @@
   平台 / 月度 / 连续天数 / 首末播放与覆盖范围，海报离线渲染（1440×1920），
   Top 50 可存成歌单；不改统计口径、表结构或采集链路。
   与 `play_history`（最近播放，500 条上限）是两套数据。
-- **AI 推歌（Phase 2，可选，默认关闭）**：`lib/services/ai/**` 是唯一数据出口与
+- **AI 推歌（可选，默认关闭）**：`lib/services/ai/**` 是唯一数据出口与
   网络层——`TasteProfileBuilder`（按发送范围读聚合画像 + 合并去重后的已听清单
   + 可选收藏/歌单，上限集中；提示词用紧凑行格式并按应用语言切换文案）、
   `LlmClient`（OpenAI-compatible，请求带
@@ -1555,19 +1553,10 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
 
 ## 5. 音源引擎
 
-- `LxEngineSupervisor` 状态机：`stopped → starting → ready`；invoke 探活判定引擎无响应 /
-  isolate 退出 → `restarting`（退避 0.5s/2s/8s，重放同一脚本），连续 3 次 → `failed`；
-  单个请求超时（引擎仍在响应）不再重启，只失败该请求并计入连续超时熔断（3 次 → `failed`
-  + `failureReason`，成功一次清零）；重启期间请求等待 ready（10s 上限）；重启成功刷新
-  `activeSources`。`failed` 不是永久终态：冷却 60s 后下一次请求自动做一次半开恢复
-  （重放同一脚本，并发 single-flight，失败重置冷却），`retryNow` 供 UI / 网络恢复绕过
-  冷却立即尝试。`SourceManager` 侧：启动激活失败按 5s / 20s 延迟重试；脚本源首次
-  搜索 / 取链 / 歌词 / 封面时若引擎没起来再惰性激活一次（用户主动停用绝不触发）；
-  引擎 `failed` 时网络变化事件触发一次 `retryEngine`。
-- 在线更新：脚本 meta `@updateUrl` / 运行时 `updateAlert` → `checkScriptUpdate`（版本 +
-  内容 hash）→ `applyScriptUpdate`（原地替换，激活中自动重放）；下载 10s 超时 / 1MB 上限 /
-  HTML 识别。
-- any-listen：配置页 + `AnyListenSource` 适配器骨架（当前 HTTP 占位端点；官方为 WS IPC）。
+LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线更新、安全边界与验证清单
+只在 `docs/lx_sources.md` 维护。架构层只保留跨层约束：音源统一经 `MusicSource` 端口
+暴露；脚本在独立 isolate 中运行、网络只走 `lx.request`；源脚本载荷
+（`Track.payload`）原样回传（见 §2）；失败在边界归一为 `SourceFailure`（见 §3）。
 
 ## 6. M3E 设计语言
 
@@ -1802,7 +1791,7 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   宽屏恢复普通 `M3EDialog`。
 - **排序**：三处 `ReorderableListView`（`lib/widgets/settings/settings_reorderable_rows.dart`、
   `lib/pages/favorites.dart`、`lib/widgets/collection_track_list.dart`）是长期例外——
-  material_3_expressive 1.2.0 未公开导出 `M3EListReorderHost` /
+  `material_3_expressive`（版本见 `pubspec.yaml`）未公开导出 `M3EListReorderHost` /
   `M3EListReorderExclude`，公开的 `M3EList(reorder: true)` 会二次包裹行并顶掉行尾
   操作；保留显式手柄与 `itemExtent`，白名单在
   `test/architecture/m3e_component_usage_test.dart`。
@@ -1918,7 +1907,7 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   宿主自实现预览：宿主自己当手势观察者，guard（`onDismissRequest`）非空时也接管
   （material_3_expressive ≥ 1.1.7），提交后交给 guard 裁决——guard 拒绝则预览回弹、
   表面留在原位；1.1.6 及以下宿主在 guard 非空时直接放弃手势，那条链路会静默退化成
-  「无预览」的普通返回，故依赖下限 1.1.7（当前 1.2.0；原因见 `pubspec.yaml` 注释）。
+  「无预览」的普通返回，故依赖下限 1.1.7（当前版本见 `pubspec.yaml`，原因见其注释）。
   二级页宽屏侧滑走 `M3ESideSheet.show`、页面型弹窗走 `M3EDialog.show` 路由，scrim /
   弹簧 / 键盘 inset / 关闭手势都由 M3E 宿主处理；自建 route 只剩全局搜索遮罩。
   嵌套 Navigator（设置 / AI 页弹层内层）由
@@ -2024,27 +2013,16 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
 
 ## 7. 验证与性能
 
-```bash
-flutter analyze --no-pub                 # 0 error / 0 warning
-flutter test --no-pub                    # 含 domain/catalog/playback/layering/supervisor/update
-dart run tool/agent/cli.dart test linux                 # 集成测试（引擎/设置页/窗口/托盘；不含播放）；默认 Xvfb 无窗口、后台跑（--wait 等结果）
-dart run tool/agent/cli.dart test android               # 同一份集成测试跑模拟器（跑完自动卸载；同样默认后台）
-flutter build apk --debug
-flutter build apk --release --split-per-abi --split-debug-info=build/symbols --obfuscate
-# 不要加 --extra-gen-snapshot-options=--strip：AAB 需要 libapp.so.sym，见 pitfalls #100。
-# APK 压缩打包见 android/app/build.gradle（~50%↓）。
-```
-
-已兑现的性能收益：进度 tick 不再触发聚合通知（进度条/歌词行局部重建）；队列列表进度期 0
-无谓重建；同曲重播/同词重复搜索命中缓存（0 次引擎/网络往返）；引擎崩溃自愈不再「源列表
-残留但全超时」；发现曲目行只订阅本行收藏态，详情页无限滚动按页去重追加（无新增即停）。
+验证命令、门禁与集成测试入口只在 `docs/dev_workflow.md` 维护；启动 / 体积基线见
+`docs/performance.md`；分层、模块布局与原生边界的硬约束见 `test/architecture/`。
+APK / AAB 的 `--strip` 约束见已知坑 #100，压缩打包配置见 `android/app/build.gradle`。
 
 ## 8. 后续
 
-- any-listen 真实协议（WS IPC）接入（当前为 HTTP 占位端点，抽象已就绪）；
-- 投屏 / Android Auto 保持在范围外（ADR-0025）；恢复前先补真实设备与单会话方案验证；
-- 真机验证：Android 17 通知/耳机键、iOS 18+ 后台播放；歌词显示的模拟器交互与通知栏验证、
-  A2DP 车载字段映射（见 `docs/lyrics_display.md` §9）；
-- 桌面歌词平台输出等 Flutter windowing stable（见 `docs/lyrics_display.md` §9）；
-  M3E 组件目视复核（弹层观感/间距）；
-- 发布前：release 体积与签名检查。
+未完成项只在各自权威文档维护，这里只留索引：
+
+- any-listen WS IPC 与内置平台限制 → `docs/lx_sources.md`「已知限制」；
+- 平台真机验证 / 媒体声明 → `docs/platform_media_checklist.md`；
+- 歌词显示的人工验证与桌面输出 → `docs/lyrics_display.md` §7 / §9；
+- 投屏 / Android Auto → ADR-0025；
+- 发布检查 → `docs/dev_workflow.md` §7 / §9 与 `.agents/skills/molia-release/SKILL.md`。

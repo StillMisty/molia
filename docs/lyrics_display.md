@@ -1,8 +1,8 @@
 # 歌词显示扩展规格（桌面歌词 / 通知栏·锁屏歌词 / 蓝牙歌词）
 
-> 状态：**已实施（Android v1）**。实现映射见 §12；仍待模拟器 / 真机验证的项见 §7 未勾选项。
-> 关联：GitHub issue #1（spec：歌词显示扩展）。桌面平台歌词输出在 v1 仅预留抽象，
-> 待 Flutter 官方多窗口 API 稳定后实现（见 FR-7 与 §9 风险 1）。
+> 状态：**已实施（Android v1）**。实现映射见 §12，自动化覆盖见 §8；仍待人工验证的项
+> 见 §7。桌面平台歌词输出只预留抽象，待 Flutter 官方多窗口 API 稳定后再接
+> （见 FR-7 与 §9 风险 1）。关联 issue #1（spec：歌词显示扩展）。
 
 ## 1. 背景与目标
 
@@ -439,44 +439,15 @@ abstract class LyricsOutput {
 - **可测试**：tracker / composer / settings / 调度逻辑均为纯 Dart，单测覆盖；
   原生交互留模拟器与真机清单。
 
-## 7. 任务拆解与验收（DoD）
+## 7. 仍待人工验证
 
-### Phase 1：核心（纯 Dart）
+代码与自动化测试已落地（映射见 §12，覆盖见 §8）；下列项仍需在模拟器 / 真机上确认：
 
-- [x] `LyricProvider` 结构化返回 + 网易云 / QQ 翻译透传 + LRCLib 留空
-- [x] `LyricsState` / `LyricCacheData` 增字段 + 旧缓存兼容
-- [x] `LyricLineTracker`（对齐 / 偏移 / 未同步 / upcoming）
-- [x] `LyricsDisplaySettings`（JSON 持久化 + 默认值合并）
-- [x] `LyricsOutput` 抽象 + `LyricsDisplayProvider` 骨架（调度、去重、能力状态）
-- [x] 单测全绿；`flutter analyze` 0 error / 0 warning；架构扫描通过
+- [ ] 模拟器：悬浮窗显示、拖动、锁定、控制条、权限拒绝 / 撤销、横竖屏；
+- [ ] 模拟器：通知栏 / 锁屏第二行随播放行变化；
+- [ ] 真机：A2DP 车载字段映射，以及断开后的还原。
 
-**DoD**：无 UI、无原生改动；播放页现有歌词行为不回归。
-
-### Phase 2：Android 悬浮窗
-
-- [x] Kotlin 窗口 / 视图 / 通道 / 权限 / 息屏冻结
-- [x] 样式与交互（对齐 §4 FR-3 与 §5.7 配置）
-- [x] 设置子页（桌面歌词分组 + 预览卡片）+ l10n
-- [ ] 模拟器截图验证：显示、拖动、锁定、控制条、权限拒绝/撤销、横竖屏
-
-**DoD**：模拟器全流程可用；输出入口按平台能力隐藏。
-
-### Phase 3：通知/锁屏 + 蓝牙
-
-- [x] `MediaLyricComposer` + `LocalAudioHandler.setLyricMetadataOverride`（叠加现有去重）
-- [x] `AudioRouteMonitor`（A2DP）+ 蓝牙门控 / 回退 / 还原
-- [x] 设置子页两个分组 + A2DP 状态展示
-- [x] 单测：合成规则、优先级、门控、暂停回退
-- [ ] 模拟器验证：通知栏 / 锁屏第二行变化；A2DP 字段映射留真机项
-
-**DoD**：关闭输出后元数据完全还原；暂停/停止不残留歌词字段。
-
-### 收尾
-
-- [ ] 播放页歌词快捷操作栏加「桌面歌词」开关（可选）
-- [x] `docs/architecture.md`、`AGENTS.md` 同步；本文件更新为 as-built
-- [x] 全量验证：`flutter analyze` / `flutter test` /
-      桌面端集成测试保持可跑
+平台声明与验证口径见 `docs/platform_media_checklist.md`；历史任务拆分不再维护。
 
 ## 8. 测试计划
 
@@ -494,22 +465,17 @@ abstract class LyricsOutput {
 
 ## 9. 风险与开放问题
 
-1. **Flutter 官方多窗口**：`flutter config --help`（当前 stable，版本见 `AGENTS.md`「工具链」）明确标注
-   `--enable-windowing` "applies only to the master channel"；框架源码标注 production 禁用、
-   随时破坏性变更，且现属性面（size/title/min/max/fullscreen/resizable）**不含**
-   置顶 / 透明 / 无边框 / 点击穿透 / 不占任务栏。桌面输出实现时大概率仍需平台逃逸口代码，
-   工作量按此预期评估。跟踪：flutter/flutter#30701。
+1. **Flutter 官方多窗口**：stable 的多窗口 API 仍不含置顶 / 透明 / 无边框 / 点击穿透 /
+   不占任务栏，桌面歌词实现时大概率仍需平台逃逸口代码；跟踪 flutter/flutter#30701。
 2. **AVRCP 字段差异**：车机对 `artist` / `displaySubtitle` 读取行为不一，默认字段以真机实测微调。
 3. **第二行字段**：平台 SystemUI 媒体控件第二行只读 `METADATA_KEY_ARTIST`
    （Android 13 与 AOSP main 实现一致，`displaySubtitle` 不被消费）；
    通知/锁屏默认写 `artist`，字段选择保留给用户。
-4. **主工作树 WIP**：合并本分支到 `main` 前，主工作树里 `lib/playback/local_audio_handler.dart`
-   等未提交改动需先提交或暂存——本分支也在同一文件上叠加了歌词元数据覆盖。
-5. **R8 / 资源压缩**：新增 Kotlin 类均由 `MainActivity` 可达，无需额外 keep 规则；
+4. **R8 / 资源压缩**：新增 Kotlin 类均由 `MainActivity` 可达，无需额外 keep 规则；
    但 release 的 `shrinkResources` 会删掉「字符串引用」的资源（通知动作图标、
    通知小图标），必须进 `res/raw/keep.xml`（见已知坑 34）；
    若未来接入第三方 SDK（如 Lyricon）需补 keep。
-6. **开源许可**：本规格不引入任何新第三方依赖。
+5. **开源许可**：本规格不引入任何新第三方依赖。
 
 ## 10. 附录：LX Music 桌面歌词配置对照
 

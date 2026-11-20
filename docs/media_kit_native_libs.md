@@ -153,21 +153,15 @@ x86 ≈ +2.95 MB；若构建**不拆分 ABI 的 fat APK**，4 个 ABI 全带上�
 照样在。也就是说"反正用不到，混淆器会去掉"不成立；想不打包**只能不加依赖**（或手工
 `packaging.jniLibs.excludes` / `abiFilters`，属于额外维护面）。**【实测 + 源码】**
 
-## 6. 社区反馈与已知问题
+## 6. 上游已知问题（只列影响决策的）
 
-| 内容 | 链接 / 日期 | 与本决策的关系 |
-|---|---|---|
-| issue #1103「No media_kit_libs_audio package」，同日被关；评论：「Unfindable in pub.dev, but exists nevertheless.」 | <https://github.com/media-kit/media-kit/issues/1103>（2025-02-12） | umbrella 包在 pub.dev 上的可发现性/版本曾让人困惑；按平台包反而更直观 **[三方]** |
-| issue #1056「media_kit: armeabi-v7a JAR verification failed.」**至今 open**；社区回复「it an internet problem, try to build again」 | <https://github.com/media-kit/media-kit/issues/1056>（2024-12-08 起） | Android 构建新增"必须能访问 github.com 下载 jar + MD5 校验"的硬依赖；失败会直接中断构建 **[三方]** |
-| issue #1189「Add support for 16kb memory page size」（2025-10-05 随 1.3.8 关闭）；正文贴出 Play Console 警告，列出 `base/lib/arm64-v8a/libmpv.so`、`libmediakitandroidhelper.so` 等 | <https://github.com/media-kit/media-kit/issues/1189>（2025-05-14 → 2025-10-05） | 若将来真的把 Android libs 装进来，就继承 Google Play 的 16KB 页对齐要求（1.3.8 changelog 已写 "build: 16KB page size support"，固定的 v1.1.8 jar 即对应版本） **[三方 + 源码]** |
-| issue #1231：某应用对含 media_kit 的 `.aab` 做安全扫描，报 zlib CVE-2022-37434 | <https://github.com/media-kit/media-kit/issues/1231>（2025-07-29，open） | Android 侧会多出可被扫描器盯上的二进制；**保持现状则 Android 完全无此暴露面** **[三方]** |
-| issue #846「Exclude support for unused codecs」：Windows 应用抱怨「including media_kit bundles a large number of DLLs」 | <https://github.com/media-kit/media-kit/issues/846>（2024-05-30，closed） | 佐证 native 库体积是官方长期已知问题，且**没有**按需裁剪机制 **[三方]** |
-| issue #732「How to reduce libmpv building size? How to remove unnecessary codecs…」 | <https://github.com/media-kit/media-kit/issues/732>（2024-03-19，closed） | 同上 **[三方]** |
+- **16KB 页对齐**：media_kit #1189 随 1.3.8 关闭（v1.1.8 jar 已支持）；如果将来把 Android
+  libs 装进来，会继承 Google Play 的 16KB 页要求。
+- **构建期外网依赖**：Android libs 的 jar 从 GitHub release 下载并做 MD5 校验（#1056），
+  这是现状没有的一条构建链路；体积收益与代价见 §5 / §7。
+- 其余体积 / 编解码裁剪讨论（#846、#732 等）没有改变结论：上游不提供按需裁剪。
 
-**没有找到可引用的量化社区报告**：Stack Overflow 检索（`media_kit apk size`、`media_kit_libs_audio`
-等）无结果；Reddit 有相关帖子（如 r/FlutterDev "what do you prefer: video_player or media_kit?"）
-但正文抓取被拒（403/空壳），检索摘要里提到体积权衡却无法核实原句，**因此本文不引用任何 Reddit 文字**。
-本节的体积结论完全来自 §5 的本地实测。
+本文的体积结论以 §5 的本地实测为准，不引用无法核实的社区转述。
 
 ## 7. 代价对比
 

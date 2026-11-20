@@ -59,7 +59,7 @@ class _StateValueListenable<T> implements ValueListenable<T> {
 /// 真实播放来自 facade，冷启动恢复态由协调者构造覆盖快照）与高频 position 通道。
 /// 所有播放均走本地音源。
 ///
-/// 职责边界（docs/architecture.md §2.1）：
+/// 职责边界（docs/architecture.md §1）：
 /// - 错误提示走注入的 [UiMessenger]（不依赖 `main.dart`）；
 /// - UI 状态读协调者展示投影；定时关闭 / 失败恢复订阅 live 投影；
 /// - 应用内音量 / 静音是设备本地状态：不进 [PlaybackSnapshot]（快照 `==`

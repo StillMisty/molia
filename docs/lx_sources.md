@@ -104,7 +104,8 @@ lib/playback/
 - 脚本在**独立 isolate** 中运行；调用超时不再整体 kill——先探活（ping/pong）判定：
   有在途 HTTP 时按脚本声明的超时延长预算、空闲即抛 `LxEngineTimeoutException`（只失败
   该请求）；只有事件循环被卡死（无应答）才 kill 重启。supervisor 对连续超时熔断
-  （默认 3 次 → `failed` + `failureReason`，再次 `start` 可恢复）；
+  （默认 3 次 → `failed` + `failureReason`）；`failed` 不是终态：冷却 60s 后由下一次
+  请求半开恢复，`retryNow` 可绕过冷却立即重试；
 - JS → Dart 使用 `sendMessage('lx', JSON)`，Dart → JS 通过 `__lxDeliver` / `__lxSetup` 的
   **JSInvokable 值直投**（不再把消息拼成 JS 源码 evaluate）；HTTP 响应只下发原文
   `raw`，`body` 由 prelude 在 JS 侧 `JSON.parse` 还原（失败 / 空串退化为原文）；
@@ -126,7 +127,8 @@ lib/playback/
   改源码后必须重新生成（`--check` 校验产物同步），不要手改产物；ELECTRON 兼容 shim
   （`atob/btoa/TextEncoder/setTimeout/window/navigator` 等）也加在这里；
 - **自愈监督**：`LxEngineSupervisor` 崩溃后自动退避重启并重放同一脚本，重启成功刷新
-  `activeSources`（修复「引擎已死但源列表还在」）；连续失败进入 `failed` 停用；
+  `activeSources`（修复「引擎已死但源列表还在」）；连续失败进入 `failed` 并暂停自动重启，
+  冷却 60s 后由下一次请求半开恢复，`retryNow` 供 UI / 网络恢复立即重试；
 - **请求缓存**：搜索 5min、取链 10min（失败不缓存，single-flight 并发去重）；
 - **引擎选型**：JS 运行时为 quickjs_engine（QuickJS-NG 0.14.0）。依据：API 与 flutter_js
   同源（`evaluate(sourceUrl:)` / `JsEvalResult` / `JSInvokable` / `executePendingJob`），
@@ -161,38 +163,22 @@ lib/playback/
 - `node tool/gen_qs_fixtures.mjs`：重新抓取汽水真实响应（搜索 / 专辑 / 歌手 /
   评论），更新 `test/fixtures/qs.json`、`albums/qs.json`、`artists/qs_*.json`、
   `comments/qs.json`（列表截断；匿名接口概率性返回 `200` + 空 body，脚本内重试）。
-- 构建环境（Linux 参考；Arch 用 `pacman`，Debian/Ubuntu 用 `apt`）：
-  - Linux 桌面：`sudo pacman -S --needed base-devel ninja cmake clang pkgconf gtk3 mesa-utils`
-    （Debian/Ubuntu 等价：`sudo apt install build-essential ninja-build cmake clang pkg-config libgtk-3-dev mesa-utils`）
-    - 本地播放依赖 libmpv：`sudo pacman -S --needed mpv` / `sudo apt install libmpv2`（media_kit 后端需要）
-    - **中文字体**：`sudo pacman -S --needed wqy-microhei`（App 不内置 CJK 字体；否则中文显示方块）
-  - Android（用户态安装）：先用官方脚本装 Android CLI，再按 `AGENTS.md`「工具链」的
-    compileSdk / build-tools / NDK 版本执行
-    `android sdk install platform-tools platforms/android-<compileSdk> build-tools/<build-tools> ndk/<ndk>`，
-    然后 `flutter config --android-sdk "$HOME/Android/Sdk"`
-  - 工程工具链的版本（Flutter / Dart / JDK / Gradle / AGP / Kotlin / compileSdk / targetSdk /
-    minSdk / build-tools / NDK）只维护在 `AGENTS.md`「工具链」一节，这里不再复列；
-    `android/app/build.gradle` 与 CI 工作流以那一行为准。
-  - Java/Kotlin 字节码 target 26（Kotlin 2.4.x JvmTarget 上限）
-  - 注意：`minSdk` 的取值决定可安装的最低 Android 版本（值见 `AGENTS.md`）
-  - JS 运行时为 quickjs_engine（QuickJS-NG），Linux / Android 原生库由包自身 CMake 从源码
-    编译（Linux bundle 实测含 `libquickjs_c_bridge_plugin.so`，需 `linux/CMakeLists.txt`
-    末端一处导出宏补丁，见 pitfalls #1）
+- 构建环境：Linux 桌面依赖（libmpv / X11 / 中文字体）与 Android SDK 安装见
+  `docs/dev_environment.md`；工程工具链版本只在 `AGENTS.md`「工具链」维护，这里不复列。
+- JS 运行时为 quickjs_engine（QuickJS-NG），Linux / Android 原生库由包自身 CMake 从源码
+  编译（Linux bundle 实测含 `libquickjs_c_bridge_plugin.so`，需 `linux/CMakeLists.txt`
+  末端一处导出宏补丁，见 pitfalls #1）。
 
-改动引擎/音源的完整验证清单：
+改动引擎/音源的完整验证：
 
-1. `flutter analyze --no-pub` 0 error / 0 warning；
-2. `flutter test --no-pub`（含 `test/lx_core_test.dart`、`test/lx_supervisor_test.dart`、
-   `test/lx_script_update_test.dart`、`test/builtin_misc_test.dart`
-   （KRC/LRCX/QRC/MRC 合成数据闭环）、`test/architecture/layering_test.dart`）；
-3. `node tool/lx_prelude_harness.mjs` 输出 `PROTOCOL OK`；
-4. `dart run tool/agent/cli.dart test linux --wait`（等价 `flutter test integration_test/lx_engine_integration_test.dart
-   -d linux`）：真实导入→搜索→取链→歌词；不含真实播放（无头环境 libmpv 装载不可靠，
-   见 `docs/pitfalls.md` #33），默认跑在 Xvfb 上（无窗口，`--window` 才上真实显示）；
-   `--wait` 让命令等结果，去掉则后台跑、完成后看 `.status`；
-5. `dart run tool/agent/cli.dart test android --wait`（模拟器，官方 flutter test 路径）：同一份引擎/UI 用例；
-   跑完自动卸载，不污染设备状态；
-6. 真机/模拟器验证：设置 → 音源管理 → 导入社区脚本（或在线更新）→ 搜索 → 播放。
+1. `flutter analyze --no-pub` + `flutter test --no-pub`（含 `lx_core` / `lx_supervisor` /
+   `lx_script_update` / `builtin_misc` / `layering`）；
+2. `node tool/lx_prelude_harness.mjs` 输出 `PROTOCOL OK`；改过 fixture 生成器就重抓并提交；
+3. `dart run tool/agent/cli.dart test linux --wait` 与 `... test android --wait`：
+   同一套引擎/UI 用例，不含真实播放（见 pitfalls #33）；
+4. 手动：设置 → 音源管理 → 导入社区脚本（或在线更新）→ 搜索 → 播放。
+
+门禁与命令细节见 `docs/dev_workflow.md` §5。
 
 ## 已知限制（后续计划）
 
@@ -205,4 +191,4 @@ lib/playback/
 - 汽水音乐（qs）的匿名接口只给会员曲目的 30 秒试听流，完整取链由 LX 脚本提供
   （渠道声明里没有 `resolve`）；没有匿名的按歌词搜歌、榜单目录与热搜词；
   搜索接口会概率性返回 `200` + 空 body，适配器按重试预算重试；
-- iOS/Android 后台播放与通知/耳机键需真机验证。
+- 平台后台播放 / 通知 / 耳机键的真机验证项见 `docs/platform_media_checklist.md`。

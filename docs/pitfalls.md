@@ -895,7 +895,7 @@
     键盘 + 系统栏处理），内容用 `PageModalCard`；`M3EDialogInset` 已对子树
     `removePadding` + `removeViewInsets`，页面 AppBar 不需要再改 safeArea。卡片
     底色用 `surface`（页面自带 Scaffold 的底色），不要用 `surfaceContainerHigh`。
-83. **`M3EListReorderHost` 在 material_3_expressive 1.2.0 没有公开导出**：
+83. **`M3EListReorderHost` 在当前 material_3_expressive 版本没有公开导出**：
     `M3EList(reorder: true)` 会二次包裹行并把行尾 `trailing` 换成拖拽把手。三处
     排序列表继续用 `ReorderableListView`（显式手柄 + `itemExtent`），已登记
     白名单；升级包版本时先复查导出列表再考虑迁移。

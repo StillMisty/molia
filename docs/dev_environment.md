@@ -47,9 +47,8 @@ PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解�
   `sqlite3_flutter_libs`）；库文件 `molia_database_v2.sqlite` 在应用支持目录
   （Windows `%APPDATA%\top.stillmisty\molia`、Linux
   `~/.local/share/top.stillmisty.molia`）。旧 `molia_database.sqlite` 保留在
-  原处但不读、不迁移。以后改表结构仍写增量迁移：提 `schemaVersion` 后跑
-  `build_runner` + `drift_dev make-migrations`（从新 v1 生成 schema 快照）并用
-  `stepByStep` 保留数据（ADR-0005）。
+  原处但不读、不迁移。表结构 / `schemaVersion` 见 `docs/architecture.md` §3，
+  迁移流程见 ADR-0005。
 - **集成测试默认 headless**：`dart run tool/agent/cli.dart test linux` 无条件套 `xvfb-run -a`
   （并强制 `GDK_BACKEND=x11`、去掉 `WAYLAND_DISPLAY`——只改 DISPLAY 挡不住 GTK 走 WSLg
   Wayland，窗口照样弹）；要肉眼观察加 `--window`。命令默认后台跑（打印日志 / 状态文件后
@@ -143,7 +142,6 @@ tool/agent/seed.sh android restore       # 用最近一次备份还原（第一�
 - 数据位置：Android `/data/data/top.stillmisty.molia/files/molia_database_v2.sqlite`、
   `shared_prefs/FlutterSharedPreferences.xml`、`files/lx_sources.json`；
   Linux `~/.local/share/top.stillmisty.molia/`（DB 同处）。
-  同目录的旧 `molia_database.sqlite` 保留但不读。
 - 新 worktree 首次 Android / 体积构建先跑
   `tool/agent/worktree_prepare.sh <worktree-dir> [branch]`：会补分支、签名
   （优先用户级 `~/.config/molia/android.properties`）与 native assets hooks 缓存

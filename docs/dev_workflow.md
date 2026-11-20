@@ -93,11 +93,9 @@ tool/agent/app.sh run -d linux --headless  # 无图形显示：显式 Xvfb
 | `lib/l10n` 下的 ARB | `flutter gen-l10n` | `lib/l10n/app_localizations*.dart`（生成物，勿手改） |
 | `lib/data/molia_database.dart` | `dart run build_runner build` | `lib/data/molia_database.g.dart` |
 | 表结构（提 `schemaVersion`） | 上面 + `dart run drift_dev make-migrations` | `drift_schemas/` 快照；增量迁移见 ADR-0005 / ADR-0017 |
-| `tool/lx_prelude/` | `node tool/build_lx_prelude.mjs` + `node tool/lx_prelude_harness.mjs` | `assets/lx/lx_prelude.js`（terser 产物）+ `PROTOCOL OK` |
-| 内置平台响应 | `node tool/gen_search_fixtures.mjs` 等 `tool/gen_*_fixtures.mjs` | `test/` 下的 fixture |
-| 原生互操作（JNIgen / FFIgen / Pigeon） | ADR-0038 §5 与 `tool/pigeon/README.md` 的按域命令 | `lib/platform/**` 生成物；CI drift 只覆盖 Linux 可跑部分 |
-| Windows 任务栏图标 | `python3 tool/gen_taskbar_icons.py` | `windows/runner/resources/thumbbar/` 下的 `.ico` |
-| 品牌图标 | `swift tool/gen_macos_icons.swift` / `dart run icons_launcher:create` | macOS / iOS / Windows 图标 |
+
+其余生成物（prelude、内置平台 fixture、原生互操作、图标）的命令与产物清单只在
+`AGENTS.md`「生成物」维护，这里不重复。
 
 规则：生成物提交进仓库；**改源再生成**，不要反向改产物。改表结构时不能只跑
 `dart run build_runner build`：还要用 `make-migrations` 生成快照，再用 `stepByStep`

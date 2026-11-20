@@ -75,7 +75,7 @@
   最多丢最后一个动作之后的进度）。托盘菜单 / 关窗退出仍走完整 `quitApp`。
 - **不做 macOS 桌面歌词**：仍等 Flutter 官方多窗口 API（同 `docs/lyrics_display.md`）。
 - **局域网自动发现受 Apple multicast entitlement 限制**：与 iOS 同一约束
-  （见 `docs/architecture.md` §同步），未申请时降级为手动填对端地址 / 扫码；
+  （见 `docs/architecture.md` §3），未申请时降级为手动填对端地址 / 扫码；
   macOS 15+ 首次访问局域网会弹系统授权（Info.plist 已加
   `NSLocalNetworkUsageDescription`）。
 - **系统壁纸取色**：macOS 暂无稳定读取入口，回退系统强调色 / 封面取色（与现有
