@@ -422,7 +422,8 @@
 - **Cache**：`RequestCache`（single-flight + LRU 64 + TTL + 可注入时钟）。
 - **省流**：`DataSaverService`（services 层，默认关闭）持有「开启 + 音质上限 +
   封面省流」策略与 connectivity_plus 网络探测；仅在移动数据（`active`）时生效：
-  - 取链：main.dart 的 resolver 以 `effectiveQuality(preferred)` 套 `capQualityFor`
+  - 取链：组合根（`lib/app/bootstrap/local_playback_chain.dart`）的 resolver
+    以 `effectiveQuality(preferred)` 套 `capQualityFor`
     压低音质（缓存键含音质，切换网络自然重解析）；
   - 封面：`ArtworkCache.networkImageBlocked` 网关让 `ArtworkCacheManager.getFileStream`
     只读本地缓存（未命中抛 `ArtworkNetworkBlockedException` → 占位图标），
@@ -1106,8 +1107,8 @@
 `lib/services/download/download_service.dart` 是单曲下载的唯一编排实现
 （下载一首 / 一批：取链 / 缓存拷贝 / 分项 / 标签 / 发布 / 落库），
 `download_queue.dart` 是任务队列（严格串行 FIFO / 去重 / 取消 / 重试 /
-进度通道）；组合根（`main.dart`）注入取链 / 取词 / 取图 / 缓存 / 设置与省流
-上限；任务队列、命名 / 放置、任务产物、记录装配、记录写入、文件维护、提交
+进度通道）；组合根（`lib/app/bootstrap/local_data_stack.dart`）注入取链 / 取词 /
+取图 / 缓存 / 设置与省流上限；任务队列、命名 / 放置、任务产物、记录装配、记录写入、文件维护、提交
 日志与通知 presenter 是独立 module（见下）：
 
 - **下载请求**：`lib/services/download/download_requests.dart` 的
@@ -1200,8 +1201,8 @@
   默认目录，取消静默；Android / iOS 直接写默认目录并提示位置；对话框不可用时
   回退直接写。布局：音频在 `Molia/` 根下，备份 / 听歌统计进 `exports/`，海报
   PNG 进 `posters/`，封面原图进 `covers/`；导出文件不落库、不参与同步；
-- **缓存优先**：所选音质的完整音频缓存（`CacheService.audioCacheKeyForTrack`
-  同名且无 `.part`）命中时直接拷贝不触网；歌词经注入的 `LyricsService`（缓存 →
+- **缓存优先**：所选音质的完整音频缓存（`AudioCacheStore.hitPathForTrack` /
+  `keyForTrack`，不含 `.part`）命中时直接拷贝不触网；歌词经注入的 `LyricsService`（缓存 →
   原生取词 → 跨平台回退，与播放页同一链路）；封面经 `ArtworkCache.bytesOf`
   命中直读、未命中取图后 `putBytes` 回填；
 - **两档本地数据（ADR-0008）**：缓存（易失）与下载（持久）分开命名、合在一个
@@ -1229,7 +1230,7 @@
   （页内「写入中」）。启动清扫中断残留半成品；磁盘约定（命名 / 完整判据 /
   索引 / 清扫）的唯一实现在
   `lib/services/audio_cache_store.dart`（Audio cache store），`CacheService`
-  的同名静态方法是薄委托；缓存文件名写入侧（`SourceTrack.songId`）与读取侧
+  的同名实例方法是薄委托；缓存文件名写入侧（`SourceTrack.songId`）与读取侧
   （`TrackId.id`）必须同名（回归测试见
   `test/services/track_local_data_service_test.dart`）；
 - **落库**：drift `downloads` 表（`filePath` 可空——记录可以只含
@@ -1737,7 +1738,8 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
 - 主题出口：`lib/theme/app_theme.dart::buildAppThemeData(ColorScheme)` 是唯一 ThemeData 构建处，
   并注册语义色扩展 `AppSemanticColors`（success/warning，固定色调、随亮度派生）；
   `ColorScheme` 派生唯一入口 `lib/theme/scheme_builder.dart::buildColorScheme`；
-  `main.dart` 经 `AnimatedSchemeBuilder`（450ms）平滑过渡方案色，两套主题同源重建。
+  `lib/app/shell/themed_app.dart` 经 `AnimatedSchemeBuilder`（450ms）平滑过渡方案色，
+  两套主题同源重建。
 - 封面取色：`lib/services/artwork_palette_service.dart` 是唯一取色入口（像素 → seed →
   双亮度方案 + LRU），由组合根监听 `PlaybackProvider` 触发（任何页面/后台切歌同一链路；
   省流时本地缓存可取色、未命中保持现色，无封面清除回退）。**任何模块不得二次提取

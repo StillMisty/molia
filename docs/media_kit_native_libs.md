@@ -48,7 +48,7 @@
 |---|---|---|
 | 依赖写法 | `media_kit: ^1.2.6` + `media_kit_libs_audio: ^1.0.7` | `just_audio_media_kit` + `media_kit_libs_linux` + `media_kit_libs_windows_audio` |
 | 覆盖平台 | android/ios/macos/windows/linux 一次到位 | 只覆盖实际使用 media_kit 的两个桌面平台 |
-| 官方附加要求 | "Enable `--split-per-abi` or use app bundle (instead of APK) on Android."（因为 Android 侧 libmpv 很大） | 发布命令本来就带 `--split-per-abi`（见 `AGENTS.md`） |
+| 官方附加要求 | "Enable `--split-per-abi` or use app bundle (instead of APK) on Android."（因为 Android 侧 libmpv 很大） | 发布命令本来就带 `--split-per-abi`（见 `docs/dev_workflow.md` §6.2 / §6.3） |
 | 互斥说明 | "The `media_kit_libs_video` & `media_kit_libs_audio` packages should not be mixed." | 未使用 video 版，无冲突 |
 
 来源：<https://github.com/media-kit/media-kit>（README `## Installation` 一节）。
@@ -190,8 +190,7 @@ x86 ≈ +2.95 MB；若构建**不拆分 ABI 的 fat APK**，4 个 ABI 全带上�
 1. **手工记忆成本**：新增平台或改用 media_kit 后端时，要记得补对应的 libs 包，否则运行期报
    `Cannot find libmpv…`（`media_kit` 的 `lib/src/player/native/core/native_library.dart` 错误文案里
    明确写了 `Please ensure it's presence in the APK.`）。**【源码】**
-   缓解：这一约定已写进 `AGENTS.md` 与本节，且平台判断集中在
-   `lib/playback/desktop_audio_init_io.dart` 一处。
+   缓解：这一约定见本节 §2，平台判断集中在 `lib/playback/desktop_audio_init_io.dart` 一处。
 2. **与官方 README 写法不一致**：新同事照 README 抄会写出 umbrella。本文即为此存在。
 3. **依赖陈旧感**：`media_kit_libs_windows_audio` 最新版仍是 **1.0.9（2023-09-27）**，
    `media_kit_libs_ios_audio` / `_macos_audio` 停在 **1.1.4（2023-09-27）**（pub.dev API 版本列表核对）。

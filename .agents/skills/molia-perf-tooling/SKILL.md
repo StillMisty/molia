@@ -36,11 +36,12 @@ GitHub 下载 sqlite3（受限网络会等 3 分钟以上）。细节见 `docs/p
 
 ## seed.sh
 
+完整命令、数据位置与恢复语义见 `docs/dev_environment.md`「数据注入」。性能采样
+常用的两个大样本：
+
 ```bash
 tool/agent/seed.sh android favorites 1000   # 1000 首收藏
-tool/agent/seed.sh android history 500      # 最近播放
 tool/agent/seed.sh android covers 30        # 30 张本地 file:// 封面，填 ImageCache
-tool/agent/seed.sh android mock-source      # mock LX 音源 + WAV
 ```
 
 - DB 读取会拉主库 + `-wal` / `-shm`，本地 checkpoint 后修改；release 包的 schema
@@ -94,10 +95,8 @@ tool/agent/perf.sh memory linux            # 托盘 RSS + molia.memory
 
 - Android 采样要求 `adb root`（release 包不可 `run-as`）；首次安装先启动一次
   创建私有目录，脚本已处理。
-- 图片缓存预算：前台 64MiB / 托盘与移动端后台 16MiB；后台 30s 清理
-  `imageCache.clear()`，**不清 live images**（恢复后当前封面不能空白）。
-- `LibraryProvider` 列表曲目缓存 LRU 上限 5；搜索 / 目录缓存只在
-  `didHaveMemoryPressure` 释放，普通退后台不清列表。
+- 图片缓存预算、列表曲目 LRU、后台清理与释放口径见 `docs/memory.md` §8；
+  这里只记采样入口与 A/B 条件。
 - 受控 A/B 必须同 fixture（封面数、列表数、前后台时长）；空 fixture 的
   `imageCache=0.0MB` 只能证明预算切换，不能宣称省内存。
 

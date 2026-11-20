@@ -1,4 +1,4 @@
-/// 启动子阶段埋点：与 `main.dart` 的 `molia.startup` 阶段行同一 logger 与格式，
+/// 启动子阶段埋点：与启动流程的 `molia.startup` 阶段行同一 logger 与格式，
 /// `tool/agent/startup.sh` 会自动把它们收进汇总表。
 ///
 /// 为什么单独成文件：各 stack builder 都能用同一条口径记录「自己这段等了多少」，

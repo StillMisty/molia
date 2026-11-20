@@ -13,14 +13,8 @@ node tool/build_lx_prelude.mjs --check  # 校验产物与源码同步
 node tool/lx_prelude_harness.mjs        # Node 沙箱全链路，应输出 PROTOCOL OK
 ```
 
-重抓平台真实响应（依赖外网，网络不可控时不要跑）：
-
-```bash
-node tool/gen_search_fixtures.mjs
-node tool/gen_album_fixtures.mjs
-node tool/gen_artist_fixtures.mjs
-node tool/gen_lyric_search_fixtures.mjs
-```
+重抓平台真实响应：生成器命令与产物清单见 `AGENTS.md`「生成物」（`tool/gen_*_fixtures.mjs`）。
+依赖外网，网络不可控时不要跑。
 
 ## 完整验证清单
 
