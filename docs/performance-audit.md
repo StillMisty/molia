@@ -980,6 +980,12 @@ p99 在不同轮次有 40–65ms 抖动（语义树开关、GC），方向是 **
 
 - p99 中位 **49.65 → 27.07ms（−45%）**，`jank33` 1 → 0；
 - `desktop-favorites-toggle` 3 轮仍 `jank8 = 0`、p99 2.83–3.53ms，无回退；
+- 提交后独立复测一轮（`/tmp/molia-agent/perf-linux-20261121-020413`）：
+  `desktop-favorites-toggle` 118 帧、`jank8=0`、p99 3.02ms；
+  `desktop-statistics-open` 62 帧、`jank8=2`、p99 29.95ms、`jank33=0`；
+  收藏滚动 p99 3.78ms / jank8 0。同轮 `desktop-library-switch` p99 9.63ms、
+  `desktop-track-switch` p99 12.62ms 属于既有单帧离群（前几轮 p99 15–22ms
+  同量级），不是本轮路径；
 - timeline：最差 UI 帧 70.84 → 30.18–43.17ms，LAYOUT 51.21 → 21.64–33.41，
   SEMANTICS 12.28 → 5.13，PAINT 4.78 → 3.16–3.59，BUILD 6.32 → 3.59–3.74。
 
