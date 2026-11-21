@@ -121,10 +121,6 @@ class BiliClient {
     }
   }
 
-  /// 与内置平台共用的结果缓存（整表端点，如榜单）。
-  Future<T> cached<T>(String key, Future<T> Function() create) =>
-      transport.cached(key, create);
-
   /// 跟随短链跳转（b23.tv → 收藏夹链接）；只读 Location，不解析 body。
   Future<Uri?> resolveRedirect(Uri uri) =>
       transport.resolveRedirect(uri, headers: BiliApi.anonymousHeaders);
