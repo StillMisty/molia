@@ -1,44 +1,18 @@
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/device_settings.dart';
 import 'package:molia/data/settings/device_settings_keys.dart';
 import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/domain/models/playback_feel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
-const _boolKey = DeviceSettingKey<bool>(
-  'ds_test_bool',
-  true,
-  kind: DeviceSettingKind.boolean,
-);
-const _intKey = DeviceSettingKey<int>(
-  'ds_test_int',
-  7,
-  kind: DeviceSettingKind.integer,
-);
-const _decimalKey = DeviceSettingKey<double>(
-  'ds_test_decimal',
-  0.5,
-  kind: DeviceSettingKind.decimal,
-);
-const _textKey = DeviceSettingKey<String>(
-  'ds_test_text',
-  'fallback',
-  kind: DeviceSettingKind.text,
-);
-const _listKey = DeviceSettingKey<List<String>>(
-  'ds_test_list',
-  <String>[],
-  kind: DeviceSettingKind.stringList,
-);
-const _jsonKey = DeviceSettingKey<String>(
-  'ds_test_json',
-  '',
-  kind: DeviceSettingKind.text,
-);
+const _boolKey = DeviceSettingKey<bool>('ds_test_bool', true);
+const _intKey = DeviceSettingKey<int>('ds_test_int', 7);
+const _decimalKey = DeviceSettingKey<double>('ds_test_decimal', 0.5);
+const _textKey = DeviceSettingKey<String>('ds_test_text', 'fallback');
+const _listKey = DeviceSettingKey<List<String>>('ds_test_list', <String>[]);
 
-/// 设置模块接口契约：标量读写 / JSON 往返 / 失败策略 / 串行写 / 键表。
+/// 设置模块接口契约：标量读写 / JSON 键 / 失败策略 / 模块级串行写 / 键表。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -54,7 +28,7 @@ void main() {
     expect(await settings.read(_listKey), isEmpty);
   });
 
-  test('标量写入后按原类型往返，键名不变', () async {
+  test('标量写入后按原类型往返，remove 后读回默认值', () async {
     final prefs = await SharedPreferences.getInstance();
     final settings = DeviceSettings(preferences: prefs);
 
@@ -69,50 +43,71 @@ void main() {
     expect(await settings.read(_decimalKey), closeTo(0.35, 1e-9));
     expect(await settings.read(_textKey), 'kept');
     expect(await settings.read(_listKey), ['a', 'b']);
-    expect(
-      prefs.getKeys(),
-      containsAll(<String>[
-        _boolKey.name,
-        _intKey.name,
-        _decimalKey.name,
-        _textKey.name,
-        _listKey.name,
-      ]),
-    );
-  });
 
-  test('remove 后读回默认值', () async {
-    final prefs = await SharedPreferences.getInstance();
-    final settings = DeviceSettings(preferences: prefs);
-
-    await settings.write(_textKey, 'temporary');
     await settings.remove(_textKey);
-
     expect(prefs.containsKey(_textKey.name), isFalse);
     expect(await settings.read(_textKey), 'fallback');
   });
 
-  test('JSON 往返；缺键 / 损坏 / 非对象都回 null', () async {
+  test('tryRead 区分缺键与读取失败', () async {
     final prefs = await SharedPreferences.getInstance();
     final settings = DeviceSettings(preferences: prefs);
 
-    expect(await settings.readJson(_jsonKey), isNull);
+    final missing = await settings.tryRead(_intKey);
+    expect(missing.ok, isTrue, reason: '缺键不是失败：值取默认');
+    expect(missing.value, 7);
 
-    await settings.writeJson(_jsonKey, {'fadeMs': 300, 'smartShuffle': false});
-    expect(await settings.readJson(_jsonKey), {
-      'fadeMs': 300,
-      'smartShuffle': false,
-    });
-    expect(jsonDecode(prefs.getString(_jsonKey.name)!), {
-      'fadeMs': 300,
-      'smartShuffle': false,
-    });
+    // 存储里的类型与键声明不符：getInt 会抛 TypeError，整组回退的调用方
+    // 需要 ok=false 才能把同一键组的其它值一起回默认。
+    await prefs.setString(_intKey.name, 'not-an-int');
+    final mismatch = await settings.tryRead(_intKey);
+    expect(mismatch.ok, isFalse);
+    expect(mismatch.value, 7);
+  });
 
-    await prefs.setString(_jsonKey.name, '{broken');
-    expect(await settings.readJson(_jsonKey), isNull, reason: '损坏 JSON 回默认');
+  test('JSON 键自带字段形状：往返、缺键、损坏与非有限值都回 null', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final settings = DeviceSettings(preferences: prefs);
 
-    await prefs.setString(_jsonKey.name, '[1, 2]');
-    expect(await settings.readJson(_jsonKey), isNull, reason: '非对象回默认');
+    expect(await settings.readJson(kPlaybackFeelStateKey), isNull);
+    await settings.writeJson(kPlaybackFeelStateKey, (
+      fade: PlaybackFadePreset.ms300,
+      smartShuffle: false,
+    ));
+    final feel = await settings.readJson(kPlaybackFeelStateKey);
+    expect(feel?.fade, PlaybackFadePreset.ms300);
+    expect(feel?.smartShuffle, isFalse);
+
+    await settings.writeJson(kPlaybackVolumeStateKey, (
+      volume: 0.35,
+      muted: true,
+    ));
+    final volume = await settings.readJson(kPlaybackVolumeStateKey);
+    expect(volume?.volume, closeTo(0.35, 1e-9));
+    expect(volume?.muted, isTrue);
+
+    await prefs.setString(kPlaybackFeelStateKey.name, '{broken');
+    expect(await settings.readJson(kPlaybackFeelStateKey), isNull);
+
+    await prefs.setString(
+      kPlaybackFeelStateKey.name,
+      '{"fadeMs":1e999,"smartShuffle":true}',
+    );
+    expect(
+      await settings.readJson(kPlaybackFeelStateKey),
+      isNull,
+      reason: '非有限毫秒值不能走到 toInt()',
+    );
+
+    await prefs.setString(
+      kPlaybackVolumeStateKey.name,
+      '{"volume":1e999,"muted":true}',
+    );
+    expect(
+      await settings.readJson(kPlaybackVolumeStateKey),
+      isNull,
+      reason: '非有限音量不能污染滑块',
+    );
   });
 
   test('写动作串行：前一次落盘完才开始下一次', () async {
@@ -136,17 +131,54 @@ void main() {
     expect(await settings.read(_intKey), 2);
   });
 
+  test('不同 DeviceSettings 实例共用同一条写链', () async {
+    final store = _RecordingStore();
+    SharedPreferencesStorePlatform.instance = store;
+    final prefs = await SharedPreferences.getInstance();
+    final first = DeviceSettings(preferences: prefs);
+    final second = DeviceSettings(preferences: prefs);
+
+    // 迁移后的 store 各自构造自己的 DeviceSettings；串行必须跨实例成立。
+    final writeA = first.write(_textKey, 'a');
+    final writeB = second.write(_intKey, 3);
+    await Future.wait([writeA, writeB]);
+
+    expect(store.events, [
+      'start:${_textKey.name}',
+      'end:${_textKey.name}',
+      'start:${_intKey.name}',
+      'end:${_intKey.name}',
+    ]);
+  });
+
   test('写失败不抛出，内存值仍可读；后续写继续执行', () async {
     SharedPreferencesStorePlatform.instance = _FailingWriteStore();
     final prefs = await SharedPreferences.getInstance();
     final settings = DeviceSettings(preferences: prefs);
 
     await expectLater(settings.write(_textKey, 'session'), completes);
-    await expectLater(settings.writeJson(_jsonKey, {'a': 1}), completes);
+    await expectLater(
+      settings.writeJson(kPlaybackVolumeStateKey, (volume: 0.5, muted: true)),
+      completes,
+    );
 
     // shared_preferences 先更新内存缓存再落盘，写失败不回滚本次会话值。
     expect(await settings.read(_textKey), 'session');
-    expect(await settings.readJson(_jsonKey), {'a': 1});
+    expect((await settings.readJson(kPlaybackVolumeStateKey))?.volume, 0.5);
+  });
+
+  test('无法编码的 JSON 值不抛出', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final settings = DeviceSettings(preferences: prefs);
+
+    // NaN / Infinity 不能写进 JSON；失败策略是只记日志，不打断会话。
+    await expectLater(
+      settings.writeJson(kPlaybackVolumeStateKey, (
+        volume: double.nan,
+        muted: false,
+      )),
+      completes,
+    );
   });
 
   test('存储打不开时读取回默认、写入不抛出', () async {
@@ -155,7 +187,8 @@ void main() {
     );
 
     expect(await settings.read(_intKey), 7);
-    expect(await settings.readJson(_jsonKey), isNull);
+    expect((await settings.tryRead(_intKey)).ok, isFalse);
+    expect(await settings.readJson(kPlaybackFeelStateKey), isNull);
     await expectLater(settings.write(_textKey, 'value'), completes);
     await expectLater(settings.remove(_textKey), completes);
   });
@@ -174,16 +207,10 @@ void main() {
     final registered = kAllSettingsKeys.map((key) => key.name).toSet();
     expect(names.intersection(registered), isEmpty, reason: '设备本地键不能进入同步 / 备份');
 
-    for (final key in kDeviceSettingsKeys) {
-      final matchesKind = switch (key.kind) {
-        DeviceSettingKind.boolean => key.defaultValue is bool,
-        DeviceSettingKind.integer => key.defaultValue is int,
-        DeviceSettingKind.decimal => key.defaultValue is double,
-        DeviceSettingKind.text => key.defaultValue is String,
-        DeviceSettingKind.stringList => key.defaultValue is List<String>,
-      };
-      expect(matchesKind, isTrue, reason: '${key.name} 的默认值类型与 kind 不符');
-    }
+    expect(kPlaybackFeelStateKey.defaultValue.fade, PlaybackFadePreset.ms200);
+    expect(kPlaybackFeelStateKey.defaultValue.smartShuffle, isTrue);
+    expect(kPlaybackVolumeStateKey.defaultValue.volume, 1.0);
+    expect(kPlaybackVolumeStateKey.defaultValue.muted, isFalse);
   });
 }
 

@@ -1,5 +1,3 @@
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../data/settings/device_settings.dart';
 import '../data/settings/device_settings_keys.dart';
 import '../domain/models/playback_feel.dart';
@@ -11,12 +9,12 @@ import '../domain/models/playback_feel.dart';
 /// 变了手感。协议 / 会话也都不该出现这两个值。
 ///
 /// 两个值合并成一个 JSON 键：桌面 `shared_preferences` 每次写都会重写整个
-/// 偏好文件，两次写入就是两次整文件 I/O。键名 / 默认值 / 编解码与失败策略
-/// 收在 `data/settings/device_settings.dart`，本类只做字段解释。
+/// 偏好文件，两次写入就是两次整文件 I/O。字段形状（含非有限数值校验）由
+/// `device_settings_keys.dart` 的 JSON 键定义，本类只负责选择键与暴露默认值。
 class PlaybackFeelStore {
-  /// [preferences] 仅测试注入；生产走 SharedPreferences 单例。
-  PlaybackFeelStore({SharedPreferences? preferences})
-    : _settings = DeviceSettings(preferences: preferences);
+  /// [settings] 仅测试注入；生产构造自己的设备本地入口。
+  PlaybackFeelStore({DeviceSettings? settings})
+    : _settings = settings ?? DeviceSettings();
 
   static const String keyState = kPlaybackFeelStateKeyName;
 
@@ -27,24 +25,16 @@ class PlaybackFeelStore {
 
   /// 读取已保存的手感设置；无记录 / 读取失败 / 字段损坏回默认值。
   Future<({PlaybackFadePreset fade, bool smartShuffle})> load() async {
-    final decoded = await _settings.readJson(kPlaybackFeelStateKey);
-    final fadeMs = decoded?['fadeMs'];
-    final smartShuffle = decoded?['smartShuffle'];
-    if (fadeMs is! num || smartShuffle is! bool) {
-      return (fade: defaultFade, smartShuffle: defaultSmartShuffle);
-    }
-    return (
-      fade: PlaybackFadePreset.fromMilliseconds(fadeMs.toInt()),
-      smartShuffle: smartShuffle,
-    );
+    final state = await _settings.readJson(kPlaybackFeelStateKey);
+    return state ?? kPlaybackFeelStateKey.defaultValue;
   }
 
   /// 保存手感设置：写失败只影响下次启动，不打断当前交互。
   Future<void> save({
     required PlaybackFadePreset fade,
     required bool smartShuffle,
-  }) => _settings.writeJson(kPlaybackFeelStateKey, {
-    'fadeMs': fade.duration.inMilliseconds,
-    'smartShuffle': smartShuffle,
-  });
+  }) => _settings.writeJson(kPlaybackFeelStateKey, (
+    fade: fade,
+    smartShuffle: smartShuffle,
+  ));
 }

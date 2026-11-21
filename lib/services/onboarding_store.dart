@@ -5,7 +5,6 @@
 library;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/settings/device_settings.dart';
 import '../data/settings/device_settings_keys.dart';
@@ -14,8 +13,9 @@ import '../data/settings/device_settings_keys.dart';
 const String kOnboardingCompletedV1 = kOnboardingCompletedKeyName;
 
 class OnboardingStore {
-  OnboardingStore({SharedPreferences? prefs})
-    : _settings = DeviceSettings(preferences: prefs);
+  /// [settings] 仅测试注入；生产构造自己的设备本地入口。
+  OnboardingStore({DeviceSettings? settings})
+    : _settings = settings ?? DeviceSettings();
 
   final DeviceSettings _settings;
 
