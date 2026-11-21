@@ -608,6 +608,7 @@ class MgDiscoverSource extends DiscoverSource {
     return runDiscoverCall(
       DiscoverAttemptCall<({List<SourceTrack> tracks, int total})>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         attempt: (_) async {
           final tracks = <SourceTrack>[];
           var total = 0;
@@ -619,7 +620,7 @@ class MgDiscoverSource extends DiscoverSource {
               headers: _songListHeaders,
             );
             if (body is! Map || body['code'] != _successCode) {
-              // 首屏失败视为整次失败（重试）；后续页失败保留已取部分。
+              // 首屏失败视为整次失败；后续页失败保留已取部分。
               if (page == 1) return null;
               break;
             }

@@ -330,6 +330,7 @@ class KgDiscoverSource extends DiscoverSource {
     return runDiscoverCall(
       DiscoverRequestCall<List<dynamic>>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () => lxHttpGet(
           http, // LX 默认排序 = 推荐（t=5）。
           'http://www2.kugou.kugou.com/yueku/v9/special/getSpecial'

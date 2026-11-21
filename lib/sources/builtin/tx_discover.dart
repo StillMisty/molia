@@ -197,6 +197,7 @@ class TxDiscoverSource extends DiscoverSource {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTagCategory>>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () {
           final data = jsonEncode({
             'tags': {

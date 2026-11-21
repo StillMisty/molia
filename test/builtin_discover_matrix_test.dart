@@ -187,7 +187,7 @@ void main() {
       );
     });
 
-    test('标签：目录 + 热门标签；直连失败一次即 StateError', () async {
+    test('标签：目录 + 热门标签；内层子请求失败各单次', () async {
       final ok = _Stub({
         'getTagList': jsonEncode({
           'code': 200,
@@ -227,10 +227,30 @@ void main() {
       await _expectStateError(
         badSource,
         () => badSource.tags(),
-        attempts: 6,
-        reason: '两个取数各自重试 3 次',
+        attempts: 2,
+        reason: '内层两个子请求各尝试一次',
       );
       _expectNotCachedKey(bad, 'kw:tags');
+    });
+
+    test('标签：内层子请求失败只尝试一次，外层不再放大', () async {
+      final stub = _Stub({
+        'getTagList': '{"code":1}',
+        'getRcmTagList': '{"code":1}',
+      });
+      final source = stub.bind(discover);
+      await _expectStateError(source, () => source.tags(), attempts: 2);
+      expect(
+        stub.requests.where((uri) => uri.toString().contains('getTagList')),
+        hasLength(1),
+        reason: '内层标签目录只尝试一次（不是 3 次）',
+      );
+      expect(
+        stub.requests.where((uri) => uri.toString().contains('getRcmTagList')),
+        hasLength(1),
+        reason: '内层热门标签只尝试一次（不是 3 次）',
+      );
+      _expectNotCachedKey(stub, 'kw:tags');
     });
 
     test('歌单：推荐（tagId 空）与标签两条分支、失败重试 3 次', () async {
@@ -307,7 +327,7 @@ void main() {
       _expectNotCachedKey(bad, 'kw:playlist-search:夏:1');
     });
 
-    test('歌单详情：digest8 解析曲目、失败重试 3 次', () async {
+    test('歌单详情：digest8 解析曲目、失败单次', () async {
       final body = jsonEncode({
         'result': 'ok',
         'title': '歌单',
@@ -340,7 +360,7 @@ void main() {
       await _expectStateError(
         badSource,
         () => badSource.playlistDetail('123', 1),
-        attempts: 3,
+        attempts: 1,
       );
       _expectNotCachedKey(bad, 'kw:playlist-detail:123');
     });
@@ -491,7 +511,7 @@ void main() {
       _expectNotCachedKey(bad, 'kg:tags');
     });
 
-    test('歌单：推荐与标签两条分支、失败重试 3 次', () async {
+    test('歌单：推荐与标签两条分支、失败单次', () async {
       final ok = _Stub({
         'is_ajax=1': jsonEncode({
           'status': 1,
@@ -531,7 +551,7 @@ void main() {
       await _expectStateError(
         badSource,
         () => badSource.playlists('', 1),
-        attempts: 3,
+        attempts: 1,
       );
       _expectNotCachedKey(bad, 'kg:playlists::1');
     });
@@ -727,7 +747,7 @@ void main() {
         'category_playlist.html': '<html></html>',
       });
       final badSource = bad.bind(discover);
-      await _expectStateError(badSource, () => badSource.tags(), attempts: 4);
+      await _expectStateError(badSource, () => badSource.tags(), attempts: 2);
       _expectNotCachedKey(bad, 'tx:tags');
     });
 
@@ -1154,8 +1174,8 @@ void main() {
       await _expectStateError(
         badSource,
         () => badSource.playlistDetail('777', 1),
-        attempts: 4,
-        reason: '曲目列表重试 3 次 + 头部信息 1 次',
+        attempts: 2,
+        reason: '曲目列表与头部信息各尝试一次',
       );
       _expectNotCachedKey(bad, 'mg:playlist-detail:777');
     });
@@ -1307,7 +1327,7 @@ void main() {
         'playlist/hottags': '{"code":1}',
       });
       final badSource = bad.bind(discover);
-      await _expectStateError(badSource, () => badSource.tags(), attempts: 6);
+      await _expectStateError(badSource, () => badSource.tags(), attempts: 2);
       _expectNotCachedKey(bad, 'wy:playlist-tags');
     });
 
@@ -1383,7 +1403,7 @@ void main() {
       _expectNotCachedKey(bad, 'wy:playlist-search:周:1:20');
     });
 
-    test('歌单详情：linux forward 解析曲目、失败重试 3 次', () async {
+    test('歌单详情：linux forward 解析曲目、失败单次', () async {
       final ok = _Stub({
         'api/linux/forward': jsonEncode({
           'code': 200,
@@ -1411,7 +1431,7 @@ void main() {
       await _expectStateError(
         badSource,
         () => badSource.playlistDetail('123', 1),
-        attempts: 3,
+        attempts: 1,
       );
       _expectNotCachedKey(bad, 'wy:playlist-detail:123');
     });

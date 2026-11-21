@@ -239,6 +239,7 @@ class KwDiscoverSource extends DiscoverSource {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTagCategory>>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () => lxHttpGet(
           http,
           'http://wapi.kuwo.cn/api/pc/classify/playlist/getTagList'
@@ -274,6 +275,7 @@ class KwDiscoverSource extends DiscoverSource {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTag>>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () => lxHttpGet(
           http,
           'http://wapi.kuwo.cn/api/pc/classify/playlist/getRcmTagList'
@@ -572,6 +574,7 @@ class KwDiscoverSource extends DiscoverSource {
     return runDiscoverCall(
       DiscoverRequestCall<DiscoverDetail>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () => lxHttpGet(
           http,
           'http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=$id&pn=0'
@@ -611,6 +614,7 @@ class KwDiscoverSource extends DiscoverSource {
     return runDiscoverCall(
       DiscoverAttemptCall<DiscoverDetail>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         attempt: (_) async {
           final infoBody = await lxHttpGet(
             http,

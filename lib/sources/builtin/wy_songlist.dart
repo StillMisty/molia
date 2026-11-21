@@ -82,6 +82,7 @@ class WySongList {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTagCategory>>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () => lxHttpPost(
           http,
           'https://music.163.com/weapi/playlist/catalogue',
@@ -134,6 +135,7 @@ class WySongList {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTag>>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () => lxHttpPost(
           http,
           'https://music.163.com/weapi/playlist/hottags',
@@ -289,6 +291,7 @@ class WySongList {
     return runDiscoverCall(
       DiscoverRequestCall<_WyPlaylistShell>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () async {
           try {
             return await lxHttpPost(
@@ -501,6 +504,7 @@ class WySongList {
     return runDiscoverCall(
       DiscoverAttemptCall<String>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         message: 'link try max num',
         attempt: (_) async {
           var current = link;
