@@ -18,7 +18,6 @@ import 'lx/lx_script_update.dart';
 import 'source_preferences.dart';
 import 'source_profiles.dart';
 import 'source_route_executor.dart';
-import 'source_routing.dart';
 import 'source_search_result.dart';
 import 'source_track.dart';
 import '../domain/models/album.dart';
@@ -197,10 +196,6 @@ class SourceManager extends ChangeNotifier {
   /// 音源能力：直接读 [SourceProfiles]（registry / 领域适配器共用同一答案）。
   SourceCapabilities capabilitiesFor(String key) =>
       sourceProfiles.forKey(key)?.capabilities ?? const SourceCapabilities();
-
-  /// 当前快照的能力路由：画像自带走查所需的脚本声明，执行器不再按 key 分支。
-  SourceRouting routingOf(SourceProfiles profiles) =>
-      SourceRouting(profiles: profiles);
 
   /// supervisor 状态回调：重启 / 半开恢复成功后用引擎当前声明的源刷新
   /// [activeSources]，修复“引擎死了源列表还在”（超时 kill 后脚本重新执行，
