@@ -192,6 +192,14 @@ class PlayStatisticsSummary {
   /// 全局首播时间（**不受范围过滤影响**，用于「数据起始日」）。
   final int? firstPlayedAt;
 
+  /// 全局首播的本地时刻（无记录 = null）。
+  ///
+  /// 「数据起始日」、统计 view 的首播事实与年度报告覆盖起点都经这里换算，
+  /// 避免各消费面各自 `DateTime.fromMillisecondsSinceEpoch`。
+  DateTime? get firstPlayedLocal => firstPlayedAt == null
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch(firstPlayedAt!);
+
   const PlayStatisticsSummary({
     required this.playCount,
     required this.qualifiedPlayCount,

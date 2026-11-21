@@ -209,14 +209,45 @@ void main() {
       );
 
       expect(view.firstDay, DateTime(2030, 12, 31));
+      expect(
+        view.firstPlayedAt,
+        DateTime(2030, 12, 31, 18, 30),
+        reason: '首播事实保留时间分量，年度覆盖起点直接消费它',
+      );
       expect(view.today, DateTime(2031, 1, 2));
       expect(view.window.start, DateTime(2030, 12, 26, 0, 0, 1));
     });
 
-    test('没有首播记录时起始日退回窗口今天', () {
+    test('没有首播记录时起始日退回窗口今天，首播事实为空', () {
       final view = _view(DateTime(2031, 1, 2, 12));
+      expect(view.firstPlayedAt, isNull);
       expect(view.firstDay, DateTime(2031, 1, 2));
       expect(view.window.start, DateTime(2030, 12, 26, 12));
+    });
+
+    test('跨年窗口：首播事实 / 日历起点 / 年度入口共用同一窗口', () {
+      final firstPlayedAt = DateTime(2030, 12, 31, 23, 30);
+      final now = DateTime(2031, 1, 1, 0, 15);
+      final view = ListeningStatisticsView.from(
+        _snapshot(
+          firstPlayedAt: firstPlayedAt.millisecondsSinceEpoch,
+          daily: [
+            DayListened(
+              day: DateTime(2030, 12, 31),
+              listenedMs: 5000,
+              playCount: 2,
+            ),
+          ],
+        ),
+        ListeningStatisticsWindow(range: PlayStatisticsRange.week, now: now),
+      );
+
+      expect(view.firstPlayedAt, firstPlayedAt);
+      expect(view.firstDay, DateTime(2030, 12, 31));
+      expect(view.today, DateTime(2031, 1, 1));
+      // 1 月：上一年有数据时推上一年，且用高强调。
+      expect(view.annualEntry.featuredYear, 2030);
+      expect(view.annualEntry.prominent, isTrue);
     });
 
     test('海报投影只摊平一次：固定 168 槽、非法行跳过、榜单原样保留', () {

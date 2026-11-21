@@ -13,6 +13,7 @@ import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/play_statistics_provider.dart';
 import '../../services/notification_service.dart';
+import '../../services/play_statistics_export.dart';
 import '../../services/save_as.dart';
 import '../../theme/m3e_context.dart';
 import '../../widgets/card_list_surface.dart';
@@ -171,11 +172,10 @@ Future<void> exportPlayStatistics(
   final saveAs = context.read<SaveAs?>();
   try {
     if (saveAs == null) throw StateError('SaveAs 未装配');
-    final json = await provider.buildExportJson();
+    final export = await provider.buildExportJson();
     final result = await saveAs.saveBytes(
-      fileName:
-          'molia_listening_${DateTime.now().toIso8601String().replaceAll(':', '-')}.json',
-      bytes: Uint8List.fromList(utf8.encode(json)),
+      fileName: playStatisticsExportFileName(export.exportedAt),
+      bytes: Uint8List.fromList(utf8.encode(export.json)),
       mimeType: 'application/json',
       relativeDir: saveAsExportsDirName,
       dialogTitle: l10n.statsExport,

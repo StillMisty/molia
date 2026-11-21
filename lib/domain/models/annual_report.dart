@@ -119,6 +119,12 @@ class AnnualStatisticsSnapshot {
 
   final AnnualPlayMoment? firstPlay;
   final AnnualPlayMoment? lastPlay;
+
+  /// 全局首播的本地时刻（无记录 = null；与统计页「数据起始日」同一事实）。
+  ///
+  /// 年度覆盖起点由 [buildAnnualReport] 显式消费它，不在年度域里反推
+  /// `summary.firstPlayedAt`。
+  DateTime? get firstPlayedAt => summary.firstPlayedLocal;
 }
 
 /// Top 专辑条目。
@@ -225,6 +231,12 @@ AnnualReport buildAnnualReport({
   required AnnualStatisticsSnapshot data,
   required DateTime now,
   required Map<String, String> knownSourceNames,
+
+  /// 全局首播（本地时间；null = 没有首播记录）。
+  ///
+  /// 由调用方从快照 / 统计 view 的同一份事实传入；年度域不再自己从
+  /// `summary.firstPlayedAt` 换算。
+  required DateTime? firstPlayedAt,
   bool recordingEnabled = true,
 }) {
   final window = AnnualReportWindow(year);
@@ -276,9 +288,7 @@ AnnualReport buildAnnualReport({
 
   final coverageStart = activeDays.isEmpty
       ? null
-      : (data.summary.firstPlayedAt == null
-            ? activeDays.first
-            : DateTime.fromMillisecondsSinceEpoch(data.summary.firstPlayedAt!));
+      : (firstPlayedAt ?? activeDays.first);
   final lastActiveDay = activeDays.isEmpty ? null : activeDays.last;
   final currentYear = now.year == year;
   final coverageEnd = activeDays.isEmpty

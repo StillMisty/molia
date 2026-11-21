@@ -48,6 +48,7 @@ void main() {
         year: 2026,
         now: DateTime(2027, 2, 1),
         knownSourceNames: const {'wy': '网易云'},
+        firstPlayedAt: null,
         data: _snapshot(
           summary: _summary(listenedMs: 3000),
           daily: [
@@ -80,6 +81,7 @@ void main() {
         year: 2026,
         now: DateTime(2027, 3, 1),
         knownSourceNames: const {},
+        firstPlayedAt: null,
         data: _snapshot(
           daily: [
             DayListened(
@@ -121,6 +123,7 @@ void main() {
         year: 2026,
         now: DateTime(2027, 1, 2),
         knownSourceNames: const {'wy': '网易云'},
+        firstPlayedAt: null,
         data: _snapshot(
           summary: _summary(listenedMs: 1000),
           sources: const [
@@ -139,6 +142,7 @@ void main() {
         year: 2026,
         now: DateTime(2027, 2, 1),
         knownSourceNames: const {},
+        firstPlayedAt: null,
         data: _snapshot(
           summary: _summary(playCount: 0, qualified: 0, listenedMs: 0),
         ),
@@ -155,6 +159,7 @@ void main() {
         now: DateTime(2026, 11, 14),
         knownSourceNames: const {},
         recordingEnabled: false,
+        firstPlayedAt: DateTime(2026, 1, 1),
         data: _snapshot(
           summary: _summary(
             firstPlayedAt: DateTime(2026, 1, 1).millisecondsSinceEpoch,
@@ -177,6 +182,7 @@ void main() {
         year: 2025,
         now: DateTime(2026, 2, 1),
         knownSourceNames: const {},
+        firstPlayedAt: DateTime(2025, 1, 5),
         data: _snapshot(
           summary: _summary(
             firstPlayedAt: DateTime(2025, 1, 5).millisecondsSinceEpoch,
@@ -203,6 +209,7 @@ void main() {
         year: 2025,
         now: DateTime(2026, 2, 1),
         knownSourceNames: const {},
+        firstPlayedAt: DateTime(2025, 6, 1),
         data: _snapshot(
           summary: _summary(
             firstPlayedAt: DateTime(2025, 6, 1).millisecondsSinceEpoch,
@@ -226,6 +233,36 @@ void main() {
       expect(report.coverageEnd, DateTime(2025, 8, 1));
     });
 
+    test('覆盖起点只消费传入的首播事实，不再从 summary 反推', () {
+      // summary 里的全局首播故意早于传入值：如果年度域偷读 summary，
+      // 覆盖起点会变成 2020，年份反而被误判为「从年初开始」。
+      final report = buildAnnualReport(
+        year: 2026,
+        now: DateTime(2027, 2, 1),
+        knownSourceNames: const {},
+        firstPlayedAt: DateTime(2026, 6, 1, 8, 30),
+        data: _snapshot(
+          summary: _summary(
+            firstPlayedAt: DateTime(2020, 5, 1).millisecondsSinceEpoch,
+          ),
+          daily: [
+            DayListened(
+              day: DateTime(2026, 6, 1),
+              listenedMs: 1000,
+              playCount: 1,
+            ),
+            DayListened(
+              day: DateTime(2026, 8, 1),
+              listenedMs: 1000,
+              playCount: 1,
+            ),
+          ],
+        ),
+      );
+      expect(report.coverageStart, DateTime(2026, 6, 1, 8, 30));
+      expect(report.notice, AnnualReportNotice.partialCoverage);
+    });
+
     test('Top 50 保留完整列表，页面只取前 5', () {
       final tracks = [
         for (var index = 0; index < 60; index++)
@@ -242,6 +279,7 @@ void main() {
         year: 2026,
         now: DateTime(2027, 1, 1),
         knownSourceNames: const {},
+        firstPlayedAt: null,
         data: _snapshot(topTracks: tracks),
       );
       expect(report.topTracks, hasLength(50));
@@ -312,6 +350,7 @@ void main() {
         year: 2026,
         now: DateTime(2027, 1, 1),
         knownSourceNames: const {},
+        firstPlayedAt: null,
         data: _snapshot(topTracks: tracks),
       );
       final playlist = buildAnnualPlaylistTracks(report, addedAt: 123);
@@ -326,6 +365,7 @@ void main() {
         year: 2026,
         now: DateTime(2027, 1, 1),
         knownSourceNames: const {},
+        firstPlayedAt: null,
         data: _snapshot(
           summary: _summary(playCount: 0, qualified: 0, listenedMs: 0),
         ),

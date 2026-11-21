@@ -136,7 +136,13 @@ class PlayStatisticsProvider extends ChangeNotifier {
   ///
   /// 只负责取数与序列化；写到哪个目录由页面的 `SaveAs` 决定（桌面可弹
   /// “另存为”，移动端直接写公共下载目录）。
-  Future<String> buildExportJson() async {
+  ///
+  /// 时间戳（载荷 `exportedAt` 与文件名）都取已接受窗口的 [window.now]：
+  /// 失败 / 过期加载不会推进窗口，导出也就不会用另一次时钟读数。
+  /// 尚未有已接受视图时（首次加载失败 / 仍在加载）直接失败，而不是退回墙钟。
+  Future<({String json, DateTime exportedAt})> buildExportJson() async {
+    final window = _view?.window;
+    if (window == null) throw StateError('统计窗口尚未加载，无法导出');
     final results = await Future.wait([
       _repository.summary(),
       _repository.topTracks(limit: 20),
@@ -154,10 +160,10 @@ class PlayStatisticsProvider extends ChangeNotifier {
       hourly: results[4] as List<HourListened>,
       sources: results[5] as List<SourceListened>,
       recentEvents: results[6] as List<PlayEvent>,
-      exportedAt: _clock(),
+      exportedAt: window.now,
     );
     const jsonEncoder = JsonEncoder.withIndent('  ');
-    return jsonEncoder.convert(payload);
+    return (json: jsonEncoder.convert(payload), exportedAt: window.now);
   }
 
   /// 立即加载：取消防抖窗口（手动刷新 / 范围切换 / 清空后的数据必须立刻可见）。

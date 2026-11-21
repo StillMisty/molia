@@ -21,7 +21,6 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../../domain/models/annual_report_entry.dart';
 import '../../domain/models/play_statistics.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/library_provider.dart';
@@ -43,6 +42,16 @@ import 'statistics_heatmap.dart';
 import 'statistics_models.dart';
 import 'statistics_rankings.dart';
 import 'statistics_summary.dart';
+
+/// 海报文件名：时间戳来自统计窗口（[now] 已接受窗口的 `now`）。
+///
+/// 窗口尚未就绪时不盖时间戳，避免退回墙钟；此时海报渲染也返回 null，
+/// 文件名不会被写到磁盘。
+String playStatisticsPosterFileName(DateTime? now, PlayStatisticsRange range) {
+  final stamp = now?.toIso8601String().replaceAll(':', '-');
+  final parts = <String>['molia_listening_stats', range.name, ?stamp];
+  return '${parts.join('_')}.png';
+}
 
 class PlayStatisticsPage extends StatefulWidget {
   const PlayStatisticsPage({super.key, this.sharePoster});
@@ -258,12 +267,9 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
 
   /// 年度报告入口：数据来自本页已有的全量日历 rollup，不额外查询。
   ///
-  /// 「现在」直接取统计窗口：入口强调的月份与页面高亮属于同一时刻。
+  /// 入口本身由统计视图投影（同一份日历 + 同一窗口 now）；页面不再拆分字段。
   List<Widget> _annualEntry(ListeningStatisticsView view) {
-    final entry = AnnualReportEntry.fromDaily(
-      view.snapshot.daily,
-      now: view.window.now,
-    );
+    final entry = view.annualEntry;
     if (!entry.isVisible) return const [];
     return [
       AnnualReportEntryCard(
@@ -406,7 +412,6 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   Future<void> _openShareSheet() async {
     if (_shareSheetOpen) return;
     final l10n = AppLocalizations.of(context)!;
-    final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
     setState(() => _shareSheetOpen = true);
     try {
       await showPosterShareSheet(
@@ -414,7 +419,12 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
         title: l10n.statsShareTitle,
         renderPoster: () => _renderPoster(_provider),
         shareText: l10n.statsPosterTitle,
-        fileName: 'molia_listening_stats_${_provider.range.name}_$stamp.png',
+        // 文件名时间戳取已接受统计窗口的 now（不读墙钟）；还没有窗口时
+        // 不盖时间戳——渲染本就返回 null，文件名不会落盘。
+        fileName: playStatisticsPosterFileName(
+          _provider.window?.now,
+          _provider.range,
+        ),
         saveDialogTitle: l10n.shareSaveImage,
         emptyMessage: l10n.statsPosterEmpty,
         shareFile: widget.sharePoster,
