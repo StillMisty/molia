@@ -296,7 +296,7 @@ void main() {
     });
   });
 
-  test('checkNow：已有轮次在跑时不排队', () {
+  test('checkNow：已有轮次在跑时排队补跑，不并发', () {
     fakeAsync((async) {
       final env = build(async);
       env.host.roundGate = Completer<void>();
@@ -308,11 +308,14 @@ void main() {
       unawaited(env.scheduler.checkNow());
       async.flushMicrotasks();
       expect(env.host.rounds, isEmpty, reason: '启动轮仍在等 gate');
+      expect(env.host.queue.running, isTrue);
 
       env.host.roundGate!.complete();
       async.flushMicrotasks();
-      expect(env.host.rounds, hasLength(1));
-      expect(env.host.rounds.single.trigger, SyncTrigger.startup);
+      expect(env.host.rounds, hasLength(2));
+      expect(env.host.rounds.first.trigger, SyncTrigger.startup);
+      expect(env.host.rounds.last.trigger, SyncTrigger.check);
+      expect(env.host.rounds.last.push, isTrue, reason: '检查轮仍按自己的外发范围并入补跑');
       env.scheduler.dispose();
     });
   });
@@ -748,9 +751,6 @@ class RecordingSyncSchedulerHost implements SyncSchedulerHost {
 
   @override
   bool get syncEnabled => enabled;
-
-  @override
-  bool get roundInFlight => queue.running;
 
   @override
   Future<SyncRunOutcome> runSyncRound({

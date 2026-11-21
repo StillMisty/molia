@@ -10,14 +10,16 @@ import 'sync_book.dart';
 import 'sync_round_queue.dart';
 
 /// 调度器驱动一轮同步的宿主（生产 = `SyncEngine`；单测注入假实现）。
+///
+/// 在途状态不在这里声明：调度器与宿主共享 [SyncRoundQueue]，直接读
+/// `queue.running`，避免两份「是否已有轮次在跑」互相打架。
 abstract interface class SyncSchedulerHost {
   bool get syncEnabled;
 
-  /// 是否已有一段轮次链在跑（队列的唯一在途状态；调度器据此不重复发起）。
-  bool get roundInFlight;
-
   /// 跑一轮；[onlyCategories] 非空时只处理这些类别（蜂窝小类别策略）；
   /// [antiEntropy] 允许全量兜底（周期性指纹比对修复静默分歧）。
+  ///
+  /// 已有轮次在跑时由宿主并入补跑（按请求合并外发 / 范围），不会并发。
   Future<SyncRunOutcome> runSyncRound({
     required SyncTrigger trigger,
     required bool push,
@@ -328,12 +330,11 @@ class SyncScheduler {
     }
     // 一轮未结束：公告不能丢（对端可能只公告一次），重新走 1s 去抖，
     // 等轮次结束后再判定冷却——不能在冷却窗口里把 pending 的公告吞掉。
-    if (_host.roundInFlight) {
+    if (_queue.running) {
       _peerSightTimer = Timer(_peerSightDebounce, _firePeerSight);
       return;
     }
-    // 冷却起点在真正开跑时由 `_runAndMark` 记录（上一轮未结束时本轮不会
-    // 实际开跑，公告不会被冷却窗口吞掉）。
+    // 冷却起点在真正开跑时由 `_runAndMark` 记录。
     unawaited(_runAndMark(SyncTrigger.discovery, push: true));
   }
 
@@ -350,10 +351,9 @@ class SyncScheduler {
 
   /// 打开同步页时检查连接状态。
   ///
-  /// 不是手动轮：同步关闭、已有轮次在跑、省电 / 蜂窝暂停策略生效时都不跑，
-  /// 也不做 anti-entropy 全量兜底（只更新「最近一轮是否接触成功」）。
-  /// 「同步关闭 / 已有轮次在跑」由 [canRunAutomatically] 与 [_runAndMark]
-  /// 统一拦住，这里不重复判断。
+  /// 不是手动轮：同步关闭、省电 / 蜂窝暂停策略生效时不跑；已有轮次在跑时
+  /// 并入共享队列的补跑轮（不并发）。不做 anti-entropy 全量兜底（只更新
+  /// 「最近一轮是否接触成功」）。
   Future<void> checkNow() async {
     if (_disposed || !canRunAutomatically) return;
     await _runAndMark(SyncTrigger.check, push: true);
@@ -513,11 +513,7 @@ class SyncScheduler {
     required bool push,
     bool armLadderOnZeroPeers = false,
   }) async {
-    if (_host.roundInFlight) {
-      // 一轮未结束不并发再跑：公告由 `_firePeerSight` 重新去抖，其余触发按
-      // 「本轮已覆盖同一环境」丢弃。
-      return null;
-    }
+    // 在途轮次由宿主并入补跑；调度器不维护第二份在途状态。
     if (trigger == SyncTrigger.discovery) _lastDiscoveryAt = _nowMs();
     final SyncRunOutcome outcome;
     try {

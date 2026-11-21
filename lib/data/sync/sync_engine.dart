@@ -157,9 +157,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 排队模块（调度器共享：待发类别与「是否已有轮次在跑」都问它）。
   SyncRoundQueue get roundQueue => _queue;
 
-  @override
-  bool get roundInFlight => _queue.running;
-
   bool get initialized => _initialized;
 
   /// 最近一轮的完整结果；null = 本次进程内还没跑过。
@@ -301,7 +298,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     _runner.enqueueInbound(envelope);
     if (_queue.running) {
       // 在途轮次不并发：合并成一次补跑（不等待报告，入站轮由轮次链兜底）。
-      _queue.schedule(trigger: SyncTrigger.incoming);
+      // 入站轮只消费收到的快照、不推送；若同一补跑里还有手动请求，合并规则
+      // 会把手动请求提升为「推送 + 全部类别」。
+      _queue.schedule(trigger: SyncTrigger.incoming, push: false);
       return;
     }
     _inboundTimer ??= Timer(_inboundWindow, () {
@@ -322,6 +321,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 排队 / 合并 / 交付判定都在 [SyncRoundQueue]（与调度器共享同一实例）；
   /// 本方法只负责「初始化 + 同步开关」这两道入口判断。
   ///
+  /// 同步关闭时任何请求都直接返回 null（即使已有一段轮次链在跑）：关闭后
+  /// 不再把请求并入补跑，避免同步已经停了还多跑一轮。
+  ///
   /// [onlyCategories] 非空时只处理这些类别（蜂窝小类别策略；适配器的本地
   /// 变化登记照常进行，不受影响）。[antiEntropy] 允许全量兜底（周期性比对
   /// `snapshotId` 修复静默分歧；充电 / Wi-Fi / 前台的唤醒才置位）。
@@ -331,16 +333,16 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     bool antiEntropy = false,
     Set<SyncCategory>? onlyCategories,
   }) async {
-    if (_queue.running) {
-      return _queue.enqueue(trigger: trigger, antiEntropy: antiEntropy);
-    }
     if (!_initialized) await init();
-    // 初始化等待期间另一条请求可能已经起跑：重新入队，保证同一时刻只有
-    // 一条轮次链，且本次请求仍能拿到补跑轮报告。
-    if (_queue.running) {
-      return _queue.enqueue(trigger: trigger, antiEntropy: antiEntropy);
-    }
     if (!_state.enabled) return null;
+    if (_queue.running) {
+      return _queue.enqueue(
+        trigger: trigger,
+        push: push,
+        antiEntropy: antiEntropy,
+        onlyCategories: onlyCategories,
+      );
+    }
     return _queue.run(
       trigger: trigger,
       push: push,
@@ -387,6 +389,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   }
 
   /// 跑一轮并落日志 / 通知（阶段编排在 [SyncRoundRunner.runRound]）。
+  ///
+  /// 通知由队列在「是否有轮次在跑」翻转时发出：本方法只更新 `lastReport`
+  /// 与提交状态，不再逐轮 `notifyListeners`（否则一段补跑链会多出整树重建）。
   Future<SyncRoundReport> _runQueuedRound(SyncQueuedRound round) async {
     final report = await _runner.runRound(
       trigger: round.trigger,
@@ -399,7 +404,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     // 首次连通提示与轮次结果共用同一次提交：一轮只写一份状态 JSON。
     _announceConnectedPeers();
     await _state.commit();
-    notifyListeners();
     return report;
   }
 
