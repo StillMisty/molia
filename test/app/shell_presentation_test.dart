@@ -218,21 +218,23 @@ void main() {
   });
 
   group('返回层级', () {
-    test('收起态 / 其它页 / 无收起态都不拦返回', () {
-      final collapsed = build(selected: nowPlaying);
-      collapsed.setMiniCapable(true);
-      expect(collapsed.interceptsBack, isFalse);
-      expect(collapsed.handleBack(pageClaimsBack: false), ShellBackIntent.exit);
+    test('正常播放页 / 其它页 / 无收起态都不拦返回', () {
+      // 正常播放页（歌词在下方）是播放 tab 的终态：返回交给系统退出。
+      final normal = build(selected: nowPlaying);
+      normal
+        ..setMiniCapable(true)
+        ..setExpanded(true);
+      expect(normal.interceptsBack, isFalse);
+      expect(normal.handleBack(pageClaimsBack: false), ShellBackIntent.exit);
 
-      // 其它页即使残留展开态（异常顺序）也不拦：一级页返回即退出。
+      // 其它一级页即使残留展开态（异常顺序）也不拦：平级页返回即退出。
       final otherPage = build(selected: favorites);
       otherPage.setExpanded(true);
       expect(otherPage.interceptsBack, isFalse);
       expect(otherPage.handleBack(pageClaimsBack: false), ShellBackIntent.exit);
 
-      // 桌面 / 宽版式没有收起态：expanded 残留不能吞掉返回。
+      // 桌面 / 宽版式没有歌词整页状态：残留的未展开态不能吞掉返回。
       final noCollapse = build(selected: nowPlaying);
-      noCollapse.setExpanded(true);
       expect(noCollapse.interceptsBack, isFalse);
       expect(
         noCollapse.handleBack(pageClaimsBack: false),
@@ -241,18 +243,16 @@ void main() {
 
       noCollapse.dispose();
       otherPage.dispose();
-      collapsed.dispose();
+      normal.dispose();
     });
 
-    test('展开的播放页先收起，页面级占用优先', () {
+    test('歌词整页先恢复完整播放页，页面级占用优先', () {
       final presentation = build(selected: nowPlaying);
-      presentation
-        ..setMiniCapable(true)
-        ..setExpanded(true);
+      presentation.setMiniCapable(true);
       expect(presentation.interceptsBack, isTrue);
       expect(
         presentation.handleBack(pageClaimsBack: false),
-        ShellBackIntent.collapsePlayer,
+        ShellBackIntent.restorePlayer,
       );
 
       // 页面级临时状态（多选 / 搜索 / 排序 / 弹层）接管时壳层让位。

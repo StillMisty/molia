@@ -176,8 +176,8 @@ extension _NowPlayingGestures on _NowPlayingState {
   void _setMini(bool mini) {
     if (_isMini == mini || !mounted) return;
     _applyMiniState(mini);
-    // 动画落定的节点是壳层返回层级最可靠的信号：宽版式无收起态，隐藏页
-    // 的展开态也不拦返回，两者都按「未展开」回写。
+    // 动画落定的节点是壳层返回层级最可靠的信号：歌词整页（mini）才拦返回；
+    // 宽版式无收起态，隐藏页的展开态也不拦返回，两者都按「未展开」回写。
     //
     // 展开请求来自「即将进入播放页」时页面还没可见，此时不能按可见性把它
     // 压回 false——否则壳层会先显示顶栏播放条、下一帧再收起，闪一帧。

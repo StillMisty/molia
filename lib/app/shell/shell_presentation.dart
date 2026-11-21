@@ -34,12 +34,12 @@ enum ShellExpansionVerdict {
 
 /// 壳层级返回（Android back）的裁决。
 enum ShellBackIntent {
-  /// 不拦：非展开播放页，或页面级临时状态正接管返回。
+  /// 不拦：播放页已是正常布局（或不在播放页），交给系统退出应用。
   exit,
 
-  /// 壳层先收起展开的播放页；调用方随后执行收起动画，页面落定时回写
-  /// [ShellPresentation.expanded]。
-  collapsePlayer,
+  /// 播放页的歌词整页（播放器高度 0）先恢复成正常播放页；调用方随后执行
+  /// 展开动画，页面落定时回写 [ShellPresentation.expanded]。
+  restorePlayer,
 }
 
 /// 壳层展示状态与判定：目的地解析、播放页展开、顶栏播放条、返回层级。
@@ -164,12 +164,16 @@ class ShellPresentation extends ChangeNotifier {
   /// 在播放页永远不显示。
   bool get showsPlayerBar => !onPlayerPage || (_miniCapable && !_expanded);
 
-  /// 壳层是否要拦截系统返回（展开的播放页是唯一的页内层级）。
+  /// 壳层是否要拦截系统返回（歌词整页是唯一的页内层级）。
   ///
-  /// 同时要求 [miniCapable]：桌面 / 宽版式没有收起态，残留的 expanded 不能
-  /// 吞掉返回。页面级占用不参与 `canPop`：它们由页面自己的 `PopScope` 声明
-  /// `canPop == false`，壳层在回调里让位（见 [handleBack]）。
-  bool get interceptsBack => onPlayerPage && _miniCapable && _expanded;
+  /// 同时要求 [miniCapable]：桌面 / 宽版式没有歌词整页状态，残留的
+  /// `expanded == false` 不能吞掉返回。页面级占用不参与 `canPop`：它们由
+  /// 页面自己的 `PopScope` 声明 `canPop == false`，壳层在回调里让位
+  /// （见 [handleBack]）。
+  ///
+  /// 正常播放页（歌词在下方）是播放 tab 的终态：此时不拦，返回交给系统
+  /// 退出应用。
+  bool get interceptsBack => onPlayerPage && _miniCapable && !_expanded;
 
   /// 展开 / 收起请求的裁决；调用方只在 [ShellExpansionVerdict.accepted] 时执行。
   ///
@@ -181,17 +185,17 @@ class ShellPresentation extends ChangeNotifier {
     return ShellExpansionVerdict.accepted;
   }
 
-  /// 壳层级返回的裁决：页面级占用优先，其次「展开的播放页先收起」。
+  /// 壳层级返回的裁决：页面级占用优先，其次「歌词整页先恢复正常播放页」。
   ///
   /// [pageClaimsBack] 由调用方传入（生产为 `BackClaims.any`）：本模块不读
   /// 进程级登记表，接口测试可以用布尔值覆盖优先级。
   ///
-  /// 只做判定，不改 [expanded]：页面在收起动画落定时才回写，提前清零会让
-  /// 收起途中第二次返回直接退出应用。
+  /// 只做判定，不改 [expanded]：页面在展开动画开始时才回写，提前清零会让
+  /// 恢复途中的第二次返回又落回歌词整页。
   ShellBackIntent handleBack({required bool pageClaimsBack}) {
     if (pageClaimsBack) return ShellBackIntent.exit;
     if (!interceptsBack) return ShellBackIntent.exit;
-    return ShellBackIntent.collapsePlayer;
+    return ShellBackIntent.restorePlayer;
   }
 
   /// 页面回写展开态；相同值不重复通知。

@@ -106,7 +106,7 @@ class _NowPlayingState extends State<NowPlaying>
   double _pendingExpansionVelocity = 0;
 
   /// 当前布局是否有收起态（窄单栏）。桌面两栏 / 移动宽版式恒为 false：
-  /// 返回层级要据此决定「先收起播放器」还是直接回上一目的地，壳层也据此
+  /// 返回层级要据此决定「歌词整页先恢复播放页」还是交给系统退出，壳层也据此
   /// 决定顶栏显示播放条还是品牌位。
   bool _miniCapable = true;
 
