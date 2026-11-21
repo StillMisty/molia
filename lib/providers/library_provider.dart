@@ -196,29 +196,55 @@ class LibraryProvider extends ChangeNotifier {
 
   /// 读取并标记最近使用（未缓存返回 null）。
   ///
-  /// 收藏列表的值以事实为准：单曲 toggle 只补事实，不重写 LRU 里的读投影；
-  /// LRU 只负责「这份列表有没有读过 / 在途 / 失败」。
+  /// 收藏列表的值只来自收藏事实；LRU 只负责「这份列表有没有读过 / 在途 /
+  /// 失败」。事实没有行时返回 null，不能退回 LRU 里的旧快照（那可能是
+  /// toggle 之前读到的基线）。
   List<PlaylistTrack>? _touchPlaylistTracks(int playlistId) {
     final read = _playlistTracksReads[playlistId];
-    if (read == null || read.value == null) return read?.value;
+    if (read == null) return null;
+    if (playlistId == _favoritesPlaylistId) {
+      if (read.value == null) return null;
+      _playlistTracksReads
+        ..remove(playlistId)
+        ..[playlistId] = read;
+      return _favorites.rows;
+    }
+    if (read.value == null) return read.value;
     _playlistTracksReads
       ..remove(playlistId)
       ..[playlistId] = read;
-    if (playlistId == _favoritesPlaylistId && _favorites.hasRows) {
-      return _favorites.rows;
-    }
     return read.value;
   }
 
   /// 写入缓存并按 LRU 淘汰超限条目。
-  void _storePlaylistTracks(int playlistId, List<PlaylistTrack> tracks) {
-    final read = _playlistTracksRead(playlistId)..seed(tracks);
+  ///
+  /// [favoriteRowsVersion] 是收藏行读取开始前捕获的事实版本：期间发生过
+  /// 切换 / 释放时 [FavoriteFact.adoptRows] 会拒绝这份旧快照。
+  void _storePlaylistTracks(
+    int playlistId,
+    List<PlaylistTrack> tracks, {
+    int? favoriteRowsVersion,
+  }) {
+    final read = _playlistTracksRead(playlistId);
+    if (playlistId == _favoritesPlaylistId) {
+      _favorites.adoptRows(
+        tracks,
+        version: favoriteRowsVersion ?? _favorites.rowsVersion,
+      );
+      final favoriteRows = _favorites.rows;
+      if (favoriteRows == null) {
+        // 读取期间事实被释放：结果不能留在 LRU 里冒充缓存，页面恢复后
+        // 还要能重新 ensure。
+        read.invalidate(discardValue: true);
+      } else {
+        read.seed(favoriteRows);
+      }
+    } else {
+      read.seed(tracks);
+    }
     _playlistTracksReads
       ..remove(playlistId)
       ..[playlistId] = read;
-    if (playlistId == _favoritesPlaylistId) {
-      _favorites.adoptRows(tracks);
-    }
     _evictOverflowPlaylistTracks();
   }
 
@@ -261,6 +287,9 @@ class LibraryProvider extends ChangeNotifier {
     ReadReconciliation<List<PlaylistTrack>?, Never>? read,
   }) async {
     final projection = read ?? _playlistTracksRead(playlistId);
+    final favoriteRowsVersion = playlistId == _favoritesPlaylistId
+        ? _favorites.rowsVersion
+        : null;
     final result = await projection.load(
       intent: mode,
       fetch: () =>
@@ -271,7 +300,11 @@ class LibraryProvider extends ChangeNotifier {
     }
     final value = result.value;
     if (result.accepted && value != null) {
-      _storePlaylistTracks(playlistId, value);
+      _storePlaylistTracks(
+        playlistId,
+        value,
+        favoriteRowsVersion: favoriteRowsVersion,
+      );
     }
     if (mode == _LoadMode.explicit || result.accepted) {
       _notify();
@@ -416,29 +449,15 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   void _syncFavoriteCount() {
-    final favoritesId = _favoritesPlaylistId;
-    if (favoritesId == null) return;
-    PlaylistInfo? favorites;
-    for (final playlist in _playlistsRead.value) {
-      if (playlist.id == favoritesId) {
-        favorites = playlist;
-        break;
-      }
-    }
+    final favorites = _favoritesPlaylist;
     if (favorites == null) return;
     final count = _favorites.count;
     if (favorites.trackCount == count) return;
     _playlistsRead.patch(
       (current) => [
         for (final playlist in current)
-          if (playlist.id == favoritesId)
-            PlaylistInfo(
-              id: playlist.id,
-              name: playlist.name,
-              createdAt: playlist.createdAt,
-              trackCount: count,
-              isFavorites: playlist.isFavorites,
-            )
+          if (playlist.id == favorites.id)
+            playlist.copyWith(trackCount: count)
           else
             playlist,
       ],
@@ -576,9 +595,10 @@ class LibraryProvider extends ChangeNotifier {
   Future<void> _refreshFavoritesQuietly() => DataPathTrace.async(
     'library.favorites.refresh',
     () async {
-      await _favorites.reload(readRows: _favorites.hasRows);
+      // 本轮先把事实校准完（通知由最后统一发）：列表清单落地后计数才有
+      // 新依据，中间通知会让 UI 先闪一帧旧计数。
+      await _favorites.reload(readRows: _favorites.rows != null, notify: false);
       if (_disposed) return;
-      // 计数 / 新建收藏列表都要靠列表清单落地；通知统一放到最后。
       await _loadPlaylists(_LoadMode.quiet, notify: false);
       _notify();
     },
@@ -603,11 +623,13 @@ class LibraryProvider extends ChangeNotifier {
     if (result.failed) {
       debugPrint('[Library] 加载列表失败: ${result.error}');
     }
-    // 列表清单是收藏列表 id 与 DB 计数的来源：先绑定 id（行读取要用），
-    // 再把计数交给事实校准；都在同一轮通知前完成，避免 UI 闪一下旧计数。
+    // 列表清单是收藏列表 id 与 DB 计数的来源：一次绑定同时完成 id 与计数
+    // 校准；都在同一轮通知前完成，避免 UI 闪一下旧计数。
     final favorites = _favoritesPlaylist;
-    _favorites.bindPlaylist(favorites?.id);
-    _favorites.seedCount(favorites?.trackCount ?? 0);
+    _favorites.bindPlaylist(
+      favorites?.id,
+      databaseCount: favorites?.trackCount ?? 0,
+    );
     _syncFavoriteCount();
     // 永远给终态：读投影已按「有旧列表 ready / 空列表 failed」收口，
     // 不能因为「曾经成功过」留在 loading（空库导入后刷新失败会让收藏页
@@ -622,12 +644,7 @@ class LibraryProvider extends ChangeNotifier {
     return null;
   }
 
-  int? get _favoritesPlaylistId {
-    for (final playlist in _playlistsRead.value) {
-      if (playlist.isFavorites) return playlist.id;
-    }
-    return null;
-  }
+  int? get _favoritesPlaylistId => _favoritesPlaylist?.id;
 
   /// 仅供测试/调试：最近一次仓库变更触发的重载 Future（完成后为 null 不安全，
   /// 这里保留最近一次，供测试确定性等待）。

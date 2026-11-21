@@ -1694,5 +1694,114 @@ void main() {
       await settle();
       expect(provider.playlists.single.trackCount, 0);
     });
+
+    test('旧收藏行快照晚到：不能删掉刚切换的收藏行', () async {
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+      );
+      await settle();
+      await provider.refreshPlaylists(force: true);
+      await provider.ensureFavoritesLoaded(force: true);
+      final favorites = provider.playlists.singleWhere((p) => p.isFavorites);
+      await provider.loadPlaylistTracks(favorites.id, force: true);
+
+      // 读取在途时收藏第二首：事实立即补一行并递增行版本。
+      final staleRows = await repository.listPlaylistTracks(favorites.id);
+      final gate = Completer<List<PlaylistTrack>>();
+      repository.nextPlaylistTracksSnapshot = gate;
+      final reading = provider.loadPlaylistTracks(favorites.id, force: true);
+      await Future<void>.delayed(Duration.zero);
+
+      final added = await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '2',
+        title: 'Song 2',
+      );
+      expect(added.isFavorite, isTrue);
+
+      // 旧快照（不含 2）晚到：必须丢弃，否则心形已亮、列表里却没有这首。
+      gate.complete(staleRows);
+      await reading;
+      await settle();
+
+      expect(provider.isFavorite('wy', '2'), isTrue);
+      expect(provider.playlists.single.trackCount, 2);
+      expect(
+        provider.playlistTracksView(favorites.id).tracks!.map((t) => t.songId),
+        ['1', '2'],
+      );
+    });
+
+    test('收藏计数补丁保留列表描述 / 分组 / 封面 / syncId', () async {
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: 'seed',
+        title: 'Seed',
+      );
+      await settle();
+      await provider.refreshPlaylists(force: true);
+      final favorites = provider.playlists.singleWhere((p) => p.isFavorites);
+
+      await provider.updatePlaylistDetails(
+        favorites.id,
+        name: favorites.name,
+        description: '收藏描述',
+        folder: '收藏分组',
+      );
+      await provider.setPlaylistCoverKey(favorites.id, 'playlist:cover');
+      await provider.refreshPlaylists(force: true);
+      final before = provider.playlists.singleWhere((p) => p.isFavorites);
+      expect(before.description, '收藏描述');
+      expect(before.folder, '收藏分组');
+      expect(before.coverKey, 'playlist:cover');
+
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+      );
+      await settle();
+
+      final after = provider.playlists.singleWhere((p) => p.isFavorites);
+      expect(after.trackCount, 2);
+      expect(after.description, before.description);
+      expect(after.folder, before.folder);
+      expect(after.coverKey, before.coverKey);
+      expect(after.syncId, before.syncId);
+    });
+
+    test('批量收藏校准只通知一次（列表清单落地后再发）', () async {
+      final favoritesId = await repository.createPlaylist('__favorites__');
+      final scratch = await repository.createPlaylist('scratch');
+      await repository.addTrackToPlaylist(
+        scratch,
+        PlaylistTrack(
+          playlistId: scratch,
+          sourceKey: 'wy',
+          songId: 'x',
+          title: 'X',
+          addedAt: 0,
+        ),
+      );
+      await provider.refreshPlaylists(force: true);
+      await provider.ensureFavoritesLoaded(force: true);
+      await settle();
+      expect(favoritesId, isPositive);
+
+      var notifications = 0;
+      void count() => notifications++;
+      provider.addListener(count);
+      addTearDown(() => provider.removeListener(count));
+
+      await repository.removeTracksFromPlaylist(scratch, [
+        (sourceKey: 'wy', songId: 'x'),
+      ], favoriteChange: true);
+      await Future<void>.delayed(Duration.zero);
+      await provider.pendingReload;
+
+      expect(notifications, 1, reason: '批量校准不应先闪一帧旧计数再刷新');
+    });
   });
 }

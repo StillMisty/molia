@@ -15,37 +15,6 @@ import 'package:flutter/foundation.dart';
 import '../../domain/models/library.dart';
 import '../../domain/ports/library_store.dart';
 
-/// 收藏事实的一帧不可变快照。
-///
-/// [rows] 为 null 表示收藏列表曲目还没有完整读过（只读过键）；消费方不能
-/// 把 null 当成「没有收藏」。
-class FavoriteSnapshot {
-  FavoriteSnapshot({
-    required Set<String> keys,
-    required List<PlaylistTrack>? rows,
-    required this.count,
-    required this.revision,
-  }) : keys = Set.unmodifiable(keys),
-       rows = rows == null ? null : List.unmodifiable(rows);
-
-  /// 规范收藏键（`sourceKey:songId`）。
-  final Set<String> keys;
-
-  /// 收藏列表行，按仓库口径（`sortOrder` → `addedAt`）有序；null = 未加载。
-  final List<PlaylistTrack>? rows;
-
-  /// 收藏列表展示计数（清单计数 / 已加载行 / 键集合中取最可信的一项）。
-  final int count;
-
-  /// 收藏事实版本：键集合真正变化或整表校准开始时递增。
-  final int revision;
-
-  bool contains(String sourceKey, String songId) =>
-      keys.contains('$sourceKey:$songId');
-
-  bool containsKey(String key) => keys.contains(key);
-}
-
 /// 读取期间到达的单曲切换：只保留每个 key 的最终状态。
 ///
 /// 行要跟着一起重放：旧列表快照落地后会删掉新增行，只补键会让收藏列表
@@ -86,8 +55,13 @@ class FavoriteFact extends ChangeNotifier {
   /// 读取代际：收藏键后发起的读取优先，旧快照不能回滚新写入。
   int _keysGeneration = 0;
 
-  /// 行读取代际：释放缓存 / 新一轮校准让更早的行读取结果作废。
-  int _rowsGeneration = 0;
+  /// 行快照版本：任何可能改变收藏行的操作（切换 / 释放 / 校准 / 接受
+  /// 一次行读取）都会递增。
+  ///
+  /// 行读取开始前取一次 [rowsVersion]，落地时带回 [adoptRows]；版本不一致
+  /// 说明期间发生过写入或释放，旧快照必须丢弃——否则会把刚收藏的行删掉
+  ///（键 / 计数已更新，列表里却没有）。
+  int _rowsVersion = 0;
 
   /// 收藏键在途读取数；归零时才重放读取期间的切换。
   int _keysInFlight = 0;
@@ -96,15 +70,7 @@ class FavoriteFact extends ChangeNotifier {
 
   bool _disposed = false;
 
-  /// 当前事实快照。
-  FavoriteSnapshot get snapshot => FavoriteSnapshot(
-    keys: _keys,
-    rows: _rows,
-    count: _count,
-    revision: _revision,
-  );
-
-  /// 收藏事实版本（单调递增）。
+  /// 收藏事实版本（键集合真正变化或整表校准开始时递增）。
   int get revision => _revision;
 
   /// 收藏列表展示计数。
@@ -113,22 +79,25 @@ class FavoriteFact extends ChangeNotifier {
   /// 收藏列表行；null = 尚未完整读取。
   List<PlaylistTrack>? get rows => _rows;
 
-  bool get hasRows => _rows != null;
+  /// 行快照版本；行读取开始时捕获，[adoptRows] 落地时带回。
+  int get rowsVersion => _rowsVersion;
 
+  /// 是否已收藏（键口径为 `sourceKey:songId`）。
   bool contains(String sourceKey, String songId) =>
-      _keys.contains('$sourceKey:$songId');
+      _keys.contains(_keyOf(sourceKey, songId));
 
-  bool containsKey(String key) => _keys.contains(key);
-
-  /// 绑定默认收藏列表 id。
+  /// 绑定默认收藏列表 id，并用列表清单的 DB 计数校准展示计数。
   ///
-  /// 行读取需要 id；id 变化说明旧行已不属于当前收藏列表，直接丢弃。键与
-  /// 计数来自 `favoriteKeys` / 列表清单，不因 id 变化失效。
-  void bindPlaylist(int? playlistId) {
-    if (_playlistId == playlistId) return;
-    _playlistId = playlistId;
-    _rows = null;
-    _rowsGeneration++;
+  /// 行读取需要 id；id 变化说明旧行已不属于当前收藏列表，直接丢弃并让
+  /// 在途行读取作废。计数只在没有更可信依据时采用 [databaseCount]（整表键 >
+  /// 已加载行 > 清单计数）。
+  void bindPlaylist(int? playlistId, {required int databaseCount}) {
+    if (_playlistId != playlistId) {
+      _playlistId = playlistId;
+      _rows = null;
+      _rowsVersion++;
+    }
+    _count = _resolveCount(baseline: databaseCount);
   }
 
   /// 首屏 / 导入后 / 失败重试：读取整表收藏键（可等待）。
@@ -157,11 +126,11 @@ class FavoriteFact extends ChangeNotifier {
   /// [readRows] 只应在「收藏列表行本来已加载」时为 true：保持旧行可见的
   /// 同时校准，不为一次同步把整表收藏曲目读进内存。本轮开始会丢弃旧的
   /// 待重放切换——数据库已经包含那些写入，读取快照才是新基线。
-  Future<void> reload({bool readRows = false}) async {
+  Future<void> reload({bool readRows = false, bool notify = true}) async {
     if (_disposed) return;
     _revision++;
     final keysGeneration = ++_keysGeneration;
-    final rowsGeneration = ++_rowsGeneration;
+    final rowsVersion = ++_rowsVersion;
     final rowsWereLoaded = _rows != null;
     _pending.clear();
     _keysInFlight++;
@@ -183,8 +152,9 @@ class FavoriteFact extends ChangeNotifier {
           final fresh = await _repository
               .listPlaylistTracks(playlistId)
               .timeout(_readTimeout);
-          if (_acceptRowsSnapshot(rowsGeneration)) {
+          if (_acceptRowsSnapshot(rowsVersion)) {
             _rows = List<PlaylistTrack>.of(fresh);
+            _rowsVersion++;
             _recount();
           }
         } catch (e) {
@@ -192,28 +162,29 @@ class FavoriteFact extends ChangeNotifier {
         }
       }
     } finally {
-      _finishRead();
+      _finishRead(notify: notify);
     }
   }
 
-  /// 用一次列表曲目读取的结果替换收藏行（完整快照）。
+  /// 用一次收藏列表曲目读取的结果替换行（完整快照）。
   ///
-  /// 只在读取投影接受结果后调用；更新计数但不改版本（版本只表达键变化）。
-  void adoptRows(List<PlaylistTrack> rows) {
-    if (_disposed) return;
+  /// [version] 是读取开始前捕获的 [rowsVersion]。版本不一致说明期间发生过
+  /// 切换 / 释放 / 校准：这份快照可能删掉刚写入的行，必须丢弃。
+  void adoptRows(List<PlaylistTrack> rows, {required int version}) {
+    if (_disposed || version != _rowsVersion) return;
     _rows = List<PlaylistTrack>.of(rows);
+    _rowsVersion++;
     _recount();
-    notifyListeners();
+    _notify();
   }
 
   /// 释放收藏行（托盘隐藏 / 低内存 / 整表失效）。
   ///
   /// 键与计数保留：恢复后心形与收藏入口立即有依据；行在页面重新 ensure 时
-  /// 再读。代际自增让释放前的在途行读取落地后作废。
+  /// 再读。版本自增让释放前的在途行读取落地后作废（即使当前还没有行）。
   void releaseRows() {
-    if (_rows == null) return;
     _rows = null;
-    _rowsGeneration++;
+    _rowsVersion++;
   }
 
   /// 丢弃可信基线（`.lxmc` 导入等全量失效）。
@@ -224,20 +195,11 @@ class FavoriteFact extends ChangeNotifier {
     _keysLoaded = false;
     _keysAuthoritative = false;
     _keysGeneration++;
-    _rowsGeneration++;
+    _rowsVersion++;
     _rows = null;
     _pending.clear();
     _revision++;
-    notifyListeners();
-  }
-
-  /// 列表清单读到的默认收藏计数（数据库真值）。
-  ///
-  /// 只在没有更可信的本地依据时采用：整表收藏键 > 已加载收藏行 > 清单计数。
-  /// 不在这里通知：调用方（列表清单读取）会在同一轮统一投影并通知。
-  void seedCount(int count) {
-    final next = _countFromBaseline(count);
-    if (next != _count) _count = next;
+    _notify();
   }
 
   /// 应用一次已落库的单曲切换（仓库变更事件）。
@@ -253,12 +215,11 @@ class FavoriteFact extends ChangeNotifier {
         track: toggle.favorite ? (toggle.track ?? previous?.track) : null,
       );
     }
-    final changed = _mutate(
+    _mutate(
       add: toggle.favorite ? [toggle.key] : const [],
       remove: toggle.favorite ? const [] : [toggle.key],
       rows: [if (toggle.favorite && toggle.track != null) toggle.track!],
     );
-    if (changed) notifyListeners();
   }
 
   /// 收藏 / 取消收藏（唯一写入路径）。
@@ -286,12 +247,11 @@ class FavoriteFact extends ChangeNotifier {
       durationMs: durationMs,
       raw: raw,
     );
-    final key = '$sourceKey:$songId';
-    final changed = _mutate(
+    final key = _keyOf(sourceKey, songId);
+    _mutate(
       add: favorite ? [key] : const [],
       remove: favorite ? const [] : [key],
     );
-    if (changed) notifyListeners();
     return favorite;
   }
 
@@ -303,8 +263,7 @@ class FavoriteFact extends ChangeNotifier {
     if (tracks.isEmpty) return 0;
     final added = await _repository.addFavorites(tracks);
     if (added > 0) {
-      final changed = _mutate(add: [for (final track in tracks) track.key]);
-      if (changed) notifyListeners();
+      _mutate(add: [for (final track in tracks) track.key]);
     }
     return added;
   }
@@ -314,10 +273,9 @@ class FavoriteFact extends ChangeNotifier {
     if (keys.isEmpty) return 0;
     final removed = await _repository.removeFavorites(keys);
     if (removed > 0) {
-      final changed = _mutate(
-        remove: [for (final key in keys) '${key.sourceKey}:${key.songId}'],
+      _mutate(
+        remove: [for (final key in keys) _keyOf(key.sourceKey, key.songId)],
       );
-      if (changed) notifyListeners();
     }
     return removed;
   }
@@ -343,9 +301,7 @@ class FavoriteFact extends ChangeNotifier {
     if (track == null || rows.any((row) => row.key == toggle.key)) {
       return rows;
     }
-    final row = wrap(track);
-    final index = rows.indexWhere((item) => _compareRows(item, row) > 0);
-    return List<T>.of(rows)..insert(index < 0 ? rows.length : index, row);
+    return _insertOrdered(rows, wrap(track));
   }
 
   void _replaceKeys(Set<String> fresh) {
@@ -359,16 +315,19 @@ class FavoriteFact extends ChangeNotifier {
   bool _acceptKeySnapshot(int generation) =>
       !_disposed && generation == _keysGeneration;
 
-  bool _acceptRowsSnapshot(int generation) =>
-      !_disposed && generation == _rowsGeneration;
+  bool _acceptRowsSnapshot(int version) =>
+      !_disposed && version == _rowsVersion;
 
-  /// 一次读取结束：归还在途计数，最后一个读取落地后重放并只通知一次。
-  void _finishRead() {
+  /// 一次读取结束：归还在途计数，最后一个读取落地后重放并通知一次。
+  ///
+  /// [notify] 为 false 时只更新状态，通知由调用方在后续列表清单落地后统一
+  /// 发出（批量校准避免中间帧用旧计数刷新 UI）。
+  void _finishRead({bool notify = true}) {
     _keysInFlight--;
     if (_disposed) return;
     _drainPending();
     _recount();
-    notifyListeners();
+    if (notify) _notify();
   }
 
   /// 最后一个收藏键读取落地后，按到达顺序折叠并重放期间的切换。
@@ -434,7 +393,7 @@ class FavoriteFact extends ChangeNotifier {
       }
       for (final track in rows) {
         if (next.any((row) => row.key == track.key)) continue;
-        next = _insertRow(next, track);
+        next = _insertOrdered(next, track);
         changed = true;
       }
       _rows = next;
@@ -444,18 +403,20 @@ class FavoriteFact extends ChangeNotifier {
       _revision++;
       changed = true;
     }
-    if (changed) _recount(delta: addedCount - removedCount);
-    return changed;
+    if (!changed) return false;
+    // 键或行变了：任何在途的行快照都可能是旧基线（会删掉刚写入的行）。
+    _rowsVersion++;
+    _recount(delta: addedCount - removedCount);
+    _notify();
+    return true;
   }
 
-  List<PlaylistTrack> _insertRow(
-    List<PlaylistTrack> current,
-    PlaylistTrack track,
+  static List<T> _insertOrdered<T extends FavoriteOrderedRow>(
+    List<T> current,
+    T row,
   ) {
-    final index = current.indexWhere((row) => _compareRows(row, track) > 0);
-    final next = List<PlaylistTrack>.of(current);
-    next.insert(index < 0 ? next.length : index, track);
-    return next;
+    final index = current.indexWhere((item) => _compareRows(item, row) > 0);
+    return List<T>.of(current)..insert(index < 0 ? current.length : index, row);
   }
 
   /// 收藏行的仓库顺序：`sortOrder` 升序，同序按 `addedAt`。
@@ -469,22 +430,25 @@ class FavoriteFact extends ChangeNotifier {
   /// 计数的唯一优先级：整表收藏键 > 已加载收藏行 > 清单计数 ± 净变化。
   ///
   /// 前两者都是权威快照，重放时不会把校准已包含的切换再算一次；只有两者
-  /// 都不可用时才在现有计数上做单步增减。
-  int _countFromBaseline(int baseline) {
+  /// 都不可用时才在 [baseline] 上做单步增减。
+  int _resolveCount({required int baseline, int delta = 0}) {
     if (_keysAuthoritative) return _keys.length;
     final rows = _rows;
     if (rows != null) return rows.length;
-    return baseline;
+    final next = baseline + delta;
+    return next < 0 ? 0 : next;
   }
 
   void _recount({int delta = 0}) {
-    if (_keysAuthoritative) {
-      _count = _keys.length;
-    } else if (_rows != null) {
-      _count = _rows!.length;
-    } else if (delta != 0) {
-      _count = _count + delta < 0 ? 0 : _count + delta;
-    }
+    _count = _resolveCount(baseline: _count, delta: delta);
+  }
+
+  /// 收藏键口径（与仓库 `(sourceKey, songId)` 唯一约束一致）。
+  static String _keyOf(String sourceKey, String songId) => '$sourceKey:$songId';
+
+  /// dispose 后不再向已销毁的监听器发通知（写入 / 读取可能跨销毁边界完成）。
+  void _notify() {
+    if (!_disposed) notifyListeners();
   }
 
   @override

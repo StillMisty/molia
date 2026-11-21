@@ -11,6 +11,7 @@ import '../support/fake_library_repository.dart';
 class _GatedLibraryRepository extends FakeLibraryRepository {
   Completer<Set<String>>? nextKeys;
   Completer<List<PlaylistTrack>>? nextTracks;
+  Completer<void>? nextAddFavorites;
   int keysCalls = 0;
   int tracksCalls = 0;
 
@@ -34,6 +35,16 @@ class _GatedLibraryRepository extends FakeLibraryRepository {
       return gate.future;
     }
     return super.listPlaylistTracks(playlistId, limit: limit);
+  }
+
+  @override
+  Future<int> addFavorites(List<PlaylistTrack> tracks) async {
+    final gate = nextAddFavorites;
+    if (gate != null) {
+      nextAddFavorites = null;
+      await gate.future;
+    }
+    return super.addFavorites(tracks);
   }
 }
 
@@ -69,10 +80,13 @@ void main() {
     fact.dispose();
   });
 
+  void adoptRows(List<PlaylistTrack> rows) =>
+      fact.adoptRows(rows, version: fact.rowsVersion);
+
   Future<int> seedFavorites(List<PlaylistTrack> rows) async {
     await repository.addFavorites(rows);
     final playlist = await repository.findPlaylistByName('__favorites__');
-    fact.bindPlaylist(playlist!.id);
+    fact.bindPlaylist(playlist!.id, databaseCount: rows.length);
     return playlist.id;
   }
 
@@ -87,7 +101,6 @@ void main() {
     expect(fact.rows, isNull, reason: '整表读取只读键，不顺手把整表曲目读进内存');
     expect(fact.count, 2);
     expect(fact.revision, greaterThan(revision));
-    expect(fact.snapshot.keys, {'wy:1', 'wy:2'});
   });
 
   test('已加载且非 force：重复 ensure 不再查库', () async {
@@ -103,7 +116,7 @@ void main() {
   test('单曲切换：键 / 行 / 计数一次更新，重复补丁不递增版本', () async {
     await seedFavorites([track('1', sortOrder: 0, addedAt: 1)]);
     await fact.ensureLoaded(force: true);
-    fact.adoptRows([track('1', sortOrder: 0, addedAt: 1)]);
+    adoptRows([track('1', sortOrder: 0, addedAt: 1)]);
 
     final before = fact.revision;
     fact.applyChange(addToggle(track('2', sortOrder: 1, addedAt: 2)));
@@ -125,7 +138,7 @@ void main() {
   });
 
   test('行顺序：sortOrder 优先，同序按 addedAt', () async {
-    fact.adoptRows([
+    adoptRows([
       track('b', sortOrder: 1, addedAt: 20),
       track('d', sortOrder: 3, addedAt: 1),
     ]);
@@ -139,7 +152,7 @@ void main() {
 
   test('读取在途时切换：旧快照落地后键与行都被重放', () async {
     await seedFavorites([track('1', sortOrder: 0, addedAt: 1)]);
-    fact.adoptRows([track('1', sortOrder: 0, addedAt: 1)]);
+    adoptRows([track('1', sortOrder: 0, addedAt: 1)]);
 
     final gate = Completer<Set<String>>();
     repository.nextKeys = gate;
@@ -161,7 +174,7 @@ void main() {
   test('批量校准在途时切换：旧键 / 旧行快照都不会覆盖新收藏', () async {
     await seedFavorites([track('1', sortOrder: 0, addedAt: 1)]);
     await fact.ensureLoaded(force: true);
-    fact.adoptRows([track('1', sortOrder: 0, addedAt: 1)]);
+    adoptRows([track('1', sortOrder: 0, addedAt: 1)]);
 
     final keysGate = Completer<Set<String>>();
     final tracksGate = Completer<List<PlaylistTrack>>();
@@ -179,6 +192,49 @@ void main() {
     expect(fact.contains('wy', '2'), isTrue);
     expect(fact.count, 2);
     expect(fact.rows!.map((row) => row.songId), ['1', '2']);
+  });
+
+  test('旧行快照不能删掉刚切换的收藏行', () async {
+    await seedFavorites([track('1', sortOrder: 0, addedAt: 1)]);
+    await fact.ensureLoaded(force: true);
+    adoptRows([track('1', sortOrder: 0, addedAt: 1)]);
+
+    // 读取开始前捕获版本；读取在途时用户收藏了 2。
+    final version = fact.rowsVersion;
+    fact.applyChange(addToggle(track('2', sortOrder: 1, addedAt: 2)));
+
+    // 旧快照（不含 2）晚到：必须丢弃，否则心形已亮、列表却没有这首歌。
+    fact.adoptRows([track('1', sortOrder: 0, addedAt: 1)], version: version);
+
+    expect(fact.contains('wy', '2'), isTrue);
+    expect(fact.count, 2);
+    expect(fact.rows!.map((row) => row.songId), ['1', '2']);
+  });
+
+  test('releaseRows 后旧行读取不能把行写回来', () async {
+    await seedFavorites([track('1')]);
+    await fact.ensureLoaded(force: true);
+    adoptRows([track('1')]);
+    final version = fact.rowsVersion;
+
+    fact.releaseRows();
+    fact.adoptRows([track('1')], version: version);
+
+    expect(fact.rows, isNull);
+    expect(fact.contains('wy', '1'), isTrue);
+  });
+
+  test('dispose 后完成的写入不再通知', () async {
+    final gate = Completer<void>();
+    repository.nextAddFavorites = gate;
+    final local = FavoriteFact(repository: repository);
+    final write = local.addAll([track('1')]);
+
+    local.dispose();
+    gate.complete();
+
+    await expectLater(write, completes);
+    expect(local.contains('wy', '1'), isTrue);
   });
 
   test('后发起的整表读取优先，旧快照不能回滚新快照', () async {
@@ -241,7 +297,7 @@ void main() {
   });
 
   test('计数优先级：整表键 > 已加载行 > 清单计数 ± 净变化', () async {
-    fact.seedCount(7);
+    fact.bindPlaylist(null, databaseCount: 7);
     expect(fact.count, 7, reason: '没有更可信依据时采用清单计数');
 
     fact.applyChange(addToggle(track('1')));
@@ -249,9 +305,9 @@ void main() {
     fact.applyChange(removeToggle('1'));
     expect(fact.count, 7);
 
-    fact.adoptRows([track('1'), track('2')]);
+    adoptRows([track('1'), track('2')]);
     expect(fact.count, 2, reason: '已加载行优先于清单计数');
-    fact.seedCount(9);
+    fact.bindPlaylist(null, databaseCount: 9);
     expect(fact.count, 2);
 
     await fact.ensureLoaded(force: true);
@@ -262,7 +318,7 @@ void main() {
 
   test('releaseRows：保留键与计数，行等页面重新读取', () async {
     await fact.addAll([track('1')]);
-    fact.adoptRows([track('1')]);
+    adoptRows([track('1')]);
     expect(fact.rows, isNotNull);
 
     fact.releaseRows();
