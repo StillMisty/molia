@@ -78,7 +78,7 @@ class _LazyRawMap extends MapBase<String, dynamic> {
 /// raw 有「DB 原串 / 已解码 Map」两种来源：DB 路径保留 [rawJson] 原样，
 /// 构建索引与合并去重都不解码；内存路径（收藏切换 / 下载记录）直接带 Map。
 /// [raw] 返回只读惰性壳，真正的 jsonDecode 延迟到首次读 payload。
-class BrowseTrack {
+class BrowseTrack implements FavoriteOrderedRow {
   BrowseTrack({
     required this.sourceKey,
     required this.songId,
@@ -110,11 +110,14 @@ class BrowseTrack {
 
   _LazyRawMap? _lazyRaw;
 
+  @override
   final int addedAt;
 
   /// 列表内位置（仅用于重建时按 DB 的 `sortOrder` 稳定排序）。
+  @override
   final int sortOrder;
 
+  @override
   String get key => '$sourceKey:$songId';
 
   bool get hasCover => coverUrl != null && coverUrl!.isNotEmpty;

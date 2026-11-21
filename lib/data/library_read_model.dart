@@ -1,4 +1,4 @@
-/// 资料库读侧的内存策略：播放历史顺序 / 收藏计数的唯一实现。
+/// 资料库读侧的内存策略：播放历史顺序的唯一实现。
 ///
 /// 这些规则收成纯函数，provider 只负责持有状态并调用；SQL 真值由仓库负责，
 /// 内存侧只做与之等价的合并 / 计数。
@@ -78,35 +78,5 @@ abstract final class LibraryHistoryOrder {
             return byTime != 0 ? byTime : a.index.compareTo(b.index);
           });
     return [for (final item in decorated) item.entry];
-  }
-}
-
-/// 默认收藏列表曲目计数的优先级策略。
-///
-/// 优先级：整表收藏键 > 已加载列表长度 > 当前计数 ±1。
-/// 前两者都是权威快照，乐观 toggle 重放时不会把校准已包含的切换再算一次；
-/// 只有两者都不可用时才在现有计数上做单步增减。
-abstract final class FavoriteCountPolicy {
-  static int trackCount({
-    /// 收藏键是否来自仓库整表（而非只有一次乐观 toggle）。
-    required bool authoritative,
-
-    /// 整表收藏键数；[authoritative] 为 true 时必须传入。
-    required int favoriteKeyCount,
-
-    /// 已加载的收藏列表长度；null = 尚未加载。
-    required int? loadedTrackCount,
-
-    /// 当前显示的计数。
-    required int currentCount,
-
-    /// 本次 toggle 的方向：> 0 收藏（+1），< 0 取消（-1），0 不变。
-    required int delta,
-  }) {
-    if (authoritative) return favoriteKeyCount;
-    if (loadedTrackCount != null) return loadedTrackCount;
-    if (delta > 0) return currentCount + 1;
-    if (delta < 0) return currentCount > 0 ? currentCount - 1 : 0;
-    return currentCount;
   }
 }
