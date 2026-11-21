@@ -25,7 +25,6 @@ class LibraryReadSnapshot<T> {
     required this.value,
     required this.state,
     required this.loaded,
-    required this.authoritative,
     required this.reading,
   });
 
@@ -38,9 +37,6 @@ class LibraryReadSnapshot<T> {
   /// 是否至少成功读到过一次整表快照。
   final bool loaded;
 
-  /// 当前 [value] 是否来自一次完整的仓库快照（收藏计数校准用）。
-  final bool authoritative;
-
   /// 是否有读取在途。
   final bool reading;
 }
@@ -51,15 +47,9 @@ class LibraryReadSnapshot<T> {
 /// 写回投影。代际过期 / 释放后的结果仍原样返回给显式等待方，只是不进入
 /// 缓存——与既有 `loadPlaylistTracks` 的返回语义一致。
 class LibraryReadResult<T> {
-  const LibraryReadResult._({
-    required this.accepted,
-    required this.generation,
-    this.value,
-    this.error,
-  });
+  const LibraryReadResult._({required this.accepted, this.value, this.error});
 
   final bool accepted;
-  final int generation;
   final T? value;
   final Object? error;
 
@@ -71,7 +61,7 @@ class LibraryReadResult<T> {
 /// 通用读投影协调器。
 ///
 /// 职责：
-/// - 记录读取阶段、loaded / authoritative / 最近错误；
+/// - 记录读取阶段、loaded / 最近错误；
 /// - 每次读取捕获代际，只有仍有效的读取能写回（显式释放才递增代际）；
 /// - 记录在途读取，读取期间到达的写入先缓冲，最后一个读取落地后重放；
 /// - quiet 读取按 [mergeQuiet] 合并、不翻 loading；explicit 读取替换快照。
@@ -104,7 +94,6 @@ class ReadReconciliation<T, W> {
   T _value;
   LibraryReadState _state = const LibraryReadState.loading();
   bool _loaded = false;
-  bool _authoritative = false;
   Object? _error;
   int _generation = 0;
   int _inFlight = 0;
@@ -116,9 +105,7 @@ class ReadReconciliation<T, W> {
   T get value => _value;
   LibraryReadState get state => _state;
   bool get loaded => _loaded;
-  bool get authoritative => _authoritative;
   Object? get error => _error;
-  int get generation => _generation;
   bool get reading => _inFlight > 0;
 
   /// 显式读取是否已标记（build 期 ensure 的同步占位也算）。
@@ -128,7 +115,6 @@ class ReadReconciliation<T, W> {
     value: _value,
     state: _state,
     loaded: _loaded,
-    authoritative: _authoritative,
     reading: reading,
   );
 
@@ -191,7 +177,6 @@ class ReadReconciliation<T, W> {
       _explicitQueued = false;
     }
     _loaded = false;
-    _authoritative = false;
     if (discardPending) _pending = const [];
     if (discardValue) {
       _value = _initialValue;
@@ -210,10 +195,10 @@ class ReadReconciliation<T, W> {
     if (intent == LibraryReadIntent.quiet &&
         canReadQuietly != null &&
         !canReadQuietly(_value)) {
-      return LibraryReadResult<T>._(accepted: false, generation: _generation);
+      return const LibraryReadResult._(accepted: false);
     }
     if (_disposed) {
-      return LibraryReadResult<T>._(accepted: false, generation: _generation);
+      return const LibraryReadResult._(accepted: false);
     }
 
     if (intent == LibraryReadIntent.explicit) {
@@ -234,26 +219,17 @@ class ReadReconciliation<T, W> {
             ? mergeQuiet(_value, fresh)
             : fresh;
         _loaded = true;
-        _authoritative = true;
         _error = null;
         _state = const LibraryReadState.ready();
       }
-      result = LibraryReadResult<T>._(
-        accepted: accepted,
-        generation: generation,
-        value: fresh,
-      );
+      result = LibraryReadResult<T>._(accepted: accepted, value: fresh);
     } catch (e) {
       final accepted = !_disposed && generation == _generation;
       if (accepted) {
         _error = e;
         _state = failureState(_value, e);
       }
-      result = LibraryReadResult<T>._(
-        accepted: accepted,
-        generation: generation,
-        error: e,
-      );
+      result = LibraryReadResult<T>._(accepted: accepted, error: e);
     }
 
     _finishRead(intent, generation);
