@@ -11,7 +11,7 @@ import 'wy_music_detail.dart';
 /// - 榜单表为 LX 内置静态列表（官方 `weapi/toplist` 接口需要登录态，
 ///   LX 侧即硬编码该表，见其 `getBoards` 注释）；
 /// - `getTracks(BuiltinTransport http, bangid)`：weapi v3 歌单详情 → trackIds → 批量歌曲详情；
-/// - 结果缓存 5 分钟（统一走注入 transport 的 `cached`）。
+/// - 结果缓存 5 分钟（统一走发现执行器与注入的 transport）。
 class WyLeaderboard {
   WyLeaderboard._();
 
@@ -189,25 +189,32 @@ class WyLeaderboard {
   ///
   /// 只发一次详情请求，不批量补歌曲详情；失败交给发现页占位 / 首曲封面兜底。
   static Future<String?> getCover(BuiltinTransport http, String bangid) {
-    return http.cached('wy:leaderboard-cover:$bangid', () async {
-      final body = await lxHttpPost(
-        http,
-        'https://music.163.com/weapi/v3/playlist/detail',
-        form: true,
-        body: weapiForm({'id': bangid, 'n': 1, 'p': 1}),
-      );
-      if (body is! Map || body['code'] != 200 || body['playlist'] is! Map) {
-        throw StateError('wy 榜单封面获取失败');
-      }
-      final playlist = body['playlist'] as Map;
-      final url = (playlist['coverImgUrl'] ?? playlist['coverUrl'])
-          ?.toString()
-          .trim();
-      if (url == null || url.isEmpty) {
-        throw StateError('wy 榜单封面为空');
-      }
-      return url;
-    });
+    return runDiscoverCall(
+      DiscoverRequestCall<String>(
+        key: 'wy:leaderboard-cover:$bangid',
+        budget: BuiltinRetryBudget.singleAttempt,
+        message: 'wy 榜单封面获取失败',
+        request: () => lxHttpPost(
+          http,
+          'https://music.163.com/weapi/v3/playlist/detail',
+          form: true,
+          body: weapiForm({'id': bangid, 'n': 1, 'p': 1}),
+        ),
+        isInvalid: (body) =>
+            body is! Map || body['code'] != 200 || body['playlist'] is! Map,
+        parse: (body) {
+          final playlist = body['playlist'] as Map;
+          final url = (playlist['coverImgUrl'] ?? playlist['coverUrl'])
+              ?.toString()
+              .trim();
+          if (url == null || url.isEmpty) {
+            throw StateError('wy 榜单封面为空');
+          }
+          return url;
+        },
+      ),
+      http,
+    );
   }
 
   /// 与 LX 一致：详情失败重试至多 6 次，歌曲详情失败同样重试。

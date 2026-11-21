@@ -7,13 +7,16 @@
 /// 3. 业务失败（非法载荷）走「重试 → 用尽 → [StateError]」而不是别的异常，
 ///    且重试预算（请求次数）由各用例的 `attempts` 断言钉住。
 ///
-/// 缓存语义（命中 / 失败不缓存）由 `builtin_cached_retry_test.dart` 钉住，这里不重复。
+/// 迁移后的缓存身份也在这里钉住：成功结果必须落在迁移前的
+/// `{platform}:{type}:{params}` 键上，失败不进缓存。缓存命中 / single-flight
+/// 的通用语义见 `builtin_cached_retry_cases.dart`。
 library;
 
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/cache/request_cache.dart';
 import 'package:molia/domain/models/discover.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/crypto_utils.dart';
@@ -21,6 +24,7 @@ import 'package:molia/sources/builtin/discover_source.dart';
 import 'package:molia/sources/lx/lx_native_utils.dart';
 
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 /// 按 URL 子串路由的发现请求桩：记录全部请求；未路由的请求直接失败，
 /// 保证「绕开注入 client 的裸请求」不会被静默放过。
@@ -59,13 +63,17 @@ class _BoundSource {
 }
 
 class _Stub {
-  _Stub(this.routes);
+  _Stub(this.routes)
+    : cache = RequestCache(ttl: BuiltinTransport.defaultCacheTtl);
 
   /// URL 子串 → 响应体；按插入顺序首个命中生效（更具体的串放前面）。
   final Map<String, String> routes;
   final List<Uri> requests = [];
 
-  late final BuiltinTransport transport = BuiltinTransport(
+  /// 与 transport 共享的结果缓存：用例直接断言发现端点的缓存键。
+  final RequestCache cache;
+
+  late final BuiltinTransport transport = testTransport(
     dio: mockDio((request) async {
       final url = request.uri.toString();
       requests.add(request.uri);
@@ -76,6 +84,7 @@ class _Stub {
       }
       throw StateError('未路由的请求: $url');
     }),
+    cache: cache,
   );
 
   _BoundSource bind(DiscoverSource source) => _BoundSource(source, this);
@@ -102,6 +111,16 @@ Future<void> _expectCacheHit(
   final before = source.requests.length;
   await run();
   expect(source.requests, hasLength(before), reason: '二次调用应命中缓存');
+}
+
+/// 成功结果必须落在迁移前约定的缓存键上（键是缓存身份，不能随迁移漂移）。
+void _expectCachedKey(_Stub stub, String key) {
+  expect(stub.cache.containsKey(key), isTrue, reason: '缺少缓存键 $key');
+}
+
+/// 失败结果不得进缓存（与迁移前的 `cached(...)` 一致）。
+void _expectNotCachedKey(_Stub stub, String key) {
+  expect(stub.cache.containsKey(key), isFalse, reason: '失败不应缓存 $key');
 }
 
 /// 酷我 wbd 接口响应需 AES-128-ECB/PKCS7 加密（与适配器解码对称）。
@@ -198,6 +217,7 @@ void main() {
       expect(tags.categories.single.tags.single.id, '100-10000');
       expect(tags.hotTags.single.id, '200-43');
       expect(ok.requests, hasLength(2));
+      _expectCachedKey(ok, 'kw:tags');
 
       final bad = _Stub({
         'getTagList': '{"code":1}',
@@ -210,6 +230,7 @@ void main() {
         attempts: 6,
         reason: '两个取数各自重试 3 次',
       );
+      _expectNotCachedKey(bad, 'kw:tags');
     });
 
     test('歌单：推荐（tagId 空）与标签两条分支、失败重试 3 次', () async {
@@ -249,6 +270,8 @@ void main() {
         tagSource,
         () => tagSource.playlists('100-10000', 1),
       );
+      _expectCachedKey(recommend, 'kw:playlists::1');
+      _expectCachedKey(tag, 'kw:playlists:100-10000:1');
 
       final bad = _Stub({'getTagPlayList': '{"code":1}'});
       final badSource = bad.bind(discover);
@@ -257,6 +280,7 @@ void main() {
         () => badSource.playlists('100-10000', 1),
         attempts: 3,
       );
+      _expectNotCachedKey(bad, 'kw:playlists:100-10000:1');
     });
 
     test('歌单搜索：伪 JSON 解析；直连失败一次即 StateError', () async {
@@ -270,6 +294,7 @@ void main() {
       expect(page.playlists.single.id, '9');
       expect(page.playlists.single.author, '作者');
       expect(page.total, 1);
+      _expectCachedKey(ok, 'kw:playlist-search:夏:1');
 
       // 伪 JSON 转出来不是 Map（数组）才触发业务失败分支。
       final bad = _Stub({'search.kuwo.cn/r.s': '[]'});
@@ -279,6 +304,7 @@ void main() {
         () => badSource.searchPlaylists('夏', 1),
         attempts: 1,
       );
+      _expectNotCachedKey(bad, 'kw:playlist-search:夏:1');
     });
 
     test('歌单详情：digest8 解析曲目、失败重试 3 次', () async {
@@ -307,6 +333,7 @@ void main() {
       final detail = await source.playlistDetail('123', 1);
       expect(detail.info.name, '歌单');
       expect(detail.tracks.single.artist, 'A、B');
+      _expectCachedKey(ok, 'kw:playlist-detail:123');
 
       final bad = _Stub({'nplserver.kuwo.cn/pl.svc': '{"result":"no"}'});
       final badSource = bad.bind(discover);
@@ -315,6 +342,7 @@ void main() {
         () => badSource.playlistDetail('123', 1),
         attempts: 3,
       );
+      _expectNotCachedKey(bad, 'kw:playlist-detail:123');
     });
 
     test('歌单详情：digest5 先换算 sourceid 再取曲目', () async {
@@ -337,6 +365,31 @@ void main() {
       expect(detail.info.id, '888');
       expect(stub.requests, hasLength(2));
       expect(stub.requests.last.query, contains('pid=888'));
+      _expectCachedKey(stub, 'kw:playlist-detail:digest-5__777');
+    });
+
+    test('榜单封面：bang_info 解析 pic；失败不缓存', () async {
+      final ok = _Stub({
+        'bang/bang_info': _kwWbdResponse(
+          jsonEncode({
+            'code': 200,
+            'data': {'pic': 'http://img/cover.jpg'},
+          }),
+        ),
+      });
+      final source = ok.bind(discover);
+      expect(await source.leaderboardCover('93'), 'http://img/cover.jpg');
+      _expectCachedKey(ok, 'kw:leaderboard-cover:93');
+      await _expectCacheHit(source, () => source.leaderboardCover('93'));
+
+      final bad = _Stub({'bang/bang_info': 'not-base64'});
+      final badSource = bad.bind(discover);
+      await _expectStateError(
+        badSource,
+        () => badSource.leaderboardCover('93'),
+        attempts: 1,
+      );
+      _expectNotCachedKey(bad, 'kw:leaderboard-cover:93');
     });
 
     test('热搜词：解析、失败重试 3 次', () async {
@@ -430,10 +483,12 @@ void main() {
       final tags = await source.tags();
       expect(tags.hotTags.single.name, '经典');
       expect(tags.categories.single.tags.single.id, '222');
+      _expectCachedKey(ok, 'kg:tags');
 
       final bad = _Stub({'is_smarty=1&': '{"status":0}'});
       final badSource = bad.bind(discover);
       await _expectStateError(badSource, () => badSource.tags(), attempts: 1);
+      _expectNotCachedKey(bad, 'kg:tags');
     });
 
     test('歌单：推荐与标签两条分支、失败重试 3 次', () async {
@@ -468,6 +523,8 @@ void main() {
       expect(tag.playlists.single.name, '歌单');
       expect(tag.total, 10);
       expect(ok.requests, hasLength(3), reason: '推荐 1 次 + 标签列表/信息 2 次');
+      _expectCachedKey(ok, 'kg:playlists::1');
+      _expectCachedKey(ok, 'kg:playlists:222:1');
 
       final bad = _Stub({'is_ajax=1': '{"status":0}'});
       final badSource = bad.bind(discover);
@@ -476,6 +533,7 @@ void main() {
         () => badSource.playlists('', 1),
         attempts: 3,
       );
+      _expectNotCachedKey(bad, 'kg:playlists::1');
     });
 
     test('歌单搜索：解析、直连失败一次即 StateError', () async {
@@ -502,6 +560,7 @@ void main() {
       final page = await source.searchPlaylists('周', 1);
       expect(page.playlists.single.id, 'id_5');
       expect(page.total, 1);
+      _expectCachedKey(ok, 'kg:playlist-search:周:1');
 
       final bad = _Stub({'api/v3/search/special': '{"errcode":1}'});
       final badSource = bad.bind(discover);
@@ -510,6 +569,7 @@ void main() {
         () => badSource.searchPlaylists('周', 1),
         attempts: 1,
       );
+      _expectNotCachedKey(bad, 'kg:playlist-search:周:1');
     });
 
     test('歌单详情：HTML + gateway 批量信息、失败重试 3 次', () async {
@@ -542,6 +602,7 @@ void main() {
       expect(detail.tracks.single.title, '歌');
       expect(detail.tracks.single.durationMs, 212000);
       expect(ok.requests, hasLength(2));
+      _expectCachedKey(ok, 'kg:playlist-detail:123');
 
       final bad = _Stub({'special/single/': '<html></html>'});
       final badSource = bad.bind(discover);
@@ -550,6 +611,29 @@ void main() {
         () => badSource.playlistDetail('id_123', 1),
         attempts: 3,
       );
+      _expectNotCachedKey(bad, 'kg:playlist-detail:123');
+    });
+
+    test('榜单封面：rank/info 解析 imgurl；失败不缓存', () async {
+      final ok = _Stub({
+        'api/v3/rank/info': jsonEncode({
+          'status': 1,
+          'data': {'img': 'http://img/cover{size}.jpg'},
+        }),
+      });
+      final source = ok.bind(discover);
+      expect(await source.leaderboardCover('8888'), 'http://img/cover480.jpg');
+      _expectCachedKey(ok, 'kg:leaderboard-cover:8888');
+      await _expectCacheHit(source, () => source.leaderboardCover('8888'));
+
+      final bad = _Stub({'api/v3/rank/info': '{"status":0}'});
+      final badSource = bad.bind(discover);
+      await _expectStateError(
+        badSource,
+        () => badSource.leaderboardCover('8888'),
+        attempts: 1,
+      );
+      _expectNotCachedKey(bad, 'kg:leaderboard-cover:8888');
     });
 
     test('热搜词：解析、失败重试 3 次', () async {
@@ -599,6 +683,7 @@ void main() {
       expect(tracks.single.title, '歌');
       expect(tracks.single.songId, 'mid1');
       expect(ok.requests.single.host, 'u.y.qq.com');
+      _expectCachedKey(ok, 'tx:leaderboard:26');
 
       final bad = _Stub({'musicu.fcg': '{"code":1}'});
       final badSource = bad.bind(discover);
@@ -607,6 +692,7 @@ void main() {
         () => badSource.leaderboardTracks('26'),
         attempts: 1,
       );
+      _expectNotCachedKey(bad, 'tx:leaderboard:26');
     });
 
     test('标签：目录接口 + 热门标签 HTML；失败归一为 StateError', () async {
@@ -634,6 +720,7 @@ void main() {
       final tags = await source.tags();
       expect(tags.categories.single.name, '语种');
       expect(tags.hotTags.single.name, '官方歌单');
+      _expectCachedKey(ok, 'tx:tags');
 
       final bad = _Stub({
         'musicu.fcg': '{"code":1}',
@@ -641,6 +728,7 @@ void main() {
       });
       final badSource = bad.bind(discover);
       await _expectStateError(badSource, () => badSource.tags(), attempts: 4);
+      _expectNotCachedKey(bad, 'tx:tags');
     });
 
     test('歌单：推荐与分类两条分支、失败重试 3 次', () async {
@@ -701,6 +789,8 @@ void main() {
         categorySource,
         () => categorySource.playlists('3317', 1),
       );
+      _expectCachedKey(recommend, 'tx:playlists::1');
+      _expectCachedKey(category, 'tx:playlists:3317:1');
 
       final bad = _Stub({'musicu.fcg': '{"code":1}'});
       final badSource = bad.bind(discover);
@@ -709,6 +799,7 @@ void main() {
         () => badSource.playlists('3317', 1),
         attempts: 3,
       );
+      _expectNotCachedKey(bad, 'tx:playlists:3317:1');
     });
 
     test('歌单搜索：解析、直连失败一次即 StateError', () async {
@@ -735,6 +826,7 @@ void main() {
       final page = await source.searchPlaylists('周', 1);
       expect(page.playlists.single.name, '歌单');
       expect(page.total, 1);
+      _expectCachedKey(ok, 'tx:playlist-search:周:1');
 
       final bad = _Stub({'client_music_search_songlist': '{"code":1}'});
       final badSource = bad.bind(discover);
@@ -743,6 +835,7 @@ void main() {
         () => badSource.searchPlaylists('周', 1),
         attempts: 1,
       );
+      _expectNotCachedKey(bad, 'tx:playlist-search:周:1');
     });
 
     test('歌单详情：cgi 主接口 + musicu 兜底、失败归一为 StateError', () async {
@@ -767,6 +860,7 @@ void main() {
       expect(detail.info.name, '歌单');
       expect(detail.tracks.single.title, '歌');
       expect(ok.requests, hasLength(1));
+      _expectCachedKey(ok, 'tx:playlist-detail:1');
 
       final bad = _Stub({
         'fcg_ucc_getcdinfo_byids_cp': '{"code":1}',
@@ -779,6 +873,33 @@ void main() {
         attempts: 2,
         reason: 'cgi 失败后仍走 musicu 兜底',
       );
+      _expectNotCachedKey(bad, 'tx:playlist-detail:1');
+    });
+
+    test('榜单封面：topInfo 封面字段；失败不缓存', () async {
+      final ok = _Stub({
+        'musicu.fcg': jsonEncode({
+          'code': 0,
+          'toplist': {
+            'data': {
+              'data': {'headPicUrl': 'http://img/cover.jpg'},
+            },
+          },
+        }),
+      });
+      final source = ok.bind(discover);
+      expect(await source.leaderboardCover('26'), 'http://img/cover.jpg');
+      _expectCachedKey(ok, 'tx:leaderboard-cover:26');
+      await _expectCacheHit(source, () => source.leaderboardCover('26'));
+
+      final bad = _Stub({'musicu.fcg': '{"code":1}'});
+      final badSource = bad.bind(discover);
+      await _expectStateError(
+        badSource,
+        () => badSource.leaderboardCover('26'),
+        attempts: 1,
+      );
+      _expectNotCachedKey(bad, 'tx:leaderboard-cover:26');
     });
 
     test('热搜词：解析、失败重试 3 次', () async {
@@ -884,10 +1005,12 @@ void main() {
       final tags = await source.tags();
       expect(tags.hotTags.single.name, '网络热歌');
       expect(tags.categories.single.name, '风格');
+      _expectCachedKey(ok, 'mg:tags');
 
       final bad = _Stub({'musiclistplaza-taglist': '{"code":"1"}'});
       final badSource = bad.bind(discover);
       await _expectStateError(badSource, () => badSource.tags(), attempts: 1);
+      _expectNotCachedKey(bad, 'mg:tags');
     });
 
     test('歌单：推荐与标签两条分支、失败重试 3 次', () async {
@@ -931,6 +1054,8 @@ void main() {
         tagSource,
         () => tagSource.playlists('1000001672', 1),
       );
+      _expectCachedKey(recommend, 'mg:playlists::1');
+      _expectCachedKey(tag, 'mg:playlists:1000001672:1');
 
       final bad = _Stub({'musiclistplaza-listbytag': '{"code":"1"}'});
       final badSource = bad.bind(discover);
@@ -939,6 +1064,7 @@ void main() {
         () => badSource.playlists('1000001672', 1),
         attempts: 3,
       );
+      _expectNotCachedKey(bad, 'mg:playlists:1000001672:1');
     });
 
     test('歌单搜索：解析、直连失败一次即 StateError', () async {
@@ -964,6 +1090,7 @@ void main() {
       final page = await source.searchPlaylists('周', 1);
       expect(page.playlists.single.id, '77');
       expect(page.playlists.single.trackCount, 20);
+      _expectCachedKey(ok, 'mg:playlist-search:周:1');
 
       final bad = _Stub({'searchAll': '{"code":"1"}'});
       final badSource = bad.bind(discover);
@@ -972,6 +1099,7 @@ void main() {
         () => badSource.searchPlaylists('周', 1),
         attempts: 1,
       );
+      _expectNotCachedKey(bad, 'mg:playlist-search:周:1');
     });
 
     test('歌单详情：曲目列表 + 头部信息并行、失败归一为 StateError', () async {
@@ -1016,6 +1144,7 @@ void main() {
       expect(detail.tracks.single.title, '歌');
       expect(detail.tracks.single.durationMs, 245000);
       expect(ok.requests, hasLength(2));
+      _expectCachedKey(ok, 'mg:playlist-detail:777');
 
       final bad = _Stub({
         'resource/playlist/song': '{"code":"1"}',
@@ -1028,6 +1157,32 @@ void main() {
         attempts: 4,
         reason: '曲目列表重试 3 次 + 头部信息 1 次',
       );
+      _expectNotCachedKey(bad, 'mg:playlist-detail:777');
+    });
+
+    test('榜单封面：columnInfo 封面字段；失败不缓存', () async {
+      final ok = _Stub({
+        'querycontentbyId.do': jsonEncode({
+          'code': '000000',
+          'columnInfo': {'columnPicUrl': '/data/cover.jpg'},
+        }),
+      });
+      final source = ok.bind(discover);
+      expect(
+        await source.leaderboardCover('27186466'),
+        'http://d.musicapp.migu.cn/data/cover.jpg',
+      );
+      _expectCachedKey(ok, 'mg:leaderboard-cover:27186466');
+      await _expectCacheHit(source, () => source.leaderboardCover('27186466'));
+
+      final bad = _Stub({'querycontentbyId.do': '{"code":"1"}'});
+      final badSource = bad.bind(discover);
+      await _expectStateError(
+        badSource,
+        () => badSource.leaderboardCover('27186466'),
+        attempts: 1,
+      );
+      _expectNotCachedKey(bad, 'mg:leaderboard-cover:27186466');
     });
 
     test('热搜词：解析、失败重试 3 次', () async {
@@ -1145,6 +1300,7 @@ void main() {
       expect(tags.categories.first.tags.single.name, '华语');
       expect(tags.categories.last.tags.single.name, '流行');
       expect(tags.hotTags.single.name, '热门');
+      _expectCachedKey(ok, 'wy:playlist-tags');
 
       final bad = _Stub({
         'playlist/catalogue': '{"code":1}',
@@ -1152,6 +1308,7 @@ void main() {
       });
       final badSource = bad.bind(discover);
       await _expectStateError(badSource, () => badSource.tags(), attempts: 6);
+      _expectNotCachedKey(bad, 'wy:playlist-tags');
     });
 
     test('歌单：weapi 列表、失败重试 3 次', () async {
@@ -1179,6 +1336,7 @@ void main() {
       expect(page.playlists.single.createdAt, isNotNull);
       expect(page.total, 1);
       await _expectCacheHit(source, () => source.playlists('', 1));
+      _expectCachedKey(ok, 'wy:playlists:hot::1');
 
       final bad = _Stub({'weapi/playlist/list': '{"code":1}'});
       final badSource = bad.bind(discover);
@@ -1187,6 +1345,7 @@ void main() {
         () => badSource.playlists('', 1),
         attempts: 3,
       );
+      _expectNotCachedKey(bad, 'wy:playlists:hot::1');
     });
 
     test('歌单搜索：eapi 解析、失败重试 3 次', () async {
@@ -1212,6 +1371,7 @@ void main() {
       expect(page.playlists.single.name, '歌单');
       expect(page.total, 1);
       await _expectCacheHit(source, () => source.searchPlaylists('周', 1));
+      _expectCachedKey(ok, 'wy:playlist-search:周:1:20');
 
       final bad = _Stub({'eapi/batch': '{"code":1}'});
       final badSource = bad.bind(discover);
@@ -1220,6 +1380,7 @@ void main() {
         () => badSource.searchPlaylists('周', 1),
         attempts: 3,
       );
+      _expectNotCachedKey(bad, 'wy:playlist-search:周:1:20');
     });
 
     test('歌单详情：linux forward 解析曲目、失败重试 3 次', () async {
@@ -1243,6 +1404,7 @@ void main() {
       final detail = await source.playlistDetail('123', 1);
       expect(detail.info.name, '歌单');
       expect(detail.tracks.single.title, '歌');
+      _expectCachedKey(ok, 'wy:playlist-detail:123');
 
       final bad = _Stub({'api/linux/forward': '{"code":1}'});
       final badSource = bad.bind(discover);
@@ -1251,6 +1413,7 @@ void main() {
         () => badSource.playlistDetail('123', 1),
         attempts: 3,
       );
+      _expectNotCachedKey(bad, 'wy:playlist-detail:123');
     });
 
     test('歌单详情：翻页复用详情壳，不重复下载整单', () async {
@@ -1305,6 +1468,9 @@ void main() {
         hasLength(2),
         reason: '曲目按页取（每页各一次）',
       );
+      _expectCachedKey(stub, 'wy:playlist-detail:999');
+      _expectCachedKey(stub, 'wy:playlist-tracks:999:1');
+      _expectCachedKey(stub, 'wy:playlist-tracks:999:2');
     });
 
     test('热搜词：eapi 解析；直连失败一次即 StateError', () async {
@@ -1321,6 +1487,7 @@ void main() {
       });
       final source = ok.bind(discover);
       expect(await source.hotSearches(), ['热词一', '热词二']);
+      _expectCachedKey(ok, 'wy:hot-search');
 
       final bad = _Stub({'eapi/batch': '{"code":1}'});
       final badSource = bad.bind(discover);
@@ -1329,6 +1496,29 @@ void main() {
         () => badSource.hotSearches(),
         attempts: 1,
       );
+      _expectNotCachedKey(bad, 'wy:hot-search');
+    });
+
+    test('榜单封面：playlist.coverImgUrl；失败不缓存', () async {
+      final ok = _Stub({
+        'weapi/v3/playlist/detail': jsonEncode({
+          'code': 200,
+          'playlist': {'coverImgUrl': 'http://img/cover.jpg'},
+        }),
+      });
+      final source = ok.bind(discover);
+      expect(await source.leaderboardCover('3778678'), 'http://img/cover.jpg');
+      _expectCachedKey(ok, 'wy:leaderboard-cover:3778678');
+      await _expectCacheHit(source, () => source.leaderboardCover('3778678'));
+
+      final bad = _Stub({'weapi/v3/playlist/detail': '{"code":1}'});
+      final badSource = bad.bind(discover);
+      await _expectStateError(
+        badSource,
+        () => badSource.leaderboardCover('3778678'),
+        attempts: 1,
+      );
+      _expectNotCachedKey(bad, 'wy:leaderboard-cover:3778678');
     });
   });
 

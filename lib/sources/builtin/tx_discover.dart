@@ -19,7 +19,7 @@ import 'builtin_transport.dart';
 ///   → `uniform_get_Dissinfo` 兜底）、歌单搜索；
 /// - 热搜词：`musicu.fcg` hotkey。
 ///
-/// 网络结果缓存 5 分钟（统一走注入 transport 的 `cached`）。
+/// 网络结果缓存 5 分钟（统一走发现执行器与注入的 transport）。
 class TxDiscoverSource extends DiscoverSource {
   const TxDiscoverSource();
 
@@ -72,9 +72,37 @@ class TxDiscoverSource extends DiscoverSource {
     BuiltinTransport http,
     String bangid,
   ) {
-    return http.cached(
-      'tx:leaderboard:$bangid',
-      () => _fetchLeaderboard(http, bangid),
+    return runDiscoverCall(
+      DiscoverRequestCall<List<DiscoverTrack>>(
+        key: 'tx:leaderboard:$bangid',
+        budget: BuiltinRetryBudget.singleAttempt,
+        message: 'tx 榜单获取失败',
+        request: () => lxHttpPost(
+          http,
+          'https://u.y.qq.com/cgi-bin/musicu.fcg',
+          headers: {'User-Agent': _msieUa},
+          body: {
+            'toplist': {
+              'module': 'musicToplist.ToplistInfoServer',
+              'method': 'GetDetail',
+              'param': {'topid': int.tryParse(bangid) ?? bangid, 'num': 300},
+            },
+            'comm': {'uin': 0, 'format': 'json', 'ct': 20, 'cv': 1859},
+          },
+        ),
+        isInvalid: (body) => body is! Map || body['code'] != 0,
+        parse: (body) {
+          final data = (body['toplist'] as Map?)?['data'];
+          final songList = (data is Map) ? data['songInfoList'] : null;
+          if (songList is! List) throw StateError('tx 榜单解析失败');
+          return [
+            for (final item in songList)
+              if (TxSearch.parseSongItem(item) case final track?)
+                discoverTrackOf(track),
+          ];
+        },
+      ),
+      http,
     );
   }
 
@@ -82,47 +110,53 @@ class TxDiscoverSource extends DiscoverSource {
   /// / `musichallPicUrl` 等）；缺失时退回首曲封面。只请求 1 条曲目。
   @override
   Future<String?> leaderboardCover(BuiltinTransport http, String bangid) {
-    return http.cached('tx:leaderboard-cover:$bangid', () async {
-      final body = await lxHttpPost(
-        http,
-        'https://u.y.qq.com/cgi-bin/musicu.fcg',
-        headers: {'User-Agent': _msieUa},
-        body: {
-          'toplist': {
-            'module': 'musicToplist.ToplistInfoServer',
-            'method': 'GetDetail',
-            'param': {'topid': int.tryParse(bangid) ?? bangid, 'num': 1},
+    return runDiscoverCall(
+      DiscoverRequestCall<String>(
+        key: 'tx:leaderboard-cover:$bangid',
+        budget: BuiltinRetryBudget.singleAttempt,
+        message: 'tx 榜单封面获取失败',
+        request: () => lxHttpPost(
+          http,
+          'https://u.y.qq.com/cgi-bin/musicu.fcg',
+          headers: {'User-Agent': _msieUa},
+          body: {
+            'toplist': {
+              'module': 'musicToplist.ToplistInfoServer',
+              'method': 'GetDetail',
+              'param': {'topid': int.tryParse(bangid) ?? bangid, 'num': 1},
+            },
+            'comm': {'uin': 0, 'format': 'json', 'ct': 20, 'cv': 1859},
           },
-          'comm': {'uin': 0, 'format': 'json', 'ct': 20, 'cv': 1859},
+        ),
+        isInvalid: (body) => body is! Map || body['code'] != 0,
+        parse: (body) {
+          final data = (body['toplist'] as Map?)?['data'];
+          if (data is! Map) throw StateError('tx 榜单封面解析失败');
+          final topInfo = data['data'];
+          if (topInfo is Map) {
+            for (final key in const [
+              'headPicUrl',
+              'frontPicUrl',
+              'mbHeadPicUrl',
+              'mbFrontPicUrl',
+              'musichallPicUrl',
+              'picUrl',
+              'toplistNamePicUrl',
+            ]) {
+              final url = _nonEmpty(topInfo[key]?.toString());
+              if (url != null) return url;
+            }
+            final songs = topInfo['song'];
+            final cover = _firstSongCover(songs);
+            if (cover != null) return cover;
+          }
+          final cover = _firstSongCover(data['songInfoList']);
+          if (cover != null) return cover;
+          throw StateError('tx 榜单封面为空');
         },
-      );
-      if (body is! Map || body['code'] != 0) {
-        throw StateError('tx 榜单封面获取失败');
-      }
-      final data = (body['toplist'] as Map?)?['data'];
-      if (data is! Map) throw StateError('tx 榜单封面解析失败');
-      final topInfo = data['data'];
-      if (topInfo is Map) {
-        for (final key in const [
-          'headPicUrl',
-          'frontPicUrl',
-          'mbHeadPicUrl',
-          'mbFrontPicUrl',
-          'musichallPicUrl',
-          'picUrl',
-          'toplistNamePicUrl',
-        ]) {
-          final url = _nonEmpty(topInfo[key]?.toString());
-          if (url != null) return url;
-        }
-        final songs = topInfo['song'];
-        final cover = _firstSongCover(songs);
-        if (cover != null) return cover;
-      }
-      final cover = _firstSongCover(data['songInfoList']);
-      if (cover != null) return cover;
-      throw StateError('tx 榜单封面为空');
-    });
+      ),
+      http,
+    );
   }
 
   static String? _firstSongCover(dynamic songs) {
@@ -138,45 +172,25 @@ class TxDiscoverSource extends DiscoverSource {
     return null;
   }
 
-  static Future<List<DiscoverTrack>> _fetchLeaderboard(
-    BuiltinTransport http,
-    String bangid,
-  ) async {
-    final body = await lxHttpPost(
-      http,
-      'https://u.y.qq.com/cgi-bin/musicu.fcg',
-      headers: {'User-Agent': _msieUa},
-      body: {
-        'toplist': {
-          'module': 'musicToplist.ToplistInfoServer',
-          'method': 'GetDetail',
-          'param': {'topid': int.tryParse(bangid) ?? bangid, 'num': 300},
-        },
-        'comm': {'uin': 0, 'format': 'json', 'ct': 20, 'cv': 1859},
-      },
-    );
-    if (body is! Map || body['code'] != 0) {
-      throw StateError('tx 榜单获取失败');
-    }
-    final data = (body['toplist'] as Map?)?['data'];
-    final songList = (data is Map) ? data['songInfoList'] : null;
-    if (songList is! List) throw StateError('tx 榜单解析失败');
-    return [
-      for (final item in songList)
-        if (TxSearch.parseSongItem(item) case final track?)
-          discoverTrackOf(track),
-    ];
-  }
-
   @override
   Future<DiscoverTags> tags(BuiltinTransport http) {
-    return http.cached('tx:tags', () async {
-      final results = await Future.wait([_fetchTag(http), _fetchHotTag(http)]);
-      return DiscoverTags(
-        categories: results[0] as List<DiscoverTagCategory>,
-        hotTags: results[1] as List<DiscoverTag>,
-      );
-    });
+    return runDiscoverCall(
+      DiscoverAttemptCall<DiscoverTags>(
+        key: 'tx:tags',
+        budget: BuiltinRetryBudget.singleAttempt,
+        attempt: (_) async {
+          final results = await Future.wait([
+            _fetchTag(http),
+            _fetchHotTag(http),
+          ]);
+          return DiscoverTags(
+            categories: results[0] as List<DiscoverTagCategory>,
+            hotTags: results[1] as List<DiscoverTag>,
+          );
+        },
+      ),
+      http,
+    );
   }
 
   static Future<List<DiscoverTagCategory>> _fetchTag(BuiltinTransport http) {
@@ -415,47 +429,53 @@ class TxDiscoverSource extends DiscoverSource {
     String keyword,
     int page,
   ) {
-    return http.cached('tx:playlist-search:$keyword:$page', () async {
-      final body = await lxHttpGet(
-        http,
-        'https://c.y.qq.com/soso/fcgi-bin/client_music_search_songlist'
-        '?page_no=${page - 1}&num_per_page=20&format=json'
-        '&query=${Uri.encodeComponent(keyword)}'
-        '&remoteplace=txt.yqq.playlist&inCharset=utf8&outCharset=utf-8',
-        headers: {'Referer': 'https://y.qq.com/portal/search.html'},
-      );
-      if (body is! Map || body['code'] != 0) {
-        throw StateError('tx 歌单搜索失败');
-      }
-      final data = body['data'];
-      final items = (data is Map) ? data['list'] : null;
-      final playlists = <DiscoverPlaylist>[];
-      if (items is List) {
-        for (final item in items) {
-          if (item is! Map) continue;
-          final creator = item['creator'];
-          playlists.add(
-            DiscoverPlaylist(
-              id: (item['dissid'] ?? '').toString(),
-              name: decodeName((item['dissname'] ?? '').toString()),
-              coverUrl: _nonEmpty(item['imgurl']?.toString()),
-              author: creator is Map
-                  ? decodeName((creator['name'] ?? '').toString())
-                  : '',
-              playCount: parseSourceCount(item['listennum']) ?? 0,
-              trackCount: parseSourceCount(item['song_count']) ?? 0,
-              description: _cleanDesc(item['introduction']),
-            ),
+    return runDiscoverCall(
+      DiscoverRequestCall<DiscoverPlaylistPage>(
+        key: 'tx:playlist-search:$keyword:$page',
+        budget: BuiltinRetryBudget.singleAttempt,
+        message: 'tx 歌单搜索失败',
+        request: () => lxHttpGet(
+          http,
+          'https://c.y.qq.com/soso/fcgi-bin/client_music_search_songlist'
+          '?page_no=${page - 1}&num_per_page=20&format=json'
+          '&query=${Uri.encodeComponent(keyword)}'
+          '&remoteplace=txt.yqq.playlist&inCharset=utf8&outCharset=utf-8',
+          headers: {'Referer': 'https://y.qq.com/portal/search.html'},
+        ),
+        isInvalid: (body) => body is! Map || body['code'] != 0,
+        parse: (body) {
+          final data = body['data'];
+          final items = (data is Map) ? data['list'] : null;
+          final playlists = <DiscoverPlaylist>[];
+          if (items is List) {
+            for (final item in items) {
+              if (item is! Map) continue;
+              final creator = item['creator'];
+              playlists.add(
+                DiscoverPlaylist(
+                  id: (item['dissid'] ?? '').toString(),
+                  name: decodeName((item['dissname'] ?? '').toString()),
+                  coverUrl: _nonEmpty(item['imgurl']?.toString()),
+                  author: creator is Map
+                      ? decodeName((creator['name'] ?? '').toString())
+                      : '',
+                  playCount: parseSourceCount(item['listennum']) ?? 0,
+                  trackCount: parseSourceCount(item['song_count']) ?? 0,
+                  description: _cleanDesc(item['introduction']),
+                ),
+              );
+            }
+          }
+          return DiscoverPlaylistPage(
+            playlists: playlists,
+            page: page,
+            limit: 20,
+            total: (data is Map ? parseSourceCount(data['sum']) : null) ?? 0,
           );
-        }
-      }
-      return DiscoverPlaylistPage(
-        playlists: playlists,
-        page: page,
-        limit: 20,
-        total: (data is Map ? parseSourceCount(data['sum']) : null) ?? 0,
-      );
-    });
+        },
+      ),
+      http,
+    );
   }
 
   @override
@@ -466,13 +486,20 @@ class TxDiscoverSource extends DiscoverSource {
   ) {
     final id = _parseListId(rawId);
     if (id == null) throw StateError('tx 歌单 id 解析失败');
-    return http.cached('tx:playlist-detail:$id', () async {
-      try {
-        return await _fetchDetailByCgi(http, id);
-      } catch (_) {
-        return _fetchDetailByMusicu(http, id);
-      }
-    });
+    return runDiscoverCall(
+      DiscoverAttemptCall<DiscoverDetail>(
+        key: 'tx:playlist-detail:$id',
+        budget: BuiltinRetryBudget.singleAttempt,
+        attempt: (_) async {
+          try {
+            return await _fetchDetailByCgi(http, id);
+          } catch (_) {
+            return _fetchDetailByMusicu(http, id);
+          }
+        },
+      ),
+      http,
+    );
   }
 
   static String? _parseListId(String rawId) {

@@ -18,7 +18,7 @@ import 'mg_search.dart';
 ///   （`resource/playlist` + `resource/playlist/song`）、歌单搜索（jadeite）；
 /// - 热搜词：jadeite `hotword`。
 ///
-/// 网络结果缓存 5 分钟（统一走注入 transport 的 `cached`）。
+/// 网络结果缓存 5 分钟（统一走发现执行器与注入的 transport）。
 class MgDiscoverSource extends DiscoverSource {
   const MgDiscoverSource();
 
@@ -90,37 +90,43 @@ class MgDiscoverSource extends DiscoverSource {
   /// 榜单封面：`columnInfo.columnPicUrl`（其次 small / recommend / 自定义图）。
   @override
   Future<String?> leaderboardCover(BuiltinTransport http, String bangid) {
-    return http.cached('mg:leaderboard-cover:$bangid', () async {
-      final body = await lxHttpGet(
-        http,
-        'https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do'
-        '?columnId=$bangid&needAll=0',
-        headers: {
-          'Referer': 'https://app.c.nf.migu.cn/',
-          'User-Agent': _mobileUa,
-          'channel': '0146921',
+    return runDiscoverCall(
+      DiscoverRequestCall<String>(
+        key: 'mg:leaderboard-cover:$bangid',
+        budget: BuiltinRetryBudget.singleAttempt,
+        message: 'mg 榜单封面获取失败',
+        request: () => lxHttpGet(
+          http,
+          'https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do'
+          '?columnId=$bangid&needAll=0',
+          headers: {
+            'Referer': 'https://app.c.nf.migu.cn/',
+            'User-Agent': _mobileUa,
+            'channel': '0146921',
+          },
+        ),
+        isInvalid: (body) => body is! Map || body['code'] != _successCode,
+        parse: (body) {
+          final info = body['columnInfo'];
+          if (info is! Map) throw StateError('mg 榜单封面解析失败');
+          for (final key in const [
+            'columnPicUrl',
+            'columnSmallpicUrl',
+            'recommendPicUrl',
+          ]) {
+            final url = MgSearch.fixCoverUrl(info[key]);
+            if (url != null && url.isNotEmpty) return url;
+          }
+          final custom = info['customizedPicUrls'];
+          if (custom is List && custom.isNotEmpty) {
+            final url = MgSearch.fixCoverUrl(custom.first);
+            if (url != null && url.isNotEmpty) return url;
+          }
+          throw StateError('mg 榜单封面为空');
         },
-      );
-      if (body is! Map || body['code'] != _successCode) {
-        throw StateError('mg 榜单封面获取失败');
-      }
-      final info = body['columnInfo'];
-      if (info is! Map) throw StateError('mg 榜单封面解析失败');
-      for (final key in const [
-        'columnPicUrl',
-        'columnSmallpicUrl',
-        'recommendPicUrl',
-      ]) {
-        final url = MgSearch.fixCoverUrl(info[key]);
-        if (url != null && url.isNotEmpty) return url;
-      }
-      final custom = info['customizedPicUrls'];
-      if (custom is List && custom.isNotEmpty) {
-        final url = MgSearch.fixCoverUrl(custom.first);
-        if (url != null && url.isNotEmpty) return url;
-      }
-      throw StateError('mg 榜单封面为空');
-    });
+      ),
+      http,
+    );
   }
 
   static Future<List<DiscoverTrack>> _fetchLeaderboard(
@@ -253,20 +259,26 @@ class MgDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverTags> tags(BuiltinTransport http) {
-    return http.cached('mg:tags', () async {
-      final body = await lxHttpGet(
-        http,
-        'https://app.c.nf.migu.cn/pc/v1.0/template/'
-        'musiclistplaza-taglist/release',
-        headers: _songListHeaders,
-      );
-      if (body is! Map || body['code'] != _successCode) {
-        throw StateError('mg 标签获取失败');
-      }
-      final data = body['data'];
-      if (data is! List) throw StateError('mg 标签解析失败');
-      return filterTagInfo(data);
-    });
+    return runDiscoverCall(
+      DiscoverRequestCall<DiscoverTags>(
+        key: 'mg:tags',
+        budget: BuiltinRetryBudget.singleAttempt,
+        message: 'mg 标签获取失败',
+        request: () => lxHttpGet(
+          http,
+          'https://app.c.nf.migu.cn/pc/v1.0/template/'
+          'musiclistplaza-taglist/release',
+          headers: _songListHeaders,
+        ),
+        isInvalid: (body) => body is! Map || body['code'] != _successCode,
+        parse: (body) {
+          final data = body['data'];
+          if (data is! List) throw StateError('mg 标签解析失败');
+          return filterTagInfo(data);
+        },
+      ),
+      http,
+    );
   }
 
   /// 解析标签目录（独立出来便于单元测试）。
@@ -457,47 +469,55 @@ class MgDiscoverSource extends DiscoverSource {
     String keyword,
     int page,
   ) {
-    return http.cached('mg:playlist-search:$keyword:$page', () async {
-      final time = DateTime.now().millisecondsSinceEpoch.toString();
-      final sign = md5Hex(
-        '$keyword$_signatureMd5'
-        'yyapp2d16148780a1dcc7408e06336b98cfd50'
-        '$_deviceId$time',
-      );
-      final body = await lxHttpGet(
-        http,
-        'https://jadeite.migu.cn/music_search/v3/search/searchAll'
-        '?isCorrect=1&isCopyright=1'
-        '&searchSwitch=%7B%22song%22%3A0%2C%22album%22%3A0%2C%22singer%22%3A0'
-        '%2C%22tagSong%22%3A0%2C%22mvSong%22%3A0%2C%22bestShow%22%3A0'
-        '%2C%22songlist%22%3A1%2C%22lyricSong%22%3A0%7D'
-        '&pageSize=20&text=${Uri.encodeComponent(keyword)}&pageNo=$page'
-        '&sort=0&sid=USS',
-        headers: {
-          'uiVersion': 'A_music_3.6.1',
-          'deviceId': _deviceId,
-          'timestamp': time,
-          'sign': sign,
-          'channel': '0146921',
-          'User-Agent': _searchUa,
+    return runDiscoverCall(
+      DiscoverRequestCall<DiscoverPlaylistPage>(
+        key: 'mg:playlist-search:$keyword:$page',
+        budget: BuiltinRetryBudget.singleAttempt,
+        message: 'mg 歌单搜索失败',
+        request: () {
+          final time = DateTime.now().millisecondsSinceEpoch.toString();
+          final sign = md5Hex(
+            '$keyword$_signatureMd5'
+            'yyapp2d16148780a1dcc7408e06336b98cfd50'
+            '$_deviceId$time',
+          );
+          return lxHttpGet(
+            http,
+            'https://jadeite.migu.cn/music_search/v3/search/searchAll'
+            '?isCorrect=1&isCopyright=1'
+            '&searchSwitch=%7B%22song%22%3A0%2C%22album%22%3A0%2C%22singer%22%3A0'
+            '%2C%22tagSong%22%3A0%2C%22mvSong%22%3A0%2C%22bestShow%22%3A0'
+            '%2C%22songlist%22%3A1%2C%22lyricSong%22%3A0%7D'
+            '&pageSize=20&text=${Uri.encodeComponent(keyword)}&pageNo=$page'
+            '&sort=0&sid=USS',
+            headers: {
+              'uiVersion': 'A_music_3.6.1',
+              'deviceId': _deviceId,
+              'timestamp': time,
+              'sign': sign,
+              'channel': '0146921',
+              'User-Agent': _searchUa,
+            },
+          );
         },
-      );
-      if (body is! Map || body['code'] != _successCode) {
-        throw StateError('mg 歌单搜索失败');
-      }
-      final resultData = body['songListResultData'];
-      final items = (resultData is Map) ? resultData['result'] : null;
-      return DiscoverPlaylistPage(
-        playlists: filterSongListResult(items is List ? items : const []),
-        page: page,
-        limit: 20,
-        total:
-            (resultData is Map
-                ? parseSourceCount(resultData['totalCount'])
-                : null) ??
-            0,
-      );
-    });
+        isInvalid: (body) => body is! Map || body['code'] != _successCode,
+        parse: (body) {
+          final resultData = body['songListResultData'];
+          final items = (resultData is Map) ? resultData['result'] : null;
+          return DiscoverPlaylistPage(
+            playlists: filterSongListResult(items is List ? items : const []),
+            page: page,
+            limit: 20,
+            total:
+                (resultData is Map
+                    ? parseSourceCount(resultData['totalCount'])
+                    : null) ??
+                0,
+          );
+        },
+      ),
+      http,
+    );
   }
 
   /// 解析歌单搜索结果（独立出来便于单元测试）。
@@ -530,34 +550,44 @@ class MgDiscoverSource extends DiscoverSource {
   ) {
     final id = _parsePlaylistId(rawId);
     if (id == null) throw StateError('mg 歌单 id 解析失败');
-    return http.cached('mg:playlist-detail:$id', () async {
-      final results = await Future.wait([
-        _fetchDetailList(http, id),
-        _fetchDetailInfo(http, id),
-      ]);
-      final listData = results[0] as ({List<SourceTrack> tracks, int total});
-      final info =
-          results[1]
-              as ({
-                String name,
-                String? img,
-                String? desc,
-                String author,
-                int playCount,
-              })?;
-      return DiscoverDetail(
-        info: DiscoverPlaylist(
-          id: id,
-          name: info?.name ?? '',
-          coverUrl: info?.img,
-          author: info?.author ?? '',
-          playCount: info?.playCount ?? 0,
-          trackCount: listData.total,
-          description: info?.desc,
-        ),
-        tracks: [for (final track in listData.tracks) discoverTrackOf(track)],
-      );
-    });
+    return runDiscoverCall(
+      DiscoverAttemptCall<DiscoverDetail>(
+        key: 'mg:playlist-detail:$id',
+        budget: BuiltinRetryBudget.singleAttempt,
+        attempt: (_) async {
+          final results = await Future.wait([
+            _fetchDetailList(http, id),
+            _fetchDetailInfo(http, id),
+          ]);
+          final listData =
+              results[0] as ({List<SourceTrack> tracks, int total});
+          final info =
+              results[1]
+                  as ({
+                    String name,
+                    String? img,
+                    String? desc,
+                    String author,
+                    int playCount,
+                  })?;
+          return DiscoverDetail(
+            info: DiscoverPlaylist(
+              id: id,
+              name: info?.name ?? '',
+              coverUrl: info?.img,
+              author: info?.author ?? '',
+              playCount: info?.playCount ?? 0,
+              trackCount: listData.total,
+              description: info?.desc,
+            ),
+            tracks: [
+              for (final track in listData.tracks) discoverTrackOf(track),
+            ],
+          );
+        },
+      ),
+      http,
+    );
   }
 
   static String? _parsePlaylistId(String rawId) {

@@ -21,7 +21,7 @@ import 'kg_search.dart';
 ///   `global.data` 歌单 → gateway 批量歌曲信息）、歌单搜索；
 /// - 热搜词：`gateway.kugou.com/.../hot_tab`。
 ///
-/// 网络结果缓存 5 分钟（统一走注入 transport 的 `cached`）。
+/// 网络结果缓存 5 分钟（统一走发现执行器与注入的 transport）。
 class KgDiscoverSource extends DiscoverSource {
   const KgDiscoverSource();
 
@@ -117,21 +117,28 @@ class KgDiscoverSource extends DiscoverSource {
   /// 榜单封面：`rank/info` 的 `imgurl`（`{size}` 占位统一到 480）。
   @override
   Future<String?> leaderboardCover(BuiltinTransport http, String bangid) {
-    return http.cached('kg:leaderboard-cover:$bangid', () async {
-      final body = await lxHttpGet(
-        http,
-        'http://mobilecdnbj.kugou.com/api/v3/rank/info'
-        '?rankid=$bangid&with_res_tag=0',
-      );
-      if (body is! Map || body['status'] != 1 || body['data'] is! Map) {
-        throw StateError('kg 榜单封面获取失败');
-      }
-      final url = kgCoverUrlOf(body['data']);
-      if (url == null || url.isEmpty) {
-        throw StateError('kg 榜单封面为空');
-      }
-      return url;
-    });
+    return runDiscoverCall(
+      DiscoverRequestCall<String>(
+        key: 'kg:leaderboard-cover:$bangid',
+        budget: BuiltinRetryBudget.singleAttempt,
+        message: 'kg 榜单封面获取失败',
+        request: () => lxHttpGet(
+          http,
+          'http://mobilecdnbj.kugou.com/api/v3/rank/info'
+          '?rankid=$bangid&with_res_tag=0',
+        ),
+        isInvalid: (body) =>
+            body is! Map || body['status'] != 1 || body['data'] is! Map,
+        parse: (body) {
+          final url = kgCoverUrlOf(body['data']);
+          if (url == null || url.isEmpty) {
+            throw StateError('kg 榜单封面为空');
+          }
+          return url;
+        },
+      ),
+      http,
+    );
   }
 
   static Future<List<DiscoverTrack>> _fetchLeaderboard(
@@ -223,21 +230,27 @@ class KgDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverTags> tags(BuiltinTransport http) {
-    return http.cached('kg:tags', () async {
-      final body = await lxHttpGet(
-        http,
-        'http://www2.kugou.kugou.com/yueku/v9/special/getSpecial?is_smarty=1&',
-      );
-      if (body is! Map || body['status'] != 1) {
-        throw StateError('kg 标签获取失败');
-      }
-      final data = body['data'];
-      if (data is! Map) throw StateError('kg 标签解析失败');
-      return DiscoverTags(
-        hotTags: filterInfoHotTag(data['hotTag']),
-        categories: filterTagInfo(data['tagids']),
-      );
-    });
+    return runDiscoverCall(
+      DiscoverRequestCall<DiscoverTags>(
+        key: 'kg:tags',
+        budget: BuiltinRetryBudget.singleAttempt,
+        message: 'kg 标签获取失败',
+        request: () => lxHttpGet(
+          http,
+          'http://www2.kugou.kugou.com/yueku/v9/special/getSpecial?is_smarty=1&',
+        ),
+        isInvalid: (body) => body is! Map || body['status'] != 1,
+        parse: (body) {
+          final data = body['data'];
+          if (data is! Map) throw StateError('kg 标签解析失败');
+          return DiscoverTags(
+            hotTags: filterInfoHotTag(data['hotTag']),
+            categories: filterTagInfo(data['tagids']),
+          );
+        },
+      ),
+      http,
+    );
   }
 
   /// 解析热门标签（独立出来便于单元测试）。
@@ -288,18 +301,25 @@ class KgDiscoverSource extends DiscoverSource {
     String tagId,
     int page,
   ) {
-    return http.cached('kg:playlists:$tagId:$page', () async {
-      final list = await _fetchSongList(http, tagId, page);
-      final info = tagId.isEmpty ? null : await _fetchListInfo(http, tagId);
-      final total = parseSourceCount(info?['total']) ?? list.length;
-      final limit = parseSourceCount(info?['pagesize']) ?? _limitList;
-      return DiscoverPlaylistPage(
-        playlists: [for (final item in list) ?filterListItem(item)],
-        page: page,
-        limit: limit,
-        total: total,
-      );
-    });
+    return runDiscoverCall(
+      DiscoverAttemptCall<DiscoverPlaylistPage>(
+        key: 'kg:playlists:$tagId:$page',
+        budget: BuiltinRetryBudget.singleAttempt,
+        attempt: (_) async {
+          final list = await _fetchSongList(http, tagId, page);
+          final info = tagId.isEmpty ? null : await _fetchListInfo(http, tagId);
+          final total = parseSourceCount(info?['total']) ?? list.length;
+          final limit = parseSourceCount(info?['pagesize']) ?? _limitList;
+          return DiscoverPlaylistPage(
+            playlists: [for (final item in list) ?filterListItem(item)],
+            page: page,
+            limit: limit,
+            total: total,
+          );
+        },
+      ),
+      http,
+    );
   }
 
   static Future<List<dynamic>> _fetchSongList(
@@ -369,28 +389,34 @@ class KgDiscoverSource extends DiscoverSource {
     String keyword,
     int page,
   ) {
-    return http.cached('kg:playlist-search:$keyword:$page', () async {
-      final body = await lxHttpGet(
-        http,
-        'http://msearchretry.kugou.com/api/v3/search/special'
-        '?keyword=${Uri.encodeComponent(keyword)}&page=$page&pagesize=20'
-        '&showtype=10&filter=0&version=7910&sver=2',
-      );
-      if (body is! Map || body['errcode'] != 0) {
-        throw StateError('kg 歌单搜索失败');
-      }
-      final data = body['data'];
-      final items = (data is Map) ? data['info'] : null;
-      return DiscoverPlaylistPage(
-        playlists: [
-          for (final item in (items is List ? items : const []))
-            ?filterSearchItem(item),
-        ],
-        page: page,
-        limit: 20,
-        total: (data is Map ? parseSourceCount(data['total']) : null) ?? 0,
-      );
-    });
+    return runDiscoverCall(
+      DiscoverRequestCall<DiscoverPlaylistPage>(
+        key: 'kg:playlist-search:$keyword:$page',
+        budget: BuiltinRetryBudget.singleAttempt,
+        message: 'kg 歌单搜索失败',
+        request: () => lxHttpGet(
+          http,
+          'http://msearchretry.kugou.com/api/v3/search/special'
+          '?keyword=${Uri.encodeComponent(keyword)}&page=$page&pagesize=20'
+          '&showtype=10&filter=0&version=7910&sver=2',
+        ),
+        isInvalid: (body) => body is! Map || body['errcode'] != 0,
+        parse: (body) {
+          final data = body['data'];
+          final items = (data is Map) ? data['info'] : null;
+          return DiscoverPlaylistPage(
+            playlists: [
+              for (final item in (items is List ? items : const []))
+                ?filterSearchItem(item),
+            ],
+            page: page,
+            limit: 20,
+            total: (data is Map ? parseSourceCount(data['total']) : null) ?? 0,
+          );
+        },
+      ),
+      http,
+    );
   }
 
   /// 解析歌单搜索结果（独立出来便于单元测试）。
