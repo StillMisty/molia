@@ -8,10 +8,8 @@
 /// 这里。
 ///
 /// 这个类不知道资料库的领域形状：值、quiet 合并、写缓冲重放、失败阶段都由
-/// 持有方注入，因此四个视图可以各持一份，而不是长成一个 God object。
+/// 持有方注入，因此三个视图可以各持一份，而不是长成一个 God object。
 library;
-
-import 'dart:async';
 
 import 'library_outcome.dart';
 
@@ -74,8 +72,7 @@ class LibraryReadResult<T> {
 ///
 /// 职责：
 /// - 记录读取阶段、loaded / authoritative / 最近错误；
-/// - 每次读取捕获代际，只有仍有效的读取能写回（[supersedeReads] 为真时
-///   后发起的读取还会抢占先发起的读取）；
+/// - 每次读取捕获代际，只有仍有效的读取能写回（显式释放才递增代际）；
 /// - 记录在途读取，读取期间到达的写入先缓冲，最后一个读取落地后重放；
 /// - quiet 读取按 [mergeQuiet] 合并、不翻 loading；explicit 读取替换快照。
 class ReadReconciliation<T, W> {
@@ -84,9 +81,7 @@ class ReadReconciliation<T, W> {
     required this.mergeQuiet,
     required this.replayWrites,
     required this.failureState,
-    this.supersedeReads = false,
     this.canReadQuietly,
-    this.replayRequiresLoaded = true,
   }) : _initialValue = initialValue,
        _value = initialValue;
 
@@ -101,23 +96,10 @@ class ReadReconciliation<T, W> {
   /// 失败时给出读取阶段：空数据 failed，有旧数据 ready。
   final LibraryReadState Function(T value, Object error) failureState;
 
-  /// 后发起的读取是否让先发起的读取作废。
-  ///
-  /// true 用于「新快照必须压过旧快照」的视图（启动读取与后台校准可能重叠，
-  /// 旧快照最后落地时不能回滚较新的读取）。历史 / 列表 / 列表曲目保持
-  /// false：它们的并发读取按落地顺序写回，只有显式释放才整体代际失效。
-  final bool supersedeReads;
-
   /// quiet 读取的前置条件；null = 总是允许。
   ///
   /// 列表曲目用它表达「静默重载只刷新已缓存列表」。
   final bool Function(T value)? canReadQuietly;
-
-  /// 重放缓冲写入前是否要求已经成功读过整表。
-  ///
-  /// 历史在从未加载成功时保留缓冲，等下一次首屏读取再合并；幂等补丁类写入
-  /// 可以传 false，失败后也照常重放。
-  final bool replayRequiresLoaded;
 
   T _value;
   LibraryReadState _state = const LibraryReadState.loading();
@@ -219,15 +201,10 @@ class ReadReconciliation<T, W> {
   }
 
   /// 读取一次仓库快照。
-  ///
-  /// [duringRead] 在结果已受理、但本次读取仍算在途时执行：收藏校准要在
-  /// 「收藏键 → 收藏列表 → 列表清单」全部落地后才重放期间的 toggle，回调
-  /// 因此不能等 in-flight 归零后再跑。
   Future<LibraryReadResult<T>> load({
     required LibraryReadIntent intent,
     required Future<T> Function() fetch,
     bool discardPendingOnStart = false,
-    FutureOr<void> Function(LibraryReadResult<T> result)? duringRead,
   }) async {
     final canReadQuietly = this.canReadQuietly;
     if (intent == LibraryReadIntent.quiet &&
@@ -244,7 +221,7 @@ class ReadReconciliation<T, W> {
       _explicitLoading = true;
       _state = const LibraryReadState.loading();
     }
-    final generation = supersedeReads ? ++_generation : _generation;
+    final generation = _generation;
     if (discardPendingOnStart) _pending = const [];
     _inFlight++;
 
@@ -279,15 +256,7 @@ class ReadReconciliation<T, W> {
       );
     }
 
-    if (duringRead != null) {
-      try {
-        await duringRead(result);
-      } finally {
-        _finishRead(intent, generation);
-      }
-    } else {
-      _finishRead(intent, generation);
-    }
+    _finishRead(intent, generation);
     return result;
   }
 
@@ -305,8 +274,7 @@ class ReadReconciliation<T, W> {
 
   /// 最后一个读取落地后重放缓冲写入；只在没有读取在途时消费缓冲。
   void _drainPending() {
-    if (_inFlight > 0 || _pending.isEmpty) return;
-    if (replayRequiresLoaded && !_loaded) return;
+    if (_inFlight > 0 || _pending.isEmpty || !_loaded) return;
     final pending = _pending;
     _pending = const [];
     _value = replayWrites(_value, pending);
