@@ -661,8 +661,9 @@
   `lib/domain/models/annual_report.dart` 负责窗口 / 月度 / 平台 / 连续天数 /
   覆盖与纠错聚合，`AnnualReportProvider` 调度年份与统计变更，报告页是设置子页
   （无新导航目的地），`lib/services/annual_poster_service.dart` 离线渲染
-  1440×1920 海报。入口年份来自统计页已有的全量日历 rollup（`allHistoryDaily`），
-  12–1 月高强调；报告只读既有 `play_events` / `play_tracks`，不新增表 / 列、
+  1440×1920 海报。入口年份来自统计页 `ListeningStatisticsView.snapshot.daily`
+  （全量日历 rollup），`now` 与页面高亮共用同一次加载的窗口，12–1 月高强调；
+  报告只读既有 `play_events` / `play_tracks`，不新增表 / 列、
   不改口径，Top 50 经既有资料库导入引擎存成歌单。
 - **Search row（搜索结果行）** — `lib/providers/search_row.dart` 的 `SearchRow`：
   单曲 / 歌词搜索结果的唯一形状（领域 `Track` + 可选 `lyricSnippet`）。搜索行从
@@ -834,8 +835,15 @@
   一次范围查询的全部聚合（汇总 / 榜单 / 日历 / 作息热力图 / 来源分布）；
   `PlayStatisticsRepository.snapshot(since:)` 并发取回，统计页只渲染它。
 - **Play statistics range（统计范围）** — `PlayStatisticsRange`（周 / 月 / 全部）
-  + 扩展 `startOf(now)` / `sinceMs(now)`：范围 → 时间窗口的唯一映射，
-  查询与热力图高亮共用（本地时间）。
+  + 扩展 `startOf(now)` / `sinceMs(now)`：范围 → 时间窗口的唯一映射
+  （本地时间）。
+- **Listening statistics window（统计窗口）** — `ListeningStatisticsWindow`
+  （`lib/services/statistics/listening_statistics.dart`）：一次加载的范围 + 唯一
+  `now`；查询起点、日历高亮、今天与年度入口都从它派生，避免跨午夜时各读一次墙钟。
+- **Listening statistics view（统计视图）** — `ListeningStatisticsView.from(snapshot,
+  window)`：把快照投影成日历值（时长 / 次数）、稠密 7×24 矩阵、数据起始日与
+  海报的 168 槽时长矩阵；页面 / 海报 / 年度入口只消费这一份投影。
+  provider 只在加载被接受时同时替换快照与窗口，失败或过期结果不推进窗口。
 - **Qualified play（有效播放）** — 口径唯一在 `PlayStatisticsLimits`：
   `qualifiedThresholdMs(durationMs)` / `isQualified(...)`
   （`listenedMs ≥ min(30s, 50% × 时长)`，奇数时长向上取整）；SQL 谓词与
@@ -867,6 +875,7 @@
   （barrel；实现拆在 `lib/pages/statistics/`）+
   `lib/providers/play_statistics_provider.dart`：范围切换（近 7 天 / 30 天 /
   全部）只作用于汇总/榜单；**日历热力图固定全量历史**，范围切换只做高亮。
+  页面渲染 provider 接受的 `ListeningStatisticsView`，不自行重算日历 / 矩阵。
   形状与色阶约定见 `lib/widgets/statistics/listening_heatmap.dart`
   （格子静默 `square`、悬停/按压 morph `puffy` 放大，色阶 = `primary`
   四档 alpha，空日 `surfaceContainerHighest`）。
