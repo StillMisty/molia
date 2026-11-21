@@ -1340,7 +1340,8 @@
 - `settings_keys.dart`：登记键总表 —— 键名、默认值、同步类别（跟人走 / 音源 /
   凭证）、存放盒（prefs / 凭据库）的唯一声明处；设备本地键（省流、缓存策略、
   全局字体、桌面歌词悬浮窗、托盘与关闭行为、播放会话、曲库数据…）
-  不登记，留在各自模块（只有一位消费者，收进来只增加门房面积）。快捷键开关 /
+  不登记：已迁移的走 `DeviceSettings`，未迁移的暂时留在各自模块
+  （只有一位消费者，收进来只增加门房面积）。快捷键开关 /
   绑定四键（`kShortcutsEnabled` / `kGlobalShortcutsEnabled` /
   `kShortcutBindings` / `kGlobalShortcutBindings`）按「跟人走」登记，此前漏在
   总表外、现已进入同步范围；海报取色来源 / 自定义种子色 / 字体覆盖三键
@@ -1348,11 +1349,14 @@
   此前只写本地 prefs，换设备或重装后歌词 / 统计 / 年度报告海报样式会丢，
   也不进完整备份；字体族在目标设备缺失时由渲染层回退，不阻断生成；
 - `device_settings.dart` / `device_settings_keys.dart`：**设备本地设置**（音量 /
-  播放手感 / 首次引导标记…）的统一入口 —— `DeviceSettingKey` 只有名字 / 默认值 /
-  类型，键表一张，JSON 一个编解码路径，写盘串行，读失败回默认、写失败只记日志。
-  已迁移的 `PlaybackFeelStore` / `PlaybackVolumeStore` / `OnboardingStore` 只保留
-  字段解释与旧版兜底；不登记、不同步。新代码直连 `SharedPreferences` 由
-  `test/architecture/prefs_usage_test.dart` 拦截（存量白名单只减不增）；
+  播放手感 / 首次引导标记…）新代码的统一入口 —— `DeviceSettingKey` 只有名字 /
+  默认值 / 类型（由泛型决定），`DeviceJsonSettingKey` 由键自己持有 decode / encode
+  与默认值；键表一张，JSON 一个编解码入口，写动作跨实例串行（同一偏好文件
+  共用一条链），读失败回默认、写失败只记日志。哪些键已迁移以 `device_settings_keys.dart` 的键表为准，store
+  只保留字段选择与旧版兜底（如音量的 `playback_volume` / `playback_muted`）；
+  不登记、不同步。新代码直连 `SharedPreferences` 由
+  `test/architecture/prefs_usage_test.dart` 拦截（存量白名单只减不增），设备键
+  名字面量由 `test/architecture/settings_keys_test.dart` 扫描；
 - `settings_access.dart`：模块面 `SettingsAccess`（`read` / `write` / `clear`）；
   重载只能经 `SettingsRegistry.mount(SettingsModule)` 与作用域一起绑定，
   同步适配器只依赖窄接口 `SettingsSyncSurface`（`entries` / `readRaw` /
