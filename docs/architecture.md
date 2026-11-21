@@ -51,9 +51,9 @@
    `provider_tree.dart` / `root_widget.dart`；初始化顺序与前向引用关在 builder
    内，main() 不再持有子系统细节；应用壳的对外入口是
    `lib/app/app_shell.dart`（barrel：MyApp / MyThemedApp / 全局 key 等公开
-   类型），实现按职责拆在 `lib/app/shell/`（app_shell / shell_bar /
-   shell_page_layer / shell_progress / pairing_queue / themed_app /
-   app_keys），桌面骨架（顶栏工具条 / 恒折叠侧栏 / 常驻底栏播放条）在
+   类型），实现按职责拆在 `lib/app/shell/`（app_shell / shell_presentation /
+   shell_bar / shell_page_layer / shell_progress / pairing_queue /
+   themed_app / app_keys），桌面骨架（顶栏工具条 / 恒折叠侧栏 / 常驻底栏播放条）在
    `lib/app/desktop/**`，测试可直接挂载
    （`MyApp(desktopShell: true/false)` 可强制骨架，默认按平台判定）；
 5. UI 禁止 import `lib/sources/**`（白名单已清空，新增违规必须修复）；
@@ -1746,11 +1746,17 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   `PopScope` 只在「当前是播放页且展开」时拦，其余交给系统 pop；桌面 Esc 先看
   播放页右栏是否停在队列（是则收队列），否则展开态先收起，其它一级页不再
   「回上一目的地」（保持原命令落点，非播放页 no-op）。
-  `NowPlayingController.expanded` / `miniCapable` / `activeTab` 是页面回写给
-  壳层的只读状态，`expand()` / `collapse()` 是意图；页面级临时状态
-  （收藏多选 / 搜索 / 排序）经 `lib/services/back_claims.dart` 登记，壳层在
-  `BackClaims.any` 时让位——`ModalRoute.onPopInvokedWithResult` 会把一次返回
-  广播给路由上所有 `PopScope`，没有这层仲裁会同时退页面状态与目的地。
+  目的地解析（选中 / 隐藏回退 / 恢复）、上一目的地、展开态与布局能力、
+  顶栏播放条可见性与返回裁决收在
+  `lib/app/shell/shell_presentation.dart::ShellPresentation`（纯判定，不 import
+  widget / page / material）：页面在布局 / 动画落定时经
+  `NowPlaying.onExpansionChanged` / `onMiniCapableChanged` 回写展开态与布局
+  能力，壳层 State 只负责跑弹簧、发共享封面飞行与搭骨架；
+  `NowPlayingController` 只保留 tab / 队列 / 展开请求与 `activeTab`。页面级
+  临时状态（收藏多选 / 搜索 / 排序）经 `lib/services/back_claims.dart` 登记，
+  盘点在 `ShellPresentation.handleBack` 里让位——`ModalRoute.onPopInvokedWithResult`
+  会把一次返回广播给路由上所有 `PopScope`，没有这层仲裁会同时退页面状态与
+  目的地。
 - 取色模型（唯一优先级，见 ADR-0001）：**基础配色**（壁纸 / 自定义，单选）+
   **封面覆盖**（当前曲目已有封面取色结果时用封面 seed 覆盖基础配色，包括
   盖过莫奈；启动恢复态在首帧前用本地缓存预解析；无封面回退）+
