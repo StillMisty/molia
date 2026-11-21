@@ -12,7 +12,6 @@ import '../../../providers/library_provider.dart';
 import '../../../providers/search_provider.dart';
 import '../../../services/app_presence.dart';
 import '../../../services/memory/app_memory_manager.dart';
-import '../../../sources/builtin/builtin_search.dart';
 import '../catalog_stack.dart';
 import '../library_stack.dart';
 import '../local_data_stack.dart';
@@ -57,7 +56,7 @@ void wireMemoryReclaim({
     catalog.artistService.clearCache,
     catalog.commentsService.clearCache,
     library.statisticsSyncStore.releaseExportCaches,
-    BuiltinSearch.clearCachedResponses,
+    catalog.sourceManager.clearBuiltinCache,
     catalog.sourceManager.releaseBuiltinLyricCache,
     catalog.sourceManager.releaseBuiltinPicCache,
     local.coverBackfill.clearCache,

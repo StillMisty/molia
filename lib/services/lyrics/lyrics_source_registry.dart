@@ -7,6 +7,7 @@ library;
 
 import '../../sources/builtin/bili_lyric.dart';
 import '../../sources/builtin/bili_session.dart';
+import '../../sources/builtin/builtin_transport.dart';
 import '../../sources/builtin/channel/channels.dart';
 import 'builtin_lyric_provider.dart';
 import 'kugou_provider.dart';
@@ -24,8 +25,10 @@ class LyricsSourceRegistry {
   /// 用指定账号会话派生来源集合：可用性闭包与 B 站字幕 provider 都绑定
   /// 注入的会话。测试 / 多实例接线不碰 [BiliSession.shared]；[standard]
   /// 只是它的生产默认绑定。
-  factory LyricsSourceRegistry.forSession(BiliSession session) =>
-      LyricsSourceRegistry(_standardStrategies(session));
+  factory LyricsSourceRegistry.forSession(
+    BiliSession session, {
+    BuiltinTransport? transport,
+  }) => LyricsSourceRegistry(_standardStrategies(session, transport));
 
   /// 来源声明顺序：自动回退的并行竞速顺序，也是歌词换源的默认顺序
   /// （换源页最终按渠道管理的 `orderedChannelKeys` 重排）。
@@ -47,16 +50,19 @@ class LyricsSourceRegistry {
     BiliSession.shared,
   );
 
-  static List<LyricsSourceStrategy> _standardStrategies(BiliSession session) {
+  static List<LyricsSourceStrategy> _standardStrategies(
+    BiliSession session,
+    BuiltinTransport? transport,
+  ) {
     // 五个音乐平台沿用各自的专用 provider：搜索后需要平台特有字段
     // （kg 的 hash、mg 的 mrc/lrc/trc URL、tx 的数字 songId 等）才能取词，
     // 通用适配器只透传 raw 满足不了这些取词接口。
     final covered = <String, LyricProvider>{
-      'tx': QQProvider(),
-      'wy': NetEaseProvider(),
-      'kg': KugouProvider(),
-      'kw': KuwoProvider(),
-      'mg': MiguProvider(),
+      'tx': QQProvider(transport: transport),
+      'wy': NetEaseProvider(transport: transport),
+      'kg': KugouProvider(transport: transport),
+      'kw': KuwoProvider(transport: transport),
+      'mg': MiguProvider(transport: transport),
     };
 
     final strategies = <LyricsSourceStrategy>[];
@@ -79,8 +85,10 @@ class LyricsSourceRegistry {
           channelKey: channel.key,
           provider: BuiltinLyricProvider(
             channel.key,
+            http: transport ?? BuiltinTransport(),
             adapter: channel.key == 'bili'
-                ? BiliLyric(session: session).fetch
+                ? (http, raw) =>
+                      BiliLyric(transport: http, session: session).fetch(raw)
                 : null,
           ),
           // 只进手动换源，不参与自动回退：B 站搜索结果是视频（同名翻唱 /

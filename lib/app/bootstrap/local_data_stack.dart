@@ -44,7 +44,9 @@ import '../../services/local/music_folders.dart';
 import '../../services/local_cache_index_store.dart';
 import '../../services/local_cover_identity_sweep.dart';
 import '../../services/lyrics_cache.dart';
+import '../../services/lyrics/lyrics_source_registry.dart';
 import '../../services/lyrics_service.dart';
+import '../../sources/builtin/bili_session.dart';
 import '../../sources/builtin/builtin_search.dart';
 import 'catalog_stack.dart';
 import 'startup_trace.dart';
@@ -132,6 +134,11 @@ Future<LocalDataStack> buildLocalDataStack({
   // 曲目原生取词经 SourceManager 统一路由：脚本 lyric action →
   // any-listen → 内置平台原生实现（wy/tx/kg/kw/mg/bili，精确平台 ID）。
   final lyricsService = LyricsService(
+    // 歌词来源与内置音源共用同一个传输：缓存 / 重试预算不再分叉。
+    providers: LyricsSourceRegistry.forSession(
+      BiliSession.shared,
+      transport: sourceManager.builtinTransport,
+    ).autoProviders,
     // 与 `CacheService.instance` 共享同一个文件后端实例（见上）。
     lyricsCache: lyricsCache,
     // 本地下载曲目：离线歌词缺失时不回退网络（离线播放全程不触网）。
@@ -168,6 +175,7 @@ Future<LocalDataStack> buildLocalDataStack({
         sourceManager.fetchPic(sourceTrackFromTrack(track)),
     searchChannel: (channelKey, keyword) async {
       final page = await BuiltinSearch.searchWithMeta(
+        sourceManager.builtinTransport,
         channelKey,
         keyword,
         limit: 10,

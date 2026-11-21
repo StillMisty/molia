@@ -1,5 +1,6 @@
 import 'package:logging/logging.dart';
 
+import '../../sources/builtin/builtin_transport.dart';
 import '../../sources/builtin/kg_lyric.dart';
 import '../../sources/builtin/kg_search.dart';
 import '../../sources/source_track.dart';
@@ -9,6 +10,10 @@ import 'lyric_provider.dart';
 /// - 搜索复用内置 `kg` 搜索（与内置源同一实现，响应带 `hash`/时长）；
 /// - 取词用 [KgLyric]（search + download + KRC 解码），含翻译 / 罗马音 / 逐字。
 class KugouProvider extends LyricProvider {
+  KugouProvider({BuiltinTransport? transport})
+    : _http = transport ?? BuiltinTransport();
+
+  final BuiltinTransport _http;
   final Logger _logger = Logger('molia.kugou_provider');
 
   @override
@@ -32,7 +37,11 @@ class KugouProvider extends LyricProvider {
   }) async {
     try {
       final keyword = '$title $artist'.trim();
-      final result = await KgSearch.searchWithMeta(keyword, limit: limit);
+      final result = await KgSearch.searchWithMeta(
+        _http,
+        keyword,
+        limit: limit,
+      );
       return [for (final track in result.tracks.take(limit)) _toMatch(track)];
     } catch (e) {
       _logger.warning('酷狗歌词搜索失败: $e');
@@ -68,6 +77,7 @@ class KugouProvider extends LyricProvider {
     final seconds = _timelengthSeconds(match);
     try {
       final info = await KgLyric.fetch(
+        _http,
         name: name,
         hash: hash,
         timelengthSeconds: seconds,
