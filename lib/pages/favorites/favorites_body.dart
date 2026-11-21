@@ -201,12 +201,6 @@ Widget buildFavoritesRow(
   final playedAtText = row is HistoryCollectionRow
       ? syncTimeText(row.playedAt)
       : '';
-  // 行尾缓存标签统一用紧凑图标，不再占一整段文字。多选 / 排序模式
-  // 不渲染 ⋮（见 CollectionTrackRow）。
-  final cached = switch (row) {
-    LocalSongCollectionRow(:final song) when song.isCached => true,
-    _ => false,
-  };
   final versionCount = data.smartVersionCounts[row.key] ?? 0;
   final versionTrailing = versionCount <= 1
       ? null
@@ -215,15 +209,6 @@ Widget buildFavoritesRow(
           onPressed: () => data.onToggleSmartVersions(row),
           child: Text(l10n.duplicateVersions(versionCount)),
         );
-  final cachedTrailing =
-      versionTrailing ??
-      (!cached
-          ? null
-          : Icon(
-              Icons.download_done_rounded,
-              size: 16,
-              semanticLabel: l10n.localSongsCachedTag,
-            ));
   return RowActionsBuilder(
     // Sliver itemBuilder 里不能直接 select：动作构造放进独立 build。
     actions: (rowContext) => (data.reorderActive || data.selecting)
@@ -260,7 +245,7 @@ Widget buildFavoritesRow(
               Icons.drag_handle_rounded,
               color: Theme.of(rowContext).colorScheme.onSurfaceVariant,
             )
-          : cachedTrailing,
+          : versionTrailing,
       position: calculateCardPosition(index, data.rows.length),
       onTap: data.reorderActive || data.isMissingRow(row)
           ? null

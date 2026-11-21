@@ -4462,9 +4462,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Delete the downloads? Audio, lyrics and cover files will be removed; imported songs are only removed from the list.';
 
   @override
-  String get localSongsCachedTag => 'Cached';
-
-  @override
   String get localSongsCachedRemove => 'Clear cache';
 
   @override

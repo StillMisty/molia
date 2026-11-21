@@ -4280,9 +4280,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadDeleteConfirmMixed => '删除下载？音频、歌词与封面会一起删除；导入的歌曲只从列表移除。';
 
   @override
-  String get localSongsCachedTag => '缓存';
-
-  @override
   String get localSongsCachedRemove => '清除缓存';
 
   @override

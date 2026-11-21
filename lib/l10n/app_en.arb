@@ -2432,7 +2432,6 @@
   "downloadDelete": "Delete download",
   "downloadDeleteConfirm": "Delete the download? Audio, lyrics and cover files will be removed.",
   "downloadDeleteConfirmMixed": "Delete the downloads? Audio, lyrics and cover files will be removed; imported songs are only removed from the list.",
-  "localSongsCachedTag": "Cached",
   "localSongsCachedRemove": "Clear cache",
   "localSongsCachedRemoveConfirm": "Clear this song’s audio cache? Only the cache is removed; downloads and imported files are unaffected.",
   "localSongsMixedRemoveConfirm": "Remove the selected items? Downloads delete files, imported items are only removed from the list, and cached copies are cleared.",

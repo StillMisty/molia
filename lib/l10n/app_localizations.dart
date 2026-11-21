@@ -7996,12 +7996,6 @@ abstract class AppLocalizations {
   /// **'Delete the downloads? Audio, lyrics and cover files will be removed; imported songs are only removed from the list.'**
   String get downloadDeleteConfirmMixed;
 
-  /// No description provided for @localSongsCachedTag.
-  ///
-  /// In en, this message translates to:
-  /// **'Cached'**
-  String get localSongsCachedTag;
-
   /// No description provided for @localSongsCachedRemove.
   ///
   /// In en, this message translates to:
