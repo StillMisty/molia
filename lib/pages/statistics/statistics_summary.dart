@@ -19,11 +19,15 @@ class StatisticsSummaryBlocks extends StatelessWidget {
     super.key,
     required this.l10n,
     required this.snapshot,
+    required this.now,
     required this.wide,
   });
 
   final AppLocalizations l10n;
   final ListeningStatisticsSnapshot? snapshot;
+
+  /// 统计窗口的当前时刻：紧凑日期按它判断是否跨年，不另读墙钟。
+  final DateTime now;
   final bool wide;
 
   @override
@@ -59,7 +63,7 @@ class StatisticsSummaryBlocks extends StatelessWidget {
         iconColor: scheme.onSurfaceVariant,
         value: firstPlayedAt == null
             ? '—'
-            : formatCompactStatisticsDate(firstPlayedAt),
+            : formatCompactStatisticsDate(firstPlayedAt, now: now),
         label: l10n.statsSince,
       ),
     ];

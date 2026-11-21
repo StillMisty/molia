@@ -9,29 +9,30 @@ import '../../domain/models/play_statistics.dart';
 import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/play_statistics_provider.dart';
+import '../../services/statistics/listening_statistics.dart';
 import '../../theme/m3e_context.dart';
 import '../../widgets/labels/listened_duration.dart';
 import '../../widgets/statistics/listening_heatmap.dart';
 import '../../widgets/track_row.dart';
-import 'statistics_models.dart';
 
 /// 日历热力图卡片：全量历史格子 + 范围高亮 + 时长/次数切换。
+///
+/// 投影（值 / 起始日 / 今天 / 高亮起点）全部来自 [ListeningStatisticsView]，
+/// 卡片不再读墙钟。
 class StatisticsCalendarHeatmapCard extends StatelessWidget {
   const StatisticsCalendarHeatmapCard({
     super.key,
     required this.l10n,
-    required this.snapshot,
+    required this.view,
     required this.valueMode,
-    required this.rangeStart,
     required this.selectedDay,
     required this.onValueModeChanged,
     required this.onDayTap,
   });
 
   final AppLocalizations l10n;
-  final ListeningStatisticsSnapshot? snapshot;
+  final ListeningStatisticsView view;
   final PlayStatisticsValueMode valueMode;
-  final DateTime? rangeStart;
   final DateTime? selectedDay;
   final ValueChanged<PlayStatisticsValueMode> onValueModeChanged;
   final ValueChanged<DateTime> onDayTap;
@@ -39,14 +40,7 @@ class StatisticsCalendarHeatmapCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final duration = valueMode == PlayStatisticsValueMode.duration;
-    final values = statisticsCalendarValues(snapshot, duration: duration);
-    final today = DateUtils.dateOnly(DateTime.now());
-    final firstPlayedAt = snapshot?.summary.firstPlayedAt;
-    final firstDay = firstPlayedAt == null
-        ? today
-        : DateUtils.dateOnly(
-            DateTime.fromMillisecondsSinceEpoch(firstPlayedAt),
-          );
+    final values = view.calendarValues(duration: duration);
     final localizations = MaterialLocalizations.of(context);
 
     return M3ECard(
@@ -89,11 +83,11 @@ class StatisticsCalendarHeatmapCard extends StatelessWidget {
           const SizedBox(height: 12),
           CalendarHeatmap(
             values: values,
-            firstDay: firstDay,
-            lastDay: today,
+            firstDay: view.firstDay,
+            lastDay: view.today,
             cellSize: 14,
             selectedDay: selectedDay,
-            highlightFrom: rangeStart,
+            highlightFrom: view.windowStart,
             tooltipFor: (day, value) => l10n.statsTooltip(
               localizations.formatMediumDate(day),
               duration
@@ -115,20 +109,18 @@ class StatisticsWeekdayHourCard extends StatelessWidget {
   const StatisticsWeekdayHourCard({
     super.key,
     required this.l10n,
-    required this.snapshot,
+    required this.view,
     required this.valueMode,
   });
 
   final AppLocalizations l10n;
-  final ListeningStatisticsSnapshot? snapshot;
+  final ListeningStatisticsView view;
   final PlayStatisticsValueMode valueMode;
 
   @override
   Widget build(BuildContext context) {
-    final data = snapshot;
-    if (data == null) return const SizedBox.shrink();
     final duration = valueMode == PlayStatisticsValueMode.duration;
-    final values = statisticsWeekdayHourValues(data, duration: duration);
+    final values = view.weekdayHourValues(duration: duration);
     final narrow = MaterialLocalizations.of(context).narrowWeekdays;
 
     return M3ECard(

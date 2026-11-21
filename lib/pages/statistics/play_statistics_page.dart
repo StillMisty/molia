@@ -31,6 +31,7 @@ import '../../services/listening_stats_poster_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/play_statistics_service.dart';
 import '../../services/poster/poster_render_style.dart';
+import '../../services/statistics/listening_statistics.dart';
 import '../../theme/m3e_context.dart';
 import '../../widgets/poster_share_sheet.dart';
 import '../../widgets/responsive.dart';
@@ -142,6 +143,9 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   }
 
   Widget _content(AppLocalizations l10n, PlayStatisticsProvider provider) {
+    final view = provider.view;
+    // hasLoaded 只在快照与投影同时就绪后置位；这里兜底异常态，正常不会命中。
+    if (view == null) return const Center(child: M3ELoadingIndicator());
     final isWide = context.isLargeScreen;
     final isDesktop = context.isDesktop;
     // 范围切换走设置页共享的分段行（SettingsChoiceRow 显式给紧约束宽度，
@@ -158,10 +162,8 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       onChanged: (range) => unawaited(provider.setRange(range)),
     );
     final statistics = context.watch<PlayStatisticsService?>();
-    final topTracks =
-        provider.snapshot?.topTracks ?? const <PlayStatTrackEntry>[];
-    final topArtists =
-        provider.snapshot?.topArtists ?? const <PlayStatArtistEntry>[];
+    final topTracks = view.snapshot.topTracks;
+    final topArtists = view.snapshot.topArtists;
     final sections = <Widget>[
       // 采集开关跟随统计页：关闭 = 停止记录新事件，已有数据保留。
       if (statistics != null) ...[
@@ -182,7 +184,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
         ),
         const SizedBox(height: 16),
       ],
-      if (provider.snapshot != null) ..._annualEntry(provider.allHistoryDaily),
+      ..._annualEntry(view),
       rangeRow,
       const SizedBox(height: 16),
       if (provider.isEmpty)
@@ -191,9 +193,8 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
         // 围绕热力图设计：范围切换 → hero 热力图 → 汇总条 → 作息 → 指标 → 榜单。
         StatisticsCalendarHeatmapCard(
           l10n: l10n,
-          snapshot: provider.snapshot,
+          view: view,
           valueMode: provider.valueMode,
-          rangeStart: provider.rangeStart,
           selectedDay: _selectedDay,
           onValueModeChanged: provider.setValueMode,
           onDayTap: (day) => unawaited(_showDayDetail(day)),
@@ -201,19 +202,20 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
         const SizedBox(height: 16),
         StatisticsSummaryBlocks(
           l10n: l10n,
-          snapshot: provider.snapshot,
+          snapshot: view.snapshot,
+          now: view.window.now,
           wide: isWide,
         ),
         const SizedBox(height: 16),
         StatisticsWeekdayHourCard(
           l10n: l10n,
-          snapshot: provider.snapshot,
+          view: view,
           valueMode: provider.valueMode,
         ),
         const SizedBox(height: 16),
         StatisticsMetricsSection(
           l10n: l10n,
-          snapshot: provider.snapshot,
+          snapshot: view.snapshot,
           sourceName: (sourceKey) => statisticsSourceName(context, sourceKey),
           wide: isWide,
         ),
@@ -257,8 +259,13 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   }
 
   /// 年度报告入口：数据来自本页已有的全量日历 rollup，不额外查询。
-  List<Widget> _annualEntry(List<DayListened> daily) {
-    final entry = AnnualReportEntry.fromDaily(daily, now: DateTime.now());
+  ///
+  /// 「现在」直接取统计窗口：入口强调的月份与页面高亮属于同一时刻。
+  List<Widget> _annualEntry(ListeningStatisticsView view) {
+    final entry = AnnualReportEntry.fromDaily(
+      view.snapshot.daily,
+      now: view.window.now,
+    );
     if (!entry.isVisible) return const [];
     return [
       AnnualReportEntryCard(
@@ -420,12 +427,12 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   }
 
   Future<Uint8List?> _renderPoster(PlayStatisticsProvider provider) async {
-    if (!_hasPosterData(provider)) return null;
+    final view = provider.view;
+    if (view == null || provider.isEmpty) return null;
     final l10n = AppLocalizations.of(context)!;
     final data = buildListeningStatsPosterData(
       l10n: l10n,
-      snapshot: provider.snapshot,
-      range: provider.range,
+      view: view,
       narrowWeekdays: MaterialLocalizations.of(context).narrowWeekdays,
       sourceName: (sourceKey) => statisticsSourceName(context, sourceKey),
     );
@@ -439,9 +446,6 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       watermarkText: l10n.appName,
     );
   }
-
-  bool _hasPosterData(PlayStatisticsProvider provider) =>
-      provider.snapshot != null && !provider.isEmpty;
 
   Future<void> _confirmClear() async {
     final l10n = AppLocalizations.of(context)!;

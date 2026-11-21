@@ -5,7 +5,10 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:molia/domain/models/play_statistics.dart';
+import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/pages/statistics/statistics_models.dart';
 import 'package:molia/services/statistics/listening_statistics.dart';
 
 ListeningStatisticsSnapshot _snapshot({
@@ -248,6 +251,59 @@ void main() {
       );
       expect(view.poster.topTracks, [track]);
       expect(view.poster.sources.single.sourceKey, 'wy');
+    });
+  });
+
+  group('海报输入', () {
+    test('直接消费视图投影，星期标签重排为周一开头', () {
+      final l10n = lookupAppLocalizations(const Locale('zh'));
+      final view = ListeningStatisticsView.from(
+        _snapshot(
+          totalListenedMs: 9000,
+          qualifiedPlayCount: 3,
+          uniqueTrackCount: 1,
+          topTracks: const [
+            PlayStatTrackEntry(
+              sourceKey: 'wy',
+              songId: 's1',
+              title: '晴天',
+              artist: '周杰伦',
+              playCount: 3,
+              listenedMs: 9000,
+              lastPlayedAt: 0,
+            ),
+          ],
+          sources: const [
+            SourceListened(sourceKey: 'wy', listenedMs: 9000, playCount: 3),
+          ],
+          byWeekdayHour: const [
+            WeekdayHourListened(
+              weekday: 2,
+              hour: 5,
+              listenedMs: 2000,
+              playCount: 4,
+            ),
+          ],
+        ),
+        StatisticsWindow(
+          range: PlayStatisticsRange.week,
+          now: DateTime(2031, 1, 2, 12),
+        ),
+      );
+
+      final data = buildListeningStatsPosterData(
+        l10n: l10n,
+        view: view,
+        narrowWeekdays: const ['日', '一', '二', '三', '四', '五', '六'],
+        sourceName: (key) => '平台$key',
+      );
+
+      expect(data.rangeLabel, l10n.statsRangeWeek);
+      expect(data.weekdayLabels, ['一', '二', '三', '四', '五', '六', '日']);
+      expect(data.weekdayHour, hasLength(168));
+      expect(data.weekdayHour[2 * 24 + 5], 2000);
+      expect(data.playsLabel, '3');
+      expect(data.platformLabel, contains('平台wy'));
     });
   });
 }
