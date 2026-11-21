@@ -1754,7 +1754,7 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   能力，壳层 State 只负责跑弹簧、发共享封面飞行与搭骨架；
   `NowPlayingController` 只保留 tab / 队列 / 展开请求与 `activeTab`。页面级
   临时状态（收藏多选 / 搜索 / 排序）经 `lib/services/back_claims.dart` 登记，
-  盘点在 `ShellPresentation.handleBack` 里让位——`ModalRoute.onPopInvokedWithResult`
+  裁定在 `ShellPresentation.handleBack` 里让位——`ModalRoute.onPopInvokedWithResult`
   会把一次返回广播给路由上所有 `PopScope`，没有这层仲裁会同时退页面状态与
   目的地。
 - 取色模型（唯一优先级，见 ADR-0001）：**基础配色**（壁纸 / 自定义，单选）+

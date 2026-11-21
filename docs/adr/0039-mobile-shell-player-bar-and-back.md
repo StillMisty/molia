@@ -109,3 +109,10 @@ ADR-0024（播放页圆点手势）、`lib/app/shell/app_shell.dart`、
   不会留在半截高度。
 - 未来若重做移动端播放页，必须同时评估顶栏播放条、收起高度 0、进入
   即展开、返回层级与新设置；不允许单独恢复页内迷你条或第二套封面飞行。
+
+## 追加（2026-11-21）
+
+展开态 / `miniCapable` 的所有者迁到
+`lib/app/shell/shell_presentation.dart`，页面经 `NowPlaying.onExpansionChanged` /
+`onMiniCapableChanged` 回写；`ShellDestination` 移到
+`lib/domain/models/shell_destination.dart`。ADR 正文行为不变。
