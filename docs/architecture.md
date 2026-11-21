@@ -1055,8 +1055,8 @@
   只负责发送与结论，不读写设置、不重试、不排队；`scrobble_http.dart` 统一超时与错误归一；
 - **发件箱**：`lib/services/scrobble/scrobble_outbox.dart` 按服务隔离、有界、持久，只存事件与重试
   状态（不存令牌），429 优先 `Retry-After`；进程被杀时最多重发一条；
-- **开关与凭证**：`scrobble_preferences.dart` 把总开关 / 单服务开关 / 同意版本留在设备本地
-  SharedPreferences（不登记同步）；`kListenBrainzToken` / `kLastFmSessionKey` 是凭据键（生产落本机凭据库），
+- **开关与凭证**：`scrobble_preferences.dart` 把总开关 / 单服务开关 / 同意版本 / 账号留在
+  设备本地 `DeviceSettings`（不登记同步）；`kListenBrainzToken` / `kLastFmSessionKey` 是凭据键（生产落本机凭据库），
   随凭证同步（ADR-0016）；断开连接清空该服务凭证与队列；
 - **组合根与入口**：`lib/app/bootstrap/scrobble_stack.dart` 只做纯构造；
   服务在首帧后 `init()`（幂等），页面打开时再补一次；凭据存本机凭据库。
@@ -1388,7 +1388,8 @@
   也不进完整备份；字体族在目标设备缺失时由渲染层回退，不阻断生成；
 - `device_settings.dart` / `device_settings_keys.dart`：**设备本地设置**（音量 /
   播放手感、触感、下载、缓存策略、省流、更新渠道、窗口几何 / 托盘、曲库浏览 /
-  分组折叠、音乐文件夹、全局字体、首次引导标记）新代码的统一入口 ——
+  分组折叠、音乐文件夹、听歌同步开关 / 同意 / 账号、全局字体、首次引导标记）
+  新代码的统一入口 ——
   `DeviceSettingKey` 只有名字 / 默认值 / 类型（由泛型决定），
   `DeviceJsonSettingKey` / `DeviceJsonListSettingKey` 由键自己持有 decode /
   encode 与默认值（对象 / 数组）；键表一张，JSON 一个编解码入口，写动作跨实例

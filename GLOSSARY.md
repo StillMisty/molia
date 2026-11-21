@@ -1036,7 +1036,7 @@
   `lib/services/scrobble/listenbrainz_sink.dart` / `lastfm_sink.dart`：只负责「发一条事件并报告
   结论」，不读写设置、不重试、不排队；令牌只出现在鉴权头或协议参数里，不进日志。
 - **Scrobble preferences（开关与凭证）** — `lib/services/scrobble/scrobble_preferences.dart`：总开关 /
-  单服务开关 / 同意版本是设备本地 SharedPreferences，不登记同步——另一台设备同步凭证也不能
+  单服务开关 / 同意版本 / 账号是设备本地 `DeviceSettings`，不登记同步——另一台设备同步凭证也不能
   悄悄开始上报；访问口令与会话密钥是凭证类别，走本机凭据库并随凭证同步（ADR-0016）。断开连接
   会清空该服务的凭证与队列。
 
@@ -1256,8 +1256,8 @@
   等**非设置状态**，在棘轮白名单里逐项注明。
 - **Device-local settings（设备本地设置）** — `lib/data/settings/device_settings.dart`：
   不跟人走的键（音量与播放手感、触感、下载目录与模板、缓存策略、省流、更新渠道、
-  窗口几何与托盘行为、曲库浏览 / 分组折叠、音乐文件夹、全局应用字体、首次引导
-  标记）**新代码的唯一入口**。`DeviceSettingKey` 只有名字 / 默认值 / 类型（由泛型
+  窗口几何与托盘行为、曲库浏览 / 分组折叠、音乐文件夹、听歌同步开关 / 同意 /
+  账号、全局应用字体、首次引导标记）**新代码的唯一入口**。`DeviceSettingKey` 只有名字 / 默认值 / 类型（由泛型
   决定：bool / int / double / String / List<String>），没有同步类别；
   `DeviceJsonSettingKey` / `DeviceJsonListSettingKey` 额外持有该键的 decode /
   encode（对象 / 数组各一种），合并存储时字段形状只声明一次。

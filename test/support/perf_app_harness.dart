@@ -113,8 +113,10 @@ Future<FakePlaybackFacade> pumpPerfApp(
       'shell_home_destination': 'favorites',
     });
   }
-  // 快捷键设置必须接线后才能读写（生产由组合根 attach；测试用内存注册表）。
-  ShortcutSettings.attachSettings(testSettingsRegistry());
+  // 全静态设置服务必须接线后才能读写（生产由组合根 attach；测试用内存注册表）。
+  // 设置页 / 海报渲染 / 语言行都会在首帧后访问它们，缺一个就抛 StateError。
+  final staticSettings = testSettingsRegistry();
+  attachStaticSettingsForTest(staticSettings);
   await ShortcutSettings.load();
   await ShortcutSettings.instance.setInAppEnabled(true);
   await ShortcutSettings.instance.setGlobalEnabled(false);

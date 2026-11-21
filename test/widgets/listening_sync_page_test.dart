@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:molia/data/settings/device_settings.dart';
 import 'package:molia/domain/models/scrobble.dart';
 import 'package:molia/domain/ports/scrobble_sink.dart';
 import 'package:molia/l10n/app_localizations.dart';
@@ -47,7 +48,7 @@ void main() {
     service = ScrobbleService(
       preferences: ScrobblePreferences(
         settings: testSettingsRegistry(),
-        prefs: prefs,
+        deviceSettings: DeviceSettings(preferences: prefs),
       ),
       outbox: ScrobbleOutbox(prefs: prefs),
       listenBrainzSink: _FakeSink(ScrobbleTarget.listenBrainz),

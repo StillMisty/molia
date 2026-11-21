@@ -3,12 +3,13 @@
 /// 边界（ADR-0016 / 规格）：
 /// - 访问口令 / 会话密钥 = 凭证类别，走 secure 盒并参与凭证同步
 ///   （[SettingsAccess] 只拿登记键）；
-/// - 总开关、单个服务开关、同意标记 = **设备本地**，留在 SharedPreferences，
-///   不登记进设置注册表 —— 另一台设备同步凭据也不能悄悄开始上报。
+/// - 总开关、单个服务开关、同意标记、账号 = **设备本地**，走
+///   `DeviceSettings`，不登记进设置注册表 —— 另一台设备同步凭据也不能悄悄
+///   开始上报。
 library;
 
-import 'package:shared_preferences/shared_preferences.dart';
-
+import '../../data/settings/device_settings.dart';
+import '../../data/settings/device_settings_keys.dart';
 import '../../data/settings/settings_access.dart';
 import '../../data/settings/settings_key.dart';
 import '../../data/settings/settings_keys.dart';
@@ -18,23 +19,24 @@ import '../../domain/models/scrobble.dart';
 const int kScrobbleConsentVersion = 1;
 
 class ScrobblePreferences {
-  ScrobblePreferences({required this._settings, SharedPreferences? prefs})
-    : _prefsOverride = prefs;
+  /// [deviceSettings] 仅测试注入；生产构造自己的设备本地入口。
+  /// [settings] 是凭证键的窄作用域，与设备本地开关无关。
+  ScrobblePreferences({required this._settings, DeviceSettings? deviceSettings})
+    : _deviceSettings = deviceSettings ?? DeviceSettings();
 
-  static const String keyMasterEnabled = 'scrobble_master_enabled_v1';
+  static const String keyMasterEnabled = kScrobbleMasterEnabledKeyName;
   static const String keyListenBrainzEnabled =
-      'scrobble_listenbrainz_enabled_v1';
-  static const String keyLastFmEnabled = 'scrobble_lastfm_enabled_v1';
+      kScrobbleListenBrainzEnabledKeyName;
+  static const String keyLastFmEnabled = kScrobbleLastFmEnabledKeyName;
   static const String keyListenBrainzConsent =
-      'scrobble_listenbrainz_consent_v1';
-  static const String keyLastFmConsent = 'scrobble_lastfm_consent_v1';
+      kScrobbleListenBrainzConsentKeyName;
+  static const String keyLastFmConsent = kScrobbleLastFmConsentKeyName;
   static const String keyListenBrainzAccount =
-      'scrobble_listenbrainz_account_v1';
-  static const String keyLastFmAccount = 'scrobble_lastfm_account_v1';
+      kScrobbleListenBrainzAccountKeyName;
+  static const String keyLastFmAccount = kScrobbleLastFmAccountKeyName;
 
   final SettingsAccess _settings;
-  final SharedPreferences? _prefsOverride;
-  SharedPreferences? _prefs;
+  final DeviceSettings _deviceSettings;
 
   bool _masterEnabled = false;
   bool _listenBrainzEnabled = false;
@@ -64,31 +66,26 @@ class ScrobblePreferences {
     ScrobbleTarget.lastFm => _lastFmAccount,
   };
 
-  Future<SharedPreferences> _prefsStore() async =>
-      _prefs ??= _prefsOverride ?? await SharedPreferences.getInstance();
-
-  /// 读取设备本地偏好；存储不可用时保持默认（关闭）。
+  /// 读取设备本地偏好；存储不可用时按键默认（关闭）处理。
   Future<void> init() async {
-    try {
-      final prefs = await _prefsStore();
-      _masterEnabled = prefs.getBool(keyMasterEnabled) ?? false;
-      _listenBrainzEnabled = prefs.getBool(keyListenBrainzEnabled) ?? false;
-      _lastFmEnabled = prefs.getBool(keyLastFmEnabled) ?? false;
-      _listenBrainzConsent = prefs.getInt(keyListenBrainzConsent) ?? 0;
-      _lastFmConsent = prefs.getInt(keyLastFmConsent) ?? 0;
-      _listenBrainzAccount = prefs.getString(keyListenBrainzAccount) ?? '';
-      _lastFmAccount = prefs.getString(keyLastFmAccount) ?? '';
-    } catch (_) {
-      // 设备本地偏好读不到 = 未开启；不阻塞启动。
-    }
+    _masterEnabled = await _deviceSettings.read(kScrobbleMasterEnabledKey);
+    _listenBrainzEnabled = await _deviceSettings.read(
+      kScrobbleListenBrainzEnabledKey,
+    );
+    _lastFmEnabled = await _deviceSettings.read(kScrobbleLastFmEnabledKey);
+    _listenBrainzConsent = await _deviceSettings.read(
+      kScrobbleListenBrainzConsentKey,
+    );
+    _lastFmConsent = await _deviceSettings.read(kScrobbleLastFmConsentKey);
+    _listenBrainzAccount = await _deviceSettings.read(
+      kScrobbleListenBrainzAccountKey,
+    );
+    _lastFmAccount = await _deviceSettings.read(kScrobbleLastFmAccountKey);
   }
 
   Future<void> setMasterEnabled(bool value) async {
     _masterEnabled = value;
-    try {
-      final prefs = await _prefsStore();
-      await prefs.setBool(keyMasterEnabled, value);
-    } catch (_) {}
+    await _deviceSettings.write(kScrobbleMasterEnabledKey, value);
   }
 
   Future<void> setEnabled(ScrobbleTarget target, bool value) async {
@@ -98,10 +95,7 @@ class ScrobblePreferences {
       case ScrobbleTarget.lastFm:
         _lastFmEnabled = value;
     }
-    try {
-      final prefs = await _prefsStore();
-      await prefs.setBool(_enabledKey(target), value);
-    } catch (_) {}
+    await _deviceSettings.write(_enabledKey(target), value);
   }
 
   Future<void> recordConsent(ScrobbleTarget target) async {
@@ -111,10 +105,7 @@ class ScrobblePreferences {
       case ScrobbleTarget.lastFm:
         _lastFmConsent = kScrobbleConsentVersion;
     }
-    try {
-      final prefs = await _prefsStore();
-      await prefs.setInt(_consentKey(target), kScrobbleConsentVersion);
-    } catch (_) {}
+    await _deviceSettings.write(_consentKey(target), kScrobbleConsentVersion);
   }
 
   Future<void> setAccount(ScrobbleTarget target, String account) async {
@@ -124,10 +115,7 @@ class ScrobblePreferences {
       case ScrobbleTarget.lastFm:
         _lastFmAccount = account;
     }
-    try {
-      final prefs = await _prefsStore();
-      await prefs.setString(_accountKey(target), account);
-    } catch (_) {}
+    await _deviceSettings.write(_accountKey(target), account);
   }
 
   Future<String> readCredential(ScrobbleTarget target) async {
@@ -145,20 +133,23 @@ class ScrobblePreferences {
   Future<void> clearCredential(ScrobbleTarget target) =>
       _settings.clear(_credentialKey(target));
 
-  static String _enabledKey(ScrobbleTarget target) => switch (target) {
-    ScrobbleTarget.listenBrainz => keyListenBrainzEnabled,
-    ScrobbleTarget.lastFm => keyLastFmEnabled,
-  };
+  static DeviceSettingKey<bool> _enabledKey(ScrobbleTarget target) =>
+      switch (target) {
+        ScrobbleTarget.listenBrainz => kScrobbleListenBrainzEnabledKey,
+        ScrobbleTarget.lastFm => kScrobbleLastFmEnabledKey,
+      };
 
-  static String _consentKey(ScrobbleTarget target) => switch (target) {
-    ScrobbleTarget.listenBrainz => keyListenBrainzConsent,
-    ScrobbleTarget.lastFm => keyLastFmConsent,
-  };
+  static DeviceSettingKey<int> _consentKey(ScrobbleTarget target) =>
+      switch (target) {
+        ScrobbleTarget.listenBrainz => kScrobbleListenBrainzConsentKey,
+        ScrobbleTarget.lastFm => kScrobbleLastFmConsentKey,
+      };
 
-  static String _accountKey(ScrobbleTarget target) => switch (target) {
-    ScrobbleTarget.listenBrainz => keyListenBrainzAccount,
-    ScrobbleTarget.lastFm => keyLastFmAccount,
-  };
+  static DeviceSettingKey<String> _accountKey(ScrobbleTarget target) =>
+      switch (target) {
+        ScrobbleTarget.listenBrainz => kScrobbleListenBrainzAccountKey,
+        ScrobbleTarget.lastFm => kScrobbleLastFmAccountKey,
+      };
 
   static SettingsKey<String> _credentialKey(ScrobbleTarget target) =>
       switch (target) {
