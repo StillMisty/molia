@@ -75,35 +75,38 @@ class CollectionTrackList<T> extends StatelessWidget {
       verticalPadding,
     );
     final onReorder = this.onReorder;
-    return Scrollbar(
+    return _ScrollbarPositionAttach(
       controller: controller,
-      thumbVisibility: true,
-      interactive: true,
-      child: onReorder == null
-          ? ListView.builder(
-              controller: controller,
-              padding: padding,
-              itemExtent: itemExtent,
-              itemCount: rows.length,
-              itemBuilder: (context, index) => KeyedSubtree(
-                key: keyOf(rows[index]),
-                child: _buildRow(context, index, gap),
+      builder: (context) => Scrollbar(
+        controller: controller,
+        thumbVisibility: true,
+        interactive: true,
+        child: onReorder == null
+            ? ListView.builder(
+                controller: controller,
+                padding: padding,
+                itemExtent: itemExtent,
+                itemCount: rows.length,
+                itemBuilder: (context, index) => KeyedSubtree(
+                  key: keyOf(rows[index]),
+                  child: _buildRow(context, index, gap),
+                ),
+              )
+            : ReorderableListView.builder(
+                scrollController: controller,
+                padding: padding,
+                itemExtent: itemExtent,
+                buildDefaultDragHandles: false,
+                itemCount: rows.length,
+                onReorderItem: onReorder,
+                itemBuilder: (context, index) =>
+                    ReorderableDelayedDragStartListener(
+                      key: keyOf(rows[index]),
+                      index: index,
+                      child: _buildRow(context, index, gap),
+                    ),
               ),
-            )
-          : ReorderableListView.builder(
-              scrollController: controller,
-              padding: padding,
-              itemExtent: itemExtent,
-              buildDefaultDragHandles: false,
-              itemCount: rows.length,
-              onReorderItem: onReorder,
-              itemBuilder: (context, index) =>
-                  ReorderableDelayedDragStartListener(
-                    key: keyOf(rows[index]),
-                    index: index,
-                    child: _buildRow(context, index, gap),
-                  ),
-            ),
+      ),
     );
   }
 
@@ -151,6 +154,58 @@ class CollectionTrackList<T> extends StatelessWidget {
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
     );
+  }
+}
+
+/// 滚动条位置挂载补偿：position 从无到有时补一帧重建。
+///
+/// [Scrollbar]（`RawScrollbar`）在 build 时按「控制器是否恰好挂着一个
+/// position」决定是否安装拖动 / 轨道点击识别器，但切合集时同一个
+/// `Scrollbar` 元素被复用、控制器换新，build 发生在列表把新 position 挂上
+/// 之前。之后的指标通知只更新画笔，轴与可滚动标志没变就不会重建——
+/// 拇指看得见却拖不动，直到页面因其它原因重建（例如切到播放页再回来）
+/// 才恢复。
+///
+/// 这里在 build 发现控制器还没挂上时，帧后补一次重建，让框架按新 position
+/// 重新安装手势；不换 key，列表子树与滚动状态都不重建。
+///
+/// 滚动条用 [builder] 现建而不是透传子实例：帧后 setState 时若返回同一个
+/// widget 实例，Flutter 会短路跳过子树更新，`RawScrollbar` 不会重新计算
+/// 手势。
+class _ScrollbarPositionAttach extends StatefulWidget {
+  const _ScrollbarPositionAttach({
+    required this.controller,
+    required this.builder,
+  });
+
+  final ScrollController controller;
+  final WidgetBuilder builder;
+
+  @override
+  State<_ScrollbarPositionAttach> createState() =>
+      _ScrollbarPositionAttachState();
+}
+
+class _ScrollbarPositionAttachState extends State<_ScrollbarPositionAttach> {
+  /// 已登记帧后补偿（同一帧内重复 build 不重复登记）。
+  bool _rebuildScheduled = false;
+
+  @override
+  Widget build(BuildContext context) {
+    // 控制器在 build 时还没挂上 position：本帧更晚列表才会 attach，
+    // 滚动条这一帧装不了手势，等布局结束后补一次 build。
+    if (!widget.controller.hasClients) _scheduleRebuildAfterAttach();
+    return widget.builder(context);
+  }
+
+  void _scheduleRebuildAfterAttach() {
+    if (_rebuildScheduled) return;
+    _rebuildScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _rebuildScheduled = false;
+      // 隐藏页不布局 / 列表仍未挂载：不补，避免每帧空转。
+      if (mounted && widget.controller.hasClients) setState(() {});
+    });
   }
 }
 
