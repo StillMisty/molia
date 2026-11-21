@@ -145,6 +145,9 @@ class DeviceSettings {
   /// 不做「其它类型都当 String」的兜底：那会让 `DeviceSettingKey<num>` /
   /// `<DateTime>` 读取时静默回默认、写入时在失败策略里被吞掉。类型不受支持
   /// 属于声明错误，必须在读写前直接抛 `ArgumentError`。
+  /// 整数键读到的 `num` 统一收成 `int`；`int` 原样保留。
+  static Object? _tolerantInt(Object? raw) => raw is num ? raw.toInt() : raw;
+
   static _ValueKind _kindOf<T extends Object>(DeviceSettingKey<T> key) {
     if (key is DeviceSettingKey<bool>) return _ValueKind.boolean;
     if (key is DeviceSettingKey<int>) return _ValueKind.integer;
@@ -193,7 +196,10 @@ class DeviceSettings {
       final prefs = await _openPreferences();
       final stored = switch (kind) {
         _ValueKind.boolean => prefs.getBool(key.name),
-        _ValueKind.integer => prefs.getInt(key.name),
+        // 整数键宽容 num：旧版 `_readInt` 会把存储里的 double 收成 int。
+        // 用 `prefs.get` 而不是 `getInt`，否则 double 会抛类型错误被当成
+        // 「缺键」（缓存上限会回退设备容量建议，用户设置静默丢失）。
+        _ValueKind.integer => _tolerantInt(prefs.get(key.name)),
         _ValueKind.decimal => prefs.getDouble(key.name),
         _ValueKind.text => prefs.getString(key.name),
         _ValueKind.stringList => prefs.getStringList(key.name),

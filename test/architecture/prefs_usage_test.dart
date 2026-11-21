@@ -18,12 +18,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// AI 历史 / 发件箱。它们要么是可重算的派生数据、要么有独立协议与清扫逻辑，
 /// 收进 `DeviceSettings` 只会把「设置」边界搅浑；真正的设置项已全部迁移。
 const Set<String> _legacyPrefsWhitelist = {
-  // 同步记账 / 本地会话：有各自的合并协议与版本，不是用户可编辑的设置。
+  // 同步记账 / 本地会话 / 发件箱：有各自的合并协议与版本，不是用户可编辑的设置。
   'lib/data/sync/sync_state_store.dart',
   'lib/services/playback_session_store.dart',
   'lib/services/playback_observer.dart',
   'lib/services/scrobble/scrobble_outbox.dart',
-  'lib/services/scrobble/scrobble_preferences.dart',
   // 缓存 / 索引 / 一次性迁移标记：可重算或只写一次，不进设置 UI。
   'lib/services/ai/ai_recommendation_store.dart',
   'lib/services/artwork_palette_seed_store.dart',

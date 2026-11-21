@@ -124,6 +124,19 @@ void main() {
     expect(mismatch.value, 7);
   });
 
+  test('整数键兼容旧版 double 存储：num 收成 int，不被当成缺键', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final settings = DeviceSettings(preferences: prefs);
+
+    await prefs.setDouble(_intKey.name, 7.9);
+    expect(await settings.read(_intKey), 7);
+    expect((await settings.tryRead(_intKey)).ok, isTrue);
+    expect(await settings.readIfPresent(_intKey), 7);
+
+    await prefs.setInt(_intKey.name, 8);
+    expect(await settings.read(_intKey), 8);
+  });
+
   test('readIfPresent 区分缺键与「存的就是默认值」', () async {
     final prefs = await SharedPreferences.getInstance();
     final settings = DeviceSettings(preferences: prefs);
@@ -327,6 +340,13 @@ void main() {
       'library_browse_mode_v1',
       'playlist_folder_collapsed_v1',
       'music_folders_v1',
+      'scrobble_master_enabled_v1',
+      'scrobble_listenbrainz_enabled_v1',
+      'scrobble_lastfm_enabled_v1',
+      'scrobble_listenbrainz_consent_v1',
+      'scrobble_lastfm_consent_v1',
+      'scrobble_listenbrainz_account_v1',
+      'scrobble_lastfm_account_v1',
       'app_font_family',
     ]);
     final names = kDeviceSettingsKeys.map((key) => key.name).toSet();

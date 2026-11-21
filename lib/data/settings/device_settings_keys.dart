@@ -446,6 +446,56 @@ const DeviceJsonListSettingKey<MusicFolder> kMusicFoldersKey =
     );
 
 // ---------------------------------------------------------------------------
+// 听歌同步（设备本地开关 / 同意 / 账号；凭证走 secure 盒）
+// ---------------------------------------------------------------------------
+
+const String kScrobbleMasterEnabledKeyName = 'scrobble_master_enabled_v1';
+const String kScrobbleListenBrainzEnabledKeyName =
+    'scrobble_listenbrainz_enabled_v1';
+const String kScrobbleLastFmEnabledKeyName = 'scrobble_lastfm_enabled_v1';
+const String kScrobbleListenBrainzConsentKeyName =
+    'scrobble_listenbrainz_consent_v1';
+const String kScrobbleLastFmConsentKeyName = 'scrobble_lastfm_consent_v1';
+const String kScrobbleListenBrainzAccountKeyName =
+    'scrobble_listenbrainz_account_v1';
+const String kScrobbleLastFmAccountKeyName = 'scrobble_lastfm_account_v1';
+
+/// 默认关闭：另一台设备同步凭证也不能悄悄开始上报。
+const bool kDefaultScrobbleEnabled = false;
+const int kDefaultScrobbleConsentVersion = 0;
+const String kDefaultScrobbleAccount = '';
+
+const DeviceSettingKey<bool> kScrobbleMasterEnabledKey = DeviceSettingKey(
+  kScrobbleMasterEnabledKeyName,
+  kDefaultScrobbleEnabled,
+);
+const DeviceSettingKey<bool> kScrobbleListenBrainzEnabledKey = DeviceSettingKey(
+  kScrobbleListenBrainzEnabledKeyName,
+  kDefaultScrobbleEnabled,
+);
+const DeviceSettingKey<bool> kScrobbleLastFmEnabledKey = DeviceSettingKey(
+  kScrobbleLastFmEnabledKeyName,
+  kDefaultScrobbleEnabled,
+);
+const DeviceSettingKey<int> kScrobbleListenBrainzConsentKey = DeviceSettingKey(
+  kScrobbleListenBrainzConsentKeyName,
+  kDefaultScrobbleConsentVersion,
+);
+const DeviceSettingKey<int> kScrobbleLastFmConsentKey = DeviceSettingKey(
+  kScrobbleLastFmConsentKeyName,
+  kDefaultScrobbleConsentVersion,
+);
+const DeviceSettingKey<String> kScrobbleListenBrainzAccountKey =
+    DeviceSettingKey(
+      kScrobbleListenBrainzAccountKeyName,
+      kDefaultScrobbleAccount,
+    );
+const DeviceSettingKey<String> kScrobbleLastFmAccountKey = DeviceSettingKey(
+  kScrobbleLastFmAccountKeyName,
+  kDefaultScrobbleAccount,
+);
+
+// ---------------------------------------------------------------------------
 // 全局应用字体（本机已装字体）
 // ---------------------------------------------------------------------------
 
@@ -497,5 +547,12 @@ const List<DeviceSettingEntry> kDeviceSettingsKeys = [
   kLibraryBrowseModeKey,
   kPlaylistFolderCollapsedKey,
   kMusicFoldersKey,
+  kScrobbleMasterEnabledKey,
+  kScrobbleListenBrainzEnabledKey,
+  kScrobbleLastFmEnabledKey,
+  kScrobbleListenBrainzConsentKey,
+  kScrobbleLastFmConsentKey,
+  kScrobbleListenBrainzAccountKey,
+  kScrobbleLastFmAccountKey,
   kAppFontFamilyKey,
 ];

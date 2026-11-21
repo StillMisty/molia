@@ -24,7 +24,8 @@ class WindowSettings {
   /// 默认开启：记住窗口几何是桌面播放器的默认预期。
   static const bool defaultRememberBounds = kDefaultWindowRememberBounds;
 
-  /// 设备本地入口；测试可注入独立存储，生产懒取 SharedPreferences。
+  /// 设备本地入口；测试用 `SharedPreferences.setMockInitialValues` 换存储，
+  /// 生产懒取 `SharedPreferences.getInstance()`。
   static final DeviceSettings _settings = DeviceSettings();
 
   /// 当前开关（设置页订阅；写入后立即生效，无需重启）。

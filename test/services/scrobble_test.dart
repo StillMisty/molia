@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
+import 'package:molia/data/settings/device_settings.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/scrobble.dart';
 import 'package:molia/domain/models/track.dart';
@@ -409,7 +410,7 @@ void main() {
       service = ScrobbleService(
         preferences: ScrobblePreferences(
           settings: testSettingsRegistry(),
-          prefs: prefs,
+          deviceSettings: DeviceSettings(preferences: prefs),
         ),
         outbox: ScrobbleOutbox(prefs: prefs, clock: () => now),
         listenBrainzSink: listenBrainz,
@@ -591,7 +592,7 @@ void main() {
       final auto = ScrobbleService(
         preferences: ScrobblePreferences(
           settings: testSettingsRegistry(),
-          prefs: prefs,
+          deviceSettings: DeviceSettings(preferences: prefs),
         ),
         outbox: ScrobbleOutbox(prefs: prefs, clock: () => now),
         listenBrainzSink: listenBrainz,
