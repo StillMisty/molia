@@ -13,31 +13,26 @@ import 'package:flutter_test/flutter_test.dart';
 /// （`Shared\nPreferences`）与别名调用（`sp.SharedPreferences`）都会命中。
 /// 规则与 `module_layout_test.dart` 的体积 / 依赖棘轮互补：那条管文件布局，
 /// 这条管「设备本地键的存储入口」。
+///
+/// 白名单只剩**不是设置**的设备本地状态：缓存 / 索引 / 会话 / 同步记账 /
+/// AI 历史 / 发件箱。它们要么是可重算的派生数据、要么有独立协议与清扫逻辑，
+/// 收进 `DeviceSettings` 只会把「设置」边界搅浑；真正的设置项已全部迁移。
 const Set<String> _legacyPrefsWhitelist = {
+  // 同步记账 / 本地会话：有各自的合并协议与版本，不是用户可编辑的设置。
   'lib/data/sync/sync_state_store.dart',
-  'lib/providers/collection_mode.dart',
-  'lib/providers/library_collections.dart',
-  'lib/providers/theme_provider.dart',
-  'lib/services/ai/ai_recommendation_store.dart',
-  'lib/services/artwork_palette_seed_store.dart',
-  'lib/services/cache_service.dart',
-  'lib/services/covers/custom_cover_store.dart',
-  'lib/services/data_saver_service.dart',
-  'lib/services/download/download_settings.dart',
-  'lib/services/haptics.dart',
-  'lib/services/library/playlist_folder_prefs.dart',
-  'lib/services/local_cover_identity_sweep.dart',
-  'lib/services/local/music_folders.dart',
-  'lib/services/lyrics_cache.dart',
-  'lib/services/lyrics_service.dart',
-  'lib/services/playback_observer.dart',
   'lib/services/playback_session_store.dart',
+  'lib/services/playback_observer.dart',
   'lib/services/scrobble/scrobble_outbox.dart',
   'lib/services/scrobble/scrobble_preferences.dart',
-  'lib/services/update/update_preferences.dart',
-  'lib/services/window/tray_settings.dart',
-  'lib/services/window/window_bounds_store.dart',
-  'lib/services/window/window_settings.dart',
+  // 缓存 / 索引 / 一次性迁移标记：可重算或只写一次，不进设置 UI。
+  'lib/services/ai/ai_recommendation_store.dart',
+  'lib/services/artwork_palette_seed_store.dart',
+  'lib/services/covers/custom_cover_store.dart',
+  'lib/services/lyrics_cache.dart',
+  'lib/services/lyrics_service.dart',
+  'lib/services/local_cover_identity_sweep.dart',
+  // UI 状态（顺序 / 浏览形态）：等待单独收拢，当前不在 stage 2 清单里。
+  'lib/providers/library_collections.dart',
 };
 
 /// 直连存储的类名；`SharedPreferencesAsync` / `SharedPreferencesWithCache`
