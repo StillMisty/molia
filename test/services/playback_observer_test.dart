@@ -5,6 +5,7 @@ import 'package:molia/domain/ports/playback_facade.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/data/settings/device_settings.dart';
 import 'package:molia/services/artwork/image_preload_manager.dart';
 import 'package:molia/playback/playback_power_policy.dart';
 import 'package:molia/services/app_presence.dart';
@@ -293,7 +294,9 @@ void main() {
 
   test('省流：本地封面照常传小组件，远程封面置空', () async {
     final dataSaver = DataSaverService(
-      prefs: await SharedPreferences.getInstance(),
+      settings: DeviceSettings(
+        preferences: await SharedPreferences.getInstance(),
+      ),
       cellularProbe: () async => true,
     );
     await dataSaver.init(monitor: false);

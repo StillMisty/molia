@@ -18,6 +18,7 @@ import 'package:molia/widgets/lyrics_selection_page.dart';
 import 'package:molia/widgets/track_artwork.dart';
 
 import '../support/fakes.dart';
+import '../support/settings_test_support.dart';
 
 const _trackId = TrackId('wy', '1');
 const _originalCover = 'https://example.com/original.jpg';
@@ -57,7 +58,10 @@ void main() {
 
   final l10n = lookupAppLocalizations(const Locale('zh'));
 
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    attachStaticSettingsForTest(testSettingsRegistry());
+  });
 
   late PlaybackProvider playback;
 

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import '../../data/settings/settings_access.dart';
 import '../../data/settings/settings_key.dart';
 import '../../data/settings/settings_keys.dart';
@@ -29,9 +31,16 @@ class PosterStyleSettings {
   static const PosterColorSource defaultSource = PosterColorSource.appTheme;
   static const int defaultSeed = 0xFF2196F3;
 
-  /// 设置注册表（组合根启动时注入）；测试 / 独立挂载时为 null：
-  /// 此时状态只留在内存，不落盘。
+  /// 设置注册表（组合根启动时注入）。
   static SettingsAccess? _settings;
+
+  /// 未接线就访问设置直接失败：静默 no-op 会让「改了样式但没保存」在测试与
+  /// 生产里都无声发生（组合根在 `catalog_stack.dart` 统一 attach）。
+  static SettingsAccess get _requireSettings =>
+      _settings ??
+      (throw StateError(
+        'PosterStyleSettings.attachSettings 未调用：海报样式设置在组合根装配前被访问',
+      ));
 
   /// 最近一次载入；[ensureLoaded] 复用它避免海报页与分享链路重复读键。
   static Future<void>? _loading;
@@ -52,13 +61,24 @@ class PosterStyleSettings {
     unawaited(load());
   }
 
+  /// 清掉注入并回到未接线状态：测试隔离用，生产不要调用。
+  @visibleForTesting
+  static void resetSettingsForTest() {
+    _settings = null;
+    _loading = null;
+    _colorSource = defaultSource;
+    _seed = defaultSeed;
+    _fontFamily = null;
+  }
+
   /// 首次使用前确保已从注册表读过一次；已载入直接返回。
+  ///
+  /// 未 [attachSettings] 时同步抛 [StateError]。
   static Future<void> ensureLoaded() => _loading ?? load();
 
-  /// 读取三个登记键；读取失败 / 未接线保持当前值。
+  /// 读取三个登记键；读取失败保持当前值。
   static Future<void> load() {
-    final settings = _settings;
-    if (settings == null) return Future<void>.value();
+    final settings = _requireSettings;
     final future = _load(settings);
     _loading = future;
     return future;
@@ -116,8 +136,7 @@ class PosterStyleSettings {
     SettingsKey<T> key,
     T value,
   ) async {
-    final settings = _settings;
-    if (settings == null) return;
+    final settings = _requireSettings;
     try {
       await settings.write(key, value);
     } catch (_) {

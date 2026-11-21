@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/device_settings.dart';
 import 'package:molia/services/window/window_bounds_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,8 +12,11 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  Future<WindowBoundsStore> buildStore() async =>
-      WindowBoundsStore(prefs: await SharedPreferences.getInstance());
+  Future<WindowBoundsStore> buildStore() async => WindowBoundsStore(
+    settings: DeviceSettings(
+      preferences: await SharedPreferences.getInstance(),
+    ),
+  );
 
   test('保存几何只写一个 JSON 字符串键，读取往返一致', () async {
     final store = await buildStore();

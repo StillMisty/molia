@@ -10,6 +10,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 // ignore: depend_on_referenced_packages
 import 'package:file/file.dart' as pkg_file;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/device_settings.dart';
 import 'package:molia/services/artwork/artwork_cache.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_io.dart';
@@ -279,7 +280,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
     cacheService = CacheService(
-      prefs: prefs,
+      settings: DeviceSettings(preferences: prefs),
       storage: IoCacheStorage(
         audioDirOverride: '${Directory.systemTemp.path}/unused_audio',
         artworkDirOverride: '${Directory.systemTemp.path}/unused_artwork',
@@ -373,7 +374,10 @@ void main() {
         audioDirOverride: '${tempRoot.path}/audio',
         artworkDirOverride: artworkDir,
       );
-      final service = CacheService(prefs: prefs, storage: storage);
+      final service = CacheService(
+        settings: DeviceSettings(preferences: prefs),
+        storage: storage,
+      );
       // 注册监听（ArtworkCache 构造时挂到传入的 service 上）。
       ArtworkCache(cacheService: service, managerOverride: manager);
 
@@ -451,7 +455,10 @@ void main() {
       await present.parent.create(recursive: true);
       await present.writeAsBytes([1, 2, 3]);
 
-      final service = CacheService(prefs: prefs, storage: storage);
+      final service = CacheService(
+        settings: DeviceSettings(preferences: prefs),
+        storage: storage,
+      );
       final repo = _MemoryRepo();
       Future<void> seed(int id, String relativePath) => repo.insert(
         CacheObject(
@@ -538,7 +545,10 @@ void main() {
       await present.parent.create(recursive: true);
       await present.writeAsBytes([1, 2, 3]);
 
-      final service = CacheService(prefs: prefs, storage: storage);
+      final service = CacheService(
+        settings: DeviceSettings(preferences: prefs),
+        storage: storage,
+      );
       final repo = _MemoryRepo();
       await repo.insert(
         CacheObject(
@@ -576,7 +586,10 @@ void main() {
         audioDir: '${tempRoot.path}/audio',
         artworkDir: '${tempRoot.path}/missing_artwork',
       );
-      final service = CacheService(prefs: prefs, storage: storage);
+      final service = CacheService(
+        settings: DeviceSettings(preferences: prefs),
+        storage: storage,
+      );
       final repo = _MemoryRepo();
       final present = await manager.config.fileSystem.createFile('present.jpg');
       await present.writeAsBytes([1, 2, 3]);
@@ -707,7 +720,7 @@ void main() {
       });
       final artworkDir = '${tempRoot.path}/artwork';
       final service = CacheService(
-        prefs: prefs,
+        settings: DeviceSettings(preferences: prefs),
         storage: IoCacheStorage(
           audioDirOverride: '${tempRoot.path}/audio',
           artworkDirOverride: artworkDir,
@@ -841,7 +854,7 @@ void main() {
         if (await tempRoot.exists()) await tempRoot.delete(recursive: true);
       });
       final service = CacheService(
-        prefs: prefs,
+        settings: DeviceSettings(preferences: prefs),
         storage: IoCacheStorage(
           audioDirOverride: '${tempRoot.path}/audio',
           artworkDirOverride: '${tempRoot.path}/artwork',
@@ -922,7 +935,7 @@ void main() {
         if (await tempRoot.exists()) await tempRoot.delete(recursive: true);
       });
       final service = CacheService(
-        prefs: prefs,
+        settings: DeviceSettings(preferences: prefs),
         storage: IoCacheStorage(
           audioDirOverride: '${tempRoot.path}/audio',
           artworkDirOverride: '${tempRoot.path}/artwork',

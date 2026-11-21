@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/device_settings.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/mapping/track_mapper.dart';
 import 'package:molia/domain/models/download.dart';
@@ -69,7 +70,7 @@ void main() {
     prefs = await SharedPreferences.getInstance();
     tempRoot = await Directory.systemTemp.createTemp('track_local_data_test_');
     cacheService = CacheService(
-      prefs: prefs,
+      settings: DeviceSettings(preferences: prefs),
       storage: IoCacheStorage(
         audioDirOverride: '${tempRoot.path}/audio_cache',
         artworkDirOverride: '${tempRoot.path}/artwork_cache',
@@ -321,7 +322,7 @@ void main() {
   test('clear audio：正在写入（protectAge 内）→ skipped 且未清掉', () async {
     final guarded = TrackLocalDataService(
       cacheService: CacheService(
-        prefs: prefs,
+        settings: DeviceSettings(preferences: prefs),
         storage: IoCacheStorage(
           audioDirOverride: '${tempRoot.path}/audio_cache',
           artworkDirOverride: '${tempRoot.path}/artwork_cache',

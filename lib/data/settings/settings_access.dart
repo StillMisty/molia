@@ -16,6 +16,12 @@ abstract interface class SettingsAccess {
   /// 读取当前值；缺键回退 [SettingsKey.defaultValue]。
   Future<T> read<T extends Object?>(SettingsKey<T> key);
 
+  /// 键当前是否存过值（不返回内容）。
+  ///
+  /// 用于「缺键时才物化默认值」的迁移路径：写入会触发同步标记，不能每次
+  /// 启动都无条件写默认值。存储不可用时按「没有存过」处理。
+  Future<bool> contains(SettingsKey<Object?> key);
+
   /// 写入并持久化；`null` 表示删除键（回到默认值）。
   Future<void> write<T extends Object?>(SettingsKey<T> key, T value);
 

@@ -13,8 +13,10 @@ import '../../data/diagnostics/database_counts.dart';
 import '../../data/diagnostics/settings_snapshot.dart';
 import '../../data/diagnostics/source_snapshot.dart';
 import '../../providers/sync_ui_state.dart';
+import '../../services/data_saver_service.dart';
 import '../../services/diagnostics/app_info.dart';
 import '../../services/diagnostics/diagnostics_export.dart';
+import '../../services/update/update_preferences.dart';
 import 'app_dependencies.dart';
 import 'startup_trace.dart';
 import 'sync_stack.dart';
@@ -106,12 +108,12 @@ Future<AuxStacks> buildAuxStacks({
       registry: catalog.settings,
       sync: _diagnosticsSyncInfo(sync.provider.state),
       extraValues: {
-        'data_saver_enabled': local.dataSaver.enabled,
+        DataSaverService.keyEnabled: local.dataSaver.enabled,
         'data_saver_active': local.dataSaver.active,
         'data_saver_quality_cap': local.dataSaver.qualityCap,
-        'data_saver_covers': local.dataSaver.coversSaverEnabled,
-        'update_channel': update.provider.channel.wireName,
-        'update_auto_check': update.provider.autoCheckEnabled,
+        DataSaverService.keyCovers: local.dataSaver.coversSaverEnabled,
+        UpdatePreferences.keyChannel: update.provider.channel.wireName,
+        UpdatePreferences.keyAutoCheck: update.provider.autoCheckEnabled,
       },
     ),
     sources: () async => gatherDiagnosticsSources(catalog.sourceManager),

@@ -1,19 +1,26 @@
 /// 列表分组展开 / 收起状态（设备本地）的唯一持有者。
 ///
 /// 这是瞬时 UI 偏好，不是同步设置：换设备后重新按默认收起即可，重命名分组
-/// 也不迁移旧名字的折叠状态。因此直接落 SharedPreferences，不进设置注册表、
+/// 也不迁移旧名字的折叠状态。因此落在设备本地设置，不进设置注册表、
 /// 不进同步类别。合集弹层是唯一消费方（宽屏左栏已删除）。
 library;
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../data/settings/device_settings.dart';
+import '../../data/settings/device_settings_keys.dart';
 
 class PlaylistFolderCollapseController extends ChangeNotifier {
-  PlaylistFolderCollapseController({Set<String>? initiallyCollapsed})
-    : _collapsed = {...?initiallyCollapsed};
+  /// [settings] 仅测试注入；生产构造自己的设备本地入口。
+  PlaylistFolderCollapseController({
+    Set<String>? initiallyCollapsed,
+    DeviceSettings? settings,
+  }) : _settings = settings ?? DeviceSettings(),
+       _collapsed = {...?initiallyCollapsed};
 
-  static const String prefsKey = 'playlist_folder_collapsed_v1';
+  static const String prefsKey = kPlaylistFolderCollapsedKeyName;
 
+  final DeviceSettings _settings;
   final Set<String> _collapsed;
   bool _disposed = false;
 
@@ -27,18 +34,13 @@ class PlaylistFolderCollapseController extends ChangeNotifier {
 
   /// 读取持久状态；读取失败保持当前内存值。重复调用安全。
   Future<void> load() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final stored = prefs.getStringList(prefsKey);
-      if (stored == null) return;
-      _hasStoredState = true;
-      _collapsed
-        ..clear()
-        ..addAll(stored);
-      _notify();
-    } catch (_) {
-      // 读取失败保持当前内存状态。
-    }
+    final stored = await _settings.readIfPresent(kPlaylistFolderCollapsedKey);
+    if (stored == null) return;
+    _hasStoredState = true;
+    _collapsed
+      ..clear()
+      ..addAll(stored);
+    _notify();
   }
 
   /// 首次进入时把所有分组设为收起，只展开当前列表所在分组。
@@ -84,14 +86,8 @@ class PlaylistFolderCollapseController extends ChangeNotifier {
     await _persist();
   }
 
-  Future<void> _persist() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(prefsKey, _collapsed.toList()..sort());
-    } catch (_) {
-      // 持久化失败只影响下次启动的展开状态。
-    }
-  }
+  Future<void> _persist() =>
+      _settings.write(kPlaylistFolderCollapsedKey, _collapsed.toList()..sort());
 
   void _notify() {
     if (!_disposed) notifyListeners();

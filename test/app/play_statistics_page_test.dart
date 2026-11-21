@@ -21,6 +21,7 @@ import '../support/fake_save_as.dart';
 import '../support/memory_database.dart';
 import '../support/notification_recorder.dart';
 import '../support/sync_test_support.dart';
+import '../support/settings_test_support.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +37,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    attachStaticSettingsForTest(testSettingsRegistry());
     db = openMemoryDatabase();
     repository = PlayStatisticsRepository(
       databaseProvider: () => db,

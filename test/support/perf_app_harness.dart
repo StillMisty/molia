@@ -113,6 +113,9 @@ Future<FakePlaybackFacade> pumpPerfApp(
       'shell_home_destination': 'favorites',
     });
   }
+  // 快捷键设置必须接线后才能读写（生产由组合根 attach；测试用内存注册表）。
+  ShortcutSettings.attachSettings(testSettingsRegistry());
+  await ShortcutSettings.load();
   await ShortcutSettings.instance.setInAppEnabled(true);
   await ShortcutSettings.instance.setGlobalEnabled(false);
   await ShortcutSettings.instance.resetScope(ShortcutScope.inApp);

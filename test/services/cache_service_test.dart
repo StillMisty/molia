@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/device_settings.dart';
 import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_io.dart';
+import 'package:molia/services/lyrics_cache.dart';
 
 import '../support/memory_cache_storage.dart';
 
@@ -41,8 +43,9 @@ void main() {
       artworkDirOverride: '${tempRoot.path}/artwork_cache',
     );
     service = CacheService(
-      prefs: prefs,
+      settings: DeviceSettings(preferences: prefs),
       storage: storage,
+      lyricsCache: LyricsCache(prefs: prefs),
       audioProtectAge: Duration.zero, // 测试文件视为“非活动”
     );
   });
@@ -118,7 +121,8 @@ void main() {
     test('缺键默认上限 = 设备容量/128，下限 256MB', () async {
       // 256GB 设备 → 2048MB。
       final big = CacheService(
-        prefs: prefs,
+        settings: DeviceSettings(preferences: prefs),
+        lyricsCache: LyricsCache(prefs: prefs),
         storage: _FixedSpaceStorage(
           256 * 1024 * 1024 * 1024,
           root: tempRoot.path,
@@ -129,7 +133,8 @@ void main() {
 
       // 8GB 设备 → 64MB，低于下限 → 256MB。
       final small = CacheService(
-        prefs: prefs,
+        settings: DeviceSettings(preferences: prefs),
+        lyricsCache: LyricsCache(prefs: prefs),
         storage: _FixedSpaceStorage(
           8 * 1024 * 1024 * 1024,
           root: tempRoot.path,
@@ -144,7 +149,8 @@ void main() {
 
     test('容量不可知：建议为 null，缺键回退固定默认值', () async {
       final unknown = CacheService(
-        prefs: prefs,
+        settings: DeviceSettings(preferences: prefs),
+        lyricsCache: LyricsCache(prefs: prefs),
         storage: _FixedSpaceStorage(null, root: tempRoot.path),
       );
       expect(await unknown.suggestedAudioMaxMb(), isNull);
@@ -154,7 +160,8 @@ void main() {
     test('已写入的值优先于设备容量建议', () async {
       await prefs.setInt(CacheService.keyAudioMaxMb, 64);
       final service = CacheService(
-        prefs: prefs,
+        settings: DeviceSettings(preferences: prefs),
+        lyricsCache: LyricsCache(prefs: prefs),
         storage: _FixedSpaceStorage(
           512 * 1024 * 1024 * 1024,
           root: tempRoot.path,
@@ -182,7 +189,8 @@ void main() {
 
       // 目录不存在 → zero。
       final empty = CacheService(
-        prefs: prefs,
+        settings: DeviceSettings(preferences: prefs),
+        lyricsCache: LyricsCache(prefs: prefs),
         storage: IoCacheStorage(
           audioDirOverride: '${tempRoot.path}/missing',
           artworkDirOverride: '${tempRoot.path}/missing2',
@@ -241,7 +249,8 @@ void main() {
 
     test('protectAge 内修改的文件（正在写入）不删', () async {
       final active = CacheService(
-        prefs: prefs,
+        settings: DeviceSettings(preferences: prefs),
+        lyricsCache: LyricsCache(prefs: prefs),
         storage: storage,
         audioProtectAge: const Duration(hours: 1),
       );
@@ -292,7 +301,8 @@ void main() {
 
     test('目录不可用：返回 failed（remaining 为 null）', () async {
       final unavailable = CacheService(
-        prefs: prefs,
+        settings: DeviceSettings(preferences: prefs),
+        lyricsCache: LyricsCache(prefs: prefs),
         storage: MemoryCacheStorage(),
       );
       final result = await unavailable.enforceArtworkPolicy();
@@ -356,7 +366,8 @@ void main() {
 
     test('正在写入（protectAge 内修改）的文件跳过并计数', () async {
       final active = CacheService(
-        prefs: prefs,
+        settings: DeviceSettings(preferences: prefs),
+        lyricsCache: LyricsCache(prefs: prefs),
         storage: storage,
         audioProtectAge: const Duration(hours: 1),
       );
@@ -406,7 +417,10 @@ void main() {
         const CacheDeleteResult(),
       );
 
-      final noFs = CacheService(prefs: prefs, storage: MemoryCacheStorage());
+      final noFs = CacheService(
+        settings: DeviceSettings(preferences: prefs),
+        storage: MemoryCacheStorage(),
+      );
       expect(
         await noFs.audioUsageForTrack(sourceKey: 'kw', songId: 'x'),
         CacheUsage.zero,

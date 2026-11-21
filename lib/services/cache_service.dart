@@ -2,8 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:logging/logging.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/settings/device_settings.dart';
+import '../data/settings/device_settings_keys.dart';
 import 'audio_cache_store.dart';
 import 'cache_storage.dart';
 import 'lyrics_cache.dart';
@@ -23,8 +24,8 @@ export 'cache_storage.dart'
 /// 设计要点：
 /// - **不依赖 provider**：策略读写都直接走本服务；`main.dart` 以单例
 ///   [instance] 注册为 Provider 供 UI 使用；
-/// - **策略持久化**（SharedPreferences，键名固定）：所有 getter 每次从
-///   prefs 读取，setter 写入后立即触发对应动作，因此**无需重启**：
+/// - **策略持久化**（设备本地设置，键名固定）：所有 getter 每次从
+///   `DeviceSettings` 读取，setter 写入后立即触发对应动作，因此**无需重启**：
 ///   - 音频开关：播放时读取；
 ///   - 音频上限：setter 立即执行 [enforceAudioLimit]；
 ///   - 歌词 TTL：取词时读取；
@@ -37,14 +38,15 @@ export 'cache_storage.dart'
 /// - **歌词缓存**：默认实例是 prefs-only；生产组合根启动时经
 ///   [attachLyricsCache] 接入文件后端，取词与缓存页统计共享同一实例。
 class CacheService {
+  /// [settings] / [lyricsCache] 仅测试注入；生产各自构造自己的入口。
   CacheService({
-    SharedPreferences? prefs,
+    DeviceSettings? settings,
     CacheStorage? storage,
     LyricsCache? lyricsCache,
     this._audioProtectAge = const Duration(minutes: 10),
-  }) : _prefs = prefs,
+  }) : _settings = settings ?? DeviceSettings(),
        _storage = storage ?? createPlatformCacheStorage(),
-       _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs) {
+       _lyricsCache = lyricsCache ?? LyricsCache() {
     _audioStore = AudioCacheStore(storage: _storage);
   }
 
@@ -76,16 +78,16 @@ class CacheService {
   }
 
   // 策略键名（固定，设置 UI / 测试共用）
-  static const String keyAudioEnabled = 'cache_audio_enabled';
-  static const String keyAudioMaxMb = 'cache_audio_max_mb';
-  static const String keyLyricsTtlDays = 'cache_lyrics_ttl_days';
-  static const String keyArtworkMaxObjects = 'cache_artwork_max_objects';
-  static const String keyArtworkStaleDays = 'cache_artwork_stale_days';
+  static const String keyAudioEnabled = kCacheAudioEnabledKeyName;
+  static const String keyAudioMaxMb = kCacheAudioMaxMbKeyName;
+  static const String keyLyricsTtlDays = kCacheLyricsTtlDaysKeyName;
+  static const String keyArtworkMaxObjects = kCacheArtworkMaxObjectsKeyName;
+  static const String keyArtworkStaleDays = kCacheArtworkStaleDaysKeyName;
 
-  static const bool defaultAudioEnabled = true;
+  static const bool defaultAudioEnabled = kDefaultCacheAudioEnabled;
 
   /// 容量不可知（设备容量通道不可用 / 查询失败）时的音频上限回退值（MB）。
-  static const int defaultAudioMaxMb = 1024;
+  static const int defaultAudioMaxMb = kDefaultCacheAudioMaxMb;
 
   /// 建议上限 = 设备总容量 ÷ 该除数（128GB 设备 ≈ 1GB）。
   static const int audioMaxStorageDivisor = 128;
@@ -93,20 +95,20 @@ class CacheService {
   /// 建议上限的下限（MB）：小容量设备也保留可用缓存。
   static const int audioMaxSuggestionFloorMb = 256;
 
-  static const int defaultLyricsTtlDays = 30;
-  static const int defaultArtworkMaxObjects = 1500;
-  static const int defaultArtworkStaleDays = 365;
+  static const int defaultLyricsTtlDays = kDefaultCacheLyricsTtlDays;
+  static const int defaultArtworkMaxObjects = kDefaultCacheArtworkMaxObjects;
+  static const int defaultArtworkStaleDays = kDefaultCacheArtworkStaleDays;
 
   /// 歌词缓存键前缀（与 [LyricsCache.keyPrefix] 同一约定）。
   static const String lyricsCacheKeyPrefix = LyricsCache.keyPrefix;
 
   static const int _mbBytes = 1024 * 1024;
 
+  final DeviceSettings _settings;
   final CacheStorage _storage;
   LyricsCache _lyricsCache;
   final Duration _audioProtectAge;
   late final AudioCacheStore _audioStore;
-  SharedPreferences? _prefs;
   final Logger _logger = Logger('molia.cache_service');
 
   /// 音频缓存目录约定（命名 / 完整性 / 索引 / 命中 / 清扫）的唯一实现。
@@ -116,11 +118,10 @@ class CacheService {
   final List<void Function(CachePartition)> _clearListeners = [];
 
   /// 是否启用音频边播边缓存（默认 true）。
-  Future<bool> audioEnabled() async =>
-      (await _readBool(keyAudioEnabled)) ?? defaultAudioEnabled;
+  Future<bool> audioEnabled() => _settings.read(kCacheAudioEnabledKey);
 
   Future<void> setAudioEnabled(bool value) async {
-    await _write(keyAudioEnabled, value);
+    await _settings.write(kCacheAudioEnabledKey, value);
     _notify(CachePartition.audio);
     notifyCacheChanged();
   }
@@ -129,8 +130,10 @@ class CacheService {
   ///
   /// 缺键时按 [suggestedAudioMaxMb]（设备总容量 ÷ [audioMaxStorageDivisor]）
   /// 建议，容量不可知时回退 [defaultAudioMaxMb]；读取不写回（缺省与默认等价）。
-  Future<int> audioMaxMb() async =>
-      (await _readInt(keyAudioMaxMb)) ?? await _resolvedDefaultAudioMaxMb();
+  Future<int> audioMaxMb() async {
+    final stored = await _settings.readIfPresent(kCacheAudioMaxMbKey);
+    return stored ?? await _resolvedDefaultAudioMaxMb();
+  }
 
   /// 建议的音频缓存上限（MB）：设备总容量 ÷ [audioMaxStorageDivisor]，
   /// 不低于 [audioMaxSuggestionFloorMb]；容量不可知时返回 null（UI 不展示建议）。
@@ -159,38 +162,35 @@ class CacheService {
 
   /// 写入后立即执行一次 LRU 淘汰，无需重启。
   Future<void> setAudioMaxMb(int value) async {
-    await _write(keyAudioMaxMb, value < 0 ? 0 : value);
+    await _settings.write(kCacheAudioMaxMbKey, value < 0 ? 0 : value);
     _notify(CachePartition.audio);
     await enforceAudioLimit(force: true);
   }
 
   /// 歌词缓存 TTL（天，默认 30；0 = 永不过期）。
-  Future<int> lyricsTtlDays() async =>
-      (await _readInt(keyLyricsTtlDays)) ?? defaultLyricsTtlDays;
+  Future<int> lyricsTtlDays() => _settings.read(kCacheLyricsTtlDaysKey);
 
   /// 取词时读取；缩短 TTL 后旧条目在下一次取词时立即视为过期。
   Future<void> setLyricsTtlDays(int value) async {
-    await _write(keyLyricsTtlDays, value < 0 ? 0 : value);
+    await _settings.write(kCacheLyricsTtlDaysKey, value < 0 ? 0 : value);
     _notify(CachePartition.lyrics);
   }
 
   /// 封面缓存最大对象数（默认 1500；0 = 不限制）。
-  Future<int> artworkMaxObjects() async =>
-      (await _readInt(keyArtworkMaxObjects)) ?? defaultArtworkMaxObjects;
+  Future<int> artworkMaxObjects() => _settings.read(kCacheArtworkMaxObjectsKey);
 
   /// 写入后通知 `ArtworkCache` 立即 sweep。
   Future<void> setArtworkMaxObjects(int value) async {
-    await _write(keyArtworkMaxObjects, value < 0 ? 0 : value);
+    await _settings.write(kCacheArtworkMaxObjectsKey, value < 0 ? 0 : value);
     _notify(CachePartition.artwork);
   }
 
   /// 封面缓存过期天数（默认 365；0 = 永不过期）。
-  Future<int> artworkStaleDays() async =>
-      (await _readInt(keyArtworkStaleDays)) ?? defaultArtworkStaleDays;
+  Future<int> artworkStaleDays() => _settings.read(kCacheArtworkStaleDaysKey);
 
   /// 写入后通知 `ArtworkCache` 立即 sweep。
   Future<void> setArtworkStaleDays(int value) async {
-    await _write(keyArtworkStaleDays, value < 0 ? 0 : value);
+    await _settings.write(kCacheArtworkStaleDaysKey, value < 0 ? 0 : value);
     _notify(CachePartition.artwork);
   }
 
@@ -426,40 +426,6 @@ class CacheService {
     } catch (e) {
       // 平台通道缺失（测试 / 独立服务）或目录解析失败：按不可用处理。
       return null;
-    }
-  }
-
-  Future<SharedPreferences?> _getPrefs() async {
-    final cached = _prefs;
-    if (cached != null) return cached;
-    try {
-      return _prefs = await SharedPreferences.getInstance();
-    } catch (e) {
-      _logger.warning('SharedPreferences 不可用: $e');
-      return null;
-    }
-  }
-
-  Future<bool?> _readBool(String key) async {
-    final prefs = await _getPrefs();
-    return prefs?.getBool(key);
-  }
-
-  Future<int?> _readInt(String key) async {
-    final prefs = await _getPrefs();
-    final value = prefs?.get(key);
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return null;
-  }
-
-  Future<void> _write(String key, Object value) async {
-    final prefs = await _getPrefs();
-    if (prefs == null) return;
-    if (value is bool) {
-      await prefs.setBool(key, value);
-    } else if (value is int) {
-      await prefs.setInt(key, value);
     }
   }
 }

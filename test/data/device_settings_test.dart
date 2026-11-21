@@ -124,6 +124,40 @@ void main() {
     expect(mismatch.value, 7);
   });
 
+  test('readIfPresent 区分缺键与「存的就是默认值」', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final settings = DeviceSettings(preferences: prefs);
+
+    expect(await settings.readIfPresent(_intKey), isNull);
+    await settings.write(_intKey, _intKey.defaultValue);
+    expect(await settings.readIfPresent(_intKey), _intKey.defaultValue);
+
+    await prefs.setString(_intKey.name, 'not-an-int');
+    expect(await settings.readIfPresent(_intKey), isNull);
+  });
+
+  test('JSON 数组键：逐元素编解码，损坏元素跳过，非数组回 null', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final settings = DeviceSettings(preferences: prefs);
+    const key = DeviceJsonListSettingKey<int>(
+      'ds_test_json_list',
+      <int>[],
+      decode: _decodePositiveInt,
+      encode: _encodeInt,
+    );
+
+    expect(await settings.readJsonList(key), isNull);
+    await settings.writeJsonList(key, [1, 2, 3]);
+    expect(prefs.getString(key.name), '[1,2,3]');
+    expect(await settings.readJsonList(key), [1, 2, 3]);
+
+    await prefs.setString(key.name, '[1,"bad",3]');
+    expect(await settings.readJsonList(key), [1, 3], reason: '单个元素损坏不拖垮整份配置');
+
+    await prefs.setString(key.name, '{"items":[]}');
+    expect(await settings.readJsonList(key), isNull);
+  });
+
   test('JSON 键自带字段形状：往返、缺键、损坏与非有限值都回 null', () async {
     final prefs = await SharedPreferences.getInstance();
     final settings = DeviceSettings(preferences: prefs);
@@ -259,6 +293,41 @@ void main() {
       'playback_volume',
       'playback_muted',
       'onboarding_completed_v1',
+      'haptics_enabled',
+      'download_save_dir',
+      'download_filename_template',
+      'download_embed_tags',
+      'download_publish_public_dir',
+      'download_notifications',
+      'cache_audio_enabled',
+      'cache_audio_max_mb',
+      'cache_lyrics_ttl_days',
+      'cache_artwork_max_objects',
+      'cache_artwork_stale_days',
+      'data_saver_enabled',
+      'data_saver_quality',
+      'data_saver_covers',
+      'update_auto_check',
+      'update_channel',
+      'update_manifest_override',
+      'update_download_prefix',
+      'update_last_check_at',
+      'update_pending_version',
+      'update_pending_build',
+      'tray_close_to_tray',
+      'window_remember_bounds',
+      'window_maximized',
+      'window_bounds',
+      'window_bounds_by_desktop',
+      'window_maximized_by_desktop',
+      'window_bounds_x',
+      'window_bounds_y',
+      'window_bounds_width',
+      'window_bounds_height',
+      'library_browse_mode_v1',
+      'playlist_folder_collapsed_v1',
+      'music_folders_v1',
+      'app_font_family',
     ]);
     final names = kDeviceSettingsKeys.map((key) => key.name).toSet();
     expect(names.length, kDeviceSettingsKeys.length, reason: '键名必须唯一');
@@ -272,6 +341,10 @@ void main() {
     expect(kPlaybackVolumeStateKey.defaultValue.muted, isFalse);
   });
 }
+
+int? _decodePositiveInt(Object? raw) => raw is int && raw > 0 ? raw : null;
+
+Object? _encodeInt(int value) => value;
 
 /// 记录 setValue 先后；带一点延迟让「并发写」若存在就会交错。
 class _RecordingStore extends InMemorySharedPreferencesStore {

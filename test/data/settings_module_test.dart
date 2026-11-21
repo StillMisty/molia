@@ -37,6 +37,19 @@ void main() {
     expect(reloads, 1, reason: '没有新的远端应用时重载是空操作');
   });
 
+  test('contains：缺键为 false，写入为 true，清掉后回到 false', () async {
+    final registry = testSettingsRegistry(keys: const [kThemeMode]);
+    final scope = registry.mount(
+      SettingsModule(keys: const [kThemeMode], reload: () async {}),
+    );
+
+    expect(await scope.contains(kThemeMode), isFalse);
+    await scope.write(kThemeMode, 'dark');
+    expect(await scope.contains(kThemeMode), isTrue);
+    await scope.clear(kThemeMode);
+    expect(await scope.contains(kThemeMode), isFalse);
+  });
+
   test('scope 之外的键不可读写', () async {
     final registry = testSettingsRegistry(keys: const [kThemeMode, kSeedColor]);
     final scope = registry.mount(
@@ -49,6 +62,10 @@ void main() {
     );
     expect(
       () => scope.write(kSeedColor, 0xFF000000),
+      throwsA(anyOf(isA<AssertionError>(), isA<StateError>())),
+    );
+    expect(
+      () => scope.contains(kSeedColor),
       throwsA(anyOf(isA<AssertionError>(), isA<StateError>())),
     );
     expect(scope.keys, [kThemeMode]);

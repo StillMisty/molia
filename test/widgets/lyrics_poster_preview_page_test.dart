@@ -10,10 +10,15 @@ import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/lyrics_poster_preview_page.dart';
 
+import '../support/settings_test_support.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    attachStaticSettingsForTest(testSettingsRegistry());
+  });
 
   testWidgets('海报预览直接渲染位图，不再走 PNG 字节中转', (tester) async {
     await tester.pumpWidget(
