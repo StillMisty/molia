@@ -23,7 +23,7 @@ import 'kw_search.dart';
 ///   歌单搜索（`search.kuwo.cn`，伪 JSON 需转义）；
 /// - 热搜词：`hotword.kuwo.cn`。
 ///
-/// 网络结果缓存 5 分钟（统一走注入 transport 的 `cached`）。
+/// 网络结果缓存 5 分钟（统一走发现执行器与注入的 transport）。
 class KwDiscoverSource extends DiscoverSource {
   const KwDiscoverSource();
 
@@ -101,38 +101,46 @@ class KwDiscoverSource extends DiscoverSource {
   /// 榜单封面：`bang_info` 的 `data.pic`（榜单官方封面图）。
   @override
   Future<String?> leaderboardCover(BuiltinTransport http, String bangid) {
-    return http.cached('kw:leaderboard-cover:$bangid', () async {
-      final body = {
-        'uid': '',
-        'devId': '',
-        'sFrom': 'kuwo_sdk',
-        'user_type': 'AP',
-        'carSource': 'kwplayercar_ar_6.0.1.0_apk_keluze.apk',
-        'id': bangid,
-        'pn': 0,
-        'rn': 1,
-      };
-      final url =
-          'https://wbd.kuwo.cn/api/bd/bang/bang_info?${kwWbdBuildParam(body)}';
-      final text = await lxHttpGetText(http, url);
-      dynamic decoded;
-      try {
-        decoded = kwWbdDecodeData(text);
-      } catch (_) {
-        throw StateError('kw 榜单封面解码失败');
-      }
-      if (decoded is! Map ||
-          decoded['code'] != 200 ||
-          decoded['data'] is! Map) {
-        throw StateError('kw 榜单封面获取失败');
-      }
-      final data = decoded['data'] as Map;
-      for (final key in const ['pic', 'cover', 'img']) {
-        final value = data[key]?.toString().trim() ?? '';
-        if (value.isNotEmpty) return value;
-      }
-      throw StateError('kw 榜单封面为空');
-    });
+    return runDiscoverCall(
+      DiscoverRequestCall<String>(
+        key: 'kw:leaderboard-cover:$bangid',
+        budget: BuiltinRetryBudget.singleAttempt,
+        message: 'kw 榜单封面获取失败',
+        request: () async {
+          final body = {
+            'uid': '',
+            'devId': '',
+            'sFrom': 'kuwo_sdk',
+            'user_type': 'AP',
+            'carSource': 'kwplayercar_ar_6.0.1.0_apk_keluze.apk',
+            'id': bangid,
+            'pn': 0,
+            'rn': 1,
+          };
+          final url =
+              'https://wbd.kuwo.cn/api/bd/bang/bang_info?${kwWbdBuildParam(body)}';
+          final text = await lxHttpGetText(http, url);
+          try {
+            return kwWbdDecodeData(text);
+          } catch (_) {
+            throw StateError('kw 榜单封面解码失败');
+          }
+        },
+        isInvalid: (decoded) =>
+            decoded is! Map ||
+            decoded['code'] != 200 ||
+            decoded['data'] is! Map,
+        parse: (decoded) {
+          final data = decoded['data'] as Map;
+          for (final key in const ['pic', 'cover', 'img']) {
+            final value = data[key]?.toString().trim() ?? '';
+            if (value.isNotEmpty) return value;
+          }
+          throw StateError('kw 榜单封面为空');
+        },
+      ),
+      http,
+    );
   }
 
   static Future<List<DiscoverTrack>> _fetchLeaderboard(
@@ -208,19 +216,30 @@ class KwDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverTags> tags(BuiltinTransport http) {
-    return http.cached('kw:tags', () async {
-      final results = await Future.wait([_fetchTag(http), _fetchHotTag(http)]);
-      return DiscoverTags(
-        categories: results[0] as List<DiscoverTagCategory>,
-        hotTags: results[1] as List<DiscoverTag>,
-      );
-    });
+    return runDiscoverCall(
+      DiscoverAttemptCall<DiscoverTags>(
+        key: 'kw:tags',
+        budget: BuiltinRetryBudget.singleAttempt,
+        attempt: (_) async {
+          final results = await Future.wait([
+            _fetchTag(http),
+            _fetchHotTag(http),
+          ]);
+          return DiscoverTags(
+            categories: results[0] as List<DiscoverTagCategory>,
+            hotTags: results[1] as List<DiscoverTag>,
+          );
+        },
+      ),
+      http,
+    );
   }
 
   static Future<List<DiscoverTagCategory>> _fetchTag(BuiltinTransport http) {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTagCategory>>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () => lxHttpGet(
           http,
           'http://wapi.kuwo.cn/api/pc/classify/playlist/getTagList'
@@ -256,6 +275,7 @@ class KwDiscoverSource extends DiscoverSource {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTag>>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () => lxHttpGet(
           http,
           'http://wapi.kuwo.cn/api/pc/classify/playlist/getRcmTagList'
@@ -437,45 +457,57 @@ class KwDiscoverSource extends DiscoverSource {
     String keyword,
     int page,
   ) {
-    return http.cached('kw:playlist-search:$keyword:$page', () async {
-      final text = await lxHttpGetText(
-        http,
-        'http://search.kuwo.cn/r.s?all=${Uri.encodeComponent(keyword)}'
-        '&pn=${page - 1}&rn=20&rformat=json&encoding=utf8&ver=mbox'
-        '&vipver=MUSIC_8.7.7.0_BCS37&plat=pc&devid=28156413&ft=playlist'
-        '&pay=0&needliveshow=0',
-      );
-      final body = objStr2JSON(text);
-      if (body is! Map) throw StateError('kw 歌单搜索失败');
-      final rawList = body['abslist'];
-      final playlists = <DiscoverPlaylist>[];
-      if (rawList is List) {
-        for (final item in rawList) {
-          if (item is! Map) continue;
-          playlists.add(
-            DiscoverPlaylist(
-              id: (item['playlistid'] ?? '').toString(),
-              name: decodeName(item['name']?.toString()),
-              coverUrl: (item['pic']?.toString().isNotEmpty ?? false)
-                  ? item['pic'].toString()
-                  : null,
-              author: decodeName(item['nickname']?.toString()),
-              playCount: parseSourceCount(item['playcnt']) ?? 0,
-              trackCount: parseSourceCount(item['songnum']) ?? 0,
-              description: (item['intro']?.toString().isNotEmpty ?? false)
-                  ? decodeName(item['intro']?.toString())
-                  : null,
-            ),
+    return runDiscoverCall(
+      DiscoverRequestCall<DiscoverPlaylistPage>(
+        key: 'kw:playlist-search:$keyword:$page',
+        budget: BuiltinRetryBudget.singleAttempt,
+        message: 'kw 歌单搜索失败',
+        request: () async {
+          final text = await lxHttpGetText(
+            http,
+            'http://search.kuwo.cn/r.s?all=${Uri.encodeComponent(keyword)}'
+            '&pn=${page - 1}&rn=20&rformat=json&encoding=utf8&ver=mbox'
+            '&vipver=MUSIC_8.7.7.0_BCS37&plat=pc&devid=28156413&ft=playlist'
+            '&pay=0&needliveshow=0',
           );
-        }
-      }
-      return DiscoverPlaylistPage(
-        playlists: playlists,
-        page: page,
-        limit: 20,
-        total: parseSourceCount(body['TOTAL']) ?? 0,
-      );
-    });
+          // 伪 JSON 的转换异常与 XML 错误一样直接上抛（迁移前就在缓存
+          // 回调里，不重试也不包装）。
+          return objStr2JSON(text);
+        },
+        isInvalid: (body) => body is! Map,
+        parse: (body) {
+          final rawList = body['abslist'];
+          final playlists = <DiscoverPlaylist>[];
+          if (rawList is List) {
+            for (final item in rawList) {
+              if (item is! Map) continue;
+              playlists.add(
+                DiscoverPlaylist(
+                  id: (item['playlistid'] ?? '').toString(),
+                  name: decodeName(item['name']?.toString()),
+                  coverUrl: (item['pic']?.toString().isNotEmpty ?? false)
+                      ? item['pic'].toString()
+                      : null,
+                  author: decodeName(item['nickname']?.toString()),
+                  playCount: parseSourceCount(item['playcnt']) ?? 0,
+                  trackCount: parseSourceCount(item['songnum']) ?? 0,
+                  description: (item['intro']?.toString().isNotEmpty ?? false)
+                      ? decodeName(item['intro']?.toString())
+                      : null,
+                ),
+              );
+            }
+          }
+          return DiscoverPlaylistPage(
+            playlists: playlists,
+            page: page,
+            limit: 20,
+            total: parseSourceCount(body['TOTAL']) ?? 0,
+          );
+        },
+      ),
+      http,
+    );
   }
 
   /// 酷我伪 JSON → JSON（`{'a':'b'}` → `{"a":"b"}`；移植 LX `objStr2JSON`）。
@@ -495,9 +527,14 @@ class KwDiscoverSource extends DiscoverSource {
   ) {
     final id = _parsePlaylistId(rawId);
     if (id == null) throw StateError('kw 歌单 id 解析失败');
-    return http.cached('kw:playlist-detail:$id', () {
-      return _fetchDetail(http, id);
-    });
+    return runDiscoverCall(
+      DiscoverAttemptCall<DiscoverDetail>(
+        key: 'kw:playlist-detail:$id',
+        budget: BuiltinRetryBudget.singleAttempt,
+        attempt: (_) => _fetchDetail(http, id),
+      ),
+      http,
+    );
   }
 
   /// 从 `digest-5__123` / 链接 / 纯 ID 中提取可请求的 id 与 digest。
@@ -537,6 +574,7 @@ class KwDiscoverSource extends DiscoverSource {
     return runDiscoverCall(
       DiscoverRequestCall<DiscoverDetail>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () => lxHttpGet(
           http,
           'http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=$id&pn=0'
@@ -576,6 +614,7 @@ class KwDiscoverSource extends DiscoverSource {
     return runDiscoverCall(
       DiscoverAttemptCall<DiscoverDetail>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         attempt: (_) async {
           final infoBody = await lxHttpGet(
             http,

@@ -39,7 +39,7 @@ Dio get _redirectDio => _redirectDioInstance ??= createAppDio();
 ///   trackIds 与 privileges 数量一致时直接解析，否则批量歌曲详情补齐；
 /// - 歌单搜索：eapi `/api/cloudsearch/pc`（type=1000）。
 ///
-/// 网络结果缓存 5 分钟（统一走注入 transport 的 `cached`）。
+/// 网络结果缓存 5 分钟（统一走发现执行器与注入的 transport）。
 class WySongList {
   WySongList._();
 
@@ -59,13 +59,22 @@ class WySongList {
   /// 热门标签 + 完整标签目录（两个接口并行，结果缓存 5 分钟）。
   static Future<({List<DiscoverTagCategory> tags, List<DiscoverTag> hotTag})>
   getTags(BuiltinTransport http) {
-    return http.cached('wy:playlist-tags', () async {
-      final results = await Future.wait([getTag(http), getHotTag(http)]);
-      return (
-        tags: results[0] as List<DiscoverTagCategory>,
-        hotTag: results[1] as List<DiscoverTag>,
-      );
-    });
+    return runDiscoverCall(
+      DiscoverAttemptCall<
+        ({List<DiscoverTagCategory> tags, List<DiscoverTag> hotTag})
+      >(
+        key: 'wy:playlist-tags',
+        budget: BuiltinRetryBudget.singleAttempt,
+        attempt: (_) async {
+          final results = await Future.wait([getTag(http), getHotTag(http)]);
+          return (
+            tags: results[0] as List<DiscoverTagCategory>,
+            hotTag: results[1] as List<DiscoverTag>,
+          );
+        },
+      ),
+      http,
+    );
   }
 
   /// 标签目录（`weapi/playlist/catalogue`）。
@@ -73,6 +82,7 @@ class WySongList {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTagCategory>>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () => lxHttpPost(
           http,
           'https://music.163.com/weapi/playlist/catalogue',
@@ -125,6 +135,7 @@ class WySongList {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTag>>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () => lxHttpPost(
           http,
           'https://music.163.com/weapi/playlist/hottags',
@@ -232,9 +243,13 @@ class WySongList {
     String rawId,
     int page,
   ) async {
-    final shell = await http.cached(
-      'wy:playlist-detail:$rawId',
-      () => _fetchListShell(http, rawId),
+    final shell = await runDiscoverCall(
+      DiscoverAttemptCall<_WyPlaylistShell>(
+        key: 'wy:playlist-detail:$rawId',
+        budget: BuiltinRetryBudget.singleAttempt,
+        attempt: (_) => _fetchListShell(http, rawId),
+      ),
+      http,
     );
     final all = shell.allTracks;
     if (all != null) {
@@ -249,9 +264,13 @@ class WySongList {
     if (ids.isEmpty) {
       return DiscoverDetail(info: shell.info, tracks: const []);
     }
-    final tracks = await http.cached(
-      'wy:playlist-tracks:$rawId:$page',
-      () => WyMusicDetail.getList(http, ids),
+    final tracks = await runDiscoverCall(
+      DiscoverAttemptCall<List<SourceTrack>>(
+        key: 'wy:playlist-tracks:$rawId:$page',
+        budget: BuiltinRetryBudget.singleAttempt,
+        attempt: (_) => WyMusicDetail.getList(http, ids),
+      ),
+      http,
     );
     return DiscoverDetail(
       info: shell.info,
@@ -272,6 +291,7 @@ class WySongList {
     return runDiscoverCall(
       DiscoverRequestCall<_WyPlaylistShell>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         request: () async {
           try {
             return await lxHttpPost(
@@ -484,6 +504,7 @@ class WySongList {
     return runDiscoverCall(
       DiscoverAttemptCall<String>(
         key: null,
+        budget: BuiltinRetryBudget.singleAttempt,
         message: 'link try max num',
         attempt: (_) async {
           var current = link;

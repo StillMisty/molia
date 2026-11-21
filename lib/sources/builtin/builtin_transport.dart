@@ -347,6 +347,12 @@ abstract final class BuiltinRetryBudget {
   /// （首次 + 2 次重试），同一数字只声明一处；搜索与发现保持同一重试策略。
   static const int discover = BuiltinTransport.defaultRetries;
 
+  /// 缓存整份结果的端点（榜单封面 / 标签 / 歌单搜索 / 歌单详情）及其内层
+  /// 子请求：迁移前就是 `cached(...)` + `retries: 1` 单次尝试，失败交给
+  /// 页面刷新或占位图。重试预算归外层端点；内层不再叠加，避免一次失败
+  /// 被放大成多次并发请求（平台限流 / 首屏失败率）。
+  static const int singleAttempt = 1;
+
   /// 榜单端点：榜单是发现页首屏，kw/kg/mg 沿用既有 4 次；
   /// 比默认多一次，不要按默认 3 收紧。
   static const int leaderboard = 4;
