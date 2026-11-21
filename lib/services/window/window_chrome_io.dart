@@ -45,7 +45,16 @@ class WindowChrome {
   ///
   /// macOS 走原生标题栏：`WindowControls` 只在 [usesCustomTitleBar] 为真时
   /// 挂载，避免与系统红绿灯重复。
-  static bool get usesCustomTitleBar => Platform.isLinux || Platform.isWindows;
+  ///
+  /// 测试可置 [debugUsesCustomTitleBarOverride] 关掉窗口三键：Linux 测试宿主
+  /// 会按真实平台挂出三键，360 宽的手机版式预览/用例会被这套宿主 UI 挤出
+  /// 溢出，掩盖真正要看的手机布局。
+  @visibleForTesting
+  static bool? debugUsesCustomTitleBarOverride;
+
+  static bool get usesCustomTitleBar =>
+      debugUsesCustomTitleBarOverride ??
+      (Platform.isLinux || Platform.isWindows);
 
   static final Logger _logger = Logger('molia.window_chrome');
 

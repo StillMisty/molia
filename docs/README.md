@@ -34,6 +34,7 @@
 | 包体积 / 内存 / worktree 工具 | `.agents/skills/molia-perf-tooling/SKILL.md` | 详细口径与踩坑；seed 命令回 `docs/dev_environment.md` |
 | 设备调试（模拟器 / 热重载 / 截图） | `.agents/skills/molia-device-debug/SKILL.md` | 环境细节指向 `docs/dev_environment.md` |
 | Issue、标签、领域文档约定 | `docs/agents/` | GitHub issues 为规格来源 |
+| 界面版式 / 交互取舍（播放页 / 发现页 / 设置 / 收藏） | `docs/adr/`（0023 / 0024 / 0026 / 0027 / 0028 / 0030 / 0033） | 做 UI 审查或版式改动前先读；已定型的取舍优先于新审计意见 |
 | 决策记录（ADR） | `docs/adr/` | 只追加，不重写历史 |
 | 投屏 / Android Auto 范围 | `docs/adr/0025-cast-and-auto-out-of-scope.md` | 生产入口保持缺席 |
 | 收藏页密度 / 封面口径 | `docs/adr/0028-favorites-convergence.md` | 单一入口、桌面宽屏表格行、书脊、动图封面 |

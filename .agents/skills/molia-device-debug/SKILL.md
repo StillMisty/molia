@@ -11,6 +11,7 @@ tool/agent/app.sh run          # 后台 flutter run（默认 Android；首次需
 tool/agent/app.sh run -d linux # Linux 桌面热重载（免模拟器；无显示加 --headless 走 Xvfb）
 tool/agent/app.sh reload       # 热重载；restart 热重启；status 看 pid / 设备 / VM Service / 日志路径
 tool/agent/shot.sh [name]      # 截图 → ${TMPDIR:-/tmp}/molia-agent/shots/*.png（可直接读图）
+tool/agent/ui_preview.sh       # 无设备 360/640 预览 → ${TMPDIR:-/tmp}/molia-agent/ui-preview/*.png
 tool/agent/ui.sh layout|tap|swipe|text|key|launch|force-stop
 tool/agent/seed.sh android|linux <cmd>  # 数据注入：favorites/covers/history/session/mock-source/status/clear/restore
 tool/agent/emu.sh stop         # 停止模拟器（app.sh stop 只停 flutter run）
@@ -24,6 +25,12 @@ tool/agent/emu.sh stop         # 停止模拟器（app.sh stop 只停 flutter ru
 - 日志 / 截图 / pid 统一在 `${TMPDIR:-/tmp}/molia-agent`（默认 `/tmp/molia-agent`，`RUN_DIR` 可覆盖）；集成测试默认后台跑，日志 `it-<platform>-<时间戳>.log`、退出码写同批 `.status`（失败时日志尾部 40 行也在其中）；
 - 视觉定位：`shot.sh --annotate` 生成带编号标注的截图，再 `ui.sh resolve 截图.png "#3"` 得到坐标；
   输入文本前确保输入框已聚焦；
+- 视觉验收优先 `tool/agent/ui_preview.sh`：widget test 渲染真实壳层 / 设置弹层的
+  360 与 640 PNG，不依赖模拟器或显示服务；图里的中文可能因测试字体显示为方块，
+  看比例 / 溢出 / 密度，不用于校对文案。需要真实系统 UI（通知 / 权限 / 手势）才用模拟器；
+- 模拟器在 WSL 上不稳定（本仓遇到过 RenderThread coredump / SIGILL）：`emu.sh start`
+  已用 setsid 让模拟器脱离 agent 后台命令的进程组；仍失败时改用 Linux 桌面 + Xvfb，
+  不要在 `shot.sh` 上反复等 30s；
 - 模拟器默认 16 KB 页；镜像、AVD 与 WSL 限制等细节见 `docs/dev_environment.md`（权威出处）。
 - 新 worktree / seed 的 WAL 与大数据量 / `covers` 封面 fixture / Android 内存采样：
   见 `molia-perf-tooling` skill。

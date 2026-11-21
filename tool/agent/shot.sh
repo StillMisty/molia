@@ -24,6 +24,9 @@ while (($#)); do
 done
 
 ensure_adb
+if ! "$ADB" devices | awk -v d="$DEVICE_ID" '$1 == d { found = 1 } END { exit !found }'; then
+  die "设备 $DEVICE_ID 不在线：先 tool/agent/emu.sh start；无设备时用 tool/agent/ui_preview.sh 生成 360/640 预览"
+fi
 wait_for_device 30
 mkdir -p "$SHOT_DIR"
 

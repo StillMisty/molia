@@ -39,7 +39,17 @@ cmd_start() {
   args+=("$AVD_NAME")
 
   log "启动模拟器: $ANDROID_CLI ${args[*]}（冷启动通常 1-3 分钟）"
-  "$ANDROID_CLI" "${args[@]}"
+  # 新 session 启动：agent 的后台命令结束时会清理自己的进程组，直接前台
+  # 调用会把模拟器一起带走（表现为「启动成功，下一个命令 adb devices 空」）。
+  if command -v setsid >/dev/null 2>&1; then
+    if setsid --wait true >/dev/null 2>&1; then
+      setsid --wait "$ANDROID_CLI" "${args[@]}"
+    else
+      setsid "$ANDROID_CLI" "${args[@]}"
+    fi
+  else
+    "$ANDROID_CLI" "${args[@]}"
+  fi
   log "模拟器就绪: $(running_emulator)"
 }
 

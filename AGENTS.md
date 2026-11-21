@@ -40,6 +40,7 @@ dart run tool/agent/cli.dart -h                # 跨端工具入口：info/deps/
 dart run tool/agent/cli.dart test linux        # 端到端（真实引擎 + 设置页 + 窗口/托盘，不含播放）；默认后台（打印日志/状态路径），--wait 等结果；Xvfb 无窗口，桌面看门狗勿删
 dart run tool/agent/cli.dart test android      # 同一套跑模拟器（先 emu start）；同样默认后台；--window / --timeout 见命令用法
 dart run tool/agent/cli.dart smoke linux       # 启动首帧烟测（真实 main + provider tree；Xvfb，抓 runApp 前崩溃）
+tool/agent/ui_preview.sh                       # 无设备 UI 预览：真实壳层 / 设置弹层 360+640 PNG（先看比例再提交）
 dart run tool/agent/cli.dart deps              # 依赖/工具链体检：pub outdated + analyze suggestions + Gradle 实际版本
 dart run tool/agent/cli.dart size apk --check <apk>   # APK 分组体积与 native 库约束（无需 unzip）
 dart run tool/agent/cli.dart size desktop --check <bundle>  # 桌面 release 包：禁止 dartjni，校验 AOT / 引擎 / exe 结构
@@ -116,14 +117,16 @@ sources/playback。模块布局与体积由 `test/architecture/module_layout_tes
 - 订阅优先 `Selector`/`ValueListenableBuilder`；`select` 不返回 `Map`/`List` 引用（用不可变对象/record）；
 - 文案走 `AppLocalizations`（en/zh + `flutter gen-l10n`）；用户可见文案只说「能不能用 + 怎么办」，
   黑话对照与长度约定见 `docs/copy_style.md`（zh/en 与测试断言同步改）；注释中文、写「为什么」；
+- UI 审查 / 版式改动前先读 `docs/README.md` 的「界面版式 / 交互取舍」一组 ADR
+  （0023/0024/0026/0027/0028/0030/0033）；已定型的版式不要再当问题提；
 - UI 硬约定（`test/architecture/` 强制，细节见 `docs/architecture.md` §6）：`Icons.*_rounded`；
   颜色只走 ColorScheme/`AppSemanticColors`（透明度用 `withValues(alpha:)`）；优先 `M3E*` 组件；
   禁止 import `package:flutter/material.dart`；
   排版走 `context.typeScale` / `emphasizedTypeScale`（`lib/theme/m3e_context.dart`），
   `textTheme` 与 `w600/w800/w900` 由 `test/architecture/m3e_typography_test.dart` 拦截；
   顶栏 / 弹层 / 排序的 M3E 口径见 `docs/architecture.md` §6；
-- UI 视觉改动（共享工具栏 / 选择器 / 弹层）先在 360 与 640 宽渲染截图或 preview 再提交；
-  单测的 `didExceedMaxLines` 发现不了「chip 把输入区挤窄」这类比例问题；
+- UI 视觉改动（共享工具栏 / 选择器 / 弹层）先跑 `tool/agent/ui_preview.sh` 生成 360/640 图并
+  `read` 检查再提交；单测的 `didExceedMaxLines` 发现不了「chip 把输入区挤窄」这类比例问题；
 - 每次改动至少 `flutter analyze --no-pub` + `flutter test --no-pub`（迭代可只跑改动范围，提交前跑全量）；
 - 测试按模块聚合：小用例并入同模块 `*_test.dart`，`*_cases.dart` 只作为聚合套件的用例库
   （不被 `flutter test` 单独发现）。每个测试文件都有独立的 engine/kernel 装载开销（~1s，

@@ -13,8 +13,18 @@ PROJECT_DIR="$(cd "$AGENT_DIR/../.." && pwd)"
 # Android SDK：优先环境变量；默认用户态安装目录
 ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"
 ADB="${ADB:-$ANDROID_SDK_ROOT/platform-tools/adb}"
-# Android CLI：默认 `android`（Arch 的 android-cli 包；其它发行版可指向等价封装）
-ANDROID_CLI="${ANDROID_CLI:-android}"
+# Android CLI：默认 `android`（Arch 的 android-cli 包；其它发行版可指向等价封装）。
+# 用户级安装常在 ~/.local/bin，而 agent 的 PATH 往往没有它：像 ADB 一样显式探测。
+ANDROID_CLI="${ANDROID_CLI:-}"
+if [[ -z "$ANDROID_CLI" ]]; then
+  if command -v android >/dev/null 2>&1; then
+    ANDROID_CLI="$(command -v android)"
+  elif [[ -x "$HOME/.local/bin/android" ]]; then
+    ANDROID_CLI="$HOME/.local/bin/android"
+  else
+    ANDROID_CLI="android"
+  fi
+fi
 
 # 模拟器与目标应用
 AVD_NAME="${AVD_NAME:-molia_api37}"

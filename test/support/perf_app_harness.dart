@@ -104,6 +104,9 @@ Future<FakePlaybackFacade> pumpPerfApp(
   PerfRealLibrary? realLibrary,
   bool disableAnimations = false,
   List<SingleChildWidget> extraProviders = const [],
+
+  /// 在 MaterialApp 外再包一层（UI 预览用 RepaintBoundary 截图）；null = 原样。
+  Widget Function(Widget child)? wrap,
 }) async {
   if (resetPreferences) {
     SharedPreferences.setMockInitialValues({
@@ -261,21 +264,27 @@ Future<FakePlaybackFacade> pumpPerfApp(
         ...realLibraryProviders,
         ...extraProviders,
       ],
-      child: MaterialApp(
-        locale: const Locale('zh'),
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          ...GlobalMaterialLocalizations.delegates,
-        ],
-        supportedLocales: const [Locale('zh')],
-        // 系统「减弱动效」：部分用例验证 spatial 导航动效的直达终态。
-        builder: disableAnimations
-            ? (context, child) => MediaQuery(
-                data: MediaQuery.of(context).copyWith(disableAnimations: true),
-                child: child!,
-              )
-            : null,
-        home: MyApp(desktopShell: desktopShell, showOnboarding: showOnboarding),
+      child: (wrap ?? (child) => child)(
+        MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          // 系统「减弱动效」：部分用例验证 spatial 导航动效的直达终态。
+          builder: disableAnimations
+              ? (context, child) => MediaQuery(
+                  data: MediaQuery.of(context)
+                      .copyWith(disableAnimations: true),
+                  child: child!,
+                )
+              : null,
+          home: MyApp(
+            desktopShell: desktopShell,
+            showOnboarding: showOnboarding,
+          ),
+        ),
       ),
     ),
   );
