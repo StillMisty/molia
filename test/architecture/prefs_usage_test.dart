@@ -5,10 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// 设备本地设置持久化棘轮（stage 1）：
 ///
 /// - 新代码访问 `SharedPreferences` 只准经过 `lib/data/settings/` 里的
-///   `DeviceSettings`（统一键表 / JSON 路径 / 串行写 / 失败策略）；
+///   `DeviceSettings`（统一键表 / JSON 路径 / 模块级串行写 / 失败策略）；
 /// - 迁移前已有的直连文件登记为白名单，只减不增；条目不再直连视为陈旧条目，
 ///   同样失败，防止白名单长期掩盖新违规。
 ///
+/// 匹配前先去掉注释（行注释 / 文档注释 / 块注释）再压掉空白：折行调用
+/// （`Shared\nPreferences`）与别名调用（`sp.SharedPreferences`）都会命中。
 /// 规则与 `module_layout_test.dart` 的体积 / 依赖棘轮互补：那条管文件布局，
 /// 这条管「设备本地键的存储入口」。
 const Set<String> _legacyPrefsWhitelist = {
@@ -27,6 +29,7 @@ const Set<String> _legacyPrefsWhitelist = {
   'lib/services/local_cover_identity_sweep.dart',
   'lib/services/local/music_folders.dart',
   'lib/services/lyrics_cache.dart',
+  'lib/services/lyrics_service.dart',
   'lib/services/playback_observer.dart',
   'lib/services/playback_session_store.dart',
   'lib/services/scrobble/scrobble_outbox.dart',
@@ -37,11 +40,9 @@ const Set<String> _legacyPrefsWhitelist = {
   'lib/services/window/window_settings.dart',
 };
 
-/// 直连存储的入口形式；`DeviceSettings` 内部实现是唯一允许的调用点。
-const List<String> _forbiddenPatterns = [
-  'SharedPreferences.getInstance',
-  'SharedPreferencesAsync',
-];
+/// 直连存储的类名；`SharedPreferencesAsync` / `SharedPreferencesWithCache`
+/// 都包含这个 token。
+const String _prefsToken = 'SharedPreferences';
 
 /// 设备本地设置的唯一模块入口（消息里点名，避免只说「不要用」）。
 const String _modulePath = 'lib/data/settings/device_settings.dart';
@@ -60,12 +61,9 @@ void main() {
     final offenders = <String>[];
     final stillUsing = <String>{};
     for (final path in files.where((path) => !path.startsWith(_moduleDir))) {
-      final hits = _forbiddenHits(path);
-      if (hits.isEmpty) continue;
+      if (!_usesSharedPreferences(File(path).readAsStringSync())) continue;
       stillUsing.add(path);
-      if (!_legacyPrefsWhitelist.contains(path)) {
-        offenders.add('$path:${hits.first.line}  ${hits.first.pattern}');
-      }
+      if (!_legacyPrefsWhitelist.contains(path)) offenders.add(path);
     }
     final stale = _legacyPrefsWhitelist.difference(stillUsing).toList()..sort();
 
@@ -73,10 +71,10 @@ void main() {
       offenders,
       isEmpty,
       reason:
-          '设备本地键请用 `$_modulePath` 的 `DeviceSettings`（键名 / 默认值登记在 '
-          '`lib/data/settings/device_settings_keys.dart`）：它提供统一的 JSON 路径、'
-          '串行写与读写失败策略；新增直连会绕开这些约束：\n'
-          '${offenders.join('\n')}',
+          '设备本地键请用 `$_modulePath` 的 `DeviceSettings`（键名 / 默认值 / '
+          'JSON 字段形状登记在 `lib/data/settings/device_settings_keys.dart`）：'
+          '它提供统一的 JSON 路径、模块级串行写与读写失败策略；新增直连会绕开'
+          '这些约束：\n${offenders.join('\n')}',
     );
     expect(
       stale,
@@ -84,27 +82,124 @@ void main() {
       reason: '白名单条目已不再直连 SharedPreferences，请删除：\n${stale.join('\n')}',
     );
   });
+
+  group('扫描器', () {
+    test('注释里的提及不算违规', () {
+      expect(
+        _usesSharedPreferences('// SharedPreferences.getInstance()'),
+        isFalse,
+      );
+      expect(_usesSharedPreferences('/// 不要用 SharedPreferences'), isFalse);
+      expect(
+        _usesSharedPreferences('/* SharedPreferencesAsync */\nvoid f() {}'),
+        isFalse,
+      );
+    });
+
+    test('别名调用与折行调用都算违规', () {
+      expect(
+        _usesSharedPreferences(
+          "import 'package:shared_preferences/shared_preferences.dart' as sp;\n"
+          'final prefs = sp.SharedPreferences.getInstance();',
+        ),
+        isTrue,
+      );
+      expect(
+        _usesSharedPreferences(
+          'final prefs = Shared\n  Preferences\n  .getInstance();',
+        ),
+        isTrue,
+      );
+    });
+
+    test('Async / WithCache 变体都算违规', () {
+      expect(
+        _usesSharedPreferences('final p = SharedPreferencesAsync();'),
+        isTrue,
+      );
+      expect(
+        _usesSharedPreferences(
+          'final p = SharedPreferencesWithCache.create();',
+        ),
+        isTrue,
+      );
+    });
+
+    test('构造参数直接依赖 SharedPreferences 算违规，依赖 DeviceSettings 不算', () {
+      expect(
+        _usesSharedPreferences(
+          'class Store { Store({required SharedPreferences prefs}); }',
+        ),
+        isTrue,
+        reason: '迁移后的 store 不应再拿到 prefs 句柄',
+      );
+      expect(
+        _usesSharedPreferences(
+          'class Store { Store({DeviceSettings? settings}); }',
+        ),
+        isFalse,
+      );
+    });
+  });
 }
 
-typedef _ForbiddenHit = ({int line, String pattern});
+/// 去掉注释并压掉所有空白后匹配 [prefsToken]。
+bool _usesSharedPreferences(String source) =>
+    _stripDartComments(source)
+        .replaceAll(RegExp(r'\s+'), '')
+        .contains(_prefsToken);
 
-/// 只拦截代码行：注释里讨论 `SharedPreferences` 是允许的。
-List<_ForbiddenHit> _forbiddenHits(String path) {
-  final file = File(path);
-  if (!file.existsSync()) return const [];
-  final hits = <_ForbiddenHit>[];
-  final lines = file.readAsLinesSync();
-  for (var index = 0; index < lines.length; index++) {
-    final line = lines[index];
-    if (line.trimLeft().startsWith('//')) continue;
-    for (final pattern in _forbiddenPatterns) {
-      if (line.contains(pattern)) {
-        hits.add((line: index + 1, pattern: pattern));
-        break;
+/// 去掉 `//` / `///` / `/* */` 注释，保留字符串字面量内容与换行。
+///
+/// 不是完整的 Dart lexer：只需要避免注释里的讨论造成误报，以及不把字符串
+/// 里的 `//`（如 URL）当成注释吞掉后面的代码。普通单行 / 双行字符串足以
+/// 覆盖本仓代码；三引号字符串按普通字符串处理。
+String _stripDartComments(String source) {
+  final out = StringBuffer();
+  var index = 0;
+  while (index < source.length) {
+    final current = source[index];
+    final next = index + 1 < source.length ? source[index + 1] : '';
+
+    if (current == '/' && next == '/') {
+      while (index < source.length && source[index] != '\n') {
+        index++;
       }
+      continue;
     }
+    if (current == '/' && next == '*') {
+      index += 2;
+      while (index + 1 < source.length &&
+          !(source[index] == '*' && source[index + 1] == '/')) {
+        index++;
+      }
+      index = index + 1 < source.length ? index + 2 : source.length;
+      out.write(' ');
+      continue;
+    }
+    if (current == "'" || current == '"') {
+      final quote = current;
+      out.write(current);
+      index++;
+      while (index < source.length) {
+        final char = source[index];
+        out.write(char);
+        index++;
+        if (char == r'\' && index < source.length) {
+          out.write(source[index]);
+          index++;
+          continue;
+        }
+        if (char == quote) break;
+        // 未闭合的普通字符串：停在行尾，避免把后续代码全部当成字符串。
+        if (char == '\n') break;
+      }
+      continue;
+    }
+    out.write(current);
+    index++;
   }
-  return hits;
+  return out.toString();
 }
 
 List<String> _libFiles() {
