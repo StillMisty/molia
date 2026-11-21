@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/sources/builtin/builtin_pic_dispatch.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/source_track.dart';
 
@@ -15,9 +14,7 @@ import 'support/mock_dio.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late BuiltinTransport originalTransport;
-  setUpAll(() => originalTransport = BuiltinSearch.transport);
-  tearDown(() => BuiltinSearch.transport = originalTransport);
+  late BuiltinTransport transport;
 
   SourceTrack track(String sourceKey, Map<String, dynamic> raw) => SourceTrack(
     sourceKey: sourceKey,
@@ -34,7 +31,7 @@ void main() {
 
   test('五平台分派：请求落到各自平台端点，命中取图结果', () async {
     final requests = <Uri>[];
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         requests.add(request.uri);
         switch (request.uri.host) {
@@ -79,7 +76,7 @@ void main() {
       }),
     );
 
-    final dispatch = BuiltinPicDispatch();
+    final dispatch = BuiltinPicDispatch(transport);
     expect(
       await dispatch.fetch(track('kw', {'songmid': '228908'})),
       'https://img.example/kw-228908.jpg',
@@ -152,14 +149,14 @@ void main() {
 
   test('空 raw / 非内置平台：降级返回 null 且不发请求', () async {
     final requests = <RequestOptions>[];
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         requests.add(request);
         return textResponse('{}', statusCode: 200);
       }),
     );
 
-    final dispatch = BuiltinPicDispatch();
+    final dispatch = BuiltinPicDispatch(transport);
     expect(await dispatch.fetch(track('wy', const {})), isNull);
     expect(await dispatch.fetch(track('tx', const {})), isNull);
     expect(await dispatch.fetch(track('kw', const {})), isNull);
@@ -175,14 +172,14 @@ void main() {
 
   test('响应自带封面：直接复用，不再请求取图接口', () async {
     final requests = <RequestOptions>[];
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         requests.add(request);
         return textResponse('unexpected', statusCode: 500);
       }),
     );
 
-    final dispatch = BuiltinPicDispatch();
+    final dispatch = BuiltinPicDispatch(transport);
     expect(
       await dispatch.fetch(
         track('kg', {
@@ -207,7 +204,7 @@ void main() {
   test('clearCache：清空后重新取图，重复调用安全', () async {
     final song = track('wy', {'songmid': 1399112638});
     var calls = 0;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         calls++;
         return textResponse(wyDetailFixture(), statusCode: 200);
@@ -216,7 +213,7 @@ void main() {
 
     const cover =
         'https://p2.music.126.net/pE_xbRjFKTza8i7CKfmDuQ==/109951164447654929.jpg';
-    final dispatch = BuiltinPicDispatch();
+    final dispatch = BuiltinPicDispatch(transport);
     expect(await dispatch.fetch(song), cover);
     expect(await dispatch.fetch(song), cover);
     expect(calls, 1, reason: '成功后命中缓存');
@@ -234,7 +231,7 @@ void main() {
     final song = track('wy', {'songmid': 1399112638});
     var calls = 0;
     var healthy = false;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         calls++;
         if (!healthy) return textResponse('{}', statusCode: 200);
@@ -242,7 +239,7 @@ void main() {
       }),
     );
 
-    final dispatch = BuiltinPicDispatch();
+    final dispatch = BuiltinPicDispatch(transport);
     expect(await dispatch.fetch(song), isNull);
     expect(calls, 1);
 

@@ -1,5 +1,6 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/domain/models/discover.dart';
@@ -35,37 +36,47 @@ class _FakeDiscoverSource extends DiscoverSource {
   ];
 
   @override
-  Future<List<DiscoverTrack>> leaderboardTracks(String bangid) async =>
-      const [];
+  Future<List<DiscoverTrack>> leaderboardTracks(
+    BuiltinTransport http,
+    String bangid,
+  ) async => const [];
 
   @override
-  Future<DiscoverTags> tags() async => const DiscoverTags();
+  Future<DiscoverTags> tags(BuiltinTransport http) async =>
+      const DiscoverTags();
 
   @override
-  Future<DiscoverPlaylistPage> playlists(String tagId, int page) async =>
-      const DiscoverPlaylistPage(playlists: [], page: 1, limit: 20);
+  Future<DiscoverPlaylistPage> playlists(
+    BuiltinTransport http,
+    String tagId,
+    int page,
+  ) async => const DiscoverPlaylistPage(playlists: [], page: 1, limit: 20);
 
   @override
   Future<DiscoverPlaylistPage> searchPlaylists(
+    BuiltinTransport http,
     String keyword,
     int page,
   ) async => const DiscoverPlaylistPage(playlists: [], page: 1, limit: 20);
 
   @override
-  Future<DiscoverDetail> playlistDetail(String rawId, int page) async =>
-      const DiscoverDetail(
-        info: DiscoverPlaylist(
-          id: '',
-          name: '',
-          author: '',
-          playCount: 0,
-          trackCount: 0,
-        ),
-        tracks: [],
-      );
+  Future<DiscoverDetail> playlistDetail(
+    BuiltinTransport http,
+    String rawId,
+    int page,
+  ) async => const DiscoverDetail(
+    info: DiscoverPlaylist(
+      id: '',
+      name: '',
+      author: '',
+      playCount: 0,
+      trackCount: 0,
+    ),
+    tracks: [],
+  );
 
   @override
-  Future<List<String>> hotSearches() async => const [];
+  Future<List<String>> hotSearches(BuiltinTransport http) async => const [];
 }
 
 class _FakeSources extends SourcesProvider {

@@ -6,7 +6,6 @@ import 'package:molia/data/http/app_dio.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_favorites.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
@@ -16,7 +15,7 @@ import 'support/bili_session_mock.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late BuiltinTransport originalTransport;
+  late BuiltinTransport transport;
   late Map<int, Map<String, dynamic>> pages;
   late List<String> requestedPages;
   late int? errorCode;
@@ -26,9 +25,8 @@ void main() {
       jsonDecode(File('test/fixtures/$name').readAsStringSync())
           as Map<String, dynamic>;
 
-  setUpAll(() => originalTransport = BuiltinSearch.transport);
-
   setUp(() {
+    transport = BuiltinTransport();
     BiliApi.reset();
     pages = {
       1: fixture('bili_favorites_page1.json'),
@@ -39,9 +37,7 @@ void main() {
     infoNull = false;
   });
 
-  tearDown(() {
-    BuiltinSearch.transport = originalTransport;
-  });
+  tearDown(() {});
 
   MockDioAdapter install() {
     final adapter = MockDioAdapter((options) async {
@@ -83,36 +79,41 @@ void main() {
           return textResponse('{}', statusCode: 500);
       }
     });
-    BuiltinSearch.transport = BuiltinTransport(
-      dio: createAppDio(adapter: adapter),
-    );
+    transport = BuiltinTransport(dio: createAppDio(adapter: adapter));
     return adapter;
   }
 
   group('parseMediaId', () {
     test('纯数字 / fid / media_id / ml 路径', () async {
-      expect(await BiliFavorites.parseMediaId('123456'), '123456');
-      expect(await BiliFavorites.parseMediaId('  123456  '), '123456');
+      expect(await BiliFavorites.parseMediaId(transport, '123456'), '123456');
+      expect(
+        await BiliFavorites.parseMediaId(transport, '  123456  '),
+        '123456',
+      );
       expect(
         await BiliFavorites.parseMediaId(
+          transport,
           'https://space.bilibili.com/336/favlist?fid=555&ftype=create',
         ),
         '555',
       );
       expect(
         await BiliFavorites.parseMediaId(
+          transport,
           'https://www.bilibili.com/medialist/detail/ml987654?type=1',
         ),
         '987654',
       );
       expect(
         await BiliFavorites.parseMediaId(
+          transport,
           'https://www.bilibili.com/list/watchlater?media_id=777',
         ),
         '777',
       );
       expect(
         await BiliFavorites.parseMediaId(
+          transport,
           'www.bilibili.com/medialist/detail/ml42',
         ),
         '42',
@@ -120,10 +121,13 @@ void main() {
     });
 
     test('无法识别的链接返回 null', () async {
-      expect(await BiliFavorites.parseMediaId(''), isNull);
-      expect(await BiliFavorites.parseMediaId('not a link'), isNull);
+      expect(await BiliFavorites.parseMediaId(transport, ''), isNull);
+      expect(await BiliFavorites.parseMediaId(transport, 'not a link'), isNull);
       expect(
-        await BiliFavorites.parseMediaId('https://example.com/playlist/1'),
+        await BiliFavorites.parseMediaId(
+          transport,
+          'https://example.com/playlist/1',
+        ),
         isNull,
       );
     });
@@ -132,6 +136,7 @@ void main() {
       install();
       expect(
         await BiliFavorites.parseMediaId(
+          transport,
           'https://space.bilibili.com/336/favlist',
         ),
         '321',
@@ -155,11 +160,12 @@ void main() {
         }
         return textResponse('');
       });
-      BuiltinSearch.transport = BuiltinTransport(
-        dio: createAppDio(adapter: adapter),
-      );
+      transport = BuiltinTransport(dio: createAppDio(adapter: adapter));
 
-      expect(await BiliFavorites.parseMediaId('https://b23.tv/abcdef'), '321');
+      expect(
+        await BiliFavorites.parseMediaId(transport, 'https://b23.tv/abcdef'),
+        '321',
+      );
       expect(redirects.first.host, 'b23.tv');
       expect(redirects.last.host, 'www.bilibili.com');
     });
@@ -169,7 +175,7 @@ void main() {
     test('拉全部分页并保留顺序；过滤非视频 / 失效条目', () async {
       install();
 
-      final detail = await BiliFavorites.detail('123456', 1);
+      final detail = await BiliFavorites.detail(transport, '123456', 1);
 
       expect(requestedPages, ['1', '2']);
       expect(detail.tracks, hasLength(25));
@@ -206,7 +212,7 @@ void main() {
     test('忽略入参 page：永远从第 1 页开始拉全', () async {
       install();
 
-      final detail = await BiliFavorites.detail('123456', 5);
+      final detail = await BiliFavorites.detail(transport, '123456', 5);
 
       expect(detail.tracks, hasLength(25));
       expect(requestedPages, ['1', '2']);
@@ -217,7 +223,7 @@ void main() {
       install();
 
       await expectLater(
-        BiliFavorites.detail('123456', 1),
+        BiliFavorites.detail(transport, '123456', 1),
         throwsA(
           isA<SourceFailure>()
               .having((e) => e.kind, 'kind', FailureKind.notFound)
@@ -230,7 +236,7 @@ void main() {
       pages[2] = {...pages[2]!}..remove('info');
       install();
 
-      final detail = await BiliFavorites.detail('123456', 1);
+      final detail = await BiliFavorites.detail(transport, '123456', 1);
 
       expect(requestedPages, ['1', '2']);
       expect(detail.tracks, hasLength(25));
@@ -243,7 +249,7 @@ void main() {
       install();
 
       await expectLater(
-        BiliFavorites.detail('123456', 1),
+        BiliFavorites.detail(transport, '123456', 1),
         throwsA(
           isA<SourceFailure>().having(
             (e) => e.kind,
@@ -258,7 +264,7 @@ void main() {
       final adapter = install();
 
       await expectLater(
-        BiliFavorites.detail('not a link', 1),
+        BiliFavorites.detail(transport, 'not a link', 1),
         throwsA(
           isA<SourceFailure>().having(
             (e) => e.kind,

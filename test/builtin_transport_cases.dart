@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/kw_search.dart';
 import 'package:molia/sources/builtin/wy_hot_search.dart';
@@ -12,15 +11,7 @@ import 'support/mock_dio.dart';
 /// 内置传输层：客户端注入、请求头/超时、响应级重试、JSON 解码；
 /// 并验证平台搜索 fetch 路径可被 MockClient 完整覆盖。
 void main() {
-  late BuiltinTransport original;
-
-  setUp(() {
-    original = BuiltinSearch.transport;
-  });
-
-  tearDown(() {
-    BuiltinSearch.transport = original;
-  });
+  late BuiltinTransport transport;
 
   test('getJson：成功解码并合并默认请求头', () async {
     Uri? seenUri;
@@ -110,7 +101,7 @@ void main() {
   });
 
   test('平台搜索 fetch 路径：注入 MockClient 后 KwSearch 端到端解析', () async {
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         expect(request.uri.host, 'search.kuwo.cn');
         return textResponse(
@@ -134,7 +125,7 @@ void main() {
       }),
     );
 
-    final result = await KwSearch.searchWithMeta('hello');
+    final result = await KwSearch.searchWithMeta(transport, 'hello');
     expect(result.tracks, hasLength(1));
     expect(result.tracks.single.title, 'Hello');
     expect(result.tracks.single.raw['songmid'], '1');
@@ -142,7 +133,7 @@ void main() {
 
   test('平台搜索响应级重试：首轮空页后重试成功', () async {
     var calls = 0;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((_) async {
         calls++;
         final first = calls == 1;
@@ -169,7 +160,7 @@ void main() {
       }),
     );
 
-    final result = await KwSearch.searchWithMeta('hello');
+    final result = await KwSearch.searchWithMeta(transport, 'hello');
     expect(calls, 2);
     expect(result.tracks, hasLength(1));
   });
@@ -217,7 +208,7 @@ void main() {
 
   test('发现适配器 fetch：WyHotSearch 走注入客户端且结果被缓存', () async {
     var requests = 0;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         requests++;
         return bytesResponse(
@@ -237,9 +228,9 @@ void main() {
       }),
     );
 
-    final words = await WyHotSearch.getList();
+    final words = await WyHotSearch.getList(transport);
     expect(words, ['热词一', '热词二']);
-    final again = await WyHotSearch.getList();
+    final again = await WyHotSearch.getList(transport);
     expect(again, words);
     expect(requests, 1, reason: '第二次命中 transport 缓存');
   });

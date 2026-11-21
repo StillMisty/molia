@@ -5,24 +5,18 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/discover_runner.dart';
 
 import 'support/mock_dio.dart';
 
 void main() {
-  late BuiltinTransport original;
+  late BuiltinTransport transport;
 
   setUp(() {
-    original = BuiltinSearch.transport;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((_) async => textResponse('{}', statusCode: 200)),
     );
-  });
-
-  tearDown(() {
-    BuiltinSearch.transport = original;
   });
 
   test('有 key：命中缓存，不再执行 request', () async {
@@ -37,6 +31,7 @@ void main() {
         isInvalid: (_) => false,
         parse: (_) => 7,
       ),
+      transport,
     );
 
     expect(await run(), 7);
@@ -56,6 +51,7 @@ void main() {
         isInvalid: (_) => false,
         parse: (response) => response as int,
       ),
+      transport,
     );
 
     expect(await run('test:key-a'), 1);
@@ -76,6 +72,7 @@ void main() {
         isInvalid: (response) => response == 1,
         parse: (response) => response as int,
       ),
+      transport,
     );
 
     expect(result, 2);
@@ -94,6 +91,7 @@ void main() {
         isInvalid: (_) => false,
         parse: (response) => response == 1 ? null : response as int,
       ),
+      transport,
     );
 
     expect(result, 2);
@@ -113,6 +111,7 @@ void main() {
           isInvalid: (_) => false,
           parse: (_) => 1,
         ),
+        transport,
       ),
       throwsA(isA<UnsupportedError>()),
     );
@@ -130,6 +129,7 @@ void main() {
             throw UnsupportedError('parse failed');
           },
         ),
+        transport,
       ),
       throwsA(isA<UnsupportedError>()),
     );
@@ -151,6 +151,7 @@ void main() {
           isInvalid: (_) => true,
           parse: (_) => 1,
         ),
+        transport,
       ),
       throwsA(
         isA<StateError>().having((e) => e.message, 'message', 'custom max num'),
@@ -171,6 +172,7 @@ void main() {
         isInvalid: (_) => false,
         parse: (_) => 1,
       ),
+      transport,
     );
 
     expect(await run(), 1);
@@ -188,6 +190,7 @@ void main() {
           return tryNum == 1 ? 5 : null;
         },
       ),
+      transport,
     );
 
     expect(result, 5);

@@ -400,6 +400,8 @@ void main() {
 }
 
 class _FakeBiliQrLogin extends BiliQrLogin {
+  _FakeBiliQrLogin() : super(client: BiliClient(transport: BuiltinTransport()));
+
   BiliQrCode? generateResult;
   List<BiliQrPollOutcome> pollResults = [];
   BiliAccount? profileResult;

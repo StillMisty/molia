@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/data/mapping/track_mapper.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/builtin/artist_source.dart';
@@ -258,18 +259,18 @@ void main() {
 
     test('未知音源：搜索与详情都抛 unsupported', () async {
       expect(
-        () => BuiltinArtists.fetch('unknown', '1'),
+        () => BuiltinArtists.fetch(BuiltinTransport(), 'unknown', '1'),
         throwsA(isA<SourceFailure>()),
       );
       expect(
-        () => BuiltinArtists.search('unknown', 'keyword'),
+        () => BuiltinArtists.search(BuiltinTransport(), 'unknown', 'keyword'),
         throwsA(isA<SourceFailure>()),
       );
     });
 
     test('缺少歌手 id：失败', () {
       expect(
-        () => BuiltinArtists.fetch('kw', '  '),
+        () => BuiltinArtists.fetch(BuiltinTransport(), 'kw', '  '),
         throwsA(isA<SourceFailure>()),
       );
     });

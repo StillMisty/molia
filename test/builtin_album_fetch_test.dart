@@ -7,7 +7,6 @@ import 'package:molia/data/http/app_dio.dart';
 import 'package:molia/domain/models/album.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/builtin/album_source.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/kg_album.dart';
 import 'package:molia/sources/builtin/kw_album.dart';
@@ -22,18 +21,14 @@ import 'support/mock_dio.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late BuiltinTransport originalTransport;
-  setUpAll(() => originalTransport = BuiltinSearch.transport);
-  tearDown(() => BuiltinSearch.transport = originalTransport);
+  late BuiltinTransport transport;
 
   /// 注入一个「按请求返回响应」的传输层，返回的 adapter 可断言请求。
   MockDioAdapter install(
     FutureOr<ResponseBody> Function(RequestOptions options) handler,
   ) {
     final adapter = MockDioAdapter(handler);
-    BuiltinSearch.transport = BuiltinTransport(
-      dio: createAppDio(adapter: adapter),
-    );
+    transport = BuiltinTransport(dio: createAppDio(adapter: adapter));
     return adapter;
   }
 
@@ -73,7 +68,7 @@ void main() {
         );
       });
 
-      final album = await WyAlbum.fetch('32311');
+      final album = await WyAlbum.fetch(transport, '32311');
       expect(adapter.requests, hasLength(1));
       expect(album.name, '神的游戏');
       expect(album.year, 2012);
@@ -86,7 +81,7 @@ void main() {
         return textResponse(jsonEncode({'code': 250}));
       });
       await expectLater(
-        WyAlbum.fetch('1'),
+        WyAlbum.fetch(transport, '1'),
         throwsA(
           isA<SourceFailure>()
               .having((f) => f.kind, 'kind', FailureKind.unknown)
@@ -137,7 +132,12 @@ void main() {
         );
       });
 
-      final album = await TxAlbum.fetch('000MkMni19ClKG', page: 2, limit: 30);
+      final album = await TxAlbum.fetch(
+        transport,
+        '000MkMni19ClKG',
+        page: 2,
+        limit: 30,
+      );
       final data =
           jsonDecode(adapter.lastRequest.uri.queryParameters['data']!) as Map;
       final section = data['albumSonglist'] as Map;
@@ -201,7 +201,12 @@ void main() {
         );
       });
 
-      final album = await KgAlbum.fetch('1234567', page: 1, limit: 5);
+      final album = await KgAlbum.fetch(
+        transport,
+        '1234567',
+        page: 1,
+        limit: 5,
+      );
       expect(adapter.requests, hasLength(2));
       final songsQuery = adapter.requests.first.uri.queryParameters;
       expect(songsQuery['albumid'], '1234567');
@@ -229,7 +234,7 @@ void main() {
         );
       });
 
-      final album = await KwAlbum.fetch('1433', page: 2, limit: 10);
+      final album = await KwAlbum.fetch(transport, '1433', page: 2, limit: 10);
       final query = adapter.lastRequest.uri.queryParameters;
       expect(query['stype'], 'albuminfo');
       expect(query['albumid'], '1433');
@@ -286,7 +291,12 @@ void main() {
         );
       });
 
-      final album = await MgAlbum.fetch('1142521343', page: 1, limit: 50);
+      final album = await MgAlbum.fetch(
+        transport,
+        '1142521343',
+        page: 1,
+        limit: 50,
+      );
       expect(adapter.requests, hasLength(2));
       final songsQuery = adapter.requests.first.uri.queryParameters;
       expect(songsQuery['albumId'], '1142521343');
@@ -320,9 +330,9 @@ void main() {
         );
       });
 
-      final kw = await BuiltinAlbums.fetch('kw', '1');
+      final kw = await BuiltinAlbums.fetch(transport, 'kw', '1');
       expect(kw, isA<Album>());
-      final wy = await BuiltinAlbums.fetch('wy', '1');
+      final wy = await BuiltinAlbums.fetch(transport, 'wy', '1');
       expect(wy.id, '1');
     });
   });

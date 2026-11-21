@@ -14,7 +14,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
+import 'package:molia/domain/models/discover.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/crypto_utils.dart';
 import 'package:molia/sources/builtin/discover_source.dart';
@@ -24,6 +24,38 @@ import 'support/mock_dio.dart';
 
 /// 按 URL 子串路由的发现请求桩：记录全部请求；未路由的请求直接失败，
 /// 保证「绕开注入 client 的裸请求」不会被静默放过。
+/// 当前用例的传输（`install()` 切换）：发现适配器按调用方注入传输，
+/// 测试用 [_BoundSource] 把「当前 stub 的 transport」绑到调用上。
+late BuiltinTransport _currentTransport;
+
+/// 把未绑定的发现声明与当前测试传输组合成可直接调用的门面。
+class _BoundSource {
+  const _BoundSource(this._source);
+
+  final DiscoverSource _source;
+
+  String get sourceKey => _source.sourceKey;
+  List<DiscoverLeaderboard> get leaderboards => _source.leaderboards;
+  bool get supportsLeaderboards => _source.supportsLeaderboards;
+  bool get supportsPlaylists => _source.supportsPlaylists;
+  bool get supportsPlaylistSearch => _source.supportsPlaylistSearch;
+  bool get supportsHotSearch => _source.supportsHotSearch;
+  bool get hasLeaderboardCoverEndpoint => _source.hasLeaderboardCoverEndpoint;
+
+  Future<List<DiscoverTrack>> leaderboardTracks(String bangid) =>
+      _source.leaderboardTracks(_currentTransport, bangid);
+  Future<String?> leaderboardCover(String bangid) =>
+      _source.leaderboardCover(_currentTransport, bangid);
+  Future<DiscoverTags> tags() => _source.tags(_currentTransport);
+  Future<DiscoverPlaylistPage> playlists(String tagId, int page) =>
+      _source.playlists(_currentTransport, tagId, page);
+  Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) =>
+      _source.searchPlaylists(_currentTransport, keyword, page);
+  Future<DiscoverDetail> playlistDetail(String rawId, int page) =>
+      _source.playlistDetail(_currentTransport, rawId, page);
+  Future<List<String>> hotSearches() => _source.hotSearches(_currentTransport);
+}
+
 class _Stub {
   _Stub(this.routes);
 
@@ -44,7 +76,7 @@ class _Stub {
     }),
   );
 
-  void install() => BuiltinSearch.transport = transport;
+  void install() => _currentTransport = transport;
 }
 
 /// 断言失败路径：StateError（重试耗尽或直连业务失败），并校验请求次数。
@@ -94,18 +126,8 @@ Map<String, dynamic> _txSongItem() => {
 };
 
 void main() {
-  late BuiltinTransport original;
-
-  setUp(() {
-    original = BuiltinSearch.transport;
-  });
-
-  tearDown(() {
-    BuiltinSearch.transport = original;
-  });
-
   group('酷我发现矩阵', () {
-    final source = BuiltinDiscover.of('kw');
+    final source = _BoundSource(BuiltinDiscover.of('kw'));
 
     test('榜单：经注入 client、解析曲目、失败重试 4 次', () async {
       final body = jsonEncode({
@@ -323,7 +345,7 @@ void main() {
   });
 
   group('酷狗发现矩阵', () {
-    final source = BuiltinDiscover.of('kg');
+    final source = _BoundSource(BuiltinDiscover.of('kg'));
 
     test('榜单：经注入 client、解析曲目、失败重试 4 次', () async {
       final ok = _Stub({
@@ -526,7 +548,7 @@ void main() {
   });
 
   group('QQ 发现矩阵', () {
-    final source = BuiltinDiscover.of('tx');
+    final source = _BoundSource(BuiltinDiscover.of('tx'));
 
     test('榜单：经注入 client、解析曲目；直连失败一次即 StateError', () async {
       final ok = _Stub({
@@ -738,7 +760,7 @@ void main() {
   });
 
   group('咪咕发现矩阵', () {
-    final source = BuiltinDiscover.of('mg');
+    final source = _BoundSource(BuiltinDiscover.of('mg'));
 
     test('榜单：经注入 client、解析曲目、失败重试 4 次', () async {
       final ok = _Stub({
@@ -973,7 +995,7 @@ void main() {
   });
 
   group('网易云发现矩阵', () {
-    final source = BuiltinDiscover.of('wy');
+    final source = _BoundSource(BuiltinDiscover.of('wy'));
 
     Map<String, dynamic> wyPlaylist({required List<dynamic> trackIds}) => {
       'name': '歌单',
@@ -1232,7 +1254,7 @@ void main() {
   });
 
   group('汽水发现矩阵', () {
-    final source = BuiltinDiscover.of('qs');
+    final source = _BoundSource(BuiltinDiscover.of('qs'));
 
     test('榜单与热搜：平台没有匿名入口，能力位显式为假', () async {
       expect(source.leaderboards, isEmpty);

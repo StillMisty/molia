@@ -9,7 +9,6 @@ import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_discover.dart';
 import 'package:molia/sources/builtin/bili_ranking.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
@@ -21,17 +20,16 @@ void main() {
 
   const source = BiliDiscoverSource();
 
-  late BuiltinTransport originalTransport;
+  late BuiltinTransport transport;
 
   Map<String, dynamic> fixture(String name) =>
       jsonDecode(File('test/fixtures/$name').readAsStringSync())
           as Map<String, dynamic>;
 
-  setUpAll(() => originalTransport = BuiltinSearch.transport);
-
-  setUp(BiliApi.reset);
-
-  tearDown(() => BuiltinSearch.transport = originalTransport);
+  setUp(() {
+    transport = BuiltinTransport();
+    BiliApi.reset();
+  });
 
   MockDioAdapter install(
     FutureOr<ResponseBody> Function(RequestOptions options) onRequest,
@@ -44,9 +42,7 @@ void main() {
           return onRequest(options);
       }
     });
-    BuiltinSearch.transport = BuiltinTransport(
-      dio: createAppDio(adapter: adapter),
-    );
+    transport = BuiltinTransport(dio: createAppDio(adapter: adapter));
     return adapter;
   }
 
@@ -59,11 +55,11 @@ void main() {
     expect(source.supportsPlaylistSearch, isFalse);
     expect(source.supportsHotSearch, isTrue);
 
-    final tags = await source.tags();
+    final tags = await source.tags(transport);
     expect(tags.isEmpty, isTrue);
 
     await expectLater(
-      source.playlists('', 1),
+      source.playlists(transport, '', 1),
       throwsA(
         isA<SourceFailure>()
             .having((e) => e.kind, 'kind', FailureKind.unsupported)
@@ -71,7 +67,7 @@ void main() {
       ),
     );
     await expectLater(
-      source.searchPlaylists('周杰伦', 1),
+      source.searchPlaylists(transport, '周杰伦', 1),
       throwsA(
         isA<SourceFailure>().having(
           (e) => e.kind,
@@ -90,7 +86,7 @@ void main() {
       return textResponse('{}', statusCode: 500);
     });
 
-    final words = await source.hotSearches();
+    final words = await source.hotSearches(transport);
 
     expect(words, ['起风了', '周杰伦']);
     final request = adapter.requests.singleWhere(
@@ -107,7 +103,10 @@ void main() {
       return textResponse('{}', statusCode: 500);
     });
 
-    await expectLater(source.hotSearches(), throwsA(isA<SourceFailure>()));
+    await expectLater(
+      source.hotSearches(transport),
+      throwsA(isA<SourceFailure>()),
+    );
   });
 
   test('playlistDetail 委托收藏夹导入：拉全分页并带曲目', () async {
@@ -126,7 +125,7 @@ void main() {
       }
     });
 
-    final detail = await source.playlistDetail('123456', 1);
+    final detail = await source.playlistDetail(transport, '123456', 1);
 
     expect(detail.info.id, '123456');
     expect(detail.info.name, '我的收藏夹');

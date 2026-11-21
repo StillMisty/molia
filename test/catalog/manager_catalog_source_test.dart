@@ -13,7 +13,6 @@ import 'package:molia/sources/any_listen/any_listen_config.dart';
 import 'package:molia/sources/any_listen/any_listen_source.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_play.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/lx/lx_engine.dart';
 import 'package:molia/sources/lx/lx_engine_supervisor.dart';
@@ -405,8 +404,7 @@ void main() {
     });
 
     test('collection：内置平台专辑路由到 SourceManager.fetchAlbum', () async {
-      final original = BuiltinSearch.transport;
-      BuiltinSearch.transport = BuiltinTransport(
+      final transport = BuiltinTransport(
         dio: createAppDio(
           adapter: MockDioAdapter(
             (options) async => textResponse(
@@ -418,9 +416,10 @@ void main() {
           ),
         ),
       );
-      addTearDown(() => BuiltinSearch.transport = original);
-
-      final manager = SourceManager(settings: testSettingsRegistry());
+      final manager = SourceManager(
+        settings: testSettingsRegistry(),
+        builtinTransport: transport,
+      );
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('kw', manager);
       final page = await source.collection(
@@ -680,14 +679,15 @@ void main() {
     });
 
     test('search：平台返回 failed 时抛 SourceFailure（不静默成空结果）', () async {
-      final original = BuiltinSearch.transport;
-      addTearDown(() => BuiltinSearch.transport = original);
-      BuiltinSearch.transport = BuiltinTransport(
+      final transport = BuiltinTransport(
         dio: mockDio((_) async => textResponse('{}', statusCode: 500)),
       );
       BiliApi.reset();
 
-      final manager = SourceManager(settings: testSettingsRegistry());
+      final manager = SourceManager(
+        settings: testSettingsRegistry(),
+        builtinTransport: transport,
+      );
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('bili', manager);
 
@@ -831,13 +831,11 @@ void main() {
     });
 
     test('B 站原生取链：headers / expiresIn 经适配器原样透传', () async {
-      final original = BuiltinSearch.transport;
-      addTearDown(() => BuiltinSearch.transport = original);
       BiliApi.reset();
       BiliPlay.reset();
       final deadline = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600;
       final requested = <String>[];
-      BuiltinSearch.transport = BuiltinTransport(
+      final transport = BuiltinTransport(
         dio: mockDio((request) async {
           final session = biliSessionResponse(request);
           if (session != null) return session;
@@ -863,7 +861,10 @@ void main() {
         }),
       );
 
-      final manager = SourceManager(settings: testSettingsRegistry());
+      final manager = SourceManager(
+        settings: testSettingsRegistry(),
+        builtinTransport: transport,
+      );
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('bili', manager);
       final track = Track(

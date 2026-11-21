@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_search.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
@@ -20,10 +19,11 @@ void main() {
     File('test/fixtures/bili_search.json').readAsStringSync(),
   ) as Map<String, dynamic>;
 
-  late BuiltinTransport originalTransport;
-  setUpAll(() => originalTransport = BuiltinSearch.transport);
-  setUp(BiliApi.reset);
-  tearDown(() => BuiltinSearch.transport = originalTransport);
+  late BuiltinTransport transport;
+  setUp(() {
+    transport = BuiltinTransport();
+    BiliApi.reset();
+  });
 
   List<dynamic> resultItems() =>
       ((fixture['data'] as Map)['result'] as List).toList();
@@ -96,9 +96,12 @@ void main() {
         }
       }),
     );
-    BuiltinSearch.transport = transport;
 
-    final firstPage = await BiliSearch.searchWithMeta('起风了', page: 1);
+    final firstPage = await BiliSearch.searchWithMeta(
+      transport,
+      '起风了',
+      page: 1,
+    );
     expect(firstPage.failure, isNull);
     expect(firstPage.tracks, hasLength(2));
     expect(firstPage.total, 1000);
@@ -113,14 +116,18 @@ void main() {
     expect(searchUri.queryParameters['wts'], isNotEmpty);
     expect(searchUri.queryParameters['w_rid'], isNotEmpty);
 
-    final lastPage = await BiliSearch.searchWithMeta('起风了', page: 50);
+    final lastPage = await BiliSearch.searchWithMeta(
+      transport,
+      '起风了',
+      page: 50,
+    );
     expect(lastPage.hasMore, isFalse, reason: 'page >= numPages 即末页');
   });
 
   test('风控 -403：刷新会话一次后重试，搜索仍成功', () async {
     var searchCalls = 0;
     var navCalls = 0;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         final sessionResponse = biliSessionResponse(
           request,
@@ -138,7 +145,7 @@ void main() {
       }),
     );
 
-    final result = await BiliSearch.searchWithMeta('起风了');
+    final result = await BiliSearch.searchWithMeta(transport, '起风了');
 
     expect(result.failure, isNull);
     expect(result.tracks, hasLength(2));
@@ -149,7 +156,7 @@ void main() {
   test('普通业务拒绝 -1：按 ADR-0014 刷新会话一次后重试', () async {
     var searchCalls = 0;
     var navCalls = 0;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         final sessionResponse = biliSessionResponse(
           request,
@@ -167,7 +174,7 @@ void main() {
       }),
     );
 
-    final result = await BiliSearch.searchWithMeta('起风了');
+    final result = await BiliSearch.searchWithMeta(transport, '起风了');
 
     expect(result.failure, isNull);
     expect(result.tracks, hasLength(2));
@@ -178,7 +185,7 @@ void main() {
   test('传输失败：刷新会话一次后重试成功', () async {
     var searchCalls = 0;
     var navCalls = 0;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         final sessionResponse = biliSessionResponse(
           request,
@@ -194,7 +201,7 @@ void main() {
       }),
     );
 
-    final result = await BiliSearch.searchWithMeta('起风了');
+    final result = await BiliSearch.searchWithMeta(transport, '起风了');
 
     expect(result.failure, isNull);
     expect(result.tracks, hasLength(2));
@@ -207,7 +214,7 @@ void main() {
       BiliApi.reset();
       var searchCalls = 0;
       var navCalls = 0;
-      BuiltinSearch.transport = BuiltinTransport(
+      transport = BuiltinTransport(
         dio: mockDio((request) async {
           final sessionResponse = biliSessionResponse(
             request,
@@ -223,7 +230,7 @@ void main() {
         }),
       );
 
-      final result = await BiliSearch.searchWithMeta('起风了');
+      final result = await BiliSearch.searchWithMeta(transport, '起风了');
 
       expect(
         result.failure,
@@ -239,7 +246,7 @@ void main() {
   test('刷新会话失败：返回第一次失败，不把刷新错误当结果', () async {
     var sessionFetches = 0;
     var searchCalls = 0;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         if (request.uri.path == '/x/frontend/finger/spi') {
           sessionFetches++;
@@ -255,7 +262,7 @@ void main() {
       }),
     );
 
-    final result = await BiliSearch.searchWithMeta('起风了');
+    final result = await BiliSearch.searchWithMeta(transport, '起风了');
 
     expect(result.failure, isNotNull);
     expect(result.failure!.message, contains('code=-1'));
@@ -266,7 +273,7 @@ void main() {
   test('刷新后仍失败：报告第二次失败，不循环', () async {
     var searchCalls = 0;
     var navCalls = 0;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         final sessionResponse = biliSessionResponse(
           request,
@@ -284,7 +291,7 @@ void main() {
       }),
     );
 
-    final result = await BiliSearch.searchWithMeta('起风了');
+    final result = await BiliSearch.searchWithMeta(transport, '起风了');
 
     expect(result.failure, isNotNull);
     expect(result.failure!.kind, FailureKind.notFound);
@@ -293,7 +300,7 @@ void main() {
   });
 
   test('空结果：正常空结果，不因缺分页字段误报下一页', () async {
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         switch (request.uri.path) {
           case '/x/frontend/finger/spi':
@@ -332,7 +339,7 @@ void main() {
       }),
     );
 
-    final result = await BiliSearch.searchWithMeta('不存在的内容');
+    final result = await BiliSearch.searchWithMeta(transport, '不存在的内容');
     expect(result.failure, isNull);
     expect(result.tracks, isEmpty);
     expect(result.hasMore, isFalse);

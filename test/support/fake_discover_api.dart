@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:molia/domain/models/discover.dart';
+import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/discover_source.dart';
 import 'package:molia/sources/source_track.dart';
 import 'package:molia/sources/builtin/discover_track_mapper.dart';
@@ -67,7 +68,10 @@ class FakeDiscoverSource implements DiscoverSource {
   bool get hasLeaderboardCoverEndpoint => false;
 
   @override
-  Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
+  Future<List<DiscoverTrack>> leaderboardTracks(
+    BuiltinTransport http,
+    String bangid,
+  ) {
     leaderboardCalls++;
     if (!coverlessLeaderboardTracks) return _guard([track]);
     return _guard([
@@ -84,7 +88,7 @@ class FakeDiscoverSource implements DiscoverSource {
   }
 
   @override
-  Future<String?> leaderboardCover(String bangid) {
+  Future<String?> leaderboardCover(BuiltinTransport http, String bangid) {
     leaderboardCoverCalls++;
     final gate = leaderboardCoverGate;
     if (gate != null) return gate.future;
@@ -98,7 +102,7 @@ class FakeDiscoverSource implements DiscoverSource {
   DiscoverTags? tagsOverride;
 
   @override
-  Future<DiscoverTags> tags() {
+  Future<DiscoverTags> tags(BuiltinTransport http) {
     tagCalls++;
     final override = tagsOverride;
     if (override != null) return _guard(override);
@@ -116,7 +120,11 @@ class FakeDiscoverSource implements DiscoverSource {
   }
 
   @override
-  Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
+  Future<DiscoverPlaylistPage> playlists(
+    BuiltinTransport http,
+    String tagId,
+    int page,
+  ) {
     playlistPageCalls.add(page);
     final bool single = playlistPages <= 1 && playlistsPerPage <= 1;
     return _guard(
@@ -138,18 +146,25 @@ class FakeDiscoverSource implements DiscoverSource {
   }
 
   @override
-  Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) =>
-      _guard(
-        DiscoverPlaylistPage(
-          playlists: [DiscoverPlaylist(id: '9', name: '搜索:$keyword')],
-          page: page,
-          limit: 20,
-          total: 1,
-        ),
-      );
+  Future<DiscoverPlaylistPage> searchPlaylists(
+    BuiltinTransport http,
+    String keyword,
+    int page,
+  ) => _guard(
+    DiscoverPlaylistPage(
+      playlists: [DiscoverPlaylist(id: '9', name: '搜索:$keyword')],
+      page: page,
+      limit: 20,
+      total: 1,
+    ),
+  );
 
   @override
-  Future<DiscoverDetail> playlistDetail(String rawId, int page) => _guard(
+  Future<DiscoverDetail> playlistDetail(
+    BuiltinTransport http,
+    String rawId,
+    int page,
+  ) => _guard(
     DiscoverDetail(
       info: DiscoverPlaylist(id: rawId, name: '歌单详情'),
       tracks: [track],
@@ -157,7 +172,7 @@ class FakeDiscoverSource implements DiscoverSource {
   );
 
   @override
-  Future<List<String>> hotSearches() {
+  Future<List<String>> hotSearches(BuiltinTransport http) {
     hotSearchCalls++;
     return _guard(const ['晴天', '夜曲']);
   }

@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/sources/builtin/builtin_lyric_dispatch.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/mg_lyric.dart';
 import 'package:molia/sources/builtin/zlib_io.dart' as zlib_impl;
@@ -17,9 +16,7 @@ import 'support/mock_dio.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late BuiltinTransport originalTransport;
-  setUpAll(() => originalTransport = BuiltinSearch.transport);
-  tearDown(() => BuiltinSearch.transport = originalTransport);
+  late BuiltinTransport transport;
 
   SourceTrack track(String sourceKey, Map<String, dynamic> raw) => SourceTrack(
     sourceKey: sourceKey,
@@ -44,7 +41,7 @@ void main() {
 
   test('五平台分派：请求落到各自平台端点，命中解码结果', () async {
     final requests = <Uri>[];
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         requests.add(request.uri);
         switch (request.uri.host) {
@@ -101,7 +98,7 @@ void main() {
       }),
     );
 
-    final dispatch = BuiltinLyricDispatch();
+    final dispatch = BuiltinLyricDispatch(transport);
     final kw = await dispatch.fetch(track('kw', {'songmid': '228908'}));
     final wy = await dispatch.fetch(track('wy', {'songmid': '1399112638'}));
     final tx = await dispatch.fetch(track('tx', {'songId': '123'}));
@@ -145,14 +142,14 @@ void main() {
 
   test('空 raw / 非内置平台：降级返回 null 且不发请求', () async {
     final requests = <RequestOptions>[];
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         requests.add(request);
         return textResponse('{}', statusCode: 200);
       }),
     );
 
-    final dispatch = BuiltinLyricDispatch();
+    final dispatch = BuiltinLyricDispatch(transport);
     expect(await dispatch.fetch(track('wy', const {})), isNull);
     expect(await dispatch.fetch(track('tx', const {})), isNull);
     expect(await dispatch.fetch(track('kg', const {})), isNull);
@@ -168,7 +165,7 @@ void main() {
   test('clearCache：清空后重新取词，重复调用安全', () async {
     final song = track('wy', {'songmid': '77'});
     var calls = 0;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         calls++;
         return textResponse(
@@ -181,7 +178,7 @@ void main() {
       }),
     );
 
-    final dispatch = BuiltinLyricDispatch();
+    final dispatch = BuiltinLyricDispatch(transport);
     expect((await dispatch.fetch(song))?.lyric, contains('你好'));
     expect((await dispatch.fetch(song))?.lyric, contains('你好'));
     expect(calls, 1, reason: '成功后命中缓存');
@@ -197,7 +194,7 @@ void main() {
     final song = track('wy', {'songmid': '42'});
     var calls = 0;
     var healthy = false;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = BuiltinTransport(
       dio: mockDio((request) async {
         calls++;
         if (!healthy) {
@@ -214,7 +211,7 @@ void main() {
       }),
     );
 
-    final dispatch = BuiltinLyricDispatch();
+    final dispatch = BuiltinLyricDispatch(transport);
     expect(await dispatch.fetch(song), isNull);
     expect(calls, 1);
 
