@@ -976,7 +976,8 @@
   `PlaybackFacade.replaceQueueTrack` 端口；命中当前曲目重新取链从头播放，
   冷启动恢复会话同步替换并落盘）。
   **歌词 tab**：来源来自 `LyricsSourceRegistry`
-  （`lib/services/lyrics/lyrics_source_registry.dart`）——五个音乐平台 + LRCLIB
+  （`lib/services/lyrics/lyrics_source_registry.dart`，由组合根注入共享
+  `BuiltinTransport`）——五个音乐平台 + LRCLIB
   参与自动名字回退；`SongChannels` 中同时声明 `search` + `lyric` 的渠道自动获得
   通用 `BuiltinLyricProvider`（当前为 B 站 CC/AI 字幕与汽水），新增渠道无需改
   UI。B 站字幕需登录：未登录时该来源不发搜索请求，登录提示挂在 B 站分组标题
