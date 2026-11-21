@@ -1,9 +1,8 @@
 /// B 站账号会话：Cookie、账号资料与初始化就绪状态的唯一进程内快照。
 ///
-/// 静态内置适配器（`BiliClient.shared` / `BiliLyric.shared` /
-/// `LyricsSourceRegistry.standard`）拿不到组合根注入的服务实例，因此
-/// [BiliSession.shared] 承担生产环境的默认绑定；任何消费者都允许注入自己的
-/// 会话，测试与多实例接线不需要再改全局单例。
+/// B 站业务适配器（`BiliClient` / `BiliLyric` / 歌词来源注册表）由组合根
+/// 显式注入会话与传输；[BiliSession.shared] 只是生产组合根的默认绑定，
+/// 任何消费者都允许注入自己的会话，测试与多实例接线不碰进程级状态。
 ///
 /// 写入口只有账号服务（登录 / 退出 / 同步到达）；请求侧只读。**Cookie 不写日志**。
 library;
