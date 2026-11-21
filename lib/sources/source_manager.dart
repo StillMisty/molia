@@ -201,16 +201,14 @@ class SourceManager extends ChangeNotifier {
   SourceCapabilities capabilitiesFor(String key) =>
       sourceProfiles.forKey(key)?.capabilities ?? const SourceCapabilities();
 
-  /// 当前快照的能力路由：画像 + 激活脚本声明，管理器不再自己分支。
+  /// 当前快照的能力路由：画像自带走查所需的脚本声明，管理器不再自己分支。
   SourceRouting routingOf(SourceProfiles profiles) =>
-      SourceRouting(profiles: profiles, declarations: _activeSources);
+      SourceRouting(profiles: profiles);
 
-  /// 脚本源的惰性激活入口。
+  /// 纯脚本源的惰性激活入口（搜索 / 歌词 / 封面入口）。
   ///
-  /// 只有画像里「不是内置 / any-listen」的 key 才可能靠脚本恢复：内置渠道
-  /// 的原生能力不依赖脚本（脚本只做覆盖），any-listen 走自己的配置。
-  /// 这与旧实现的 `!SongChannels.isSupported(key)` 判定同义，但现在读的是
-  /// 画像的身份，不再查平台 key。
+  /// 内置渠道的原生能力不依赖脚本（脚本只做覆盖），any-listen 走自己的
+  /// 配置，因此只有「画像未知」或「画像身份是 LX」才在这里拉起引擎。
   Future<void> _ensureScriptFor(String key, SourceProfiles profiles) async {
     final profile = profiles.forKey(key);
     if (profile == null || profile.kind == SourceKind.lx) {
@@ -235,8 +233,8 @@ class SourceManager extends ChangeNotifier {
       case SourceCapability.resolve:
         if (route.reason == SourceUnavailableReason.unknownSource ||
             route.declaration == null) {
-          // 内置渠道没有原生取链、也没有脚本声明：与旧实现的脚本分支
-          // 一样按「该 key 当前不可用」上报（不冒充「平台不支持」）。
+          // 内置渠道没有原生取链、也没有脚本声明：按「该 key 当前不可用」
+          // 上报（不冒充「平台不支持」）。
           throw LxEngineException('音源 ${route.key} 当前不可用');
         }
         throw LxEngineException('音源「${route.declaration!.name}」不支持获取播放地址');
@@ -267,33 +265,39 @@ class SourceManager extends ChangeNotifier {
     }
   }
 
-  /// 路由第一条路线是否能执行；不可用路线直接按能力给出既有错误。
+  /// 路由第一条路线；不可用路线直接按能力给出既有错误。
+  ///
+  /// `available=false` 只可能出现在 any-listen 路线（配置由适配器裁决），
+  /// 这里不拦；内置 / 脚本路线生成时已通过能力门。
   SourceRoute _primaryRoute(
     SourceProfiles profiles,
     String key,
     SourceCapability capability,
   ) {
     final route = routingOf(profiles).primaryFor(key, capability);
-    if (route == null || route is UnavailableSourceRoute) {
-      _throwUnavailable(
-        route is UnavailableSourceRoute
-            ? route
-            : UnavailableSourceRoute(
-                key: key,
-                capability: capability,
-                profile:
-                    profiles.forKey(key) ??
-                    SourceProfile(
-                      key: key,
-                      displayName: key,
-                      kind: SourceKind.lx,
-                      capabilities: const SourceCapabilities(),
-                    ),
-                reason: SourceUnavailableReason.unknownSource,
-              ),
-      );
-    }
+    if (route is UnavailableSourceRoute) _throwUnavailable(route);
     return route;
+  }
+
+  /// 只接受内置实现的能力（评论 / 专辑 / 歌手 / 歌词搜索）的唯一取路入口。
+  BuiltinSourceRoute _builtinRoute(
+    SourceProfiles profiles,
+    String key,
+    SourceCapability capability,
+  ) {
+    final route = _primaryRoute(profiles, key, capability);
+    if (route is BuiltinSourceRoute) return route;
+    // 这些能力在内置渠道之外没有实现；any-listen / 脚本路线属于接线错误，
+    // 按「不支持」给出能力对应的文案。
+    _throwUnavailable(
+      UnavailableSourceRoute(
+        key: key,
+        capability: capability,
+        profile: route.profile,
+        reason: SourceUnavailableReason.missingAdapter,
+        declaration: route is ScriptSourceRoute ? route.declaration : null,
+      ),
+    );
   }
 
   /// supervisor 状态回调：重启 / 半开恢复成功后用引擎当前声明的源刷新
@@ -619,15 +623,7 @@ class SourceManager extends ChangeNotifier {
           page: page,
           limit: limit,
         );
-      case ScriptSourceRoute():
-        // 激活可能在上一步失败：声明不在时与旧实现一样按未知源上报。
-        final decl = _activeSources[sourceKey];
-        if (decl == null) {
-          throw LxEngineException('未知音源: $sourceKey');
-        }
-        final action = decl.actions.contains('musicSearch')
-            ? 'musicSearch'
-            : 'search';
+      case ScriptSourceRoute(:final action):
         final data = await _engine.search(
           source: sourceKey,
           action: action,
@@ -665,15 +661,22 @@ class SourceManager extends ChangeNotifier {
     Duration? timeout,
   }) async {
     var profiles = sourceProfiles;
-    // 脚本源（含内置渠道被脚本声明覆盖取链的情况）先尝试惰性恢复：
-    // 内置渠道的原生取链不需要引擎，因此只有脚本路线才等待激活。
+    // 纯脚本源 / 未知 key 先尝试惰性恢复。
     await _ensureScriptFor(track.sourceKey, profiles);
     profiles = sourceProfiles;
-    final route = _primaryRoute(
-      profiles,
-      track.sourceKey,
-      SourceCapability.resolve,
-    );
+    var route = routingOf(profiles)
+        .primaryFor(track.sourceKey, SourceCapability.resolve);
+    // 内置渠道没有原生取链、脚本又尚未激活时，画像里还没有 script 声明：
+    // 与搜索 / 歌词不同，取链必须补一次激活后重新路由（否则已保存曲目会
+    // 因为「脚本没跑起来」而不可播）。
+    if (route is UnavailableSourceRoute &&
+        profiles.forKey(track.sourceKey)?.kind == SourceKind.builtin) {
+      await _ensureActiveScript(track.sourceKey);
+      profiles = sourceProfiles;
+      route = routingOf(profiles)
+          .primaryFor(track.sourceKey, SourceCapability.resolve);
+    }
+    if (route is UnavailableSourceRoute) _throwUnavailable(route);
     if (route is AnyListenSourceRoute) {
       try {
         final url = await _anyListenSource.resolveUrl(
@@ -705,6 +708,8 @@ class SourceManager extends ChangeNotifier {
       }
     }
     if (route is! ScriptSourceRoute) {
+      // 内置路线必然有原生 resolve（否则路由会给出脚本 / 不可用），这里只
+      // 让类型收窄可穷尽。
       _throwUnavailable(
         UnavailableSourceRoute(
           key: track.sourceKey,
@@ -713,15 +718,6 @@ class SourceManager extends ChangeNotifier {
           reason: SourceUnavailableReason.missingAdapter,
         ),
       );
-    }
-    // 内置渠道的脚本取链：引擎没跑起来时补一次激活（与旧实现同一条路径）。
-    await _ensureActiveScript(track.sourceKey);
-    final decl = _activeSources[track.sourceKey];
-    if (decl == null) {
-      throw LxEngineException('音源 ${track.sourceKey} 当前不可用');
-    }
-    if (!decl.canResolveUrl) {
-      throw LxEngineException('音源「${decl.name}」不支持获取播放地址');
     }
     final candidates = <String>[
       picked,
@@ -804,7 +800,7 @@ class SourceManager extends ChangeNotifier {
   Future<LxLyricResult?> fetchLyric(SourceTrack track) async {
     var profiles = sourceProfiles;
     // 原生渠道不依赖脚本：脚本只做覆盖，因此不在歌词入口拉起引擎；
-    // 纯脚本源 / 未知 key 才补一次惰性激活（与旧实现同一条路径）。
+    // 纯脚本源 / 未知 key 才补一次惰性激活。
     await _ensureScriptFor(track.sourceKey, profiles);
     profiles = sourceProfiles;
     final routes = routingOf(profiles)
@@ -826,9 +822,8 @@ class SourceManager extends ChangeNotifier {
             // 与 LX 分支保持一致：歌词失败返回 null，交由现有歌词源回退。
             return null;
           }
-        case ScriptSourceRoute():
-          final decl = _activeSources[track.sourceKey];
-          if (decl == null || !decl.canFetchLyric) continue;
+        case ScriptSourceRoute(:final declaration):
+          if (!declaration.canFetchLyric) continue;
           try {
             final result = await _engine.getLyric(
               source: track.sourceKey,
@@ -844,8 +839,7 @@ class SourceManager extends ChangeNotifier {
           continue;
       }
     }
-    // 没有任何实现：旧实现的脚本分支也会落到内置回退（对非内置 key 返回
-    // null），这里显式返回 null，语义相同。
+    // 没有任何实现：歌词契约允许失败，返回 null 交由上层歌词源回退。
     return null;
   }
 
@@ -875,22 +869,7 @@ class SourceManager extends ChangeNotifier {
     int page = 1,
     int limit = kCommentPageSize,
   }) async {
-    // 能力位与注册表适配器同源：路由门与 profile.comment 读同一份画像。
-    final route = _primaryRoute(
-      sourceProfiles,
-      track.sourceKey,
-      SourceCapability.comments,
-    );
-    if (route is! BuiltinSourceRoute) {
-      _throwUnavailable(
-        UnavailableSourceRoute(
-          key: track.sourceKey,
-          capability: SourceCapability.comments,
-          profile: route.profile,
-          reason: SourceUnavailableReason.missingAdapter,
-        ),
-      );
-    }
+    _builtinRoute(sourceProfiles, track.sourceKey, SourceCapability.comments);
     try {
       return await BuiltinComments.fetch(
         _builtinTransport,
@@ -916,21 +895,7 @@ class SourceManager extends ChangeNotifier {
     int page = 1,
     int limit = kAlbumPageSize,
   }) async {
-    final route = _primaryRoute(
-      sourceProfiles,
-      sourceKey,
-      SourceCapability.album,
-    );
-    if (route is! BuiltinSourceRoute) {
-      _throwUnavailable(
-        UnavailableSourceRoute(
-          key: sourceKey,
-          capability: SourceCapability.album,
-          profile: route.profile,
-          reason: SourceUnavailableReason.missingAdapter,
-        ),
-      );
-    }
+    _builtinRoute(sourceProfiles, sourceKey, SourceCapability.album);
     try {
       return await BuiltinAlbums.fetch(
         _builtinTransport,
@@ -957,21 +922,7 @@ class SourceManager extends ChangeNotifier {
   }) async {
     // 详情路由只看适配器（画像的 `artist` 还叠了搜索门，UI 入口用能力位），
     // 已保存曲目的歌手 id 在无激活脚本时仍可直接取详情。
-    final route = _primaryRoute(
-      sourceProfiles,
-      sourceKey,
-      SourceCapability.artist,
-    );
-    if (route is! BuiltinSourceRoute) {
-      _throwUnavailable(
-        UnavailableSourceRoute(
-          key: sourceKey,
-          capability: SourceCapability.artist,
-          profile: route.profile,
-          reason: SourceUnavailableReason.missingAdapter,
-        ),
-      );
-    }
+    _builtinRoute(sourceProfiles, sourceKey, SourceCapability.artist);
     try {
       return await BuiltinArtists.fetch(
         _builtinTransport,
@@ -1004,17 +955,7 @@ class SourceManager extends ChangeNotifier {
         message: '音源 $sourceKey 不支持歌手搜索',
       );
     }
-    final route = _primaryRoute(profiles, sourceKey, SourceCapability.artist);
-    if (route is! BuiltinSourceRoute) {
-      _throwUnavailable(
-        UnavailableSourceRoute(
-          key: sourceKey,
-          capability: SourceCapability.artist,
-          profile: route.profile,
-          reason: SourceUnavailableReason.missingAdapter,
-        ),
-      );
-    }
+    _builtinRoute(profiles, sourceKey, SourceCapability.artist);
     try {
       return await BuiltinArtists.search(
         _builtinTransport,
@@ -1045,21 +986,7 @@ class SourceManager extends ChangeNotifier {
         message: '音源 $sourceKey 不支持歌词搜索',
       );
     }
-    final route = _primaryRoute(
-      profiles,
-      sourceKey,
-      SourceCapability.lyricSearch,
-    );
-    if (route is! BuiltinSourceRoute) {
-      _throwUnavailable(
-        UnavailableSourceRoute(
-          key: sourceKey,
-          capability: SourceCapability.lyricSearch,
-          profile: route.profile,
-          reason: SourceUnavailableReason.missingAdapter,
-        ),
-      );
-    }
+    _builtinRoute(profiles, sourceKey, SourceCapability.lyricSearch);
     try {
       return await BuiltinLyricSearch.searchWithMeta(
         _builtinTransport,
@@ -1080,7 +1007,7 @@ class SourceManager extends ChangeNotifier {
   /// mg 资源封面）。
   Future<String?> fetchPic(SourceTrack track) async {
     var profiles = sourceProfiles;
-    // any-listen 的封面来自远端服务器，优先于曲目自带封面（旧实现顺序）。
+    // any-listen 的封面来自远端服务器，优先于曲目自带封面。
     final initialRoutes = routingOf(profiles)
         .routesFor(track.sourceKey, SourceCapability.picture);
     if (initialRoutes.first is AnyListenSourceRoute) {
@@ -1101,9 +1028,8 @@ class SourceManager extends ChangeNotifier {
       switch (route) {
         case AnyListenSourceRoute():
           continue;
-        case ScriptSourceRoute():
-          final decl = _activeSources[track.sourceKey];
-          if (decl == null || !decl.canFetchPic) continue;
+        case ScriptSourceRoute(:final declaration):
+          if (!declaration.canFetchPic) continue;
           try {
             final url = await _engine.getPic(
               source: track.sourceKey,

@@ -16,10 +16,8 @@ void main() {
         qualitys: const ['320k'],
       );
 
-  SourceRouting routingOf(
-    SourceProfiles profiles, [
-    Map<String, LxSourceDecl> declarations = const {},
-  ]) => SourceRouting(profiles: profiles, declarations: declarations);
+  SourceRouting routingOf(SourceProfiles profiles) =>
+      SourceRouting(profiles: profiles);
 
   /// 每条路线的类型名，便于断言选择结果。
   List<String> kindsOf(List<SourceRoute> routes) => [
@@ -119,7 +117,7 @@ void main() {
       'resolve-only': decl('resolve-only', ['musicUrl']),
     };
     final profiles = SourceProfiles.build(activeSources: declarations);
-    final routing = routingOf(profiles, declarations);
+    final routing = routingOf(profiles);
 
     test('内置 key：脚本补取链 → 搜索走内置、取链走脚本', () {
       expect(kindsOf(routing.routesFor('wy', SourceCapability.search)), [
@@ -240,6 +238,31 @@ void main() {
     });
   });
 
+  test('路由与画像消费同一份脚本声明（不会漂移）', () {
+    final declarations = <String, LxSourceDecl>{
+      'custom': decl('custom', ['search', 'musicUrl', 'lyric', 'pic']),
+    };
+    final profiles = SourceProfiles.build(activeSources: declarations);
+    final routing = SourceRouting(profiles: profiles);
+
+    expect(identical(routing.declarations, profiles.declarations), isTrue);
+    expect(routing.declarations.keys, contains('custom'));
+    expect(
+      routing.routesFor('custom', SourceCapability.search).single,
+      isA<ScriptSourceRoute>().having(
+        (route) => route.declaration.key,
+        'declaration',
+        'custom',
+      ),
+    );
+  });
+
+  test('primaryFor 总返回路线（未知 key 也是 UnavailableSourceRoute）', () {
+    final routing = routingOf(SourceProfiles.build());
+    final route = routing.primaryFor('missing', SourceCapability.search);
+    expect(route, isA<UnavailableSourceRoute>());
+  });
+
   test('能力位为真 ⇒ 至少一条 available 路线（全部 key × 能力）', () {
     final scenarios = <Map<String, LxSourceDecl>>[
       const {},
@@ -254,20 +277,28 @@ void main() {
         activeSources: active,
         anyListenUsable: true,
       );
-      final routing = routingOf(profiles, active);
+      final routing = routingOf(profiles);
       for (final profile in profiles.channels) {
+        final channel = SongChannels.forKey(profile.key);
         for (final capability in SourceCapability.values) {
-          final gate = capability.gateOf(profile.capabilities);
-          // 内置渠道的歌手上限是搜索门：详情路线存在但能力位可能为 false。
-          final expectsRoute =
-              gate ||
-              (capability == SourceCapability.artist &&
-                  routing.supports(profile.key, capability));
-          if (!expectsRoute) continue;
+          if (capability == SourceCapability.artist) {
+            // 歌手详情只认适配器；画像的 `artist` 能力位额外叠了搜索门。
+            expect(
+              routing.supports(profile.key, capability),
+              channel?.artist != null,
+              reason: '${profile.key} 歌手详情路线',
+            );
+            expect(
+              profile.capabilities.artist,
+              channel?.artist != null && profile.searchable,
+              reason: '${profile.key} 歌手搜索门',
+            );
+            continue;
+          }
           expect(
             routing.supports(profile.key, capability),
-            isTrue,
-            reason: '${profile.key} × $capability 能力位为真但没有路线',
+            capability.gateOf(profile.capabilities),
+            reason: '${profile.key} × $capability 能力位与路线不一致',
           );
         }
       }

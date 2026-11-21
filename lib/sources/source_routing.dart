@@ -78,7 +78,10 @@ sealed class SourceRoute {
 
   /// 是否通过能力门（`profile.capabilities` 的同源答案）。
   ///
-  /// false 不代表没有实现：any-listen 的配置由适配器在调用时校验。
+  /// 契约：`BuiltinSourceRoute` / `ScriptSourceRoute` 只在能力成立时生成，
+  /// `available` 恒 true；`AnyListenSourceRoute` 的配置可能在画像构建后变化，
+  /// 因此允许 `available=false`，由适配器在调用时给出具体失败（管理器不拦）。
+  /// `supports` 与路由生成共用这一个字段。
   final bool available;
 }
 
@@ -94,16 +97,22 @@ final class BuiltinSourceRoute extends SourceRoute {
   final SongChannel channel;
 }
 
-/// 脚本路线：curve 由激活脚本的 action 声明决定。
+/// 脚本路线：由激活脚本的 action 声明决定。
 final class ScriptSourceRoute extends SourceRoute {
   const ScriptSourceRoute({
     required super.key,
     required super.capability,
     required super.profile,
     required this.declaration,
+    this.action = '',
   }) : super(available: true);
 
   final LxSourceDecl declaration;
+
+  /// 搜索 action 的具名选择（`musicSearch` / `search`）；其它能力为空串。
+  ///
+  /// 管理器只执行这里给出的 action，不再读声明自行判定路由。
+  final String action;
 }
 
 /// any-listen 路线：能力门由画像给出，实际可用性由适配器裁决。
@@ -137,12 +146,12 @@ final class UnavailableSourceRoute extends SourceRoute {
 /// 每次读取都是当前快照（输入已在各自的 ChangeNotifier 里维护），刻意不
 /// 缓存：避免「路由缓存了、画像变了」的第二份失效逻辑。
 class SourceRouting {
-  const SourceRouting({required this.profiles, this.declarations = const {}});
+  const SourceRouting({required this.profiles});
 
   final SourceProfiles profiles;
 
-  /// 当前激活脚本声明的源（脚本 action 的唯一事实）。
-  final Map<String, LxSourceDecl> declarations;
+  /// 本轮快照的激活脚本声明（与画像同一份，不另收参数）。
+  Map<String, LxSourceDecl> get declarations => profiles.declarations;
 
   /// 该 key × 能力的实现路线，按执行顺序排列。
   ///
@@ -252,9 +261,12 @@ class SourceRouting {
     return routes;
   }
 
-  /// 第一条路线（不判断能力门）；没有实现时返回 null。
-  SourceRoute? primaryFor(String key, SourceCapability capability) =>
-      routesFor(key, capability).firstOrNull;
+  /// 第一条路线（不判断能力门）。
+  ///
+  /// `routesFor` 始终至少返回一条 `UnavailableSourceRoute`，因此这里不返回
+  /// null；调用方只需区分可执行路线与不可用原因。
+  SourceRoute primaryFor(String key, SourceCapability capability) =>
+      routesFor(key, capability).first;
 
   /// 该 key 是否具备能力（与 `profile.capabilities` 同源）。
   bool supports(String key, SourceCapability capability) => routesFor(
@@ -282,6 +294,11 @@ class SourceRouting {
     capability: capability,
     profile: profile,
     declaration: declaration,
+    action: capability == SourceCapability.search
+        ? (declaration.actions.contains('musicSearch')
+              ? 'musicSearch'
+              : 'search')
+        : '',
   );
 
   UnavailableSourceRoute _missing(
