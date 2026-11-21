@@ -14,6 +14,7 @@ class TxComment {
   TxComment._();
 
   static Future<CommentPage> fetch(
+    BuiltinTransport http,
     String songId, {
     required CommentKind kind,
     int page = 1,
@@ -21,18 +22,20 @@ class TxComment {
   }) {
     switch (kind) {
       case CommentKind.hot:
-        return _fetchHot(songId, page, limit);
+        return _fetchHot(http, songId, page, limit);
       case CommentKind.latest:
-        return _fetchLatest(songId, page, limit);
+        return _fetchLatest(http, songId, page, limit);
     }
   }
 
   static Future<CommentPage> _fetchHot(
+    BuiltinTransport http,
     String songId,
     int page,
     int limit,
   ) async {
     final body = await lxHttpPost(
+      http,
       'https://u.y.qq.com/cgi-bin/musicu.fcg',
       headers: const {
         'referer': 'https://y.qq.com/',
@@ -82,11 +85,13 @@ class TxComment {
   }
 
   static Future<CommentPage> _fetchLatest(
+    BuiltinTransport http,
     String songId,
     int page,
     int limit,
   ) async {
     final body = await lxHttpPost(
+      http,
       'http://c.y.qq.com/base/fcgi-bin/fcg_global_comment_h5.fcg',
       form: true,
       headers: const {

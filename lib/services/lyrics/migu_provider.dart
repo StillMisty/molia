@@ -1,5 +1,6 @@
 import 'package:logging/logging.dart';
 
+import '../../sources/builtin/builtin_transport.dart';
 import '../../sources/builtin/mg_lyric.dart';
 import '../../sources/builtin/mg_search.dart';
 import '../../sources/source_track.dart';
@@ -9,6 +10,10 @@ import 'lyric_provider.dart';
 /// - 搜索复用内置 `mg` 搜索（与内置源同一实现，响应带 mrc/lrc/trc URL）；
 /// - 取词用 [MgLyric]（MRC 解密 + 逐字；缺 URL 时按 songId 走资源信息兜底）。
 class MiguProvider extends LyricProvider {
+  MiguProvider({BuiltinTransport? transport})
+    : _http = transport ?? BuiltinTransport();
+
+  final BuiltinTransport _http;
   final Logger _logger = Logger('molia.migu_provider');
 
   @override
@@ -31,7 +36,11 @@ class MiguProvider extends LyricProvider {
   }) async {
     try {
       final keyword = '$title $artist'.trim();
-      final result = await MgSearch.searchWithMeta(keyword, limit: limit);
+      final result = await MgSearch.searchWithMeta(
+        _http,
+        keyword,
+        limit: limit,
+      );
       return [for (final track in result.tracks.take(limit)) _toMatch(track)];
     } catch (e) {
       _logger.warning('咪咕歌词搜索失败: $e');
@@ -79,6 +88,7 @@ class MiguProvider extends LyricProvider {
   }) async {
     try {
       final info = await MgLyric.fetch(
+        _http,
         songId: songId,
         mrcUrl: mrcUrl,
         lrcUrl: lrcUrl,

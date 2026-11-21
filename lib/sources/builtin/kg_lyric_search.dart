@@ -4,6 +4,7 @@ import 'crypto_utils.dart';
 import 'kg_search.dart';
 import 'lyric_hit.dart';
 import 'lyric_search_runner.dart';
+import 'builtin_transport.dart';
 
 /// 酷狗音乐「按歌词搜歌」（`songsearch.kugou.com/lyric_search`）。
 ///
@@ -16,12 +17,14 @@ class KgLyricSearch {
   KgLyricSearch._();
 
   static Future<LyricSearchPage> search(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = 30,
   }) {
     return runBuiltinLyricSearch(
       _callFor(keyword, page, limit),
+      http,
       page: page,
       limit: limit,
     );

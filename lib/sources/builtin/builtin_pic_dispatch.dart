@@ -14,13 +14,17 @@ library;
 
 import '../../data/cache/request_cache.dart';
 import '../source_track.dart';
+import 'builtin_transport.dart';
 import 'channel/channels.dart';
 
 class BuiltinPicDispatch {
-  BuiltinPicDispatch({RequestCache? cache})
+  BuiltinPicDispatch(this.http, {RequestCache? cache})
     : _cache =
           cache ??
           RequestCache(maxEntries: 128, ttl: const Duration(minutes: 5));
+
+  /// 内置平台 HTTP 传输（组合根注入；测试各自构造）。
+  final BuiltinTransport http;
 
   /// 曲目原生取图缓存（key `{track.id}:pic`）。
   final RequestCache _cache;
@@ -38,7 +42,7 @@ class BuiltinPicDispatch {
     try {
       return await _cache.getOrCreate<String?>(
         '${track.id}:pic',
-        () => adapter(track.raw),
+        () => adapter(http, track.raw),
       );
     } catch (_) {
       return null;

@@ -11,6 +11,7 @@ import '../../domain/models/failure.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'qs_api.dart';
+import 'builtin_transport.dart';
 import 'qs_track.dart';
 
 class QsSearch {
@@ -20,12 +21,14 @@ class QsSearch {
   static const int pageSize = 20;
 
   static Future<SourceSearchResult> searchWithMeta(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = pageSize,
   }) async {
     try {
       final response = await QsApi.getJson(
+        http,
         '/luna/search/track',
         query: {
           'q': keyword,

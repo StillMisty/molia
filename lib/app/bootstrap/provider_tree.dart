@@ -45,6 +45,7 @@ import '../../services/download/download_records.dart';
 import '../../services/local/local_library_service.dart';
 import '../../services/local/local_metadata_service.dart';
 import '../../services/local_cache_index_store.dart';
+import '../../services/lyrics/lyrics_source_registry.dart';
 import '../../services/notification_service.dart';
 import '../../services/play_statistics_service.dart';
 import '../../services/scrobble/scrobble_service.dart';
@@ -206,9 +207,12 @@ List<SingleChildWidget> buildAppProviders({
         playbackProvider: context.read<PlaybackProvider>(),
         libraryProvider: context.read<LibraryProvider>(),
         selection: channelSelection,
+        builtinTransport: catalog.sourceManager.builtinTransport,
       ),
     ),
     ChangeNotifierProvider.value(value: lyrics.lyricsProvider),
+    // 换源页手动歌词来源：与自动回退共用同一份注册表 / 传输。
+    Provider<LyricsSourceRegistry>.value(value: lyrics.lyricsSourceRegistry),
     // 歌词显示：配置（设置页读写）+ 调度（桌面/通知/蓝牙输出）。
     ChangeNotifierProvider.value(value: display.lyricsDisplaySettings),
     ChangeNotifierProvider.value(value: display.lyricsDisplay),

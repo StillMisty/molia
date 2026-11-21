@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/sources/builtin/builtin_lyric_dispatch.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/qs_artist.dart';
 import 'package:molia/sources/builtin/qs_lyric.dart';
@@ -11,6 +10,7 @@ import 'package:molia/sources/builtin/qs_search.dart';
 import 'package:molia/sources/source_track.dart';
 
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 dynamic _fixture(String path) =>
     jsonDecode(File('test/fixtures/$path').readAsStringSync());
@@ -67,9 +67,7 @@ Map<String, dynamic> _track({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late BuiltinTransport originalTransport;
-  setUpAll(() => originalTransport = BuiltinSearch.transport);
-  tearDown(() => BuiltinSearch.transport = originalTransport);
+  late BuiltinTransport transport;
 
   group('qs 歌词', () {
     test('KRC → 行级 LRC + LX 逐字（去掉第三字段）', () {
@@ -94,7 +92,7 @@ void main() {
     });
 
     test('原生取词派发：track_id → seo_track → 逐字歌词', () async {
-      BuiltinSearch.transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) {
           expect(request.uri.path, '/luna/h5/seo_track');
           expect(
@@ -109,7 +107,7 @@ void main() {
         }),
       );
 
-      final result = await BuiltinLyricDispatch().fetch(
+      final result = await BuiltinLyricDispatch(transport).fetch(
         const SourceTrack(
           sourceKey: 'qs',
           origin: 'builtin',
@@ -128,7 +126,7 @@ void main() {
   group('qs 搜索', () {
     test('空响应重试后成功；分页按平台 20 条游标走', () async {
       var calls = 0;
-      BuiltinSearch.transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) {
           calls++;
           if (calls <= 2) return textResponse('');
@@ -151,7 +149,7 @@ void main() {
         }),
       );
 
-      final result = await QsSearch.searchWithMeta('陈粒', page: 2);
+      final result = await QsSearch.searchWithMeta(transport, '陈粒', page: 2);
       expect(calls, 3, reason: '前两次空 body 必须重试');
       expect(result.failure, isNull);
       expect(result.tracks.single.title, '小半');
@@ -160,10 +158,10 @@ void main() {
     });
 
     test('平台正常返回空结果：不是失败', () async {
-      BuiltinSearch.transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((_) => textResponse('{"extra":{"empty_search":1}}')),
       );
-      final result = await QsSearch.searchWithMeta('没有这首歌');
+      final result = await QsSearch.searchWithMeta(transport, '没有这首歌');
       expect(result.failure, isNull);
       expect(result.tracks, isEmpty);
     });
@@ -172,7 +170,7 @@ void main() {
   group('qs 歌手', () {
     test('分享页样本 + 同名搜索按歌手 id 补齐（不混入他人曲目）', () async {
       final artistPage = _fixture('artists/qs_page.json');
-      BuiltinSearch.transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) {
           if (request.uri.host == 'www.qishui.com') {
             expect(request.uri.path, '/share/artist');
@@ -202,7 +200,7 @@ void main() {
         }),
       );
 
-      final detail = await QsArtist.fetch('6776144869279664130');
+      final detail = await QsArtist.fetch(transport, '6776144869279664130');
       expect(detail.id, '6776144869279664130');
       expect(detail.name, '陈粒');
       expect(detail.avatarUrl, contains('douyinpic.com'));

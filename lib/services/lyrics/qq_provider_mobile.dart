@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 
+import '../../sources/builtin/builtin_transport.dart';
 import '../../sources/builtin/tx_lyric.dart';
 import 'lyric_provider.dart';
 import '../../data/http/app_dio.dart';
@@ -31,7 +32,11 @@ class QQProvider extends LyricProvider {
     'content-type': 'application/json;charset=utf-8',
   };
 
-  QQProvider({Dio? dio}) : _dio = dio ?? createAppDio();
+  QQProvider({BuiltinTransport? transport, Dio? dio})
+    : _http = transport ?? BuiltinTransport(),
+      _dio = dio ?? createAppDio();
+
+  final BuiltinTransport _http;
 
   @override
   String get name => 'qq';
@@ -160,6 +165,7 @@ class QQProvider extends LyricProvider {
   Future<LyricsPayload?> fetchForMatch(SongMatch match) async {
     try {
       final info = await TxLyric.fetch(
+        _http,
         songId: match.extra['songId']?.toString(),
         songMid: match.songId,
       );

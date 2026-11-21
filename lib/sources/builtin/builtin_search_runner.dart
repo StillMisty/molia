@@ -15,7 +15,6 @@ library;
 import '../../domain/models/failure.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
-import 'builtin_search.dart';
 import 'builtin_transport.dart';
 
 /// 请求方式（POST 的 JSON / 表单编码由 [BuiltinSearchCall.form] 表达）。
@@ -86,10 +85,11 @@ class BuiltinCall {
 /// 由各 runner 决定失败形态（搜索：`SourceSearchResult.failed`；歌词：抛出）。
 Future<({dynamic response, SourceFailure? failure})> sendBuiltinCall(
   BuiltinCall call,
+  BuiltinTransport transport,
 ) async {
   final dynamic response;
   try {
-    response = await call.send(BuiltinSearch.transport);
+    response = await call.send(transport);
   } catch (error) {
     return (response: null, failure: SourceFailure.from(error));
   }
@@ -137,11 +137,12 @@ class BuiltinSearchCall extends BuiltinCall {
 
 /// 执行一次平台检索：异常与业务拒绝归一为失败结果，「平台返回空」保持正常。
 Future<SourceSearchResult> runBuiltinSearch(
-  BuiltinSearchCall call, {
+  BuiltinSearchCall call,
+  BuiltinTransport transport, {
   required int page,
   required int limit,
 }) async {
-  final result = await sendBuiltinCall(call);
+  final result = await sendBuiltinCall(call, transport);
   final failure = result.failure;
   if (failure != null) return SourceSearchResult.failed(failure);
 

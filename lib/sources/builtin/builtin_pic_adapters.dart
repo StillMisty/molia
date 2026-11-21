@@ -9,6 +9,7 @@
 library;
 
 import 'bili_track.dart';
+import 'builtin_transport.dart';
 import 'builtin_cover_urls.dart';
 import 'kg_pic.dart';
 import 'kw_pic.dart';
@@ -17,15 +18,18 @@ import 'qs_pic.dart';
 import 'wy_music_detail.dart';
 
 /// 网易云：歌曲详情 `al.picUrl`。
-Future<String?> wyBuiltinPic(Map<String, dynamic> raw) async {
+Future<String?> wyBuiltinPic(
+  BuiltinTransport http,
+  Map<String, dynamic> raw,
+) async {
   final songId = raw['songmid'] ?? raw['id'];
   if (songId == null) return null;
-  final list = await WyMusicDetail.getList([songId]);
+  final list = await WyMusicDetail.getList(http, [songId]);
   return list.isEmpty ? null : list.first.coverUrl;
 }
 
 /// QQ 音乐：按专辑 mid 拼静态封面 URL（不发请求）。
-Future<String?> txBuiltinPic(Map<String, dynamic> raw) {
+Future<String?> txBuiltinPic(BuiltinTransport http, Map<String, dynamic> raw) {
   final albumMid = (raw['albumMid'] ?? raw['albumId'])?.toString();
   if (albumMid == null || albumMid.isEmpty || albumMid == '空') {
     return Future.value(null);
@@ -37,10 +41,11 @@ Future<String?> txBuiltinPic(Map<String, dynamic> raw) {
 
 /// 酷狗：响应内已带封面（`Image` / `sizable_cover`）时直接复用；
 /// 否则 `get_res_privilege` 按 hash / album_id 取图。
-Future<String?> kgBuiltinPic(Map<String, dynamic> raw) {
+Future<String?> kgBuiltinPic(BuiltinTransport http, Map<String, dynamic> raw) {
   final fromRaw = kgCoverUrlOf(raw);
   if (fromRaw != null) return Future.value(fromRaw);
   return KgPic.fetch(
+    http,
     songmid: raw['songmid']?.toString() ?? '',
     audioId: (raw['audioId'] ?? raw['albumAudioId'])?.toString(),
     albumId: raw['albumId']?.toString(),
@@ -51,24 +56,27 @@ Future<String?> kgBuiltinPic(Map<String, dynamic> raw) {
 }
 
 /// 酷我：响应内已带封面时直接复用；否则 pic.web 接口返回纯文本 URL。
-Future<String?> kwBuiltinPic(Map<String, dynamic> raw) {
+Future<String?> kwBuiltinPic(BuiltinTransport http, Map<String, dynamic> raw) {
   final fromRaw = kwCoverUrlOf(raw);
   if (fromRaw != null) return Future.value(fromRaw);
-  return KwPic.fetch(raw['songmid']?.toString() ?? '');
+  return KwPic.fetch(http, raw['songmid']?.toString() ?? '');
 }
 
 /// 咪咕：搜索响应自带 `img`，否则走资源信息封面。
-Future<String?> mgBuiltinPic(Map<String, dynamic> raw) {
+Future<String?> mgBuiltinPic(BuiltinTransport http, Map<String, dynamic> raw) {
   final img = raw['img']?.toString();
   if (img != null && img.isNotEmpty) return Future.value(img);
   final songId = raw['songmid']?.toString();
   if (songId == null || songId.isEmpty) return Future.value(null);
-  return MgLyric.coverOf(songId);
+  return MgLyric.coverOf(http, songId);
 }
 
 /// B 站：搜索 / 收藏夹自带封面，只做 `//` 补协议，不再发请求。
-Future<String?> biliBuiltinPic(Map<String, dynamic> raw) =>
-    Future.value(biliCoverUrl(raw['pic'] ?? raw['cover'] ?? raw['img']));
+Future<String?> biliBuiltinPic(
+  BuiltinTransport http,
+  Map<String, dynamic> raw,
+) => Future.value(biliCoverUrl(raw['pic'] ?? raw['cover'] ?? raw['img']));
 
 /// 汽水音乐：实体自带专辑封面，缺封面时按 track_id 取 H5 详情。
-Future<String?> qsBuiltinPic(Map<String, dynamic> raw) => QsPic.fetch(raw);
+Future<String?> qsBuiltinPic(BuiltinTransport http, Map<String, dynamic> raw) =>
+    QsPic.fetch(http, raw);

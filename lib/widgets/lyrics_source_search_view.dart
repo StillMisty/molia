@@ -8,7 +8,6 @@ import '../domain/models/source.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/lyrics_source_search_session.dart';
-import '../services/lyrics/lyrics_source_registry.dart';
 import '../services/lyrics/lyrics_source_strategy.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
@@ -41,9 +40,8 @@ class LyricsSourceSearchView extends StatefulWidget {
   /// 歌词会话模块：手动选择结果经它写缓存并更新展示状态。
   final LyricsProvider lyricsProvider;
 
-  /// 来源列表（测试注入）；缺省使用 [LyricsSourceRegistry.standard]
-  /// （B 站可用性绑定 `BiliSession.shared`，与生产账号服务同一份）。
-  final List<LyricsSourceStrategy>? sources;
+  /// 来源列表：由组合根的 [LyricsSourceRegistry] 注入（含 B 站会话绑定）。
+  final List<LyricsSourceStrategy> sources;
 
   /// 渠道描述符：只用于来源标签查找显示名，不参与排序。
   ///
@@ -69,7 +67,7 @@ class LyricsSourceSearchView extends StatefulWidget {
     this.initialDuration,
     required this.trackId,
     required this.lyricsProvider,
-    this.sources,
+    required this.sources,
     this.sourceDescriptors = const [],
     this.enabledChannelKeys,
     this.channelOrder,
@@ -101,8 +99,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
 
     // 来源取自注册表（缺省时）；B 站等只有手动换源的来源也在其中
     // （是否可用在搜索时判定）。顺序由 channelOrder 决定。
-    final allStrategies =
-        widget.sources ?? LyricsSourceRegistry.standard.strategies;
+    final allStrategies = widget.sources;
 
     _session = LyricsSourceSearchSession(
       strategies: allStrategies,

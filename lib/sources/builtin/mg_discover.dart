@@ -18,7 +18,7 @@ import 'mg_search.dart';
 ///   （`resource/playlist` + `resource/playlist/song`）、歌单搜索（jadeite）；
 /// - 热搜词：jadeite `hotword`。
 ///
-/// 网络结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
+/// 网络结果缓存 5 分钟（统一走注入 transport 的 `cached`）。
 class MgDiscoverSource extends DiscoverSource {
   const MgDiscoverSource();
 
@@ -80,54 +80,59 @@ class MgDiscoverSource extends DiscoverSource {
   bool get hasLeaderboardCoverEndpoint => true;
 
   @override
-  Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
-    return _fetchLeaderboard(bangid);
+  Future<List<DiscoverTrack>> leaderboardTracks(
+    BuiltinTransport http,
+    String bangid,
+  ) {
+    return _fetchLeaderboard(http, bangid);
   }
 
   /// 榜单封面：`columnInfo.columnPicUrl`（其次 small / recommend / 自定义图）。
   @override
-  Future<String?> leaderboardCover(String bangid) {
-    return BuiltinSearch.transport.cached(
-      'mg:leaderboard-cover:$bangid',
-      () async {
-        final body = await lxHttpGet(
-          'https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do'
-          '?columnId=$bangid&needAll=0',
-          headers: {
-            'Referer': 'https://app.c.nf.migu.cn/',
-            'User-Agent': _mobileUa,
-            'channel': '0146921',
-          },
-        );
-        if (body is! Map || body['code'] != _successCode) {
-          throw StateError('mg 榜单封面获取失败');
-        }
-        final info = body['columnInfo'];
-        if (info is! Map) throw StateError('mg 榜单封面解析失败');
-        for (final key in const [
-          'columnPicUrl',
-          'columnSmallpicUrl',
-          'recommendPicUrl',
-        ]) {
-          final url = MgSearch.fixCoverUrl(info[key]);
-          if (url != null && url.isNotEmpty) return url;
-        }
-        final custom = info['customizedPicUrls'];
-        if (custom is List && custom.isNotEmpty) {
-          final url = MgSearch.fixCoverUrl(custom.first);
-          if (url != null && url.isNotEmpty) return url;
-        }
-        throw StateError('mg 榜单封面为空');
-      },
-    );
+  Future<String?> leaderboardCover(BuiltinTransport http, String bangid) {
+    return http.cached('mg:leaderboard-cover:$bangid', () async {
+      final body = await lxHttpGet(
+        http,
+        'https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do'
+        '?columnId=$bangid&needAll=0',
+        headers: {
+          'Referer': 'https://app.c.nf.migu.cn/',
+          'User-Agent': _mobileUa,
+          'channel': '0146921',
+        },
+      );
+      if (body is! Map || body['code'] != _successCode) {
+        throw StateError('mg 榜单封面获取失败');
+      }
+      final info = body['columnInfo'];
+      if (info is! Map) throw StateError('mg 榜单封面解析失败');
+      for (final key in const [
+        'columnPicUrl',
+        'columnSmallpicUrl',
+        'recommendPicUrl',
+      ]) {
+        final url = MgSearch.fixCoverUrl(info[key]);
+        if (url != null && url.isNotEmpty) return url;
+      }
+      final custom = info['customizedPicUrls'];
+      if (custom is List && custom.isNotEmpty) {
+        final url = MgSearch.fixCoverUrl(custom.first);
+        if (url != null && url.isNotEmpty) return url;
+      }
+      throw StateError('mg 榜单封面为空');
+    });
   }
 
-  static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {
+  static Future<List<DiscoverTrack>> _fetchLeaderboard(
+    BuiltinTransport http,
+    String bangid,
+  ) {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTrack>>(
         key: 'mg:leaderboard:$bangid',
         budget: BuiltinRetryBudget.leaderboard,
         request: () => lxHttpGet(
+          http,
           'https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do'
           '?columnId=$bangid&needAll=0',
           headers: {
@@ -151,6 +156,7 @@ class MgDiscoverSource extends DiscoverSource {
           return [for (final track in tracks) discoverTrackOf(track)];
         },
       ),
+      http,
     );
   }
 
@@ -246,9 +252,10 @@ class MgDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverTags> tags() {
-    return BuiltinSearch.transport.cached('mg:tags', () async {
+  Future<DiscoverTags> tags(BuiltinTransport http) {
+    return http.cached('mg:tags', () async {
       final body = await lxHttpGet(
+        http,
         'https://app.c.nf.migu.cn/pc/v1.0/template/'
         'musiclistplaza-taglist/release',
         headers: _songListHeaders,
@@ -299,16 +306,26 @@ class MgDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
-    return tagId.isEmpty ? _fetchRecommend(page) : _fetchTagList(tagId, page);
+  Future<DiscoverPlaylistPage> playlists(
+    BuiltinTransport http,
+    String tagId,
+    int page,
+  ) {
+    return tagId.isEmpty
+        ? _fetchRecommend(http, page)
+        : _fetchTagList(http, tagId, page);
   }
 
   /// 推荐歌单（LX 默认排序 = 推荐）。
-  static Future<DiscoverPlaylistPage> _fetchRecommend(int page) {
+  static Future<DiscoverPlaylistPage> _fetchRecommend(
+    BuiltinTransport http,
+    int page,
+  ) {
     return runDiscoverCall(
       DiscoverRequestCall<DiscoverPlaylistPage>(
         key: 'mg:playlists::$page',
         request: () => lxHttpGet(
+          http,
           'https://app.c.nf.migu.cn/pc/bmw/page-data/'
           'playlist-square-recommend/v1.0?templateVersion=2&pageNo=$page',
           headers: _songListHeaders,
@@ -325,14 +342,20 @@ class MgDiscoverSource extends DiscoverSource {
           );
         },
       ),
+      http,
     );
   }
 
-  static Future<DiscoverPlaylistPage> _fetchTagList(String tagId, int page) {
+  static Future<DiscoverPlaylistPage> _fetchTagList(
+    BuiltinTransport http,
+    String tagId,
+    int page,
+  ) {
     return runDiscoverCall(
       DiscoverRequestCall<DiscoverPlaylistPage>(
         key: 'mg:playlists:$tagId:$page',
         request: () => lxHttpGet(
+          http,
           'https://app.c.nf.migu.cn/pc/v1.0/template/'
           'musiclistplaza-listbytag/release?pageNumber=$page'
           '&templateVersion=2&tagId=$tagId',
@@ -356,6 +379,7 @@ class MgDiscoverSource extends DiscoverSource {
           );
         },
       ),
+      http,
     );
   }
 
@@ -428,50 +452,52 @@ class MgDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return BuiltinSearch.transport.cached(
-      'mg:playlist-search:$keyword:$page',
-      () async {
-        final time = DateTime.now().millisecondsSinceEpoch.toString();
-        final sign = md5Hex(
-          '$keyword$_signatureMd5'
-          'yyapp2d16148780a1dcc7408e06336b98cfd50'
-          '$_deviceId$time',
-        );
-        final body = await lxHttpGet(
-          'https://jadeite.migu.cn/music_search/v3/search/searchAll'
-          '?isCorrect=1&isCopyright=1'
-          '&searchSwitch=%7B%22song%22%3A0%2C%22album%22%3A0%2C%22singer%22%3A0'
-          '%2C%22tagSong%22%3A0%2C%22mvSong%22%3A0%2C%22bestShow%22%3A0'
-          '%2C%22songlist%22%3A1%2C%22lyricSong%22%3A0%7D'
-          '&pageSize=20&text=${Uri.encodeComponent(keyword)}&pageNo=$page'
-          '&sort=0&sid=USS',
-          headers: {
-            'uiVersion': 'A_music_3.6.1',
-            'deviceId': _deviceId,
-            'timestamp': time,
-            'sign': sign,
-            'channel': '0146921',
-            'User-Agent': _searchUa,
-          },
-        );
-        if (body is! Map || body['code'] != _successCode) {
-          throw StateError('mg 歌单搜索失败');
-        }
-        final resultData = body['songListResultData'];
-        final items = (resultData is Map) ? resultData['result'] : null;
-        return DiscoverPlaylistPage(
-          playlists: filterSongListResult(items is List ? items : const []),
-          page: page,
-          limit: 20,
-          total:
-              (resultData is Map
-                  ? parseSourceCount(resultData['totalCount'])
-                  : null) ??
-              0,
-        );
-      },
-    );
+  Future<DiscoverPlaylistPage> searchPlaylists(
+    BuiltinTransport http,
+    String keyword,
+    int page,
+  ) {
+    return http.cached('mg:playlist-search:$keyword:$page', () async {
+      final time = DateTime.now().millisecondsSinceEpoch.toString();
+      final sign = md5Hex(
+        '$keyword$_signatureMd5'
+        'yyapp2d16148780a1dcc7408e06336b98cfd50'
+        '$_deviceId$time',
+      );
+      final body = await lxHttpGet(
+        http,
+        'https://jadeite.migu.cn/music_search/v3/search/searchAll'
+        '?isCorrect=1&isCopyright=1'
+        '&searchSwitch=%7B%22song%22%3A0%2C%22album%22%3A0%2C%22singer%22%3A0'
+        '%2C%22tagSong%22%3A0%2C%22mvSong%22%3A0%2C%22bestShow%22%3A0'
+        '%2C%22songlist%22%3A1%2C%22lyricSong%22%3A0%7D'
+        '&pageSize=20&text=${Uri.encodeComponent(keyword)}&pageNo=$page'
+        '&sort=0&sid=USS',
+        headers: {
+          'uiVersion': 'A_music_3.6.1',
+          'deviceId': _deviceId,
+          'timestamp': time,
+          'sign': sign,
+          'channel': '0146921',
+          'User-Agent': _searchUa,
+        },
+      );
+      if (body is! Map || body['code'] != _successCode) {
+        throw StateError('mg 歌单搜索失败');
+      }
+      final resultData = body['songListResultData'];
+      final items = (resultData is Map) ? resultData['result'] : null;
+      return DiscoverPlaylistPage(
+        playlists: filterSongListResult(items is List ? items : const []),
+        page: page,
+        limit: 20,
+        total:
+            (resultData is Map
+                ? parseSourceCount(resultData['totalCount'])
+                : null) ??
+            0,
+      );
+    });
   }
 
   /// 解析歌单搜索结果（独立出来便于单元测试）。
@@ -497,13 +523,17 @@ class MgDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverDetail> playlistDetail(String rawId, int page) {
+  Future<DiscoverDetail> playlistDetail(
+    BuiltinTransport http,
+    String rawId,
+    int page,
+  ) {
     final id = _parsePlaylistId(rawId);
     if (id == null) throw StateError('mg 歌单 id 解析失败');
-    return BuiltinSearch.transport.cached('mg:playlist-detail:$id', () async {
+    return http.cached('mg:playlist-detail:$id', () async {
       final results = await Future.wait([
-        _fetchDetailList(id),
-        _fetchDetailInfo(id),
+        _fetchDetailList(http, id),
+        _fetchDetailInfo(http, id),
       ]);
       final listData = results[0] as ({List<SourceTrack> tracks, int total});
       final info =
@@ -542,6 +572,7 @@ class MgDiscoverSource extends DiscoverSource {
   }
 
   static Future<({List<SourceTrack> tracks, int total})> _fetchDetailList(
+    BuiltinTransport http,
     String id,
   ) {
     return runDiscoverCall(
@@ -552,6 +583,7 @@ class MgDiscoverSource extends DiscoverSource {
           var total = 0;
           for (var page = 1; page <= _maxDetailPages; page++) {
             final body = await lxHttpGet(
+              http,
               'https://app.c.nf.migu.cn/MIGUM3.0/resource/playlist/song/v2.0'
               '?pageNo=$page&pageSize=$_limitSong&playlistId=$id',
               headers: _songListHeaders,
@@ -573,15 +605,17 @@ class MgDiscoverSource extends DiscoverSource {
           return (tracks: tracks, total: total);
         },
       ),
+      http,
     );
   }
 
   static Future<
     ({String name, String? img, String? desc, String author, int playCount})?
   >
-  _fetchDetailInfo(String id) async {
+  _fetchDetailInfo(BuiltinTransport http, String id) async {
     try {
       final body = await lxHttpGet(
+        http,
         'https://c.musicapp.migu.cn/MIGUM3.0/resource/playlist/v2.0'
         '?playlistId=$id',
         headers: _songListHeaders,
@@ -606,15 +640,16 @@ class MgDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<List<String>> hotSearches() {
-    return _fetchHotSearch();
+  Future<List<String>> hotSearches(BuiltinTransport http) {
+    return _fetchHotSearch(http);
   }
 
-  static Future<List<String>> _fetchHotSearch() {
+  static Future<List<String>> _fetchHotSearch(BuiltinTransport http) {
     return runDiscoverCall(
       DiscoverRequestCall<List<String>>(
         key: 'mg:hot-search',
         request: () => lxHttpGet(
+          http,
           'http://jadeite.migu.cn:7090/music_search/v3/search/hotword',
         ),
         isInvalid: (body) {
@@ -637,6 +672,7 @@ class MgDiscoverSource extends DiscoverSource {
           ];
         },
       ),
+      http,
     );
   }
 

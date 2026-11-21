@@ -1,4 +1,7 @@
 import 'dart:convert';
+
+import 'support/transport_test_support.dart';
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -222,7 +225,7 @@ void main() {
 
     test('未知平台：unsupported（不发请求）', () async {
       await expectLater(
-        BuiltinAlbums.fetch('lx_custom', '1'),
+        BuiltinAlbums.fetch(testTransport(), 'lx_custom', '1'),
         throwsA(
           isA<SourceFailure>().having(
             (f) => f.kind,
@@ -235,7 +238,7 @@ void main() {
 
     test('缺少专辑 id：可重试失败（不发请求）', () async {
       await expectLater(
-        BuiltinAlbums.fetch('wy', '  '),
+        BuiltinAlbums.fetch(testTransport(), 'wy', '  '),
         throwsA(
           isA<SourceFailure>()
               .having((f) => f.kind, 'kind', FailureKind.unknown)

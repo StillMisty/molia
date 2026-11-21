@@ -22,11 +22,13 @@ class KgAlbum {
   KgAlbum._();
 
   static Future<Album> fetch(
+    BuiltinTransport http,
     String albumId, {
     int page = 1,
     int limit = kAlbumPageSize,
   }) async {
     final songs = await lxHttpGet(
+      http,
       'http://mobilecdn.kugou.com/api/v3/album/song?version=9108'
       '&albumid=$albumId&plat=0&pagesize=$limit&area_code=0&page=$page'
       '&with_res_tag=0',
@@ -37,6 +39,7 @@ class KgAlbum {
     dynamic info;
     try {
       info = await lxHttpGet(
+        http,
         'http://mobilecdn.kugou.com/api/v3/album/info?albumid=$albumId'
         '&with_res_tag=0',
         retries: BuiltinTransport.defaultRetries,

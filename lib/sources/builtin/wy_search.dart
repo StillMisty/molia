@@ -3,28 +3,37 @@ import '../source_track.dart';
 import 'builtin_search_runner.dart';
 import 'crypto_utils.dart';
 import 'wy_music_detail.dart';
+import 'builtin_transport.dart';
 
 /// 网易音乐搜索（移植自 lx-music-mobile `wy/musicSearch.js`，eapi 协议）。
 class WySearch {
   static const _limit = 30;
 
   static Future<List<SourceTrack>> search(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = _limit,
   }) async {
-    final result = await searchWithMeta(keyword, page: page, limit: limit);
+    final result = await searchWithMeta(
+      http,
+      keyword,
+      page: page,
+      limit: limit,
+    );
     return result.tracks;
   }
 
   /// 分页搜索：响应 `data.totalCount`（仅首页返回）用于计算 hasMore。
   static Future<SourceSearchResult> searchWithMeta(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = _limit,
   }) {
     return runBuiltinSearch(
       _callFor(keyword, page, limit),
+      http,
       page: page,
       limit: limit,
     );

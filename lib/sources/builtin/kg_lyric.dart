@@ -55,7 +55,8 @@ class KgLyric {
   /// 获取歌词；失败返回 null（由调用方回退其它来源）。
   ///
   /// [timelengthSeconds] 为 LX `musicInfo._interval`（秒）。
-  static Future<BuiltinLyricResult?> fetch({
+  static Future<BuiltinLyricResult?> fetch(
+    BuiltinTransport http, {
     required String name,
     required String hash,
     required int timelengthSeconds,
@@ -65,6 +66,7 @@ class KgLyric {
         '&keyword=${Uri.encodeComponent(name)}'
         '&hash=$hash&timelength=$timelengthSeconds&lrctxt=1';
     final search = await lxHttpGet(
+      http,
       searchUrl,
       headers: _headers,
       retries: BuiltinTransport.defaultRetries,
@@ -83,6 +85,7 @@ class KgLyric {
         '&id=${info['id']}&accesskey=${info['accesskey']}'
         '&fmt=$fmt&charset=utf8';
     final download = await lxHttpGet(
+      http,
       downloadUrl,
       headers: _headers,
       retries: BuiltinTransport.defaultRetries,

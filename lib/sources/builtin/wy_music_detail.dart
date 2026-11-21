@@ -3,6 +3,7 @@ import '../source_track.dart';
 import 'artist_utils.dart';
 import 'builtin_search.dart';
 import 'crypto_utils.dart';
+import 'builtin_transport.dart';
 
 /// 网易云歌曲详情（移植自 lx-music-mobile `wy/musicDetail.js`，weapi 协议）。
 ///
@@ -15,10 +16,14 @@ class WyMusicDetail {
   ///
   /// [ids] 元素为平台 song id（int/string 均可）。失败抛 [StateError]，
   /// 由调用方（热榜/歌单）决定重试策略。
-  static Future<List<SourceTrack>> getList(List<Object> ids) async {
+  static Future<List<SourceTrack>> getList(
+    BuiltinTransport http,
+    List<Object> ids,
+  ) async {
     if (ids.isEmpty) return const [];
 
     final result = await lxHttpPost(
+      http,
       'https://music.163.com/weapi/v3/song/detail',
       form: true,
       headers: {'origin': 'https://music.163.com'},

@@ -23,7 +23,7 @@ import 'kw_search.dart';
 ///   歌单搜索（`search.kuwo.cn`，伪 JSON 需转义）；
 /// - 热搜词：`hotword.kuwo.cn`。
 ///
-/// 网络结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
+/// 网络结果缓存 5 分钟（统一走注入 transport 的 `cached`）。
 class KwDiscoverSource extends DiscoverSource {
   const KwDiscoverSource();
 
@@ -91,14 +91,17 @@ class KwDiscoverSource extends DiscoverSource {
   bool get hasLeaderboardCoverEndpoint => true;
 
   @override
-  Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
-    return _fetchLeaderboard(bangid);
+  Future<List<DiscoverTrack>> leaderboardTracks(
+    BuiltinTransport http,
+    String bangid,
+  ) {
+    return _fetchLeaderboard(http, bangid);
   }
 
   /// 榜单封面：`bang_info` 的 `data.pic`（榜单官方封面图）。
   @override
-  Future<String?> leaderboardCover(String bangid) {
-    return BuiltinSearch.transport.cached('kw:leaderboard-cover:$bangid', () async {
+  Future<String?> leaderboardCover(BuiltinTransport http, String bangid) {
+    return http.cached('kw:leaderboard-cover:$bangid', () async {
       final body = {
         'uid': '',
         'devId': '',
@@ -111,7 +114,7 @@ class KwDiscoverSource extends DiscoverSource {
       };
       final url =
           'https://wbd.kuwo.cn/api/bd/bang/bang_info?${kwWbdBuildParam(body)}';
-      final text = await lxHttpGetText(url);
+      final text = await lxHttpGetText(http, url);
       dynamic decoded;
       try {
         decoded = kwWbdDecodeData(text);
@@ -132,7 +135,10 @@ class KwDiscoverSource extends DiscoverSource {
     });
   }
 
-  static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {
+  static Future<List<DiscoverTrack>> _fetchLeaderboard(
+    BuiltinTransport http,
+    String bangid,
+  ) {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTrack>>(
         key: 'kw:leaderboard:$bangid',
@@ -150,7 +156,7 @@ class KwDiscoverSource extends DiscoverSource {
           };
           final url =
               'https://wbd.kuwo.cn/api/bd/bang/bang_info?${kwWbdBuildParam(body)}';
-          final text = await lxHttpGetText(url);
+          final text = await lxHttpGetText(http, url);
           try {
             return kwWbdDecodeData(text);
           } catch (_) {
@@ -171,6 +177,7 @@ class KwDiscoverSource extends DiscoverSource {
           ];
         },
       ),
+      http,
     );
   }
 
@@ -200,9 +207,9 @@ class KwDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverTags> tags() {
-    return BuiltinSearch.transport.cached('kw:tags', () async {
-      final results = await Future.wait([_fetchTag(), _fetchHotTag()]);
+  Future<DiscoverTags> tags(BuiltinTransport http) {
+    return http.cached('kw:tags', () async {
+      final results = await Future.wait([_fetchTag(http), _fetchHotTag(http)]);
       return DiscoverTags(
         categories: results[0] as List<DiscoverTagCategory>,
         hotTags: results[1] as List<DiscoverTag>,
@@ -210,11 +217,12 @@ class KwDiscoverSource extends DiscoverSource {
     });
   }
 
-  static Future<List<DiscoverTagCategory>> _fetchTag() {
+  static Future<List<DiscoverTagCategory>> _fetchTag(BuiltinTransport http) {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTagCategory>>(
         key: null,
         request: () => lxHttpGet(
+          http,
           'http://wapi.kuwo.cn/api/pc/classify/playlist/getTagList'
           '?cmd=rcm_keyword_playlist&user=0&prod=kwplayer_pc_9.0.5.0'
           '&vipver=9.0.5.0&source=kwplayer_pc_9.0.5.0&loginUid=0&loginSid=0'
@@ -223,6 +231,7 @@ class KwDiscoverSource extends DiscoverSource {
         isInvalid: (body) => body is! Map || body['code'] != 200,
         parse: (body) => filterTagInfo(body['data'] as List? ?? const []),
       ),
+      http,
     );
   }
 
@@ -243,11 +252,12 @@ class KwDiscoverSource extends DiscoverSource {
         ),
   ];
 
-  static Future<List<DiscoverTag>> _fetchHotTag() {
+  static Future<List<DiscoverTag>> _fetchHotTag(BuiltinTransport http) {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTag>>(
         key: null,
         request: () => lxHttpGet(
+          http,
           'http://wapi.kuwo.cn/api/pc/classify/playlist/getRcmTagList'
           '?loginUid=0&loginSid=0&appUid=76039576',
         ),
@@ -260,6 +270,7 @@ class KwDiscoverSource extends DiscoverSource {
           return filterInfoHotTag(rawList is List ? rawList : const []);
         },
       ),
+      http,
     );
   }
 
@@ -274,18 +285,26 @@ class KwDiscoverSource extends DiscoverSource {
   ];
 
   @override
-  Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
+  Future<DiscoverPlaylistPage> playlists(
+    BuiltinTransport http,
+    String tagId,
+    int page,
+  ) {
     return tagId.isEmpty
-        ? _fetchRecommend(page)
-        : _fetchTagPlaylist(tagId, page);
+        ? _fetchRecommend(http, page)
+        : _fetchTagPlaylist(http, tagId, page);
   }
 
   /// 推荐歌单（LX 默认排序 = 最新）。
-  static Future<DiscoverPlaylistPage> _fetchRecommend(int page) {
+  static Future<DiscoverPlaylistPage> _fetchRecommend(
+    BuiltinTransport http,
+    int page,
+  ) {
     return runDiscoverCall(
       DiscoverRequestCall<DiscoverPlaylistPage>(
         key: 'kw:playlists::$page',
         request: () => lxHttpGet(
+          http,
           'http://wapi.kuwo.cn/api/pc/classify/playlist/getRcmPlayList'
           '?loginUid=0&loginSid=0&appUid=76039576&pn=$page&rn=$_limitList'
           '&order=new',
@@ -302,6 +321,7 @@ class KwDiscoverSource extends DiscoverSource {
           );
         },
       ),
+      http,
     );
   }
 
@@ -331,6 +351,7 @@ class KwDiscoverSource extends DiscoverSource {
   }
 
   static Future<DiscoverPlaylistPage> _fetchTagPlaylist(
+    BuiltinTransport http,
     String tagId,
     int page,
   ) {
@@ -345,10 +366,12 @@ class KwDiscoverSource extends DiscoverSource {
         request: () => aggregated
             // 聚合数据接口（mobileinterfaces）：响应为数组，含 songlist/list/album。
             ? lxHttpGet(
+                http,
                 'http://mobileinterfaces.kuwo.cn/er.s?type=get_pc_qz_data&f=web'
                 '&id=$id&prod=pc',
               )
             : lxHttpGet(
+                http,
                 'http://wapi.kuwo.cn/api/pc/classify/playlist/getTagPlayList'
                 '?loginUid=0&loginSid=0&appUid=76039576&pn=$page&id=$id&rn=$_limitList',
               ),
@@ -373,6 +396,7 @@ class KwDiscoverSource extends DiscoverSource {
           );
         },
       ),
+      http,
     );
   }
 
@@ -408,48 +432,50 @@ class KwDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return BuiltinSearch.transport.cached(
-      'kw:playlist-search:$keyword:$page',
-      () async {
-        final text = await lxHttpGetText(
-          'http://search.kuwo.cn/r.s?all=${Uri.encodeComponent(keyword)}'
-          '&pn=${page - 1}&rn=20&rformat=json&encoding=utf8&ver=mbox'
-          '&vipver=MUSIC_8.7.7.0_BCS37&plat=pc&devid=28156413&ft=playlist'
-          '&pay=0&needliveshow=0',
-        );
-        final body = objStr2JSON(text);
-        if (body is! Map) throw StateError('kw 歌单搜索失败');
-        final rawList = body['abslist'];
-        final playlists = <DiscoverPlaylist>[];
-        if (rawList is List) {
-          for (final item in rawList) {
-            if (item is! Map) continue;
-            playlists.add(
-              DiscoverPlaylist(
-                id: (item['playlistid'] ?? '').toString(),
-                name: decodeName(item['name']?.toString()),
-                coverUrl: (item['pic']?.toString().isNotEmpty ?? false)
-                    ? item['pic'].toString()
-                    : null,
-                author: decodeName(item['nickname']?.toString()),
-                playCount: parseSourceCount(item['playcnt']) ?? 0,
-                trackCount: parseSourceCount(item['songnum']) ?? 0,
-                description: (item['intro']?.toString().isNotEmpty ?? false)
-                    ? decodeName(item['intro']?.toString())
-                    : null,
-              ),
-            );
-          }
+  Future<DiscoverPlaylistPage> searchPlaylists(
+    BuiltinTransport http,
+    String keyword,
+    int page,
+  ) {
+    return http.cached('kw:playlist-search:$keyword:$page', () async {
+      final text = await lxHttpGetText(
+        http,
+        'http://search.kuwo.cn/r.s?all=${Uri.encodeComponent(keyword)}'
+        '&pn=${page - 1}&rn=20&rformat=json&encoding=utf8&ver=mbox'
+        '&vipver=MUSIC_8.7.7.0_BCS37&plat=pc&devid=28156413&ft=playlist'
+        '&pay=0&needliveshow=0',
+      );
+      final body = objStr2JSON(text);
+      if (body is! Map) throw StateError('kw 歌单搜索失败');
+      final rawList = body['abslist'];
+      final playlists = <DiscoverPlaylist>[];
+      if (rawList is List) {
+        for (final item in rawList) {
+          if (item is! Map) continue;
+          playlists.add(
+            DiscoverPlaylist(
+              id: (item['playlistid'] ?? '').toString(),
+              name: decodeName(item['name']?.toString()),
+              coverUrl: (item['pic']?.toString().isNotEmpty ?? false)
+                  ? item['pic'].toString()
+                  : null,
+              author: decodeName(item['nickname']?.toString()),
+              playCount: parseSourceCount(item['playcnt']) ?? 0,
+              trackCount: parseSourceCount(item['songnum']) ?? 0,
+              description: (item['intro']?.toString().isNotEmpty ?? false)
+                  ? decodeName(item['intro']?.toString())
+                  : null,
+            ),
+          );
         }
-        return DiscoverPlaylistPage(
-          playlists: playlists,
-          page: page,
-          limit: 20,
-          total: parseSourceCount(body['TOTAL']) ?? 0,
-        );
-      },
-    );
+      }
+      return DiscoverPlaylistPage(
+        playlists: playlists,
+        page: page,
+        limit: 20,
+        total: parseSourceCount(body['TOTAL']) ?? 0,
+      );
+    });
   }
 
   /// 酷我伪 JSON → JSON（`{'a':'b'}` → `{"a":"b"}`；移植 LX `objStr2JSON`）。
@@ -462,11 +488,15 @@ class KwDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverDetail> playlistDetail(String rawId, int page) {
+  Future<DiscoverDetail> playlistDetail(
+    BuiltinTransport http,
+    String rawId,
+    int page,
+  ) {
     final id = _parsePlaylistId(rawId);
     if (id == null) throw StateError('kw 歌单 id 解析失败');
-    return BuiltinSearch.transport.cached('kw:playlist-detail:$id', () {
-      return _fetchDetail(id);
+    return http.cached('kw:playlist-detail:$id', () {
+      return _fetchDetail(http, id);
     });
   }
 
@@ -482,29 +512,33 @@ class KwDiscoverSource extends DiscoverSource {
     return rawId;
   }
 
-  static Future<DiscoverDetail> _fetchDetail(String id) {
+  static Future<DiscoverDetail> _fetchDetail(BuiltinTransport http, String id) {
     if (id.startsWith('digest-')) {
       final parts = id.split('__');
       final digest = parts.first.replaceFirst('digest-', '');
       final realId = parts.length > 1 ? parts[1] : '';
       if (digest == '5') {
-        return _fetchDetailDigest5(realId);
+        return _fetchDetailDigest5(http, realId);
       }
       if (digest == '13') {
         throw UnsupportedError('kw 专辑暂不支持');
       }
       if (realId.isEmpty) throw StateError('kw 歌单 id 解析失败');
-      return _fetchDetailDigest8(realId);
+      return _fetchDetailDigest8(http, realId);
     }
-    return _fetchDetailDigest8(id);
+    return _fetchDetailDigest8(http, id);
   }
 
   /// digest 8：歌曲类歌单（`nplserver/pl.svc`）。
-  static Future<DiscoverDetail> _fetchDetailDigest8(String id) {
+  static Future<DiscoverDetail> _fetchDetailDigest8(
+    BuiltinTransport http,
+    String id,
+  ) {
     return runDiscoverCall(
       DiscoverRequestCall<DiscoverDetail>(
         key: null,
         request: () => lxHttpGet(
+          http,
           'http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=$id&pn=0'
           '&rn=$_limitSong&encode=utf8&keyset=pl2012&identity=kuwo&pcmp4=1'
           '&vipver=MUSIC_9.0.5.0_W1&newver=1',
@@ -530,16 +564,21 @@ class KwDiscoverSource extends DiscoverSource {
           );
         },
       ),
+      http,
     );
   }
 
   /// digest 5：推荐歌单（先 `qukudata` 换算 sourceid，再取曲目）。
-  static Future<DiscoverDetail> _fetchDetailDigest5(String id) {
+  static Future<DiscoverDetail> _fetchDetailDigest5(
+    BuiltinTransport http,
+    String id,
+  ) {
     return runDiscoverCall(
       DiscoverAttemptCall<DiscoverDetail>(
         key: null,
         attempt: (_) async {
           final infoBody = await lxHttpGet(
+            http,
             'http://qukudata.kuwo.cn/q.k?op=query&cont=ninfo&node=$id&pn=0&rn=1'
             '&fmt=json&src=mbox&level=2',
           );
@@ -549,9 +588,10 @@ class KwDiscoverSource extends DiscoverSource {
               ? (child[0] as Map)['sourceid']?.toString()
               : null;
           if (sourceId == null || sourceId.isEmpty) return null;
-          return _fetchDetailDigest8(sourceId);
+          return _fetchDetailDigest8(http, sourceId);
         },
       ),
+      http,
     );
   }
 
@@ -590,15 +630,16 @@ class KwDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<List<String>> hotSearches() {
-    return _fetchHotSearch();
+  Future<List<String>> hotSearches(BuiltinTransport http) {
+    return _fetchHotSearch(http);
   }
 
-  static Future<List<String>> _fetchHotSearch() {
+  static Future<List<String>> _fetchHotSearch(BuiltinTransport http) {
     return runDiscoverCall(
       DiscoverRequestCall<List<String>>(
         key: 'kw:hot-search',
         request: () => lxHttpGet(
+          http,
           'http://hotword.kuwo.cn/hotword.s?prod=kwplayer_ar_9.3.0.1&corp=kuwo'
           '&newver=2&vipver=9.3.0.1&source=kwplayer_ar_9.3.0.1_40.apk&p2p=1'
           '&notrace=0&uid=0&plat=kwplayer_ar&rformat=json&encoding=utf8&tabid=1',
@@ -615,6 +656,7 @@ class KwDiscoverSource extends DiscoverSource {
           ];
         },
       ),
+      http,
     );
   }
 

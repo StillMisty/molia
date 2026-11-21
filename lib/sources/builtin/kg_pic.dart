@@ -17,7 +17,8 @@ class KgPic {
   };
 
   /// 获取封面 URL；失败返回 null。
-  static Future<String?> fetch({
+  static Future<String?> fetch(
+    BuiltinTransport http, {
     required String songmid,
     String? audioId,
     String? albumId,
@@ -55,6 +56,7 @@ class KgPic {
 
     try {
       final json = await lxHttpPost(
+        http,
         'http://media.store.kugou.com/v1/get_res_privilege',
         body: body,
         headers: _headers,

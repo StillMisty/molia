@@ -13,6 +13,7 @@ library;
 import '../../domain/models/failure.dart';
 import 'crypto_utils.dart';
 import 'builtin_search_runner.dart';
+import 'builtin_transport.dart';
 import 'lyric_hit.dart';
 
 /// 一次歌词检索的变体面：请求 + 响应判定 + 命中解析（骨架在 [BuiltinCall]）。
@@ -40,11 +41,12 @@ class BuiltinLyricSearchCall extends BuiltinCall {
 
 /// 执行一次歌词检索：异常与业务拒绝抛 [SourceFailure]，「平台返回空」保持正常。
 Future<LyricSearchPage> runBuiltinLyricSearch(
-  BuiltinLyricSearchCall call, {
+  BuiltinLyricSearchCall call,
+  BuiltinTransport transport, {
   required int page,
   required int limit,
 }) async {
-  final result = await sendBuiltinCall(call);
+  final result = await sendBuiltinCall(call, transport);
   final SourceFailure? failure = result.failure;
   if (failure != null) throw failure;
 

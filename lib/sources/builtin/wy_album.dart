@@ -19,11 +19,13 @@ class WyAlbum {
   WyAlbum._();
 
   static Future<Album> fetch(
+    BuiltinTransport http,
     String albumId, {
     int page = 1,
     int limit = kAlbumPageSize,
   }) async {
     final body = await lxHttpGet(
+      http,
       'https://music.163.com/api/v1/album/$albumId',
       headers: const {'origin': 'https://music.163.com'},
       retries: BuiltinTransport.defaultRetries,

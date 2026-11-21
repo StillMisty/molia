@@ -1,5 +1,6 @@
 import 'package:logging/logging.dart';
 
+import '../../sources/builtin/builtin_transport.dart';
 import '../../sources/builtin/kw_lyric.dart';
 import '../../sources/builtin/kw_search.dart';
 import '../../sources/source_track.dart';
@@ -9,6 +10,10 @@ import 'lyric_provider.dart';
 /// - 搜索复用内置 `kw` 搜索（与内置源同一实现）；
 /// - 取词用 [KwLyric]（`mlyric` LRCX 解码 + H5 兜底），含逐字与翻译。
 class KuwoProvider extends LyricProvider {
+  KuwoProvider({BuiltinTransport? transport})
+    : _http = transport ?? BuiltinTransport();
+
+  final BuiltinTransport _http;
   final Logger _logger = Logger('molia.kuwo_provider');
 
   @override
@@ -31,7 +36,11 @@ class KuwoProvider extends LyricProvider {
   }) async {
     try {
       final keyword = '$title $artist'.trim();
-      final result = await KwSearch.searchWithMeta(keyword, limit: limit);
+      final result = await KwSearch.searchWithMeta(
+        _http,
+        keyword,
+        limit: limit,
+      );
       return [for (final track in result.tracks.take(limit)) _toMatch(track)];
     } catch (e) {
       _logger.warning('酷我歌词搜索失败: $e');
@@ -57,7 +66,7 @@ class KuwoProvider extends LyricProvider {
   @override
   Future<LyricsPayload?> fetchLyrics(String songId) async {
     try {
-      final info = await KwLyric.fetch(songId);
+      final info = await KwLyric.fetch(_http, songId);
       if (info == null || info.isEmpty) return null;
       return LyricsPayload(
         lyric: info.lyric,

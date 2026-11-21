@@ -9,17 +9,19 @@ import '../../data/mapping/track_mapper.dart';
 import '../../domain/models/album.dart';
 import 'album_utils.dart';
 import 'qs_api.dart';
+import 'builtin_transport.dart';
 import 'qs_track.dart';
 
 class QsAlbum {
   QsAlbum._();
 
   static Future<Album> fetch(
+    BuiltinTransport http,
     String albumId, {
     int page = 1,
     int limit = kAlbumPageSize,
   }) async {
-    final loader = await QsApi.shareLoaderData('/share/album', {
+    final loader = await QsApi.shareLoaderData(http, '/share/album', {
       'album_id': albumId,
     });
     return parse(loader['album_page'], albumId: albumId);

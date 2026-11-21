@@ -14,7 +14,8 @@ Track _track(String id) => Track(
 
 class _FakeLyricsService extends LyricsService {
   _FakeLyricsService({Map<String, LyricsResult?>? results})
-    : _results = results ?? const {};
+    : _results = results ?? const {},
+      super(providers: const []);
 
   final Map<String, LyricsResult?> _results;
   final Map<String, Duration> delays = {};
@@ -58,7 +59,7 @@ class _FakeLyricsService extends LyricsService {
 
 /// 按调用顺序返回结果的取词服务（空 → 空 → 有词，覆盖重试路径）。
 class _FlakyLyricsService extends LyricsService {
-  _FlakyLyricsService(this.results);
+  _FlakyLyricsService(this.results) : super(providers: const []);
 
   final List<LyricsResult?> results;
   final List<String> requested = [];

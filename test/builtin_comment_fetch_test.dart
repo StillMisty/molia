@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/http/app_dio.dart';
 import 'package:molia/domain/models/comment.dart';
 import 'package:molia/domain/models/failure.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/comment_source.dart';
 import 'package:molia/sources/builtin/comment_utils.dart';
@@ -18,16 +17,15 @@ import 'package:molia/sources/builtin/tx_comment.dart';
 import 'package:molia/sources/builtin/wy_comment.dart';
 
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 /// 评论取数链路（请求构造 / 分页游标 / 业务码失败）的离线单测：
 /// 用 `MockDioAdapter` 拦在真实 socket 之前，不联网。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late BuiltinTransport originalTransport;
-  setUpAll(() => originalTransport = BuiltinSearch.transport);
+  late BuiltinTransport transport;
   tearDown(() {
-    BuiltinSearch.transport = originalTransport;
     WyComment.cursorStore.clear();
     MgComment.cursorStore.clear();
   });
@@ -37,9 +35,7 @@ void main() {
     FutureOr<ResponseBody> Function(RequestOptions options) handler,
   ) {
     final adapter = MockDioAdapter(handler);
-    BuiltinSearch.transport = BuiltinTransport(
-      dio: createAppDio(adapter: adapter),
-    );
+    transport = testTransport(dio: createAppDio(adapter: adapter));
     return adapter;
   }
 
@@ -65,6 +61,7 @@ void main() {
       });
 
       final page = await KwComment.fetch(
+        transport,
         '228908',
         kind: CommentKind.latest,
         page: 3,
@@ -96,7 +93,7 @@ void main() {
         );
       });
 
-      final page = await KwComment.fetch('1', kind: CommentKind.hot);
+      final page = await KwComment.fetch(transport, '1', kind: CommentKind.hot);
       expect(
         adapter.lastRequest.uri.queryParameters['type'],
         'get_rec_comment',
@@ -111,7 +108,7 @@ void main() {
       });
 
       await expectLater(
-        KwComment.fetch('1', kind: CommentKind.latest),
+        KwComment.fetch(transport, '1', kind: CommentKind.latest),
         throwsA(
           isA<SourceFailure>()
               .having((f) => f.kind, 'kind', FailureKind.unknown)
@@ -144,6 +141,7 @@ void main() {
       });
 
       final page = await KgComment.fetch(
+        transport,
         'HASH1',
         kind: CommentKind.latest,
         page: 2,
@@ -173,7 +171,7 @@ void main() {
         return textResponse(jsonEncode({'err_code': 30001, 'list': []}));
       });
       await expectLater(
-        KgComment.fetch('HASH', kind: CommentKind.hot),
+        KgComment.fetch(transport, 'HASH', kind: CommentKind.hot),
         throwsA(isA<SourceFailure>()),
       );
     });
@@ -202,6 +200,7 @@ void main() {
       });
 
       final page = await MgComment.fetch(
+        transport,
         '600908',
         kind: CommentKind.hot,
         page: 2,
@@ -237,19 +236,24 @@ void main() {
         );
       });
 
-      await MgComment.fetch('600908', kind: CommentKind.latest);
+      await MgComment.fetch(transport, '600908', kind: CommentKind.latest);
       expect(adapter.requests, hasLength(1));
       expect(MgComment.cursorStore.read('600908', 2), 'first');
       expect(lastCommentId, isEmpty, reason: '第一页不带游标');
 
-      await MgComment.fetch('600908', kind: CommentKind.latest, page: 2);
+      await MgComment.fetch(
+        transport,
+        '600908',
+        kind: CommentKind.latest,
+        page: 2,
+      );
       expect(lastCommentId, 'first', reason: '第 2 页带上一页最后一条评论 id');
     });
 
     test('最新评论：缺游标时失败（不静默返回首页数据）', () async {
       install((options) async => textResponse(jsonEncode({'code': '000000'})));
       await expectLater(
-        MgComment.fetch('600908', kind: CommentKind.latest, page: 2),
+        MgComment.fetch(transport, '600908', kind: CommentKind.latest, page: 2),
         throwsA(isA<SourceFailure>()),
       );
     });
@@ -272,13 +276,22 @@ void main() {
         );
       });
 
-      final first = await WyComment.fetch('186016', kind: CommentKind.latest);
+      final first = await WyComment.fetch(
+        transport,
+        '186016',
+        kind: CommentKind.latest,
+      );
       expect(first.total, 30);
       expect(first.items.single.text, '好听');
       expect(WyComment.cursorStore.read('186016', 2), 'CURSOR-1');
       final firstBody = requestBodyText(adapter.lastRequest);
 
-      await WyComment.fetch('186016', kind: CommentKind.latest, page: 2);
+      await WyComment.fetch(
+        transport,
+        '186016',
+        kind: CommentKind.latest,
+        page: 2,
+      );
       final secondBody = requestBodyText(adapter.lastRequest);
       expect(secondBody, isNot(firstBody), reason: '第 2 页使用第 1 页返回的游标');
     });
@@ -296,7 +309,11 @@ void main() {
         );
       });
 
-      final page = await WyComment.fetch('186016', kind: CommentKind.hot);
+      final page = await WyComment.fetch(
+        transport,
+        '186016',
+        kind: CommentKind.hot,
+      );
       expect(adapter.lastRequest.uri.path, contains('hotcomments'));
       expect(page.total, 5);
       expect(page.items.single.text, '热评');
@@ -305,7 +322,7 @@ void main() {
     test('code 非 200：失败', () async {
       install((options) async => textResponse(jsonEncode({'code': 250})));
       await expectLater(
-        WyComment.fetch('1', kind: CommentKind.latest),
+        WyComment.fetch(transport, '1', kind: CommentKind.latest),
         throwsA(isA<SourceFailure>()),
       );
     });
@@ -338,6 +355,7 @@ void main() {
       });
 
       final page = await TxComment.fetch(
+        transport,
         '97773',
         kind: CommentKind.hot,
         page: 2,
@@ -374,6 +392,7 @@ void main() {
       });
 
       final page = await TxComment.fetch(
+        transport,
         '97773',
         kind: CommentKind.latest,
         page: 3,
@@ -398,7 +417,7 @@ void main() {
         );
       });
       await expectLater(
-        TxComment.fetch('1', kind: CommentKind.hot),
+        TxComment.fetch(transport, '1', kind: CommentKind.hot),
         throwsA(isA<SourceFailure>()),
       );
     });
@@ -407,7 +426,12 @@ void main() {
   group('BuiltinComments 调度', () {
     test('未知平台：unsupported', () async {
       await expectLater(
-        BuiltinComments.fetch('lx_custom', const {}, kind: CommentKind.hot),
+        BuiltinComments.fetch(
+          transport,
+          'lx_custom',
+          const {},
+          kind: CommentKind.hot,
+        ),
         throwsA(
           isA<SourceFailure>().having(
             (f) => f.kind,
@@ -423,7 +447,7 @@ void main() {
         fail('不应发起请求');
       });
       await expectLater(
-        BuiltinComments.fetch('kw', const {
+        BuiltinComments.fetch(transport, 'kw', const {
           'name': '无 id',
         }, kind: CommentKind.hot),
         throwsA(

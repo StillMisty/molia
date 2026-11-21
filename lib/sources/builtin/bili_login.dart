@@ -53,7 +53,9 @@ class BiliQrPollOutcome {
 }
 
 class BiliQrLogin {
-  BiliQrLogin({BiliClient? client}) : _client = client ?? BiliClient.shared;
+  // 命名参数保持 client，字段按本类惯例私有。
+  // ignore: prefer_initializing_formals
+  BiliQrLogin({required BiliClient client}) : _client = client;
 
   final BiliClient _client;
   final Logger _logger = Logger('molia.bili_login');

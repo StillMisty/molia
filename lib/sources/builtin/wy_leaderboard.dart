@@ -10,8 +10,8 @@ import 'wy_music_detail.dart';
 ///
 /// - 榜单表为 LX 内置静态列表（官方 `weapi/toplist` 接口需要登录态，
 ///   LX 侧即硬编码该表，见其 `getBoards` 注释）；
-/// - `getTracks(bangid)`：weapi v3 歌单详情 → trackIds → 批量歌曲详情；
-/// - 结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
+/// - `getTracks(BuiltinTransport http, bangid)`：weapi v3 歌单详情 → trackIds → 批量歌曲详情；
+/// - 结果缓存 5 分钟（统一走注入 transport 的 `cached`）。
 class WyLeaderboard {
   WyLeaderboard._();
 
@@ -178,39 +178,43 @@ class WyLeaderboard {
   ];
 
   /// 榜单曲目（带 5 分钟缓存；[bangid] 为榜单 id，如 `3778678`）。
-  static Future<List<SourceTrack>> getTracks(String bangid) {
-    return _fetch(bangid);
+  static Future<List<SourceTrack>> getTracks(
+    BuiltinTransport http,
+    String bangid,
+  ) {
+    return _fetch(http, bangid);
   }
 
   /// 榜单封面：`playlist/detail` 的 `playlist.coverImgUrl`。
   ///
   /// 只发一次详情请求，不批量补歌曲详情；失败交给发现页占位 / 首曲封面兜底。
-  static Future<String?> getCover(String bangid) {
-    return BuiltinSearch.transport.cached(
-      'wy:leaderboard-cover:$bangid',
-      () async {
-        final body = await lxHttpPost(
-          'https://music.163.com/weapi/v3/playlist/detail',
-          form: true,
-          body: weapiForm({'id': bangid, 'n': 1, 'p': 1}),
-        );
-        if (body is! Map || body['code'] != 200 || body['playlist'] is! Map) {
-          throw StateError('wy 榜单封面获取失败');
-        }
-        final playlist = body['playlist'] as Map;
-        final url = (playlist['coverImgUrl'] ?? playlist['coverUrl'])
-            ?.toString()
-            .trim();
-        if (url == null || url.isEmpty) {
-          throw StateError('wy 榜单封面为空');
-        }
-        return url;
-      },
-    );
+  static Future<String?> getCover(BuiltinTransport http, String bangid) {
+    return http.cached('wy:leaderboard-cover:$bangid', () async {
+      final body = await lxHttpPost(
+        http,
+        'https://music.163.com/weapi/v3/playlist/detail',
+        form: true,
+        body: weapiForm({'id': bangid, 'n': 1, 'p': 1}),
+      );
+      if (body is! Map || body['code'] != 200 || body['playlist'] is! Map) {
+        throw StateError('wy 榜单封面获取失败');
+      }
+      final playlist = body['playlist'] as Map;
+      final url = (playlist['coverImgUrl'] ?? playlist['coverUrl'])
+          ?.toString()
+          .trim();
+      if (url == null || url.isEmpty) {
+        throw StateError('wy 榜单封面为空');
+      }
+      return url;
+    });
   }
 
   /// 与 LX 一致：详情失败重试至多 6 次，歌曲详情失败同样重试。
-  static Future<List<SourceTrack>> _fetch(String bangid) {
+  static Future<List<SourceTrack>> _fetch(
+    BuiltinTransport http,
+    String bangid,
+  ) {
     return runDiscoverCall(
       DiscoverRequestCall<List<SourceTrack>>(
         key: 'wy:leaderboard:$bangid',
@@ -218,6 +222,7 @@ class WyLeaderboard {
         request: () async {
           try {
             return await lxHttpPost(
+              http,
               'https://music.163.com/weapi/v3/playlist/detail',
               form: true,
               body: weapiForm({'id': bangid, 'n': 100000, 'p': 1}),
@@ -238,13 +243,14 @@ class WyLeaderboard {
               if (trackId is Map && trackId['id'] != null) trackId['id'],
           ];
           try {
-            return await WyMusicDetail.getList(ids);
+            return await WyMusicDetail.getList(http, ids);
           } catch (e) {
             if (e is StateError && e.message == 'try max num') rethrow;
             return null;
           }
         },
       ),
+      http,
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:logging/logging.dart';
 
+import '../../sources/builtin/builtin_transport.dart';
 import '../../sources/builtin/wy_lyric.dart';
 import '../../sources/builtin/wy_search.dart';
 import 'lyric_provider.dart';
@@ -13,6 +14,10 @@ import 'lyric_provider.dart';
 /// 翻译 / 罗马音经 [fetchLyrics] 结构化透传（tlyric / rlyric 内部已完成
 /// 时间轴对齐与时间标签修正）。
 class NetEaseProvider extends LyricProvider {
+  NetEaseProvider({BuiltinTransport? transport})
+    : _http = transport ?? BuiltinTransport();
+
+  final BuiltinTransport _http;
   final Logger _logger = Logger('molia.netease_provider');
 
   @override
@@ -36,7 +41,7 @@ class NetEaseProvider extends LyricProvider {
   }) async {
     try {
       final keyword = '$title $artist';
-      final tracks = await WySearch.search(keyword, limit: limit);
+      final tracks = await WySearch.search(_http, keyword, limit: limit);
       return [
         for (final track in tracks.take(limit))
           SongMatch(
@@ -65,7 +70,7 @@ class NetEaseProvider extends LyricProvider {
   @override
   Future<LyricsPayload?> fetchLyrics(String songId) async {
     try {
-      final info = await WyLyric.fetch(songId);
+      final info = await WyLyric.fetch(_http, songId);
       if (info.lyric.isEmpty) return null;
       return LyricsPayload(
         lyric: info.lyric,

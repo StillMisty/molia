@@ -14,6 +14,7 @@
 library;
 
 import '../../domain/models/failure.dart';
+import 'builtin_transport.dart';
 import 'channel/channels.dart';
 import 'lyric_hit.dart';
 
@@ -25,6 +26,7 @@ class BuiltinLyricSearch {
 
   /// 按歌词搜歌；失败抛 [SourceFailure]（不静默吞成空结果）。
   static Future<LyricSearchPage> searchWithMeta(
+    BuiltinTransport http,
     String sourceKey,
     String keyword, {
     int page = 1,
@@ -37,6 +39,6 @@ class BuiltinLyricSearch {
         message: '内置平台不支持歌词搜索: $sourceKey',
       );
     }
-    return adapter(keyword, page: page, limit: limit);
+    return adapter(http, keyword, page: page, limit: limit);
   }
 }

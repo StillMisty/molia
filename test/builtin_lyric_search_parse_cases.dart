@@ -1,4 +1,7 @@
 import 'dart:convert';
+
+import 'support/transport_test_support.dart';
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -142,7 +145,11 @@ void main() {
   group('BuiltinLyricSearch 调度', () {
     test('未知音源：抛 unsupported', () {
       expect(
-        () => BuiltinLyricSearch.searchWithMeta('unknown', '雨下整夜'),
+        () => BuiltinLyricSearch.searchWithMeta(
+          testTransport(),
+          'unknown',
+          '雨下整夜',
+        ),
         throwsA(
           isA<SourceFailure>().having(
             (f) => f.kind,

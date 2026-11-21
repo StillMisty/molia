@@ -39,9 +39,13 @@ class KwLyric {
   static final RegExp _existTimeExp = RegExp(r'\[\d{1,2}:.*\d{1,4}\]');
 
   /// 获取歌词；失败返回 null（由调用方回退其它来源）。
-  static Future<BuiltinLyricResult?> fetch(String songmid) async {
+  static Future<BuiltinLyricResult?> fetch(
+    BuiltinTransport http,
+    String songmid,
+  ) async {
     try {
       final bytes = await lxHttpGetBytes(
+        http,
         'http://mlyric.kuwo.cn/mobi.s?f=web&type=lyric&lrcx=1'
         '&rid=$songmid&encode=utf8',
         headers: _headers,
@@ -55,7 +59,7 @@ class KwLyric {
     } catch (_) {
       // 主路径失败：走 H5 兜底。
     }
-    return _fetchH5(songmid);
+    return _fetchH5(http, songmid);
   }
 
   /// `TP=content` 二进制解码：zlib → base64 → `yeelion` XOR（lrcx=1）。
@@ -127,9 +131,13 @@ class KwLyric {
   }
 
   /// H5 JSON 兜底：`data.songinfo` + `data.lrclist`。
-  static Future<BuiltinLyricResult?> _fetchH5(String songmid) async {
+  static Future<BuiltinLyricResult?> _fetchH5(
+    BuiltinTransport http,
+    String songmid,
+  ) async {
     try {
       final json = await lxHttpGet(
+        http,
         'http://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId=$songmid',
         headers: _headers,
         retries: BuiltinTransport.defaultRetries,

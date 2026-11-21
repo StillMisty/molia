@@ -30,6 +30,7 @@ class BiliComment {
   static void resetForTest() => cursorStore.clear();
 
   static Future<CommentPage> fetch(
+    BuiltinTransport http,
     String aid, {
     required CommentKind kind,
     int page = 1,
@@ -40,7 +41,7 @@ class BiliComment {
     // 匿名口径：评论接口不能带 buvid Cookie（带 Cookie 会退回「只给 3 条
     // 热评 + is_end=true」的降级响应），也不需要 WBI，client 不会拉会话。
     // JSON 作为 query 值由 Uri 统一编码；平台按 URL 解码后读 offset。
-    final response = await BiliClient.shared.get(
+    final response = await BiliClient(transport: http).get(
       '/x/v2/reply/main',
       query: <String, Object?>{
         'type': '1',

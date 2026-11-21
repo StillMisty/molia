@@ -11,10 +11,10 @@ import 'package:molia/services/bili_account_service.dart';
 import 'package:molia/sources/builtin/bili_client.dart';
 import 'package:molia/sources/builtin/bili_login.dart';
 import 'package:molia/sources/builtin/bili_session.dart';
-import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
 import 'support/settings_test_support.dart';
+import 'support/transport_test_support.dart';
 
 /// B 站扫码登录协议 + 账号服务（本地 / 同步凭据的生命周期）。
 void main() {
@@ -26,7 +26,7 @@ void main() {
       BiliSession? session,
     }) => BiliQrLogin(
       client: BiliClient(
-        transport: BuiltinTransport(dio: mockDio(handler)),
+        transport: testTransport(dio: mockDio(handler)),
         session: session,
       ),
     );
@@ -400,6 +400,8 @@ void main() {
 }
 
 class _FakeBiliQrLogin extends BiliQrLogin {
+  _FakeBiliQrLogin() : super(client: BiliClient(transport: testTransport()));
+
   BiliQrCode? generateResult;
   List<BiliQrPollOutcome> pollResults = [];
   BiliAccount? profileResult;

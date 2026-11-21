@@ -11,11 +11,15 @@ import 'package:logging/logging.dart';
 
 import '../../sources/builtin/channel/channels.dart';
 import '../../sources/builtin/builtin_search.dart';
+import '../../sources/builtin/builtin_transport.dart';
 import '../../sources/source_track.dart';
 import 'lyric_provider.dart';
 
 class BuiltinLyricProvider extends LyricProvider {
-  BuiltinLyricProvider(this.key, {this.adapter});
+  BuiltinLyricProvider(this.key, {required this.http, this.adapter});
+
+  /// 内置平台 HTTP 传输（组合根注入；测试各自构造）。
+  final BuiltinTransport http;
 
   /// 内置渠道 key（`SongChannels.byKey` 的键，如 `bili`）。
   final String key;
@@ -55,10 +59,11 @@ class BuiltinLyricProvider extends LyricProvider {
       // 关键词更准，且命中项同样自带取词所需的 raw。
       final lyricSearch = SongChannels.forKey(key)?.lyricSearch;
       if (lyricSearch != null) {
-        final page = await lyricSearch(keyword, limit: limit);
+        final page = await lyricSearch(http, keyword, limit: limit);
         tracks.addAll(page.hits.map((hit) => hit.track));
       } else {
         final result = await BuiltinSearch.searchWithMeta(
+          http,
           key,
           keyword,
           limit: limit,
@@ -100,7 +105,7 @@ class BuiltinLyricProvider extends LyricProvider {
     final adapter = this.adapter ?? SongChannels.forKey(key)?.lyric;
     if (adapter == null) return null;
     try {
-      final info = await adapter(match.extra);
+      final info = await adapter(http, match.extra);
       if (info == null || info.isEmpty) return null;
       return LyricsPayload(
         lyric: info.lyric,

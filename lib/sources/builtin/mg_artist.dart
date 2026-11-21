@@ -25,6 +25,7 @@ class MgArtist {
 
   /// 歌手搜索（`singerResultData.totalCount` 用于分页）。
   static Future<ArtistSearchPage> search(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = 30,
@@ -46,6 +47,7 @@ class MgArtist {
       },
     );
     final body = await lxHttpGet(
+      http,
       request.url,
       headers: request.headers,
       retries: BuiltinTransport.defaultRetries,
@@ -93,11 +95,13 @@ class MgArtist {
   ///
   /// 详情接口 best-effort：失败时退回入口携带的名字，不阻断歌曲列表。
   static Future<ArtistDetail> fetch(
+    BuiltinTransport http,
     String artistId, {
     int page = 1,
     int limit = kArtistPageSize,
   }) async {
     final songs = await lxHttpGet(
+      http,
       'https://app.c.nf.migu.cn/pc/bmw/singer/song/v1.0'
       '?pageNo=$page&singerId=$artistId&type=1',
       headers: const {'Referer': 'https://music.migu.cn/'},
@@ -106,6 +110,7 @@ class MgArtist {
     dynamic info;
     try {
       info = await lxHttpGet(
+        http,
         'https://app.c.nf.migu.cn/pc/bmw/singer/info/v1.1?singerId=$artistId',
         headers: const {'Referer': 'https://music.migu.cn/'},
         retries: BuiltinTransport.defaultRetries,

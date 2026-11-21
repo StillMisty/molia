@@ -25,11 +25,13 @@ class WyArtist {
 
   /// 歌手搜索（`artistCount` 用于分页）。
   static Future<ArtistSearchPage> search(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = 30,
   }) async {
     final body = await lxHttpGet(
+      http,
       'https://music.163.com/api/search/get/web'
       '?s=${Uri.encodeComponent(keyword)}'
       '&type=$_searchTypeArtist&offset=${(page - 1) * limit}&limit=$limit',
@@ -79,11 +81,13 @@ class WyArtist {
   ///
   /// 详情接口 best-effort：失败时退回入口携带的名字，不阻断歌曲列表。
   static Future<ArtistDetail> fetch(
+    BuiltinTransport http,
     String artistId, {
     int page = 1,
     int limit = kArtistPageSize,
   }) async {
     final songsPage = await lxHttpGet(
+      http,
       'https://music.163.com/api/v1/artist/songs'
       '?id=$artistId&offset=${(page - 1) * limit}&limit=$limit&order=hot',
       headers: const {'Referer': 'https://music.163.com/'},
@@ -93,6 +97,7 @@ class WyArtist {
     dynamic info;
     try {
       info = await lxHttpPost(
+        http,
         'https://music.163.com/weapi/v1/artist/$artistId',
         form: true,
         headers: const {
@@ -118,7 +123,7 @@ class WyArtist {
     final tracks = ids.isEmpty
         ? const <Track>[]
         : [
-            for (final track in await WyMusicDetail.getList(ids))
+            for (final track in await WyMusicDetail.getList(http, ids))
               trackFromSourceTrack(track),
           ];
 

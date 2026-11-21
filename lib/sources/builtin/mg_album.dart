@@ -22,11 +22,13 @@ class MgAlbum {
   MgAlbum._();
 
   static Future<Album> fetch(
+    BuiltinTransport http,
     String albumId, {
     int page = 1,
     int limit = kAlbumPageSize,
   }) async {
     final songs = await lxHttpGet(
+      http,
       'http://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/queryAlbumSong'
       '?albumId=$albumId&pageNo=$page',
       retries: BuiltinTransport.defaultRetries,
@@ -36,6 +38,7 @@ class MgAlbum {
     dynamic info;
     try {
       info = await lxHttpGet(
+        http,
         'https://app.c.nf.migu.cn/MIGUM3.0/resource/album/v2.0?albumId=$albumId',
         retries: BuiltinTransport.defaultRetries,
       );

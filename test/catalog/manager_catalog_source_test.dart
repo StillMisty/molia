@@ -13,8 +13,6 @@ import 'package:molia/sources/any_listen/any_listen_config.dart';
 import 'package:molia/sources/any_listen/any_listen_source.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_play.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
-import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/lx/lx_engine.dart';
 import 'package:molia/sources/lx/lx_engine_supervisor.dart';
 import 'package:molia/sources/lx/lx_engine_types.dart';
@@ -26,6 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/bili_session_mock.dart';
 import '../support/mock_dio.dart';
 import '../support/settings_test_support.dart';
+import '../support/transport_test_support.dart';
 
 /// 适配器测试：真实 SourceManager + any-listen 本地 mock HTTP 服务
 /// （与 any_listen_manager_test.dart 相同手法，不访问真实网络）。
@@ -53,6 +52,16 @@ class _FakeResolveEngine implements LxEngine {
 
   bool running = false;
   Map<String, LxSourceDecl> _sources = {};
+
+  /// 引擎启动后声明的源；默认是脚本降档测试用的 `lx_test`。
+  Map<String, LxSourceDecl> declaredSources = const {
+    'lx_test': LxSourceDecl(
+      key: 'lx_test',
+      name: 'LX 测试',
+      actions: ['musicUrl'],
+      qualitys: ['flac', '320k', '128k'],
+    ),
+  };
   final StreamController<LxLogEntry> _logs =
       StreamController<LxLogEntry>.broadcast();
   final StreamController<LxUpdateAlert> _alerts =
@@ -79,14 +88,7 @@ class _FakeResolveEngine implements LxEngine {
     Duration timeout = const Duration(seconds: 30),
   }) async {
     running = true;
-    _sources = {
-      'lx_test': const LxSourceDecl(
-        key: 'lx_test',
-        name: 'LX 测试',
-        actions: ['musicUrl'],
-        qualitys: ['flac', '320k', '128k'],
-      ),
-    };
+    _sources = Map<String, LxSourceDecl>.from(declaredSources);
     return Map<String, LxSourceDecl>.from(_sources);
   }
 
@@ -405,8 +407,7 @@ void main() {
     });
 
     test('collection：内置平台专辑路由到 SourceManager.fetchAlbum', () async {
-      final original = BuiltinSearch.transport;
-      BuiltinSearch.transport = BuiltinTransport(
+      final transport = testTransport(
         dio: createAppDio(
           adapter: MockDioAdapter(
             (options) async => textResponse(
@@ -418,9 +419,10 @@ void main() {
           ),
         ),
       );
-      addTearDown(() => BuiltinSearch.transport = original);
-
-      final manager = SourceManager(settings: testSettingsRegistry());
+      final manager = SourceManager(
+        settings: testSettingsRegistry(),
+        builtinTransport: transport,
+      );
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('kw', manager);
       final page = await source.collection(
@@ -680,14 +682,15 @@ void main() {
     });
 
     test('search：平台返回 failed 时抛 SourceFailure（不静默成空结果）', () async {
-      final original = BuiltinSearch.transport;
-      addTearDown(() => BuiltinSearch.transport = original);
-      BuiltinSearch.transport = BuiltinTransport(
+      final transport = testTransport(
         dio: mockDio((_) async => textResponse('{}', statusCode: 500)),
       );
       BiliApi.reset();
 
-      final manager = SourceManager(settings: testSettingsRegistry());
+      final manager = SourceManager(
+        settings: testSettingsRegistry(),
+        builtinTransport: transport,
+      );
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('bili', manager);
 
@@ -831,13 +834,11 @@ void main() {
     });
 
     test('B 站原生取链：headers / expiresIn 经适配器原样透传', () async {
-      final original = BuiltinSearch.transport;
-      addTearDown(() => BuiltinSearch.transport = original);
       BiliApi.reset();
       BiliPlay.reset();
       final deadline = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600;
       final requested = <String>[];
-      BuiltinSearch.transport = BuiltinTransport(
+      final transport = testTransport(
         dio: mockDio((request) async {
           final session = biliSessionResponse(request);
           if (session != null) return session;
@@ -863,7 +864,10 @@ void main() {
         }),
       );
 
-      final manager = SourceManager(settings: testSettingsRegistry());
+      final manager = SourceManager(
+        settings: testSettingsRegistry(),
+        builtinTransport: transport,
+      );
       addTearDown(manager.dispose);
       final source = SourceManagerMusicSource('bili', manager);
       final track = Track(
@@ -887,4 +891,57 @@ void main() {
       expect(stream.expiresIn!.inMinutes, greaterThan(50));
     });
   });
+
+  group('SourceManager · 内置渠道 + 脚本取链的惰性激活', () {
+    test('wy 只有脚本 musicUrl 且脚本尚未激活：resolve 先激活再取链', () async {
+      final engine = _FakeResolveEngine()
+        ..declaredSources = const {
+          'wy': LxSourceDecl(
+            key: 'wy',
+            name: '脚本网易',
+            actions: ['musicUrl'],
+            qualitys: ['320k'],
+          ),
+        };
+      final manager = SourceManager(
+        engine: LxEngineSupervisor(engineFactory: () => engine),
+        settings: testSettingsRegistry(),
+      );
+      await manager.init();
+      addTearDown(manager.dispose);
+
+      // 保存为激活脚本，但不启动引擎：模拟启动激活失败后的状态。
+      final info = LxScriptInfo.parse(_wyScript)!;
+      await manager.repository.add(info);
+      await manager.repository.setActive(info.id);
+      expect(manager.activeSources, isEmpty);
+      expect(engine.isRunning, isFalse);
+
+      final stream = await manager.resolveStream(
+        SourceTrack(
+          sourceKey: 'wy',
+          origin: 'builtin',
+          title: '惰性激活',
+          artist: '歌手',
+          album: '',
+          qualities: const [SourceQuality(type: '320k')],
+          raw: const {'songmid': '123', 'source': 'wy'},
+        ),
+        requestedQuality: '320k',
+      );
+
+      expect(stream.uri.path, '/lx/320k.mp3');
+      expect(engine.isRunning, isTrue, reason: '取链入口必须补一次脚本激活');
+      expect(engine.calls.single.quality, '320k');
+    });
+  });
 }
+
+const _wyScript = '''
+/**
+ * @name 网易脚本取链
+ * @description fake
+ * @version 1.0.0
+ */
+globalThis.lx.on('request', () => {});
+''';

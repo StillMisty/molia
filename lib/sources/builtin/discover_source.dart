@@ -1,4 +1,5 @@
 import '../../domain/models/discover.dart';
+import 'builtin_transport.dart';
 import 'channel/channels.dart';
 
 /// 内置平台「发现」能力抽象：热榜 / 歌单（标签浏览、搜索、详情）/ 热搜词。
@@ -16,13 +17,19 @@ abstract class DiscoverSource {
   List<DiscoverLeaderboard> get leaderboards;
 
   /// 榜单曲目（[bangid] 为平台原始榜单 id）。
-  Future<List<DiscoverTrack>> leaderboardTracks(String bangid);
+  Future<List<DiscoverTrack>> leaderboardTracks(
+    BuiltinTransport http,
+    String bangid,
+  );
 
   /// 榜单封面（轻量请求；平台没有榜单封面时返回 null）。
   ///
   /// 默认 null：发现页会用第一首曲目的封面兜底；平台能直接给出榜单封面时
   /// 覆写本方法，避免为了一个缩略图拉完整曲目列表。
-  Future<String?> leaderboardCover(String bangid) async => null;
+  Future<String?> leaderboardCover(
+    BuiltinTransport http,
+    String bangid,
+  ) async => null;
 
   /// 是否有轻量榜单封面接口。
   ///
@@ -32,19 +39,31 @@ abstract class DiscoverSource {
   bool get hasLeaderboardCoverEndpoint => false;
 
   /// 歌单标签（热门 + 分类目录）。
-  Future<DiscoverTags> tags();
+  Future<DiscoverTags> tags(BuiltinTransport http);
 
   /// 标签歌单列表（[tagId] 为空表示推荐/全部）。
-  Future<DiscoverPlaylistPage> playlists(String tagId, int page);
+  Future<DiscoverPlaylistPage> playlists(
+    BuiltinTransport http,
+    String tagId,
+    int page,
+  );
 
   /// 歌单搜索。
-  Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page);
+  Future<DiscoverPlaylistPage> searchPlaylists(
+    BuiltinTransport http,
+    String keyword,
+    int page,
+  );
 
   /// 歌单详情（支持平台 ID / 链接）。
-  Future<DiscoverDetail> playlistDetail(String rawId, int page);
+  Future<DiscoverDetail> playlistDetail(
+    BuiltinTransport http,
+    String rawId,
+    int page,
+  );
 
   /// 热搜词。
-  Future<List<String>> hotSearches();
+  Future<List<String>> hotSearches(BuiltinTransport http);
 
   bool get supportsLeaderboards => leaderboards.isNotEmpty;
   bool get supportsPlaylists => true;

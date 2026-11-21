@@ -11,11 +11,11 @@ import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_lyric.dart';
 import 'package:molia/sources/builtin/bili_play.dart';
 import 'package:molia/sources/builtin/bili_session.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/bili_session_mock.dart';
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 /// 歌词来源注册表与通用内置 platform provider：渠道自动派生、B 站登录
 /// 门槛、手动换源的搜索 / 取词（raw 透传）与失败收口。
@@ -30,18 +30,14 @@ void main() {
     extra: const {'bvid': 'BV1xx411c7mD', 'cid': 777},
   );
 
-  late BuiltinTransport originalTransport;
-
-  setUpAll(() => originalTransport = BuiltinSearch.transport);
+  late BuiltinTransport transport;
 
   setUp(() {
-    // 每个用例都从真实传输基线出发：上一个用例注入的 mock 不外溢。
-    BuiltinSearch.transport = originalTransport;
+    // 每个用例都从独立传输基线出发：上一个用例注入的 mock 不外溢。
+    transport = testTransport();
     BiliApi.reset();
     BiliPlay.reset();
   });
-
-  tearDownAll(() => BuiltinSearch.transport = originalTransport);
 
   void login({BiliSession? session}) {
     (session ?? BiliSession.shared).apply(
@@ -55,7 +51,7 @@ void main() {
     FutureOrResponse endpoint, {
     List<RequestOptions>? requests,
   }) {
-    return BuiltinTransport(
+    return testTransport(
       dio: mockDio((request) async {
         requests?.add(request);
         final session = biliSessionResponse(request);
@@ -67,7 +63,10 @@ void main() {
 
   group('lyrics source registry', () {
     test('standard：渠道按内置顺序声明，B 站只进手动换源', () {
-      final registry = LyricsSourceRegistry.standard;
+      final registry = LyricsSourceRegistry.forSession(
+        BiliSession.shared,
+        transport: testTransport(),
+      );
 
       expect(registry.strategies.map((strategy) => strategy.channelKey), [
         'tx',
@@ -122,8 +121,10 @@ void main() {
 
     test('B 站可用性按调用时求值：登录后消失、退出后恢复', () {
       final session = BiliSession();
-      final bili = LyricsSourceRegistry.forSession(session).strategies
-          .firstWhere((s) => s.channelKey == 'bili');
+      final bili = LyricsSourceRegistry.forSession(
+        session,
+        transport: testTransport(),
+      ).strategies.firstWhere((s) => s.channelKey == 'bili');
 
       expect(bili.unavailable!(), LyricsSourceUnavailable.biliLoginRequired);
 
@@ -138,7 +139,7 @@ void main() {
   group('builtin lyric provider', () {
     test('搜索：B 站视频 → SongMatch（bvid / UP 主 / 时长 / raw）', () async {
       final requests = <RequestOptions>[];
-      BuiltinSearch.transport = biliTransport((request) async {
+      transport = biliTransport((request) async {
         if (request.uri.path == '/x/web-interface/wbi/search/type') {
           return textResponse(
             jsonEncode({
@@ -163,8 +164,10 @@ void main() {
         return textResponse('{}', statusCode: 404);
       }, requests: requests);
 
-      final matches = await BuiltinLyricProvider('bili')
-          .searchMultiple('晴天', '周杰伦', limit: 3);
+      final matches = await BuiltinLyricProvider(
+        'bili',
+        http: transport,
+      ).searchMultiple('晴天', '周杰伦', limit: 3);
 
       expect(matches, hasLength(1));
       final match = matches.single;
@@ -189,7 +192,7 @@ void main() {
     test('取词：raw 透传给字幕接口，空扩展行按 null', () async {
       final session = BiliSession();
       login(session: session);
-      BuiltinSearch.transport = biliTransport((request) async {
+      transport = biliTransport((request) async {
         switch (request.uri.path) {
           case '/x/player/wbi/v2':
             return textResponse(
@@ -224,7 +227,9 @@ void main() {
 
       final provider = BuiltinLyricProvider(
         'bili',
-        adapter: BiliLyric(session: session).fetch,
+        http: transport,
+        adapter: (http, raw) =>
+            BiliLyric(transport: http, session: session).fetch(raw),
       );
       final payload = await provider.fetchForMatch(biliMatch);
 
@@ -239,7 +244,7 @@ void main() {
 
     test('未登录：B 站取词直接返回 null，不发请求', () async {
       final requests = <RequestOptions>[];
-      BuiltinSearch.transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) async {
           requests.add(request);
           return textResponse('{}', statusCode: 500);
@@ -248,7 +253,9 @@ void main() {
 
       final payload = await BuiltinLyricProvider(
         'bili',
-        adapter: BiliLyric(session: BiliSession()).fetch,
+        http: transport,
+        adapter: (http, raw) =>
+            BiliLyric(transport: http, session: BiliSession()).fetch(raw),
       ).fetchForMatch(biliMatch);
 
       expect(payload, isNull);
@@ -256,18 +263,20 @@ void main() {
     });
 
     test('搜索失败：归一为空结果（不抛给换源页）', () async {
-      BuiltinSearch.transport = biliTransport(
+      transport = biliTransport(
         (request) async => textResponse('{}', statusCode: 500),
       );
 
-      final matches = await BuiltinLyricProvider('bili')
-          .searchMultiple('晴天', '周杰伦');
+      final matches = await BuiltinLyricProvider(
+        'bili',
+        http: transport,
+      ).searchMultiple('晴天', '周杰伦');
       expect(matches, isEmpty);
     });
 
     test('空关键词：不搜索、不请求', () async {
       final requests = <RequestOptions>[];
-      BuiltinSearch.transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) async {
           requests.add(request);
           return textResponse('{}', statusCode: 500);
@@ -275,7 +284,10 @@ void main() {
       );
 
       expect(
-        await BuiltinLyricProvider('bili').searchMultiple(' ', ''),
+        await BuiltinLyricProvider(
+          'bili',
+          http: transport,
+        ).searchMultiple(' ', ''),
         isEmpty,
       );
       expect(requests, isEmpty);

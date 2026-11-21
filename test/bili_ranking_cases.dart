@@ -6,31 +6,28 @@ import 'package:molia/data/http/app_dio.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_ranking.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
 import 'support/bili_session_mock.dart';
+import 'support/transport_test_support.dart';
 
 /// B 站音乐榜：唯一榜单表、`rid:day` 解析、cid 透传与 5 分钟缓存。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late BuiltinTransport originalTransport;
+  late BuiltinTransport transport;
   late int rankingCalls;
 
   final fixture = jsonDecode(
     File('test/fixtures/bili_ranking.json').readAsStringSync(),
   ) as Map<String, dynamic>;
 
-  setUpAll(() => originalTransport = BuiltinSearch.transport);
-
   setUp(() {
+    transport = testTransport();
     BiliApi.reset();
     rankingCalls = 0;
   });
-
-  tearDown(() => BuiltinSearch.transport = originalTransport);
 
   MockDioAdapter install({bool fail = false}) {
     final adapter = MockDioAdapter((options) async {
@@ -46,9 +43,7 @@ void main() {
           return textResponse('{}', statusCode: 500);
       }
     });
-    BuiltinSearch.transport = BuiltinTransport(
-      dio: createAppDio(adapter: adapter),
-    );
+    transport = testTransport(dio: createAppDio(adapter: adapter));
     return adapter;
   }
 
@@ -72,7 +67,7 @@ void main() {
   test('榜单曲目：bvid/aid/cid/封面/时长，cid 保留在 raw', () async {
     final adapter = install();
 
-    final tracks = await BiliRanking.leaderboardTracks('3:3');
+    final tracks = await BiliRanking.leaderboardTracks(transport, '3:3');
 
     expect(tracks, hasLength(2));
     expect(tracks.first.sourceKey, 'bili');
@@ -103,8 +98,8 @@ void main() {
   test('二次调用命中缓存，不重复请求', () async {
     install();
 
-    await BiliRanking.leaderboardTracks('3:3');
-    await BiliRanking.leaderboardTracks('3:3');
+    await BiliRanking.leaderboardTracks(transport, '3:3');
+    await BiliRanking.leaderboardTracks(transport, '3:3');
 
     expect(rankingCalls, 1);
   });
@@ -113,12 +108,12 @@ void main() {
     install(fail: true);
 
     await expectLater(
-      BiliRanking.leaderboardTracks('3:3'),
+      BiliRanking.leaderboardTracks(transport, '3:3'),
       throwsA(isA<SourceFailure>()),
     );
     // 失败后再次调用会重新请求，而不是复用失败结果。
     await expectLater(
-      BiliRanking.leaderboardTracks('3:3'),
+      BiliRanking.leaderboardTracks(transport, '3:3'),
       throwsA(isA<SourceFailure>()),
     );
     expect(rankingCalls, 2);
@@ -126,7 +121,7 @@ void main() {
 
   test('不支持的 bangid：unsupported 失败', () async {
     await expectLater(
-      BiliRanking.leaderboardTracks('4:3'),
+      BiliRanking.leaderboardTracks(transport, '4:3'),
       throwsA(
         isA<SourceFailure>().having(
           (e) => e.kind,

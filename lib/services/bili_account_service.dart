@@ -20,16 +20,25 @@ import '../domain/models/bili_account.dart';
 import '../sources/builtin/bili_client.dart';
 import '../sources/builtin/bili_login.dart';
 import '../sources/builtin/bili_session.dart';
+import '../sources/builtin/builtin_transport.dart';
 
 class BiliAccountService extends ChangeNotifier {
   BiliAccountService({
     required this._settings,
+    BuiltinTransport? builtinTransport,
     BiliQrLogin? login,
     BiliSession? session,
   }) : _session = BiliSession.resolve(session) {
     // 扫码请求（含 nav 资料）必须读同一份会话：否则注入的 session 只影响
-    // 设置页，而 BiliQrLogin 仍拿共享 Cookie。
-    _login = login ?? BiliQrLogin(client: BiliClient(session: _session));
+    // 设置页，而 BiliQrLogin 仍拿共享 Cookie。传输同样由组合根注入。
+    _login =
+        login ??
+        BiliQrLogin(
+          client: BiliClient(
+            transport: builtinTransport ?? BuiltinTransport(),
+            session: _session,
+          ),
+        );
   }
 
   final SettingsAccess _settings;

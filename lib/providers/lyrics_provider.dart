@@ -71,8 +71,9 @@ class LyricsState {
 /// 页面只渲染 [state]（不再从 build 触发取词）。输出侧 / 预取 / 手动选择
 /// 分别走 [preload] / [saveManual]；[retry] 供页面或用户显式重试。
 class LyricsProvider extends ChangeNotifier {
-  LyricsProvider({LyricsService? service})
-    : _service = service ?? LyricsService();
+  LyricsProvider({required LyricsService service})
+    // ignore: prefer_initializing_formals
+    : _service = service;
 
   final LyricsService _service;
 

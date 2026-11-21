@@ -9,30 +9,28 @@ import 'package:molia/domain/models/comment.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_comment.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/comment_source.dart';
 
 import 'support/mock_dio.dart';
 import 'support/bili_session_mock.dart';
+import 'support/transport_test_support.dart';
 
 /// B 站评论：热门/最新 mode、游标翻页、嵌套回复、IP 归属地与业务码失败。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late BuiltinTransport originalTransport;
+  late BuiltinTransport transport;
   late String fixtureText;
 
-  setUpAll(() => originalTransport = BuiltinSearch.transport);
-
   setUp(() {
+    transport = testTransport();
     BiliApi.reset();
     BiliComment.resetForTest();
     fixtureText = File('test/fixtures/bili_comment.json').readAsStringSync();
   });
 
   tearDown(() {
-    BuiltinSearch.transport = originalTransport;
     BiliComment.resetForTest();
   });
 
@@ -50,16 +48,18 @@ void main() {
           return textResponse('{}', statusCode: 500);
       }
     });
-    BuiltinSearch.transport = BuiltinTransport(
-      dio: createAppDio(adapter: adapter),
-    );
+    transport = testTransport(dio: createAppDio(adapter: adapter));
     return adapter;
   }
 
   test('热门第 1 页：mode=3、无 pagination_str、游标/总数/嵌套回复', () async {
     final adapter = install((options) async => textResponse(fixtureText));
 
-    final page = await BiliComment.fetch('987654', kind: CommentKind.hot);
+    final page = await BiliComment.fetch(
+      transport,
+      '987654',
+      kind: CommentKind.hot,
+    );
 
     final query = adapter.lastRequest.uri.queryParameters;
     expect(query['type'], '1');
@@ -128,12 +128,17 @@ void main() {
       );
     });
 
-    final first = await BiliComment.fetch('987654', kind: CommentKind.latest);
+    final first = await BiliComment.fetch(
+      transport,
+      '987654',
+      kind: CommentKind.latest,
+    );
     expect(first.page, 1);
     expect(first.hasMore, isTrue);
     expect(adapter.lastRequest.uri.queryParameters['mode'], '2');
 
     final second = await BiliComment.fetch(
+      transport,
       '987654',
       kind: CommentKind.latest,
       page: 2,
@@ -157,6 +162,7 @@ void main() {
     final adapter = install((options) async => textResponse(fixtureText));
 
     final page = await BiliComment.fetch(
+      transport,
       '987654',
       kind: CommentKind.hot,
       page: 2,
@@ -191,7 +197,7 @@ void main() {
       );
     });
 
-    final page = await BiliComment.fetch('1', kind: CommentKind.hot);
+    final page = await BiliComment.fetch(transport, '1', kind: CommentKind.hot);
     expect(page.items.single.text, '热评');
     expect(page.hasMore, isFalse);
     expect(page.total, 1);
@@ -215,7 +221,7 @@ void main() {
       );
     });
 
-    final page = await BiliComment.fetch('1', kind: CommentKind.hot);
+    final page = await BiliComment.fetch(transport, '1', kind: CommentKind.hot);
     expect(page.items.single.text, '没有游标');
     expect(page.hasMore, isFalse);
     expect(BiliComment.cursorStore.read('bili:1:hot', 2), isNull);
@@ -227,7 +233,7 @@ void main() {
     });
 
     await expectLater(
-      BiliComment.fetch('987654', kind: CommentKind.hot),
+      BiliComment.fetch(transport, '987654', kind: CommentKind.hot),
       throwsA(
         isA<SourceFailure>()
             .having((f) => f.kind, 'kind', FailureKind.unknown)
@@ -242,7 +248,7 @@ void main() {
     });
 
     await expectLater(
-      BiliComment.fetch('987654', kind: CommentKind.latest),
+      BiliComment.fetch(transport, '987654', kind: CommentKind.latest),
       throwsA(
         isA<SourceFailure>()
             .having((f) => f.kind, 'kind', FailureKind.notFound)
@@ -254,7 +260,7 @@ void main() {
   test('BuiltinComments 调度：bili 从 raw 的 aid 取评论', () async {
     install((options) async => textResponse(fixtureText));
 
-    final page = await BuiltinComments.fetch('bili', const {
+    final page = await BuiltinComments.fetch(transport, 'bili', const {
       'bvid': 'BV1xx411c7mD',
       'aid': 987654,
     }, kind: CommentKind.hot);

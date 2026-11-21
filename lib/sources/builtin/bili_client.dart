@@ -11,7 +11,6 @@ library;
 import '../../domain/models/failure.dart';
 import 'bili_api.dart';
 import 'bili_session.dart';
-import 'builtin_search.dart';
 import 'builtin_transport.dart';
 
 /// 请求鉴权口径：决定请求头、是否 WBI 签名，以及风控后是否刷新会话。
@@ -55,20 +54,20 @@ enum BiliCodePolicy {
   none,
 }
 
-/// B 站端点客户端（可在测试里注入独立传输 / 账号会话）。
+/// B 站端点客户端：传输与账号会话都显式注入。
+///
+/// 生产由组合根把同一个 [BuiltinTransport] 交给各业务文件；测试构造自己
+/// 的传输 / 会话，不碰进程级静态变量。
 class BiliClient {
-  const BiliClient({this._transport, this._session});
+  // 命名参数保持 session（调用方语义），字段按本类惯例私有。
+  const BiliClient({required this.transport, BiliSession? session})
+    // ignore: prefer_initializing_formals
+    : _session = session;
 
-  /// 生产 / 业务文件共用实例：传输走 [BuiltinSearch.transport]，账号会话走
-  /// [BiliSession.shared]；测试替换全局传输或注入自己的客户端即可覆盖。
-  /// 自身不持有可变状态，因此不需要 reset。
-  static const BiliClient shared = BiliClient();
+  /// 唯一 HTTP 传输（缓存 / 重试预算与其它内置平台共享）。
+  final BuiltinTransport transport;
 
-  final BuiltinTransport? _transport;
   final BiliSession? _session;
-
-  /// 显式注入优先；否则跟随全局传输（组合根与既有测试的注入点）。
-  BuiltinTransport get transport => _transport ?? BuiltinSearch.transport;
 
   /// 账号 Cookie 来源：显式注入优先，否则是生产共享会话。
   BiliSession get session => BiliSession.resolve(_session);
@@ -121,10 +120,6 @@ class BiliClient {
       throw SourceFailure.from(error);
     }
   }
-
-  /// 与内置平台共用的结果缓存（整表端点，如榜单）。
-  Future<T> cached<T>(String key, Future<T> Function() create) =>
-      transport.cached(key, create);
 
   /// 跟随短链跳转（b23.tv → 收藏夹链接）；只读 Location，不解析 body。
   Future<Uri?> resolveRedirect(Uri uri) =>

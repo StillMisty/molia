@@ -117,7 +117,7 @@ extension SourceProfileDescriptors on Iterable<SourceProfile> {
 /// ChangeNotifier 里维护，重复构建只有个位数条目；多一份缓存就多一处失效
 /// 逻辑，反而容易与路由漂移。
 class SourceProfiles {
-  SourceProfiles._(this._byKey, this.channels)
+  SourceProfiles._(this._byKey, this.channels, this.declarations)
     : searchable = List.unmodifiable(
         channels.where((profile) => profile.enabled && profile.searchable),
       );
@@ -126,6 +126,11 @@ class SourceProfiles {
 
   /// 渠道列表（含停用项；按用户顺序）。
   final List<SourceProfile> channels;
+
+  /// 本轮快照消费的激活脚本声明（脚本 action 的唯一事实）。
+  ///
+  /// 路由与画像共用这一份，避免调用方再传一份 declarations 造成漂移。
+  final Map<String, LxSourceDecl> declarations;
 
   /// 可搜索且启用的源（按用户顺序；`SourceRegistry.descriptors` 的输入）。
   final List<SourceProfile> searchable;
@@ -200,6 +205,7 @@ class SourceProfiles {
     return SourceProfiles._(
       Map.unmodifiable(profiles),
       List.unmodifiable([for (final key in orderedKeys) profiles[key]!]),
+      Map.unmodifiable(activeSources),
     );
   }
 

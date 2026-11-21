@@ -4,6 +4,7 @@ import 'builtin_search_runner.dart';
 import 'lyric_hit.dart';
 import 'lyric_search_runner.dart';
 import 'tx_search.dart';
+import 'builtin_transport.dart';
 
 /// QQ 音乐「按歌词搜歌」（musicu `search_type=7`，与单曲搜索同模块）。
 ///
@@ -18,12 +19,14 @@ class TxLyricSearch {
   static const int _searchTypeLyric = 7;
 
   static Future<LyricSearchPage> search(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = 30,
   }) {
     return runBuiltinLyricSearch(
       _callFor(keyword, page, limit),
+      http,
       page: page,
       limit: limit,
     );

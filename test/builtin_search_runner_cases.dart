@@ -9,19 +9,16 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/failure.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_search_runner.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/kg_search.dart';
 import 'package:molia/sources/source_track.dart';
 
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 void main() {
-  late BuiltinTransport original;
-
-  setUp(() => original = BuiltinSearch.transport);
-  tearDown(() => BuiltinSearch.transport = original);
+  late BuiltinTransport transport;
 
   BuiltinSearchCall callOf({
     required bool Function(dynamic response) isInvalid,
@@ -45,11 +42,12 @@ void main() {
   }
 
   test('平台返回空：正常结果（无 failure、无 total、无下一页）', () async {
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((_) async => textResponse('{}', statusCode: 200)),
     );
     final result = await runBuiltinSearch(
       callOf(isInvalid: (_) => false, parseItems: (_) => null),
+      transport,
       page: 1,
       limit: 30,
     );
@@ -60,11 +58,12 @@ void main() {
   });
 
   test('响应非法（平台业务拒绝）：失败结果，不抛异常', () async {
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((_) async => textResponse('{"code":7}', statusCode: 200)),
     );
     final result = await runBuiltinSearch(
       callOf(isInvalid: (response) => response['code'] != 0),
+      transport,
       page: 1,
       limit: 30,
     );
@@ -76,11 +75,12 @@ void main() {
   });
 
   test('传输失败（重试耗尽）：归一为失败结果（network/retryable）', () async {
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((_) async => throw const SocketExceptionStub()),
     );
     final result = await runBuiltinSearch(
       callOf(isInvalid: (_) => false),
+      transport,
       page: 1,
       limit: 30,
     );
@@ -90,7 +90,7 @@ void main() {
 
   test('重试预算由 call 持有：retryIf 命中即按预算重试', () async {
     var calls = 0;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((_) async {
         calls++;
         return textResponse(jsonEncode({'ready': calls >= 3}), statusCode: 200);
@@ -103,6 +103,7 @@ void main() {
         isInvalid: (response) => response['ready'] != true,
         parseItems: (_) => const [],
       ),
+      transport,
       page: 1,
       limit: 30,
     );
@@ -111,11 +112,12 @@ void main() {
   });
 
   test('分页推断：total 与 limit 决定 hasMore', () async {
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((_) async => textResponse('{}', statusCode: 200)),
     );
     final result = await runBuiltinSearch(
       callOf(isInvalid: (_) => false, totalOf: (_) => 100),
+      transport,
       page: 1,
       limit: 30,
     );
@@ -124,7 +126,7 @@ void main() {
   });
 
   test('分页推断：平台明确 isEnd 优先于 total', () async {
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((_) async => textResponse('{}', statusCode: 200)),
     );
     final result = await runBuiltinSearch(
@@ -133,6 +135,7 @@ void main() {
         totalOf: (_) => 100,
         isEndOf: (_) => true,
       ),
+      transport,
       page: 1,
       limit: 30,
     );
@@ -159,11 +162,16 @@ void main() {
         ],
       },
     });
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((_) async => textResponse(body, statusCode: 200)),
     );
 
-    final result = await KgSearch.searchWithMeta('hello', page: 1, limit: 30);
+    final result = await KgSearch.searchWithMeta(
+      transport,
+      'hello',
+      page: 1,
+      limit: 30,
+    );
     expect(result.failure, isNull);
     expect(result.tracks, hasLength(1));
     expect(result.tracks.single.title, 'Hello');
@@ -174,20 +182,30 @@ void main() {
       'error_code': 0,
       'data': {'total': 2},
     });
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((_) async => textResponse(body, statusCode: 200)),
     );
-    final empty = await KgSearch.searchWithMeta('hello', page: 1, limit: 30);
+    final empty = await KgSearch.searchWithMeta(
+      transport,
+      'hello',
+      page: 1,
+      limit: 30,
+    );
     expect(empty.tracks, isEmpty);
     expect(empty.failure, isNull);
     expect(empty.total, isNull);
 
     // 业务码异常：失败结果（重试预算耗尽后不抛异常）。
     body = jsonEncode({'error_code': 20001});
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((_) async => textResponse(body, statusCode: 200)),
     );
-    final failed = await KgSearch.searchWithMeta('hello', page: 1, limit: 30);
+    final failed = await KgSearch.searchWithMeta(
+      transport,
+      'hello',
+      page: 1,
+      limit: 30,
+    );
     expect(failed.failure, isNotNull);
     expect(failed.failure!.kind, FailureKind.unknown);
   });

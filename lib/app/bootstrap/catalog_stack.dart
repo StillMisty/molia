@@ -27,6 +27,7 @@ import '../../services/language_service.dart';
 import '../../services/poster/poster_style_settings.dart';
 import '../../services/shortcut_settings.dart';
 import '../../services/source_swap/swap_query_planner.dart';
+import '../../sources/builtin/builtin_transport.dart';
 import '../../sources/source_manager.dart';
 
 /// 目录栈产物（字段即子系统的对外面；构造顺序见 [buildCatalogStack]）。
@@ -98,6 +99,10 @@ CatalogStack buildCatalogStack({
   );
   PosterStyleSettings.attachSettings(posterStyleSettings);
 
+  // 内置平台唯一 HTTP 传输：B 站账号、音源路由、发现与歌词来源共用同一实例
+  // （缓存 / single-flight / 重试预算不分叉）；测试可直接构造自己的传输。
+  final builtinTransport = BuiltinTransport();
+
   // B 站账号：凭据是凭证类别（默认随同步 / 备份），初始化放后台，取词链路
   // 会 await `BiliSession.ready`，不阻塞首帧。
   late final BiliAccountService biliAccount;
@@ -107,7 +112,10 @@ CatalogStack buildCatalogStack({
       reload: () => biliAccount.reloadFromSettings(),
     ),
   );
-  biliAccount = BiliAccountService(settings: biliSettings);
+  biliAccount = BiliAccountService(
+    settings: biliSettings,
+    builtinTransport: builtinTransport,
+  );
   // 凭据在本机凭据库（明文 SQLite）：启动即可懒读，登录用户的字幕链路
   // 不依赖「先打开账号页」；读取失败按匿名会话降级。
   unawaited(biliAccount.init());
@@ -137,7 +145,10 @@ CatalogStack buildCatalogStack({
       ],
     ),
   );
-  sourceManager = SourceManager(settings: sourceSettings);
+  sourceManager = SourceManager(
+    settings: sourceSettings,
+    builtinTransport: builtinTransport,
+  );
 
   // 适配层：SourceManager → SourceRegistry → CatalogService。
   // SearchProvider 只依赖后两者（搜索缓存 single-flight + LRU + TTL 5min）。

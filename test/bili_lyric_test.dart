@@ -8,17 +8,17 @@ import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_lyric.dart';
 import 'package:molia/sources/builtin/bili_play.dart';
 import 'package:molia/sources/builtin/bili_session.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/bili_session_mock.dart';
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 /// B 站 CC 字幕歌词：登录态、WBI 取字幕、选轨、LRC 时间轴与失败降级。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late BuiltinTransport originalTransport;
+  late BuiltinTransport transport;
   late List<RequestOptions> options;
   late List<Map<String, dynamic>> subtitles;
   late int playerCode;
@@ -28,13 +28,10 @@ void main() {
 
   const accountCookie = 'SESSDATA=test-sessdata; bili_jct=test-jct';
 
-  setUpAll(() => originalTransport = BuiltinSearch.transport);
-
   setUp(() {
     BiliApi.reset();
     BiliPlay.reset();
     session = BiliSession();
-    biliLyric = BiliLyric(session: session);
     options = [];
     pagelistCalls = 0;
     playerCode = 0;
@@ -46,7 +43,7 @@ void main() {
       {'lan': 'zh-CN', 'lan_doc': '中文（中国）', 'subtitle_url': zhUrl},
     ];
 
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         options.add(request);
         final sessionResponse = biliSessionResponse(request);
@@ -97,9 +94,8 @@ void main() {
         }
       }),
     );
+    biliLyric = BiliLyric(transport: transport, session: session);
   });
-
-  tearDown(() => BuiltinSearch.transport = originalTransport);
 
   void login() {
     session.apply(
@@ -171,7 +167,10 @@ void main() {
     );
 
     // 取链复用同一 cid：歌词拉过之后不应再查分 P。
-    expect(await BiliPlay.cidOf(const {'bvid': 'BV1xx411c7mD'}), 12345);
+    expect(
+      await BiliPlay.cidOf(transport, const {'bvid': 'BV1xx411c7mD'}),
+      12345,
+    );
     expect(pagelistCalls, 1);
     final pagelist = options.firstWhere(
       (o) => o.uri.path == '/x/player/pagelist',
@@ -182,7 +181,7 @@ void main() {
   test('WBI 失败时退回 unsigned 账号接口', () async {
     login();
     var wbiCalls = 0;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         options.add(request);
         final sessionResponse = biliSessionResponse(request);
@@ -223,6 +222,7 @@ void main() {
         return textResponse('{}', statusCode: 500);
       }),
     );
+    biliLyric = BiliLyric(transport: transport, session: session);
 
     final lyric = await biliLyric.fetch(const {'bvid': 'BV1xx411c7mD'});
     expect(lyric?.lyric, '[00:01.000]退回成功');

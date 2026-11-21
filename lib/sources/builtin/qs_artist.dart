@@ -13,6 +13,7 @@ import '../../domain/models/artist.dart';
 import '../../domain/models/track.dart';
 import 'artist_source.dart';
 import 'qs_api.dart';
+import 'builtin_transport.dart';
 import 'qs_search.dart';
 import 'qs_track.dart';
 
@@ -21,11 +22,13 @@ class QsArtist {
 
   /// 歌手搜索（搜索页「歌手」类型）。
   static Future<ArtistSearchPage> search(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = 30,
   }) async {
     final response = await QsApi.getJson(
+      http,
       '/luna/search/artist',
       query: {
         'q': keyword,
@@ -85,11 +88,12 @@ class QsArtist {
 
   /// 歌手详情 + 一页歌曲。
   static Future<ArtistDetail> fetch(
+    BuiltinTransport http,
     String artistId, {
     int page = 1,
     int limit = kArtistPageSize,
   }) async {
-    final loader = await QsApi.shareLoaderData('/share/artist', {
+    final loader = await QsApi.shareLoaderData(http, '/share/artist', {
       'artist_id': artistId,
     });
     final rawPage = loader['artist_page'];
@@ -117,6 +121,7 @@ class QsArtist {
     if (page <= 1 && name.isNotEmpty && tracks.length < limit) {
       try {
         final result = await QsSearch.searchWithMeta(
+          http,
           name,
           page: 1,
           limit: QsSearch.pageSize,

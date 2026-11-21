@@ -8,6 +8,7 @@ import 'builtin_search.dart';
 import 'crypto_utils.dart';
 import 'kw_discover.dart';
 import 'kw_search.dart';
+import 'builtin_transport.dart';
 
 /// 酷我音乐专辑（`search.kuwo.cn/r.s?stype=albuminfo`）。
 ///
@@ -22,11 +23,13 @@ class KwAlbum {
   KwAlbum._();
 
   static Future<Album> fetch(
+    BuiltinTransport http,
     String albumId, {
     int page = 1,
     int limit = kAlbumPageSize,
   }) async {
     final text = await lxHttpGetText(
+      http,
       'http://search.kuwo.cn/r.s?pn=${page - 1}&rn=$limit&stype=albuminfo'
       '&albumid=$albumId&show_copyright_off=0&encoding=utf&vipver=MUSIC_9.1.0',
     );

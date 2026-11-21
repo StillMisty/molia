@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/kg_lyric.dart';
 import 'package:molia/sources/builtin/kw_lyric.dart';
@@ -11,6 +10,7 @@ import 'package:molia/sources/builtin/tx_lyric.dart';
 import 'package:molia/sources/builtin/tx_qrc.dart';
 
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 import 'package:molia/sources/builtin/zlib_io.dart' as zlib_impl;
 
@@ -19,13 +19,7 @@ import 'package:molia/sources/builtin/zlib_io.dart' as zlib_impl;
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late BuiltinTransport originalTransport;
-  setUpAll(() {
-    originalTransport = BuiltinSearch.transport;
-  });
-  tearDown(() {
-    BuiltinSearch.transport = originalTransport;
-  });
+  late BuiltinTransport transport;
 
   group('kg KRC', () {
     const encKey = [
@@ -97,7 +91,7 @@ void main() {
         ],
       });
 
-      BuiltinSearch.transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) async {
           if (request.uri.path.contains('/search')) {
             return bytesResponse(utf8.encode(search), statusCode: 200);
@@ -107,6 +101,7 @@ void main() {
       );
 
       final result = await KgLyric.fetch(
+        transport,
         name: '测试',
         hash: 'HASH',
         timelengthSeconds: 200,
@@ -142,13 +137,13 @@ void main() {
           '[00:00.000]<1120,-1120>你<2400,160>好\n'
           '[00:02.250]<3150,-3150>译<6750,450>文\n'
           '[00:02.250]<3150,-3150>原<6750,450>文\n';
-      BuiltinSearch.transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) async {
           return bytesResponse(encodeLrcx(lrcx), statusCode: 200);
         }),
       );
 
-      final result = await KwLyric.fetch('228908');
+      final result = await KwLyric.fetch(transport, '228908');
       expect(result, isNotNull);
       // `<1120,-1120>` 在 [kuwo:127]（offset 8 / offset2 7）下换算为 <0,160>。
       expect(result!.lyric, contains('[00:00.000]你好'));
@@ -189,13 +184,13 @@ void main() {
       // 明文按 4 个 UTF-16 码元一组分组长，尾部以 \x00 补齐。
       expect(decrypted!.replaceAll(RegExp(r'\x00+$'), ''), raw);
 
-      BuiltinSearch.transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) async {
           return textResponse(encrypted, statusCode: 200);
         }),
       );
       // ignore: unawaited_futures
-      return MgLyric.fetch(mrcUrl: 'https://x/mrc').then((result) {
+      return MgLyric.fetch(transport, mrcUrl: 'https://x/mrc').then((result) {
         expect(result, isNotNull);
         expect(result!.lyric, contains('[00:01.000]你好'));
         expect(result.lxlyric, contains('[00:01.000]<0,200>你<200,300>好'));

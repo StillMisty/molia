@@ -10,6 +10,7 @@ import '../source_track.dart' show SourceTrack;
 import 'bili_client.dart';
 import 'bili_track.dart';
 import 'builtin_transport.dart';
+import 'discover_runner.dart';
 import 'discover_track_mapper.dart';
 
 class BiliRanking {
@@ -32,7 +33,10 @@ class BiliRanking {
   }
 
   /// 榜单曲目（平台一次给全，结果缓存 5 分钟）。
-  static Future<List<DiscoverTrack>> leaderboardTracks(String bangid) async {
+  static Future<List<DiscoverTrack>> leaderboardTracks(
+    BuiltinTransport http,
+    String bangid,
+  ) async {
     final parsed = parseBangid(bangid);
     if (parsed == null) {
       throw SourceFailure(
@@ -41,14 +45,21 @@ class BiliRanking {
       );
     }
     final key = 'bili:ranking:${parsed.rid}:${parsed.day}';
-    return BiliClient.shared.cached(key, () async {
-      final response = await BiliClient.shared.get(
-        '/x/web-interface/ranking',
-        query: {'rid': '${parsed.rid}', 'day': '${parsed.day}'},
-        retries: BuiltinTransport.defaultRetries,
-      );
-      return parseTracks(response);
-    });
+    final client = BiliClient(transport: http);
+    return runDiscoverCall(
+      DiscoverRequestCall<List<DiscoverTrack>>(
+        key: key,
+        request: () => client.get(
+          '/x/web-interface/ranking',
+          query: {'rid': '${parsed.rid}', 'day': '${parsed.day}'},
+          retries: BuiltinTransport.defaultRetries,
+        ),
+        // 业务码由 client 校验；结构不符由 parseTracks 抛出（失败不缓存）。
+        isInvalid: (_) => false,
+        parse: parseTracks,
+      ),
+      http,
+    );
   }
 
   /// 解析榜单响应（供单测 / 调试复用；不读缓存）。

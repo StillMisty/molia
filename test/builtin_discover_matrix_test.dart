@@ -14,7 +14,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
+import 'package:molia/domain/models/discover.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/crypto_utils.dart';
 import 'package:molia/sources/builtin/discover_source.dart';
@@ -24,6 +24,40 @@ import 'support/mock_dio.dart';
 
 /// 按 URL 子串路由的发现请求桩：记录全部请求；未路由的请求直接失败，
 /// 保证「绕开注入 client 的裸请求」不会被静默放过。
+/// 把未绑定的发现声明与一个测试 stub 组合成可直接调用的门面。
+///
+/// 每次调用显式携带该 stub 的 transport，不用进程级 / 用例级可变全局。
+class _BoundSource {
+  const _BoundSource(this._source, this._stub);
+
+  final DiscoverSource _source;
+  final _Stub _stub;
+
+  BuiltinTransport get transport => _stub.transport;
+  List<Uri> get requests => _stub.requests;
+
+  String get sourceKey => _source.sourceKey;
+  List<DiscoverLeaderboard> get leaderboards => _source.leaderboards;
+  bool get supportsLeaderboards => _source.supportsLeaderboards;
+  bool get supportsPlaylists => _source.supportsPlaylists;
+  bool get supportsPlaylistSearch => _source.supportsPlaylistSearch;
+  bool get supportsHotSearch => _source.supportsHotSearch;
+  bool get hasLeaderboardCoverEndpoint => _source.hasLeaderboardCoverEndpoint;
+
+  Future<List<DiscoverTrack>> leaderboardTracks(String bangid) =>
+      _source.leaderboardTracks(transport, bangid);
+  Future<String?> leaderboardCover(String bangid) =>
+      _source.leaderboardCover(transport, bangid);
+  Future<DiscoverTags> tags() => _source.tags(transport);
+  Future<DiscoverPlaylistPage> playlists(String tagId, int page) =>
+      _source.playlists(transport, tagId, page);
+  Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) =>
+      _source.searchPlaylists(transport, keyword, page);
+  Future<DiscoverDetail> playlistDetail(String rawId, int page) =>
+      _source.playlistDetail(transport, rawId, page);
+  Future<List<String>> hotSearches() => _source.hotSearches(transport);
+}
+
 class _Stub {
   _Stub(this.routes);
 
@@ -44,29 +78,30 @@ class _Stub {
     }),
   );
 
-  void install() => BuiltinSearch.transport = transport;
+  _BoundSource bind(DiscoverSource source) => _BoundSource(source, this);
 }
 
 /// 断言失败路径：StateError（重试耗尽或直连业务失败），并校验请求次数。
 Future<void> _expectStateError(
-  _Stub stub,
+  _BoundSource source,
   Future<Object?> Function() run, {
   int? attempts,
   String? reason,
 }) async {
-  stub.install();
   await expectLater(run(), throwsA(isA<StateError>()));
   if (attempts != null) {
-    expect(stub.requests, hasLength(attempts), reason: reason ?? '重试预算保持不变');
+    expect(source.requests, hasLength(attempts), reason: reason ?? '重试预算保持不变');
   }
 }
 
 /// 同一 transport 的二次调用必须命中缓存。
-Future<void> _expectCacheHit(_Stub stub, Future<Object?> Function() run) async {
-  stub.install();
-  final before = stub.requests.length;
+Future<void> _expectCacheHit(
+  _BoundSource source,
+  Future<Object?> Function() run,
+) async {
+  final before = source.requests.length;
   await run();
-  expect(stub.requests, hasLength(before), reason: '二次调用应命中缓存');
+  expect(source.requests, hasLength(before), reason: '二次调用应命中缓存');
 }
 
 /// 酷我 wbd 接口响应需 AES-128-ECB/PKCS7 加密（与适配器解码对称）。
@@ -94,18 +129,8 @@ Map<String, dynamic> _txSongItem() => {
 };
 
 void main() {
-  late BuiltinTransport original;
-
-  setUp(() {
-    original = BuiltinSearch.transport;
-  });
-
-  tearDown(() {
-    BuiltinSearch.transport = original;
-  });
-
   group('酷我发现矩阵', () {
-    final source = BuiltinDiscover.of('kw');
+    final discover = BuiltinDiscover.of('kw');
 
     test('榜单：经注入 client、解析曲目、失败重试 4 次', () async {
       final body = jsonEncode({
@@ -126,18 +151,19 @@ void main() {
         },
       });
       final ok = _Stub({'bang/bang_info': _kwWbdResponse(body)});
-      ok.install();
+      final source = ok.bind(discover);
       final tracks = await source.leaderboardTracks('93');
       expect(tracks.single.title, '歌 & 名');
       expect(tracks.single.songId, '933');
       expect(tracks.single.durationMs, 212000);
       expect(ok.requests.single.host, 'wbd.kuwo.cn');
-      await _expectCacheHit(ok, () => source.leaderboardTracks('93'));
+      await _expectCacheHit(source, () => source.leaderboardTracks('93'));
 
       final bad = _Stub({'bang/bang_info': 'not-base64'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.leaderboardTracks('93'),
+        badSource,
+        () => badSource.leaderboardTracks('93'),
         attempts: 4,
       );
     });
@@ -166,7 +192,7 @@ void main() {
           ],
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final tags = await source.tags();
       expect(tags.categories.single.name, '风格');
       expect(tags.categories.single.tags.single.id, '100-10000');
@@ -177,9 +203,10 @@ void main() {
         'getTagList': '{"code":1}',
         'getRcmTagList': '{"code":1}',
       });
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.tags(),
+        badSource,
+        () => badSource.tags(),
         attempts: 6,
         reason: '两个取数各自重试 3 次',
       );
@@ -204,23 +231,30 @@ void main() {
         },
       });
       final recommend = _Stub({'getRcmPlayList': page});
-      recommend.install();
-      final r = await source.playlists('', 1);
+      final recommendSource = recommend.bind(discover);
+      final r = await recommendSource.playlists('', 1);
       expect(r.playlists.single.id, 'digest-8__123');
       expect(recommend.requests.single.host, 'wapi.kuwo.cn');
 
       final tag = _Stub({'getTagPlayList': page});
-      tag.install();
-      final t = await source.playlists('100-10000', 1);
+      final tagSource = tag.bind(discover);
+      final t = await tagSource.playlists('100-10000', 1);
       expect(t.playlists.single.name, '歌单');
       expect(t.total, 1);
-      await _expectCacheHit(recommend, () => source.playlists('', 1));
-      await _expectCacheHit(tag, () => source.playlists('100-10000', 1));
+      await _expectCacheHit(
+        recommendSource,
+        () => recommendSource.playlists('', 1),
+      );
+      await _expectCacheHit(
+        tagSource,
+        () => tagSource.playlists('100-10000', 1),
+      );
 
       final bad = _Stub({'getTagPlayList': '{"code":1}'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.playlists('100-10000', 1),
+        badSource,
+        () => badSource.playlists('100-10000', 1),
         attempts: 3,
       );
     });
@@ -231,7 +265,7 @@ void main() {
           "'nickname':'作者','pic':'http://img/x.jpg','playcnt':'12',"
           "'songnum':'3'}],'TOTAL':'1'}";
       final ok = _Stub({'search.kuwo.cn/r.s': text});
-      ok.install();
+      final source = ok.bind(discover);
       final page = await source.searchPlaylists('夏', 1);
       expect(page.playlists.single.id, '9');
       expect(page.playlists.single.author, '作者');
@@ -239,9 +273,10 @@ void main() {
 
       // 伪 JSON 转出来不是 Map（数组）才触发业务失败分支。
       final bad = _Stub({'search.kuwo.cn/r.s': '[]'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.searchPlaylists('夏', 1),
+        badSource,
+        () => badSource.searchPlaylists('夏', 1),
         attempts: 1,
       );
     });
@@ -268,15 +303,16 @@ void main() {
         ],
       });
       final ok = _Stub({'nplserver.kuwo.cn/pl.svc': body});
-      ok.install();
+      final source = ok.bind(discover);
       final detail = await source.playlistDetail('123', 1);
       expect(detail.info.name, '歌单');
       expect(detail.tracks.single.artist, 'A、B');
 
       final bad = _Stub({'nplserver.kuwo.cn/pl.svc': '{"result":"no"}'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.playlistDetail('123', 1),
+        badSource,
+        () => badSource.playlistDetail('123', 1),
         attempts: 3,
       );
     });
@@ -295,7 +331,7 @@ void main() {
           'musiclist': const [],
         }),
       });
-      stub.install();
+      final source = stub.bind(discover);
       final detail = await source.playlistDetail('digest-5__777', 1);
       expect(detail.info.name, '推荐歌单');
       expect(detail.info.id, '888');
@@ -313,17 +349,22 @@ void main() {
           ],
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       expect(await source.hotSearches(), ['热词一', '热词二']);
-      await _expectCacheHit(ok, () => source.hotSearches());
+      await _expectCacheHit(source, () => source.hotSearches());
 
       final bad = _Stub({'hotword.kuwo.cn': '{"status":"no"}'});
-      await _expectStateError(bad, () => source.hotSearches(), attempts: 3);
+      final badSource = bad.bind(discover);
+      await _expectStateError(
+        badSource,
+        () => badSource.hotSearches(),
+        attempts: 3,
+      );
     });
   });
 
   group('酷狗发现矩阵', () {
-    final source = BuiltinDiscover.of('kg');
+    final discover = BuiltinDiscover.of('kg');
 
     test('榜单：经注入 client、解析曲目、失败重试 4 次', () async {
       final ok = _Stub({
@@ -347,18 +388,19 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final tracks = await source.leaderboardTracks('8888');
       expect(tracks.single.title, '勇气');
       expect(tracks.single.artist, '梁静茹');
       expect(tracks.single.songId, '88');
       expect(ok.requests.single.host, 'mobilecdnbj.kugou.com');
-      await _expectCacheHit(ok, () => source.leaderboardTracks('8888'));
+      await _expectCacheHit(source, () => source.leaderboardTracks('8888'));
 
       final bad = _Stub({'api/v3/rank/song': '{"errcode":1}'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.leaderboardTracks('8888'),
+        badSource,
+        () => badSource.leaderboardTracks('8888'),
         attempts: 4,
       );
     });
@@ -384,13 +426,14 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final tags = await source.tags();
       expect(tags.hotTags.single.name, '经典');
       expect(tags.categories.single.tags.single.id, '222');
 
       final bad = _Stub({'is_smarty=1&': '{"status":0}'});
-      await _expectStateError(bad, () => source.tags(), attempts: 1);
+      final badSource = bad.bind(discover);
+      await _expectStateError(badSource, () => badSource.tags(), attempts: 1);
     });
 
     test('歌单：推荐与标签两条分支、失败重试 3 次', () async {
@@ -416,7 +459,7 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final recommend = await source.playlists('', 1);
       expect(recommend.playlists.single.id, 'id_6409645');
       expect(recommend.limit, 30);
@@ -427,7 +470,12 @@ void main() {
       expect(ok.requests, hasLength(3), reason: '推荐 1 次 + 标签列表/信息 2 次');
 
       final bad = _Stub({'is_ajax=1': '{"status":0}'});
-      await _expectStateError(bad, () => source.playlists('', 1), attempts: 3);
+      final badSource = bad.bind(discover);
+      await _expectStateError(
+        badSource,
+        () => badSource.playlists('', 1),
+        attempts: 3,
+      );
     });
 
     test('歌单搜索：解析、直连失败一次即 StateError', () async {
@@ -450,15 +498,16 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final page = await source.searchPlaylists('周', 1);
       expect(page.playlists.single.id, 'id_5');
       expect(page.total, 1);
 
       final bad = _Stub({'api/v3/search/special': '{"errcode":1}'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.searchPlaylists('周', 1),
+        badSource,
+        () => badSource.searchPlaylists('周', 1),
         attempts: 1,
       );
     });
@@ -487,7 +536,7 @@ void main() {
           ],
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final detail = await source.playlistDetail('id_123', 1);
       expect(detail.info.name, '歌单');
       expect(detail.tracks.single.title, '歌');
@@ -495,9 +544,10 @@ void main() {
       expect(ok.requests, hasLength(2));
 
       final bad = _Stub({'special/single/': '<html></html>'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.playlistDetail('id_123', 1),
+        badSource,
+        () => badSource.playlistDetail('id_123', 1),
         attempts: 3,
       );
     });
@@ -517,16 +567,21 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       expect(await source.hotSearches(), ['热词']);
 
       final bad = _Stub({'search/hot_tab': '{"errcode":1}'});
-      await _expectStateError(bad, () => source.hotSearches(), attempts: 3);
+      final badSource = bad.bind(discover);
+      await _expectStateError(
+        badSource,
+        () => badSource.hotSearches(),
+        attempts: 3,
+      );
     });
   });
 
   group('QQ 发现矩阵', () {
-    final source = BuiltinDiscover.of('tx');
+    final discover = BuiltinDiscover.of('tx');
 
     test('榜单：经注入 client、解析曲目；直连失败一次即 StateError', () async {
       final ok = _Stub({
@@ -539,16 +594,17 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final tracks = await source.leaderboardTracks('26');
       expect(tracks.single.title, '歌');
       expect(tracks.single.songId, 'mid1');
       expect(ok.requests.single.host, 'u.y.qq.com');
 
       final bad = _Stub({'musicu.fcg': '{"code":1}'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.leaderboardTracks('26'),
+        badSource,
+        () => badSource.leaderboardTracks('26'),
         attempts: 1,
       );
     });
@@ -574,7 +630,7 @@ void main() {
             '<div><a class="c_bg_link js_tag_item" '
             'data-id="3317">官方歌单</a></div>',
       });
-      ok.install();
+      final source = ok.bind(discover);
       final tags = await source.tags();
       expect(tags.categories.single.name, '语种');
       expect(tags.hotTags.single.name, '官方歌单');
@@ -583,7 +639,8 @@ void main() {
         'musicu.fcg': '{"code":1}',
         'category_playlist.html': '<html></html>',
       });
-      await _expectStateError(bad, () => source.tags(), attempts: 4);
+      final badSource = bad.bind(discover);
+      await _expectStateError(badSource, () => badSource.tags(), attempts: 4);
     });
 
     test('歌单：推荐与分类两条分支、失败重试 3 次', () async {
@@ -613,8 +670,8 @@ void main() {
           },
         }),
       });
-      recommend.install();
-      final r = await source.playlists('', 1);
+      final recommendSource = recommend.bind(discover);
+      final r = await recommendSource.playlists('', 1);
       expect(r.playlists.single.name, '歌单');
       expect(r.total, 1);
 
@@ -633,16 +690,23 @@ void main() {
           },
         }),
       });
-      category.install();
-      final c = await source.playlists('3317', 1);
+      final categorySource = category.bind(discover);
+      final c = await categorySource.playlists('3317', 1);
       expect(c.playlists.single.id, '1');
-      await _expectCacheHit(recommend, () => source.playlists('', 1));
-      await _expectCacheHit(category, () => source.playlists('3317', 1));
+      await _expectCacheHit(
+        recommendSource,
+        () => recommendSource.playlists('', 1),
+      );
+      await _expectCacheHit(
+        categorySource,
+        () => categorySource.playlists('3317', 1),
+      );
 
       final bad = _Stub({'musicu.fcg': '{"code":1}'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.playlists('3317', 1),
+        badSource,
+        () => badSource.playlists('3317', 1),
         attempts: 3,
       );
     });
@@ -667,15 +731,16 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final page = await source.searchPlaylists('周', 1);
       expect(page.playlists.single.name, '歌单');
       expect(page.total, 1);
 
       final bad = _Stub({'client_music_search_songlist': '{"code":1}'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.searchPlaylists('周', 1),
+        badSource,
+        () => badSource.searchPlaylists('周', 1),
         attempts: 1,
       );
     });
@@ -697,7 +762,7 @@ void main() {
           ],
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final detail = await source.playlistDetail('1', 1);
       expect(detail.info.name, '歌单');
       expect(detail.tracks.single.title, '歌');
@@ -707,9 +772,10 @@ void main() {
         'fcg_ucc_getcdinfo_byids_cp': '{"code":1}',
         'musicu.fcg': '{"code":1}',
       });
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.playlistDetail('1', 1),
+        badSource,
+        () => badSource.playlistDetail('1', 1),
         attempts: 2,
         reason: 'cgi 失败后仍走 musicu 兜底',
       );
@@ -728,17 +794,22 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       expect(await source.hotSearches(), ['热词']);
-      await _expectCacheHit(ok, () => source.hotSearches());
+      await _expectCacheHit(source, () => source.hotSearches());
 
       final bad = _Stub({'musicu.fcg': '{"code":1}'});
-      await _expectStateError(bad, () => source.hotSearches(), attempts: 3);
+      final badSource = bad.bind(discover);
+      await _expectStateError(
+        badSource,
+        () => badSource.hotSearches(),
+        attempts: 3,
+      );
     });
   });
 
   group('咪咕发现矩阵', () {
-    final source = BuiltinDiscover.of('mg');
+    final discover = BuiltinDiscover.of('mg');
 
     test('榜单：经注入 client、解析曲目、失败重试 4 次', () async {
       final ok = _Stub({
@@ -769,18 +840,19 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final tracks = await source.leaderboardTracks('27186466');
       expect(tracks.single.title, '起风了');
       expect(tracks.single.artist, '周深');
       expect(tracks.single.durationMs, 312000);
       expect(ok.requests.single.host, 'app.c.nf.migu.cn');
-      await _expectCacheHit(ok, () => source.leaderboardTracks('27186466'));
+      await _expectCacheHit(source, () => source.leaderboardTracks('27186466'));
 
       final bad = _Stub({'querycontentbyId.do': '{"code":"1"}'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.leaderboardTracks('27186466'),
+        badSource,
+        () => badSource.leaderboardTracks('27186466'),
         attempts: 4,
       );
     });
@@ -808,13 +880,14 @@ void main() {
           ],
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final tags = await source.tags();
       expect(tags.hotTags.single.name, '网络热歌');
       expect(tags.categories.single.name, '风格');
 
       final bad = _Stub({'musiclistplaza-taglist': '{"code":"1"}'});
-      await _expectStateError(bad, () => source.tags(), attempts: 1);
+      final badSource = bad.bind(discover);
+      await _expectStateError(badSource, () => badSource.tags(), attempts: 1);
     });
 
     test('歌单：推荐与标签两条分支、失败重试 3 次', () async {
@@ -833,8 +906,8 @@ void main() {
           },
         }),
       });
-      recommend.install();
-      final r = await source.playlists('', 1);
+      final recommendSource = recommend.bind(discover);
+      final r = await recommendSource.playlists('', 1);
       expect(r.playlists.single.name, '歌单一');
 
       final tag = _Stub({
@@ -847,16 +920,23 @@ void main() {
           },
         }),
       });
-      tag.install();
-      final t = await source.playlists('1000001672', 1);
+      final tagSource = tag.bind(discover);
+      final t = await tagSource.playlists('1000001672', 1);
       expect(t.playlists.single.name, '歌单二');
-      await _expectCacheHit(recommend, () => source.playlists('', 1));
-      await _expectCacheHit(tag, () => source.playlists('1000001672', 1));
+      await _expectCacheHit(
+        recommendSource,
+        () => recommendSource.playlists('', 1),
+      );
+      await _expectCacheHit(
+        tagSource,
+        () => tagSource.playlists('1000001672', 1),
+      );
 
       final bad = _Stub({'musiclistplaza-listbytag': '{"code":"1"}'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.playlists('1000001672', 1),
+        badSource,
+        () => badSource.playlists('1000001672', 1),
         attempts: 3,
       );
     });
@@ -880,15 +960,16 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final page = await source.searchPlaylists('周', 1);
       expect(page.playlists.single.id, '77');
       expect(page.playlists.single.trackCount, 20);
 
       final bad = _Stub({'searchAll': '{"code":"1"}'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.searchPlaylists('周', 1),
+        badSource,
+        () => badSource.searchPlaylists('周', 1),
         attempts: 1,
       );
     });
@@ -928,7 +1009,7 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final detail = await source.playlistDetail('777', 1);
       expect(detail.info.name, '歌单');
       expect(detail.info.author, '作者');
@@ -940,9 +1021,10 @@ void main() {
         'resource/playlist/song': '{"code":"1"}',
         'resource/playlist/v2.0': '{"code":"1"}',
       });
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.playlistDetail('777', 1),
+        badSource,
+        () => badSource.playlistDetail('777', 1),
         attempts: 4,
         reason: '曲目列表重试 3 次 + 头部信息 1 次',
       );
@@ -963,17 +1045,22 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       expect(await source.hotSearches(), ['热词']);
-      await _expectCacheHit(ok, () => source.hotSearches());
+      await _expectCacheHit(source, () => source.hotSearches());
 
       final bad = _Stub({'hotword': '{"code":"1"}'});
-      await _expectStateError(bad, () => source.hotSearches(), attempts: 3);
+      final badSource = bad.bind(discover);
+      await _expectStateError(
+        badSource,
+        () => badSource.hotSearches(),
+        attempts: 3,
+      );
     });
   });
 
   group('网易云发现矩阵', () {
-    final source = BuiltinDiscover.of('wy');
+    final discover = BuiltinDiscover.of('wy');
 
     Map<String, dynamic> wyPlaylist({required List<dynamic> trackIds}) => {
       'name': '歌单',
@@ -1014,18 +1101,19 @@ void main() {
           ],
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final tracks = await source.leaderboardTracks('3778678');
       expect(tracks.single.title, '歌');
       expect(tracks.single.songId, '1');
       expect(tracks.single.durationMs, 180000);
       expect(ok.requests, hasLength(2));
-      await _expectCacheHit(ok, () => source.leaderboardTracks('3778678'));
+      await _expectCacheHit(source, () => source.leaderboardTracks('3778678'));
 
       final bad = _Stub({'weapi/v3/playlist/detail': '{"code":1}'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.leaderboardTracks('3778678'),
+        badSource,
+        () => badSource.leaderboardTracks('3778678'),
         attempts: 6,
       );
     });
@@ -1051,7 +1139,7 @@ void main() {
           ],
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final tags = await source.tags();
       expect(tags.categories.map((category) => category.name), ['语种', '风格']);
       expect(tags.categories.first.tags.single.name, '华语');
@@ -1062,7 +1150,8 @@ void main() {
         'playlist/catalogue': '{"code":1}',
         'playlist/hottags': '{"code":1}',
       });
-      await _expectStateError(bad, () => source.tags(), attempts: 6);
+      final badSource = bad.bind(discover);
+      await _expectStateError(badSource, () => badSource.tags(), attempts: 6);
     });
 
     test('歌单：weapi 列表、失败重试 3 次', () async {
@@ -1084,15 +1173,20 @@ void main() {
           ],
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final page = await source.playlists('', 1);
       expect(page.playlists.single.id, '1');
       expect(page.playlists.single.createdAt, isNotNull);
       expect(page.total, 1);
-      await _expectCacheHit(ok, () => source.playlists('', 1));
+      await _expectCacheHit(source, () => source.playlists('', 1));
 
       final bad = _Stub({'weapi/playlist/list': '{"code":1}'});
-      await _expectStateError(bad, () => source.playlists('', 1), attempts: 3);
+      final badSource = bad.bind(discover);
+      await _expectStateError(
+        badSource,
+        () => badSource.playlists('', 1),
+        attempts: 3,
+      );
     });
 
     test('歌单搜索：eapi 解析、失败重试 3 次', () async {
@@ -1113,16 +1207,17 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final page = await source.searchPlaylists('周', 1);
       expect(page.playlists.single.name, '歌单');
       expect(page.total, 1);
-      await _expectCacheHit(ok, () => source.searchPlaylists('周', 1));
+      await _expectCacheHit(source, () => source.searchPlaylists('周', 1));
 
       final bad = _Stub({'eapi/batch': '{"code":1}'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.searchPlaylists('周', 1),
+        badSource,
+        () => badSource.searchPlaylists('周', 1),
         attempts: 3,
       );
     });
@@ -1144,15 +1239,16 @@ void main() {
           ],
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       final detail = await source.playlistDetail('123', 1);
       expect(detail.info.name, '歌单');
       expect(detail.tracks.single.title, '歌');
 
       final bad = _Stub({'api/linux/forward': '{"code":1}'});
+      final badSource = bad.bind(discover);
       await _expectStateError(
-        bad,
-        () => source.playlistDetail('123', 1),
+        badSource,
+        () => badSource.playlistDetail('123', 1),
         attempts: 3,
       );
     });
@@ -1187,7 +1283,7 @@ void main() {
           ],
         }),
       });
-      stub.install();
+      final source = stub.bind(discover);
 
       final first = await source.playlistDetail('999', 1);
       expect(first.info.trackCount, 1001);
@@ -1223,16 +1319,22 @@ void main() {
           },
         }),
       });
-      ok.install();
+      final source = ok.bind(discover);
       expect(await source.hotSearches(), ['热词一', '热词二']);
 
       final bad = _Stub({'eapi/batch': '{"code":1}'});
-      await _expectStateError(bad, () => source.hotSearches(), attempts: 1);
+      final badSource = bad.bind(discover);
+      await _expectStateError(
+        badSource,
+        () => badSource.hotSearches(),
+        attempts: 1,
+      );
     });
   });
 
   group('汽水发现矩阵', () {
-    final source = BuiltinDiscover.of('qs');
+    final discover = BuiltinDiscover.of('qs');
+    final source = _BoundSource(discover, _Stub(const {}));
 
     test('榜单与热搜：平台没有匿名入口，能力位显式为假', () async {
       expect(source.leaderboards, isEmpty);
@@ -1291,7 +1393,7 @@ void main() {
         ],
       });
       final stub = _Stub({'luna/discover/mix': body});
-      stub.install();
+      final source = stub.bind(discover);
       final page = await source.playlists('0', 1);
       expect(page.playlists.single.id, '7096700219496368135');
       expect(page.playlists.single.name, '酷女孩');
@@ -1372,7 +1474,7 @@ void main() {
         'luna/search/playlist': searchBody,
         'luna/playlist/detail': detailBody,
       });
-      stub.install();
+      final source = stub.bind(discover);
 
       final page = await source.searchPlaylists('夏日', 2);
       expect(page.playlists.single.name, '搜索歌单');

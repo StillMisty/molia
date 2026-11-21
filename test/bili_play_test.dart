@@ -5,18 +5,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_play.dart';
-import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
 import 'support/bili_session_mock.dart';
+import 'support/transport_test_support.dart';
 
 /// B 站取链：分 P → WBI playurl → dash 音频选档；直链 headers / 有效期 /
 /// 业务码映射都用注入传输验证。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late BuiltinTransport originalTransport;
+  late BuiltinTransport transport;
   late List<Uri> requests;
   late List<RequestOptions> options;
   late int playUrlCalls;
@@ -25,9 +25,8 @@ void main() {
   late int deadline;
   late bool noDash;
 
-  setUpAll(() => originalTransport = BuiltinSearch.transport);
-
   setUp(() {
+    transport = testTransport();
     BiliApi.reset();
     BiliPlay.reset();
     requests = [];
@@ -42,7 +41,7 @@ void main() {
         'https://upos-sz-mirrorcos.bilivideo.com/bfs/audio/$name.m4s'
         '?deadline=$deadline&gen=playurlv3';
 
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         requests.add(request.uri);
         options.add(request);
@@ -124,12 +123,13 @@ void main() {
     );
   });
 
-  tearDown(() => BuiltinSearch.transport = originalTransport);
-
   const raw = {'bvid': 'BV1xx411c7mD', 'aid': 987654};
 
   test('192k：查分 P → 签名 playurl → 30280 直链 + headers / expiresIn', () async {
-    final stream = await BiliPlay.resolve(Map<String, dynamic>.from(raw));
+    final stream = await BiliPlay.resolve(
+      transport,
+      Map<String, dynamic>.from(raw),
+    );
 
     final pagelist = requests.firstWhere(
       (uri) => uri.path == '/x/player/pagelist',
@@ -165,12 +165,14 @@ void main() {
 
   test('128k：选 30232；cid 命中缓存后不再查分 P', () async {
     final first = await BiliPlay.resolve(
+      transport,
       Map<String, dynamic>.from(raw),
       quality: '128k',
     );
     expect(first.uri.path, endsWith('/audio128.m4s'));
 
     final second = await BiliPlay.resolve(
+      transport,
       Map<String, dynamic>.from(raw),
       quality: '128k',
     );
@@ -184,6 +186,7 @@ void main() {
 
   test('请求音质不在档位内：按 LX 顺序回退到 192k', () async {
     final stream = await BiliPlay.resolve(
+      transport,
       Map<String, dynamic>.from(raw),
       quality: '320k',
     );
@@ -193,7 +196,7 @@ void main() {
   test('code -404 → SourceFailure(notFound)', () async {
     notFound = true;
     await expectLater(
-      BiliPlay.resolve({'bvid': 'BV1xx411c7mD', 'cid': 999}),
+      BiliPlay.resolve(transport, {'bvid': 'BV1xx411c7mD', 'cid': 999}),
       throwsA(
         isA<SourceFailure>()
             .having((failure) => failure.kind, 'kind', FailureKind.notFound)
@@ -206,6 +209,7 @@ void main() {
   test('无 dash 时回退 fnval=1 的 durl（读取 url 字段）', () async {
     noDash = true;
     final stream = await BiliPlay.resolve(
+      transport,
       Map<String, dynamic>.from(raw),
       quality: '128k',
     );
@@ -220,6 +224,7 @@ void main() {
   test('code -403 → 刷新 WBI 会话后重试一次', () async {
     riskOnce = true;
     final stream = await BiliPlay.resolve(
+      transport,
       Map<String, dynamic>.from(raw),
       quality: '128k',
     );
@@ -235,7 +240,7 @@ void main() {
   test('网络失败：riskOnly 不刷新会话', () async {
     var sessionFetches = 0;
     var playCalls = 0;
-    BuiltinSearch.transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         if (request.uri.path == '/x/frontend/finger/spi') sessionFetches++;
         final sessionResponse = biliSessionResponse(request);
@@ -249,7 +254,7 @@ void main() {
     );
 
     await expectLater(
-      BiliPlay.resolve({'bvid': 'BV1xx411c7mD', 'cid': 999}),
+      BiliPlay.resolve(transport, {'bvid': 'BV1xx411c7mD', 'cid': 999}),
       throwsA(
         isA<SourceFailure>().having((f) => f.kind, 'kind', FailureKind.network),
       ),
@@ -260,7 +265,7 @@ void main() {
 
   test('缺少 bvid / aid → unsupported，且不发请求', () async {
     await expectLater(
-      BiliPlay.resolve(const {}),
+      BiliPlay.resolve(transport, const {}),
       throwsA(
         isA<SourceFailure>().having(
           (failure) => failure.kind,

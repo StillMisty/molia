@@ -508,7 +508,7 @@ class _FastProvider extends LyricProvider {
 }
 
 class _StubService extends LyricsService {
-  _StubService(this.result);
+  _StubService(this.result) : super(providers: const []);
 
   final LyricsResult? result;
 

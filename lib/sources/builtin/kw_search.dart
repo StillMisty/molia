@@ -3,6 +3,7 @@ import '../source_search_result.dart';
 import '../source_track.dart';
 import 'builtin_cover_urls.dart';
 import 'builtin_search.dart';
+import 'builtin_transport.dart';
 import 'builtin_search_runner.dart';
 import 'crypto_utils.dart';
 
@@ -14,12 +15,14 @@ class KwSearch {
 
   /// 分页搜索：响应中的 `TOTAL` 用于计算 hasMore。
   static Future<SourceSearchResult> searchWithMeta(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = _limit,
   }) {
     return runBuiltinSearch(
       _callFor(keyword, page, limit),
+      http,
       page: page,
       limit: limit,
     );
