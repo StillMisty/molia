@@ -18,36 +18,21 @@ const int nowPlayingQueueTabIndex = 0;
 const int nowPlayingLyricsTabIndex = 1;
 const int nowPlayingInfoTabIndex = 2;
 
-/// 播放页请求 + 壳层可见的展开态。
+/// 播放页的外部请求通道（壳 → 播放页）。
 ///
 /// 由组合根创建并注入 `NowPlaying`；调用方只发请求，不读界面状态。
-/// 壳层需要三件事做顶栏 / 返回层级：
-/// - [expanded]：窄版式播放页**是否展开**（由页面在布局 / 动画落定时写）。
-///   它表达的是播放器在页面里的高度状态，不是「当前目的地是不是播放页」；
-///   宽版式 / 桌面两栏没有收起态，恒为 false。
-/// - [miniCapable]：当前布局是否有窄版式播放页（收起高度为 0）。
-///   壳层据此决定顶栏是显示播放条还是品牌位。
-/// - [activeTab]：右栏当前 tab（判断「队列是否已打开」）。
-/// 三者都是只读快照，不参与请求分发。
+/// 展开态 / 布局能力（`expanded` / `miniCapable`）是壳层展示决策，唯一所有者
+/// 是 `lib/app/shell/shell_presentation.dart::ShellPresentation`；页面通过
+/// `NowPlaying.onExpansionChanged` / `onMiniCapableChanged` 回写，不再经过
+/// 本控制器——留一份副本就会重新出现「两边都要对齐」的问题。
+///
+/// 壳层仍需 [activeTab]：桌面 Esc 要先判断播放页右栏是否停在队列。
 class NowPlayingController extends ChangeNotifier {
   int? _requestedTab;
   int _tabRequestVersion = 0;
 
   /// 待消费的展开 / 收起意图；null = 没有请求。
   bool? _requestedExpansion;
-
-  /// 窄版式播放页是否展开；宽版式 / 桌面两栏恒为 false
-  /// （这些版式没有收起态，返回层级应直接回上一目的地）。
-  final ValueNotifier<bool> expanded = ValueNotifier<bool>(false);
-
-  /// 当前布局是否有窄版式播放页（窄单栏 = true，桌面 / 移动宽版式 = false）。
-  ///
-  /// 由页面在布局期写回。壳层用它决定顶栏内容：没有窄版式时顶栏永远是
-  /// 品牌位，避免出现「点了收起却没有任何可收起高度」的状态。
-  ///
-  /// 初值 false 而不是 true：启动就落在播放页时页面默认展开，先按品牌位
-  /// 渲染可以避免第一帧闪一下播放条。
-  final ValueNotifier<bool> miniCapable = ValueNotifier<bool>(false);
 
   /// 播放页当前内容 tab（桌面右栏 / 移动 PageView 落定后的值）。
   final ValueNotifier<int> activeTab = ValueNotifier<int>(
@@ -78,7 +63,7 @@ class NowPlayingController extends ChangeNotifier {
   void showInfoTab() => _request(nowPlayingInfoTabIndex);
 
   /// 请求展开播放页（窄版式）；无迷你态的版式由页面忽略并回写
-  /// [expanded] = false。
+  /// 展开态 = false。
   void expand() => _requestExpansion(true);
 
   /// 请求收起播放页（窄版式，收起高度为 0）；无迷你态的版式由页面忽略。
@@ -109,8 +94,6 @@ class NowPlayingController extends ChangeNotifier {
 
   @override
   void dispose() {
-    expanded.dispose();
-    miniCapable.dispose();
     activeTab.dispose();
     super.dispose();
   }

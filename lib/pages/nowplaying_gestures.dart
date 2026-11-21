@@ -43,13 +43,12 @@ extension _NowPlayingGestures on _NowPlayingState {
       // _setMini 在「已经不是收起态」时会提前返回，但展开意图本身仍要立刻
       // 写回壳层：从其它一级页进入时页面原先可能停在展开态，壳层读到的
       // expanded 却是隐藏期间同步下来的 false，晚一帧会让顶栏闪一下播放条。
-      widget.controller?.expanded.value = _miniCapable;
+      _writeExpansion(_miniCapable);
     } else {
       // 无收起态（桌面 / 宽版式）不能把 _isMini 翻成 true：下一次返回会
       // 误以为有可收起高度。
-      final controller = widget.controller;
       if (!_miniCapable) {
-        controller?.expanded.value = false;
+        _writeExpansion(false);
         return;
       }
     }
@@ -129,16 +128,17 @@ extension _NowPlayingGestures on _NowPlayingState {
 
   /// 把「当前布局是否有收起态 + 实际是否展开」回写给壳层。
   ///
-  /// 构建期只安排帧末写入：壳层监听 [NowPlayingController.expanded] 并
-  /// setState，直接在本帧通知会触发「构建中 markNeedsBuild」。
+  /// 构建期只安排帧末写入：壳层展示模块收到回写会 setState，直接在本帧
+  /// 通知会触发「构建中 markNeedsBuild」。
   void _syncExpanded() {
-    final controller = widget.controller;
-    if (controller == null) return;
+    final notify = widget.onExpansionChanged;
+    if (notify == null) return;
     final bool expected = _shellVisible && _miniCapable && !_isMini;
-    if (controller.expanded.value == expected) return;
+    if (_reportedExpansion == expected) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || widget.controller != controller) return;
-      controller.expanded.value = expected;
+      if (!mounted || widget.onExpansionChanged != notify) return;
+      notify(expected);
+      _reportedExpansion = expected;
     });
   }
 
@@ -147,13 +147,20 @@ extension _NowPlayingGestures on _NowPlayingState {
   /// 壳层据此决定顶栏是播放条还是品牌位；宽版式 / 桌面版式不写 true，
   /// 否则会暴露一个点了也收不起来的播放条。
   void _syncMiniCapable() {
-    final controller = widget.controller;
-    if (controller == null) return;
-    if (controller.miniCapable.value == _miniCapable) return;
+    final notify = widget.onMiniCapableChanged;
+    if (notify == null) return;
+    if (_reportedMiniCapable == _miniCapable) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || widget.controller != controller) return;
-      controller.miniCapable.value = _miniCapable;
+      if (!mounted || widget.onMiniCapableChanged != notify) return;
+      notify(_miniCapable);
+      _reportedMiniCapable = _miniCapable;
     });
+  }
+
+  /// 立即回写展开态（动画落定 / 展开请求同步路径）：不走帧末排队。
+  void _writeExpansion(bool value) {
+    _reportedExpansion = value;
+    widget.onExpansionChanged?.call(value);
   }
 
   /// 展开进度跨过阈值即同步展开态（视觉落定口径，不等弹簧容差拖尾）。
@@ -174,7 +181,7 @@ extension _NowPlayingGestures on _NowPlayingState {
     //
     // 展开请求来自「即将进入播放页」时页面还没可见，此时不能按可见性把它
     // 压回 false——否则壳层会先显示顶栏播放条、下一帧再收起，闪一帧。
-    widget.controller?.expanded.value = _miniCapable && !mini;
+    _writeExpansion(_miniCapable && !mini);
   }
 
   /// 播放器区域跟手拖拽行程基准：约 0.6 个最大高度走完整段（一次拇指

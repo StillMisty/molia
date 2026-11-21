@@ -35,8 +35,17 @@ class NowPlaying extends StatefulWidget {
   /// 为 null 时（单测直接挂载页面）退回本地动画，便于独立验证页面行为。
   final ValueChanged<bool>? onRequestExpansion;
 
-  /// 外部 tab 切换请求（如底栏队列按钮「跳播放页 + 切队列」）。
+  /// 外部 tab / 展开请求（如底栏队列按钮「跳播放页 + 切队列」）。
   final NowPlayingController? controller;
+
+  /// 展开态回写：页面在布局 / 动画落定时把「是否完整展开」交给壳层。
+  ///
+  /// 壳层的 `ShellPresentation` 是展开态的唯一所有者；页面只报告自己的高度
+  /// 状态，不持有第二份壳层可见副本。
+  final ValueChanged<bool>? onExpansionChanged;
+
+  /// 布局能力回写：当前版式是否有收起态（窄单栏 true / 宽版式、桌面 false）。
+  final ValueChanged<bool>? onMiniCapableChanged;
 
   /// 桌面骨架专用版式：左「封面 + 控制」固定栏 + 右「队列 / 歌词 / 歌曲
   /// 信息」三 tab（默认歌词，与移动端圆点页序一致）。
@@ -50,6 +59,8 @@ class NowPlaying extends StatefulWidget {
     this.morph,
     this.onRequestExpansion,
     this.controller,
+    this.onExpansionChanged,
+    this.onMiniCapableChanged,
     this.desktopLayout = false,
   });
 
@@ -131,6 +142,11 @@ class _NowPlayingState extends State<NowPlaying>
   /// tab 请求共用一次通知，只有 tab 版本前进才重放 tab。
   int _handledTabRequest = 0;
 
+  /// 最近一次回写给壳层的展开态 / 布局能力（只用于去重，不是第二份状态）：
+  /// 壳层展示模块持有真值，这里只避免每次 build 都排一个帧末写入。
+  bool? _reportedExpansion;
+  bool _reportedMiniCapable = false;
+
   /// 移动 / 平板版式当前落定的内容页（PageView 落定后更新）。
   ///
   /// 与 [_desktopTab] 分开：桌面没有 [PageView]，tab 选中态由
@@ -189,6 +205,13 @@ class _NowPlayingState extends State<NowPlaying>
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?.removeListener(_handleControllerRequest);
       widget.controller?.addListener(_handleControllerRequest);
+    }
+    // 回写通道换了接收方：去重缓存作废，下一次布局重新报告真值。
+    if (oldWidget.onExpansionChanged != widget.onExpansionChanged) {
+      _reportedExpansion = null;
+    }
+    if (oldWidget.onMiniCapableChanged != widget.onMiniCapableChanged) {
+      _reportedMiniCapable = false;
     }
   }
 
