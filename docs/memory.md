@@ -193,7 +193,7 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
 - `lib/services/memory/app_memory_manager.dart` 增加 `addReleaser` / `removeReleaser`，
   只在 `trayHidden` 的休眠帧之后执行；`minimized` 不触发，保持跟手恢复。
 - `LibraryProvider.releaseBrowseCaches()`：清 `_tracksByPlaylist` / 读取错误，
-  保留收藏键、列表清单与历史；browse generation 让释放前在途读取作废，
+  保留收藏键、列表清单与历史；列表读投影的释放代际让释放前在途读取作废，
   恢复后页面按需重读。
 - `SearchProvider.releaseSearchResults()` + `CatalogService.clearSearchCache()`：
   清搜索瞬时结果与目录分页结果（含 raw payload）；**不清** `_resolveCache`，

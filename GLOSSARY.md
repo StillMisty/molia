@@ -722,6 +722,16 @@
   `PlaylistTrack.fromHistoryEntry` 只负责反向（历史条目 → 列表行）。
 - **Favorites（收藏）** — 领域概念 `PlaylistInfo.isFavorites`；存储层保留行名
   `__favorites__` 只在实现内部（UI 文案走 l10n，调用方不再按名字比较）。
+  收藏的规范键集合、顺序行、计数与版本只有一个持有者（见下条）。
+- **Favorite fact（收藏事实）** — `lib/data/library/favorite_fact.dart`：
+  收藏键 / 顺序行 / 计数 / 版本 / 版本号的唯一持有者，也是收藏写入的唯一
+  落状态路径（仓库写仍经 `LibraryStore`）。模块内部负责整表读取的代际与
+  在途切换重放、计数优先级（整表键 > 已加载行 > 清单计数 ± 净变化）与行
+  插入顺序（`sortOrder` → `addedAt`）；对外只给 `FavoriteSnapshot`、
+  `ensureLoaded` / `reload` / `adoptRows` / `applyChange`、`toggle` /
+  `addAll` / `removeAll` 与变更通知。浏览索引的惰性 raw 行不能直接换成
+  列表行，经 `applyToggleToProjection` 复用同一份插入规则；重放缓冲、
+  计数候选与比较器不进入公开接口。
 - **Library mutation gateway（资料库变更网关）** — `lib/providers/library_provider.dart`：
   收藏 / 播放历史 / 列表写入的唯一实现。收藏唯一入口 `toggleFavoriteTrack(Track)`
   （播放页不再直连 `LibraryRepository`）；批量操作按 `PlaylistTrack` 规范形状，
@@ -779,7 +789,8 @@
 - **Library read projection（资料库读投影）** — `lib/providers/library_read_projection.dart`
   的 `ReadReconciliation<T, W>`：一个视图「读快照 vs 写入 / 其它读」的唯一仲裁。
   持有代际 / 在途 / 缓冲写回放 / quiet vs explicit / 失败阶段；值合并、写入重放与
-  失败形态由持有方注入策略。收藏键 / 播放历史 / 列表清单 / 列表曲目各持一份，
+  失败形态由持有方注入策略。播放历史 / 列表清单 / 列表曲目各持一份；收藏键与
+  收藏行不在这里，归 **Favorite fact**（同一套方向性规则在模块内实现）。
   `LibraryProvider` 只做扇出与变更网关，不再各写一套 generation / pending 状态机。
 
 ## 换源
