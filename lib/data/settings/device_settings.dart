@@ -70,6 +70,35 @@ class DeviceJsonSettingKey<T extends Object> implements DeviceSettingEntry {
   String toString() => 'DeviceJsonSettingKey($name)';
 }
 
+/// 一个 JSON 数组键：键名、缺键默认值，以及单个元素的编解码。
+///
+/// 列表型状态（如音乐文件夹配置）的存盘形状就是 JSON 数组：用对象键包一层
+/// 会改变已有数据的形状。元素形状仍由键表声明一次，store 不解析原始 JSON；
+/// [decode] 返回 `null` 表示该元素损坏，读取时跳过，与迁移前的逐项过滤一致。
+class DeviceJsonListSettingKey<E extends Object> implements DeviceSettingEntry {
+  const DeviceJsonListSettingKey(
+    this.name,
+    this.defaultValue, {
+    required this.decode,
+    required this.encode,
+  });
+
+  @override
+  final String name;
+
+  /// 缺键 / JSON 损坏时的回退值。
+  final List<E> defaultValue;
+
+  /// 把数组里的一个元素还原为值；元素损坏返回 `null`。
+  final E? Function(Object? json) decode;
+
+  /// 把值编码为可放进数组的 JSON。
+  final Object? Function(E value) encode;
+
+  @override
+  String toString() => 'DeviceJsonListSettingKey($name)';
+}
+
 /// 设备本地设置的唯一读写入口。
 ///
 /// 生产路径懒取 `SharedPreferences.getInstance()`（它自身已缓存实例）；测试
@@ -142,6 +171,22 @@ class DeviceSettings {
   Future<({bool ok, T value})> tryRead<T extends Object>(
     DeviceSettingKey<T> key,
   ) async {
+    final stored = await _readScalar(key);
+    return (ok: stored.ok, value: stored.value);
+  }
+
+  /// 读取标量；没有存过（或读取失败 / 类型不符）返回 `null`。
+  ///
+  /// 用于「键默认值本身也是合法用户值」的场景：例如缓存上限缺键时要按设备
+  /// 容量算建议默认，不能把用户显式写入的 1024MB 当成缺键。
+  Future<T?> readIfPresent<T extends Object>(DeviceSettingKey<T> key) async {
+    final stored = await _readScalar(key);
+    return stored.present ? stored.value : null;
+  }
+
+  Future<({bool ok, bool present, T value})> _readScalar<T extends Object>(
+    DeviceSettingKey<T> key,
+  ) async {
     // 类型校验放在 try 之外：声明错误不能被读失败策略吞成「默认值」。
     final kind = _kindOf(key);
     try {
@@ -153,14 +198,16 @@ class DeviceSettings {
         _ValueKind.text => prefs.getString(key.name),
         _ValueKind.stringList => prefs.getStringList(key.name),
       };
-      if (stored == null) return (ok: true, value: key.defaultValue);
-      if (stored is T) return (ok: true, value: stored);
+      if (stored == null) {
+        return (ok: true, present: false, value: key.defaultValue);
+      }
+      if (stored is T) return (ok: true, present: true, value: stored);
       // 存储里的类型与键声明不一致（手工改偏好 / 旧版本残留）。
       _log('读取 ${key.name} 的类型是 ${stored.runtimeType}，回退默认值');
-      return (ok: false, value: key.defaultValue);
+      return (ok: false, present: false, value: key.defaultValue);
     } catch (error) {
       _log('读取 ${key.name} 失败，回退默认值：$error');
-      return (ok: false, value: key.defaultValue);
+      return (ok: false, present: false, value: key.defaultValue);
     }
   }
 
@@ -226,6 +273,40 @@ class DeviceSettings {
     T value,
   ) => _enqueueWrite(key.name, (prefs) async {
     await prefs.setString(key.name, jsonEncode(key.encode(value)));
+  });
+
+  /// 读取 JSON 数组键；缺键、非数组、整体解析失败都回 `null`。
+  ///
+  /// 单个元素损坏由 [DeviceJsonListSettingKey.decode] 返回 `null` 跳过，
+  /// 不会让整份配置作废（与迁移前的逐项过滤一致）。
+  Future<List<E>?> readJsonList<E extends Object>(
+    DeviceJsonListSettingKey<E> key,
+  ) async {
+    try {
+      final prefs = await _openPreferences();
+      final raw = prefs.getString(key.name);
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        _log('读取 ${key.name} 不是 JSON 数组，回退默认值');
+        return null;
+      }
+      return [for (final item in decoded) ?key.decode(item)];
+    } catch (error) {
+      _log('读取 ${key.name} 失败，回退默认值：$error');
+      return null;
+    }
+  }
+
+  /// 写入 JSON 数组键；编码 / 写盘失败只记日志。
+  Future<void> writeJsonList<E extends Object>(
+    DeviceJsonListSettingKey<E> key,
+    List<E> value,
+  ) => _enqueueWrite(key.name, (prefs) async {
+    await prefs.setString(
+      key.name,
+      jsonEncode([for (final item in value) key.encode(item)]),
+    );
   });
 
   /// 排队执行一次写动作：同一偏好文件的前一次完成后才开始。

@@ -4,14 +4,16 @@
 /// 为什么**不登记**进 `SettingsRegistry`：保存位置是设备相关路径、文件名
 /// 模板是设备偏好、公共目录发布是 Android 平台能力，跨设备同步过去只会
 /// 互相打架（与缓存策略键同一取舍）。
-/// 键名只出现在本文件（`settings_keys_test` 只约束登记键）。
+/// 键名只出现在 `device_settings_keys.dart`。
 library;
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../data/settings/device_settings.dart';
+import '../../data/settings/device_settings_keys.dart';
 
 /// 默认文件名模板：`{artist} - {title}`（无歌手时只留歌名）。
-const String kDefaultFilenameTemplate = '{artist} - {title}';
+const String kDefaultFilenameTemplate = kDefaultDownloadFilenameTemplate;
 
 /// 模板可用占位符（设置页提示文案用）。
 const List<String> kFilenameTemplatePlaceholders = [
@@ -20,17 +22,19 @@ const List<String> kFilenameTemplatePlaceholders = [
   '{album}',
 ];
 
-/// 下载设置：读写 `SharedPreferences`，变更即时生效（服务每次下载读取）。
+/// 下载设置：读写设备本地设置，变更即时生效（服务每次下载读取）。
 class DownloadSettings extends ChangeNotifier {
-  DownloadSettings({this._prefs});
+  /// [settings] 仅测试注入；生产构造自己的设备本地入口。
+  DownloadSettings({DeviceSettings? settings})
+    : _settings = settings ?? DeviceSettings();
 
-  static const String keySaveDir = 'download_save_dir';
-  static const String keyFilenameTemplate = 'download_filename_template';
-  static const String keyEmbedTags = 'download_embed_tags';
-  static const String keyPublishToPublicDir = 'download_publish_public_dir';
-  static const String keyNotifications = 'download_notifications';
+  static const String keySaveDir = kDownloadSaveDirKeyName;
+  static const String keyFilenameTemplate = kDownloadFilenameTemplateKeyName;
+  static const String keyEmbedTags = kDownloadEmbedTagsKeyName;
+  static const String keyPublishToPublicDir = kDownloadPublishPublicDirKeyName;
+  static const String keyNotifications = kDownloadNotificationsKeyName;
 
-  SharedPreferences? _prefs;
+  final DeviceSettings _settings;
 
   /// 自定义保存目录（空 = 平台默认：桌面系统下载目录下 `Molia/`）。
   String _saveDir = '';
@@ -51,16 +55,13 @@ class DownloadSettings extends ChangeNotifier {
   bool get publishToPublicDir => _publishToPublicDir;
   bool get notifications => _notifications;
 
-  /// 绑定 prefs 并加载已保存值（组合根 / 测试调用一次）。
+  /// 加载已保存值（组合根 / 测试调用一次）。
   Future<void> init() async {
-    _prefs ??= await SharedPreferences.getInstance();
-    final prefs = _prefs;
-    _saveDir = prefs?.getString(keySaveDir) ?? '';
-    _filenameTemplate =
-        prefs?.getString(keyFilenameTemplate) ?? kDefaultFilenameTemplate;
-    _embedTags = prefs?.getBool(keyEmbedTags) ?? true;
-    _publishToPublicDir = prefs?.getBool(keyPublishToPublicDir) ?? true;
-    _notifications = prefs?.getBool(keyNotifications) ?? true;
+    _saveDir = await _settings.read(kDownloadSaveDirKey);
+    _filenameTemplate = await _settings.read(kDownloadFilenameTemplateKey);
+    _embedTags = await _settings.read(kDownloadEmbedTagsKey);
+    _publishToPublicDir = await _settings.read(kDownloadPublishPublicDirKey);
+    _notifications = await _settings.read(kDownloadNotificationsKey);
     notifyListeners();
   }
 
@@ -68,7 +69,7 @@ class DownloadSettings extends ChangeNotifier {
     final next = value.trim();
     if (next == _saveDir) return;
     _saveDir = next;
-    await _prefs?.setString(keySaveDir, next);
+    await _settings.write(kDownloadSaveDirKey, next);
     notifyListeners();
   }
 
@@ -76,14 +77,14 @@ class DownloadSettings extends ChangeNotifier {
     final next = value.trim().isEmpty ? kDefaultFilenameTemplate : value.trim();
     if (next == _filenameTemplate) return;
     _filenameTemplate = next;
-    await _prefs?.setString(keyFilenameTemplate, next);
+    await _settings.write(kDownloadFilenameTemplateKey, next);
     notifyListeners();
   }
 
   Future<void> setEmbedTags(bool value) async {
     if (value == _embedTags) return;
     _embedTags = value;
-    await _prefs?.setBool(keyEmbedTags, value);
+    await _settings.write(kDownloadEmbedTagsKey, value);
     notifyListeners();
   }
 
@@ -91,7 +92,7 @@ class DownloadSettings extends ChangeNotifier {
   Future<void> setPublishToPublicDir(bool value) async {
     if (value == _publishToPublicDir) return;
     _publishToPublicDir = value;
-    await _prefs?.setBool(keyPublishToPublicDir, value);
+    await _settings.write(kDownloadPublishPublicDirKey, value);
     notifyListeners();
   }
 
@@ -99,7 +100,7 @@ class DownloadSettings extends ChangeNotifier {
   Future<void> setNotifications(bool value) async {
     if (value == _notifications) return;
     _notifications = value;
-    await _prefs?.setBool(keyNotifications, value);
+    await _settings.write(kDownloadNotificationsKey, value);
     notifyListeners();
   }
 

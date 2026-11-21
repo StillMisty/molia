@@ -118,6 +118,19 @@ class SettingsRegistry implements SettingsAccess, SettingsSyncSurface {
   Future<T> read<T extends Object?>(SettingsKey<T> key) async =>
       (await readRaw(key)) as T;
 
+  /// 键当前是否存过值；存储不可用按「没有存过」处理。
+  @override
+  Future<bool> contains(SettingsKey<Object?> key) async {
+    try {
+      if (key.store == SettingsValueStore.secure) {
+        return await _secrets.read(key.name) != null;
+      }
+      return (await _prefs()).containsKey(key.name);
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 写入并持久化；`null` 表示删除键（回到默认值）。
   @override
   Future<void> write<T extends Object?>(SettingsKey<T> key, T value) async {
@@ -289,6 +302,12 @@ class SettingsScope implements SettingsAccess {
   Future<T> read<T extends Object?>(SettingsKey<T> key) {
     _check(key);
     return _registry.read(key);
+  }
+
+  @override
+  Future<bool> contains(SettingsKey<Object?> key) {
+    _check(key);
+    return _registry.contains(key);
   }
 
   @override

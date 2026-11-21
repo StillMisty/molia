@@ -3,8 +3,9 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/settings/device_settings.dart';
+import '../data/settings/device_settings_keys.dart';
 import '../sources/source_track.dart' show capQualityFor;
 
 /// 省流模式（数据节省）服务。
@@ -24,25 +25,26 @@ import '../sources/source_track.dart' show capQualityFor;
 /// - 本服务只提供策略判定，不直接改播放行为：音质在 composition root 的
 ///   取链回调里套用，封面在 `ArtworkCache` 网关注入判定。
 class DataSaverService extends ChangeNotifier {
+  /// [settings] 仅测试注入；生产构造自己的设备本地入口。
   DataSaverService({
-    SharedPreferences? prefs,
+    DeviceSettings? settings,
     this._cellularProbe,
     this._cellularChanges,
-  }) : _prefsOverride = prefs;
+  }) : _settings = settings ?? DeviceSettings();
 
   // 持久化键名（设置 UI / 测试共用）
-  static const String keyEnabled = 'data_saver_enabled';
-  static const String keyQuality = 'data_saver_quality';
-  static const String keyCovers = 'data_saver_covers';
+  static const String keyEnabled = kDataSaverEnabledKeyName;
+  static const String keyQuality = kDataSaverQualityKeyName;
+  static const String keyCovers = kDataSaverCoversKeyName;
 
-  static const bool defaultEnabled = false;
-  static const String defaultQuality = '128k';
-  static const bool defaultCovers = true;
+  static const bool defaultEnabled = kDefaultDataSaverEnabled;
+  static const String defaultQuality = kDefaultDataSaverQuality;
+  static const bool defaultCovers = kDefaultDataSaverCovers;
 
   /// 省流音质上限可选项（值为 LX 音质标识，与取链链路同源）。
   static const List<String> qualityOptions = ['128k', '192k', '320k'];
 
-  final SharedPreferences? _prefsOverride;
+  final DeviceSettings _settings;
   final Future<bool> Function()? _cellularProbe;
   final Stream<bool>? _cellularChanges;
   final Logger _logger = Logger('molia.data_saver_service');
@@ -54,7 +56,6 @@ class DataSaverService extends ChangeNotifier {
   final StreamController<void> _networkEvents =
       StreamController<void>.broadcast();
 
-  SharedPreferences? _prefs;
   StreamSubscription<bool>? _subscription;
   Future<void>? _monitoringFuture;
 
@@ -142,21 +143,21 @@ class DataSaverService extends ChangeNotifier {
     if (_enabled == value) return;
     _enabled = value;
     notifyListeners();
-    await _write(keyEnabled, value);
+    await _settings.write(kDataSaverEnabledKey, value);
   }
 
   Future<void> setQualityCap(String value) async {
     if (!qualityOptions.contains(value) || _quality == value) return;
     _quality = value;
     notifyListeners();
-    await _write(keyQuality, value);
+    await _settings.write(kDataSaverQualityKey, value);
   }
 
   Future<void> setCoversSaverEnabled(bool value) async {
     if (_coversSaverEnabled == value) return;
     _coversSaverEnabled = value;
     notifyListeners();
-    await _write(keyCovers, value);
+    await _settings.write(kDataSaverCoversKey, value);
   }
 
   /// 重新探测当前网络类型。
@@ -196,39 +197,14 @@ class DataSaverService extends ChangeNotifier {
 
   Future<void> _loadPreferences() async {
     try {
-      final prefs = await _prefsOrNull();
-      if (prefs == null) return;
-      _enabled = prefs.getBool(keyEnabled) ?? defaultEnabled;
-      final quality = prefs.getString(keyQuality);
-      if (quality != null && qualityOptions.contains(quality)) {
+      _enabled = await _settings.read(kDataSaverEnabledKey);
+      final quality = await _settings.read(kDataSaverQualityKey);
+      if (qualityOptions.contains(quality)) {
         _quality = quality;
       }
-      _coversSaverEnabled = prefs.getBool(keyCovers) ?? defaultCovers;
+      _coversSaverEnabled = await _settings.read(kDataSaverCoversKey);
     } catch (e) {
       _logger.warning('省流模式：读取偏好失败: $e');
-    }
-  }
-
-  Future<void> _write(String key, Object value) async {
-    try {
-      final prefs = await _prefsOrNull();
-      if (prefs == null) return;
-      if (value is bool) {
-        await prefs.setBool(key, value);
-      } else {
-        await prefs.setString(key, value.toString());
-      }
-    } catch (e) {
-      _logger.warning('省流模式：保存偏好失败: $e');
-    }
-  }
-
-  Future<SharedPreferences?> _prefsOrNull() async {
-    if (_prefsOverride != null) return _prefsOverride;
-    try {
-      return _prefs ??= await SharedPreferences.getInstance();
-    } catch (_) {
-      return null;
     }
   }
 

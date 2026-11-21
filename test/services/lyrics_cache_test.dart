@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart' show md5;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/device_settings.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/lyrics/lyric_provider.dart';
 import 'package:molia/services/lyrics_cache.dart';
@@ -56,7 +57,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
     tempRoot = await Directory.systemTemp.createTemp('lyrics_cache_test_');
-    cacheService = CacheService(prefs: prefs, storage: MemoryCacheStorage());
+    cacheService = CacheService(
+      settings: DeviceSettings(preferences: prefs),
+      storage: MemoryCacheStorage(),
+    );
   });
 
   tearDown(() async {

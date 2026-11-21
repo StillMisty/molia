@@ -5,17 +5,20 @@
 library;
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../data/settings/device_settings.dart';
+import '../data/settings/device_settings_keys.dart';
 
 enum CollectionMode { albums, artists }
 
 class CollectionModeStore extends ChangeNotifier {
-  CollectionModeStore({Future<SharedPreferences> Function()? preferences})
-    : _preferences = preferences ?? SharedPreferences.getInstance;
+  /// [settings] 仅测试注入；生产构造自己的设备本地入口。
+  CollectionModeStore({DeviceSettings? settings})
+    : _settings = settings ?? DeviceSettings();
 
-  static const String prefsKey = 'library_browse_mode_v1';
+  static const String prefsKey = kLibraryBrowseModeKeyName;
 
-  final Future<SharedPreferences> Function() _preferences;
+  final DeviceSettings _settings;
   CollectionMode _mode = CollectionMode.albums;
   bool _loaded = false;
 
@@ -23,16 +26,11 @@ class CollectionModeStore extends ChangeNotifier {
   bool get isLoaded => _loaded;
 
   Future<void> load() async {
-    try {
-      final prefs = await _preferences();
-      final raw = prefs.getString(prefsKey);
-      _mode = CollectionMode.values.firstWhere(
-        (mode) => mode.name == raw,
-        orElse: () => CollectionMode.albums,
-      );
-    } catch (e) {
-      debugPrint('[Molia] 读取曲库模式失败: $e');
-    }
+    final raw = await _settings.read(kLibraryBrowseModeKey);
+    _mode = CollectionMode.values.firstWhere(
+      (mode) => mode.name == raw,
+      orElse: () => CollectionMode.albums,
+    );
     _loaded = true;
     notifyListeners();
   }
@@ -41,11 +39,6 @@ class CollectionModeStore extends ChangeNotifier {
     if (_mode == mode) return;
     _mode = mode;
     notifyListeners();
-    try {
-      final prefs = await _preferences();
-      await prefs.setString(prefsKey, mode.name);
-    } catch (e) {
-      debugPrint('[Molia] 保存曲库模式失败: $e');
-    }
+    await _settings.write(kLibraryBrowseModeKey, mode.name);
   }
 }

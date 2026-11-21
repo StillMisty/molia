@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:molia/data/settings/device_settings.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/downloads/download_notifications.dart';
 import 'package:molia/data/downloads/downloads_repository.dart';
@@ -891,7 +892,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     final cacheService = CacheService(
       storage: _FakeCacheStorage(audioDir: '/cache/audio'),
-      prefs: prefs,
+      settings: DeviceSettings(preferences: prefs),
     );
     final dio = mockDio(
       (options) => textResponse('should not be requested', statusCode: 500),
@@ -927,7 +928,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     final cacheService = CacheService(
       storage: _FakeCacheStorage(audioDir: '/cache/audio'),
-      prefs: prefs,
+      settings: DeviceSettings(preferences: prefs),
     );
     final dio = mockDio(
       (options) => bytesResponse(
@@ -958,7 +959,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     final cacheStorage = _FakeCacheStorage(audioDir: '/cache/audio');
-    final cacheService = CacheService(storage: cacheStorage, prefs: prefs);
+    final cacheService = CacheService(
+      storage: cacheStorage,
+      settings: DeviceSettings(preferences: prefs),
+    );
     final service = makeService(cacheService: cacheService);
     await service.init();
 
@@ -1001,7 +1005,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     final cacheStorage = _FakeCacheStorage(audioDir: '/cache/audio');
-    final cacheService = CacheService(storage: cacheStorage, prefs: prefs);
+    final cacheService = CacheService(
+      storage: cacheStorage,
+      settings: DeviceSettings(preferences: prefs),
+    );
     final service = makeService(cacheService: cacheService);
     await service.init();
 

@@ -1,5 +1,5 @@
-import 'package:shared_preferences/shared_preferences.dart';
-
+import '../../data/settings/device_settings.dart';
+import '../../data/settings/device_settings_keys.dart';
 import '../../domain/models/app_release.dart';
 
 /// 已交给安装器、等待下次启动确认的更新目标。
@@ -32,29 +32,30 @@ class PendingUpdate {
   String toString() => 'PendingUpdate($version+$build)';
 }
 
-/// 应用内更新的本地偏好（SharedPreferences 直连）。
+/// 应用内更新的本地偏好（设备本地设置）。
 ///
 /// 这些键都是设备本地项（更新渠道 / 镜像在不同设备可以不同，且只有一个
 /// 消费者），按仓库约定不登记进 `SettingsRegistry`（见 settings_keys.dart
 /// 的分档说明）。
 class UpdatePreferences {
-  UpdatePreferences({SharedPreferences? prefs}) : _prefsOverride = prefs;
+  /// [settings] 仅测试注入；生产构造自己的设备本地入口。
+  UpdatePreferences({DeviceSettings? settings})
+    : _settings = settings ?? DeviceSettings();
 
-  static const String keyAutoCheck = 'update_auto_check';
-  static const String keyChannel = 'update_channel';
-  static const String keyManifestOverride = 'update_manifest_override';
-  static const String keyDownloadPrefix = 'update_download_prefix';
-  static const String keyLastCheckAt = 'update_last_check_at';
-  static const String keyPendingVersion = 'update_pending_version';
-  static const String keyPendingBuild = 'update_pending_build';
+  static const String keyAutoCheck = kUpdateAutoCheckKeyName;
+  static const String keyChannel = kUpdateChannelKeyName;
+  static const String keyManifestOverride = kUpdateManifestOverrideKeyName;
+  static const String keyDownloadPrefix = kUpdateDownloadPrefixKeyName;
+  static const String keyLastCheckAt = kUpdateLastCheckAtKeyName;
+  static const String keyPendingVersion = kUpdatePendingVersionKeyName;
+  static const String keyPendingBuild = kUpdatePendingBuildKeyName;
 
   /// 自动检查默认关闭：更新是低频行为，且桌面端会自动替换文件，
   /// 必须由用户显式开启（设置页「自动检查更新」）。
-  static const bool defaultAutoCheck = false;
+  static const bool defaultAutoCheck = kDefaultUpdateAutoCheck;
   static const UpdateChannel defaultChannel = UpdateChannel.stable;
 
-  final SharedPreferences? _prefsOverride;
-  SharedPreferences? _prefs;
+  final DeviceSettings _settings;
 
   bool _autoCheck = defaultAutoCheck;
   UpdateChannel _channel = defaultChannel;
@@ -71,24 +72,23 @@ class UpdatePreferences {
   PendingUpdate? get pendingUpdate => _pendingUpdate;
 
   Future<void> load() async {
-    final prefs = await _prefsInstance();
     try {
-      _autoCheck = prefs.getBool(keyAutoCheck) ?? defaultAutoCheck;
+      _autoCheck = await _settings.read(kUpdateAutoCheckKey);
       _channel = UpdateChannel.fromWire(
-        prefs.getString(keyChannel) ?? defaultChannel.wireName,
+        await _settings.read(kUpdateChannelKey),
       );
-      _manifestOverride = prefs.getString(keyManifestOverride) ?? '';
-      _downloadPrefix = prefs.getString(keyDownloadPrefix) ?? '';
-      final lastCheck = prefs.getInt(keyLastCheckAt);
-      _lastCheckedAt = lastCheck == null || lastCheck <= 0
+      _manifestOverride = await _settings.read(kUpdateManifestOverrideKey);
+      _downloadPrefix = await _settings.read(kUpdateDownloadPrefixKey);
+      final lastCheck = await _settings.read(kUpdateLastCheckAtKey);
+      _lastCheckedAt = lastCheck <= 0
           ? null
           : DateTime.fromMillisecondsSinceEpoch(lastCheck);
-      final pendingVersion = prefs.getString(keyPendingVersion);
-      final pendingBuild = prefs.getInt(keyPendingBuild);
+      final pendingVersion = await _settings.read(kUpdatePendingVersionKey);
+      final pendingBuild = await _settings.readIfPresent(
+        kUpdatePendingBuildKey,
+      );
       _pendingUpdate = null;
-      if (pendingVersion != null &&
-          pendingVersion.isNotEmpty &&
-          pendingBuild != null) {
+      if (pendingVersion.isNotEmpty && pendingBuild != null) {
         _pendingUpdate = PendingUpdate(
           version: pendingVersion,
           build: pendingBuild,
@@ -103,27 +103,27 @@ class UpdatePreferences {
 
   Future<void> setAutoCheckEnabled(bool value) async {
     _autoCheck = value;
-    await _write(keyAutoCheck, value);
+    await _settings.write(kUpdateAutoCheckKey, value);
   }
 
   Future<void> setChannel(UpdateChannel channel) async {
     _channel = channel;
-    await _write(keyChannel, channel.wireName);
+    await _settings.write(kUpdateChannelKey, channel.wireName);
   }
 
   Future<void> setManifestUrlOverride(String value) async {
     _manifestOverride = value.trim();
-    await _write(keyManifestOverride, _manifestOverride);
+    await _settings.write(kUpdateManifestOverrideKey, _manifestOverride);
   }
 
   Future<void> setDownloadPrefix(String value) async {
     _downloadPrefix = value.trim();
-    await _write(keyDownloadPrefix, _downloadPrefix);
+    await _settings.write(kUpdateDownloadPrefixKey, _downloadPrefix);
   }
 
   Future<void> markChecked(DateTime at) async {
     _lastCheckedAt = at;
-    await _write(keyLastCheckAt, at.millisecondsSinceEpoch);
+    await _settings.write(kUpdateLastCheckAtKey, at.millisecondsSinceEpoch);
   }
 
   /// 记录「已交给安装器」的目标版本；写入失败只丢下次启动的回执。
@@ -132,37 +132,14 @@ class UpdatePreferences {
     required int build,
   }) async {
     _pendingUpdate = PendingUpdate(version: version, build: build);
-    await _write(keyPendingVersion, version);
-    await _write(keyPendingBuild, build);
+    await _settings.write(kUpdatePendingVersionKey, version);
+    await _settings.write(kUpdatePendingBuildKey, build);
   }
 
   /// 清除待确认更新（安装失败 / 用户取消 / 已消费回执）。
   Future<void> clearPendingUpdate() async {
     _pendingUpdate = null;
-    try {
-      final prefs = await _prefsInstance();
-      await prefs.remove(keyPendingVersion);
-      await prefs.remove(keyPendingBuild);
-    } catch (_) {
-      // 清除失败只可能让下次启动多显示一次回执，不影响启动。
-    }
+    await _settings.remove(kUpdatePendingVersionKey);
+    await _settings.remove(kUpdatePendingBuildKey);
   }
-
-  Future<void> _write(String key, Object value) async {
-    try {
-      final prefs = await _prefsInstance();
-      if (value is bool) {
-        await prefs.setBool(key, value);
-      } else if (value is int) {
-        await prefs.setInt(key, value);
-      } else {
-        await prefs.setString(key, value.toString());
-      }
-    } catch (_) {
-      // 持久化失败只丢偏好：内存值已更新，本次会话内仍然生效。
-    }
-  }
-
-  Future<SharedPreferences> _prefsInstance() async =>
-      _prefs ??= _prefsOverride ?? await SharedPreferences.getInstance();
 }

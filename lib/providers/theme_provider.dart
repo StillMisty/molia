@@ -2,8 +2,9 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:logging/logging.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/settings/device_settings.dart';
+import '../data/settings/device_settings_keys.dart';
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
 import '../theme/scheme_builder.dart';
@@ -51,9 +52,6 @@ enum SystemBaseColorSource {
 ///
 /// 缺键时把新键的默认值物化一次，之后启动都走「已有值」的读取路径。
 class ThemeProvider extends ChangeNotifier {
-  /// 设备本地键（字体来自本机已装字体，不跟人走）。
-  static const String _appFontKey = 'app_font_family';
-
   ColorScheme _colorScheme = buildColorScheme(
     Color(kSeedColor.defaultValue),
     Brightness.light,
@@ -88,11 +86,14 @@ class ThemeProvider extends ChangeNotifier {
 
   late final Future<void> _preferencesReady;
 
-  ThemeProvider({required this._settings}) {
+  /// [deviceSettings] 仅测试注入字体存储；生产懒取 SharedPreferences。
+  ThemeProvider({required this._settings, DeviceSettings? deviceSettings})
+    : _deviceSettings = deviceSettings ?? DeviceSettings() {
     _preferencesReady = _loadPreferences();
   }
 
   final SettingsAccess _settings;
+  final DeviceSettings _deviceSettings;
 
   ColorScheme get colorScheme => _colorScheme;
 
@@ -281,11 +282,10 @@ class ThemeProvider extends ChangeNotifier {
     _appFontFamily = family;
     notifyListeners();
     await _persist(() async {
-      final prefs = await SharedPreferences.getInstance();
       if (family == null) {
-        await prefs.remove(_appFontKey);
+        await _deviceSettings.remove(kAppFontFamilyKey);
       } else {
-        await prefs.setString(_appFontKey, family);
+        await _deviceSettings.write(kAppFontFamilyKey, family);
       }
     });
   }
@@ -351,20 +351,20 @@ class ThemeProvider extends ChangeNotifier {
       _themeMode = _themeModeOf(modeName);
 
       // 新键缺省时把默认值物化一次；之后启动都走「已有值」的读取路径。
-      final prefs = await SharedPreferences.getInstance();
       final baseName = await _settings.read(kColorBase);
       _baseColorSource = _colorBaseOf(baseName);
       _followArtworkEnabled = await _settings.read(kFollowArtworkEnabled);
-      if (!prefs.containsKey(kColorBase.name)) {
+      if (!await _settings.contains(kColorBase)) {
         await _settings.write(kColorBase, _baseColorSource.name);
       }
-      if (!prefs.containsKey(kFollowArtworkEnabled.name)) {
+      if (!await _settings.contains(kFollowArtworkEnabled)) {
         await _settings.write(kFollowArtworkEnabled, _followArtworkEnabled);
       }
 
       _pureBlackEnabled = await _settings.read(kPureBlackEnabled);
       _seedColor = Color(await _settings.read(kSeedColor));
-      _appFontFamily = prefs.getString(_appFontKey);
+      final fontFamily = await _deviceSettings.read(kAppFontFamilyKey);
+      _appFontFamily = fontFamily.isEmpty ? null : fontFamily;
       // system 模式保留当前亮度，等宿主回调按平台亮度刷新。
       _applyColorScheme(
         _schemeForBrightness(_effectiveBrightness(_colorScheme.brightness)),

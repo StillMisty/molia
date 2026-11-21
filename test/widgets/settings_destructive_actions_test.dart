@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:molia/data/settings/device_settings.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/downloads_and_cache_page.dart';
 import 'package:molia/pages/downloads_manage_page.dart';
@@ -50,7 +51,10 @@ void main() {
   testWidgets('缓存单清是行尾图标按钮，全清是唯一整宽按钮', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
-    final cache = CacheService(prefs: prefs, storage: MemoryCacheStorage());
+    final cache = CacheService(
+      settings: DeviceSettings(preferences: prefs),
+      storage: MemoryCacheStorage(),
+    );
     await pump(
       tester,
       const DownloadsAndCachePage(),
@@ -82,8 +86,13 @@ void main() {
   testWidgets('下载与缓存页把下载入口与缓存清理放在同一页', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
-    final cache = CacheService(prefs: prefs, storage: MemoryCacheStorage());
-    final downloadSettings = DownloadSettings(prefs: prefs);
+    final cache = CacheService(
+      settings: DeviceSettings(preferences: prefs),
+      storage: MemoryCacheStorage(),
+    );
+    final downloadSettings = DownloadSettings(
+      settings: DeviceSettings(preferences: prefs),
+    );
     await downloadSettings.init();
     addTearDown(downloadSettings.dispose);
 

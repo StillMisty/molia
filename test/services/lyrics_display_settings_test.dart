@@ -330,6 +330,10 @@ class _RecordingSettingsAccess implements SettingsAccess {
       (values[key.name] as T?) ?? key.defaultValue;
 
   @override
+  Future<bool> contains(SettingsKey<Object?> key) async =>
+      values.containsKey(key.name);
+
+  @override
   Future<void> write<T extends Object?>(SettingsKey<T> key, T value) {
     writes.add(key.name);
     values[key.name] = value;
