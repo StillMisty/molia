@@ -110,8 +110,15 @@ linux_display_prefix() {
   fi
   command -v xvfb-run >/dev/null 2>&1 ||
     die "缺少 xvfb-run（装 xorg-server-xvfb，或显式使用 --window 跑真实显示）"
+  # headless 默认关闭 GTK 无障碍桥：没有真实 AT 时，at-spi 仍会建语义树，
+  # 把 SEMANTICS 成本混进帧 / 启动数字（实测统计页 timeline 里约 12ms）。
+  # 需要测读屏 / 语义成本时设 MOLIA_KEEP_AT_BRIDGE=1（perf.sh 的 --with-at）。
+  local -a a11y_env=()
+  if [[ "${MOLIA_KEEP_AT_BRIDGE:-0}" != "1" ]]; then
+    a11y_env=(NO_AT_BRIDGE=1 GTK_A11Y=none)
+  fi
   LINUX_DISPLAY_PREFIX=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11 \
-    MOLIA_SINGLE_INSTANCE_DISABLED=1 xvfb-run -a)
+    "${a11y_env[@]}" MOLIA_SINGLE_INSTANCE_DISABLED=1 xvfb-run -a)
 }
 
 # ---- Linux release 构建卫生（perf.sh / startup.sh 共用）--------------------

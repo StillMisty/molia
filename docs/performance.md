@@ -28,6 +28,18 @@ GTK 建窗 ~46ms + libmpv `dlopen` ~39ms + 引擎与首帧渲染 ~100ms；我们
 补埋点而没有可测收益时，提交说明与文档要标明，不冒充性能提升；既无收益又无结构
 必要的改动回退，不留在仓库里。
 
+**Review 清单**（性能改动）：
+
+- **搬回主线程**：把整段工作挪进 isolate 后，追一遍 publish / 派生 / UI 适配路径，
+  别在下一跳又把 O(n) 解码、格式化、排序搬回 UI isolate（本次 `_publish` 就把
+  10k raw 解码搬了回来，43.7ms）。
+- **直接发对象**：`Isolate.run` 优先直接发送纯数据对象；为跨 isolate 构造全量
+  wire map 本身就是 UI 线程成本（10k 行 4–11ms），还会带来字段子集漂移。
+- **行为回退**：交互组件优化要核对语义树（Tooltip → `Semantics`）、出现 / 消失
+  时序、选中与焦点态、几何与视觉；只测帧不算通过。
+- **AOT 口径**：JIT 微基准只能比较量级；宣称收益前用 release / AOT（如
+  `dart compile exe`）复测，给不出同机 A/B 就标「结构改动」。
+
 ## 2. 测量方法
 
 - **只用 release 产物**：debug 的首帧含 JIT / 断言开销，历史 debug 数据在 1.5–2.4s，
@@ -70,6 +82,11 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
 - **Linux 默认无头**：`perf.sh` / `startup.sh` / `dart run tool/agent/cli.dart test` 默认套 Xvfb，
   不会把窗口弹到 WSLg；只有显式 `--window` 才用当前真实显示。手动跑时也要
   `env -u WAYLAND_DISPLAY GDK_BACKEND=x11`，只 unset `DISPLAY` 不够。
+- **headless 默认注入 `NO_AT_BRIDGE=1 GTK_A11Y=none`（best-effort）**：没有真实
+  AT 时 at-spi 可能仍建语义树，把 SEMANTICS 成本混进帧 / 启动数字。实测
+  Xvfb + `integration_test` 下这两个环境变量并不会关掉引擎上报的 accessibility
+  （`semanticsEnabled: false` 也无效），所以 **SEMANTICS 仍属环境成本**；
+  `--with-at` 只控制测试是否主动建语义 handle。跨轮比较必须同机同环境。
 - **WSL / 容器要私有 D-Bus**：`perf.sh data/cpu linux` 已自动套
   `dbus-run-session`。没有 NetworkManager 时，系统会话总线会让电量 / 网络
   探针卡 40s+，症状是 `scenario.source` 迟迟不出现、搜索看起来超时。
@@ -301,7 +318,11 @@ Linux microbenchmark（非端到端启动采样，绝对值只用于比较量级
 `cpu`），Windows 真实窗口帧用 `tool/agent/perf.sh frames windows --real`。
 桌面 `frames` 还包含两个 120Hz 场景：`desktop-favorites-toggle`（10k 行内存库，
 真实 `LocalLibraryProvider`）与 `desktop-statistics-open`（400 天统计直推页面）；
-两者在 Android 上跳过。
+两者在 Android 上跳过。迭代时用 `frames linux --only <场景,场景>` 只跑改动的场景
+（`--only` 会校验场景名并确认确实产出了 `molia.frame`）；新增场景改
+`test/support/perf_app_harness.dart` + `integration_test/perf_flows_test.dart`
+（harness 默认 fake 仓库，10k 真实库用 `PerfRealLibrary`），场景名同时登记到
+`tool/agent/perf.sh` 的 `KNOWN_FRAME_SCENES`。
 
 ### 9.1 帧归因：`frames --timeline`（2026-11）
 
@@ -309,14 +330,14 @@ Linux microbenchmark（非端到端启动采样，绝对值只用于比较量级
 回归，但看不出「卡在哪个阶段」。需要定位时跑：
 
 ```bash
-tool/agent/perf.sh frames linux --timeline     # Android 换成 android [serial]
+tool/agent/perf.sh frames linux --timeline          # Android 换成 android [serial]
+tool/agent/perf.sh frames linux --timeline stats    # 统计页开页入口
 ```
 
 这条路径换用 `integration_test/perf_timeline_test.dart`：`traceAction` 采一段
 VM service timeline（DevTools Performance 的同一数据源），场景仍是桌面壳收藏滚动。
-统计页开页另用 `integration_test/perf_statistics_timeline_test.dart`（同一套口径，
-只是场景换成 400 天统计 + 直接 push 页面）；本机 GTK/at-spi 默认开启语义树时
-SEMANTICS 不会归零，跨环境比较前先确认。
+`--timeline stats` 换 `integration_test/perf_statistics_timeline_test.dart`
+（同一套口径，场景换成 400 天统计 + 直接 push 页面）。
 
 - 产物：`timeline.json`（原始 trace，可直接导入 DevTools Performance 或
   ui.perfetto.dev 看火焰图）与 `summary.md`（UI 帧百分位、BUILD / LAYOUT / PAINT /

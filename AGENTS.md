@@ -140,7 +140,7 @@ sources/playback。模块布局与体积由 `test/architecture/module_layout_tes
 - 文档地图与单一来源约定见 `docs/README.md`；改 / 删文档前先查指向；
 - Issues 与规格走 GitHub issues（`gh` CLI，`docs/agents/issue-tracker.md`）；标签见
   `docs/agents/triage-labels.md`；术语与决策见 `GLOSSARY.md` + `docs/adr/`（`docs/agents/domain.md`）；
-- 包体积 / 内存 / worktree / seed / APK 明细的完整口径与踩坑见
-  `.agents/skills/molia-perf-tooling/SKILL.md`；
+- 帧 / 120Hz（`jank8`）/ 包体积 / 内存 / worktree / seed / APK 明细的完整口径与
+  踩坑见 `.agents/skills/molia-perf-tooling/SKILL.md`；
 - `skills-lock.json` 管理的 `dart-*` / `flutter-*` 等第三方技能勿手改；`molia-*` 为本仓技能，
   随 `AGENTS.md` 与 docs 一起维护。

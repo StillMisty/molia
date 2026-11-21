@@ -1,6 +1,6 @@
 ---
 name: Molia 性能与体积工具
-description: 优化或验证 Molia 的包体积、内存、APK 内容、Linux release bundle，或在并行 worktree 中构建 / seed / 采样时使用。触发词：包体积、内存、perf、size、APK、bundle、worktree、seed、imageCache、release 体积、native 库。
+description: 优化或验证 Molia 的帧 / 120Hz（jank8）、启动、包体积、内存、APK 内容、Linux release bundle，或在并行 worktree 中构建 / seed / 采样时使用。触发词：帧、120Hz、jank8、frames、perf、启动、包体积、内存、size、APK、bundle、worktree、seed、imageCache、release 体积、native 库。
 ---
 
 # Molia 性能与体积工具
@@ -10,6 +10,8 @@ description: 优化或验证 Molia 的包体积、内存、APK 内容、Linux re
 | 目标 | 命令 |
 |---|---|
 | 新 worktree 构建前置 | `tool/agent/worktree_prepare.sh <dir> [branch]` |
+| 帧 / 120Hz | `tool/agent/perf.sh frames linux`（`--only a,b` 只跑场景；`--timeline [stats]` 归因） |
+| 语义 / 读屏成本 | 帧命令加 `--with-at`（默认关闭 GTK 无障碍桥） |
 | Linux bundle 体积 | `tool/agent/perf.sh size linux` |
 | Android APK 体积 | `tool/agent/perf.sh size android` |
 | APK 明细 / native 库约束 | `dart run tool/agent/cli.dart size apk --check <apk>` |
@@ -19,6 +21,28 @@ description: 优化或验证 Molia 的包体积、内存、APK 内容、Linux re
 
 权威数字与基线：`docs/performance.md`、`docs/memory.md`、`docs/performance-audit.md`。
 **先有原始产物 / 日志，再写数字；没有 A/B 就明确写「未测」，不要归因。**
+
+## 帧 / 120Hz
+
+- 判定口径：`work = build + raster`，120Hz 看 **`jank8`**（>8.33ms），60Hz 看
+  `jank16` / `jank33`；`totalSpan` 只用于 `latency16`，不是卡顿依据。
+- 场景都在 `integration_test/perf_flows_test.dart`：桌面滚动 / 切页 / 切歌、
+  移动壳进出播放页、迷你条展开，以及两个 120Hz 专用场景
+  `desktop-favorites-toggle`（10k 真实内存库）与 `desktop-statistics-open`
+  （400 天统计）。Android 跳过这两个 10k 场景。
+- **只跑改动的场景**：`tool/agent/perf.sh frames linux --only desktop-statistics-open`
+  （逗号分隔；会校验场景名并确认确实产出了 `molia.frame`）。全量一轮含 10k seed，
+  分钟级，迭代不要每轮全跑。
+- 归因：`--timeline`（收藏滚动）或 `--timeline stats`（统计页开页）；
+  产物为 `timeline.json` + `summary.md`。
+- headless 默认注入 `NO_AT_BRIDGE=1 GTK_A11Y=none`（best-effort）：没有真实 AT 时
+  语义树不该计入帧预算；但实测 Xvfb + integration_test 下引擎仍会报告
+  accessibility enabled，SEMANTICS 属环境成本。`--with-at` 只控制测试是否主动建
+  语义 handle，跨轮比较保持同机同环境。
+- 新增场景：改 `test/support/perf_app_harness.dart` +
+  `integration_test/perf_flows_test.dart`，并把场景名登记到 `tool/agent/perf.sh`
+  的 `KNOWN_FRAME_SCENES`。
+- 基线与历史 A/B 见 `docs/performance.md` §9 与 `docs/performance-audit.md`。
 
 ## 新 worktree
 

@@ -37,7 +37,7 @@ Future<int?> showAppColorPicker(
 }) async {
   final l10n = AppLocalizations.of(context)!;
   final selected = ValueNotifier<int>(initialColor);
-  final width = math.min(MediaQuery.of(context).size.width * 0.9, 420.0);
+  final width = math.min(MediaQuery.sizeOf(context).width * 0.9, 420.0);
   // M3EDialog.show 固定把 dialog 推入 root navigator；关闭也必须定向 root，
   // 否则在带内部 Navigator 的弹层（设置页）里 pop 无效。
   final navigator = Navigator.of(context, rootNavigator: true);

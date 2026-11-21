@@ -1,8 +1,9 @@
 /// `frames` 结果汇总：把 `frames*.jsonl` / `frames*.log` 里的 `molia.frame`
 /// 行整理成 Markdown（跨端，替代 `perf.sh report()` 里的内联 Python）。
 ///
-/// 口径不变：每个场景优先取 `label=end` 的窗口，没有 end 时取最后一条
-/// （启动期场景可能没机会打 end）。
+/// 口径：5s 周期汇总可能把长场景切成多个窗口；每个场景取**样本数最多**的
+/// 窗口，同样本数优先 `label=end`。只取 `end` 会在场景超过 5s 时把很短的
+/// 尾窗当成代表，严重低估（10k 收藏切换曾出现 108 帧 + 14 帧被汇总成后者）。
 library;
 
 import 'dart:convert';
@@ -84,6 +85,23 @@ Map<String, Object?>? _tryDecode(String text) {
 
 String _basename(String path) => path.split(Platform.pathSeparator).last;
 
+/// 场景窗口的帧数（缺失按 0）。
+int _frameCount(Map<String, Object?> row) =>
+    (row['frames'] as num?)?.toInt() ?? 0;
+
+/// 长场景被 5s 周期汇总切成多段时，取样本最多的一段；同数优先显式 `end`。
+bool _preferWindow(
+  Map<String, Object?> candidate,
+  Map<String, Object?> current,
+) {
+  final candidateFrames = _frameCount(candidate);
+  final currentFrames = _frameCount(current);
+  if (candidateFrames != currentFrames) {
+    return candidateFrames > currentFrames;
+  }
+  return candidate['label'] == 'end' && current['label'] != 'end';
+}
+
 /// 生成 summary.md 内容。空样本也给出明确结论，避免误以为是脚本失败。
 String renderFrameSummary(List<Map<String, Object?>> rows) {
   if (rows.isEmpty) {
@@ -94,7 +112,7 @@ String renderFrameSummary(List<Map<String, Object?>> rows) {
   for (final row in rows) {
     final scenario = (row['scenario'] ?? 'app').toString();
     final existing = byScenario[scenario];
-    if (existing == null || row['label'] == 'end') {
+    if (existing == null || _preferWindow(row, existing)) {
       byScenario[scenario] = row;
     }
   }
@@ -102,7 +120,7 @@ String renderFrameSummary(List<Map<String, Object?>> rows) {
   final buffer = StringBuffer()
     ..writeln('# 性能体检：帧样本')
     ..writeln()
-    ..writeln('## 场景汇总（每个场景取 end / 最后一条）')
+    ..writeln('## 场景汇总（每个场景取样本最多的窗口；同数优先 end）')
     ..writeln()
     ..writeln(_tableHeader());
   for (final row in byScenario.values) {

@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:molia/app/perf/frame_stats.dart';
+
 import '../../tool/agent/src/perf_report.dart';
 
 void main() {
@@ -35,11 +37,13 @@ void main() {
     ]);
   });
 
-  test('每个场景优先取 end 窗口', () {
+  test('每个场景取样本最多的窗口，同样本数优先 end', () {
     File('${directory.path}/frames.jsonl').writeAsStringSync(
       '{"scenario":"a","label":"mid","frames":10}\n'
       '{"scenario":"a","label":"end","frames":20}\n'
-      '{"scenario":"b","label":"only","frames":5}\n',
+      '{"scenario":"b","label":"only","frames":5}\n'
+      '{"scenario":"long","frames":108}\n'
+      '{"scenario":"long","label":"end","frames":14}\n',
     );
 
     final summary = renderFrameSummary(loadFrameRows(directory));
@@ -47,6 +51,11 @@ void main() {
     expect(scenarioTable, contains('| a | end | 20 |'));
     expect(scenarioTable, contains('| b | only | 5 |'));
     expect(scenarioTable, isNot(contains('| a | mid | 10 |')));
+    expect(
+      scenarioTable,
+      contains('| long |  | 108 |'),
+      reason: '长场景被 5s 周期切成两段时，不能拿很短的 end 尾窗代表场景',
+    );
   });
 
   test('没有样本时给出明确结论', () {
@@ -61,5 +70,27 @@ void main() {
       ]),
       contains('| 3 |'),
     );
+  });
+
+  test('jank8 按 120Hz 帧预算（8.33ms）判定 work', () {
+    final window = FrameWindow()
+      ..add(buildMs: 6, rasterMs: 3, vsyncMs: 0, totalMs: 9) // work=9 → jank8
+      ..add(buildMs: 4, rasterMs: 3, vsyncMs: 0, totalMs: 7); // work=7 → 不 jank
+
+    final stats = window.take()!;
+    expect(stats['jank8'], 1);
+    expect(stats['jank16'], 0);
+    expect(stats['jank33'], 0);
+  });
+
+  test('take() 输出 jank8 并清零', () {
+    final window = FrameWindow()
+      ..add(buildMs: 5, rasterMs: 5, vsyncMs: 0, totalMs: 10);
+
+    expect(window.take()!['jank8'], 1);
+    expect(window.take(), isNull);
+
+    window.add(buildMs: 1, rasterMs: 1, vsyncMs: 0, totalMs: 2);
+    expect(window.take()!['jank8'], 0);
   });
 }

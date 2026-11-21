@@ -4,6 +4,8 @@
 # 用法:
 #   tool/agent/perf.sh frames linux|android|windows
 #   tool/agent/perf.sh frames linux|android --timeline   # VM timeline 归因 + 原始 trace
+#   tool/agent/perf.sh frames linux|android --timeline stats  # 统计页开页 timeline
+#   tool/agent/perf.sh frames linux --only desktop-statistics-open  # 只跑指定场景
 #   tool/agent/perf.sh frames windows --real   # release 真实窗口 + 滚轮，raster 可信
 #   tool/agent/perf.sh startup linux|android
 #   tool/agent/perf.sh data linux|android      # 搜索/起播/取词端到端时延（mock 音源）
@@ -15,11 +17,16 @@
 #
 # 全局选项:
 #   --window    Linux 在真实显示上跑（默认 Xvfb 无头，不会弹到 WSLg）
+#   --with-at   frames：测试仍主动建语义 handle（默认不建；环境语义树开关另见下）
+#   --only a,b  frames：只跑指定场景（同样支持 MOLIA_PERF_ONLY 环境变量）
 #   --no-build  复用已有产物（data/cpu 的 release APK / Linux bundle；见各命令）
 #
 # 说明:
 # - Linux 默认无条件 Xvfb；`--window` 才用当前 DISPLAY。只改 DISPLAY 不够，
 #   脚本会同时 unset WAYLAND_DISPLAY + GDK_BACKEND=x11（同 cli.dart test）；
+# - headless 默认注入 NO_AT_BRIDGE/GTK_A11Y（best-effort）：没有真实 AT 时
+#   语义树不该计入帧预算；但 integration_test 下引擎仍可能上报 accessibility
+#   enabled，SEMANTICS 属环境成本。--with-at 只控制测试是否主动建语义 handle；
 # - data/cpu linux 自动套私有 `dbus-run-session`：WSL / 容器没有 keyring 或
 #   NetworkManager 时，系统会话总线会让同步初始化（安全存储 / 探针）卡 40s+，
 #   看起来像搜索超时；
@@ -30,7 +37,7 @@
 # - `frames --timeline` 换 integration_test/perf_timeline_test.dart：用
 #   `traceAction` 采 VM timeline（DevTools Performance 的同一数据源），
 #   timeline.json 可直接导入 DevTools / Perfetto；summary.md 里按帧给出
-#   build / raster 拆分与最差帧归因，用于默认路径只报总耗时之后的定位；
+#   build / raster 拆分与最差帧归因；`--timeline stats` 换成统计页开页入口；
 # - Windows 目标必须用 Windows 侧 Flutter（WSL 的 Flutter 不能构建 Windows）；
 #   默认从 Windows 用户目录推导构建目录（%USERPROFILE%\molia-perf）、从 %TEMP%
 #   推导采样输出、从 Windows PATH 取 flutter.bat，可用 MOLIA_WIN_FLUTTER /
@@ -42,8 +49,11 @@ handle_help "$@"
 
 FRAME_TEST_TARGET="integration_test/perf_flows_test.dart"
 FRAME_TIMELINE_TARGET="integration_test/perf_timeline_test.dart"
+FRAME_STATS_TIMELINE_TARGET="integration_test/perf_statistics_timeline_test.dart"
 FRAME_TIMELINE_DATA="$PROJECT_DIR/build/integration_response_data.json"
 FRAME_TEST_DRIVER="test_driver/integration_test.dart"
+# 由 `frames` 子命令设置：1 = 本轮采 timeline（Android 不再抓 logcat）。
+FRAME_TIMELINE=0
 # Windows 侧路径：优先环境变量；未设置时由 win_init 从 Windows 用户目录与
 # %TEMP% 推导，不假设任何用户名或 SDK 安装位置。
 WIN_FLUTTER="${MOLIA_WIN_FLUTTER:-}"
@@ -58,16 +68,90 @@ FRAME_TIMEOUT="${MOLIA_PERF_TIMEOUT:-1800}"
 
 PERF_WINDOW=0
 PERF_NO_BUILD=0
+PERF_ONLY="${MOLIA_PERF_ONLY:-}"
+PERF_WITH_AT="${MOLIA_PERF_WITH_AT:-0}"
 _global_args=()
-for _arg in "$@"; do
-  case "$_arg" in
+while (($#)); do
+  case "$1" in
     --window) PERF_WINDOW=1 ;;
     --no-build) PERF_NO_BUILD=1 ;;
-    *) _global_args+=("$_arg") ;;
+    --with-at) PERF_WITH_AT=1 ;;
+    --only|--only=*)
+      if [[ "$1" == --only=* ]]; then
+        PERF_ONLY="${1#--only=}"
+      else
+        [[ $# -ge 2 ]] || die "--only 需要场景名（逗号分隔）"
+        PERF_ONLY="$2"
+        shift
+      fi
+      ;;
+    *) _global_args+=("$1") ;;
   esac
+  shift
 done
 set -- "${_global_args[@]}"
-unset _arg _global_args
+unset _global_args
+
+# headless 下默认关闭 GTK 无障碍桥（见 _common.sh::linux_display_prefix）。
+# 测语义树成本 / 读屏路径时用 --with-at 或 MOLIA_PERF_WITH_AT=1。
+if [[ "$PERF_WITH_AT" == "1" ]]; then
+  export MOLIA_KEEP_AT_BRIDGE=1
+fi
+
+# `frames --only` 的场景白名单：与 `integration_test/perf_flows_test.dart` 的
+# 场景名一一对应；拼错直接失败，避免跑完一轮才发现没有样本。
+KNOWN_FRAME_SCENES=(
+  desktop-favorites-scroll
+  desktop-library-switch
+  desktop-track-switch
+  mobile-nowplaying-open
+  mobile-nowplaying-toggle
+  mobile-nowplaying-leave-return
+  mobile-mini-expand
+  desktop-favorites-toggle
+  desktop-statistics-open
+)
+
+validate_frame_only() {
+  [[ -n "$PERF_ONLY" ]] || return 0
+  local name known
+  local -a names=()
+  IFS=',' read -r -a names <<<"$PERF_ONLY"
+  for name in "${names[@]}"; do
+    name="${name// /}"
+    [[ -z "$name" ]] && continue
+    known=0
+    for candidate in "${KNOWN_FRAME_SCENES[@]}"; do
+      [[ "$candidate" == "$name" ]] && known=1 && break
+    done
+    ((known)) ||
+      die "未知帧场景：$name（可选：${KNOWN_FRAME_SCENES[*]}）"
+  done
+}
+
+# 结果目录里必须真的出现请求的场景；场景被平台 skip / 测试失败都能在这里暴露。
+require_frame_scenarios() {
+  local out_dir="$1"
+  [[ -n "$PERF_ONLY" ]] || return 0
+  local name
+  local -a names=()
+  IFS=',' read -r -a names <<<"$PERF_ONLY"
+  for name in "${names[@]}"; do
+    name="${name// /}"
+    [[ -z "$name" ]] && continue
+    grep -qE "\"scenario\": ?\"$name\"" "$out_dir"/frames.* 2>/dev/null ||
+      die "场景 $name 没有产出 molia.frame（检查平台 skip / 测试是否失败；原始日志：$out_dir）"
+  done
+}
+
+# frames 的额外 dart-define：--only 为空时保持全量；--with-at 才让测试建语义 handle。
+FRAME_EXTRA_DEFINES=()
+if [[ -n "$PERF_ONLY" ]]; then
+  FRAME_EXTRA_DEFINES+=(--dart-define="MOLIA_PERF_ONLY=$PERF_ONLY")
+fi
+if [[ "$PERF_WITH_AT" == "1" ]]; then
+  FRAME_EXTRA_DEFINES+=(--dart-define=MOLIA_PERF_WITH_AT=true)
+fi
 
 
 new_out_dir() {
@@ -138,11 +222,11 @@ windows_powershell() { # 传入 PowerShell 命令字符串
 
 run_frames_linux() {
   require_flutter
-  local out_dir="$1" timeline="${2:-0}" target="$FRAME_TEST_TARGET"
-  ((timeline)) && target="$FRAME_TIMELINE_TARGET"
+  local out_dir="$1" target="${2:-$FRAME_TEST_TARGET}"
   linux_run_prefix
   local out_file="$out_dir/frames.jsonl"
   log "帧场景（Linux / profile）：结果 $out_dir"
+  [[ -n "$PERF_ONLY" ]] && log "只跑场景：$PERF_ONLY"
   "${LINUX_RUN_PREFIX[@]}" timeout --signal=TERM --kill-after=10 "$FRAME_TIMEOUT" \
     flutter drive \
     --profile \
@@ -151,6 +235,7 @@ run_frames_linux() {
     -d linux \
     --dart-define=MOLIA_PERF_TRACE=true \
     --dart-define="MOLIA_PERF_OUT=$out_file" \
+    "${FRAME_EXTRA_DEFINES[@]}" \
     2>&1 | tee "$out_dir/drive.log"
 }
 
@@ -158,11 +243,11 @@ run_frames_android() {
   require_flutter
   ensure_adb
   local serial="${1:-$DEVICE_ID}"
-  local out_dir="$2" timeline="${3:-0}" target="$FRAME_TEST_TARGET"
-  ((timeline)) && target="$FRAME_TIMELINE_TARGET"
+  local out_dir="$2" target="${3:-$FRAME_TEST_TARGET}"
   "$ADB" -s "$serial" get-state >/dev/null 2>&1 ||
     die "设备 $serial 未连接（先 tool/agent/emu.sh start）"
   log "帧场景（Android $serial / profile）：结果 $out_dir"
+  [[ -n "$PERF_ONLY" ]] && log "只跑场景：$PERF_ONLY"
   "$ADB" -s "$serial" logcat -c || true
   timeout --signal=TERM --kill-after=10 "$FRAME_TIMEOUT" \
     flutter drive \
@@ -171,8 +256,9 @@ run_frames_android() {
     --target="$target" \
     -d "$serial" \
     --dart-define=MOLIA_PERF_TRACE=true \
+    "${FRAME_EXTRA_DEFINES[@]}" \
     2>&1 | tee "$out_dir/drive.log"
-  if ((timeline)); then
+  if ((FRAME_TIMELINE)); then
     return 0
   fi
   "$ADB" -s "$serial" logcat -d -v time 2>/dev/null |
@@ -194,8 +280,12 @@ collect_timeline() {
 run_frames_windows() {
   windows_sync
   local out_dir="$1"
+  local extra_defines=""
+  [[ -n "$PERF_ONLY" ]] && extra_defines+="--dart-define='MOLIA_PERF_ONLY=$PERF_ONLY' "
+  [[ "$PERF_WITH_AT" == "1" ]] && extra_defines+="--dart-define='MOLIA_PERF_WITH_AT=true' "
   rm -f "$WIN_PERF_OUT_WSL"
   log "帧场景（Windows / profile integration）：结果 $out_dir"
+  [[ -n "$PERF_ONLY" ]] && log "只跑场景：$PERF_ONLY"
   windows_powershell "\
     \$ErrorActionPreference = 'Stop'; \
     Set-Location '$WIN_PROJECT'; \
@@ -206,7 +296,7 @@ run_frames_windows() {
       --target='$FRAME_TEST_TARGET' \
       -d windows \
       --dart-define=MOLIA_PERF_TRACE=true \
-      --dart-define='MOLIA_PERF_OUT=$WIN_PERF_OUT_WIN' \
+      ${extra_defines}--dart-define='MOLIA_PERF_OUT=$WIN_PERF_OUT_WIN' \
       2>&1 | Tee-Object -FilePath '$WIN_PROJECT\\perf-drive.log'" \
     >"$out_dir/drive.log" 2>&1 || true
   [[ -f "$WIN_PERF_OUT_WSL" ]] && cp "$WIN_PERF_OUT_WSL" "$out_dir/frames.jsonl"
@@ -669,39 +759,77 @@ shift || true
 case "$cmd" in
   frames)
     ((PERF_NO_BUILD)) && die "frames 暂不支持 --no-build：flutter drive 会重建 profile 产物"
-    timeline=0
+    validate_frame_only
+    FRAME_TIMELINE=0
+    timeline_kind=""
+    expect_timeline_arg=0
     frame_args=()
     for frame_arg in "$@"; do
+      if ((expect_timeline_arg)); then
+        expect_timeline_arg=0
+        if [[ "$frame_arg" == "stats" ]]; then
+          timeline_kind="stats"
+          continue
+        fi
+      fi
       case "$frame_arg" in
-        --timeline) timeline=1 ;;
+        --timeline) FRAME_TIMELINE=1; expect_timeline_arg=1 ;;
+        --timeline=*) FRAME_TIMELINE=1; timeline_kind="${frame_arg#--timeline=}" ;;
         *) frame_args+=("$frame_arg") ;;
       esac
     done
     set -- "${frame_args[@]}"
-    unset frame_arg frame_args
+    unset frame_arg frame_args expect_timeline_arg
+    case "$timeline_kind" in
+      "" | stats) ;;
+      *) die "--timeline 只支持 stats（统计页开页）或留空（收藏滚动）" ;;
+    esac
+    frame_target="$FRAME_TEST_TARGET"
+    if ((FRAME_TIMELINE)); then
+      if [[ "$timeline_kind" == "stats" ]]; then
+        frame_target="$FRAME_STATS_TIMELINE_TARGET"
+      else
+        frame_target="$FRAME_TIMELINE_TARGET"
+      fi
+    fi
     [[ $# -ge 1 ]] || usage
     platform="$1"; shift
     case "$platform" in
       linux)
         out_dir="$(new_out_dir linux)"
-        run_frames_linux "$out_dir" "$timeline" | tee "$out_dir/drive-console.log"
-        if ((timeline)); then collect_timeline "$out_dir"; else report "$out_dir"; fi
+        run_frames_linux "$out_dir" "$frame_target" |
+          tee "$out_dir/drive-console.log"
+        if ((FRAME_TIMELINE)); then
+          collect_timeline "$out_dir"
+        else
+          report "$out_dir"
+          require_frame_scenarios "$out_dir"
+        fi
         ;;
       android)
         out_dir="$(new_out_dir android)"
-        run_frames_android "${1:-}" "$out_dir" "$timeline" | tee "$out_dir/drive-console.log"
-        if ((timeline)); then collect_timeline "$out_dir"; else report "$out_dir"; fi
+        run_frames_android "${1:-}" "$out_dir" "$frame_target" |
+          tee "$out_dir/drive-console.log"
+        if ((FRAME_TIMELINE)); then
+          collect_timeline "$out_dir"
+        else
+          report "$out_dir"
+          require_frame_scenarios "$out_dir"
+        fi
         ;;
       windows)
-        ((timeline)) &&
+        ((FRAME_TIMELINE)) &&
           die "Windows 不支持 --timeline：真实窗口帧走 frames windows --real（PowerShell 采样）"
         out_dir="$(new_out_dir windows)"
         if [[ "${1:-}" == "--real" ]]; then
+          [[ -n "$PERF_ONLY" ]] &&
+            die "frames windows --real 不支持 --only：真实窗口采样不按测试场景切分"
           run_frames_windows_real "$out_dir" | tee "$out_dir/frames-console.log"
         else
           run_frames_windows "$out_dir" | tee "$out_dir/drive-console.log"
         fi
         report "$out_dir"
+        require_frame_scenarios "$out_dir"
         ;;
       *) usage ;;
     esac
