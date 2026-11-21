@@ -1,8 +1,7 @@
-/// 听歌统计页的页面内模型与格式化。
+/// 听歌统计页的页面内模型与格式化：紧凑日期与海报数据拼装。
 ///
-/// 这里只放「页面自己定义、但不止一个拆分文件要用」的值：紧凑日期与海报
-/// 数据拼装。统计投影（日历 / 7×24 矩阵 / 起始日）统一在
-/// `lib/services/statistics/listening_statistics.dart`，本文件不复制口径。
+/// 统计投影（日历 / 7×24 矩阵 / 起始日）来自
+/// `lib/services/statistics/listening_statistics.dart`，本文件只做展示格式化。
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -17,7 +16,7 @@ import '../../widgets/labels/listened_duration.dart';
 
 /// 紧凑日期：同年 `M/d`、跨年 `yyyy/M`（完整日期会在窄块里被裁切）。
 ///
-/// [now] 由统计窗口提供，页面不再自己读墙钟。
+/// [now] 由统计窗口提供，用于判断同年 `M/d` 还是跨年 `yyyy/M`。
 String formatCompactStatisticsDate(int epochMs, {required DateTime now}) {
   final date = DateTime.fromMillisecondsSinceEpoch(epochMs);
   return date.year == now.year
@@ -38,16 +37,15 @@ String statisticsSourceName(BuildContext context, String sourceKey) {
 ///
 /// [narrowWeekdays] 是 `MaterialLocalizations.narrowWeekdays`（周日开头），
 /// 这里重排成周一开头的 7 个标签，与作息热力图的行顺序一致。矩阵本身来自
-/// [ListeningStatisticsView.poster]，本函数只做 l10n 格式化。
+/// [ListeningStatisticsView.posterWeekdayHour]，本函数只做 l10n 格式化。
 ListeningStatsPosterData buildListeningStatsPosterData({
   required AppLocalizations l10n,
   required ListeningStatisticsView view,
   required List<String> narrowWeekdays,
   required String Function(String sourceKey) sourceName,
 }) {
-  final poster = view.poster;
-  final summary = poster.summary;
-  final sources = poster.sources;
+  final summary = view.snapshot.summary;
+  final sources = view.snapshot.sources;
   final rangeLabel = switch (view.window.range) {
     PlayStatisticsRange.week => l10n.statsRangeWeek,
     PlayStatisticsRange.month => l10n.statsRangeMonth,
@@ -70,7 +68,7 @@ ListeningStatsPosterData buildListeningStatsPosterData({
     completionCaption: l10n.statsCompleteRate,
     topTracksTitle: l10n.statsTopTracks,
     topTracks: [
-      for (final track in poster.topTracks)
+      for (final track in view.snapshot.topTracks)
         ListeningStatsPosterRow(
           title: track.title,
           subtitle: [
@@ -82,7 +80,7 @@ ListeningStatsPosterData buildListeningStatsPosterData({
     ],
     topArtistsTitle: l10n.statsTopArtists,
     topArtists: [
-      for (final artist in poster.topArtists)
+      for (final artist in view.snapshot.topArtists)
         ListeningStatsPosterRow(
           title: artist.artist,
           subtitle:
@@ -92,7 +90,7 @@ ListeningStatsPosterData buildListeningStatsPosterData({
     ],
     weekdayHourTitle: l10n.statsWeekdayHour,
     weekdayLabels: weekdayLabels,
-    weekdayHour: poster.weekdayHour,
+    weekdayHour: view.posterWeekdayHour,
     platformLabel: sources.isEmpty
         ? null
         : l10n.annualReportTopPlatform(sourceName(sources.first.sourceKey)),

@@ -17,8 +17,7 @@ import '../../widgets/track_row.dart';
 
 /// 日历热力图卡片：全量历史格子 + 范围高亮 + 时长/次数切换。
 ///
-/// 投影（值 / 起始日 / 今天 / 高亮起点）全部来自 [ListeningStatisticsView]，
-/// 卡片不再读墙钟。
+/// 值、起始日、今天与高亮起点都来自 [ListeningStatisticsView]。
 class StatisticsCalendarHeatmapCard extends StatelessWidget {
   const StatisticsCalendarHeatmapCard({
     super.key,
@@ -87,7 +86,7 @@ class StatisticsCalendarHeatmapCard extends StatelessWidget {
             lastDay: view.today,
             cellSize: 14,
             selectedDay: selectedDay,
-            highlightFrom: view.windowStart,
+            highlightFrom: view.window.start,
             tooltipFor: (day, value) => l10n.statsTooltip(
               localizations.formatMediumDate(day),
               duration

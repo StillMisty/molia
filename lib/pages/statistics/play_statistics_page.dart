@@ -143,9 +143,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   }
 
   Widget _content(AppLocalizations l10n, PlayStatisticsProvider provider) {
-    final view = provider.view;
-    // hasLoaded 只在快照与投影同时就绪后置位；这里兜底异常态，正常不会命中。
-    if (view == null) return const Center(child: M3ELoadingIndicator());
+    final view = provider.view!;
     final isWide = context.isLargeScreen;
     final isDesktop = context.isDesktop;
     // 范围切换走设置页共享的分段行（SettingsChoiceRow 显式给紧约束宽度，

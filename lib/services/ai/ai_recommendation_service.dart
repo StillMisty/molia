@@ -435,6 +435,8 @@ class AiRecommendationService implements AiRecommendationGenerator {
     }
     if (sections.contains(AiUpstreamSection.timeAndSource) &&
         profile.byWeekdayHour.isNotEmpty) {
+      // 这里排序的是「时长最高的时段」列表（每项带 weekday/hour），不是统计页
+      // 的稠密 7×24 矩阵；复用矩阵会丢掉 top-slot 语义，故保持独立。
       final topSlots = [...profile.byWeekdayHour]
         ..sort((a, b) {
           final byMinutes = b.listenedMs.compareTo(a.listenedMs);

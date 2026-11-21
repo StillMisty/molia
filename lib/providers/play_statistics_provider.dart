@@ -32,7 +32,7 @@ class PlayStatisticsProvider extends ChangeNotifier {
 
   final PlayStatisticsRepository _repository;
 
-  /// 统计窗口的唯一时钟源；测试注入固定值，避免用例跟墙钟漂移。
+  /// 统计加载窗口与导出时间戳共用的时钟源；测试注入固定值。
   final DateTime Function() _clock;
   final Logger _logger = Logger('molia.play_statistics_provider');
   StreamSubscription<void>? _subscription;
@@ -52,13 +52,10 @@ class PlayStatisticsProvider extends ChangeNotifier {
   bool _failed = false;
   int _loadToken = 0;
 
-  /// 最近一次加载完成的聚合快照（null = 尚未加载）。
-  ListeningStatisticsSnapshot? _snapshot;
-
-  /// 最近一次加载读取的窗口（null = 尚未加载）；页面高亮与年度入口共用。
-  StatisticsWindow? _window;
-
-  /// 最近一次加载完成的投影（快照 + 窗口一次算好）。
+  /// 最近一次被接受的加载（快照 + 窗口一次算好；null = 尚未加载）。
+  ///
+  /// 只有查询成功且未被新加载取代时才替换：失败或过期结果不会让窗口
+  /// 先于页面显示的视图前移。
   ListeningStatisticsView? _view;
 
   PlayStatisticsRange get range => _range;
@@ -68,26 +65,17 @@ class PlayStatisticsProvider extends ChangeNotifier {
   bool get hasError => _failed;
 
   /// 聚合快照（汇总 / 榜单 / 日历 / 作息热力图 / 来源分布一次取回）。
-  ListeningStatisticsSnapshot? get snapshot => _snapshot;
+  ListeningStatisticsSnapshot? get snapshot => _view?.snapshot;
 
-  /// 最近一次加载固定的窗口；页面高亮、海报与年度入口都读它。
-  StatisticsWindow? get window => _window;
+  /// 最近一次被接受的窗口；与 [view] 永远同一代。
+  ListeningStatisticsWindow? get window => _view?.window;
 
-  /// 最近一次加载完成的页面投影；同一快照 + 同一窗口只算一次。
+  /// 最近一次被接受的页面投影；同一快照 + 同一窗口只算一次。
   ListeningStatisticsView? get view => _view;
-
-  /// 全量历史的按日 rollup（**不受范围切换影响**）。
-  ///
-  /// 日历热力图与年度报告入口共用这一份；范围只作用于汇总 / 榜单 /
-  /// 作息热力图，年度可用年份不能跟着 30 天窗口消失。
-  List<DayListened> get allHistoryDaily => _snapshot?.daily ?? const [];
 
   /// 范围内没有任何已收尾事件（加载完成的前提下）。
   bool get isEmpty =>
-      _loaded && !_loading && (_snapshot?.summary.playCount ?? 0) == 0;
-
-  /// 范围起点（本地时间；`null` = 全部）。热力图高亮与查询共用同一窗口。
-  DateTime? get rangeStart => _window?.start;
+      _loaded && !_loading && (snapshot?.summary.playCount ?? 0) == 0;
 
   /// 首次打开页面时调用（已加载过则跳过）。
   Future<void> ensureLoaded() async {
@@ -206,8 +194,7 @@ class PlayStatisticsProvider extends ChangeNotifier {
         final token = ++_loadToken;
         // 一次加载只读一次时钟：查询起点、日历高亮与「今天」必须属于同一窗口，
         // 否则两次读取跨过午夜会出现范围 / 高亮 / 年度入口各说各话。
-        final window = StatisticsWindow(range: _range, now: _clock());
-        _window = window;
+        final window = ListeningStatisticsWindow(range: _range, now: _clock());
         if (!silent) {
           _loading = true;
           notifyListeners();
@@ -216,7 +203,6 @@ class PlayStatisticsProvider extends ChangeNotifier {
           // 一次快照：查询集合与范围语义都由领域层与仓库承担。
           final snapshot = await _repository.snapshot(since: window.sinceMs);
           if (token != _loadToken) return; // 范围已切换：丢弃过期结果。
-          _snapshot = snapshot;
           _view = ListeningStatisticsView.from(snapshot, window);
           _loaded = true;
           _failed = false;
