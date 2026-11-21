@@ -18,8 +18,9 @@ import 'support/sync_test_support.dart';
 /// 轮次队列：唯一的排队 / 串行 / 交付判定。
 ///
 /// 覆盖「零对端 / 纯探测不算交付」「手动轮能清待发」「按请求合并外发与类别
-/// 范围」「在途永不重叠」「轮内标脏不被本轮清掉」，以及真实引擎 + 真实调度器
-/// 共享同一队列的跨层用例（只在传输边界用假传输）。
+/// 范围」「在途永不重叠」「轮内标脏不被本轮清掉」，交付判据的按启用传输矩阵
+/// （局域网 / WebDAV 分别成功 / 失败 / 不可用 / 关闭），以及真实引擎 + 真实
+/// 调度器共享同一队列的跨层用例（只在传输边界用假传输）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -396,6 +397,225 @@ void main() {
     });
   });
 
+  group('交付矩阵：按启用传输收敛', () {
+    const dirty = {SyncCategory.settings};
+
+    Future<Set<SyncCategory>> runMatrix(
+      SyncRoundReport report, {
+      bool push = true,
+      Set<SyncCategory> dirtyAtStart = dirty,
+      Set<SyncCategory>? onlyCategories,
+    }) async {
+      final matrix = SyncRoundQueue(
+        runRound: (_) async => report,
+        enabledCategories: () => SyncCategory.values.toSet(),
+      );
+      matrix.markLocalChange(categories: dirtyAtStart);
+      await matrix.run(
+        trigger: SyncTrigger.timer,
+        push: push,
+        antiEntropy: false,
+        onlyCategories: onlyCategories,
+      );
+      return matrix.dirtyCategories;
+    }
+
+    test('局域网成功 + WebDAV 推送失败：待发保留', () async {
+      final report = _matrixReport(SyncOutcome.partial, [
+        _matrixTransport(SyncTransportKind.lan, peersSeen: 1, pushed: 1),
+        _matrixTransport(
+          SyncTransportKind.webdav,
+          peersSeen: 1,
+          failedPushes: 1,
+          error: const SyncIssue(code: SyncIssueCode.webdavUploadFailed),
+        ),
+      ]);
+
+      expect(
+        await runMatrix(report),
+        dirty,
+        reason: 'WebDAV 没把改动送出去，不能只凭局域网成功就清标记',
+      );
+    });
+
+    test('局域网成功 + WebDAV 拉取失败：待发保留', () async {
+      final report = _matrixReport(SyncOutcome.partial, [
+        _matrixTransport(SyncTransportKind.lan, peersSeen: 1, pushed: 1),
+        _matrixTransport(
+          SyncTransportKind.webdav,
+          peersSeen: 1,
+          failedPulls: 1,
+          error: const SyncIssue(code: SyncIssueCode.webdavListFailed),
+        ),
+      ]);
+
+      expect(await runMatrix(report), dirty, reason: '拉取失败同样是传输级失败证据');
+    });
+
+    test('WebDAV 成功 + 局域网不可用：待发保留', () async {
+      final report = _matrixReport(SyncOutcome.ok, [
+        _matrixTransport(
+          SyncTransportKind.lan,
+          running: false,
+          unavailableReason: SyncIssueCode.startFailed,
+        ),
+        _matrixTransport(SyncTransportKind.webdav, peersSeen: 1, pushed: 1),
+      ]);
+
+      expect(
+        await runMatrix(report),
+        dirty,
+        reason: '启用的传输没在工作，无法确认局域网对端是否已收到改动',
+      );
+    });
+
+    test('两路都成功：清掉待发', () async {
+      final report = _matrixReport(SyncOutcome.ok, [
+        _matrixTransport(SyncTransportKind.lan, peersSeen: 1, pushed: 1),
+        _matrixTransport(SyncTransportKind.webdav, peersSeen: 1, pushed: 1),
+      ]);
+
+      expect(await runMatrix(report), isEmpty);
+    });
+
+    test('WebDAV 成功 + 局域网在运行但没有对端：清掉待发', () async {
+      final report = _matrixReport(SyncOutcome.ok, [
+        _matrixTransport(SyncTransportKind.lan),
+        _matrixTransport(SyncTransportKind.webdav, peersSeen: 1, pushed: 1),
+      ]);
+
+      expect(
+        await runMatrix(report),
+        isEmpty,
+        reason: '局域网是按对端工作的：本轮没有局域网对端不等于它失败了',
+      );
+    });
+
+    test('关闭的 WebDAV 未配置不阻塞局域网交付', () async {
+      final report = _matrixReport(SyncOutcome.ok, [
+        _matrixTransport(SyncTransportKind.lan, peersSeen: 1, pushed: 1),
+        _matrixTransport(
+          SyncTransportKind.webdav,
+          enabled: false,
+          running: false,
+          unavailableReason: SyncIssueCode.notConfigured,
+        ),
+      ]);
+
+      expect(await runMatrix(report), isEmpty, reason: '关闭的传输不参与本轮判据');
+    });
+
+    test('启用传输带错误（失败计数为零）也不清待发', () async {
+      final report = _matrixReport(SyncOutcome.ok, [
+        _matrixTransport(
+          SyncTransportKind.lan,
+          peersSeen: 1,
+          skippedUnchanged: 1,
+        ),
+        _matrixTransport(
+          SyncTransportKind.webdav,
+          peersSeen: 1,
+          error: const SyncIssue(code: SyncIssueCode.webdavDirFailed),
+        ),
+      ]);
+
+      expect(await runMatrix(report), dirty, reason: '传输报告带回错误即视为覆盖不全的证据');
+    });
+
+    test('成功证据只认启用传输：关闭传输的推送不算交付', () async {
+      final report = _matrixReport(SyncOutcome.ok, [
+        _matrixTransport(SyncTransportKind.lan, peersSeen: 1),
+        _matrixTransport(
+          SyncTransportKind.webdav,
+          enabled: false,
+          peersSeen: 1,
+          pushed: 1,
+        ),
+      ]);
+
+      expect(
+        await runMatrix(report),
+        dirty,
+        reason: '关闭的传输没有承载本轮外发，它记下的推送不是本轮交付',
+      );
+    });
+
+    test('纯接触没有传输证据：待发保留', () async {
+      final report = _matrixReport(SyncOutcome.ok, [
+        _matrixTransport(SyncTransportKind.lan, peersSeen: 1),
+        _matrixTransport(SyncTransportKind.webdav, peersSeen: 1),
+      ]);
+
+      expect(
+        await runMatrix(report),
+        dirty,
+        reason: 'peersSeen 只说明看到了对端，没说明改动已到达',
+      );
+    });
+
+    test('partial 结论即使两路都推送成功也不算交付', () async {
+      final report = _matrixReport(SyncOutcome.partial, [
+        _matrixTransport(SyncTransportKind.lan, peersSeen: 1, pushed: 1),
+        _matrixTransport(SyncTransportKind.webdav, peersSeen: 1, pushed: 1),
+      ]);
+
+      expect(await runMatrix(report), dirty);
+    });
+
+    test('只拉不推的轮次不算交付', () async {
+      final report = _matrixReport(SyncOutcome.ok, [
+        _matrixTransport(
+          SyncTransportKind.lan,
+          peersSeen: 1,
+          pulled: 1,
+          pushed: 1,
+        ),
+        _matrixTransport(
+          SyncTransportKind.webdav,
+          peersSeen: 1,
+          pulled: 1,
+          pushed: 1,
+        ),
+      ]);
+
+      expect(await runMatrix(report, push: false), dirty);
+    });
+
+    test('没有待发类别时：够了接触证据就记交付（不止清标记）', () async {
+      final report = _matrixReport(SyncOutcome.noChanges, [
+        _matrixTransport(SyncTransportKind.lan, peersSeen: 1),
+        _matrixTransport(SyncTransportKind.webdav, peersSeen: 1),
+      ]);
+      final matrix = SyncRoundQueue(
+        runRound: (_) async => report,
+        enabledCategories: () => SyncCategory.values.toSet(),
+      );
+
+      final delivery = matrix.classify(report, push: true);
+
+      expect(delivery.delivered, isTrue);
+      expect(delivery.categories, SyncCategory.values.toSet());
+    });
+
+    test('类别范围外照旧保留待发：失败与成功都只作用于本轮范围', () async {
+      final report = _matrixReport(SyncOutcome.ok, [
+        _matrixTransport(SyncTransportKind.lan, peersSeen: 1, pushed: 1),
+        _matrixTransport(SyncTransportKind.webdav, peersSeen: 1, pushed: 1),
+      ]);
+
+      final remaining = await runMatrix(
+        report,
+        dirtyAtStart: SyncCategory.values.toSet(),
+        onlyCategories: {SyncCategory.settings},
+      );
+
+      expect(
+        remaining,
+        SyncCategory.values.toSet().difference({SyncCategory.settings}),
+      );
+    });
+  });
+
   group('引擎 + 调度器共用队列', () {
     late SharedPreferences prefs;
     late SyncStateStore state;
@@ -593,6 +813,45 @@ void main() {
     });
   });
 }
+
+/// 交付矩阵用的显式轮次报告（只有判定关心的字段）。
+SyncRoundReport _matrixReport(
+  SyncOutcome outcome,
+  List<SyncTransportReport> transports,
+) => SyncRoundReport(
+  trigger: SyncTrigger.timer,
+  startedAt: 7000,
+  finishedAt: 7010,
+  outcome: outcome,
+  transports: transports,
+);
+
+/// 交付矩阵用的逐传输报告：显式给出启用 / 运行 / 证据，不依赖执行器默认值。
+SyncTransportReport _matrixTransport(
+  String kind, {
+  bool enabled = true,
+  bool running = true,
+  String? unavailableReason,
+  int peersSeen = 0,
+  int pulled = 0,
+  int pushed = 0,
+  int skippedUnchanged = 0,
+  int failedPulls = 0,
+  int failedPushes = 0,
+  SyncIssue? error,
+}) => SyncTransportReport(
+  kind: kind,
+  enabled: enabled,
+  running: running,
+  unavailableReason: unavailableReason,
+  peersSeen: peersSeen,
+  pulled: pulled,
+  pushed: pushed,
+  skippedUnchanged: skippedUnchanged,
+  failedPulls: failedPulls,
+  failedPushes: failedPushes,
+  error: error,
+);
 
 /// 可注入报告 / 门的执行器：记录调用顺序与并发峰值。
 class _RecordingExecutor {

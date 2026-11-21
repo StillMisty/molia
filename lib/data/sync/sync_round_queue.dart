@@ -43,13 +43,18 @@ class SyncQueuedRound {
 
 /// 一轮的交付事实（全仓唯一的 delivered 定义）。
 ///
-/// `delivered` 只表示「这一轮真的把范围内的改动交给了至少一路传输」：
+/// `delivered` 只表示「这一轮真的把范围内的改动交给了可用的传输，且没有一路
+/// 启用的传输报告失败」：
 /// - 结论是 `ok` / `noChanges`（`partial` / `failed` 保守地不算交付：传输
 ///   报告是逐对端收敛证据，部分失败时无法确认改动已到达每个对端）；
 /// - 本轮确实外发（`push: false` 的入站 / 只拉轮不算交付）；
-/// - 有真实传输证据：本轮开始时有待发类别时，要求至少一路传输
-///   `pushed > 0 || skippedUnchanged > 0`（纯 `peersSeen` 不算，避免空轮吞掉
-///   本地变更）；没有待发类别时，`succeeded` 的接触就足够（没有要清的标记）。
+/// - 至少一路**启用**传输有真实传输证据：本轮开始时有待发类别时，要求一路
+///   启用传输 `pushed > 0 || skippedUnchanged > 0`（纯 `peersSeen` 不算，避免
+///   空轮吞掉本地变更）；没有待发类别时，`succeeded` 的接触就足够（没有要清
+///   的标记）。未启用的传输不提供成功证据，也不参与判据；
+/// - **没有一路启用的传输**带失败 / 不可用证据（未运行、`unavailableReason`、
+///   失败计数或 `error`）：局域网成功 + WebDAV 推送失败、或 WebDAV 成功 +
+///   局域网不可用，都不能清掉待发。
 ///
 /// `noPeers` 没有接触任何对端，因此**不是**交付；`categories` 为本轮类别范围
 /// （协议只有逐对端回执，类别范围是可得的最细粒度）。
@@ -224,9 +229,10 @@ class SyncRoundQueue {
   ///
   /// [dirtyAtStart] 是本轮开始时的待发类别快照；非空时要求真实的推送 / 未变
   /// 跳过证据（纯 `peersSeen` 不算），避免「看到了对端但没传任何东西」把待发
-  /// 标记清掉。传输报告只有对端粒度（协议没有逐类别回执），因此「本轮类别
-  /// 范围」就是可得的最细粒度：范围外（例如蜂窝小类别轮之外的历史 / 统计）
-  /// 继续保留待发。
+  /// 标记清掉。成功证据只认**启用**传输；任何一路启用传输有失败 / 不可用证据，
+  /// 本轮整体不算交付（见 [SyncRoundDelivery]）。传输报告只有对端粒度（协议
+  /// 没有逐类别回执），因此「本轮类别范围」就是可得的最细粒度：范围外（例如
+  /// 蜂窝小类别轮之外的历史 / 统计）继续保留待发。
   SyncRoundDelivery classify(
     SyncRoundReport report, {
     required bool push,
@@ -333,24 +339,44 @@ class SyncRoundQueue {
     final contactedLan = report.transports.any(
       (item) => item.kind == SyncTransportKind.lan && item.peersSeen > 0,
     );
+    // 判据只覆盖**启用**的传输：关闭的传输不承载本轮外发，它的未配置 /
+    // 未运行状态不能阻塞另一路已经交付的事实。
+    final enabled = [
+      for (final item in report.transports)
+        if (item.enabled) item,
+    ];
+    // 任何一路启用传输有失败 / 不可用证据，就不能宣布交付：传输报告是逐对端
+    // 收敛证据，没有逐类别回执，无法确认改动已到达每个对端。
+    final transportFailed = enabled.any(_transportFailed);
     final needsTransfer = dirtyAtStart.intersection(scope).isNotEmpty;
     final transferred = needsTransfer
-        ? report.transports.any(
-            (item) => item.pushed > 0 || item.skippedUnchanged > 0,
-          )
-        : report.transports.any((item) => item.succeeded);
+        ? enabled.any((item) => item.pushed > 0 || item.skippedUnchanged > 0)
+        : enabled.any((item) => item.succeeded);
     // `noPeers`（五态里明确「一个对端都没接触」）与失败结论都不算交付：
     // 前者没有对端收到数据，后者下轮要重试。
     final contactedOutcome =
         report.outcome == SyncOutcome.ok ||
         report.outcome == SyncOutcome.noChanges;
-    final delivered = push && contactedOutcome && transferred;
+    final delivered =
+        push && contactedOutcome && !transportFailed && transferred;
     return SyncRoundDelivery(
       categories: delivered ? scope : const {},
       contacted: contacted,
       contactedLan: contactedLan,
     );
   }
+
+  /// 单路传输是否有失败 / 不可用证据。
+  ///
+  /// 宁可保守：只要一路启用传输本轮没在跑、没有配置 / 启动失败、对某个对端
+  /// 失败过或带回了错误，就无法确认本轮改动已到达每个对端。保留待发、下一轮
+  /// 重试，比错误地清掉标记安全（协议没有逐类别回执，见 [SyncRoundDelivery]）。
+  static bool _transportFailed(SyncTransportReport report) =>
+      !report.running ||
+      report.unavailableReason != null ||
+      report.failedPulls > 0 ||
+      report.failedPushes > 0 ||
+      report.error != null;
 
   _PendingRound? _takePending() {
     final pending = _pending;
