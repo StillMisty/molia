@@ -12,6 +12,7 @@ library;
 
 import '../../domain/models/album.dart';
 import '../../domain/models/failure.dart';
+import 'builtin_transport.dart';
 import 'channel/channels.dart';
 
 class BuiltinAlbums {
@@ -25,6 +26,7 @@ class BuiltinAlbums {
   /// 声明为 `async`：校验失败（不支持）也走 Future 错误通道，
   /// 调用方用统一的 `try/await` 即可，不会出现同步抛错。
   static Future<Album> fetch(
+    BuiltinTransport http,
     String sourceKey,
     String albumId, {
     int page = 1,
@@ -44,6 +46,6 @@ class BuiltinAlbums {
         message: '内置平台不支持专辑: $sourceKey',
       );
     }
-    return adapter(albumId, page: page, limit: limit);
+    return adapter(http, albumId, page: page, limit: limit);
   }
 }

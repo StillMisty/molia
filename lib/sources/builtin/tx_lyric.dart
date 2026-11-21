@@ -25,7 +25,8 @@ class TxLyric {
   /// 获取歌词；失败返回 null（由调用方回退其它来源）。
   ///
   /// [songId] 为数字歌曲 ID（优先），[songMid] 为字符串 songmid（兜底）。
-  static Future<BuiltinLyricResult?> fetch({
+  static Future<BuiltinLyricResult?> fetch(
+    BuiltinTransport http, {
     String? songId,
     String? songMid,
   }) async {
@@ -61,6 +62,7 @@ class TxLyric {
       },
     });
     final response = await lxHttpPost(
+      http,
       _url,
       body: body,
       headers: {

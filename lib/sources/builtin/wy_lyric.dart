@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'builtin_search.dart';
 import 'crypto_utils.dart';
+import 'builtin_transport.dart';
 
 /// 网易云歌词结果（对应 LX lyric.js 返回的 `info`）。
 class WyLyricInfo {
@@ -37,8 +38,9 @@ class WyLyric {
   WyLyric._();
 
   /// 获取歌词（失败抛 [StateError]，由歌词服务回退到其它提供者）。
-  static Future<WyLyricInfo> fetch(String songId) async {
+  static Future<WyLyricInfo> fetch(BuiltinTransport http, String songId) async {
     final body = await lxHttpPost(
+      http,
       'https://interface3.music.163.com/eapi/song/lyric/v1',
       form: true,
       headers: {'origin': 'https://music.163.com'},

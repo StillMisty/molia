@@ -6,6 +6,7 @@ import '../source_search_result.dart';
 import 'artist_source.dart';
 import 'crypto_utils.dart';
 import 'tx_search.dart';
+import 'builtin_transport.dart';
 
 /// QQ 音乐歌手（musicu 签名 POST，与搜索同一客户端协议）。
 ///
@@ -24,6 +25,7 @@ class TxArtist {
 
   /// 歌手搜索（`meta.sum` 用于分页）。
   static Future<ArtistSearchPage> search(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = 30,
@@ -34,7 +36,7 @@ class TxArtist {
       limit: limit,
       searchType: _searchTypeSinger,
     );
-    final response = await _post(body);
+    final response = await _post(http, body);
     return parseSearch(response, page: page, limit: limit);
   }
 
@@ -80,6 +82,7 @@ class TxArtist {
 
   /// 歌手详情 + 一页歌曲（同一请求返回）。
   static Future<ArtistDetail> fetch(
+    BuiltinTransport http,
     String artistId, {
     int page = 1,
     int limit = kArtistPageSize,
@@ -92,7 +95,7 @@ class TxArtist {
         'param': {'sort': 5, 'singermid': artistId, 'begin': 0, 'num': limit},
       },
     };
-    final response = await _post(body);
+    final response = await _post(http, body);
     return parse(response, artistId: artistId, page: page, limit: limit);
   }
 
@@ -130,9 +133,12 @@ class TxArtist {
     );
   }
 
-  static Future<dynamic> _post(Map<String, dynamic> body) async {
+  static Future<dynamic> _post(
+    BuiltinTransport http,
+    Map<String, dynamic> body,
+  ) async {
     try {
-      return await TxSearch.musicuPost(body);
+      return await TxSearch.musicuPost(http, body);
     } catch (error) {
       throw SourceFailure.from(error);
     }

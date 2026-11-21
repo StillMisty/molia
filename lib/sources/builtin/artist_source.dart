@@ -12,6 +12,7 @@ library;
 
 import '../../domain/models/artist.dart';
 import '../../domain/models/failure.dart';
+import 'builtin_transport.dart';
 import 'channel/channels.dart';
 import 'builtin_search.dart';
 
@@ -47,6 +48,7 @@ class BuiltinArtists {
 
   /// 歌手搜索（搜索页「歌手」类型）；失败抛 [SourceFailure]。
   static Future<ArtistSearchPage> search(
+    BuiltinTransport http,
     String sourceKey,
     String keyword, {
     int page = 1,
@@ -59,11 +61,12 @@ class BuiltinArtists {
         message: '内置平台不支持歌手搜索: $sourceKey',
       );
     }
-    return adapter.search(keyword, page: page, limit: limit);
+    return adapter.search(http, keyword, page: page, limit: limit);
   }
 
   /// 取一页歌手详情（歌手页）；[artistId] 为平台内歌手 id。
   static Future<ArtistDetail> fetch(
+    BuiltinTransport http,
     String sourceKey,
     String artistId, {
     int page = 1,
@@ -83,6 +86,6 @@ class BuiltinArtists {
         message: '内置平台不支持歌手: $sourceKey',
       );
     }
-    return adapter.fetch(artistId, page: page, limit: limit);
+    return adapter.fetch(http, artistId, page: page, limit: limit);
   }
 }

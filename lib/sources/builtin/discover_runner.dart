@@ -13,7 +13,6 @@ library;
 
 import 'dart:async';
 
-import 'builtin_search.dart';
 import 'builtin_transport.dart';
 
 /// 一次发现端点调用：缓存键 + 重试预算 + 失败判定 / 尝试。
@@ -75,7 +74,9 @@ final class DiscoverAttemptCall<T> extends DiscoverCall<T> {
 }
 
 /// 执行一次发现端点调用（唯一入口）。
-Future<T> runDiscoverCall<T>(DiscoverCall<T> call) {
+///
+/// [transport] 由组合根注入（生产单实例共享缓存 / single-flight）。
+Future<T> runDiscoverCall<T>(DiscoverCall<T> call, BuiltinTransport transport) {
   final attempt = _attemptOf(call);
   final key = call.key;
   if (key == null) {
@@ -85,7 +86,7 @@ Future<T> runDiscoverCall<T>(DiscoverCall<T> call) {
       attempt: attempt,
     );
   }
-  return BuiltinSearch.transport.cachedRetry(
+  return transport.cachedRetry(
     key,
     maxTries: call.budget,
     message: call.message,

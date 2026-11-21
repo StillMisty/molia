@@ -16,6 +16,7 @@ import '../../domain/models/track.dart';
 import '../source_search_result.dart' show parseSourceCount;
 import 'artist_source.dart';
 import 'bili_api.dart';
+import 'builtin_transport.dart';
 import 'bili_client.dart';
 import 'bili_track.dart';
 
@@ -32,6 +33,7 @@ class BiliArtist {
   /// 全站视频搜索。两条回退都失败（或搜索无结果）时仍返回资料页 + 空列表，
   /// 不让「这个 UP 暂时被风控」表现成整页打不开。
   static Future<ArtistDetail> fetch(
+    BuiltinTransport http,
     String artistId, {
     int page = 1,
     int limit = kArtistPageSize,
@@ -41,8 +43,14 @@ class BiliArtist {
       throw artistPlatformFailure('bili', '缺少 UP mid');
     }
     final normalizedPage = page.clamp(1, maxPage);
-    final profile = await _fetchProfile(mid);
-    final content = await _fetchVideos(mid, normalizedPage, profile.name);
+    final client = BiliClient(transport: http);
+    final profile = await _fetchProfile(client, mid);
+    final content = await _fetchVideos(
+      client,
+      mid,
+      normalizedPage,
+      profile.name,
+    );
     return ArtistDetail(
       id: mid,
       name: profile.name,
@@ -55,11 +63,12 @@ class BiliArtist {
 
   /// 资料：`card`（免 WBI）→ `space/wbi/acc/info`（WBI）兜底。
   static Future<({String name, String? avatarUrl, String sign})> _fetchProfile(
+    BiliClient client,
     String mid,
   ) async {
     SourceFailure? failure;
     try {
-      final response = await BiliClient.shared.get(
+      final response = await client.get(
         '/x/web-interface/card',
         query: {'mid': mid},
       );
@@ -76,7 +85,9 @@ class BiliArtist {
     }
 
     try {
-      final response = await _getWbi('/x/space/wbi/acc/info', {'mid': mid});
+      final response = await _getWbi(client, '/x/space/wbi/acc/info', {
+        'mid': mid,
+      });
       final profile = _profileOf(_mapOf(response));
       if (profile != null) return profile;
       failure = artistPlatformFailure('bili', 'UP 资料不存在');
@@ -101,12 +112,13 @@ class BiliArtist {
 
   /// 投稿：空间接口优先，风控 / 结构异常时回退全站视频搜索。
   static Future<({List<Track> tracks, bool hasMore})> _fetchVideos(
+    BiliClient client,
     String mid,
     int page,
     String name,
   ) async {
     try {
-      final response = await _getWbi('/x/space/wbi/arc/search', {
+      final response = await _getWbi(client, '/x/space/wbi/arc/search', {
         'mid': mid,
         'pn': page,
         'ps': spacePageSize,
@@ -118,7 +130,7 @@ class BiliArtist {
     } catch (_) {
       // 网络 / 签名失败也走搜索兜底：UP 页至少还能看到公开投稿。
     }
-    return _searchVideos(mid, page, name);
+    return _searchVideos(client, mid, page, name);
   }
 
   /// 空间投稿响应 → 曲目 + 分页；结构不符返回 null（触发搜索兜底）。
@@ -156,19 +168,24 @@ class BiliArtist {
 
   /// 搜索兜底：按 UP 名搜视频，再按 mid（或同名作者）过滤。
   static Future<({List<Track> tracks, bool hasMore})> _searchVideos(
+    BiliClient client,
     String mid,
     int page,
     String name,
   ) async {
     try {
-      final response = await _getWbi('/x/web-interface/wbi/search/type', {
-        'search_type': 'video',
-        'keyword': name,
-        // 不能用 pubdate：按发布时间搜「UP 名」常常一条该 UP 的投稿都不
-        // 返回（实测 0 命中），totalrank 才会把该 UP 的代表作排在前面。
-        'order': 'totalrank',
-        'page': page,
-      });
+      final response = await _getWbi(
+        client,
+        '/x/web-interface/wbi/search/type',
+        {
+          'search_type': 'video',
+          'keyword': name,
+          // 不能用 pubdate：按发布时间搜「UP 名」常常一条该 UP 的投稿都不
+          // 返回（实测 0 命中），totalrank 才会把该 UP 的代表作排在前面。
+          'order': 'totalrank',
+          'page': page,
+        },
+      );
       final data = _mapOf(response);
       final result = data?['result'];
       if (result is! List) {
@@ -198,8 +215,12 @@ class BiliArtist {
   }
 
   /// 带 WBI 签名的 GET；风控刷新一次与搜索 / 取链同一语义（client 内唯一实现）。
-  static Future<dynamic> _getWbi(String path, Map<String, Object?> params) {
-    return BiliClient.shared.get(path, query: params, auth: BiliAuth.session);
+  static Future<dynamic> _getWbi(
+    BiliClient client,
+    String path,
+    Map<String, Object?> params,
+  ) {
+    return client.get(path, query: params, auth: BiliAuth.session);
   }
 
   static Map? _mapOf(dynamic response) {

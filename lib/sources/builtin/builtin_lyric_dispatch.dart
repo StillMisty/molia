@@ -16,13 +16,17 @@ library;
 import '../../data/cache/request_cache.dart';
 import '../lx/lx_engine_types.dart';
 import '../source_track.dart';
+import 'builtin_transport.dart';
 import 'channel/channels.dart';
 
 class BuiltinLyricDispatch {
-  BuiltinLyricDispatch({RequestCache? cache})
+  BuiltinLyricDispatch(this.http, {RequestCache? cache})
     : _cache =
           cache ??
           RequestCache(maxEntries: 64, ttl: const Duration(minutes: 5));
+
+  /// 内置平台 HTTP 传输（组合根注入；测试各自构造）。
+  final BuiltinTransport http;
 
   /// 曲目原生取词缓存（key `{track.id}:lyric`）。
   final RequestCache _cache;
@@ -36,7 +40,7 @@ class BuiltinLyricDispatch {
       return await _cache.getOrCreate<LxLyricResult?>(
         '${track.id}:lyric',
         () async {
-          final info = await adapter(track.raw);
+          final info = await adapter(http, track.raw);
           if (info == null || info.isEmpty) return null;
           return LxLyricResult(
             lyric: info.lyric,

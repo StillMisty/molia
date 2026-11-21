@@ -11,6 +11,7 @@ import '../source_search_result.dart';
 import '../source_track.dart';
 import 'artist_source.dart';
 import 'bili_client.dart';
+import 'builtin_transport.dart';
 import 'bili_track.dart';
 
 class BiliSearch {
@@ -20,11 +21,17 @@ class BiliSearch {
   static const int maxPage = 50;
 
   static Future<List<SourceTrack>> search(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = pageSize,
   }) async {
-    final result = await searchWithMeta(keyword, page: page, limit: limit);
+    final result = await searchWithMeta(
+      http,
+      keyword,
+      page: page,
+      limit: limit,
+    );
     return result.tracks;
   }
 
@@ -35,13 +42,14 @@ class BiliSearch {
   /// 请求生命周期（WBI 签名、风控刷新一次、业务码）全在 [BiliClient]；
   /// 这里只拼查询参数与解析 `data`。
   static Future<SourceSearchResult> searchWithMeta(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = pageSize,
   }) async {
     final normalizedPage = page.clamp(1, maxPage);
     try {
-      final response = await BiliClient.shared.get(
+      final response = await BiliClient(transport: http).get(
         '/x/web-interface/wbi/search/type',
         query: {
           'search_type': 'video',
@@ -74,12 +82,13 @@ class BiliSearch {
   /// 与视频搜索同一套会话 / 风控策略（[BiliClient] 的 session 口径），
   /// 两处行为一致。
   static Future<ArtistSearchPage> searchUsers(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = pageSize,
   }) async {
     final normalizedPage = page.clamp(1, maxPage);
-    final response = await BiliClient.shared.get(
+    final response = await BiliClient(transport: http).get(
       '/x/web-interface/wbi/search/type',
       query: {
         'search_type': 'bili_user',

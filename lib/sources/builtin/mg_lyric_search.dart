@@ -2,6 +2,7 @@ import '../source_search_result.dart';
 import 'lyric_hit.dart';
 import 'lyric_search_runner.dart';
 import 'mg_search.dart';
+import 'builtin_transport.dart';
 
 /// 咪咕音乐「按歌词搜歌」（jadeite `searchAll` + `searchSwitch.lyricSong=1`）。
 ///
@@ -28,12 +29,14 @@ class MgLyricSearch {
   };
 
   static Future<LyricSearchPage> search(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = 30,
   }) {
     return runBuiltinLyricSearch(
       _callFor(keyword, page, limit),
+      http,
       page: page,
       limit: limit,
     );

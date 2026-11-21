@@ -8,6 +8,7 @@ import 'builtin_cover_urls.dart';
 import 'builtin_search.dart';
 import 'builtin_search_runner.dart';
 import 'crypto_utils.dart';
+import 'builtin_transport.dart';
 
 /// 酷狗音乐搜索（移植自 lx-music-mobile `kg/musicSearch.js`）。
 class KgSearch {
@@ -15,12 +16,14 @@ class KgSearch {
 
   /// 分页搜索：响应 `data.total` 用于计算 hasMore。
   static Future<SourceSearchResult> searchWithMeta(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = _limit,
   }) {
     return runBuiltinSearch(
       _callFor(keyword, page, limit),
+      http,
       page: page,
       limit: limit,
     );

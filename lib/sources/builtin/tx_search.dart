@@ -16,12 +16,14 @@ class TxSearch {
 
   /// 分页搜索：响应 `data.meta.sum` 用于计算 hasMore。
   static Future<SourceSearchResult> searchWithMeta(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = _limit,
   }) {
     return runBuiltinSearch(
       _callFor(keyword, page, limit),
+      http,
       page: page,
       limit: limit,
     );
@@ -111,9 +113,13 @@ class TxSearch {
       'https://u.y.qq.com/cgi-bin/musics.fcg?sign=${zzcSign(bodyText)}';
 
   /// musicu 签名 POST（搜索之外的模块共用）。
-  static Future<dynamic> musicuPost(Map<String, dynamic> body) {
+  static Future<dynamic> musicuPost(
+    BuiltinTransport http,
+    Map<String, dynamic> body,
+  ) {
     final bodyText = jsonEncode(body);
     return lxHttpPost(
+      http,
       signedMusicuUrl(bodyText),
       body: bodyText,
       headers: const {'User-Agent': 'QQMusic 14090508(android 12)'},

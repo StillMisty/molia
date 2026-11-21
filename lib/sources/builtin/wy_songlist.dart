@@ -39,7 +39,7 @@ Dio get _redirectDio => _redirectDioInstance ??= createAppDio();
 ///   trackIds 与 privileges 数量一致时直接解析，否则批量歌曲详情补齐；
 /// - 歌单搜索：eapi `/api/cloudsearch/pc`（type=1000）。
 ///
-/// 网络结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
+/// 网络结果缓存 5 分钟（统一走注入 transport 的 `cached`）。
 class WySongList {
   WySongList._();
 
@@ -58,9 +58,9 @@ class WySongList {
 
   /// 热门标签 + 完整标签目录（两个接口并行，结果缓存 5 分钟）。
   static Future<({List<DiscoverTagCategory> tags, List<DiscoverTag> hotTag})>
-  getTags() {
-    return BuiltinSearch.transport.cached('wy:playlist-tags', () async {
-      final results = await Future.wait([getTag(), getHotTag()]);
+  getTags(BuiltinTransport http) {
+    return http.cached('wy:playlist-tags', () async {
+      final results = await Future.wait([getTag(http), getHotTag(http)]);
       return (
         tags: results[0] as List<DiscoverTagCategory>,
         hotTag: results[1] as List<DiscoverTag>,
@@ -69,11 +69,12 @@ class WySongList {
   }
 
   /// 标签目录（`weapi/playlist/catalogue`）。
-  static Future<List<DiscoverTagCategory>> getTag() {
+  static Future<List<DiscoverTagCategory>> getTag(BuiltinTransport http) {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTagCategory>>(
         key: null,
         request: () => lxHttpPost(
+          http,
           'https://music.163.com/weapi/playlist/catalogue',
           form: true,
           body: weapiForm(const {}),
@@ -84,6 +85,7 @@ class WySongList {
           categories: (body['categories'] as Map?) ?? const {},
         ),
       ),
+      http,
     );
   }
 
@@ -119,11 +121,12 @@ class WySongList {
   }
 
   /// 热门标签（`weapi/playlist/hottags`）。
-  static Future<List<DiscoverTag>> getHotTag() {
+  static Future<List<DiscoverTag>> getHotTag(BuiltinTransport http) {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTag>>(
         key: null,
         request: () => lxHttpPost(
+          http,
           'https://music.163.com/weapi/playlist/hottags',
           form: true,
           body: weapiForm(const {}),
@@ -131,6 +134,7 @@ class WySongList {
         isInvalid: (body) => body is! Map || body['code'] != 200,
         parse: (body) => filterHotTagInfo((body['tags'] as List?) ?? const []),
       ),
+      http,
     );
   }
 
@@ -149,14 +153,16 @@ class WySongList {
 
   /// 按标签取歌单列表（[sortId] 固定 `hot`，[tagId] 空表示全部）。
   static Future<DiscoverPlaylistPage> getList(
+    BuiltinTransport http,
     String sortId,
     String tagId,
     int page,
   ) {
-    return _fetchList(sortId, tagId, page);
+    return _fetchList(http, sortId, tagId, page);
   }
 
   static Future<DiscoverPlaylistPage> _fetchList(
+    BuiltinTransport http,
     String sortId,
     String tagId,
     int page,
@@ -165,6 +171,7 @@ class WySongList {
       DiscoverRequestCall<DiscoverPlaylistPage>(
         key: 'wy:playlists:$sortId:$tagId:$page',
         request: () => lxHttpPost(
+          http,
           'https://music.163.com/weapi/playlist/list',
           form: true,
           body: weapiForm({
@@ -183,6 +190,7 @@ class WySongList {
           limit: limitList,
         ),
       ),
+      http,
     );
   }
 
@@ -219,10 +227,14 @@ class WySongList {
   /// 缓存拆两层：详情「壳」（含全部 trackIds、体积远小于逐首曲目对象）按
   /// **页无关** key 缓存一次；曲目按页取——整体 key 带 page 的话，翻一页
   /// 就要重新下载 + 解析整张歌单（万首歌单 = 每次翻页数 MB）。
-  static Future<DiscoverDetail> getListDetail(String rawId, int page) async {
-    final shell = await BuiltinSearch.transport.cached(
+  static Future<DiscoverDetail> getListDetail(
+    BuiltinTransport http,
+    String rawId,
+    int page,
+  ) async {
+    final shell = await http.cached(
       'wy:playlist-detail:$rawId',
-      () => _fetchListShell(rawId),
+      () => _fetchListShell(http, rawId),
     );
     final all = shell.allTracks;
     if (all != null) {
@@ -237,9 +249,9 @@ class WySongList {
     if (ids.isEmpty) {
       return DiscoverDetail(info: shell.info, tracks: const []);
     }
-    final tracks = await BuiltinSearch.transport.cached(
+    final tracks = await http.cached(
       'wy:playlist-tracks:$rawId:$page',
-      () => WyMusicDetail.getList(ids),
+      () => WyMusicDetail.getList(http, ids),
     );
     return DiscoverDetail(
       info: shell.info,
@@ -250,8 +262,11 @@ class WySongList {
   /// 歌单详情单页上限（平台 `song/detail` 批量接口一次最多 1000 首）。
   static const int songPageLimit = 1000;
 
-  static Future<_WyPlaylistShell> _fetchListShell(String rawId) async {
-    final parsed = await parseListId(rawId);
+  static Future<_WyPlaylistShell> _fetchListShell(
+    BuiltinTransport http,
+    String rawId,
+  ) async {
+    final parsed = await parseListId(http, rawId);
     if (parsed.cookie != null) _cookie = parsed.cookie!;
 
     return runDiscoverCall(
@@ -260,6 +275,7 @@ class WySongList {
         request: () async {
           try {
             return await lxHttpPost(
+              http,
               'https://music.163.com/api/linux/forward',
               form: true,
               headers: {'Cookie': _cookie},
@@ -310,6 +326,7 @@ class WySongList {
           );
         },
       ),
+      http,
     );
   }
 
@@ -388,14 +405,16 @@ class WySongList {
 
   /// 歌单搜索（eapi `/api/cloudsearch/pc`，type=1000）。
   static Future<DiscoverPlaylistPage> search(
+    BuiltinTransport http,
     String text,
     int page, {
     int limit = 20,
   }) {
-    return _fetchSearch(text, page, limit);
+    return _fetchSearch(http, text, page, limit);
   }
 
   static Future<DiscoverPlaylistPage> _fetchSearch(
+    BuiltinTransport http,
     String text,
     int page,
     int limit,
@@ -404,6 +423,7 @@ class WySongList {
       DiscoverRequestCall<DiscoverPlaylistPage>(
         key: 'wy:playlist-search:$text:$page:$limit',
         request: () => lxHttpPost(
+          http,
           'http://interface.music.163.com/eapi/batch',
           form: true,
           headers: {'origin': 'https://music.163.com'},
@@ -431,11 +451,15 @@ class WySongList {
           );
         },
       ),
+      http,
     );
   }
 
   /// 解析歌单链接 / ID：`id`、完整链接、`id###MUSIC_U token`。
-  static Future<({String id, String? cookie})> parseListId(String rawId) async {
+  static Future<({String id, String? cookie})> parseListId(
+    BuiltinTransport http,
+    String rawId,
+  ) async {
     var id = rawId;
     String? cookie;
     if (id.contains('###')) {
@@ -449,14 +473,14 @@ class WySongList {
       } else if (_listDetailLink2.hasMatch(id)) {
         id = id.replaceFirstMapped(_listDetailLink2, (m) => m.group(1)!);
       } else {
-        id = await _followRedirect(id);
+        id = await _followRedirect(http, id);
       }
     }
     return (id: id, cookie: cookie);
   }
 
   /// 跟随短链/分享链接重定向到最终地址，再解析歌单 id。
-  static Future<String> _followRedirect(String link) {
+  static Future<String> _followRedirect(BuiltinTransport http, String link) {
     return runDiscoverCall(
       DiscoverAttemptCall<String>(
         key: null,
@@ -498,6 +522,7 @@ class WySongList {
           );
         },
       ),
+      http,
     );
   }
 

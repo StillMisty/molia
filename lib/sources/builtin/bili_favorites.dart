@@ -37,7 +37,10 @@ class BiliFavorites {
   /// 返回 null 表示无法识别（调用方统一转成 notFound）。`space.bilibili.com`
   /// 的 favlist 链接不带 `fid` 时尝试取该 UP 的第一个收藏夹（需要多一次请求，
   /// 失败就按无法识别处理，不影响其它链接形态）。
-  static Future<String?> parseMediaId(String rawId) async {
+  static Future<String?> parseMediaId(
+    BuiltinTransport http,
+    String rawId,
+  ) async {
     final text = rawId.trim();
     if (text.isEmpty) return null;
 
@@ -48,20 +51,26 @@ class BiliFavorites {
     if (uri == null) return null;
 
     if (_shortLinkHost.hasMatch(uri.host.toLowerCase())) {
-      final resolved = await _resolveShortLink(uri);
+      final client = BiliClient(transport: http);
+      final resolved = await _resolveShortLink(client, uri);
       if (resolved == null) return null;
       final resolvedId = _parseText(resolved.toString());
       if (resolvedId != null) return resolvedId;
-      return _firstFolderOf(resolved.toString());
+      return _firstFolderOf(client, resolved.toString());
     }
-    return _firstFolderOf(text);
+    return _firstFolderOf(BiliClient(transport: http), text);
   }
 
   /// 收藏夹详情：忽略入参 [page]，永远从第 1 页拉全。
   ///
   /// 导入路径只需要一次完整结果；按页返回会让「导入」只导入前 20 条。
-  static Future<DiscoverDetail> detail(String rawId, int page) async {
-    final mediaId = await parseMediaId(rawId);
+  static Future<DiscoverDetail> detail(
+    BuiltinTransport http,
+    String rawId,
+    int page,
+  ) async {
+    final client = BiliClient(transport: http);
+    final mediaId = await parseMediaId(http, rawId);
     if (mediaId == null) {
       throw const SourceFailure(
         kind: FailureKind.notFound,
@@ -71,16 +80,19 @@ class BiliFavorites {
     }
     // 请求生命周期（业务码 / 空响应 / 非 JSON）在 [BiliClient] 内归一；
     // 收藏夹的 -403 由 favorites 口径映射成 notFound，不会当成会话风控刷新。
-    return _fetchAll(mediaId);
+    return _fetchAll(client, mediaId);
   }
 
-  static Future<DiscoverDetail> _fetchAll(String mediaId) async {
+  static Future<DiscoverDetail> _fetchAll(
+    BiliClient client,
+    String mediaId,
+  ) async {
     Map? info;
     final tracks = <String, SourceTrack>{};
 
     var pn = 1;
     while (pn <= maxPages && tracks.length < maxItems) {
-      final data = await _fetchPage(mediaId, pn);
+      final data = await _fetchPage(client, mediaId, pn);
       // 私密 / 已删除收藏夹没有 info（平台仍回 code=0）。真实响应通常每页
       // 都带 info，但没有必要依赖：第一页拿到后就够构造详情，后续页缺 info
       // 不应让整份导入失败。
@@ -126,8 +138,12 @@ class BiliFavorites {
   }
 
   /// 收藏夹资源列表一页 → `data`（结构不符统一按 unknown 失败）。
-  static Future<Map> _fetchPage(String mediaId, int pn) async {
-    final response = await BiliClient.shared.get(
+  static Future<Map> _fetchPage(
+    BiliClient client,
+    String mediaId,
+    int pn,
+  ) async {
+    final response = await client.get(
       '/x/v3/fav/resource/list',
       query: {
         'media_id': mediaId,
@@ -221,15 +237,15 @@ class BiliFavorites {
   }
 
   /// `space.bilibili.com/<mid>/favlist`（不带 fid）→ 该 UP 的第一个收藏夹。
-  static Future<String?> _firstFolderOf(String text) async {
+  static Future<String?> _firstFolderOf(BiliClient client, String text) async {
     final match = _folderLink.firstMatch(text);
     if (match == null) return null;
-    return _firstFolderId(match.group(1)!);
+    return _firstFolderId(client, match.group(1)!);
   }
 
-  static Future<String?> _firstFolderId(String upMid) async {
+  static Future<String?> _firstFolderId(BiliClient client, String upMid) async {
     try {
-      final response = await BiliClient.shared.get(
+      final response = await client.get(
         '/x/v3/fav/folder/created/list-all',
         query: {'up_mid': upMid},
       );
@@ -248,8 +264,8 @@ class BiliFavorites {
   }
 
   /// 跟随 b23 短链（走 client 的匿名传输，测试可注入 MockDio）。
-  static Future<Uri?> _resolveShortLink(Uri uri) =>
-      BiliClient.shared.resolveRedirect(uri);
+  static Future<Uri?> _resolveShortLink(BiliClient client, Uri uri) =>
+      client.resolveRedirect(uri);
 
   static Uri? _asUri(String text) {
     final direct = Uri.tryParse(text);

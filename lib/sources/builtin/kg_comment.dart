@@ -17,6 +17,7 @@ class KgComment {
   KgComment._();
 
   static Future<CommentPage> fetch(
+    BuiltinTransport http,
     String hash, {
     required CommentKind kind,
     int page = 1,
@@ -33,6 +34,7 @@ class KgComment {
         '&code=fc4be23b4e972707f36b8a828a93ba8a&schash=$hash&clientver=11409'
         '&p=$page&clienttoken=&pagesize=$limit&ver=10&kugouid=0';
     final body = await lxHttpGet(
+      http,
       'http://m.comment.service.kugou.com/r/v1/rank/$path'
       '?$params&signature=${kgSignatureParams(params)}',
       headers: const {

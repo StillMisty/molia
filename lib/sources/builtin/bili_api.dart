@@ -14,7 +14,6 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../../domain/models/failure.dart';
-import 'builtin_search.dart';
 import 'builtin_transport.dart';
 import 'crypto_utils.dart';
 
@@ -226,9 +225,10 @@ class BiliApi {
 
   /// 当前会话（缓存过期或未拉取时发起一次请求；并发调用共用同一 Future）。
   ///
-  /// [transport] 只给测试注入独立传输用；生产走 [BuiltinSearch.transport]
-  /// 这一全局注入点。
-  static Future<BiliAnonSession> session({BuiltinTransport? transport}) {
+  /// [transport] 由组合根 / 业务文件注入（不再读进程级静态传输）。
+  static Future<BiliAnonSession> session({
+    required BuiltinTransport transport,
+  }) {
     final cached = _session;
     final fetchedAt = _fetchedAt;
     if (cached != null &&
@@ -236,18 +236,16 @@ class BiliApi {
         DateTime.now().difference(fetchedAt) < sessionTtl) {
       return Future.value(cached);
     }
-    return _pending ??= _startSessionFetch(
-      transport ?? BuiltinSearch.transport,
-    );
+    return _pending ??= _startSessionFetch(transport);
   }
 
   /// 丢弃缓存并重新拉取（风控后的唯一恢复手段）。
-  static Future<BiliAnonSession> refresh({BuiltinTransport? transport}) {
+  static Future<BiliAnonSession> refresh({
+    required BuiltinTransport transport,
+  }) {
     _session = null;
     _fetchedAt = null;
-    return _pending ??= _startSessionFetch(
-      transport ?? BuiltinSearch.transport,
-    );
+    return _pending ??= _startSessionFetch(transport);
   }
 
   /// 测试隔离：清空缓存与在途请求。

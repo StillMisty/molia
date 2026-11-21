@@ -80,6 +80,7 @@ abstract final class QsApi {
 
   /// GET + JSON。空 body（平台概率性丢弃）与传输异常都按次数重试。
   static Future<dynamic> getJson(
+    BuiltinTransport http,
     String path, {
     Map<String, Object?> query = const {},
     int tries = defaultTries,
@@ -92,12 +93,13 @@ abstract final class QsApi {
     );
     return _withEmptyRetry(
       tries: tries,
-      send: () => lxHttpGet(uri.toString(), headers: _pcHeaders()),
+      send: () => lxHttpGet(http, uri.toString(), headers: _pcHeaders()),
     );
   }
 
   /// POST + JSON body（发现页接口）。
   static Future<dynamic> postJson(
+    BuiltinTransport http,
     String path,
     Object body, {
     int tries = defaultTries,
@@ -105,7 +107,7 @@ abstract final class QsApi {
     return _withEmptyRetry(
       tries: tries,
       send: () =>
-          lxHttpPost('$pcHost$path', headers: _appHeaders(), body: body),
+          lxHttpPost(http, '$pcHost$path', headers: _appHeaders(), body: body),
     );
   }
 
@@ -114,6 +116,7 @@ abstract final class QsApi {
   /// 页面结构变化 / 缺 marker 时抛 [BuiltinHttpException]，与传输失败同一条
   /// 重试路径（分享页偶发返回不完整快照）。
   static Future<Map<String, dynamic>> shareLoaderData(
+    BuiltinTransport http,
     String path,
     Map<String, String> query, {
     int tries = defaultTries,
@@ -122,6 +125,7 @@ abstract final class QsApi {
     final html = await _withEmptyRetry(
       tries: tries,
       send: () => lxHttpGetText(
+        http,
         uri.toString(),
         headers: const {'User-Agent': webUserAgent},
       ),

@@ -21,7 +21,7 @@ import 'kg_search.dart';
 ///   `global.data` 歌单 → gateway 批量歌曲信息）、歌单搜索；
 /// - 热搜词：`gateway.kugou.com/.../hot_tab`。
 ///
-/// 网络结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
+/// 网络结果缓存 5 分钟（统一走注入 transport 的 `cached`）。
 class KgDiscoverSource extends DiscoverSource {
   const KgDiscoverSource();
 
@@ -107,38 +107,43 @@ class KgDiscoverSource extends DiscoverSource {
   bool get hasLeaderboardCoverEndpoint => true;
 
   @override
-  Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
-    return _fetchLeaderboard(bangid);
+  Future<List<DiscoverTrack>> leaderboardTracks(
+    BuiltinTransport http,
+    String bangid,
+  ) {
+    return _fetchLeaderboard(http, bangid);
   }
 
   /// 榜单封面：`rank/info` 的 `imgurl`（`{size}` 占位统一到 480）。
   @override
-  Future<String?> leaderboardCover(String bangid) {
-    return BuiltinSearch.transport.cached(
-      'kg:leaderboard-cover:$bangid',
-      () async {
-        final body = await lxHttpGet(
-          'http://mobilecdnbj.kugou.com/api/v3/rank/info'
-          '?rankid=$bangid&with_res_tag=0',
-        );
-        if (body is! Map || body['status'] != 1 || body['data'] is! Map) {
-          throw StateError('kg 榜单封面获取失败');
-        }
-        final url = kgCoverUrlOf(body['data']);
-        if (url == null || url.isEmpty) {
-          throw StateError('kg 榜单封面为空');
-        }
-        return url;
-      },
-    );
+  Future<String?> leaderboardCover(BuiltinTransport http, String bangid) {
+    return http.cached('kg:leaderboard-cover:$bangid', () async {
+      final body = await lxHttpGet(
+        http,
+        'http://mobilecdnbj.kugou.com/api/v3/rank/info'
+        '?rankid=$bangid&with_res_tag=0',
+      );
+      if (body is! Map || body['status'] != 1 || body['data'] is! Map) {
+        throw StateError('kg 榜单封面获取失败');
+      }
+      final url = kgCoverUrlOf(body['data']);
+      if (url == null || url.isEmpty) {
+        throw StateError('kg 榜单封面为空');
+      }
+      return url;
+    });
   }
 
-  static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {
+  static Future<List<DiscoverTrack>> _fetchLeaderboard(
+    BuiltinTransport http,
+    String bangid,
+  ) {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTrack>>(
         key: 'kg:leaderboard:$bangid',
         budget: BuiltinRetryBudget.leaderboard,
         request: () => lxHttpGet(
+          http,
           'http://mobilecdnbj.kugou.com/api/v3/rank/song?version=9108'
           '&ranktype=1&plat=0&pagesize=$_limitSong&area_code=1&page=1'
           '&rankid=$bangid&with_res_tag=0&show_portrait_mv=1',
@@ -157,6 +162,7 @@ class KgDiscoverSource extends DiscoverSource {
           ];
         },
       ),
+      http,
     );
   }
 
@@ -216,9 +222,10 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverTags> tags() {
-    return BuiltinSearch.transport.cached('kg:tags', () async {
+  Future<DiscoverTags> tags(BuiltinTransport http) {
+    return http.cached('kg:tags', () async {
       final body = await lxHttpGet(
+        http,
         'http://www2.kugou.kugou.com/yueku/v9/special/getSpecial?is_smarty=1&',
       );
       if (body is! Map || body['status'] != 1) {
@@ -276,30 +283,35 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
-    return BuiltinSearch.transport.cached(
-      'kg:playlists:$tagId:$page',
-      () async {
-        final list = await _fetchSongList(tagId, page);
-        final info = tagId.isEmpty ? null : await _fetchListInfo(tagId);
-        final total = parseSourceCount(info?['total']) ?? list.length;
-        final limit = parseSourceCount(info?['pagesize']) ?? _limitList;
-        return DiscoverPlaylistPage(
-          playlists: [for (final item in list) ?filterListItem(item)],
-          page: page,
-          limit: limit,
-          total: total,
-        );
-      },
-    );
+  Future<DiscoverPlaylistPage> playlists(
+    BuiltinTransport http,
+    String tagId,
+    int page,
+  ) {
+    return http.cached('kg:playlists:$tagId:$page', () async {
+      final list = await _fetchSongList(http, tagId, page);
+      final info = tagId.isEmpty ? null : await _fetchListInfo(http, tagId);
+      final total = parseSourceCount(info?['total']) ?? list.length;
+      final limit = parseSourceCount(info?['pagesize']) ?? _limitList;
+      return DiscoverPlaylistPage(
+        playlists: [for (final item in list) ?filterListItem(item)],
+        page: page,
+        limit: limit,
+        total: total,
+      );
+    });
   }
 
-  static Future<List<dynamic>> _fetchSongList(String tagId, int page) {
+  static Future<List<dynamic>> _fetchSongList(
+    BuiltinTransport http,
+    String tagId,
+    int page,
+  ) {
     return runDiscoverCall(
       DiscoverRequestCall<List<dynamic>>(
         key: null,
         request: () => lxHttpGet(
-          // LX 默认排序 = 推荐（t=5）。
+          http, // LX 默认排序 = 推荐（t=5）。
           'http://www2.kugou.kugou.com/yueku/v9/special/getSpecial'
           '?is_ajax=1&cdn=cdn&t=5&c=$tagId&p=$page',
         ),
@@ -307,12 +319,17 @@ class KgDiscoverSource extends DiscoverSource {
             body is! Map || body['status'] != 1 || body['special_db'] is! List,
         parse: (body) => body['special_db'] as List,
       ),
+      http,
     );
   }
 
-  static Future<Map<String, dynamic>?> _fetchListInfo(String tagId) async {
+  static Future<Map<String, dynamic>?> _fetchListInfo(
+    BuiltinTransport http,
+    String tagId,
+  ) async {
     try {
       final body = await lxHttpGet(
+        http,
         'http://www2.kugou.kugou.com/yueku/v9/special/getSpecial'
         '?is_smarty=1&cdn=cdn&t=5&c=$tagId',
       );
@@ -347,31 +364,33 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return BuiltinSearch.transport.cached(
-      'kg:playlist-search:$keyword:$page',
-      () async {
-        final body = await lxHttpGet(
-          'http://msearchretry.kugou.com/api/v3/search/special'
-          '?keyword=${Uri.encodeComponent(keyword)}&page=$page&pagesize=20'
-          '&showtype=10&filter=0&version=7910&sver=2',
-        );
-        if (body is! Map || body['errcode'] != 0) {
-          throw StateError('kg 歌单搜索失败');
-        }
-        final data = body['data'];
-        final items = (data is Map) ? data['info'] : null;
-        return DiscoverPlaylistPage(
-          playlists: [
-            for (final item in (items is List ? items : const []))
-              ?filterSearchItem(item),
-          ],
-          page: page,
-          limit: 20,
-          total: (data is Map ? parseSourceCount(data['total']) : null) ?? 0,
-        );
-      },
-    );
+  Future<DiscoverPlaylistPage> searchPlaylists(
+    BuiltinTransport http,
+    String keyword,
+    int page,
+  ) {
+    return http.cached('kg:playlist-search:$keyword:$page', () async {
+      final body = await lxHttpGet(
+        http,
+        'http://msearchretry.kugou.com/api/v3/search/special'
+        '?keyword=${Uri.encodeComponent(keyword)}&page=$page&pagesize=20'
+        '&showtype=10&filter=0&version=7910&sver=2',
+      );
+      if (body is! Map || body['errcode'] != 0) {
+        throw StateError('kg 歌单搜索失败');
+      }
+      final data = body['data'];
+      final items = (data is Map) ? data['info'] : null;
+      return DiscoverPlaylistPage(
+        playlists: [
+          for (final item in (items is List ? items : const []))
+            ?filterSearchItem(item),
+        ],
+        page: page,
+        limit: 20,
+        total: (data is Map ? parseSourceCount(data['total']) : null) ?? 0,
+      );
+    });
   }
 
   /// 解析歌单搜索结果（独立出来便于单元测试）。
@@ -394,10 +413,14 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverDetail> playlistDetail(String rawId, int page) {
+  Future<DiscoverDetail> playlistDetail(
+    BuiltinTransport http,
+    String rawId,
+    int page,
+  ) {
     final id = _parseSpecialId(rawId);
     if (id == null) throw StateError('kg 歌单 id 解析失败');
-    return _fetchDetailBySpecialId(id);
+    return _fetchDetailBySpecialId(http, id);
   }
 
   /// 从 `id_123` / `special/single/123-5-9999.html` / 纯数字中提取 specialid。
@@ -411,11 +434,15 @@ class KgDiscoverSource extends DiscoverSource {
     return null;
   }
 
-  static Future<DiscoverDetail> _fetchDetailBySpecialId(String id) {
+  static Future<DiscoverDetail> _fetchDetailBySpecialId(
+    BuiltinTransport http,
+    String id,
+  ) {
     return runDiscoverCall(
       DiscoverRequestCall<DiscoverDetail>(
         key: 'kg:playlist-detail:$id',
         request: () => lxHttpGetText(
+          http,
           'http://www2.kugou.kugou.com/yueku/v9/special/single/$id-5-9999.html',
         ),
         isInvalid: (html) => _listDataExp.firstMatch(html as String) == null,
@@ -428,7 +455,7 @@ class KgDiscoverSource extends DiscoverSource {
               if (item is Map && item['hash'] != null)
                 {'hash': item['hash'].toString()},
           ];
-          final tracks = await _fetchMusicInfos(hashes);
+          final tracks = await _fetchMusicInfos(http, hashes);
           final infoMatch = _listInfoExp.firstMatch(text);
           return DiscoverDetail(
             info: DiscoverPlaylist(
@@ -444,6 +471,7 @@ class KgDiscoverSource extends DiscoverSource {
           );
         },
       ),
+      http,
     );
   }
 
@@ -462,6 +490,7 @@ class KgDiscoverSource extends DiscoverSource {
   ///
   /// 全部批次为空（且有待取 hash）视为失败并重试；最后一次尝试允许空结果。
   static Future<List<SourceTrack>> _fetchMusicInfos(
+    BuiltinTransport http,
     List<Map<String, dynamic>> hashes,
   ) {
     const maxTries = BuiltinRetryBudget.discover;
@@ -477,6 +506,7 @@ class KgDiscoverSource extends DiscoverSource {
               (i + _limitSong) > hashes.length ? hashes.length : i + _limitSong,
             );
             final body = await lxHttpPost(
+              http,
               'http://gateway.kugou.com/v2/album_audio/audio',
               headers: {
                 'KG-THash': '13a3164',
@@ -517,6 +547,7 @@ class KgDiscoverSource extends DiscoverSource {
           return tracks;
         },
       ),
+      http,
     );
   }
 
@@ -577,15 +608,16 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<List<String>> hotSearches() {
-    return _fetchHotSearch();
+  Future<List<String>> hotSearches(BuiltinTransport http) {
+    return _fetchHotSearch(http);
   }
 
-  static Future<List<String>> _fetchHotSearch() {
+  static Future<List<String>> _fetchHotSearch(BuiltinTransport http) {
     return runDiscoverCall(
       DiscoverRequestCall<List<String>>(
         key: 'kg:hot-search',
         request: () => lxHttpGet(
+          http,
           'http://gateway.kugou.com/api/v3/search/hot_tab'
           '?signature=ee44edb9d7155821412d220bcaf509dd&appid=1005'
           '&clientver=10026&plat=0',
@@ -619,6 +651,7 @@ class KgDiscoverSource extends DiscoverSource {
           return words;
         },
       ),
+      http,
     );
   }
 }

@@ -7,6 +7,7 @@ import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../domain/models/play_mode.dart';
 import '../sources/builtin/builtin_search.dart';
+import '../sources/builtin/builtin_transport.dart';
 import '../sources/builtin/discover_source.dart';
 import '../sources/raw_track.dart';
 import '../sources/source_track.dart';
@@ -38,8 +39,10 @@ class DiscoverProvider extends ChangeNotifier {
     required PlaybackProvider playbackProvider,
     required LibraryProvider libraryProvider,
     required ChannelSelection selection,
+    BuiltinTransport? builtinTransport,
     Map<String, DiscoverSource>? sources,
-  }) : _playback = playbackProvider,
+  }) : _builtinTransport = builtinTransport ?? BuiltinTransport(),
+       _playback = playbackProvider,
        _library = libraryProvider,
        // 公开参数名保持 selection，字段仍按本类惯例私有。
        // ignore: prefer_initializing_formals
@@ -72,6 +75,9 @@ class DiscoverProvider extends ChangeNotifier {
 
   final PlaybackProvider _playback;
   final LibraryProvider _library;
+
+  /// 发现端点共用的内置传输（组合根注入；测试各自构造）。
+  final BuiltinTransport _builtinTransport;
   final ChannelSelection _selection;
   final Map<String, DiscoverSource> _sources;
 
@@ -173,7 +179,10 @@ class DiscoverProvider extends ChangeNotifier {
   ) async {
     var directFailed = false;
     try {
-      final direct = (await source.leaderboardCover(board.bangid))?.trim();
+      final direct = (await source.leaderboardCover(
+        _builtinTransport,
+        board.bangid,
+      ))?.trim();
       if (direct != null && direct.isNotEmpty) return direct;
     } catch (_) {
       directFailed = true;
@@ -182,7 +191,10 @@ class DiscoverProvider extends ChangeNotifier {
     // 可见磁贴同时拉整张榜单；等下一次可见 / 详情页打开时再重试。
     if (directFailed && source.hasLeaderboardCoverEndpoint) return null;
     try {
-      final tracks = await source.leaderboardTracks(board.bangid);
+      final tracks = await source.leaderboardTracks(
+        _builtinTransport,
+        board.bangid,
+      );
       for (final track in tracks) {
         final cover = track.coverUrl?.trim() ?? '';
         if (cover.isNotEmpty) return cover;
@@ -202,7 +214,7 @@ class DiscoverProvider extends ChangeNotifier {
     final key = channelKey;
     _hotSearchLoading = true;
     try {
-      final words = await source.hotSearches();
+      final words = await source.hotSearches(_builtinTransport);
       _hotSearchesBySource[key] = words;
       if (key == channelKey) notifyListeners();
     } catch (e) {
@@ -214,22 +226,25 @@ class DiscoverProvider extends ChangeNotifier {
 
   /// 榜单曲目（静态表 → 详情曲目）。
   Future<List<DiscoverTrack>> loadLeaderboardTracks(String bangid) =>
-      _guard((source) => source.leaderboardTracks(bangid));
+      _guard((source) => source.leaderboardTracks(_builtinTransport, bangid));
 
   /// 歌单标签（热门 + 分类目录）。
-  Future<DiscoverTags> loadTags() => _guard((source) => source.tags());
+  Future<DiscoverTags> loadTags() =>
+      _guard((source) => source.tags(_builtinTransport));
 
   /// 标签歌单列表（[tagId] 为空表示平台默认推荐）。
   Future<DiscoverPlaylistPage> loadPlaylists(String tagId, int page) =>
-      _guard((source) => source.playlists(tagId, page));
+      _guard((source) => source.playlists(_builtinTransport, tagId, page));
 
   /// 歌单搜索。
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) =>
-      _guard((source) => source.searchPlaylists(keyword, page));
+      _guard(
+        (source) => source.searchPlaylists(_builtinTransport, keyword, page),
+      );
 
   /// 歌单详情（支持链接 / ID / 平台内合成 id）。
   Future<DiscoverDetail> loadPlaylistDetail(String rawId, int page) =>
-      _guard((source) => source.playlistDetail(rawId, page));
+      _guard((source) => source.playlistDetail(_builtinTransport, rawId, page));
 
   /// 播放发现曲目队列（测试 / 兼容入口；生产页面走 `TrackHandoff`）。
   ///
@@ -294,7 +309,7 @@ class DiscoverProvider extends ChangeNotifier {
     final source = _sourceFor(sourceKey);
     final DiscoverDetail detail;
     try {
-      detail = await source.playlistDetail(rawId, 1);
+      detail = await source.playlistDetail(_builtinTransport, rawId, 1);
     } catch (e) {
       throw DiscoverFailure(SourceFailure.from(e));
     }

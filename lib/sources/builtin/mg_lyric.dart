@@ -28,7 +28,8 @@ class MgLyric {
   static final RegExp _word = RegExp(r'\(\d+,\d+\)');
 
   /// 获取歌词；失败返回 null（由调用方回退其它来源）。
-  static Future<BuiltinLyricResult?> fetch({
+  static Future<BuiltinLyricResult?> fetch(
+    BuiltinTransport http, {
     String? songId,
     String? mrcUrl,
     String? lrcUrl,
@@ -38,7 +39,7 @@ class MgLyric {
     var lrc = lrcUrl;
     var trc = trcUrl;
     if ((mrc == null || mrc.isEmpty) && (songId ?? '').isNotEmpty) {
-      final info = await resourceInfo(songId!);
+      final info = await resourceInfo(http, songId!);
       mrc ??= info?['mrcUrl']?.toString();
       lrc ??= info?['lrcUrl']?.toString();
       trc ??= info?['trcUrl']?.toString();
@@ -46,13 +47,13 @@ class MgLyric {
 
     BuiltinLyricResult? result;
     if ((mrc ?? '').isNotEmpty) {
-      final text = await getText(mrc!);
+      final text = await getText(http, mrc!);
       final decrypted = decrypt(text);
       if (decrypted != null && decrypted.trim().isNotEmpty) {
         result = _parseMrcText(decrypted);
       }
     } else if ((lrc ?? '').isNotEmpty) {
-      final text = await getText(lrc!);
+      final text = await getText(http, lrc!);
       if (text != null && text.trim().isNotEmpty) {
         result = BuiltinLyricResult(lyric: text);
       }
@@ -61,7 +62,7 @@ class MgLyric {
 
     String? tlyric = result.tlyric;
     if ((trc ?? '').isNotEmpty) {
-      final text = await getText(trc!);
+      final text = await getText(http, trc!);
       if (text != null && text.trim().isNotEmpty) tlyric = text;
     }
     return BuiltinLyricResult(
@@ -73,9 +74,13 @@ class MgLyric {
   }
 
   /// 按 songId 取资源信息（mrc/lrc/trc URL、专辑封面）。
-  static Future<Map<String, dynamic>?> resourceInfo(String songId) async {
+  static Future<Map<String, dynamic>?> resourceInfo(
+    BuiltinTransport http,
+    String songId,
+  ) async {
     try {
       final json = await lxHttpPost(
+        http,
         'https://c.musicapp.migu.cn/MIGUM2.0/v1.0/content/'
         'resourceinfo.do?resourceType=2',
         form: true,
@@ -94,8 +99,8 @@ class MgLyric {
   }
 
   /// 取资源封面（`albumImgs[0].img`），供封面回退使用。
-  static Future<String?> coverOf(String songId) async {
-    final info = await resourceInfo(songId);
+  static Future<String?> coverOf(BuiltinTransport http, String songId) async {
+    final info = await resourceInfo(http, songId);
     final imgs = info?['albumImgs'];
     if (imgs is List && imgs.isNotEmpty && imgs.first is Map) {
       final img = (imgs.first as Map)['img']?.toString();
@@ -107,9 +112,9 @@ class MgLyric {
   }
 
   /// 下载歌词文本（多媒体资源 URL，统一走咪咕请求头）。
-  static Future<String?> getText(String url) async {
+  static Future<String?> getText(BuiltinTransport http, String url) async {
     try {
-      return await lxHttpGetText(url, headers: _headers);
+      return await lxHttpGetText(http, url, headers: _headers);
     } catch (_) {
       return null;
     }

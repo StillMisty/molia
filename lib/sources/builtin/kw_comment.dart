@@ -13,6 +13,7 @@ class KwComment {
   KwComment._();
 
   static Future<CommentPage> fetch(
+    BuiltinTransport http,
     String songId, {
     required CommentKind kind,
     int page = 1,
@@ -23,6 +24,7 @@ class KwComment {
       CommentKind.latest => 'get_comment',
     };
     final body = await lxHttpGet(
+      http,
       'http://ncomment.kuwo.cn/com.s?f=web&type=$type&aapiver=1'
       '&prod=kwplayer_ar_10.5.2.0&digest=15&sid=$songId'
       '&start=${limit * (page - 1)}&msgflag=1&count=$limit&newver=3&uid=0',

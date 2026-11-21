@@ -11,6 +11,9 @@
 /// - 发现返回自己的 `DiscoverSource` 类型。
 /// 混成一个通用返回值会把上述差异抹平。
 ///
+/// 每个适配器的第一个参数都是 [BuiltinTransport]：传输实例由组合根注入
+/// （生产一份、测试各自构造），适配器不再从进程级静态变量取 HTTP 客户端。
+///
 /// 新增渠道 = 在本目录加一个 `{key}_channel.dart` 声明条目 + 在
 /// `channels.dart` 的 `all` 里登记一行；注册表与各 facade 不需要再改。
 library;
@@ -21,12 +24,14 @@ import '../../../domain/models/comment.dart';
 import '../../../domain/ports/music_source.dart' show PlayableStream;
 import '../../source_search_result.dart';
 import '../artist_source.dart';
+import '../builtin_transport.dart';
 import '../discover_source.dart';
 import '../lyric_hit.dart';
 import '../lyric_result.dart';
 
 /// 单曲搜索适配器（结果含分页信息；平台失败由 runner 归一为 failed）。
 typedef SongChannelSearch = Future<SourceSearchResult> Function(
+  BuiltinTransport http,
   String keyword, {
   int page,
   int limit,
@@ -37,12 +42,14 @@ typedef SongChannelSearch = Future<SourceSearchResult> Function(
 /// 返回 [PlayableStream] 而不是 URL：B 站直链必须带 Referer / UA，headers
 /// 必须一路透传到播放器与缓存写入。
 typedef SongChannelResolve = Future<PlayableStream> Function(
+  BuiltinTransport http,
   Map<String, dynamic> raw, {
   String? quality,
 });
 
 /// 按歌词搜歌适配器（失败抛 `SourceFailure`，不静默吞成空结果）。
 typedef SongChannelLyricSearch = Future<LyricSearchPage> Function(
+  BuiltinTransport http,
   String keyword, {
   int page,
   int limit,
@@ -53,14 +60,19 @@ typedef SongChannelLyricSearch = Future<LyricSearchPage> Function(
 /// 能力位 `SourceCapabilities.lyrics` 只认这个适配器（或脚本声明的 lyric
 /// action），与渠道是否内置无关。
 typedef SongChannelLyric = Future<BuiltinLyricResult?> Function(
+  BuiltinTransport http,
   Map<String, dynamic> raw,
 );
 
 /// 原生取图适配器：曲目 raw → 封面 URL（无字段 / 失败返回 null）。
-typedef SongChannelPic = Future<String?> Function(Map<String, dynamic> raw);
+typedef SongChannelPic = Future<String?> Function(
+  BuiltinTransport http,
+  Map<String, dynamic> raw,
+);
 
 /// 评论取数适配器（[id] 已由 facade 从 raw 中按渠道字段解析）。
 typedef SongChannelCommentFetch = Future<CommentPage> Function(
+  BuiltinTransport http,
   String id, {
   required CommentKind kind,
   int page,
@@ -80,6 +92,7 @@ class SongChannelComments {
 
 /// 专辑取数适配器。
 typedef SongChannelAlbum = Future<Album> Function(
+  BuiltinTransport http,
   String albumId, {
   int page,
   int limit,
@@ -87,6 +100,7 @@ typedef SongChannelAlbum = Future<Album> Function(
 
 /// 歌手搜索适配器。
 typedef SongChannelArtistSearch = Future<ArtistSearchPage> Function(
+  BuiltinTransport http,
   String keyword, {
   int page,
   int limit,
@@ -94,6 +108,7 @@ typedef SongChannelArtistSearch = Future<ArtistSearchPage> Function(
 
 /// 歌手详情取数适配器。
 typedef SongChannelArtistFetch = Future<ArtistDetail> Function(
+  BuiltinTransport http,
   String artistId, {
   int page,
   int limit,

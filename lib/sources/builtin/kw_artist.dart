@@ -11,6 +11,7 @@ import 'builtin_search.dart';
 import 'crypto_utils.dart';
 import 'kw_discover.dart';
 import 'kw_search.dart';
+import 'builtin_transport.dart';
 
 /// 酷我音乐歌手（搜索 `r.s?ft=artist`；详情 / 歌曲走 wbd `artist/*`）。
 ///
@@ -27,6 +28,7 @@ class KwArtist {
 
   /// 歌手搜索（`TOTAL` 用于分页）。
   static Future<ArtistSearchPage> search(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = 30,
@@ -38,7 +40,7 @@ class KwArtist {
         '&uid=794762570&ver=kwplayer_ar_9.2.2.1&vipver=1'
         '&show_copyright_off=1&newver=1&cluster=0&strategy=2012'
         '&encoding=utf8&rformat=json&vermerge=1&mobi=1&issubtitle=1';
-    final text = await lxHttpGetText(url);
+    final text = await lxHttpGetText(http, url);
     return parseSearch(text, page: page, limit: limit);
   }
 
@@ -86,11 +88,13 @@ class KwArtist {
   ///
   /// 详情接口 best-effort：失败时退回入口携带的名字，不阻断歌曲列表。
   static Future<ArtistDetail> fetch(
+    BuiltinTransport http,
     String artistId, {
     int page = 1,
     int limit = kArtistPageSize,
   }) async {
     final songs = await _fetchWbd(
+      http,
       'artist_music',
       artistId: artistId,
       page: page,
@@ -99,6 +103,7 @@ class KwArtist {
     dynamic info;
     try {
       info = await _fetchWbd(
+        http,
         'artist_info',
         artistId: artistId,
         page: 0,
@@ -195,6 +200,7 @@ class KwArtist {
 
   /// wbd 歌手接口请求（签名 GET → 解密；业务码非 200 抛 [SourceFailure]）。
   static Future<dynamic> _fetchWbd(
+    BuiltinTransport http,
     String path, {
     required String artistId,
     required int page,
@@ -211,6 +217,7 @@ class KwArtist {
       'rn': limit,
     });
     final text = await lxHttpGetText(
+      http,
       'https://wbd.kuwo.cn/api/bd/artist/$path?$params',
       headers: const {'User-Agent': 'kwplayercar_ar_6.0.1.0_apk_keluze.apk'},
     );

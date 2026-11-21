@@ -1,4 +1,5 @@
 import '../../domain/models/discover.dart';
+import 'builtin_transport.dart';
 import 'discover_source.dart';
 import 'discover_track_mapper.dart';
 import 'wy_hot_search.dart';
@@ -19,33 +20,46 @@ class WyDiscoverSource extends DiscoverSource {
   bool get hasLeaderboardCoverEndpoint => true;
 
   @override
-  Future<List<DiscoverTrack>> leaderboardTracks(String bangid) async {
-    final tracks = await WyLeaderboard.getTracks(bangid);
+  Future<List<DiscoverTrack>> leaderboardTracks(
+    BuiltinTransport http,
+    String bangid,
+  ) async {
+    final tracks = await WyLeaderboard.getTracks(http, bangid);
     return [for (final track in tracks) discoverTrackOf(track)];
   }
 
   @override
-  Future<String?> leaderboardCover(String bangid) =>
-      WyLeaderboard.getCover(bangid);
+  Future<String?> leaderboardCover(BuiltinTransport http, String bangid) =>
+      WyLeaderboard.getCover(http, bangid);
 
   @override
-  Future<DiscoverTags> tags() async {
-    final result = await WySongList.getTags();
+  Future<DiscoverTags> tags(BuiltinTransport http) async {
+    final result = await WySongList.getTags(http);
     return DiscoverTags(hotTags: result.hotTag, categories: result.tags);
   }
 
   @override
-  Future<DiscoverPlaylistPage> playlists(String tagId, int page) =>
-      WySongList.getList('hot', tagId, page);
+  Future<DiscoverPlaylistPage> playlists(
+    BuiltinTransport http,
+    String tagId,
+    int page,
+  ) => WySongList.getList(http, 'hot', tagId, page);
 
   @override
-  Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) =>
-      WySongList.search(keyword, page);
+  Future<DiscoverPlaylistPage> searchPlaylists(
+    BuiltinTransport http,
+    String keyword,
+    int page,
+  ) => WySongList.search(http, keyword, page);
 
   @override
-  Future<DiscoverDetail> playlistDetail(String rawId, int page) =>
-      WySongList.getListDetail(rawId, page);
+  Future<DiscoverDetail> playlistDetail(
+    BuiltinTransport http,
+    String rawId,
+    int page,
+  ) => WySongList.getListDetail(http, rawId, page);
 
   @override
-  Future<List<String>> hotSearches() => WyHotSearch.getList();
+  Future<List<String>> hotSearches(BuiltinTransport http) =>
+      WyHotSearch.getList(http);
 }

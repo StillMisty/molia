@@ -14,17 +14,15 @@ library;
 
 import '../../domain/models/failure.dart';
 import 'bili_client.dart';
+import 'builtin_transport.dart';
 import 'bili_play.dart';
 import 'bili_session.dart';
 import 'lyric_result.dart';
 
 class BiliLyric {
-  BiliLyric({BiliSession? session})
+  BiliLyric({required BuiltinTransport transport, BiliSession? session})
     : _session = session,
-      _client = BiliClient(session: session);
-
-  /// 静态内置歌词适配器使用的共享实例（账号会话走 [BiliSession.shared]）。
-  static final BiliLyric shared = BiliLyric();
+      _client = BiliClient(transport: transport, session: session);
 
   final BiliSession? _session;
   final BiliClient _client;
@@ -49,7 +47,7 @@ class BiliLyric {
       if (bvid.isEmpty && aid.isEmpty) return null;
 
       // 与取链共用 cid 缓存：raw 有 cid 时连分 P 都不查。
-      final cid = await BiliPlay.cidOf(raw);
+      final cid = await BiliPlay.cidOf(_client.transport, raw);
       final query = <String, Object?>{
         if (bvid.isNotEmpty) 'bvid': bvid else 'aid': aid,
         'cid': '$cid',

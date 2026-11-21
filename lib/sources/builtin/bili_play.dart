@@ -12,6 +12,7 @@ import '../../domain/ports/music_source.dart';
 import '../source_search_result.dart' show parseSourceCount;
 import '../source_track.dart' show pickQualityFor;
 import 'bili_api.dart';
+import 'builtin_transport.dart';
 import 'bili_client.dart';
 import 'bili_track.dart' show biliRawText;
 
@@ -35,6 +36,7 @@ class BiliPlay {
   }
 
   static Future<PlayableStream> resolve(
+    BuiltinTransport http,
     Map<String, dynamic> raw, {
     String? quality,
   }) async {
@@ -43,14 +45,27 @@ class BiliPlay {
     final aid = ids.aid;
     _requireIds(bvid, aid);
 
-    final cid = await _cidFor(raw, bvid: bvid, aid: aid);
-    final response = await _playUrl(bvid: bvid, aid: aid, cid: cid, fnval: 16);
+    final client = BiliClient(transport: http);
+    final cid = await _cidFor(client, raw, bvid: bvid, aid: aid);
+    final response = await _playUrl(
+      client: client,
+      bvid: bvid,
+      aid: aid,
+      cid: cid,
+      fnval: 16,
+    );
 
     final data = response is Map ? response['data'] : null;
     var audio = _pickDashAudio(data, quality);
     if (audio == null) {
       // 老视频 / 版权限制可能没有 dash：退回 `fnval=1` 的 durl 单文件。
-      final fallback = await _playUrl(bvid: bvid, aid: aid, cid: cid, fnval: 1);
+      final fallback = await _playUrl(
+        client: client,
+        bvid: bvid,
+        aid: aid,
+        cid: cid,
+        fnval: 1,
+      );
       final fallbackData = fallback is Map ? fallback['data'] : null;
       audio = _pickDurlAudio(fallbackData);
     }
@@ -79,14 +94,22 @@ class BiliPlay {
   ///
   /// 取链与 CC 字幕歌词共用这一入口：同一视频只查一次分 P；分 P 缓存
   /// 由 [_cidCache] 承担，歌词失败不影响下一次取链。
-  static Future<int> cidOf(Map<String, dynamic> raw) async {
+  static Future<int> cidOf(
+    BuiltinTransport http,
+    Map<String, dynamic> raw,
+  ) async {
     final fromRaw = parseSourceCount(raw['cid']);
     if (fromRaw != null && fromRaw > 0) return fromRaw;
     final ids = _idsOf(raw);
     _requireIds(ids.bvid, ids.aid);
     // 分 P 接口不需要 WBI / Cookie：字幕歌词即使拿不到会话也能查 cid，
     // 不让 nav 失败拖垮歌词。
-    return _cidFor(raw, bvid: ids.bvid, aid: ids.aid);
+    return _cidFor(
+      BiliClient(transport: http),
+      raw,
+      bvid: ids.bvid,
+      aid: ids.aid,
+    );
   }
 
   static ({String bvid, String aid}) _idsOf(Map<String, dynamic> raw) => (
@@ -105,6 +128,7 @@ class BiliPlay {
 
   /// 分 P 列表 → 首个 cid（raw 已带 cid 时直接复用）。
   static Future<int> _cidFor(
+    BiliClient client,
     Map<String, dynamic> raw, {
     required String bvid,
     required String aid,
@@ -116,7 +140,7 @@ class BiliPlay {
     final cached = _cidCache[cacheKey];
     if (cached != null) return cached;
 
-    final response = await BiliClient.shared.get(
+    final response = await client.get(
       '/x/player/pagelist',
       query: bvid.isNotEmpty ? {'bvid': bvid} : {'aid': aid},
     );
@@ -135,12 +159,13 @@ class BiliPlay {
   }
 
   static Future<dynamic> _playUrl({
+    required BiliClient client,
     required String bvid,
     required String aid,
     required int cid,
     required int fnval,
   }) {
-    return BiliClient.shared.get(
+    return client.get(
       '/x/player/wbi/playurl',
       query: {
         if (bvid.isNotEmpty) 'bvid': bvid else 'avid': aid,

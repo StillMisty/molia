@@ -23,11 +23,13 @@ class KgArtist {
 
   /// 歌手搜索（平台固定一页，[page]/[limit] 仍按平台参数传入）。
   static Future<ArtistSearchPage> search(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = 30,
   }) async {
     final body = await lxHttpGet(
+      http,
       'https://mobiles.kugou.com/api/v3/search/singer'
       '?keyword=${Uri.encodeComponent(keyword)}'
       '&page=$page&pagesize=$limit&showtype=1',
@@ -58,11 +60,13 @@ class KgArtist {
   ///
   /// 详情接口 best-effort：失败时退回入口携带的名字，不阻断歌曲列表。
   static Future<ArtistDetail> fetch(
+    BuiltinTransport http,
     String artistId, {
     int page = 1,
     int limit = kArtistPageSize,
   }) async {
     final songs = await lxHttpGet(
+      http,
       'http://mobiles.kugou.com/api/v5/singer/song'
       '?singerid=$artistId&page=$page&pagesize=$limit',
       retries: BuiltinTransport.defaultRetries,
@@ -71,6 +75,7 @@ class KgArtist {
     dynamic info;
     try {
       info = await lxHttpGet(
+        http,
         'http://mobiles.kugou.com/api/v5/singer/info?singerid=$artistId',
         retries: BuiltinTransport.defaultRetries,
         retryIf: _isInvalid,

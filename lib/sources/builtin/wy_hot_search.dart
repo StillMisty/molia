@@ -1,19 +1,21 @@
 import 'builtin_search.dart';
 import 'crypto_utils.dart';
+import 'builtin_transport.dart';
 
 /// 网易云热搜词（移植自 lx-music-mobile `wy/hotSearch.js`）。
 ///
 /// eapi `/api/search/chart/detail`（`HOT_SEARCH_SONG#@#`）→ itemList.searchWord；
-/// 结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
+/// 结果缓存 5 分钟（统一走注入 transport 的 `cached`）。
 class WyHotSearch {
   WyHotSearch._();
 
-  static Future<List<String>> getList() {
-    return BuiltinSearch.transport.cached('wy:hot-search', _fetch);
+  static Future<List<String>> getList(BuiltinTransport http) {
+    return http.cached('wy:hot-search', () => _fetch(http));
   }
 
-  static Future<List<String>> _fetch() async {
+  static Future<List<String>> _fetch(BuiltinTransport http) async {
     final body = await lxHttpPost(
+      http,
       'http://interface.music.163.com/eapi/batch',
       form: true,
       headers: {'origin': 'https://music.163.com'},

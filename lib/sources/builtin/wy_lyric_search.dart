@@ -20,11 +20,13 @@ class WyLyricSearch {
   static const int _searchTypeLyric = 1006;
 
   static Future<LyricSearchPage> search(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = 30,
   }) async {
     final body = await lxHttpGet(
+      http,
       'https://music.163.com/api/search/get/web'
       '?s=${Uri.encodeComponent(keyword)}'
       '&type=$_searchTypeLyric&offset=${(page - 1) * limit}&limit=$limit',
@@ -34,7 +36,7 @@ class WyLyricSearch {
     final ids = idsOf(body);
     final tracks = ids.isEmpty
         ? const <SourceTrack>[]
-        : await WyMusicDetail.getList(ids);
+        : await WyMusicDetail.getList(http, ids);
     return buildPage(body: body, tracks: tracks, page: page, limit: limit);
   }
 

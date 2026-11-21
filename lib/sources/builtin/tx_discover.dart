@@ -8,6 +8,7 @@ import 'discover_runner.dart';
 import 'discover_source.dart';
 import 'discover_track_mapper.dart';
 import 'tx_search.dart';
+import 'builtin_transport.dart';
 
 /// QQ 音乐「发现」（移植自 lx-music-mobile `tx/leaderboard.js`、
 /// `tx/songList.js`、`tx/hotSearch.js`）。
@@ -18,7 +19,7 @@ import 'tx_search.dart';
 ///   → `uniform_get_Dissinfo` 兜底）、歌单搜索；
 /// - 热搜词：`musicu.fcg` hotkey。
 ///
-/// 网络结果缓存 5 分钟（统一走 `BuiltinSearch.transport.cached`）。
+/// 网络结果缓存 5 分钟（统一走注入 transport 的 `cached`）。
 class TxDiscoverSource extends DiscoverSource {
   const TxDiscoverSource();
 
@@ -67,60 +68,61 @@ class TxDiscoverSource extends DiscoverSource {
   bool get hasLeaderboardCoverEndpoint => true;
 
   @override
-  Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
-    return BuiltinSearch.transport.cached(
+  Future<List<DiscoverTrack>> leaderboardTracks(
+    BuiltinTransport http,
+    String bangid,
+  ) {
+    return http.cached(
       'tx:leaderboard:$bangid',
-      () => _fetchLeaderboard(bangid),
+      () => _fetchLeaderboard(http, bangid),
     );
   }
 
   /// 榜单封面：`GetDetail` 的 `data.topInfo`（`headPicUrl` / `frontPicUrl`
   /// / `musichallPicUrl` 等）；缺失时退回首曲封面。只请求 1 条曲目。
   @override
-  Future<String?> leaderboardCover(String bangid) {
-    return BuiltinSearch.transport.cached(
-      'tx:leaderboard-cover:$bangid',
-      () async {
-        final body = await lxHttpPost(
-          'https://u.y.qq.com/cgi-bin/musicu.fcg',
-          headers: {'User-Agent': _msieUa},
-          body: {
-            'toplist': {
-              'module': 'musicToplist.ToplistInfoServer',
-              'method': 'GetDetail',
-              'param': {'topid': int.tryParse(bangid) ?? bangid, 'num': 1},
-            },
-            'comm': {'uin': 0, 'format': 'json', 'ct': 20, 'cv': 1859},
+  Future<String?> leaderboardCover(BuiltinTransport http, String bangid) {
+    return http.cached('tx:leaderboard-cover:$bangid', () async {
+      final body = await lxHttpPost(
+        http,
+        'https://u.y.qq.com/cgi-bin/musicu.fcg',
+        headers: {'User-Agent': _msieUa},
+        body: {
+          'toplist': {
+            'module': 'musicToplist.ToplistInfoServer',
+            'method': 'GetDetail',
+            'param': {'topid': int.tryParse(bangid) ?? bangid, 'num': 1},
           },
-        );
-        if (body is! Map || body['code'] != 0) {
-          throw StateError('tx 榜单封面获取失败');
+          'comm': {'uin': 0, 'format': 'json', 'ct': 20, 'cv': 1859},
+        },
+      );
+      if (body is! Map || body['code'] != 0) {
+        throw StateError('tx 榜单封面获取失败');
+      }
+      final data = (body['toplist'] as Map?)?['data'];
+      if (data is! Map) throw StateError('tx 榜单封面解析失败');
+      final topInfo = data['data'];
+      if (topInfo is Map) {
+        for (final key in const [
+          'headPicUrl',
+          'frontPicUrl',
+          'mbHeadPicUrl',
+          'mbFrontPicUrl',
+          'musichallPicUrl',
+          'picUrl',
+          'toplistNamePicUrl',
+        ]) {
+          final url = _nonEmpty(topInfo[key]?.toString());
+          if (url != null) return url;
         }
-        final data = (body['toplist'] as Map?)?['data'];
-        if (data is! Map) throw StateError('tx 榜单封面解析失败');
-        final topInfo = data['data'];
-        if (topInfo is Map) {
-          for (final key in const [
-            'headPicUrl',
-            'frontPicUrl',
-            'mbHeadPicUrl',
-            'mbFrontPicUrl',
-            'musichallPicUrl',
-            'picUrl',
-            'toplistNamePicUrl',
-          ]) {
-            final url = _nonEmpty(topInfo[key]?.toString());
-            if (url != null) return url;
-          }
-          final songs = topInfo['song'];
-          final cover = _firstSongCover(songs);
-          if (cover != null) return cover;
-        }
-        final cover = _firstSongCover(data['songInfoList']);
+        final songs = topInfo['song'];
+        final cover = _firstSongCover(songs);
         if (cover != null) return cover;
-        throw StateError('tx 榜单封面为空');
-      },
-    );
+      }
+      final cover = _firstSongCover(data['songInfoList']);
+      if (cover != null) return cover;
+      throw StateError('tx 榜单封面为空');
+    });
   }
 
   static String? _firstSongCover(dynamic songs) {
@@ -136,8 +138,12 @@ class TxDiscoverSource extends DiscoverSource {
     return null;
   }
 
-  static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) async {
+  static Future<List<DiscoverTrack>> _fetchLeaderboard(
+    BuiltinTransport http,
+    String bangid,
+  ) async {
     final body = await lxHttpPost(
+      http,
       'https://u.y.qq.com/cgi-bin/musicu.fcg',
       headers: {'User-Agent': _msieUa},
       body: {
@@ -163,9 +169,9 @@ class TxDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverTags> tags() {
-    return BuiltinSearch.transport.cached('tx:tags', () async {
-      final results = await Future.wait([_fetchTag(), _fetchHotTag()]);
+  Future<DiscoverTags> tags(BuiltinTransport http) {
+    return http.cached('tx:tags', () async {
+      final results = await Future.wait([_fetchTag(http), _fetchHotTag(http)]);
       return DiscoverTags(
         categories: results[0] as List<DiscoverTagCategory>,
         hotTags: results[1] as List<DiscoverTag>,
@@ -173,7 +179,7 @@ class TxDiscoverSource extends DiscoverSource {
     });
   }
 
-  static Future<List<DiscoverTagCategory>> _fetchTag() {
+  static Future<List<DiscoverTagCategory>> _fetchTag(BuiltinTransport http) {
     return runDiscoverCall(
       DiscoverRequestCall<List<DiscoverTagCategory>>(
         key: null,
@@ -186,6 +192,7 @@ class TxDiscoverSource extends DiscoverSource {
             },
           });
           return lxHttpGet(
+            http,
             'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json'
             '&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json'
             '&needNewCode=0&data=${Uri.encodeComponent(data)}',
@@ -201,6 +208,7 @@ class TxDiscoverSource extends DiscoverSource {
           return filterTagInfo(groups as List);
         },
       ),
+      http,
     );
   }
 
@@ -227,8 +235,9 @@ class TxDiscoverSource extends DiscoverSource {
     return list;
   }
 
-  static Future<List<DiscoverTag>> _fetchHotTag() async {
+  static Future<List<DiscoverTag>> _fetchHotTag(BuiltinTransport http) async {
     final html = await lxHttpGetText(
+      http,
       'https://c.y.qq.com/node/pc/wk_v15/category_playlist.html',
     );
     return filterInfoHotTag(html);
@@ -250,12 +259,21 @@ class TxDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
-    return tagId.isEmpty ? _fetchRecommend(page) : _fetchCategory(tagId, page);
+  Future<DiscoverPlaylistPage> playlists(
+    BuiltinTransport http,
+    String tagId,
+    int page,
+  ) {
+    return tagId.isEmpty
+        ? _fetchRecommend(http, page)
+        : _fetchCategory(http, tagId, page);
   }
 
   /// 推荐歌单（LX 默认排序 = 推荐）。
-  static Future<DiscoverPlaylistPage> _fetchRecommend(int page) {
+  static Future<DiscoverPlaylistPage> _fetchRecommend(
+    BuiltinTransport http,
+    int page,
+  ) {
     return runDiscoverCall(
       DiscoverRequestCall<DiscoverPlaylistPage>(
         key: 'tx:playlists::$page',
@@ -275,6 +293,7 @@ class TxDiscoverSource extends DiscoverSource {
             },
           });
           return lxHttpGet(
+            http,
             'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json'
             '&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json'
             '&needNewCode=0&data=${Uri.encodeComponent(data)}',
@@ -303,11 +322,16 @@ class TxDiscoverSource extends DiscoverSource {
           );
         },
       ),
+      http,
     );
   }
 
   /// 分类歌单（`get_category_content`）。
-  static Future<DiscoverPlaylistPage> _fetchCategory(String tagId, int page) {
+  static Future<DiscoverPlaylistPage> _fetchCategory(
+    BuiltinTransport http,
+    String tagId,
+    int page,
+  ) {
     return runDiscoverCall(
       DiscoverRequestCall<DiscoverPlaylistPage>(
         key: 'tx:playlists:$tagId:$page',
@@ -329,6 +353,7 @@ class TxDiscoverSource extends DiscoverSource {
             },
           });
           return lxHttpGet(
+            http,
             'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json'
             '&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json'
             '&needNewCode=0&data=${Uri.encodeComponent(data)}',
@@ -354,6 +379,7 @@ class TxDiscoverSource extends DiscoverSource {
           );
         },
       ),
+      http,
     );
   }
 
@@ -384,61 +410,67 @@ class TxDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return BuiltinSearch.transport.cached(
-      'tx:playlist-search:$keyword:$page',
-      () async {
-        final body = await lxHttpGet(
-          'https://c.y.qq.com/soso/fcgi-bin/client_music_search_songlist'
-          '?page_no=${page - 1}&num_per_page=20&format=json'
-          '&query=${Uri.encodeComponent(keyword)}'
-          '&remoteplace=txt.yqq.playlist&inCharset=utf8&outCharset=utf-8',
-          headers: {'Referer': 'https://y.qq.com/portal/search.html'},
-        );
-        if (body is! Map || body['code'] != 0) {
-          throw StateError('tx 歌单搜索失败');
+  Future<DiscoverPlaylistPage> searchPlaylists(
+    BuiltinTransport http,
+    String keyword,
+    int page,
+  ) {
+    return http.cached('tx:playlist-search:$keyword:$page', () async {
+      final body = await lxHttpGet(
+        http,
+        'https://c.y.qq.com/soso/fcgi-bin/client_music_search_songlist'
+        '?page_no=${page - 1}&num_per_page=20&format=json'
+        '&query=${Uri.encodeComponent(keyword)}'
+        '&remoteplace=txt.yqq.playlist&inCharset=utf8&outCharset=utf-8',
+        headers: {'Referer': 'https://y.qq.com/portal/search.html'},
+      );
+      if (body is! Map || body['code'] != 0) {
+        throw StateError('tx 歌单搜索失败');
+      }
+      final data = body['data'];
+      final items = (data is Map) ? data['list'] : null;
+      final playlists = <DiscoverPlaylist>[];
+      if (items is List) {
+        for (final item in items) {
+          if (item is! Map) continue;
+          final creator = item['creator'];
+          playlists.add(
+            DiscoverPlaylist(
+              id: (item['dissid'] ?? '').toString(),
+              name: decodeName((item['dissname'] ?? '').toString()),
+              coverUrl: _nonEmpty(item['imgurl']?.toString()),
+              author: creator is Map
+                  ? decodeName((creator['name'] ?? '').toString())
+                  : '',
+              playCount: parseSourceCount(item['listennum']) ?? 0,
+              trackCount: parseSourceCount(item['song_count']) ?? 0,
+              description: _cleanDesc(item['introduction']),
+            ),
+          );
         }
-        final data = body['data'];
-        final items = (data is Map) ? data['list'] : null;
-        final playlists = <DiscoverPlaylist>[];
-        if (items is List) {
-          for (final item in items) {
-            if (item is! Map) continue;
-            final creator = item['creator'];
-            playlists.add(
-              DiscoverPlaylist(
-                id: (item['dissid'] ?? '').toString(),
-                name: decodeName((item['dissname'] ?? '').toString()),
-                coverUrl: _nonEmpty(item['imgurl']?.toString()),
-                author: creator is Map
-                    ? decodeName((creator['name'] ?? '').toString())
-                    : '',
-                playCount: parseSourceCount(item['listennum']) ?? 0,
-                trackCount: parseSourceCount(item['song_count']) ?? 0,
-                description: _cleanDesc(item['introduction']),
-              ),
-            );
-          }
-        }
-        return DiscoverPlaylistPage(
-          playlists: playlists,
-          page: page,
-          limit: 20,
-          total: (data is Map ? parseSourceCount(data['sum']) : null) ?? 0,
-        );
-      },
-    );
+      }
+      return DiscoverPlaylistPage(
+        playlists: playlists,
+        page: page,
+        limit: 20,
+        total: (data is Map ? parseSourceCount(data['sum']) : null) ?? 0,
+      );
+    });
   }
 
   @override
-  Future<DiscoverDetail> playlistDetail(String rawId, int page) {
+  Future<DiscoverDetail> playlistDetail(
+    BuiltinTransport http,
+    String rawId,
+    int page,
+  ) {
     final id = _parseListId(rawId);
     if (id == null) throw StateError('tx 歌单 id 解析失败');
-    return BuiltinSearch.transport.cached('tx:playlist-detail:$id', () async {
+    return http.cached('tx:playlist-detail:$id', () async {
       try {
-        return await _fetchDetailByCgi(id);
+        return await _fetchDetailByCgi(http, id);
       } catch (_) {
-        return _fetchDetailByMusicu(id);
+        return _fetchDetailByMusicu(http, id);
       }
     });
   }
@@ -453,8 +485,12 @@ class TxDiscoverSource extends DiscoverSource {
     return match?.group(1);
   }
 
-  static Future<DiscoverDetail> _fetchDetailByCgi(String id) async {
+  static Future<DiscoverDetail> _fetchDetailByCgi(
+    BuiltinTransport http,
+    String id,
+  ) async {
     final body = await lxHttpGet(
+      http,
       'https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg'
       '?type=1&json=1&utf8=1&onlysong=0&new_format=1&disstid=$id'
       '&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8'
@@ -497,8 +533,12 @@ class TxDiscoverSource extends DiscoverSource {
   }
 
   /// 备用详情接口（`uniform_get_Dissinfo`，与 LX `getListDetail2` 一致）。
-  static Future<DiscoverDetail> _fetchDetailByMusicu(String id) async {
+  static Future<DiscoverDetail> _fetchDetailByMusicu(
+    BuiltinTransport http,
+    String id,
+  ) async {
     final body = await lxHttpPost(
+      http,
       'https://u.y.qq.com/cgi-bin/musicu.fcg',
       headers: {
         'Origin': 'https://y.qq.com',
@@ -562,15 +602,16 @@ class TxDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<List<String>> hotSearches() {
-    return _fetchHotSearch();
+  Future<List<String>> hotSearches(BuiltinTransport http) {
+    return _fetchHotSearch(http);
   }
 
-  static Future<List<String>> _fetchHotSearch() {
+  static Future<List<String>> _fetchHotSearch(BuiltinTransport http) {
     return runDiscoverCall(
       DiscoverRequestCall<List<String>>(
         key: 'tx:hot-search',
         request: () => lxHttpPost(
+          http,
           'https://u.y.qq.com/cgi-bin/musicu.fcg',
           headers: {'Referer': 'https://y.qq.com/portal/player.html'},
           body: {
@@ -606,6 +647,7 @@ class TxDiscoverSource extends DiscoverSource {
           return filterHotSearch(vec);
         },
       ),
+      http,
     );
   }
 

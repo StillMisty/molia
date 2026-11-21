@@ -23,14 +23,21 @@ class BiliDiscoverSource extends DiscoverSource {
   List<DiscoverLeaderboard> get leaderboards => BiliRanking.boards;
 
   @override
-  Future<List<DiscoverTrack>> leaderboardTracks(String bangid) =>
-      BiliRanking.leaderboardTracks(bangid);
+  Future<List<DiscoverTrack>> leaderboardTracks(
+    BuiltinTransport http,
+    String bangid,
+  ) => BiliRanking.leaderboardTracks(http, bangid);
 
   @override
-  Future<DiscoverTags> tags() async => const DiscoverTags();
+  Future<DiscoverTags> tags(BuiltinTransport http) async =>
+      const DiscoverTags();
 
   @override
-  Future<DiscoverPlaylistPage> playlists(String tagId, int page) async {
+  Future<DiscoverPlaylistPage> playlists(
+    BuiltinTransport http,
+    String tagId,
+    int page,
+  ) async {
     throw const SourceFailure(
       kind: FailureKind.unsupported,
       message: 'bili: 不支持歌单浏览',
@@ -38,7 +45,11 @@ class BiliDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) async {
+  Future<DiscoverPlaylistPage> searchPlaylists(
+    BuiltinTransport http,
+    String keyword,
+    int page,
+  ) async {
     throw const SourceFailure(
       kind: FailureKind.unsupported,
       message: 'bili: 不支持歌单浏览',
@@ -46,13 +57,16 @@ class BiliDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverDetail> playlistDetail(String rawId, int page) =>
-      BiliFavorites.detail(rawId, page);
+  Future<DiscoverDetail> playlistDetail(
+    BuiltinTransport http,
+    String rawId,
+    int page,
+  ) => BiliFavorites.detail(http, rawId, page);
 
   /// 热搜：`data.trending.list[].keyword`（只收字符串、去重保序）。
   @override
-  Future<List<String>> hotSearches() async {
-    final response = await BiliClient.shared.get(
+  Future<List<String>> hotSearches(BuiltinTransport http) async {
+    final response = await BiliClient(transport: http).get(
       '/x/web-interface/search/square',
       query: {'limit': '10'},
       retries: BuiltinTransport.defaultRetries,

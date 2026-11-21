@@ -6,6 +6,7 @@ import 'kw_discover.dart';
 import 'kw_search.dart';
 import 'lyric_hit.dart';
 import 'lyric_search_runner.dart';
+import 'builtin_transport.dart';
 
 /// 酷我音乐「按歌词搜歌」（`r.s?stype=lyric`）。
 ///
@@ -20,6 +21,7 @@ class KwLyricSearch {
   KwLyricSearch._();
 
   static Future<LyricSearchPage> search(
+    BuiltinTransport http,
     String keyword, {
     int page = 1,
     int limit = 30,
@@ -31,7 +33,7 @@ class KwLyricSearch {
         '&uid=794762570&ver=kwplayer_ar_9.2.2.1&vipver=1'
         '&newver=1&ft=music&cluster=0&strategy=2012'
         '&encoding=utf8&rformat=json&vermerge=1&mobi=1&issubtitle=1';
-    final text = await lxHttpGetText(url);
+    final text = await lxHttpGetText(http, url);
     return parseSearch(text, page: page, limit: limit);
   }
 

@@ -3,17 +3,22 @@
 library;
 
 import 'qs_api.dart';
+import 'builtin_transport.dart';
 import 'qs_track.dart';
 
 class QsPic {
   QsPic._();
 
-  static Future<String?> fetch(Map<String, dynamic> raw) async {
+  static Future<String?> fetch(
+    BuiltinTransport http,
+    Map<String, dynamic> raw,
+  ) async {
     final direct = coverOf(raw);
     if (direct != null) return direct;
     final trackId = raw['track_id']?.toString() ?? raw['id']?.toString() ?? '';
     if (trackId.isEmpty) return null;
     final response = await QsApi.getJson(
+      http,
       '/luna/h5/seo_track',
       query: {'track_id': trackId},
     );

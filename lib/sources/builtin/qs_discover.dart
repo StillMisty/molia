@@ -14,6 +14,7 @@ import '../../domain/models/discover.dart';
 import 'discover_source.dart';
 import 'discover_track_mapper.dart';
 import 'qs_api.dart';
+import 'builtin_transport.dart';
 import 'qs_search.dart';
 import 'qs_track.dart';
 
@@ -56,11 +57,13 @@ class QsDiscoverSource extends DiscoverSource {
   List<DiscoverLeaderboard> get leaderboards => const [];
 
   @override
-  Future<List<DiscoverTrack>> leaderboardTracks(String bangid) async =>
-      const [];
+  Future<List<DiscoverTrack>> leaderboardTracks(
+    BuiltinTransport http,
+    String bangid,
+  ) async => const [];
 
   @override
-  Future<DiscoverTags> tags() async => DiscoverTags(
+  Future<DiscoverTags> tags(BuiltinTransport http) async => DiscoverTags(
     hotTags: const [
       ..._dailyRecommended,
       DiscoverTag(id: '14', name: '流行'),
@@ -76,8 +79,12 @@ class QsDiscoverSource extends DiscoverSource {
   );
 
   @override
-  Future<DiscoverPlaylistPage> playlists(String tagId, int page) async {
-    final response = await QsApi.postJson('/luna/discover/mix', {
+  Future<DiscoverPlaylistPage> playlists(
+    BuiltinTransport http,
+    String tagId,
+    int page,
+  ) async {
+    final response = await QsApi.postJson(http, '/luna/discover/mix', {
       'sub_channel_id': _channelOf(tagId),
       'count': discoverBatchSize,
     });
@@ -94,8 +101,13 @@ class QsDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) async {
+  Future<DiscoverPlaylistPage> searchPlaylists(
+    BuiltinTransport http,
+    String keyword,
+    int page,
+  ) async {
     final response = await QsApi.getJson(
+      http,
       '/luna/search/playlist',
       query: {
         'q': keyword,
@@ -116,9 +128,14 @@ class QsDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<DiscoverDetail> playlistDetail(String rawId, int page) async {
+  Future<DiscoverDetail> playlistDetail(
+    BuiltinTransport http,
+    String rawId,
+    int page,
+  ) async {
     final requestPage = page < 1 ? 1 : page;
     final response = await QsApi.getJson(
+      http,
       '/luna/playlist/detail',
       query: {
         'playlist_id': rawId,
@@ -144,7 +161,7 @@ class QsDiscoverSource extends DiscoverSource {
   }
 
   @override
-  Future<List<String>> hotSearches() async => const [];
+  Future<List<String>> hotSearches(BuiltinTransport http) async => const [];
 
   @override
   bool get supportsHotSearch => false;

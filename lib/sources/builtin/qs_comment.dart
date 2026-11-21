@@ -11,18 +11,21 @@ library;
 import '../../domain/models/comment.dart';
 import 'comment_utils.dart';
 import 'qs_api.dart';
+import 'builtin_transport.dart';
 import 'qs_track.dart';
 
 class QsComment {
   QsComment._();
 
   static Future<CommentPage> fetch(
+    BuiltinTransport http,
     String trackId, {
     required CommentKind kind,
     int page = 1,
     int limit = kCommentPageSize,
   }) async {
     final response = await QsApi.getJson(
+      http,
       '/luna/pc/comments',
       query: {
         'group_id': trackId,

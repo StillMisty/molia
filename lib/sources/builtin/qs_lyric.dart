@@ -13,6 +13,7 @@ library;
 
 import 'lyric_result.dart';
 import 'qs_api.dart';
+import 'builtin_transport.dart';
 
 class QsLyric {
   QsLyric._();
@@ -23,10 +24,14 @@ class QsLyric {
   /// KRC 词标签：`<0,350,0>`（第三个字段是 KRC 的保留位，LX 格式不要）。
   static final RegExp _wordTag = RegExp(r'<(\d+),(\d+),\d+>');
 
-  static Future<BuiltinLyricResult?> fetch(Map<String, dynamic> raw) async {
+  static Future<BuiltinLyricResult?> fetch(
+    BuiltinTransport http,
+    Map<String, dynamic> raw,
+  ) async {
     final trackId = raw['track_id']?.toString() ?? raw['id']?.toString() ?? '';
     if (trackId.isEmpty) return null;
     final response = await QsApi.getJson(
+      http,
       '/luna/h5/seo_track',
       query: {'track_id': trackId},
     );

@@ -32,7 +32,10 @@ class BiliRanking {
   }
 
   /// 榜单曲目（平台一次给全，结果缓存 5 分钟）。
-  static Future<List<DiscoverTrack>> leaderboardTracks(String bangid) async {
+  static Future<List<DiscoverTrack>> leaderboardTracks(
+    BuiltinTransport http,
+    String bangid,
+  ) async {
     final parsed = parseBangid(bangid);
     if (parsed == null) {
       throw SourceFailure(
@@ -41,8 +44,9 @@ class BiliRanking {
       );
     }
     final key = 'bili:ranking:${parsed.rid}:${parsed.day}';
-    return BiliClient.shared.cached(key, () async {
-      final response = await BiliClient.shared.get(
+    final client = BiliClient(transport: http);
+    return client.cached(key, () async {
+      final response = await client.get(
         '/x/web-interface/ranking',
         query: {'rid': '${parsed.rid}', 'day': '${parsed.day}'},
         retries: BuiltinTransport.defaultRetries,

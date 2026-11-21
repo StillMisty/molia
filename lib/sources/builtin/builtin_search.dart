@@ -23,17 +23,12 @@ class BuiltinSearch {
   static String displayName(String sourceKey) =>
       SongChannels.displayName(sourceKey);
 
-  /// 内置请求传输：测试注入 `MockClient` 覆盖 fetch 路径（唯一入口）。
-  static BuiltinTransport transport = BuiltinTransport();
-
-  /// 释放共享传输的响应缓存（托盘隐藏 / 系统低内存）。
-  ///
-  /// 取当前 [transport] 而不是持有旧实例：测试会替换静态实例，释放入口
-  /// 始终作用于正在使用的那个。只清结果缓存，不碰平台 / 脚本注册表。
-  static void clearCachedResponses() => transport.clearCache();
-
   /// 分页搜索（返回曲目与 total/hasMore 等分页信息）。
+  ///
+  /// [http] 由组合根注入（生产只有一个实例，测试各自构造），平台适配器
+  /// 不再从进程级静态变量取传输。
   static Future<SourceSearchResult> searchWithMeta(
+    BuiltinTransport http,
     String sourceKey,
     String keyword, {
     int page = 1,
@@ -43,19 +38,20 @@ class BuiltinSearch {
     if (adapter == null) {
       throw UnsupportedError('不支持的内置音源: $sourceKey');
     }
-    return adapter(keyword, page: page, limit: limit);
+    return adapter(http, keyword, page: page, limit: limit);
   }
 }
 
 /// 发起 GET 请求并解析 JSON（传输统一入口；[retryIf] 为响应级重试判定）。
 Future<dynamic> lxHttpGet(
+  BuiltinTransport http,
   String url, {
   Map<String, String>? headers,
   Duration timeout = BuiltinTransport.defaultTimeout,
   int retries = 1,
   bool Function(dynamic json)? retryIf,
 }) {
-  return BuiltinSearch.transport.getJson(
+  return http.getJson(
     url,
     headers: headers,
     timeout: timeout,
@@ -66,25 +62,23 @@ Future<dynamic> lxHttpGet(
 
 /// 发起 GET 请求并返回文本（HTML 页面等非 JSON 响应）。
 Future<String> lxHttpGetText(
+  BuiltinTransport http,
   String url, {
   Map<String, String>? headers,
   Duration timeout = BuiltinTransport.defaultTimeout,
 }) {
-  return BuiltinSearch.transport.getText(
-    url,
-    headers: headers,
-    timeout: timeout,
-  );
+  return http.getText(url, headers: headers, timeout: timeout);
 }
 
 /// 发起 GET 请求并返回原始字节（二进制歌词响应）。
 Future<Uint8List> lxHttpGetBytes(
+  BuiltinTransport http,
   String url, {
   Map<String, String>? headers,
   Duration timeout = BuiltinTransport.defaultTimeout,
   int retries = 1,
 }) {
-  return BuiltinSearch.transport.getBytes(
+  return http.getBytes(
     url,
     headers: headers,
     timeout: timeout,
@@ -94,6 +88,7 @@ Future<Uint8List> lxHttpGetBytes(
 
 /// 发起 POST 请求并解析 JSON（表单或 JSON body）。
 Future<dynamic> lxHttpPost(
+  BuiltinTransport http,
   String url, {
   Map<String, String>? headers,
   Object? body,
@@ -102,7 +97,7 @@ Future<dynamic> lxHttpPost(
   int retries = 1,
   bool Function(dynamic json)? retryIf,
 }) {
-  return BuiltinSearch.transport.postJson(
+  return http.postJson(
     url,
     headers: headers,
     body: body,

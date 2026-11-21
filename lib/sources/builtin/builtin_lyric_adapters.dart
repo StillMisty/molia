@@ -9,6 +9,7 @@
 library;
 
 import 'bili_lyric.dart';
+import 'builtin_transport.dart';
 import 'kg_lyric.dart';
 import 'kw_lyric.dart';
 import 'lyric_result.dart';
@@ -18,10 +19,13 @@ import 'tx_lyric.dart';
 import 'wy_lyric.dart';
 
 /// 网易云：songmid / id → eapi 歌词（逐字 yrc 转 LX 格式）。
-Future<BuiltinLyricResult?> wyBuiltinLyric(Map<String, dynamic> raw) async {
+Future<BuiltinLyricResult?> wyBuiltinLyric(
+  BuiltinTransport http,
+  Map<String, dynamic> raw,
+) async {
   final songId = raw['songmid'] ?? raw['id'];
   if (songId == null) return null;
-  final info = await WyLyric.fetch(songId.toString());
+  final info = await WyLyric.fetch(http, songId.toString());
   return BuiltinLyricResult(
     lyric: info.lyric,
     tlyric: info.tlyric,
@@ -31,20 +35,27 @@ Future<BuiltinLyricResult?> wyBuiltinLyric(Map<String, dynamic> raw) async {
 }
 
 /// QQ 音乐：数字 songId 优先，songmid 兜底。
-Future<BuiltinLyricResult?> txBuiltinLyric(Map<String, dynamic> raw) =>
-    TxLyric.fetch(
-      songId: raw['songId']?.toString(),
-      songMid: raw['songmid']?.toString(),
-    );
+Future<BuiltinLyricResult?> txBuiltinLyric(
+  BuiltinTransport http,
+  Map<String, dynamic> raw,
+) => TxLyric.fetch(
+  http,
+  songId: raw['songId']?.toString(),
+  songMid: raw['songmid']?.toString(),
+);
 
 /// 酷狗：hash + 歌名 + 时长（时长影响平台是否返回逐字歌词）。
-Future<BuiltinLyricResult?> kgBuiltinLyric(Map<String, dynamic> raw) {
+Future<BuiltinLyricResult?> kgBuiltinLyric(
+  BuiltinTransport http,
+  Map<String, dynamic> raw,
+) {
   final hash = raw['hash']?.toString();
   final name = raw['name']?.toString();
   if (hash == null || hash.isEmpty || name == null || name.isEmpty) {
     return Future.value(null);
   }
   return KgLyric.fetch(
+    http,
     name: name,
     hash: hash,
     timelengthSeconds: _intervalSecondsOf(raw),
@@ -52,28 +63,38 @@ Future<BuiltinLyricResult?> kgBuiltinLyric(Map<String, dynamic> raw) {
 }
 
 /// 酷我：songmid → LRCX。
-Future<BuiltinLyricResult?> kwBuiltinLyric(Map<String, dynamic> raw) {
+Future<BuiltinLyricResult?> kwBuiltinLyric(
+  BuiltinTransport http,
+  Map<String, dynamic> raw,
+) {
   final songmid = raw['songmid']?.toString();
   if (songmid == null || songmid.isEmpty) return Future.value(null);
-  return KwLyric.fetch(songmid);
+  return KwLyric.fetch(http, songmid);
 }
 
 /// 咪咕：songmid + MRC/LRC/TRC 直链。
-Future<BuiltinLyricResult?> mgBuiltinLyric(Map<String, dynamic> raw) =>
-    MgLyric.fetch(
-      songId: raw['songmid']?.toString(),
-      mrcUrl: raw['mrcUrl']?.toString(),
-      lrcUrl: raw['lrcUrl']?.toString(),
-      trcUrl: raw['trcUrl']?.toString(),
-    );
+Future<BuiltinLyricResult?> mgBuiltinLyric(
+  BuiltinTransport http,
+  Map<String, dynamic> raw,
+) => MgLyric.fetch(
+  http,
+  songId: raw['songmid']?.toString(),
+  mrcUrl: raw['mrcUrl']?.toString(),
+  lrcUrl: raw['lrcUrl']?.toString(),
+  trcUrl: raw['trcUrl']?.toString(),
+);
 
 /// B 站：CC 字幕轨（中文优先）。
-Future<BuiltinLyricResult?> biliBuiltinLyric(Map<String, dynamic> raw) =>
-    BiliLyric.shared.fetch(raw);
+Future<BuiltinLyricResult?> biliBuiltinLyric(
+  BuiltinTransport http,
+  Map<String, dynamic> raw,
+) => BiliLyric(transport: http).fetch(raw);
 
 /// 汽水音乐：track_id → H5 SEO 详情的 KRC（转行级 LRC + LX 逐字）。
-Future<BuiltinLyricResult?> qsBuiltinLyric(Map<String, dynamic> raw) =>
-    QsLyric.fetch(raw);
+Future<BuiltinLyricResult?> qsBuiltinLyric(
+  BuiltinTransport http,
+  Map<String, dynamic> raw,
+) => QsLyric.fetch(http, raw);
 
 /// 曲目时长（秒）：优先 `_interval`，否则解析 `mm:ss` 文本。
 int _intervalSecondsOf(Map<String, dynamic> raw) {

@@ -29,6 +29,7 @@ class TxAlbum {
   };
 
   static Future<Album> fetch(
+    BuiltinTransport http,
     String albumMid, {
     int page = 1,
     int limit = kAlbumPageSize,
@@ -51,6 +52,7 @@ class TxAlbum {
         '$_url?g_tk=5381&format=json&inCharset=utf8&outCharset=utf-8'
         '&data=${Uri.encodeComponent(jsonEncode(payload))}';
     final body = await lxHttpGet(
+      http,
       url,
       headers: _headers,
       retries: BuiltinTransport.defaultRetries,

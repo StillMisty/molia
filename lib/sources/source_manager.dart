@@ -13,6 +13,7 @@ import 'builtin/artist_source.dart';
 import 'builtin/builtin_lyric_dispatch.dart';
 import 'builtin/builtin_pic_dispatch.dart';
 import 'builtin/builtin_search.dart';
+import 'builtin/builtin_transport.dart';
 import 'builtin/comment_source.dart';
 import 'builtin/lyric_hit.dart';
 import 'builtin/lyric_search.dart';
@@ -65,14 +66,25 @@ class SourceManager extends ChangeNotifier {
   /// 渠道偏好（音质 / 顺序 / 停用）的唯一持有者；变化经本类转发给 UI。
   late final SourcePreferences _preferences;
 
+  /// 内置平台的唯一 HTTP 传输（组合根注入；测试各自构造）。
+  ///
+  /// 生产只构造一次并同时注入发现 / 歌词来源等消费方，缓存 / single-flight
+  /// / 重试预算因此共享；测试传自己的实例即可完全隔离。
+  final BuiltinTransport _builtinTransport;
+
   /// 内置平台原生歌词回退（脚本不可用 / 未声明 lyric action 时的 Dart 实现）。
-  final BuiltinLyricDispatch _builtinLyricFallback = BuiltinLyricDispatch();
+  late final BuiltinLyricDispatch _builtinLyricFallback = BuiltinLyricDispatch(
+    _builtinTransport,
+  );
 
   /// 内置平台原生封面回退（同上）。
-  final BuiltinPicDispatch _builtinPicFallback = BuiltinPicDispatch();
+  late final BuiltinPicDispatch _builtinPicFallback = BuiltinPicDispatch(
+    _builtinTransport,
+  );
 
   SourceManager({
     LxEngineSupervisor? engine,
+    BuiltinTransport? builtinTransport,
     required SettingsAccess settings,
     List<Duration> activationRetryDelays = const [
       Duration(seconds: 5),
@@ -80,6 +92,7 @@ class SourceManager extends ChangeNotifier {
     ],
     Duration lazyActivationCooldown = const Duration(seconds: 5),
   }) : _engine = engine ?? LxEngineSupervisor(),
+       _builtinTransport = builtinTransport ?? BuiltinTransport(),
        _settings = settings,
        _anyListenSource = AnyListenSource(settings: settings),
        _activationRetryDelays = List<Duration>.unmodifiable(
@@ -140,6 +153,12 @@ class SourceManager extends ChangeNotifier {
 
   /// 当前音源是否可用（激活了脚本且引擎就绪）。
   bool get hasActiveSource => _engine.isRunning && _activeSources.isNotEmpty;
+
+  /// 内置平台 HTTP 传输（组合根与其它栈共享同一实例；只读）。
+  BuiltinTransport get builtinTransport => _builtinTransport;
+
+  /// 释放内置平台的共享响应缓存（托盘隐藏 / 系统低内存）。
+  void clearBuiltinCache() => _builtinTransport.clearCache();
 
   /// any-listen 适配器（搜索 / 取链 / 歌词 / 封面 / 连接测试）。
   AnyListenSource get anyListenSource => _anyListenSource;
@@ -594,6 +613,7 @@ class SourceManager extends ChangeNotifier {
         }
       case BuiltinSourceRoute():
         return BuiltinSearch.searchWithMeta(
+          _builtinTransport,
           sourceKey,
           keyword,
           page: page,
@@ -674,7 +694,11 @@ class SourceManager extends ChangeNotifier {
       final nativeResolve = route.channel.resolve;
       if (nativeResolve != null) {
         try {
-          return await nativeResolve(track.raw, quality: picked);
+          return await nativeResolve(
+            _builtinTransport,
+            track.raw,
+            quality: picked,
+          );
         } catch (e) {
           throw SourceFailure.from(e);
         }
@@ -869,6 +893,7 @@ class SourceManager extends ChangeNotifier {
     }
     try {
       return await BuiltinComments.fetch(
+        _builtinTransport,
         track.sourceKey,
         track.raw,
         kind: kind,
@@ -908,6 +933,7 @@ class SourceManager extends ChangeNotifier {
     }
     try {
       return await BuiltinAlbums.fetch(
+        _builtinTransport,
         sourceKey,
         albumId,
         page: page,
@@ -948,6 +974,7 @@ class SourceManager extends ChangeNotifier {
     }
     try {
       return await BuiltinArtists.fetch(
+        _builtinTransport,
         sourceKey,
         artistId,
         page: page,
@@ -990,6 +1017,7 @@ class SourceManager extends ChangeNotifier {
     }
     try {
       return await BuiltinArtists.search(
+        _builtinTransport,
         sourceKey,
         keyword,
         page: page,
@@ -1034,6 +1062,7 @@ class SourceManager extends ChangeNotifier {
     }
     try {
       return await BuiltinLyricSearch.searchWithMeta(
+        _builtinTransport,
         sourceKey,
         keyword,
         page: page,

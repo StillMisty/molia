@@ -17,6 +17,7 @@ class WyComment {
   static final CommentCursorStore cursorStore = CommentCursorStore();
 
   static Future<CommentPage> fetch(
+    BuiltinTransport http,
     String songId, {
     required CommentKind kind,
     int page = 1,
@@ -24,19 +25,21 @@ class WyComment {
   }) {
     switch (kind) {
       case CommentKind.hot:
-        return _fetchHot(songId, page, limit);
+        return _fetchHot(http, songId, page, limit);
       case CommentKind.latest:
-        return _fetchLatest(songId, page, limit);
+        return _fetchLatest(http, songId, page, limit);
     }
   }
 
   static Future<CommentPage> _fetchHot(
+    BuiltinTransport http,
     String songId,
     int page,
     int limit,
   ) async {
     final rid = 'R_SO_4_$songId';
     final body = await lxHttpPost(
+      http,
       'https://music.163.com/weapi/v1/resource/hotcomments/$rid',
       form: true,
       headers: const {'origin': 'https://music.163.com'},
@@ -61,6 +64,7 @@ class WyComment {
   }
 
   static Future<CommentPage> _fetchLatest(
+    BuiltinTransport http,
     String songId,
     int page,
     int limit,
@@ -68,6 +72,7 @@ class WyComment {
     final rid = 'R_SO_4_$songId';
     final cursor = _cursorFor(songId, page);
     final body = await lxHttpPost(
+      http,
       'https://music.163.com/weapi/comment/resource/comments/get',
       form: true,
       headers: const {'origin': 'https://music.163.com'},

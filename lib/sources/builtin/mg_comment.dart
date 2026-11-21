@@ -16,6 +16,7 @@ class MgComment {
   static final CommentCursorStore cursorStore = CommentCursorStore();
 
   static Future<CommentPage> fetch(
+    BuiltinTransport http,
     String songId, {
     required CommentKind kind,
     int page = 1,
@@ -28,6 +29,7 @@ class MgComment {
         : 'pageSize=$limit&queryType=1&resourceId=$songId&resourceType=2'
               '&commentId=${lastId ?? ''}';
     final body = await lxHttpGet(
+      http,
       'https://app.c.nf.migu.cn/MIGUM3.0/user/comment/stack/v1.0?$query',
       headers: const {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1',
