@@ -881,9 +881,13 @@
   → 实现者」的唯一决策点。输入只有 `SourceProfile`（由渠道自述 + 脚本声明 +
   any-listen 可用性合成）与激活脚本声明；输出 `BuiltinSourceRoute` /
   `ScriptSourceRoute` / `AnyListenSourceRoute` / `UnavailableSourceRoute`。歌词 /
-  封面允许「脚本优先 + 渠道原生回退」两条路线，其余能力单路线。`SourceManager`
-  只按路线类型执行，不再写 `sourceKey == any_listen`、`SongChannels.isSupported`
-  或脚本 action 分支；能力位与路线同源，新增渠道只需改自己的声明文件。
+  封面允许「脚本优先 + 渠道原生回退」两条路线，其余能力单路线。
+  `lib/sources/source_route_executor.dart::SourceRouteExecutor` 只按路线类型执行
+  搜索 / 取链 / 歌词 / 封面 / 评论 / 专辑 / 歌手 / 歌词搜索，不写
+  `sourceKey == any_listen`、`SongChannels.isSupported` 或脚本 action 分支；
+  `SourceManager` 只保留脚本仓库 / 引擎 / 偏好 / any-listen 配置的生命周期与
+  画像 facade，能力方法逐条委托执行器。能力位与路线同源，新增渠道只需改自己的
+  声明文件。
 - **内置检索 runner**：`lib/sources/builtin/builtin_search_runner.dart` 是五个
   音乐平台搜索的执行骨架（`runBuiltinSearch`）：重试预算、分页推断与失败归一
   各写一次；平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表

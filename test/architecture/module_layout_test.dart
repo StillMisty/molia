@@ -45,7 +45,6 @@ const Set<String> _sizeWhitelist = {
   'lib/services/window/window_chrome_io.dart',
   'lib/sources/builtin/tx_qrc.dart',
   'lib/sources/lx/lx_engine_native.dart',
-  'lib/sources/source_manager.dart',
   'lib/widgets/discover_playlists_tab.dart',
   'lib/widgets/search_results_view.dart',
 };
