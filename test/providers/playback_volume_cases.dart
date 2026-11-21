@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/device_settings.dart';
 import 'package:molia/domain/ports/playback_facade.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/playback_volume_store.dart';
@@ -43,7 +44,9 @@ void main() {
 
   test('音量与静音合并为单键写入，读取往返一致', () async {
     final prefs = await SharedPreferences.getInstance();
-    final store = PlaybackVolumeStore(preferences: prefs);
+    final store = PlaybackVolumeStore(
+      settings: DeviceSettings(preferences: prefs),
+    );
 
     await store.save(volume: 0.35, muted: true);
 
@@ -52,9 +55,26 @@ void main() {
       'volume': 0.35,
       'muted': true,
     });
-    final loaded = await PlaybackVolumeStore(preferences: prefs).load();
+    final loaded = await store.load();
     expect(loaded.volume, closeTo(0.35, 1e-9));
     expect(loaded.muted, isTrue);
+  });
+
+  test('新键里的非有限音量按损坏处理，整组回旧版兜底', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final store = PlaybackVolumeStore(
+      settings: DeviceSettings(preferences: prefs),
+    );
+
+    // 1e999 解码成 Infinity：不能写进滑块 / 后端；按损坏字段走旧版两键，
+    // 旧版键也不存在，因此音量与静音一起回默认（不会保留 state 里的 muted）。
+    await prefs.setString(
+      PlaybackVolumeStore.keyState,
+      '{"volume":1e999,"muted":true}',
+    );
+    final loaded = await store.load();
+    expect(loaded.volume, PlaybackVolumeStore.defaultVolume);
+    expect(loaded.muted, PlaybackVolumeStore.defaultMuted);
   });
 
   test('旧版音量 / 静音两键只读兜底', () async {
@@ -63,7 +83,9 @@ void main() {
       PlaybackVolumeStore.keyMuted: true,
     });
     final prefs = await SharedPreferences.getInstance();
-    final store = PlaybackVolumeStore(preferences: prefs);
+    final store = PlaybackVolumeStore(
+      settings: DeviceSettings(preferences: prefs),
+    );
 
     final loaded = await store.load();
     expect(loaded.volume, closeTo(0.25, 1e-9));
@@ -73,6 +95,37 @@ void main() {
       isNull,
       reason: '只读兜底不迁移写；下次保存才写新键',
     );
+  });
+
+  test('旧版音量类型损坏时音量与静音整组回默认', () async {
+    SharedPreferences.setMockInitialValues({
+      PlaybackVolumeStore.keyVolume: 'not-a-double',
+      PlaybackVolumeStore.keyMuted: true,
+    });
+    final prefs = await SharedPreferences.getInstance();
+    final store = PlaybackVolumeStore(
+      settings: DeviceSettings(preferences: prefs),
+    );
+
+    final loaded = await store.load();
+    expect(loaded.volume, PlaybackVolumeStore.defaultVolume);
+    expect(
+      loaded.muted,
+      PlaybackVolumeStore.defaultMuted,
+      reason: '单键读取失败不能把另一键的 true 留在默认音量上',
+    );
+  });
+
+  test('无法编码为非有限音量时保存不抛出', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final store = PlaybackVolumeStore(
+      settings: DeviceSettings(preferences: prefs),
+    );
+
+    await expectLater(store.save(volume: double.nan, muted: false), completes);
+    final loaded = await store.load();
+    expect(loaded.volume, PlaybackVolumeStore.defaultVolume);
+    expect(loaded.muted, PlaybackVolumeStore.defaultMuted);
   });
 
   test('setVolume 更新值并下发到后端，通知 UI', () async {

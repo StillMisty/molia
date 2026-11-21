@@ -1220,7 +1220,19 @@
   （见 `docs/adr/0003` §6 修订）。
 - **Settings key（登记键）** — `lib/data/settings/settings_key.dart`：一个设置键的
   全部事实（名字 / 默认值 / 同步类别 / 存放盒）；只有有「第二消费者」的键才登记
-  （同步、备份、应用远端后的重载、整表驱动的测试），设备本地键留在各自模块。
+  （同步、备份、应用远端后的重载、整表驱动的测试）。设备本地键不登记：已迁移的
+  走 `DeviceSettings`，未迁移的暂时留在各自模块，等后续阶段收拢。
+- **Device-local settings（设备本地设置）** — `lib/data/settings/device_settings.dart`：
+  不跟人走的键（音量、播放手感、首次引导标记…）**新代码的唯一入口**；迁移前的
+  直连文件仍在白名单里，只减不增。`DeviceSettingKey` 只有名字 / 默认值 / 类型
+  （由泛型决定：bool / int / double / String / List<String>），没有同步类别；
+  `DeviceJsonSettingKey` 额外持有该键的 decode / encode，多个标量合并成 JSON 时
+  字段形状只声明一次。已迁移的键登记在 `lib/data/settings/device_settings_keys.dart`，
+  名字与迁移前逐字一致。读写策略只有一份：读失败回键默认并记日志，写失败只记日志
+  （本次会话值由调用方保留）；写动作跨实例串行（同一偏好文件共用一条链）、
+  JSON 只有一个编解码入口。新代码直连 `SharedPreferences` 由 `test/architecture/prefs_usage_test.dart`
+  拦截；设备键名字面量由 `test/architecture/settings_keys_test.dart` 拦截。
+  登记键仍走 `SettingsRegistry`。
 - **Settings subpage chrome（设置子页 chrome）** — `lib/widgets/settings/settings_subpage.dart`：
   设置内层 Navigator 子页（含 AI 推歌 / 听歌统计）的
   `Scaffold + M3EAppBar.top + ListView(kSettingsPadding)` 唯一实现

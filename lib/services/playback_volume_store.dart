@@ -1,76 +1,54 @@
-import 'dart:convert';
-
-import 'package:shared_preferences/shared_preferences.dart';
+import '../data/settings/device_settings.dart';
+import '../data/settings/device_settings_keys.dart';
 
 /// 应用内音量 / 静音状态的**设备本地**持久化。
 ///
 /// 为什么是设备本地键（不登记 `SettingsRegistry`）：音量是设备能力——手机
 /// 扬声器与桌面音箱响度不同，跟账号同步只会把 A 设备的响度带到 B 设备上，
 /// 产生「什么都没动音量却变了」的错误状态；与省流 / 托盘行为同一取舍，
-/// 键名只出现在本文件。
+/// 键名只出现在 `device_settings_keys.dart`。
 ///
-/// 读写失败静默（读取回默认、写入不打断交互）：音量是尽力而为的体验设置，
-/// 存储不可用（测试 / 平台异常）时播放照常。
+/// 字段形状（含非有限数值校验与 0..1 收拢）由 `device_settings_keys.dart`
+/// 的 JSON 键定义；本类只负责选择键、旧版两键兜底与暴露默认值。
 class PlaybackVolumeStore {
-  /// [_preferences] 仅测试注入；生产走 SharedPreferences 单例。
-  PlaybackVolumeStore({this._preferences});
+  /// [settings] 仅测试注入；生产构造自己的设备本地入口。
+  PlaybackVolumeStore({DeviceSettings? settings})
+    : _settings = settings ?? DeviceSettings();
 
   /// 音量与静音合并成一个 JSON 字符串：桌面 shared_preferences 每次 set*
   /// 都会重写整个偏好文件，两次写入就是两次整文件 I/O。
-  static const String keyState = 'playback_volume_state_v1';
+  static const String keyState = kPlaybackVolumeStateKeyName;
 
   // 旧版两键：只读兜底，新键缺失时读取。
-  static const String keyVolume = 'playback_volume';
-  static const String keyMuted = 'playback_muted';
+  static const String keyVolume = kPlaybackVolumeKeyName;
+  static const String keyMuted = kPlaybackMutedKeyName;
 
   /// 默认满音量、未静音：应用内音量完全由用户显式调整。
-  static const double defaultVolume = 1.0;
-  static const bool defaultMuted = false;
+  static const double defaultVolume = kDefaultPlaybackVolume;
+  static const bool defaultMuted = kDefaultPlaybackMuted;
 
-  final SharedPreferences? _preferences;
+  final DeviceSettings _settings;
 
   /// 读取已保存的音量与静音状态；无记录 / 读取失败回默认值。
   Future<({double volume, bool muted})> load() async {
-    try {
-      final prefs = _preferences ?? await SharedPreferences.getInstance();
-      final state = _decodeState(prefs.getString(keyState));
-      if (state != null) {
-        // 越界值（手工改偏好 / 异常存储）收进合法区间，避免滑块与后端不一致。
-        return (volume: state.volume.clamp(0.0, 1.0), muted: state.muted);
-      }
-      return (
-        volume: (prefs.getDouble(keyVolume) ?? defaultVolume).clamp(0.0, 1.0),
-        muted: prefs.getBool(keyMuted) ?? defaultMuted,
-      );
-    } catch (_) {
+    final state = await _settings.readJson(kPlaybackVolumeStateKey);
+    if (state != null) return state;
+
+    // 旧版两键整组回退：任一读取抛错（例如被手工改成字符串）时，音量与
+    // 静音一起回默认，避免出现「默认音量 + 意外静音」的组合。缺键不算
+    // 失败（两键各取默认），与旧版行为一致。
+    final legacyVolume = await _settings.tryRead(kPlaybackVolumeKey);
+    final legacyMuted = await _settings.tryRead(kPlaybackMutedKey);
+    if (!legacyVolume.ok || !legacyMuted.ok) {
       return (volume: defaultVolume, muted: defaultMuted);
     }
+    return (
+      volume: legacyVolume.value.clamp(0.0, 1.0),
+      muted: legacyMuted.value,
+    );
   }
 
   /// 保存音量与静音状态：本次会话已生效，写失败只影响下次启动。
-  Future<void> save({required double volume, required bool muted}) async {
-    try {
-      final prefs = _preferences ?? await SharedPreferences.getInstance();
-      await prefs.setString(
-        keyState,
-        jsonEncode({'volume': volume, 'muted': muted}),
-      );
-    } catch (_) {
-      // 静默：持久化失败不值得打断用户操作。
-    }
-  }
-
-  static ({double volume, bool muted})? _decodeState(String? raw) {
-    if (raw == null || raw.isEmpty) return null;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map<String, dynamic>) return null;
-      final volume = decoded['volume'];
-      final muted = decoded['muted'];
-      if (volume is! num || muted is! bool) return null;
-      return (volume: volume.toDouble(), muted: muted);
-    } on FormatException {
-      return null;
-    }
-  }
+  Future<void> save({required double volume, required bool muted}) => _settings
+      .writeJson(kPlaybackVolumeStateKey, (volume: volume, muted: muted));
 }

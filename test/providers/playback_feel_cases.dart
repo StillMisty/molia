@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/device_settings.dart';
 import 'package:molia/domain/models/playback_feel.dart';
 import 'package:molia/services/playback_feel_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,7 +25,9 @@ void main() {
 
   test('两个值合并为一个键往返；损坏 / 未知档位回默认', () async {
     final prefs = await SharedPreferences.getInstance();
-    final store = PlaybackFeelStore(preferences: prefs);
+    final store = PlaybackFeelStore(
+      settings: DeviceSettings(preferences: prefs),
+    );
 
     await store.save(fade: PlaybackFadePreset.ms300, smartShuffle: false);
     expect(prefs.getKeys(), {PlaybackFeelStore.keyState});
@@ -33,12 +36,12 @@ void main() {
       'smartShuffle': false,
     });
 
-    final loaded = await PlaybackFeelStore(preferences: prefs).load();
+    final loaded = await store.load();
     expect(loaded.fade, PlaybackFadePreset.ms300);
     expect(loaded.smartShuffle, isFalse);
 
     await prefs.setString(PlaybackFeelStore.keyState, '{broken');
-    final corrupt = await PlaybackFeelStore(preferences: prefs).load();
+    final corrupt = await store.load();
     expect(corrupt.fade, PlaybackFadePreset.ms200);
     expect(corrupt.smartShuffle, isTrue);
 
@@ -46,8 +49,33 @@ void main() {
       PlaybackFeelStore.keyState,
       jsonEncode({'fadeMs': 999, 'smartShuffle': true}),
     );
-    final unknown = await PlaybackFeelStore(preferences: prefs).load();
+    final unknown = await store.load();
     expect(unknown.fade, PlaybackFadePreset.ms200, reason: '未知档位回默认');
+  });
+
+  test('非有限 / 类型不符的字段回默认，不把异常抛出 load', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final store = PlaybackFeelStore(
+      settings: DeviceSettings(preferences: prefs),
+    );
+
+    // JSON 的 1e999 解码成 Infinity；旧实现直接 toInt() 会抛
+    // UnsupportedError，读取必须把它当作损坏字段。
+    await prefs.setString(
+      PlaybackFeelStore.keyState,
+      '{"fadeMs":1e999,"smartShuffle":false}',
+    );
+    final infinite = await store.load();
+    expect(infinite.fade, PlaybackFadePreset.ms200);
+    expect(infinite.smartShuffle, isTrue);
+
+    await prefs.setString(
+      PlaybackFeelStore.keyState,
+      '{"fadeMs":"300","smartShuffle":false}',
+    );
+    final wrongType = await store.load();
+    expect(wrongType.fade, PlaybackFadePreset.ms200);
+    expect(wrongType.smartShuffle, isTrue);
   });
 
   test('provider 启动把默认手感推给播放服务', () async {

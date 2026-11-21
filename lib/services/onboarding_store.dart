@@ -5,16 +5,19 @@
 library;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../data/settings/device_settings.dart';
+import '../data/settings/device_settings_keys.dart';
 
 /// 键名常量（架构测试核对它不在 `kAllSettingsKeys` 里）。
-const String kOnboardingCompletedV1 = 'onboarding_completed_v1';
+const String kOnboardingCompletedV1 = kOnboardingCompletedKeyName;
 
 class OnboardingStore {
-  OnboardingStore({SharedPreferences? prefs}) : _prefsOverride = prefs;
+  /// [settings] 仅测试注入；生产构造自己的设备本地入口。
+  OnboardingStore({DeviceSettings? settings})
+    : _settings = settings ?? DeviceSettings();
 
-  final SharedPreferences? _prefsOverride;
-  SharedPreferences? _prefs;
+  final DeviceSettings _settings;
 
   /// 本次进程已知的完成态（启动读到 true 或用户完成 / 跳过）。
   ///
@@ -31,30 +34,17 @@ class OnboardingStore {
   @visibleForTesting
   static void resetSessionForTest() => _completedInSession = false;
 
-  Future<SharedPreferences> _prefsStore() async =>
-      _prefs ??= _prefsOverride ?? await SharedPreferences.getInstance();
-
   /// 读取完成标记；读不到 / 存储不可用 = 未完成。
   Future<bool> isCompleted() async {
-    try {
-      final prefs = await _prefsStore();
-      final completed = prefs.getBool(kOnboardingCompletedV1) ?? false;
-      if (completed) _completedInSession = true;
-      return completed;
-    } catch (_) {
-      return false;
-    }
+    final completed = await _settings.read(kOnboardingCompletedKey);
+    if (completed) _completedInSession = true;
+    return completed;
   }
 
   /// 写入完成标记（完成或跳过都算）；写盘失败时下次启动会再次出现。
   Future<void> markCompleted() async {
     // 先置位：写盘失败也不在本次进程里重复出现（下次启动才重试）。
     _completedInSession = true;
-    try {
-      final prefs = await _prefsStore();
-      await prefs.setBool(kOnboardingCompletedV1, true);
-    } catch (_) {
-      // 设备本地标记写不进去不阻断进入应用。
-    }
+    await _settings.write(kOnboardingCompletedKey, true);
   }
 }

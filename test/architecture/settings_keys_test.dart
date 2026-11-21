@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/device_settings_keys.dart';
 import 'package:molia/data/settings/settings_key.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/device_sync.dart';
@@ -92,6 +93,29 @@ void main() {
       isEmpty,
       reason:
           '登记键名只能在 lib/data/settings/settings_keys.dart 声明：\n'
+          '${violations.join('\n')}',
+    );
+  });
+
+  test('设备本地键名只出现在 device_settings_keys.dart', () {
+    final files = _libFiles();
+    expect(files, contains('lib/main.dart'), reason: '确认扫描到了 lib/**');
+
+    final violations = <String>[];
+    for (final key in kDeviceSettingsKeys) {
+      final literal = "'${key.name}'";
+      for (final path in files) {
+        if (path == 'lib/data/settings/device_settings_keys.dart') continue;
+        if (File(path).readAsStringSync().contains(literal)) {
+          violations.add('$path 出现 $literal');
+        }
+      }
+    }
+    expect(
+      violations,
+      isEmpty,
+      reason:
+          '设备本地键名只能在 lib/data/settings/device_settings_keys.dart 声明：\n'
           '${violations.join('\n')}',
     );
   });
