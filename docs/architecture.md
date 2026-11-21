@@ -1074,8 +1074,11 @@
   读取失败给重试态而不是空资料库，批量写入只在成功（含无变化）后清空选择。
   **资料库读投影** `lib/providers/library_read_projection.dart` 的
   `ReadReconciliation<T, W>` 是「读快照 vs 写入 / 其它读」的唯一仲裁（代际 /
-  在途 / 缓冲写回放 / quiet vs explicit / 失败阶段），收藏键 / 历史 / 清单 /
-  列表曲目各持一份；provider 只做扇出与变更网关。
+  在途 / 缓冲写回放 / quiet vs explicit / 失败阶段），历史 / 清单 / 列表曲目
+  各持一份；provider 只做扇出与变更网关。收藏的键 / 顺序行 / 计数 / 版本由
+  `lib/data/library/favorite_fact.dart` 的 `FavoriteFact` 统一持有：读校准、
+  在途切换重放、计数优先级与行插入顺序都只在模块内实现，provider 与浏览索引
+  只消费同一份事实。
   列表曲目读取失败会保留错误，只有显式重试（`force`）或仓库变更事件才重读
   ——每次 build 清错重试会把收藏页变成永久 loading（pitfalls #90）；读取有
   10s 超时兜底。列表 / 历史刷新失败也给终态（有旧数据 ready，空数据 failed），

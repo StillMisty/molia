@@ -13,6 +13,17 @@ import 'track.dart';
 /// 列表与历史都以该组合为唯一约束，批量操作（移除/排序/删除）按此定位。
 typedef TrackKey = ({String sourceKey, String songId});
 
+/// 收藏行在列表中的位置契约（`sortOrder` → `addedAt`）。
+///
+/// 列表行与浏览投影都要按同一份仓库顺序插入新增收藏，但两者持有不同的行
+/// 类型（前者是 [PlaylistTrack]，后者保留惰性 raw）。比较规则由收藏事实
+/// 内部实现，这里只声明它需要的三个只读字段，避免消费方各写一份排序。
+abstract interface class FavoriteOrderedRow {
+  String get key;
+  int get sortOrder;
+  int get addedAt;
+}
+
 /// 播放历史条目（`play_history` 表）。
 ///
 /// 唯一键为 `(sourceKey, songId)`：重复播放只更新时间，不产生新行。
@@ -116,6 +127,22 @@ class PlaylistInfo {
     this.isFavorites = false,
   });
 
+  /// 复制列表行并替换曲目计数。
+  ///
+  /// 计数是内存补丁（DB 行不变），只改 `trackCount` 时必须保留描述 / 分组 /
+  /// 封面 / syncId，不能重建一个只剩基础列的对象。
+  PlaylistInfo withTrackCount(int trackCount) => PlaylistInfo(
+    id: id,
+    name: name,
+    createdAt: createdAt,
+    trackCount: trackCount,
+    description: description,
+    folder: folder,
+    coverKey: coverKey,
+    syncId: syncId,
+    isFavorites: isFavorites,
+  );
+
   /// 列表封面键：行内有指针用行内的，否则从稳定 syncId 推导。
   String? get effectiveCoverKey {
     final key = coverKey;
@@ -130,7 +157,7 @@ class PlaylistInfo {
 /// 列表内曲目（`playlist_tracks` 表）。
 ///
 /// 唯一键为 `(playlistId, sourceKey, songId)`：重复导入/收藏幂等。
-class PlaylistTrack {
+class PlaylistTrack implements FavoriteOrderedRow {
   final int playlistId;
   final String sourceKey;
   final String songId;
@@ -140,7 +167,9 @@ class PlaylistTrack {
   final String? coverUrl;
   final int? durationMs;
   final Map<String, dynamic> raw;
+  @override
   final int addedAt;
+  @override
   final int sortOrder;
 
   const PlaylistTrack({
@@ -157,6 +186,7 @@ class PlaylistTrack {
     this.sortOrder = 0,
   });
 
+  @override
   String get key => '$sourceKey:$songId';
 
   /// 播放历史条目 → 列表曲目（收藏页「历史复制到列表」等场景共用）。

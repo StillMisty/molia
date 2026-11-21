@@ -6,8 +6,6 @@ import 'package:molia/providers/library_read_projection.dart';
 
 void main() {
   ReadReconciliation<List<int>, int> build({
-    bool supersedeReads = false,
-    bool replayRequiresLoaded = true,
     bool Function(List<int> value)? canReadQuietly,
   }) {
     return ReadReconciliation(
@@ -17,8 +15,6 @@ void main() {
       failureState: (value, error) => value.isEmpty
           ? LibraryReadState.failed(error)
           : const LibraryReadState.ready(),
-      supersedeReads: supersedeReads,
-      replayRequiresLoaded: replayRequiresLoaded,
       canReadQuietly: canReadQuietly,
     );
   }
@@ -50,29 +46,6 @@ void main() {
     quietGate.complete([2]);
     await quiet;
     expect(read.value, [1, 2], reason: 'quiet 走 mergeQuiet');
-  });
-
-  test('supersedeReads：后发起的读取抢占，旧结果不写回', () async {
-    final read = build(supersedeReads: true);
-    final staleGate = Completer<List<int>>();
-    final stale = read.load(
-      intent: LibraryReadIntent.quiet,
-      fetch: () => staleGate.future,
-    );
-    final freshGate = Completer<List<int>>();
-    final fresh = read.load(
-      intent: LibraryReadIntent.quiet,
-      fetch: () => freshGate.future,
-    );
-
-    freshGate.complete([2]);
-    final freshResult = await fresh;
-    staleGate.complete([1]);
-    final staleResult = await stale;
-
-    expect(freshResult.accepted, isTrue);
-    expect(staleResult.accepted, isFalse);
-    expect(read.value, [2]);
   });
 
   test('读取期间写入先缓冲，最后一个读取落地后按到达顺序重放', () async {

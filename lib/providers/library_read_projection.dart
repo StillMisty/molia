@@ -1,16 +1,15 @@
 /// 资料库读投影：一个视图的「读快照 vs 写 / 其它读」唯一仲裁。
 ///
-/// 为什么单独一层：收藏键、播放历史、列表清单、列表曲目的 generation /
-/// in-flight / pending 状态机规则相同，散在 provider 的不同方法里就难以对齐。
-/// 一次读取落地时到底该写回、合并、丢弃，还是等最后一个读取结束再重放缓冲
-/// 写入，需要和写入路径一起看；收进这里后，`LibraryProvider` 只负责扇出与
-/// 业务补丁。
+/// 为什么单独一层：播放历史、列表清单、列表曲目的 generation / in-flight /
+/// pending 状态机规则相同，散在 provider 的不同方法里就难以对齐。一次读取
+/// 落地时到底该写回、合并、丢弃，还是等最后一个读取结束再重放缓冲写入，需要
+/// 和写入路径一起看；收进这里后，`LibraryProvider` 只负责扇出与业务补丁。
+/// 收藏的键 / 行有自己的事实模块（`data/library/favorite_fact.dart`），不经过
+/// 这里。
 ///
 /// 这个类不知道资料库的领域形状：值、quiet 合并、写缓冲重放、失败阶段都由
-/// 持有方注入，因此四个视图可以各持一份，而不是长成一个 God object。
+/// 持有方注入，因此三个视图可以各持一份，而不是长成一个 God object。
 library;
-
-import 'dart:async';
 
 import 'library_outcome.dart';
 
@@ -26,7 +25,6 @@ class LibraryReadSnapshot<T> {
     required this.value,
     required this.state,
     required this.loaded,
-    required this.authoritative,
     required this.reading,
   });
 
@@ -39,9 +37,6 @@ class LibraryReadSnapshot<T> {
   /// 是否至少成功读到过一次整表快照。
   final bool loaded;
 
-  /// 当前 [value] 是否来自一次完整的仓库快照（收藏计数校准用）。
-  final bool authoritative;
-
   /// 是否有读取在途。
   final bool reading;
 }
@@ -52,15 +47,9 @@ class LibraryReadSnapshot<T> {
 /// 写回投影。代际过期 / 释放后的结果仍原样返回给显式等待方，只是不进入
 /// 缓存——与既有 `loadPlaylistTracks` 的返回语义一致。
 class LibraryReadResult<T> {
-  const LibraryReadResult._({
-    required this.accepted,
-    required this.generation,
-    this.value,
-    this.error,
-  });
+  const LibraryReadResult._({required this.accepted, this.value, this.error});
 
   final bool accepted;
-  final int generation;
   final T? value;
   final Object? error;
 
@@ -72,9 +61,8 @@ class LibraryReadResult<T> {
 /// 通用读投影协调器。
 ///
 /// 职责：
-/// - 记录读取阶段、loaded / authoritative / 最近错误；
-/// - 每次读取捕获代际，只有仍有效的读取能写回（[supersedeReads] 为真时
-///   后发起的读取还会抢占先发起的读取）；
+/// - 记录读取阶段、loaded / 最近错误；
+/// - 每次读取捕获代际，只有仍有效的读取能写回（显式释放才递增代际）；
 /// - 记录在途读取，读取期间到达的写入先缓冲，最后一个读取落地后重放；
 /// - quiet 读取按 [mergeQuiet] 合并、不翻 loading；explicit 读取替换快照。
 class ReadReconciliation<T, W> {
@@ -83,9 +71,7 @@ class ReadReconciliation<T, W> {
     required this.mergeQuiet,
     required this.replayWrites,
     required this.failureState,
-    this.supersedeReads = false,
     this.canReadQuietly,
-    this.replayRequiresLoaded = true,
   }) : _initialValue = initialValue,
        _value = initialValue;
 
@@ -100,28 +86,14 @@ class ReadReconciliation<T, W> {
   /// 失败时给出读取阶段：空数据 failed，有旧数据 ready。
   final LibraryReadState Function(T value, Object error) failureState;
 
-  /// 后发起的读取是否让先发起的读取作废。
-  ///
-  /// 收藏键必须为 true：启动 ensure 与变更后的静默校准可能重叠，旧快照
-  /// 最后落地时不能回滚较新的读取。历史 / 列表 / 列表曲目保持 false：
-  /// 它们的并发读取按落地顺序写回，只有显式释放才整体代际失效。
-  final bool supersedeReads;
-
   /// quiet 读取的前置条件；null = 总是允许。
   ///
   /// 列表曲目用它表达「静默重载只刷新已缓存列表」。
   final bool Function(T value)? canReadQuietly;
 
-  /// 重放缓冲写入前是否要求已经成功读过整表。
-  ///
-  /// 历史在从未加载成功时保留缓冲，等下一次首屏读取再合并；收藏切换的
-  /// 重放是幂等补丁，失败后也照常重放。
-  final bool replayRequiresLoaded;
-
   T _value;
   LibraryReadState _state = const LibraryReadState.loading();
   bool _loaded = false;
-  bool _authoritative = false;
   Object? _error;
   int _generation = 0;
   int _inFlight = 0;
@@ -133,9 +105,7 @@ class ReadReconciliation<T, W> {
   T get value => _value;
   LibraryReadState get state => _state;
   bool get loaded => _loaded;
-  bool get authoritative => _authoritative;
   Object? get error => _error;
-  int get generation => _generation;
   bool get reading => _inFlight > 0;
 
   /// 显式读取是否已标记（build 期 ensure 的同步占位也算）。
@@ -145,7 +115,6 @@ class ReadReconciliation<T, W> {
     value: _value,
     state: _state,
     loaded: _loaded,
-    authoritative: _authoritative,
     reading: reading,
   );
 
@@ -208,7 +177,6 @@ class ReadReconciliation<T, W> {
       _explicitQueued = false;
     }
     _loaded = false;
-    _authoritative = false;
     if (discardPending) _pending = const [];
     if (discardValue) {
       _value = _initialValue;
@@ -218,24 +186,19 @@ class ReadReconciliation<T, W> {
   }
 
   /// 读取一次仓库快照。
-  ///
-  /// [duringRead] 在结果已受理、但本次读取仍算在途时执行：收藏校准要在
-  /// 「收藏键 → 收藏列表 → 列表清单」全部落地后才重放期间的 toggle，回调
-  /// 因此不能等 in-flight 归零后再跑。
   Future<LibraryReadResult<T>> load({
     required LibraryReadIntent intent,
     required Future<T> Function() fetch,
     bool discardPendingOnStart = false,
-    FutureOr<void> Function(LibraryReadResult<T> result)? duringRead,
   }) async {
     final canReadQuietly = this.canReadQuietly;
     if (intent == LibraryReadIntent.quiet &&
         canReadQuietly != null &&
         !canReadQuietly(_value)) {
-      return LibraryReadResult<T>._(accepted: false, generation: _generation);
+      return const LibraryReadResult._(accepted: false);
     }
     if (_disposed) {
-      return LibraryReadResult<T>._(accepted: false, generation: _generation);
+      return const LibraryReadResult._(accepted: false);
     }
 
     if (intent == LibraryReadIntent.explicit) {
@@ -243,7 +206,7 @@ class ReadReconciliation<T, W> {
       _explicitLoading = true;
       _state = const LibraryReadState.loading();
     }
-    final generation = supersedeReads ? ++_generation : _generation;
+    final generation = _generation;
     if (discardPendingOnStart) _pending = const [];
     _inFlight++;
 
@@ -256,37 +219,20 @@ class ReadReconciliation<T, W> {
             ? mergeQuiet(_value, fresh)
             : fresh;
         _loaded = true;
-        _authoritative = true;
         _error = null;
         _state = const LibraryReadState.ready();
       }
-      result = LibraryReadResult<T>._(
-        accepted: accepted,
-        generation: generation,
-        value: fresh,
-      );
+      result = LibraryReadResult<T>._(accepted: accepted, value: fresh);
     } catch (e) {
       final accepted = !_disposed && generation == _generation;
       if (accepted) {
         _error = e;
         _state = failureState(_value, e);
       }
-      result = LibraryReadResult<T>._(
-        accepted: accepted,
-        generation: generation,
-        error: e,
-      );
+      result = LibraryReadResult<T>._(accepted: accepted, error: e);
     }
 
-    if (duringRead != null) {
-      try {
-        await duringRead(result);
-      } finally {
-        _finishRead(intent, generation);
-      }
-    } else {
-      _finishRead(intent, generation);
-    }
+    _finishRead(intent, generation);
     return result;
   }
 
@@ -304,8 +250,7 @@ class ReadReconciliation<T, W> {
 
   /// 最后一个读取落地后重放缓冲写入；只在没有读取在途时消费缓冲。
   void _drainPending() {
-    if (_inFlight > 0 || _pending.isEmpty) return;
-    if (replayRequiresLoaded && !_loaded) return;
+    if (_inFlight > 0 || _pending.isEmpty || !_loaded) return;
     final pending = _pending;
     _pending = const [];
     _value = replayWrites(_value, pending);

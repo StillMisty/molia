@@ -308,8 +308,13 @@ class FakeLibraryRepository implements LibraryStore {
     );
     if (exists) return false;
     list.add(track);
+    if (favoriteChange) _favorites.add('${track.sourceKey}:${track.songId}');
     _syncTrackCount(playlistId);
-    _changed(LibraryChange.playlistTracks(playlistId));
+    _changed(
+      favoriteChange
+          ? LibraryChange.favorites(toggle: FavoriteToggle.add(track))
+          : LibraryChange.playlistTracks(playlistId),
+    );
     return true;
   }
 
@@ -326,8 +331,18 @@ class FakeLibraryRepository implements LibraryStore {
     list.removeWhere((t) => t.sourceKey == sourceKey && t.songId == songId);
     final removed = before - list.length;
     if (removed > 0) {
+      if (favoriteChange) _favorites.remove('$sourceKey:$songId');
       _syncTrackCount(playlistId);
-      _changed(LibraryChange.playlistTracks(playlistId));
+      _changed(
+        favoriteChange
+            ? LibraryChange.favorites(
+                toggle: FavoriteToggle.remove(
+                  sourceKey: sourceKey,
+                  songId: songId,
+                ),
+              )
+            : LibraryChange.playlistTracks(playlistId),
+      );
     }
     return removed;
   }
@@ -346,6 +361,11 @@ class FakeLibraryRepository implements LibraryStore {
     list.removeWhere((t) => known.contains('${t.sourceKey}:${t.songId}'));
     final removed = before - list.length;
     if (removed > 0) {
+      if (favoriteChange) {
+        for (final key in keys) {
+          _favorites.remove('${key.sourceKey}:${key.songId}');
+        }
+      }
       _syncTrackCount(playlistId);
       _changed(
         favoriteChange
@@ -401,6 +421,11 @@ class FakeLibraryRepository implements LibraryStore {
       inserted.add(row);
     }
     if (inserted.isNotEmpty) {
+      if (favoriteChange) {
+        for (final row in inserted) {
+          _favorites.add('${row.sourceKey}:${row.songId}');
+        }
+      }
       _syncTrackCount(playlistId);
       _changed(
         favoriteChange
@@ -573,7 +598,12 @@ class FakeLibraryRepository implements LibraryStore {
       _favorites.remove(key);
       final favoritesId = (await findPlaylistByName(_favoritesName))?.id;
       if (favoritesId != null) {
-        await removeTrackFromPlaylist(favoritesId, sourceKey, songId);
+        await removeTrackFromPlaylist(
+          favoritesId,
+          sourceKey,
+          songId,
+          favoriteChange: true,
+        );
       }
     } else {
       final favoritesId = await _ensureFavoritesPlaylist();
@@ -592,9 +622,9 @@ class FakeLibraryRepository implements LibraryStore {
           addedAt: DateTime.now().millisecondsSinceEpoch,
           sortOrder: _nextOrder++,
         ),
+        favoriteChange: true,
       );
     }
-    _changed(const LibraryChange.favorites());
     return added;
   }
 

@@ -722,6 +722,18 @@
   `PlaylistTrack.fromHistoryEntry` 只负责反向（历史条目 → 列表行）。
 - **Favorites（收藏）** — 领域概念 `PlaylistInfo.isFavorites`；存储层保留行名
   `__favorites__` 只在实现内部（UI 文案走 l10n，调用方不再按名字比较）。
+  收藏的规范键集合、顺序行、计数与版本只有一个持有者（见下条）。
+- **Favorite fact（收藏事实）** — `lib/data/library/favorite_fact.dart`：
+  收藏键 / 顺序行 / 计数 / 版本的唯一持有者，也是收藏写入的唯一落状态路径
+  （仓库写仍经 `LibraryStore`）。模块内部负责整表读取的代际与在途切换重放、
+  计数优先级（整表键 > 已加载行 > 清单计数 ± 净变化）与行插入顺序
+  （`sortOrder` → `addedAt`）。对外是 `contains` / `rows` / `rowsVersion` /
+  `count` / `revision`、`bindPlaylist`、`ensureLoaded` / `reload` /
+  `adoptRows` / `releaseRows` / `invalidate` / `applyChange`、`toggle` /
+  `addAll` / `removeAll` 与变更通知；重放缓冲、计数候选与比较器不进入公开
+  接口。浏览索引的惰性 raw 行不能直接换成列表行，经同文件的纯函数
+  `applyFavoriteToggleToProjection` 复用同一份插入规则；provider 不暴露事实
+  实例的写入口。
 - **Library mutation gateway（资料库变更网关）** — `lib/providers/library_provider.dart`：
   收藏 / 播放历史 / 列表写入的唯一实现。收藏唯一入口 `toggleFavoriteTrack(Track)`
   （播放页不再直连 `LibraryRepository`）；批量操作按 `PlaylistTrack` 规范形状，
@@ -779,7 +791,8 @@
 - **Library read projection（资料库读投影）** — `lib/providers/library_read_projection.dart`
   的 `ReadReconciliation<T, W>`：一个视图「读快照 vs 写入 / 其它读」的唯一仲裁。
   持有代际 / 在途 / 缓冲写回放 / quiet vs explicit / 失败阶段；值合并、写入重放与
-  失败形态由持有方注入策略。收藏键 / 播放历史 / 列表清单 / 列表曲目各持一份，
+  失败形态由持有方注入策略。播放历史 / 列表清单 / 列表曲目各持一份；收藏键与
+  收藏行不在这里，归 **Favorite fact**（同一套方向性规则在模块内实现）。
   `LibraryProvider` 只做扇出与变更网关，不再各写一套 generation / pending 状态机。
 
 ## 换源
@@ -1421,10 +1434,9 @@
   空态 / 列表 / 底部重试 / 可选钉住表头 / 表格档行高。专辑页、歌手页、发现详情页
   只保留头部、行与播放动作。
 - **Library read model（资料库读侧策略）** — `lib/data/library_read_model.dart`：
-  `LibraryHistoryOrder`（历史整表合并 / 单条补丁 / 按最近播放重排）与
-  `FavoriteCountPolicy`（收藏键 > 已加载列表 > ±1）的唯一实现；批量历史的
-  `playedAt` 由 `LibraryWriteEngine.addHistoryTracks` 发放，provider 不再自己
-  造时间戳。
+  `LibraryHistoryOrder`（历史整表合并 / 单条补丁 / 按最近播放重排）的唯一实现；
+  收藏计数已归 **Favorite fact**。批量历史的 `playedAt` 由
+  `LibraryWriteEngine.addHistoryTracks` 发放，provider 不再自己造时间戳。
 - **Library collections（合集策略模块）** — `lib/providers/library_collections.dart`：收藏 / 播放历史 / 本地歌曲 / 曲库 / 自建列表的哨兵（`unset` / `favoritesSentinel` / `historySentinel` / `downloadsSentinel` / `libraryBrowseSentinel`）、默认选择解析（`resolveSelection`，后四者仅显式选择进入）、顺序应用（`applyOrder`，固定入口不参与排序）与持久化（顺序 / 选择的唯一实现）；收藏页只保留 UI 状态。滚动位置见 Collection scroll bookkeeping。
 - **Local songs collection（本地歌曲状态机）** — `lib/providers/local_songs_collection.dart`：本地歌曲伪合集的数据状态机：拥有播放历史 × 下载 / 导入记录 × 完整音频缓存的联结、下载优先去重、输入签名（历史键 + 下载记录键 + 缓存 revision）、在途加载令牌（输入变化即丢弃过期结果）与加载态 / 弹层计数；`CollectionLocalSong` 的行形状也从渲染层移到这里。页面每帧只把输入交给 `sync` 并消费 `rows`，不再在 build 里重算联结；`rows` 在输入签名、历史 / 下载列表身份与缓存行身份都不变时复用同一个列表（presenter 的源引用缓存因此对本地歌曲也生效，`rowsRevision` 是列表被替换的观察信号），缓存列举失败只影响缓存行，不拖垮下载 / 导入行。
 - **Collection presenter（合集投影器）** — `lib/providers/collection_presenter.dart`：收藏页合集身份、可见行与行动作构成的唯一推导：先把选集解析成 `CollectionIdentity`（`CollectionKind` / 落库 `playlistId` / 展示名 / 合集键），再按当前合集做过滤与排序，产出 `CollectionView.visibleRows`——统一的 `CollectionRow` 联合（`TrackCollectionRow` / `HistoryCollectionRow` / `LocalSongCollectionRow`）与 `hasItems`；排序结果按源列表身份记忆化，`rowActionsFor` 按行变体给出动作规格。曲库是 `CollectionKind.libraryBrowse` 的虚拟合集（无行投影，页面直接消费 LocalLibraryProvider 的专辑 / 歌手索引）。收藏页不再用四个布尔值 + 三份可见列表，也不按 `CollectionKind` 分支拼行或挑动作；标题 / 滚动键 / 多选栏都读同一份视图。
