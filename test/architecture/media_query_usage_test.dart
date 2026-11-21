@@ -11,6 +11,9 @@ import 'package:flutter_test/flutter_test.dart';
 const Set<String> _wholeQueryAllowlist = {
   // 需要整份 MediaQueryData 拷贝，再把 disableAnimations 等字段一起改写。
   'lib/app/shell/themed_app.dart',
+  // 页面层要把当前 / 隐藏时的旧 MediaQueryData 原样重新提供给页面，
+  // 分面读取拼不回完整快照；订阅收在这一层，隐藏页因此不再随窗口重建。
+  'lib/app/shell/shell_page_layer.dart',
 };
 
 void main() {

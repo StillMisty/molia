@@ -110,6 +110,7 @@ KNOWN_FRAME_SCENES=(
   mobile-mini-expand
   desktop-favorites-toggle
   desktop-statistics-open
+  desktop-window-resize
 )
 
 validate_frame_only() {

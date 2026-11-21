@@ -27,9 +27,10 @@ description: 优化或验证 Molia 的帧 / 120Hz（jank8）、启动、包体�
 - 判定口径：`work = build + raster`，120Hz 看 **`jank8`**（>8.33ms），60Hz 看
   `jank16` / `jank33`；`totalSpan` 只用于 `latency16`，不是卡顿依据。
 - 场景都在 `integration_test/perf_flows_test.dart`：桌面滚动 / 切页 / 切歌、
-  移动壳进出播放页、播放器展开/收起，以及两个 120Hz 专用场景
-  `desktop-favorites-toggle`（10k 真实内存库）与 `desktop-statistics-open`
-  （400 天统计）。Android 跳过这两个 10k 场景。
+  移动壳进出播放页、播放器展开/收起，以及三个 120Hz 专用场景
+  `desktop-favorites-toggle`（10k 真实内存库）、`desktop-statistics-open`
+  （400 天统计）与 `desktop-window-resize`（1440×900 ↔ 1100×720 逐帧往返）。
+  Android 跳过这三个桌面专用场景。
 - **只跑改动的场景**：`tool/agent/perf.sh frames linux --only desktop-statistics-open`
   （逗号分隔；会校验场景名并确认确实产出了 `molia.frame`）。全量一轮含 10k seed，
   分钟级，迭代不要每轮全跑。
@@ -40,8 +41,8 @@ description: 优化或验证 Molia 的帧 / 120Hz（jank8）、启动、包体�
   accessibility enabled，SEMANTICS 属环境成本。`--with-at` 只控制测试是否主动建
   语义 handle，跨轮比较保持同机同环境。
 - 新增场景：改 `test/support/perf_app_harness.dart` +
-  `integration_test/perf_flows_test.dart`，并把场景名登记到 `tool/agent/perf.sh`
-  的 `KNOWN_FRAME_SCENES`。
+  `test/support/perf_scenarios.dart` + `integration_test/perf_flows_test.dart`，
+  并把场景名登记到 `tool/agent/perf.sh` 的 `KNOWN_FRAME_SCENES`。
 - 基线与历史 A/B 见 `docs/performance.md` §9 与 `docs/performance-audit.md`。
 
 ## 新 worktree

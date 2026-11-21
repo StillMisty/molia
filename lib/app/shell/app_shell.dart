@@ -61,6 +61,7 @@ import '../app_presence_ticker_mode.dart';
 import '../desktop/desktop_shell.dart';
 import '../shell_chrome.dart';
 import '../tray_dormant_gate.dart';
+import 'layout_skipping_offstage.dart';
 
 part 'app_keys.dart';
 part 'pairing_queue.dart';

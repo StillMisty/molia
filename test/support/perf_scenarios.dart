@@ -1,4 +1,4 @@
-/// 帧体检共用场景动作：切目的地、滚动收藏列表、直推统计页。
+/// 帧体检共用场景动作：切目的地、滚动收藏列表、往返改窗口尺寸、直推统计页。
 ///
 /// 为什么单独一个文件：`integration_test/perf_flows_test.dart`（自己打点的
 /// `molia.frame` 汇总）与 `integration_test/perf_timeline_test.dart`（VM
@@ -63,6 +63,74 @@ Future<void> scrollList(WidgetTester tester, {int times = 10}) async {
   }
   if (position.pixels == before) {
     fail('列表没有产生滚动位移（场景无效）');
+  }
+}
+
+/// 在两个桌面窗口尺寸之间逐帧往返（默认 1440×900 ↔ 1100×720 逻辑像素）。
+///
+/// 为什么改 `tester.view` 而不是真窗口：桌面 `flutter drive` 的 raster 时间不可
+/// 信（窗口表面由宿主合成，`FrameTiming.raster` 恒 0）；真窗口 resize 还会把
+/// 窗口管理器 / 合成器的成本混进来。这里要的是同机可复现的「尺寸变化 → 重建 +
+/// 重排（+ 提交绘制）」成本：设置 physicalSize / physicalConstraints 后，框架
+/// 走与真窗口相同的 MetricsChanged → RenderView 重排路径，只是不搬动 OS 窗口，
+/// 因此数字只能用于 build / layout 的同机 A/B，不能当光栅基线。
+///
+/// 两端都在 expanded 档（宽 ≥ 840）：跨断点会切换导航轨 / 两栏版式，测到的就
+/// 变成「版式切换」而不是「同一版式被拉宽拉窄」，A/B 不干净。
+///
+/// 每段不是「设完端点只泵一帧」：端点之间按 [stepsPerSweep] 逐帧逼近，步幅接近
+/// 真实拖拽，也避免端点后的大量空闲帧稀释分位数。默认 6 个来回 × 2 段 × 9 步 =
+/// 108 个 16ms 帧；最后一步回到 [large]（通常就是原尺寸），恢复不再多泵帧。
+Future<void> resizeWindow(
+  WidgetTester tester, {
+  int cycles = 6,
+  int stepsPerSweep = 9,
+  Size large = const Size(1440, 900),
+  Size small = const Size(1100, 720),
+}) async {
+  assert(cycles > 0 && stepsPerSweep > 0);
+  final view = tester.view;
+  final ratio = view.devicePixelRatio;
+  final original = view.physicalSize;
+
+  Size physical(Size logical) =>
+      Size(logical.width * ratio, logical.height * ratio);
+
+  // RenderView 是逻辑尺寸：尺寸没传下去时帧照样在跑，但测到的是空闲帧，
+  // 场景会静默失效，所以端点必须核对一次。
+  void expectLogicalSize(Size expected) {
+    final actual = tester.binding.renderViews.first.size;
+    if ((actual.width - expected.width).abs() > 1 ||
+        (actual.height - expected.height).abs() > 1) {
+      fail('窗口尺寸没有生效：期望 $expected，实际 $actual');
+    }
+  }
+
+  try {
+    final largePhysical = physical(large);
+    if (view.physicalSize != largePhysical) {
+      view.physicalSize = largePhysical;
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    for (var cycle = 0; cycle < cycles; cycle++) {
+      for (var step = 1; step <= stepsPerSweep; step++) {
+        final target = Size.lerp(large, small, step / stepsPerSweep)!;
+        view.physicalSize = physical(target);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      if (cycle == 0) expectLogicalSize(small);
+      for (var step = 1; step <= stepsPerSweep; step++) {
+        final target = Size.lerp(small, large, step / stepsPerSweep)!;
+        view.physicalSize = physical(target);
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      if (cycle == 0) expectLogicalSize(large);
+    }
+  } finally {
+    if (view.physicalSize != original) {
+      view.physicalSize = original;
+      await tester.pump(const Duration(milliseconds: 16));
+    }
   }
 }
 

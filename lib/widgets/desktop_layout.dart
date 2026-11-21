@@ -34,6 +34,7 @@ class DesktopLayout extends InheritedWidget {
     required this.isDesktopPlatform,
     required this.windowWidth,
     required this.railWidth,
+    this.visible = true,
     required super.child,
   });
 
@@ -56,6 +57,13 @@ class DesktopLayout extends InheritedWidget {
   /// 唯一常驻吃宽度的栏，[contentWidth] 因此就是内容区可用宽。侧栏若将来支持
   /// 展开，宽度来源要跟着换（而不是在这里加一个「估算值」）。
   final double railWidth;
+
+  /// 本作用域对应的页面是否可见（壳层页面层用）。
+  ///
+  /// 默认 true：壳层全局作用域 / 独立挂载不变。页面层隐藏时用最后的解析值
+  /// 再包一层并置 false，窗口宽变化不再通知隐藏页；重新可见时靠这次翻转
+  /// 通知一次并拿到最新值。
+  final bool visible;
 
   /// 内容宽（窗口宽语义）：窗口宽 − 实际栏宽（[railWidth] 的不变量：
   /// 壳层只有侧栏一条常驻栏，这里就是内容区可用宽）。
@@ -85,7 +93,9 @@ class DesktopLayout extends InheritedWidget {
 
   @override
   bool updateShouldNotify(DesktopLayout oldWidget) =>
-      isDesktopPlatform != oldWidget.isDesktopPlatform ||
-      windowWidth != oldWidget.windowWidth ||
-      railWidth != oldWidget.railWidth;
+      visible != oldWidget.visible ||
+      (visible &&
+          (isDesktopPlatform != oldWidget.isDesktopPlatform ||
+              windowWidth != oldWidget.windowWidth ||
+              railWidth != oldWidget.railWidth));
 }

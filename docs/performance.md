@@ -316,13 +316,22 @@ Linux microbenchmark（非端到端启动采样，绝对值只用于比较量级
 2026-11-07 复测）统一见 `docs/performance-audit.md`；桌面内存见 `docs/memory.md`。
 复测入口为 `tool/agent/perf.sh`（`frames` / `memory` / `size` / `startup` / `data` /
 `cpu`），Windows 真实窗口帧用 `tool/agent/perf.sh frames windows --real`。
-桌面 `frames` 还包含两个 120Hz 场景：`desktop-favorites-toggle`（10k 行内存库，
-真实 `LocalLibraryProvider`）与 `desktop-statistics-open`（400 天统计直推页面）；
-两者在 Android 上跳过。迭代时用 `frames linux --only <场景,场景>` 只跑改动的场景
-（`--only` 会校验场景名并确认确实产出了 `molia.frame`）；新增场景改
-`test/support/perf_app_harness.dart` + `integration_test/perf_flows_test.dart`
-（harness 默认 fake 仓库，10k 真实库用 `PerfRealLibrary`），场景名同时登记到
-`tool/agent/perf.sh` 的 `KNOWN_FRAME_SCENES`。
+桌面 `frames` 还包含三个 120Hz 场景：`desktop-favorites-toggle`（10k 行内存库，
+真实 `LocalLibraryProvider`）、`desktop-statistics-open`（400 天统计直推页面）与
+`desktop-window-resize`（1440×900 ↔ 1100×720 逐帧往返，测尺寸变化的重建 / 重排；
+桌面 drive 的 raster 列接近 0，见 §9.1，不能当光栅基线）。前两个在 Android 上
+跳过；resize 只跑桌面。迭代时用 `frames linux --only <场景,场景>` 只跑改动的
+场景（`--only` 会校验场景名并确认确实产出了 `molia.frame`）；新增场景改
+`test/support/perf_app_harness.dart` + `test/support/perf_scenarios.dart` +
+`integration_test/perf_flows_test.dart`（harness 默认 fake 仓库，10k 真实库用
+`PerfRealLibrary`），场景名同时登记到 `tool/agent/perf.sh` 的
+`KNOWN_FRAME_SCENES`。
+
+只做窗口尺寸的同机 A/B 时跑：
+`tool/agent/perf.sh frames linux --only desktop-window-resize`。
+场景在收藏页上逐帧往返 6 个来回（108 帧），两端都落在 expanded 档（不跨 840
+断点），只覆盖尺寸变化触发的 build / layout，不含窗口管理器、合成器与真实光栅
+成本；A/B 数字与结论写进 `docs/performance-audit.md`。
 
 ### 9.1 帧归因：`frames --timeline`（2026-11）
 

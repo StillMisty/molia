@@ -5,6 +5,7 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
+import 'package:molia/widgets/playback_cover_decode.dart';
 import 'package:molia/widgets/player_cover_deck.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -360,5 +361,53 @@ void main() {
       find.byKey(PlayerCoverDeck.centerCoverTrackKey(queue[1].id)),
       findsOneWidget,
     );
+  });
+
+  group('playbackCoverDecodeEdgeFor', () {
+    int edge(double shortestSide, {double dpr = 1}) =>
+        playbackCoverDecodeEdgeFor(dpr: dpr, shortestSide: shortestSide);
+
+    test('同一档内短边变化不换解码键', () {
+      // 桌面拖动窗口时短边连续变化，同一档内必须复用同一张已解码图。
+      expect(edge(400), edge(401));
+      expect(edge(400), edge(500));
+      expect(edge(500), edge(512));
+      expect(edge(513), edge(599));
+    });
+
+    test('档位边界向上取档', () {
+      // 向上而不是就近：解码边长不能小于显示需求，否则放大后发糊。
+      expect(edge(200), 256);
+      expect(edge(0), 256);
+      expect(edge(256), 256);
+      expect(edge(257), 384);
+      expect(edge(384), 384);
+      expect(edge(385), 512);
+      expect(edge(512), 512);
+      expect(edge(513), 600);
+    });
+
+    test('短边 >= 600 稳定在 600 档', () {
+      expect(edge(600), 600);
+      expect(edge(601), 600);
+      expect(edge(900), 600);
+      expect(edge(2400), 600);
+    });
+
+    test('DPR 变化仍换解码键', () {
+      // 档位只按逻辑短边取；DPR 是档位之外的独立乘数（跨屏拖动时物理
+      // 像素需求确实变了，不能沿用旧图）。
+      expect(edge(400, dpr: 1), 512);
+      expect(edge(400, dpr: 1.5), 768);
+      expect(edge(400, dpr: 2), 1024);
+    });
+
+    test('最小窗口（短边 400）解码边长不小于显示需求', () {
+      for (final dpr in [1.0, 1.5, 2.0, 2.625, 3.0]) {
+        final decoded = edge(400, dpr: dpr);
+        expect(decoded / dpr, greaterThanOrEqualTo(400));
+        expect(decoded / dpr, lessThanOrEqualTo(playbackCoverMaxLogicalEdge));
+      }
+    });
   });
 }

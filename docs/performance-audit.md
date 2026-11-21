@@ -1023,3 +1023,87 @@ p99 在不同轮次有 40–65ms 抖动（语义树开关、GC），方向是 **
   不再有页内迷你条。历史轮次里的「迷你条展开 / 收起」描述与场景名
   `mobile-mini-expand` 保留原样（场景名不变，便于跨轮比较）；当前场景驱动的是
   「0 高度 ↔ 完整播放页」。旧轮次的数字与结论仍按当时行为解读，不回填。
+
+## 2026-11-21 桌面窗口 resize：隐藏页跳过布局
+
+> 现象：Linux / Windows 桌面拖动窗口边缘时明显不跟手。profile 归因发现不是
+> 光栅问题：窗口每变一像素，三个一级页（资料库 / 收藏 / 播放）都在做 build +
+> layout，而其中两个根本不可见。
+
+### 1. 根因（源码 + profile 两条证据）
+
+- `lib/app/shell/shell_page_layer.dart` 原来用 `Offstage` 隐藏非当前页，注释
+  也写着「省掉整页 layout」。但 Flutter 的 `RenderOffstage.performLayout`
+  在 offstage 时仍会 `child.layout(constraints)`（官方文档原文也是 "laid out
+  as if it was in the tree"）——只省 paint，不省 layout。
+- `outgoing` 是「上一目的地」的长期标记（切页后一直保留到下一次切页），旧判定
+  `offstage: !selected && !outgoing` 让上一页淡完后仍每帧布局；也就是说三个页
+  面在任何时刻都参与 layout。
+- 隐藏页同时依赖 `MediaQuery` / `AdaptiveLayoutScope` / `DesktopLayout`，这些
+  InheritedWidget 按原始像素比较，窗口拖动时每帧通知，隐藏页跟着整页 build。
+- VM timeline（0.25s resize，profile）：一个 14.01ms 的帧里，隐藏页的
+  `RenderViewport → SliverGrid` 子树单独占 5.9–6.4ms（25 个 `M3ECard` 被布局），
+  布局中夹了一次 1.7ms 的 major GC；`LAYOUT` p50 3.46ms / p95 6.24ms。
+
+### 2. 改动
+
+- 新增 `lib/app/shell/layout_skipping_offstage.dart`：契约与 `Offstage` 一致
+  （`constraints.smallest` / 不 paint / 不 hitTest / 不进 semantics /
+  `skipOffstage` finder 语义），但隐藏时**不调用 `child.layout`**；页面层外层
+  用 `SizedBox.expand` 给 tight 约束，使它成为 relayout boundary，隐藏页内部的
+  `LayoutBuilder` / `Focus` 变更只会登记到本层，不会把祖先链标脏。
+- `_ShellPageLayer` 的隐藏判定改为 `!(selected || fadingOut)`，淡出期间继续
+  布局，淡完立即跳过；同时修掉「上一页长期 `outgoing` 仍布局」。
+- `_PageSizeInputs`：隐藏页缓存最后一次可见的 `MediaQueryData` /
+  `AdaptiveLayout` / `DesktopLayout` 解析值，窗口尺寸 / DPR / 断点变化不再通
+  知隐藏页；重新可见时同一帧换回当前值。`DesktopLayout` / `AdaptiveLayoutScope`
+  增加 `visible`（默认 true），隐藏期间不因尺寸变化 notify。
+- 顺带：`playbackCoverDecodeEdge` 按 256/384/512/600 逻辑档位向上取档（窗口短
+  边 <600 时不再每像素换 `ResizeImage` key）；播放页 `_getUsesWideLayout` 只在
+  版式真正切换时清三个 tab 页缓存。
+
+### 3. 同机 A/B
+
+口径：Linux profile（AOT）+ Xvfb 1920×1200，真实窗口由 xdotool 往返改尺寸
+（内容 1100×600 ↔ 1500×850，两端都在 expanded 档、不跨 840 断点），首页固定
+收藏（300 行 seed），每个采样窗口 5s；只读 `molia.frame` 的 build / work
+（Xvfb 软光栅的 raster 只作噪声参考）。改前 = 基线提交的独立 bundle，改后 =
+本分支；同机、同脚本、同 seed。
+
+| 版本 | 采样帧 | build p50 | build p95 | build p99 | work p50 | work p95 | raster p50* |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 改前 | 90–94 | **5.79–5.86** | 7.86–8.04 | 8.78–12.80 | 13.05–13.27 | 15.60–15.99 | 6.83–7.08 |
+| 改后 | 91–97 | **3.17–3.40** | 4.61–5.17 | 4.91–9.73 | 10.25–10.55 | 12.11–13.09 | 6.73–6.89 |
+
+- build p50 中位 **5.80 → 3.38ms（−42%）**，p95 **7.94 → 4.64ms（−42%）**；
+  work（build+raster）p50 中位 **13.14 → 10.27ms（−22%）**；
+- `jank8` 两版都接近 100%：Xvfb 软光栅 p50 就有 ~6.8ms，120Hz 口径下光栅本身
+  已经超预算，不能用这组数字判断真实 GPU；本轮的可用结论是 UI 线程成本下降，
+  以及隐藏页不再随 resize 布局（`shell_navigation_test` 用 viewport 尺寸与
+  滚动位置断言锁住）；
+- 剩余 build ~3.2–3.4ms 是**当前可见页 + 壳层**在每次尺寸变化时的真实重建/重排
+  成本；要继续压需要把「原始像素宽」换成更粗的尺寸通道（只让真正按像素自适应的
+  子树收到通知），不在本轮范围。
+
+### 4. 验证与未覆盖
+
+仓库新增的 `desktop-window-resize` 场景（`flutter drive` profile，raster 恒 0）
+同机 A/B：改前 / 改后各 1 轮，`--only desktop-window-resize`，同一份代码把
+`lib/` stash 回基线后重跑。
+
+| 版本 | frames | build p50 | build p95 | build p99 | jank8 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 改前 | 107 | 6.33 | 8.34 | 8.59 | 6 |
+| 改后 | 106 | 5.17 | 7.07 | 8.15 | 1 |
+
+- 这个场景用 fake 1000 行收藏 + `tester.view` 往返尺寸，只测 build/layout
+  （raster 恒 0）；数字与 §3 的真实窗口不同（真实窗口还含壳层 / 顶层窗口
+  重建），但方向一致：build p50 −18%、jank8 6 → 1；
+- `flutter analyze --no-pub`：0 issue；`flutter test --no-pub`：3646 passed /
+  12 skipped（含 `shell_navigation_test` 新增的「隐藏页不重排 / 切回按新尺寸 /
+  滚动位置保留」两例）；
+- 新增回归场景 `desktop-window-resize`（`tool/agent/perf.sh frames linux
+  --only desktop-window-resize`）：`tester.view` 逐帧往返 1440×900 ↔ 1100×720，
+  覆盖尺寸变化触发的 build/layout；桌面 drive 的 raster 恒 0，不作为光栅基线；
+- 未测：Windows 真实窗口 150Hz 的 raster / 合成器路径（用户目标环境），需要
+  在 Windows 上用同一 profile 包 + 真实拖拽复测；macOS 同理。
