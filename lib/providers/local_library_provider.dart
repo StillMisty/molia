@@ -151,35 +151,28 @@ class LocalLibraryProvider extends ChangeNotifier {
 
   /// 单曲收藏切换：只改缓存的 [BrowseSource] 一行再重建索引，不重读整表。
   ///
-  /// 取消收藏只删 favorites 里的键；该曲若仍在下载 / 用户列表里，重建时的
-  /// 合并优先级（收藏 → 下载 / 导入 → 自建列表）会把它补回来。批量 / 换源 /
-  /// 同步不带 toggle，仍走整库重读；已有整库重读在排队或进行中时不能拿旧缓存
-  /// 增量，否则会丢掉那次重读要校准的数据。
+  /// 行投影的增删 / 位置交给资料库 provider 持有的收藏事实：浏览行保留惰性
+  /// raw，不能直接换成事实里的 `PlaylistTrack`，但排序口径必须与收藏列表
+  /// 完全一致。取消收藏只删 favorites 里的键；该曲若仍在下载 / 用户列表里，
+  /// 重建时的合并优先级（收藏 → 下载 / 导入 → 自建列表）会把它补回来。
+  /// 批量 / 换源 / 同步不带 toggle，仍走整库重读；已有整库重读在排队或进行
+  /// 中时不能拿旧缓存增量，否则会丢掉那次重读要校准的数据。
   void _applyFavoriteToggle(FavoriteToggle toggle) {
     final source = _browseSource;
     if (source == null || _browseNeedsFullReload || _running) {
       schedule(browse: true, stats: false);
       return;
     }
-    final favorites = [...source.favorites];
-    if (toggle.favorite) {
-      final track = toggle.track;
-      if (track == null) {
-        schedule(browse: true, stats: false);
-        return;
-      }
-      favorites.removeWhere((item) => item.key == toggle.key);
-      final row = BrowseTrack.fromPlaylistTrack(track);
-      // DB 顺序是 sortOrder → addedAt；默认追加在末尾，顶部插入也保持同序。
-      var index = favorites.length;
-      while (index > 0 &&
-          _compareFavoriteOrder(favorites[index - 1], row) > 0) {
-        index--;
-      }
-      favorites.insert(index, row);
-    } else {
-      favorites.removeWhere((item) => item.key == toggle.key);
+    if (toggle.favorite && toggle.track == null) {
+      schedule(browse: true, stats: false);
+      return;
     }
+    final favorites = library.favoriteFact.applyToggleToProjection(
+      rows: source.favorites,
+      toggle: toggle,
+      wrap: BrowseTrack.fromPlaylistTrack,
+    );
+    if (identical(favorites, source.favorites)) return;
     _browseSource = BrowseSource(
       favorites: favorites,
       playlists: source.playlists,
@@ -189,11 +182,6 @@ class LocalLibraryProvider extends ChangeNotifier {
     _browseDirty = true;
     _rowsDirty = true;
     _armTimer();
-  }
-
-  static int _compareFavoriteOrder(BrowseTrack a, BrowseTrack b) {
-    final byOrder = a.sortOrder.compareTo(b.sortOrder);
-    return byOrder != 0 ? byOrder : a.addedAt.compareTo(b.addedAt);
   }
 
   void _onDownloadsChanged() => schedule(browse: true, stats: false);
