@@ -810,11 +810,12 @@
   汽水（`qs_discover.dart`）只有推荐歌单 / 分类 / 歌单搜索与详情：没有匿名榜单
   目录与热搜词（`leaderboards` 为空、`supportsHotSearch` 为 false）。
 - **Mapping**：`track_mapper`（`SourceTrack` ↔ `Track`，payload 同一引用往返）。
-- **内置平台**：搜索/发现共用 `BuiltinSearch.transport`
-  （`lib/sources/builtin/builtin_transport.dart`）——客户端可注入、统一请求头/超时、
-  响应级重试（`retryIf`）与结果缓存（`transport.cached`，single-flight + LRU +
-  TTL 5min）；平台适配器只保留 URL 构造与解析，不再各自持有静态 `RequestCache`。
-  fetch 路径测试通过注入 `MockClient` 覆盖。取词 / 取图适配器登记在各渠道自述里，
+- **内置平台**：搜索/发现/评论/取词/取图共用一个 `BuiltinTransport`
+  （`lib/sources/builtin/builtin_transport.dart`）——统一请求头/超时、响应级重试
+  （`retryIf`）与结果缓存（`transport.cached`，single-flight + LRU + TTL 5min）。
+  传输实例由组合根构造并注入 `SourceManager`，再随渠道适配器 / 发现 / 歌词来源
+  下传（适配器首参即 `BuiltinTransport`）；测试各自构造实例，不再改写进程级静态
+  变量。平台适配器只保留 URL 构造与解析，不再各自持有 `RequestCache`。取词 / 取图适配器登记在各渠道自述里，
   派发（`builtin_lyric_dispatch.dart` /
   `builtin_pic_dispatch.dart`）只查表 + 结果缓存，不再维护平台 switch；渠道偏好
   （音质 / 顺序 / 停用）在 `lib/sources/source_preferences.dart`，
@@ -864,6 +865,13 @@
   `discover_runner.dart::runDiscoverCall` 是发现端点的唯一执行入口：`DiscoverCall`
   描述缓存键 / 预算 / 请求 / 无效判定 / 解析（或多步尝试），有 key 走
   `cachedRetry`、无 key 走共享尝试循环；平台文件只保留 URL / 参数 / parser。
+- **Source 路由**：`lib/sources/source_routing.dart::SourceRouting` 是「key × 能力
+  → 实现者」的唯一决策点。输入只有 `SourceProfile`（由渠道自述 + 脚本声明 +
+  any-listen 可用性合成）与激活脚本声明；输出 `BuiltinSourceRoute` /
+  `ScriptSourceRoute` / `AnyListenSourceRoute` / `UnavailableSourceRoute`。歌词 /
+  封面允许「脚本优先 + 渠道原生回退」两条路线，其余能力单路线。`SourceManager`
+  只按路线类型执行，不再写 `sourceKey == any_listen`、`SongChannels.isSupported`
+  或脚本 action 分支；能力位与路线同源，新增渠道只需改自己的声明文件。
 - **内置检索 runner**：`lib/sources/builtin/builtin_search_runner.dart` 是五个
   音乐平台搜索的执行骨架（`runBuiltinSearch`）：重试预算、分页推断与失败归一
   各写一次；平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表
