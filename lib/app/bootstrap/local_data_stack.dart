@@ -61,6 +61,7 @@ typedef LocalDataStack = ({
   LocalLibraryService localLibrary,
   LocalMetadataService localMetadata,
   LyricsService lyricsService,
+  LyricsSourceRegistry lyricsSourceRegistry,
   CoverBackfillService coverBackfill,
   AudioPredownloader audioCacheWriter,
   LocalCacheIndexStore localCacheIndex,
@@ -133,12 +134,14 @@ Future<LocalDataStack> buildLocalDataStack({
   // 歌词服务提前创建（见文件头：与下载服务互为依赖的构建顺序）。
   // 曲目原生取词经 SourceManager 统一路由：脚本 lyric action →
   // any-listen → 内置平台原生实现（wy/tx/kg/kw/mg/bili，精确平台 ID）。
+  // 歌词来源与内置音源共用同一个传输：缓存 / 重试预算不再分叉；
+  // 同一份注册表也供换源页的手动歌词来源使用。
+  final lyricsSourceRegistry = LyricsSourceRegistry.forSession(
+    BiliSession.shared,
+    transport: sourceManager.builtinTransport,
+  );
   final lyricsService = LyricsService(
-    // 歌词来源与内置音源共用同一个传输：缓存 / 重试预算不再分叉。
-    providers: LyricsSourceRegistry.forSession(
-      BiliSession.shared,
-      transport: sourceManager.builtinTransport,
-    ).autoProviders,
+    providers: lyricsSourceRegistry.autoProviders,
     // 与 `CacheService.instance` 共享同一个文件后端实例（见上）。
     lyricsCache: lyricsCache,
     // 本地下载曲目：离线歌词缺失时不回退网络（离线播放全程不触网）。
@@ -293,6 +296,7 @@ Future<LocalDataStack> buildLocalDataStack({
     localLibrary: localLibrary,
     localMetadata: localMetadata,
     lyricsService: lyricsService,
+    lyricsSourceRegistry: lyricsSourceRegistry,
     coverBackfill: coverBackfill,
     audioCacheWriter: audioCacheWriter,
     localCacheIndex: localCacheIndex,

@@ -17,6 +17,7 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/source_swap_provider.dart';
+import '../services/lyrics/lyrics_source_registry.dart';
 import '../services/lyrics/lyrics_source_strategy.dart';
 import '../widgets/labels/lyrics_provider_label.dart';
 import '../widgets/responsive.dart';
@@ -58,6 +59,8 @@ Future<LyricsSearchSelection?> showSourceSwapPage(
       lyricsProvider: lyricsProvider,
       initialTab: initialTab,
       embedded: true,
+      // 与自动回退共用注册表：B 站可用性闭包 / 传输实例都只有一份。
+      lyricsSources: context.read<LyricsSourceRegistry>().strategies,
     ),
   );
 }
