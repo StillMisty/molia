@@ -1,7 +1,7 @@
-import 'dart:convert';
-
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/settings/device_settings.dart';
+import '../data/settings/device_settings_keys.dart';
 import '../domain/models/playback_feel.dart';
 
 /// 播放手感（淡入淡出 / 智能随机）的**设备本地**持久化。
@@ -11,65 +11,40 @@ import '../domain/models/playback_feel.dart';
 /// 变了手感。协议 / 会话也都不该出现这两个值。
 ///
 /// 两个值合并成一个 JSON 键：桌面 `shared_preferences` 每次写都会重写整个
-/// 偏好文件，两次写入就是两次整文件 I/O。
+/// 偏好文件，两次写入就是两次整文件 I/O。键名 / 默认值 / 编解码与失败策略
+/// 收在 `data/settings/device_settings.dart`，本类只做字段解释。
 class PlaybackFeelStore {
-  /// [_preferences] 仅测试注入；生产走 SharedPreferences 单例。
-  PlaybackFeelStore({this._preferences});
+  /// [preferences] 仅测试注入；生产走 SharedPreferences 单例。
+  PlaybackFeelStore({SharedPreferences? preferences})
+    : _settings = DeviceSettings(preferences: preferences);
 
-  static const String keyState = 'playback_feel_state_v1';
+  static const String keyState = kPlaybackFeelStateKeyName;
 
   static PlaybackFadePreset get defaultFade => PlaybackFadePreset.defaultPreset;
-  static const bool defaultSmartShuffle = true;
+  static const bool defaultSmartShuffle = kDefaultSmartShuffle;
 
-  final SharedPreferences? _preferences;
+  final DeviceSettings _settings;
 
   /// 读取已保存的手感设置；无记录 / 读取失败 / 字段损坏回默认值。
   Future<({PlaybackFadePreset fade, bool smartShuffle})> load() async {
-    try {
-      final prefs = _preferences ?? await SharedPreferences.getInstance();
-      final decoded = _decode(prefs.getString(keyState));
-      if (decoded == null) {
-        return (fade: defaultFade, smartShuffle: defaultSmartShuffle);
-      }
-      return (
-        fade: PlaybackFadePreset.fromMilliseconds(decoded.fadeMs),
-        smartShuffle: decoded.smartShuffle,
-      );
-    } catch (_) {
+    final decoded = await _settings.readJson(kPlaybackFeelStateKey);
+    final fadeMs = decoded?['fadeMs'];
+    final smartShuffle = decoded?['smartShuffle'];
+    if (fadeMs is! num || smartShuffle is! bool) {
       return (fade: defaultFade, smartShuffle: defaultSmartShuffle);
     }
+    return (
+      fade: PlaybackFadePreset.fromMilliseconds(fadeMs.toInt()),
+      smartShuffle: smartShuffle,
+    );
   }
 
   /// 保存手感设置：写失败只影响下次启动，不打断当前交互。
   Future<void> save({
     required PlaybackFadePreset fade,
     required bool smartShuffle,
-  }) async {
-    try {
-      final prefs = _preferences ?? await SharedPreferences.getInstance();
-      await prefs.setString(
-        keyState,
-        jsonEncode({
-          'fadeMs': fade.duration.inMilliseconds,
-          'smartShuffle': smartShuffle,
-        }),
-      );
-    } catch (_) {
-      // 静默：持久化失败不值得打断用户操作。
-    }
-  }
-
-  static ({int? fadeMs, bool smartShuffle})? _decode(String? raw) {
-    if (raw == null || raw.isEmpty) return null;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map<String, dynamic>) return null;
-      final fadeMs = decoded['fadeMs'];
-      final smartShuffle = decoded['smartShuffle'];
-      if (fadeMs is! num || smartShuffle is! bool) return null;
-      return (fadeMs: fadeMs.toInt(), smartShuffle: smartShuffle);
-    } on FormatException {
-      return null;
-    }
-  }
+  }) => _settings.writeJson(kPlaybackFeelStateKey, {
+    'fadeMs': fade.duration.inMilliseconds,
+    'smartShuffle': smartShuffle,
+  });
 }
