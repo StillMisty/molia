@@ -111,13 +111,23 @@ class DeviceSettings {
     return injected == null ? _open() : Future.value(injected);
   }
 
-  /// 值的存储类型由泛型唯一决定。
+  /// 值的存储类型由泛型唯一决定；只接受下面五种显式类型。
+  ///
+  /// 不做「其它类型都当 String」的兜底：那会让 `DeviceSettingKey<num>` /
+  /// `<DateTime>` 读取时静默回默认、写入时在失败策略里被吞掉。类型不受支持
+  /// 属于声明错误，必须在读写前直接抛 `ArgumentError`。
   static _ValueKind _kindOf<T extends Object>(DeviceSettingKey<T> key) {
     if (key is DeviceSettingKey<bool>) return _ValueKind.boolean;
     if (key is DeviceSettingKey<int>) return _ValueKind.integer;
     if (key is DeviceSettingKey<double>) return _ValueKind.decimal;
+    if (key is DeviceSettingKey<String>) return _ValueKind.text;
     if (key is DeviceSettingKey<List<String>>) return _ValueKind.stringList;
-    return _ValueKind.text;
+    throw ArgumentError.value(
+      key,
+      key.name,
+      '不支持的设备设置类型：${key.runtimeType}；'
+      '仅支持 bool / int / double / String / List<String>',
+    );
   }
 
   /// 读取标量；缺键 / 读取失败回退 [DeviceSettingKey.defaultValue]。
@@ -132,9 +142,11 @@ class DeviceSettings {
   Future<({bool ok, T value})> tryRead<T extends Object>(
     DeviceSettingKey<T> key,
   ) async {
+    // 类型校验放在 try 之外：声明错误不能被读失败策略吞成「默认值」。
+    final kind = _kindOf(key);
     try {
       final prefs = await _openPreferences();
-      final stored = switch (_kindOf(key)) {
+      final stored = switch (kind) {
         _ValueKind.boolean => prefs.getBool(key.name),
         _ValueKind.integer => prefs.getInt(key.name),
         _ValueKind.decimal => prefs.getDouble(key.name),
@@ -152,22 +164,25 @@ class DeviceSettings {
     }
   }
 
-  /// 写入标量；失败只记日志，不向调用方抛错。
-  Future<void> write<T extends Object>(DeviceSettingKey<T> key, T value) =>
-      _enqueueWrite(key.name, (prefs) async {
-        switch (_kindOf(key)) {
-          case _ValueKind.boolean:
-            await prefs.setBool(key.name, value as bool);
-          case _ValueKind.integer:
-            await prefs.setInt(key.name, value as int);
-          case _ValueKind.decimal:
-            await prefs.setDouble(key.name, value as double);
-          case _ValueKind.text:
-            await prefs.setString(key.name, value as String);
-          case _ValueKind.stringList:
-            await prefs.setStringList(key.name, (value as List).cast<String>());
-        }
-      });
+  /// 写入标量；存储失败只记日志，但类型声明错误直接抛错。
+  Future<void> write<T extends Object>(DeviceSettingKey<T> key, T value) {
+    // 校验发生在入队前：不受支持的类型不会被写失败策略吞掉。
+    final kind = _kindOf(key);
+    return _enqueueWrite(key.name, (prefs) async {
+      switch (kind) {
+        case _ValueKind.boolean:
+          await prefs.setBool(key.name, value as bool);
+        case _ValueKind.integer:
+          await prefs.setInt(key.name, value as int);
+        case _ValueKind.decimal:
+          await prefs.setDouble(key.name, value as double);
+        case _ValueKind.text:
+          await prefs.setString(key.name, value as String);
+        case _ValueKind.stringList:
+          await prefs.setStringList(key.name, (value as List).cast<String>());
+      }
+    });
+  }
 
   /// 删除键（读回默认值）；失败只记日志。
   ///

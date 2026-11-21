@@ -11,6 +11,7 @@ const _intKey = DeviceSettingKey<int>('ds_test_int', 7);
 const _decimalKey = DeviceSettingKey<double>('ds_test_decimal', 0.5);
 const _textKey = DeviceSettingKey<String>('ds_test_text', 'fallback');
 const _listKey = DeviceSettingKey<List<String>>('ds_test_list', <String>[]);
+const _unsupportedNumKey = DeviceSettingKey<num>('ds_test_num', 0);
 
 /// 设置模块接口契约：标量读写 / JSON 键 / 失败策略 / 模块级串行写 / 键表。
 void main() {
@@ -47,6 +48,64 @@ void main() {
     await settings.remove(_textKey);
     expect(prefs.containsKey(_textKey.name), isFalse);
     expect(await settings.read(_textKey), 'fallback');
+  });
+
+  test('不受支持的键类型读取直接失败，不回默认值', () async {
+    final settings = DeviceSettings();
+
+    await expectLater(
+      settings.read(_unsupportedNumKey),
+      throwsA(
+        isA<ArgumentError>()
+            .having((error) => error.name, 'name', _unsupportedNumKey.name)
+            .having(
+              (error) => error.message,
+              'message',
+              contains('DeviceSettingKey<num>'),
+            ),
+      ),
+    );
+
+    await expectLater(
+      settings.read(DeviceSettingKey<DateTime>('ds_test_date', DateTime(2020))),
+      throwsA(
+        isA<ArgumentError>()
+            .having((error) => error.name, 'name', 'ds_test_date')
+            .having(
+              (error) => error.message,
+              'message',
+              contains('DeviceSettingKey<DateTime>'),
+            ),
+      ),
+    );
+  });
+
+  test('不受支持的键类型写入直接失败，不进写失败策略', () {
+    final settings = DeviceSettings();
+
+    expect(
+      () => settings.write(_unsupportedNumKey, 1),
+      throwsA(
+        isA<ArgumentError>().having(
+          (error) => error.name,
+          'name',
+          _unsupportedNumKey.name,
+        ),
+      ),
+    );
+    expect(
+      () => settings.write(
+        DeviceSettingKey<DateTime>('ds_test_date', DateTime(2020)),
+        DateTime(2021),
+      ),
+      throwsA(
+        isA<ArgumentError>().having(
+          (error) => error.name,
+          'name',
+          'ds_test_date',
+        ),
+      ),
+    );
   });
 
   test('tryRead 区分缺键与读取失败', () async {
