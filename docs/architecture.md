@@ -1347,6 +1347,12 @@
   （`kPosterColorSourceKey` / `kPosterSeedColor` / `kPosterFontFamily`）同理：
   此前只写本地 prefs，换设备或重装后歌词 / 统计 / 年度报告海报样式会丢，
   也不进完整备份；字体族在目标设备缺失时由渲染层回退，不阻断生成；
+- `device_settings.dart` / `device_settings_keys.dart`：**设备本地设置**（音量 /
+  播放手感 / 首次引导标记…）的统一入口 —— `DeviceSettingKey` 只有名字 / 默认值 /
+  类型，键表一张，JSON 一个编解码路径，写盘串行，读失败回默认、写失败只记日志。
+  已迁移的 `PlaybackFeelStore` / `PlaybackVolumeStore` / `OnboardingStore` 只保留
+  字段解释与旧版兜底；不登记、不同步。新代码直连 `SharedPreferences` 由
+  `test/architecture/prefs_usage_test.dart` 拦截（存量白名单只减不增）；
 - `settings_access.dart`：模块面 `SettingsAccess`（`read` / `write` / `clear`）；
   重载只能经 `SettingsRegistry.mount(SettingsModule)` 与作用域一起绑定，
   同步适配器只依赖窄接口 `SettingsSyncSurface`（`entries` / `readRaw` /
