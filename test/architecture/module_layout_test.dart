@@ -47,7 +47,6 @@ const Set<String> _sizeWhitelist = {
   'lib/sources/lx/lx_engine_native.dart',
   'lib/sources/source_manager.dart',
   'lib/widgets/discover_playlists_tab.dart',
-  'lib/widgets/player.dart',
   'lib/widgets/search_results_view.dart',
 };
 

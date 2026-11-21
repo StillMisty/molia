@@ -1,6 +1,8 @@
 # ADR-0024：播放页三个圆点保留紧凑命中区与激活圆点展开/收起
 
-状态：已采纳（2026-11-14）。相关：`lib/widgets/mdtab.dart`、
+状态：已采纳（2026-11-14）。移动端页内迷你条已被 ADR-0039 取代
+（2026-11-21）：展开 / 收起的落点改为完整播放页 ↔ 顶栏播放条，圆点手势与
+命中区结论不变。相关：`lib/widgets/mdtab.dart`、
 `lib/pages/nowplaying.dart`、`lib/widgets/player.dart`、
 `docs/architecture.md` §6。
 

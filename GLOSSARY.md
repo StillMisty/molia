@@ -221,13 +221,15 @@
   是它的宿主（控制器生命周期与低频 `Selector` 接线），播放页与桌面底栏只选
   时间标签档位。
 - **Playback transport（播放传输语义）** — `lib/widgets/playback_transport.dart`：
-  四个播放控制面（播放页迷你 / 播放页桌面排 / 桌面底栏 / 壳层顶栏）共用的控制
+  三个播放控制面（播放页 / 桌面底栏 / 移动壳层顶栏播放条）共用的控制
   语义。`PlaybackPlayPauseButton` / `PlaybackPreviousButton` / `PlaybackNextButton`
   统一 `hasTrack` 启用判据、图标与语义标签、触感与 provider 命令，模式按钮的
   图标与语义标签走 `PlayModeTransportPresentation`；宿主只保留按钮变体
   （tonal / standard）、尺寸与布局。`PlaybackSeekBar`
   持有 `SeekPreviewController` 生命周期与低频 `Selector`，宿主只选时间标签档位。
-  无曲目时播放 / 切歌禁用；模式仍可切换（先选模式再起播）。
+  无曲目时播放 / 切歌禁用；模式仍可切换（先选模式再起播）。移动顶栏播放条
+  按 ADR-0023 口径只放播放/暂停 + 下一首；收藏 / 上一首留在展开播放页的
+  进度排、封面手势与队列。
 
 ## 播放页封面（cover deck）
 
@@ -245,19 +247,18 @@
   `stackWidth ≤ availableWidth` 且 `stackHeight ≤ availableHeight`；三套版式都走它，
   不再各自手写「可用宽 − 96」与乘因子。
 - **Cover appearance（封面外观）** — `lib/widgets/cover_appearance.dart::CoverAppearance`：
-  圆角 / 描边 / 阴影 / 回退图标的唯一实现，三个端点是命名值（`bar` / `mini` /
-  `page`）；`CoverCard` 按外观渲染卡片（三端真身与飞行副本共用同一渲染），图片
+  圆角 / 描边 / 阴影 / 回退图标的唯一实现，两个端点是命名值（`bar` /
+  `page`）；`CoverCard` 按外观渲染卡片（两端真身与飞行副本共用同一渲染），图片
   内容 widget 的差异留在调用侧（真身 `TrackArtwork` / `AppNetworkImage`、副本
   `MorphCover`——同步出帧不闪）。两条不变量是代数关系：描边透明度 = 描边宽度、
   裁剪半径 = 外圆角 − 描边宽度；封面 URL 的空串视同无封面在这里，键归一化在
-  Cover resolution。
+  Cover resolution。旧的 `mini` 端点随播放页内迷你条一起删除（ADR-0039）。
 - **Cover flight（封面共享元素飞行）** — `CoverFlight`（两端矩形 + 外观 + 方向 →
   `rectAt` / `appearanceAt` / `iconSizeAt`，外观按「播放页端进度」插值，反向飞行
   起飞不跳）+ `CoverFlightLayer`（副本渲染，返回 `Positioned.fromRect`，挂 Stack
-  下）；顶栏↔播放页（`PlayerMorphFlight`）与迷你⇄完整（`player.dart` 页内）都是
-  它的薄壳。迷你⇄完整在阈值收尾后还有弹簧容差拖尾（状态仍是 `forward`），拖尾内
-  反向必须由进度监听重新起飞行。锚点几何读取唯一实现 `player_morph.dart::anchorRectOf(key,
-  {container})`（容器为空 = 全局坐标；含祖先缩放的两角映射）。
+  下）；顶栏播放条 ↔ 播放页（`PlayerMorphFlight`）是它唯一的薄壳。锚点几何读取
+  唯一实现 `player_morph.dart::anchorRectOf(key)`：只返回全局屏幕矩形（含祖先
+  缩放的两角映射），不再有容器参数；顶栏 ↔ 播放页的副本挂在根 Overlay 上。
 - **Cover slot（封面槽位）** — 堆叠的三个位置：左 = 上一首（实际播放顺序最近一首 →
   队列前一位 → 空，排除与当前同 id，与后端 `skipToPrevious` 同源）、
   中 = 当前（拖动/提交等待/回退期间为预览目标）、右 = `PlaybackSnapshot.next`；
@@ -367,11 +368,13 @@
 - **Shell reselect（底栏重复点击）** — `lib/widgets/shell_reselect.dart::ShellReselectSignal`：
   壳层把「重复点击已选中的底栏 / 导航轨目的地」转交给页面的唯一通道（每个目的地
   一个实例，与 `PlayerMorphController` 同路由注入）。页面自订阅、自决定语义并自给
-  反馈：播放页 = 迷你 ⇄ 完整（现有 `_toggleExpand`，进入播放页的共享元素飞行期间
-  由壳层忽略），资料库 = 当前渠道可搜索时切到搜索 tab 并聚焦搜索框（键盘即用），
+  反馈：资料库 = 当前渠道可搜索时切到搜索 tab 并聚焦搜索框（键盘即用），
   没有搜索 tab 时当前可见列表回到顶部；收藏 = 当前可见列表回到顶部
   （`lib/widgets/scroll_to_top.dart::animateScrollToTop`）。壳层不消费状态，但重复点击
   命中时统一给一次轻震（`lib/services/haptics.dart`，可在设置里全局关闭）；页面不重复给触感。
+  播放页**不再走这条通道**：重复点击由壳层直接切换展开 / 收起并同时发起顶栏 ↔
+  播放页共享飞行（`app_shell.dart::_requestPlayerExpansion`），避免飞行再绕页面
+  一圈；map 里仍保留实例只为结构完整，没有消费者。
 
 - **Shell long press（底栏长按定位）** — `lib/widgets/shell_reselect.dart::ShellLongPressSignal` +
   `lib/app/shell_chrome.dart`：壳层把「长按目的地图标」转交给页面的唯一通道（图标槽
@@ -388,7 +391,7 @@
 - **Haptics（触感模块）** — `lib/services/haptics.dart`：全应用触感唯一入口（lightImpact / mediumImpact / selectionClick），带设备本地开关（默认开；关闭后不触碰平台通道）。所有调用点经它；M3E 包内自带的触感（swipe action / 排序等）不在此覆盖范围。
 
 - **Single instance（桌面单实例）** — `lib/services/window/single_instance*.dart` + 两个 runner：每用户一个 primary。Dart 用 OS 文件锁（`single_instance.lock`，进程崩溃自动释放）+ sidecar `single_instance.json`（pid / port）做跨会话最终仲裁；Windows runner 的命名 mutex / Linux runner 的 GApplication 只负责同会话「引擎启动前退出 + 激活」，原生激活统一经窗口通道 `reopen` → `WindowChrome.show()`（托盘休眠树不能由原生直接显示）。失败路径：锁不可用按 primary 继续，锁冲突但无 metadata 短暂等待后按 secondary 退出。`MOLIA_SINGLE_INSTANCE_DISABLED=1` 同时关闭 runner 与 Dart 两层。见 ADR-0020、`docs/pitfalls.md` #41。
-- **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏工具条 + 恒折叠侧栏 + 常驻底栏播放条 + 搜索遮罩，播放页里整条让位），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道 / `NowPlayingController`）仍在 `app_shell.dart`，两套骨架同源。
+- **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏工具条 + 恒折叠侧栏 + 常驻底栏播放条 + 搜索遮罩，播放页里整条让位），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道 / `NowPlayingController`）仍在 `app_shell.dart`，两套骨架同源。桌面顶栏品牌区是 40dp 高、左右 12dp 内边距的 full 圆角胶囊（hover `surfaceContainerHigh` / press `surfaceContainerHighest` / 静止透明）；品牌区最大 280dp、长名称单行省略、窄窗只剩 LOGO 胶囊，右侧至少保留 96dp 拖动区。
 
 - **Global search overlay（搜索遮罩）** — `lib/widgets/global_search_overlay.dart`：桌面顶栏
   不再挂搜索条，最左是**品牌区**（`MoliaMark` + 应用名，整块可点）——品牌区与 Ctrl+F
@@ -408,11 +411,15 @@
 - **Desktop layout（桌面布局解析）** — `lib/widgets/desktop_layout.dart::DesktopLayout`：「是不是桌面宽布局」的唯一解析处（壳层在 `build` 里解析一次并向下提供，页面 / 骨架只消费；独立挂载页面 / 弹层路由按当前 context 回退解析，与生产同一公式）。全部判据都以窗口宽为来源：`masterDetail`（设置首屏两列的页面级增强）、`contentWidth`（窗口宽 − 实际栏宽；侧栏恒折叠 ⇒ 它就是内容区可用宽）、`tableColumns` / `tableColumnsFor`（内容宽 ≥ 720 / 历史档 812）。900 / 720 / 812 等阈值与宽度来源的选择集中在这里，页面 / 骨架只消费。
 - **Desktop window chrome（桌面窗口 chrome）** — `lib/services/window/window_chrome*.dart` + `lib/services/window/window_bounds_store.dart`：最小化 / 最大化 / 关闭、窗口几何记忆、托盘隐藏与恢复。Windows 额外做两件事：`MaximizeButtonSnapRegion` 把自绘最大化键的矩形上报原生（Win11 贴靠布局 / Win+Z 的 `HTMAXBUTTON` 命中区），`show()` 前经 `IVirtualDesktopManager` 把窗口跟到当前虚拟桌面；几何按虚拟桌面 GUID 分组保存在 `window_bounds_by_desktop` / `window_maximized_by_desktop`（每桌面上限 8 条，旧全局键只读兜底）。非 Windows 全部为空操作。见 ADR-0032、`docs/pitfalls.md` #109 / #110。
 
-- **Shell chrome（壳层 chrome spec）** — `lib/app/shell_chrome.dart::ShellChrome`：两套骨架（移动 / 桌面）共用的导航与顶栏 spec（目的地 + 标签 + 选择 + 顶栏槽位）。目的地 → 图标 / 标签映射（`railDestinations` / `barDestinations`）、索引 → 目的地回调（`selectDestinationAt`）、顶栏构造（`appBar`：titleSpacing / 无返回键 / 拖动区包装 / 设置按钮 / 窗口控件）只此一份；骨架不合并——顶栏槽里的内容、侧栏类型与底栏形态仍由各自适配渲染。
+- **Shell chrome（壳层 chrome spec）** — `lib/app/shell_chrome.dart::ShellChrome`：两套骨架（移动 / 桌面）共用的导航与顶栏 spec（目的地 + 标签 + 选择 + 顶栏槽位）。目的地 → 图标 / 标签映射（`railDestinations` / `barDestinations`）、索引 → 目的地回调（`selectDestinationAt`）、顶栏构造（`appBar`：titleSpacing / 无返回键 / 拖动区包装 / 设置按钮 / 窗口控件）只此一份；骨架不合并——顶栏槽里的内容、侧栏类型与底栏形态仍由各自适配渲染。移动骨架的顶栏槽额外装配**顶栏播放条**（封面 + 歌名/作者 + 播放/暂停 + 下一首 + 平直进度线），它是移动端唯一的迷你播放器；播放页展开时同一位置换成品牌位。
 
 - **Now playing bar（底栏播放条）** — `lib/app/desktop/now_playing_bar.dart`：桌面 80dp 播放条（左：封面/歌名/收藏，点击进播放页并复用封面飞行；中：Playback transport 控件 + 可拖波浪进度 + 时间；右：模式按钮 / 音量弹层 / 队列入口）。只在非播放页出现（播放页沉浸，整条让位）；队列入口 = 跳播放页 + 切队列 tab。进度拖动语义与播放页共用 **Seek preview**，传输控件共用 **Playback transport**，宿主只负责版式。
 
-- **NowPlayingController（播放页 tab 请求通道）** — `lib/widgets/now_playing_controller.dart`：壳 → 播放页右栏的唯一请求通道（`showQueueTab` / `showLyricsTab` / `showInfoTab`，页序与默认页索引同源）。请求是动作不是状态：重复请求同一页也通知，页面自行判断是否已到位；底栏队列入口与 Esc 的「关闭队列」都经它落点，壳层不读播放页的界面状态。
+- **NowPlayingController（播放页请求通道 + 展开态快照）** — `lib/widgets/now_playing_controller.dart`：壳 ↔ 播放页的唯一请求通道：`showQueueTab` / `showLyricsTab` / `showInfoTab`（只有 `tabRequestVersion` 前进才算新的 tab 请求，收起播放器不会重放上一次 tab）、`expand()` / `collapse()`（`takeExpansionRequest()` 消费一次意图，同方向重复请求不叠加）。只读快照 `expanded`（窄版式播放页是否展开；宽版式 / 桌面恒 false）、`miniCapable`（当前布局是否有收起态，决定顶栏显示播放条还是品牌位）、`activeTab`。页面在布局 / 动画落定时回写；壳层据此决定返回键是否先收起、底栏重复点击切换到哪个方向。底栏队列入口与 Esc 的「关闭队列」都经它落点，壳层只读这三个只读快照，不直接操作页内界面。
+
+- **Now-playing lyrics on enter（回到播放页时显示歌词）** — `kShellNowPlayingLyricsOnEnter`（默认开，`SyncCategory.settings` 跟人走），由 `NavProvider.showLyricsOnEnter` 持有；只在「从其它一级页进入播放页」时切到歌词 tab，播放页内部打开的二级页返回不重置当前 tab。设置入口在高级设置 › 播放细节。见 ADR-0039。
+
+- **Root destination back（一级页返回）** — 移动端三个一级目的地（资料 / 发现、收藏、播放页）是平级根页面：系统返回直接退出应用，不再「回上一目的地」。唯一页内层级是展开的播放页：第一次返回先收起（高度归 0，顶栏播放条回来），第二次才退出。页面级 `BackClaims`（多选 / 搜索 / 排序 / 弹层）优先，壳层让位。桌面 Esc 复用「展开态先收起」的判定，但先处理播放页队列（先收队列）；其它一级页保持原命令落点。见 ADR-0039。
 
 - **VolumeControl（音量入口组件）** — `lib/widgets/volume_control.dart`：音量图标按钮 + 弹出面板（静音开关 / 滑杆 / 百分比读数，面板夹取进宿主可绘制区）的唯一实现，底栏与播放页共用；锚点 key 由宿主给出，Esc 经 `EscapeClaims` 登记自收。
 

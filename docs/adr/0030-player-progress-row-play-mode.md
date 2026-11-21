@@ -1,6 +1,8 @@
 # ADR-0030：播放页进度排常显播放模式（撤回「更多」菜单）
 
-状态：已采纳（2026-11-15）。相关：ADR-0007（播放域划分）、
+状态：已采纳（2026-11-15）。移动端页内迷你条已由 ADR-0039 删除
+（2026-11-21）；「迷你条 / 非播放页顶栏不增加模式按钮」的结论由顶栏播放条
+继承。相关：ADR-0007（播放域划分）、
 ADR-0023（其中「进度排用『更多』收纳模式」一条被本 ADR 取代）、
 `lib/widgets/player.dart`、`lib/app/desktop/now_playing_bar.dart`、
 `lib/widgets/playback_transport.dart`、`docs/architecture.md` §6。

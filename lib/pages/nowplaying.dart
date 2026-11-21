@@ -13,20 +13,27 @@ import 'package:molia/widgets/now_playing_controller.dart';
 import 'package:molia/widgets/player_morph.dart';
 import 'package:molia/widgets/scroll_edge_fade.dart';
 import 'package:molia/widgets/shell_page_visibility.dart';
-import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/track_info_view.dart';
 
 import '../l10n/app_localizations.dart';
 import '../theme/motion_policy.dart';
 import 'nowplaying_desktop_layout.dart';
 
-/// 正在播放页：全屏播放器（可折叠为迷你条）+ 队列/歌词/歌曲信息三个 PageView。
+part 'nowplaying_gestures.dart';
+
+/// 正在播放页：全屏播放器（可收起为 0 高度）+ 队列/歌词/歌曲信息三个 PageView。
+///
+/// 收起态没有页内迷你条：移动端顶栏的播放条是唯一迷你播放器。收起后本页
+/// 直接让出播放器高度给内容区，壳层顶栏播放条回来承接封面 / 歌名 / 传输键。
 class NowPlaying extends StatefulWidget {
   /// 顶栏共享元素控制器：全屏播放器为其提供封面/歌名/进度锚点。
   final PlayerMorphController? morph;
 
-  /// 壳层「重复点击底栏 / 导航轨播放目的地」的请求通道：迷你 ⇄ 完整切换。
-  final ShellReselectSignal? reselect;
+  /// 展开 / 收起意图：页面自己的手势入口（圆点、内容下拉、播放器拖拽）
+  /// 不直接跑动画，而是请壳层统一发起顶栏 ⇄ 播放页的共享封面飞行。
+  ///
+  /// 为 null 时（单测直接挂载页面）退回本地动画，便于独立验证页面行为。
+  final ValueChanged<bool>? onRequestExpansion;
 
   /// 外部 tab 切换请求（如底栏队列按钮「跳播放页 + 切队列」）。
   final NowPlayingController? controller;
@@ -34,14 +41,14 @@ class NowPlaying extends StatefulWidget {
   /// 桌面骨架专用版式：左「封面 + 控制」固定栏 + 右「队列 / 歌词 / 歌曲
   /// 信息」三 tab（默认歌词，与移动端圆点页序一致）。
   ///
-  /// 桌面没有迷你态与圆点手势，此模式下 `reselect` 请求忽略；移动骨架
+  /// 桌面没有收起态与圆点手势，此模式下展开 / 收起请求忽略；移动骨架
   /// （含平板宽屏）保持既有 PageView 版式。
   final bool desktopLayout;
 
   const NowPlaying({
     super.key,
     this.morph,
-    this.reselect,
+    this.onRequestExpansion,
     this.controller,
     this.desktopLayout = false,
   });
@@ -73,19 +80,24 @@ class _NowPlayingState extends State<NowPlaying>
   late final ScrollController _wideLyricsScrollController;
   late final ScrollController _wideInfoScrollController;
 
-  /// 播放器展开进度：0 = 迷你条、1 = 完整播放器（小屏）。
+  /// 播放器展开进度：0 = 收起（高度 0）、1 = 完整播放器（小屏）。
   ///
   /// motor expressive spatial 弹簧（380/0.8）：拖动跟手直接写进度，松手按
-  /// 手势速度续跑吸附。
+  /// 手势速度续跑吸附。封面飞行不在这里做——顶栏 ⇄ 播放页的副本由壳层
+  /// 统一驱动，页面只负责高度与透明度。
   late final SingleMotionController _expandController;
   bool _isMini = false;
 
-  /// 当前布局是否走宽版式（左右两栏）：宽版式播放器始终完整、没有迷你态，
-  /// 重复点击请求直接忽略（不能让 `_isMini` 在宽版式被翻转）。布局期写入。
-  bool _usesWideLayout = false;
+  /// 松手当刻的手势速度（进度域/秒），由 [onRequestExpansion] 之前的
+  /// 拖拽入口暂存，等壳层回发 expand / collapse 请求时再交给弹簧续跑。
+  ///
+  /// 页内手势不直接动画（共享封面飞行由壳层统一发起），速度必须跨这一跳
+  /// 传下去；否则每次拖拽松手都会从零速度重新起步，跟手感明显变钝。
+  double _pendingExpansionVelocity = 0;
 
-  /// 当前布局是否有迷你态（窄单栏）。桌面两栏 / 移动宽版式恒为 false：
-  /// 返回层级要据此决定「先收起播放器」还是直接回上一目的地。
+  /// 当前布局是否有收起态（窄单栏）。桌面两栏 / 移动宽版式恒为 false：
+  /// 返回层级要据此决定「先收起播放器」还是直接回上一目的地，壳层也据此
+  /// 决定顶栏显示播放条还是品牌位。
   bool _miniCapable = true;
 
   /// 壳层是否把本页放在前台（布局期写入，不触发重建）。隐藏页的展开态
@@ -111,8 +123,12 @@ class _NowPlayingState extends State<NowPlaying>
   /// 桌面版式右侧分页：0 = 队列、1 = 歌词、2 = 歌曲信息。
   late int _desktopTab;
 
-  /// 已消费到的 [NowPlayingController.requestVersion]：收起意图与 tab 请求
-  /// 共用一次通知，只有版本前进才重放 tab。
+  /// 当前是否真的走桌面两栏版式（右侧三 tab）。桌面骨架落到单栏时仍用
+  /// PageView，外部 tab 请求必须走跳页而不是改 [_desktopTab]。
+  bool _desktopTabs = false;
+
+  /// 已消费到的 [NowPlayingController.tabRequestVersion]：展开 / 收起意图与
+  /// tab 请求共用一次通知，只有 tab 版本前进才重放 tab。
   int _handledTabRequest = 0;
 
   /// 移动 / 平板版式当前落定的内容页（PageView 落定后更新）。
@@ -145,7 +161,7 @@ class _NowPlayingState extends State<NowPlaying>
     // 再按 Esc 时壳层还停留在默认歌词页。
     widget.controller?.activeTab.value = requested ?? nowPlayingLyricsTabIndex;
     // 挂载前已消费过的请求不再重放（初始页已经取过 requestedTab）。
-    _handledTabRequest = widget.controller?.requestVersion ?? 0;
+    _handledTabRequest = widget.controller?.tabRequestVersion ?? 0;
     _pageController = PageController(
       initialPage: requested ?? _currentPageIndex,
     );
@@ -163,27 +179,21 @@ class _NowPlayingState extends State<NowPlaying>
       initialValue: 0,
     )..value = 1.0;
     _expandController.addListener(_handleExpandProgress);
-    widget.reselect?.addListener(_handleReselect);
-    widget.controller?.addListener(_handleTabRequest);
+    widget.controller?.addListener(_handleControllerRequest);
   }
 
   @override
   void didUpdateWidget(covariant NowPlaying oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.reselect != widget.reselect) {
-      oldWidget.reselect?.removeListener(_handleReselect);
-      widget.reselect?.addListener(_handleReselect);
-    }
     if (oldWidget.controller != widget.controller) {
-      oldWidget.controller?.removeListener(_handleTabRequest);
-      widget.controller?.addListener(_handleTabRequest);
+      oldWidget.controller?.removeListener(_handleControllerRequest);
+      widget.controller?.addListener(_handleControllerRequest);
     }
   }
 
   @override
   void dispose() {
-    widget.reselect?.removeListener(_handleReselect);
-    widget.controller?.removeListener(_handleTabRequest);
+    widget.controller?.removeListener(_handleControllerRequest);
     _expandController.dispose();
     _pageController.dispose();
     _visibleTab.dispose();
@@ -194,170 +204,6 @@ class _NowPlayingState extends State<NowPlaying>
     _wideLyricsScrollController.dispose();
     _wideInfoScrollController.dispose();
     super.dispose();
-  }
-
-  /// 展开/收起切换：按当前进度过半决定方向。
-  ///
-  /// 不用落定状态（[_isMini]）判定：弹簧有容差拖尾，「落定回调」晚于视觉
-  /// 落定约 0.35s，滚动到一半连点/到顶快速再拉会打进过期目标。
-  void _toggleExpand() {
-    HapticsService.lightImpact();
-    _animateToggleExpand();
-  }
-
-  /// 切换动作本体（不含触感）：本次点击的轻震由调用方负责。
-  void _animateToggleExpand() {
-    final double target = _expandController.value >= 0.5 ? 0.0 : 1.0;
-    if (reduceMotionOf(context)) {
-      // 减弱动效：迷你 ⇄ 完整直接换态（弹簧参数本身不变，正常态仍续跑）。
-      _expandController.value = target;
-      return;
-    }
-    _expandController.animateTo(target);
-  }
-
-  /// 壳层重复点击「播放」目的地：与迷你条点击 / 圆点点击 / 到顶下拉同一入口。
-  ///
-  /// 宽版式与桌面版式都没有迷你态（播放器始终完整），忽略请求。
-  /// 触感由壳层对重复点击统一给出（见 [ShellReselectSignal]），此处不再补一次。
-  void _handleReselect() {
-    if (widget.desktopLayout || _usesWideLayout) return;
-    _animateToggleExpand();
-  }
-
-  /// 外部 tab / 收起请求（[NowPlayingController]）。
-  ///
-  /// 请求是动作不是状态：重复请求、请求当前页都照样处理（页面可能刚挂载，
-  /// 用户也可能手动切走后再触发一次）。
-  void _handleTabRequest() {
-    final controller = widget.controller;
-    if (controller == null || !mounted) return;
-
-    if (controller.takeCollapseRequest()) {
-      _collapsePlayer();
-    }
-
-    // 收起意图与 tab 请求共用一次通知：只有版本前进才重放 tab，否则收起
-    // 播放器会把上一次请求的页再切一遍。
-    final bool hasTabRequest = controller.requestVersion != _handledTabRequest;
-    if (!hasTabRequest) return;
-    _handledTabRequest = controller.requestVersion;
-
-    final int? requested = controller.requestedTab;
-    if (requested == null) return;
-    controller.activeTab.value = requested;
-
-    if (widget.desktopLayout) {
-      _selectDesktopTab(requested);
-      return;
-    }
-
-    if (!_pageController.hasClients) {
-      // 挂载了但还没布局（请求落在 initState 与首帧之间）：初始页已在
-      // initState 取过，这里只兜一次帧末补跳。
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _pageController.hasClients) {
-          _pageController.jumpToPage(requested);
-        }
-      });
-      return;
-    }
-    if (reduceMotionOf(context)) {
-      // 减弱动效：tab 跳转直接换页，不做整段滑动。
-      _pageController.jumpToPage(requested);
-      return;
-    }
-    _pageController.animateToPage(
-      requested,
-      duration: M3EMotion.medium2,
-      curve: M3EMotion.emphasizedDecelerate,
-    );
-  }
-
-  /// 收起播放器（壳层返回键 / Esc 的层级动作）。
-  ///
-  /// 无迷你态的版式（桌面两栏 / 移动宽版式）没有可收起的目标：把
-  /// [NowPlayingController.expanded] 回写为 false，下一次返回继续回上一目的地。
-  void _collapsePlayer() {
-    final controller = widget.controller;
-    if (!_miniCapable) {
-      controller?.expanded.value = false;
-      return;
-    }
-    if (reduceMotionOf(context)) {
-      _expandController.value = 0;
-      return;
-    }
-    _expandController.animateTo(0);
-  }
-
-  /// 把「当前布局是否有迷你态 + 实际是否展开」回写给壳层。
-  ///
-  /// 构建期只安排帧末写入：壳层监听 [NowPlayingController.expanded] 并
-  /// setState，直接在本帧通知会触发「构建中 markNeedsBuild」。
-  void _syncExpanded() {
-    final controller = widget.controller;
-    if (controller == null) return;
-    final bool expected = _shellVisible && _miniCapable && !_isMini;
-    if (controller.expanded.value == expected) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || widget.controller != controller) return;
-      controller.expanded.value = expected;
-    });
-  }
-
-  /// 展开进度跨过阈值即同步迷你态（视觉落定口径，不等弹簧容差拖尾）。
-  void _handleExpandProgress() {
-    final double progress = _expandController.value;
-    if (progress >= 0.99) {
-      _setMini(false);
-    } else if (progress <= 0.01) {
-      _setMini(true);
-    }
-  }
-
-  void _setMini(bool mini) {
-    if (_isMini == mini || !mounted) return;
-    setState(() {
-      _isMini = mini;
-      // 歌词页操作按钮可见性跟随展开态，需重建页面实例。
-      _cachedPages = null;
-    });
-    // 动画落定的节点是壳层返回层级最可靠的信号：宽版式无迷你态，隐藏页
-    // 的展开态也不拦返回，两者都按「未展开」回写。
-    widget.controller?.expanded.value = _shellVisible && _miniCapable && !mini;
-  }
-
-  /// 播放器区域跟手拖拽行程基准：约 0.6 个最大高度走完整段（一次拇指
-  /// 上滑即可展开）；也是释放速度 → 进度域的换算基准。
-  double get _expandDragExtent =>
-      max(200.0, (_playerMaxHeight - miniPlayerHeight) * 0.6);
-
-  /// 播放器区域跟手拖拽：迷你条上拉展开、播放器下拉收起（过半/甩动吸附）。
-  void _handlePlayerDragUpdate(DragUpdateDetails details) {
-    final double extent = _expandDragExtent;
-    // 手指向上（dy 负）→ 展开。
-    final double delta = -details.delta.dy / extent;
-    _expandController.value = (_expandController.value + delta).clamp(0.0, 1.0);
-  }
-
-  void _handlePlayerDragEnd(DragEndDetails details) {
-    final double upVelocity = -(details.primaryVelocity ?? 0);
-    // 位置 + 速度投影：快速甩动即使行程短也按方向吸附。
-    final double projected = _expandController.value + upVelocity / 1800;
-    HapticsService.lightImpact();
-    final bool expand = projected >= 0.5;
-    if (reduceMotionOf(context)) {
-      // 减弱动效：松手直接吸附到终态，不跑弹簧。
-      _expandController.value = expand ? 1.0 : 0.0;
-      return;
-    }
-    final double extent = _expandDragExtent;
-    _expandController.animateTo(
-      expand ? 1.0 : 0.0,
-      // 手势速度换算到进度域（上滑 = 展开 = 进度增加），弹簧带惯性续跑。
-      withVelocity: extent <= 0 ? 0 : upVelocity / extent,
-    );
   }
 
   List<PageData> _buildPages(BuildContext context, {required bool wide}) {
@@ -380,6 +226,8 @@ class _NowPlayingState extends State<NowPlaying>
         title: AppLocalizations.of(context)!.queueTab,
         icon: Icons.queue_music_rounded,
         page: RepaintBoundary(
+          // 稳定 key：测试 / 自动化按它断言「当前落在哪一页」。
+          key: const Key('nowPlayingQueuePage'),
           child: QueueDisplay(
             controller: queueController,
             // 顶部留出圆点过渡带，列表首项不被渐隐吃掉。
@@ -391,6 +239,7 @@ class _NowPlayingState extends State<NowPlaying>
         title: AppLocalizations.of(context)!.lyricsTab,
         icon: Icons.lyrics_rounded,
         page: RepaintBoundary(
+          key: const Key('nowPlayingLyricsPage'),
           // 歌词快捷操作只在收起态（歌词区展开）显示。
           child: LyricsWidget(
             quickActionsEnabled: _isMini,
@@ -402,6 +251,7 @@ class _NowPlayingState extends State<NowPlaying>
         title: AppLocalizations.of(context)!.trackInfoTabTitle,
         icon: Icons.info_rounded,
         page: RepaintBoundary(
+          key: const Key('nowPlayingInfoPage'),
           child: TrackInfoView(
             controller: infoController,
             // 顶部留出圆点过渡带，内容首行不被渐隐吃掉（与队列页一致）。
@@ -459,6 +309,16 @@ class _NowPlayingState extends State<NowPlaying>
     if (!mounted || index == _visibleTab.value) return;
     _visibleTab.value = index;
     widget.controller?.activeTab.value = index;
+  }
+
+  /// 收起态切换的重建转发：`nowplaying_gestures.dart` 的 extension 不能直接
+  /// 调用 protected 的 `setState`（Dart 限制），留一个私有转发。
+  void _applyMiniState(bool mini) {
+    setState(() {
+      _isMini = mini;
+      // 歌词页操作按钮可见性跟随展开态，需重建页面实例。
+      _cachedPages = null;
+    });
   }
 
   @override
@@ -687,22 +547,26 @@ class _NowPlayingState extends State<NowPlaying>
     // 窄窗口（compact / medium）退回单栏，480 窗口下两栏必然互相挤压。
     final layout = AdaptiveLayoutScope.of(context);
     if (widget.desktopLayout && layout.isExpanded) {
+      _desktopTabs = true;
       _miniCapable = false;
       _syncExpanded();
+      _syncMiniCapable();
       return _buildDesktopLayout(context, shellVisible: shellVisible);
     }
+    _desktopTabs = false;
 
     final bool usesWideLayout = _getUsesWideLayout(context);
-    // 布局期写入（不触发重建）：壳层重复点击的忽略判定要读最新布局。
-    _usesWideLayout = usesWideLayout;
-    _miniCapable = !usesWideLayout;
+    // 桌面骨架即使窗口落到单栏也没有顶栏播放条可承接收起态：始终按
+    // 「不可收起」写回，避免收起成 0 高度后没有明确的展开入口。
+    _miniCapable = !widget.desktopLayout && !usesWideLayout;
     _syncExpanded();
+    _syncMiniCapable();
 
     if (usesWideLayout) {
       return _buildCollapsedLargeLayout(context, shellVisible: shellVisible);
     }
 
-    // 小屏 / 中屏：播放器高度随展开进度连续插值，
+    // 小屏 / 中屏：播放器高度随展开进度连续插值（收起为 0），
     // 下方是歌词/队列圆点切换行与内容区。
     return Scaffold(
       key: const Key('singlePaneNowPlaying'),
@@ -718,17 +582,20 @@ class _NowPlayingState extends State<NowPlaying>
           _playerMaxHeight = playerMaxHeight;
           return Column(
             children: [
-              // 播放器区域：跟手拖拽（迷你条上拉展开、播放器下拉收起）。
+              // 播放器区域：展开态下拉收起（收起态高度为 0，上拉入口在内容区）。
+              // 宽版式 / 桌面版式没有收起态，不挂拖拽回调：否则能把高度拖小且
+              // 松手后壳层拒绝收起，停在半截。
               GestureDetector(
-                onVerticalDragUpdate: _handlePlayerDragUpdate,
-                onVerticalDragEnd: _handlePlayerDragEnd,
+                onVerticalDragUpdate: _miniCapable
+                    ? _handlePlayerDragUpdate
+                    : null,
+                onVerticalDragEnd: _miniCapable ? _handlePlayerDragEnd : null,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxHeight: playerMaxHeight),
                   child: Player(
                     isLargeScreen: false,
                     morph: widget.morph,
                     expandAnimation: _expandController,
-                    onToggleExpand: _toggleExpand,
                   ),
                 ),
               ),

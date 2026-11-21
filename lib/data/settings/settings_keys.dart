@@ -85,6 +85,16 @@ const kShellHomeDestination = SettingsKey<String>(
   category: SyncCategory.settings,
 );
 
+/// 从其它一级页进入播放页时固定先显示歌词（跟人走，默认开）。
+///
+/// 播放页会记住上次停留的 tab（队列 / 歌词 / 信息）；从资料、收藏进入时
+/// 用户的目标通常是「看当前播放」，而不是接着上次的半成品视图。
+const kShellNowPlayingLyricsOnEnter = SettingsKey<bool>(
+  'shell_now_playing_lyrics_on_enter',
+  true,
+  category: SyncCategory.settings,
+);
+
 /// 发现页当前渠道（跟人走）：`''` = 使用内置默认渠道。
 ///
 /// 全局唯一的渠道偏好：同时决定热榜 / 歌单与搜索（搜索 tab / Ctrl+F 都只
@@ -311,6 +321,7 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kShellNavOrder,
   kShellNavHidden,
   kShellHomeDestination,
+  kShellNowPlayingLyricsOnEnter,
   kDiscoverChannelKey,
   kShortcutsEnabled,
   kGlobalShortcutsEnabled,

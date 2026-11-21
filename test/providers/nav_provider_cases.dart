@@ -54,6 +54,32 @@ void main() {
     expect(reloaded.homeDestination, ShellDestination.library);
   });
 
+  test('进入播放页显示歌词：默认开', () async {
+    final nav = await buildProvider();
+
+    expect(nav.showLyricsOnEnter, isTrue);
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getBool(kShellNowPlayingLyricsOnEnter.name),
+      isNull,
+      reason: '缺键回默认值，不写回',
+    );
+  });
+
+  test('进入播放页显示歌词：关闭后持久化，重建 provider 读回', () async {
+    final nav = await buildProvider();
+    await nav.setShowLyricsOnEnter(false);
+
+    expect(nav.showLyricsOnEnter, isFalse);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool(kShellNowPlayingLyricsOnEnter.name), isFalse);
+
+    final reloaded = await buildProvider();
+    expect(reloaded.showLyricsOnEnter, isFalse);
+    // 两项偏好各自一个键，互不覆盖。
+    expect(prefs.getString(kShellNavLayout.name), isNull);
+  });
+
   test('隐藏启动首页被拒：返回 false、仍可见、不写 hidden', () async {
     final nav = await buildProvider();
 

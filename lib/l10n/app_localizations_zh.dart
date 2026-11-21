@@ -338,6 +338,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSmartShuffleSubtitle => '';
 
   @override
+  String get settingsReturnToPlayerLyricsTitle => '回到播放页时显示歌词';
+
+  @override
+  String get settingsReturnToPlayerLyricsSubtitle => '从其它页面进入播放页时，先显示歌词';
+
+  @override
   String get settingsDefaultPlayMode => '默认播放模式';
 
   @override

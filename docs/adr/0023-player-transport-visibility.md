@@ -2,7 +2,9 @@
 
 状态：已采纳（2026-11-14）；其中「进度排保留收藏、进度与『更多』，播放模式 /
 存为列表 / 歌词显示设置收进『更多』」一条已被 ADR-0030 取代（2026-11-15），
-其余结论不变。相关：`lib/pages/nowplaying.dart`、
+其余结论不变。移动端页内迷你条已被 ADR-0039 取代（2026-11-21）：收起高度
+归 0、顶栏播放条是唯一迷你播放器，展开落点改为完整播放页；「展开态不加
+常显传输排、点封面播放」的结论不变。相关：`lib/pages/nowplaying.dart`、
 `lib/widgets/player.dart`、`lib/widgets/player_cover_deck.dart`、
 `lib/widgets/playback_transport.dart`、`docs/architecture.md` §6。
 

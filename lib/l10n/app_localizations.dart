@@ -734,6 +734,18 @@ abstract class AppLocalizations {
   /// **''**
   String get settingsSmartShuffleSubtitle;
 
+  /// No description provided for @settingsReturnToPlayerLyricsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show lyrics when returning to the player'**
+  String get settingsReturnToPlayerLyricsTitle;
+
+  /// No description provided for @settingsReturnToPlayerLyricsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Open on the lyrics tab when you enter the player from another page'**
+  String get settingsReturnToPlayerLyricsSubtitle;
+
   /// No description provided for @settingsDefaultPlayMode.
   ///
   /// In en, this message translates to:
