@@ -312,7 +312,7 @@ class FakeLibraryRepository implements LibraryStore {
     _syncTrackCount(playlistId);
     _changed(
       favoriteChange
-          ? const LibraryChange.favorites()
+          ? LibraryChange.favorites(toggle: FavoriteToggle.add(track))
           : LibraryChange.playlistTracks(playlistId),
     );
     return true;
@@ -335,7 +335,12 @@ class FakeLibraryRepository implements LibraryStore {
       _syncTrackCount(playlistId);
       _changed(
         favoriteChange
-            ? const LibraryChange.favorites()
+            ? LibraryChange.favorites(
+                toggle: FavoriteToggle.remove(
+                  sourceKey: sourceKey,
+                  songId: songId,
+                ),
+              )
             : LibraryChange.playlistTracks(playlistId),
       );
     }
@@ -593,7 +598,12 @@ class FakeLibraryRepository implements LibraryStore {
       _favorites.remove(key);
       final favoritesId = (await findPlaylistByName(_favoritesName))?.id;
       if (favoritesId != null) {
-        await removeTrackFromPlaylist(favoritesId, sourceKey, songId);
+        await removeTrackFromPlaylist(
+          favoritesId,
+          sourceKey,
+          songId,
+          favoriteChange: true,
+        );
       }
     } else {
       final favoritesId = await _ensureFavoritesPlaylist();
@@ -612,9 +622,9 @@ class FakeLibraryRepository implements LibraryStore {
           addedAt: DateTime.now().millisecondsSinceEpoch,
           sortOrder: _nextOrder++,
         ),
+        favoriteChange: true,
       );
     }
-    _changed(const LibraryChange.favorites());
     return added;
   }
 

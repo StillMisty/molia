@@ -192,8 +192,8 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
 
 - `lib/services/memory/app_memory_manager.dart` 增加 `addReleaser` / `removeReleaser`，
   只在 `trayHidden` 的休眠帧之后执行；`minimized` 不触发，保持跟手恢复。
-- `LibraryProvider.releaseBrowseCaches()`：清 `_tracksByPlaylist` / 读取错误，
-  保留收藏键、列表清单与历史；列表读投影的释放代际让释放前在途读取作废，
+- `LibraryProvider.releaseBrowseCaches()`：清列表曲目的读投影（值 / 错误 /
+  在途结果），保留收藏键、列表清单与历史；释放代际让释放前在途读取作废，
   恢复后页面按需重读。
 - `SearchProvider.releaseSearchResults()` + `CatalogService.clearSearchCache()`：
   清搜索瞬时结果与目录分页结果（含 raw payload）；**不清** `_resolveCache`，
@@ -223,7 +223,7 @@ raw payload / 多列表详情场景请按 §4 的隔离 HOME + 真实库复测�
 | `lib/app/bootstrap/platform_bootstrap.dart` + `lib/app/bootstrap/wiring/memory_wiring.dart` | 启动时、`AppMemoryManager` 首次访问前把全局 `imageCache.maximumSizeBytes` 显式设为 64 MiB（`kFullImageCacheLimitBytes`）；注册 `WidgetsBindingObserver.didHaveMemoryPressure` |
 | `lib/services/memory/app_memory_manager.dart` | 完整上限 `kFullImageCacheLimitBytes = 64 MiB`，托盘 / 后台保持 16 MiB；`onAppBackground()` / `onAppForeground()` 供移动端生命周期使用（不写 `AppPresence`）：退后台 30s 后 `imageCache.clear()`（**不** `clearLiveImages()`）+ 上限压到 16 MiB，回前台取消计时并恢复 64 MiB；token + 重复事件幂等 |
 | 同上 | `addLowMemoryReleaser()` / `onMemoryPressure()`：只有系统低内存才释放浏览 / 搜索 / 目录缓存；Android 的 `TRIM_MEMORY_UI_HIDDEN` 也会映射成 `didHaveMemoryPressure`，用 1s 去抖 + 退后台过渡窗口取消，避免每次切后台清列表 |
-| `lib/providers/library_provider.dart` | `_tracksByPlaylist` 改 LRU，上限 5 个列表；`playlistTracksView` / `ensurePlaylistTracks` 触碰最近使用，淘汰时跳过当前展示列表；`releaseBrowseCaches()` 语义不变（全清） |
+| `lib/providers/library_provider.dart` | 列表曲目读投影改 LRU（`_playlistTracksReads`），上限 5 个列表；`playlistTracksView` / `ensurePlaylistTracks` 触碰最近使用，淘汰时跳过当前展示列表；`releaseBrowseCaches()` 语义不变（全清） |
 | `test/services/memory/app_memory_manager_test.dart`、`test/library_provider_test.dart` | 覆盖 64 / 16 / 64、30s 延迟、快速往返、重复退后台、dispose、低内存与 UI_HIDDEN 区分、LRU 淘汰与 release |
 
 为什么移动端不 `clearLiveImages()`：Android 退后台不卸载 widget 树，当前封面仍被
