@@ -195,6 +195,10 @@ class SyncRoundQueue {
   /// 判据刻意要求传输 `succeeded`：零对端（`noPeers`）没有接触任何传输，
   /// 即使没有失败也不交付；这样待发标记不会被空轮吞掉。`push: false` 的
   /// 轮次没有外发动作，同样不交付。
+  ///
+  /// 传输报告只有对端粒度（协议没有逐类别回执），因此「本轮类别范围」就是
+  /// 可得的最细粒度：本轮确实接触 / 传输成功时，范围内类别视为已交付，
+  /// 范围外（例如蜂窝小类别轮之外的历史 / 统计）继续保留待发。
   SyncRoundDelivery classify(
     SyncRoundReport report, {
     required bool push,
