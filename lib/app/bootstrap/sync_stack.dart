@@ -309,6 +309,9 @@ Future<SyncStack> buildSyncStack({
   // 只是缓存值，Wi-Fi 启动后切蜂窝不会反映到它上面。
   final scheduler = SyncScheduler(
     host: syncEngine,
+    // 待发类别与「是否已有轮次在跑」只在引擎的轮次队列里定义一份：调度器
+    // 与手动轮共享同一份交付台账（手动轮也能清掉待发标记）。
+    queue: syncEngine.roundQueue,
     state: syncState,
     isPlaying: () => playback.playbackProvider.snapshot.isPlaying,
     // 网络变化与对端公告都接到调度器：换网 1.5s 后跑强制发现轮，收到公告

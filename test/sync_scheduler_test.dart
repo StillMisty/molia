@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/sync/sync_round_queue.dart';
 import 'package:molia/data/sync/sync_scheduler.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
@@ -43,9 +44,14 @@ void main() {
       Duration(seconds: 180),
     ],
   }) {
-    final host = RecordingSyncSchedulerHost();
+    final host = RecordingSyncSchedulerHost(
+      enabledCategories: () => state.enabledCategories,
+      clock: () => async.elapsed.inMilliseconds,
+    );
     final scheduler = SyncScheduler(
       host: host,
+      // 与宿主共享同一份队列：待发类别的清理走真实交付判定。
+      queue: host.queue,
       state: state,
       cellularProbe: () async => cellular,
       batteryProbe: () async => battery,
@@ -172,9 +178,13 @@ void main() {
   test('空闲唤醒重新探测环境：切到蜂窝后不再无变更拉取', () {
     fakeAsync((async) {
       var cellular = false;
-      final host = RecordingSyncSchedulerHost();
+      final host = RecordingSyncSchedulerHost(
+        enabledCategories: () => state.enabledCategories,
+        clock: () => async.elapsed.inMilliseconds,
+      );
       final scheduler = SyncScheduler(
         host: host,
+        queue: host.queue,
         state: state,
         cellularProbe: () async => cellular,
         batteryProbe: () async => BatterySnapshot.unknown,
@@ -373,9 +383,13 @@ void main() {
   test('蜂窝小类别轮只清已外发类别：历史 / 统计 / 封面 / AI 历史留到 Wi-Fi 轮', () {
     fakeAsync((async) {
       var cellular = true;
-      final host = RecordingSyncSchedulerHost();
+      final host = RecordingSyncSchedulerHost(
+        enabledCategories: () => state.enabledCategories,
+        clock: () => async.elapsed.inMilliseconds,
+      );
       final scheduler = SyncScheduler(
         host: host,
+        queue: host.queue,
         state: state,
         cellularProbe: () async => cellular,
         batteryProbe: () async => BatterySnapshot.unknown,
@@ -692,8 +706,23 @@ void main() {
   });
 }
 
-/// 记录每轮请求的假宿主（不做任何真实同步）。
+/// 记录每轮请求的假宿主：轮次经真实队列执行，待发类别也由队列清理。
 class RecordingSyncSchedulerHost implements SyncSchedulerHost {
+  RecordingSyncSchedulerHost({
+    required this.enabledCategories,
+    required this.clock,
+  }) {
+    queue = SyncRoundQueue(
+      runRound: _runRound,
+      enabledCategories: enabledCategories,
+    );
+  }
+
+  final Set<SyncCategory> Function() enabledCategories;
+  final int Function() clock;
+
+  late final SyncRoundQueue queue;
+
   final List<({SyncTrigger trigger, bool push, Set<SyncCategory>? categories})>
   rounds = [];
 
@@ -721,24 +750,58 @@ class RecordingSyncSchedulerHost implements SyncSchedulerHost {
   bool get syncEnabled => enabled;
 
   @override
+  bool get roundInFlight => queue.running;
+
+  @override
   Future<SyncRunOutcome> runSyncRound({
     required SyncTrigger trigger,
     required bool push,
     required bool antiEntropy,
     Set<SyncCategory>? onlyCategories,
   }) async {
-    final gate = roundGate;
-    if (gate != null) await gate.future;
-    rounds.add((trigger: trigger, push: push, categories: onlyCategories));
-    lastAntiEntropy = antiEntropy;
-    final failed = failNext;
-    failNext = false;
+    await queue.run(
+      trigger: trigger,
+      push: push,
+      antiEntropy: antiEntropy,
+      onlyCategories: onlyCategories,
+    );
     return SyncRunOutcome(
-      categories: onlyCategories ?? {for (final c in SyncCategory.values) c},
-      delivered: !failed,
       contacted: contacted,
       contactedLan: contactedLan,
       retryable: retryable,
+    );
+  }
+
+  Future<SyncRoundReport> _runRound(SyncQueuedRound round) async {
+    final gate = roundGate;
+    if (gate != null) await gate.future;
+    rounds.add((
+      trigger: round.trigger,
+      push: round.push,
+      categories: round.onlyCategories,
+    ));
+    lastAntiEntropy = round.antiEntropy;
+    final failed = failNext;
+    failNext = false;
+    final seen = contacted ? 1 : 0;
+    final now = clock();
+    return SyncRoundReport(
+      trigger: round.trigger,
+      startedAt: now,
+      finishedAt: now,
+      outcome: failed
+          ? SyncOutcome.failed
+          : (contacted ? SyncOutcome.ok : SyncOutcome.noPeers),
+      transports: [
+        SyncTransportReport(
+          kind: SyncTransportKind.lan,
+          enabled: true,
+          running: true,
+          peersSeen: seen,
+          pushed: seen,
+          failedPushes: failed ? 1 : 0,
+        ),
+      ],
     );
   }
 }

@@ -13,6 +13,7 @@ import 'sync_journal.dart';
 import 'sync_known_store.dart';
 import 'sync_record_pipeline.dart';
 import 'sync_round.dart';
+import 'sync_round_queue.dart';
 import 'sync_scheduler.dart';
 import 'sync_stamp.dart';
 import 'sync_state_store.dart';
@@ -87,6 +88,13 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     required this._inboundWindow,
     required this._clock,
   }) : _runner = runner {
+    // 队列由引擎持有：调度器、手动请求与入站轮都经它排队；交付判定与待发
+    // 类别台账只在队列里定义一份（调度器不再自己记 `_roundRunning` / 待发）。
+    _queue = SyncRoundQueue(
+      runRound: _runQueuedRound,
+      enabledCategories: () => _state.enabledCategories,
+      onChanged: notifyListeners,
+    );
     for (final entry in runner.transports.entries) {
       // 引擎只负责订阅入站流；发布台账等轮次状态由 runner 自己持有。
       _incomingSubscriptions.add(
@@ -116,6 +124,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   final SyncEngineState _state;
   final SyncRoundRunner _runner;
 
+  /// 轮次排队 / 串行 / 交付台账的唯一实例（调度器共享同一份）。
+  late final SyncRoundQueue _queue;
+
   /// 入站合流窗口：窗口内到达的多个对端推送合并成一轮。
   final Duration _inboundWindow;
 
@@ -133,22 +144,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
 
   Timer? _inboundTimer;
 
-  bool _syncing = false;
   bool _initialized = false;
-
-  /// 同步进行中收到的同步请求（手动点击 / 入站推送）：合并成一次排队，
-  /// 当前轮结束后立刻补跑，请求不会被丢弃。
-  ///
-  /// 排队合并语义（与拆出轮次编排器之前一致）：触发原因按「手动优先」合并、
-  /// anti-entropy 取或；`push` 与 `onlyCategories` 沿用发起这段轮次链的请求。
-  SyncTrigger? _pendingTrigger;
-  bool _pendingAntiEntropy = false;
-
-  /// 排队请求的等待者：每个请求都在**补跑轮**跑完后拿到该轮报告。
-  ///
-  /// 与 [_pendingTrigger] 同生命周期：加入等待者前一定先合并触发原因，
-  /// 因此补跑链不会出现「有等待者却没有待跑轮次」的状态。
-  final List<Completer<SyncRoundReport?>> _queuedRequests = [];
 
   SyncRoundReport? _lastReport;
 
@@ -156,7 +152,14 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   final StreamController<SyncPeerState> _peerConnected =
       StreamController<SyncPeerState>.broadcast();
 
-  bool get syncing => _syncing;
+  bool get syncing => _queue.running;
+
+  /// 排队模块（调度器共享：待发类别与「是否已有轮次在跑」都问它）。
+  SyncRoundQueue get roundQueue => _queue;
+
+  @override
+  bool get roundInFlight => _queue.running;
+
   bool get initialized => _initialized;
 
   /// 最近一轮的完整结果；null = 本次进程内还没跑过。
@@ -296,8 +299,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   Future<void> onIncomingEnvelope(SyncEnvelope envelope) async {
     if (!_state.enabled) return;
     _runner.enqueueInbound(envelope);
-    if (_syncing) {
-      _pendingTrigger = _mergeTrigger(_pendingTrigger, SyncTrigger.incoming);
+    if (_queue.running) {
+      // 在途轮次不并发：合并成一次补跑（不等待报告，入站轮由轮次链兜底）。
+      _queue.schedule(trigger: SyncTrigger.incoming);
       return;
     }
     _inboundTimer ??= Timer(_inboundWindow, () {
@@ -315,9 +319,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   ///   同一个在途轮内到达的多个请求仍只补跑一轮，全部等待者收到同一份报告；
   /// - 同步关闭（未启用任何传输）：返回 null（本轮没有真正跑）。
   ///
-  /// 排队合并语义：触发原因按「手动优先」合并、[antiEntropy]
-  /// 取或；[push] 与 [onlyCategories] 属于整段轮次链的外发范围，由发起
-  /// 请求决定（补跑轮不会因为排队请求而改变外发 / 类别范围）。
+  /// 排队 / 合并 / 交付判定都在 [SyncRoundQueue]（与调度器共享同一实例）；
+  /// 本方法只负责「初始化 + 同步开关」这两道入口判断。
   ///
   /// [onlyCategories] 非空时只处理这些类别（蜂窝小类别策略；适配器的本地
   /// 变化登记照常进行，不受影响）。[antiEntropy] 允许全量兜底（周期性比对
@@ -328,78 +331,26 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     bool antiEntropy = false,
     Set<SyncCategory>? onlyCategories,
   }) async {
-    if (_syncing) return _queueRequest(trigger, antiEntropy);
+    if (_queue.running) {
+      return _queue.enqueue(trigger: trigger, antiEntropy: antiEntropy);
+    }
     if (!_initialized) await init();
     // 初始化等待期间另一条请求可能已经起跑：重新入队，保证同一时刻只有
     // 一条轮次链，且本次请求仍能拿到补跑轮报告。
-    if (_syncing) return _queueRequest(trigger, antiEntropy);
-    if (!_state.enabled) return null;
-
-    // 同步进行中到达的请求会被排队：整段（含补跑）持有 `_syncing`，保证同一时刻
-    // 只有一条轮次在跑；点一次必有一次，多个入站推送也只合并成额外一轮。
-    _syncing = true;
-    notifyListeners();
-    var nextTrigger = trigger;
-    var nextAntiEntropy = antiEntropy;
-    SyncRoundReport? report;
-    try {
-      while (true) {
-        // 本轮开始前已排队的请求都归这一轮：轮次结束后用本轮报告完成它们。
-        // 本轮执行期间到达的请求进入下一轮（循环继续由 `_pendingTrigger` 保证）。
-        final waiters = List<Completer<SyncRoundReport?>>.of(_queuedRequests);
-        _queuedRequests.clear();
-        report = await _runRound(
-          nextTrigger,
-          push: push,
-          antiEntropy: nextAntiEntropy,
-          onlyCategories: onlyCategories,
-        );
-        for (final waiter in waiters) {
-          if (!waiter.isCompleted) waiter.complete(report);
-        }
-        final pending = _pendingTrigger;
-        _pendingTrigger = null;
-        final pendingAntiEntropy = _pendingAntiEntropy;
-        _pendingAntiEntropy = false;
-        if (pending == null) break;
-        nextTrigger = pending;
-        nextAntiEntropy = pendingAntiEntropy;
-        // 补跑轮沿用排队时的类别范围（同一策略下不应切换范围）。
-      }
-    } catch (error, stackTrace) {
-      // 轮次链异常：排队请求不能永远挂着，按同一异常结束（发起请求本身也
-      // 会抛出，保持既有的失败行为）。
-      _pendingTrigger = null;
-      _pendingAntiEntropy = false;
-      final waiters = List<Completer<SyncRoundReport?>>.of(_queuedRequests);
-      _queuedRequests.clear();
-      for (final waiter in waiters) {
-        if (!waiter.isCompleted) waiter.completeError(error, stackTrace);
-      }
-      rethrow;
-    } finally {
-      _syncing = false;
-      notifyListeners();
+    if (_queue.running) {
+      return _queue.enqueue(trigger: trigger, antiEntropy: antiEntropy);
     }
-    return report;
+    if (!_state.enabled) return null;
+    return _queue.run(
+      trigger: trigger,
+      push: push,
+      antiEntropy: antiEntropy,
+      onlyCategories: onlyCategories,
+    );
   }
 
-  /// 把请求并入下一次补跑：合并触发原因与 anti-entropy，登记一个等待者。
-  ///
-  /// 等待者在补跑轮结束后收到该轮报告；多个请求只补跑一轮（[syncNow]）。
-  Future<SyncRoundReport?> _queueRequest(
-    SyncTrigger trigger,
-    bool antiEntropy,
-  ) {
-    _pendingTrigger = _mergeTrigger(_pendingTrigger, trigger);
-    _pendingAntiEntropy = _pendingAntiEntropy || antiEntropy;
-    final waiter = Completer<SyncRoundReport?>();
-    _queuedRequests.add(waiter);
-    return waiter.future;
-  }
-
-  /// 调度器宿主接口：跑一轮并回传**外发结果**（[SyncScheduler] 据此只清
-  /// 已外发类别的待发标记）。
+  /// 调度器宿主接口：跑一轮并回传**接触结果**（重连阶梯只看是否碰到对端；
+  /// 待发类别由 [SyncRoundQueue] 按同一份交付判定清理）。
   @override
   bool get syncEnabled => _state.enabled;
 
@@ -419,51 +370,29 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     // 未初始化 / 同步关闭：本轮没有真正跑，按「不接触」之外的默认处理
     // （不触发重连阶梯——没有口令 / 传输关闭不是网络问题）。
     if (report == null) return SyncRunOutcome.none;
-    // 「零对端」用探测计数判定（noPeers 与「接触过但没变化」必须分开）。
-    final contacted = report.peersSeen > 0;
-    final contactedLan = report.transports.any(
-      (item) => item.kind == SyncTransportKind.lan && item.peersSeen > 0,
+    // 交付判定与待发类别清理只在队列里定义；调度器只需要接触信息。
+    final delivery = _queue.classify(
+      report,
+      push: push,
+      onlyCategories: onlyCategories,
     );
     // 未设置口令是配置状态：重连阶梯解决不了，不能按「零对端 -> 5s 后重试」
     // 处理（否则每次切前后台都多跑几轮必然失败的同步）。
     final retryable = report.error?.code != SyncIssueCode.noPassphrase;
-    // 入站轮 / 只拉不推的轮次同样要回传接触信息：resume 轮没有本地变更时
-    // 不推送，但仍决定是否 arm 重连阶梯。
-    if (!push) {
-      return SyncRunOutcome(
-        categories: const {},
-        delivered: false,
-        contacted: contacted,
-        contactedLan: contactedLan,
-        retryable: retryable,
-      );
-    }
-    final enabled = _state.enabledCategories;
-    final categories = onlyCategories == null
-        ? enabled
-        : onlyCategories.intersection(enabled);
     return SyncRunOutcome(
-      categories: categories,
-      delivered:
-          report.outcome != SyncOutcome.failed && report.failedCount == 0,
-      contacted: contacted,
-      contactedLan: contactedLan,
+      contacted: delivery.contacted,
+      contactedLan: delivery.contactedLan,
       retryable: retryable,
     );
   }
 
   /// 跑一轮并落日志 / 通知（阶段编排在 [SyncRoundRunner.runRound]）。
-  Future<SyncRoundReport> _runRound(
-    SyncTrigger trigger, {
-    required bool push,
-    Set<SyncCategory>? onlyCategories,
-    bool antiEntropy = false,
-  }) async {
+  Future<SyncRoundReport> _runQueuedRound(SyncQueuedRound round) async {
     final report = await _runner.runRound(
-      trigger: trigger,
-      push: push,
-      antiEntropy: antiEntropy,
-      onlyCategories: onlyCategories,
+      trigger: round.trigger,
+      push: round.push,
+      antiEntropy: round.antiEntropy,
+      onlyCategories: round.onlyCategories,
     );
     _lastReport = report;
     _state.recordRound(report);
@@ -489,17 +418,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       _state.markPeerConnectNotified(peer.deviceId);
       _peerConnected.add(peer);
     }
-  }
-
-  static SyncTrigger _mergeTrigger(
-    SyncTrigger? existing,
-    SyncTrigger incoming,
-  ) {
-    if (existing == null) return incoming;
-    if (existing == SyncTrigger.manual || incoming == SyncTrigger.manual) {
-      return SyncTrigger.manual;
-    }
-    return existing;
   }
 
   /// 记录管道的共享实例：完整备份直接注入它，应用阶段与轮次同一份规则。
