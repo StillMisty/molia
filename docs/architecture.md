@@ -1365,10 +1365,11 @@
 `lib/data/settings/`（键声明 / 模块访问面 / 注册表 / 密钥盒端口）：
 
 - `settings_keys.dart`：登记键总表 —— 键名、默认值、同步类别（跟人走 / 音源 /
-  凭证）、存放盒（prefs / 凭据库）的唯一声明处；设备本地键（省流、缓存策略、
-  全局字体、桌面歌词悬浮窗、托盘与关闭行为、播放会话、曲库数据…）
-  不登记：已迁移的走 `DeviceSettings`，未迁移的暂时留在各自模块
-  （只有一位消费者，收进来只增加门房面积）。快捷键开关 /
+  凭证）、存放盒（prefs / 凭据库）的唯一声明处；设备本地设置（省流、缓存策略、
+  下载、触感、更新渠道、窗口 / 托盘、曲库浏览 / 分组折叠、音乐文件夹、全局字体…）
+  不登记：它们走 `DeviceSettings`（只有一位消费者，收进来只增加门房面积）。
+  仍直连偏好的只剩缓存 / 会话 / 同步记账 / AI 历史 / 发件箱等非设置状态，
+  在 `prefs_usage_test.dart` 白名单逐项注明。快捷键开关 /
   绑定四键（`kShortcutsEnabled` / `kGlobalShortcutsEnabled` /
   `kShortcutBindings` / `kGlobalShortcutBindings`）按「跟人走」登记，此前漏在
   总表外、现已进入同步范围；海报取色来源 / 自定义种子色 / 字体覆盖三键
@@ -1376,15 +1377,21 @@
   此前只写本地 prefs，换设备或重装后歌词 / 统计 / 年度报告海报样式会丢，
   也不进完整备份；字体族在目标设备缺失时由渲染层回退，不阻断生成；
 - `device_settings.dart` / `device_settings_keys.dart`：**设备本地设置**（音量 /
-  播放手感 / 首次引导标记…）新代码的统一入口 —— `DeviceSettingKey` 只有名字 /
-  默认值 / 类型（由泛型决定），`DeviceJsonSettingKey` 由键自己持有 decode / encode
-  与默认值；键表一张，JSON 一个编解码入口，写动作跨实例串行（同一偏好文件
-  共用一条链），读失败回默认、写失败只记日志。哪些键已迁移以 `device_settings_keys.dart` 的键表为准，store
-  只保留字段选择与旧版兜底（如音量的 `playback_volume` / `playback_muted`）；
-  不登记、不同步。新代码直连 `SharedPreferences` 由
-  `test/architecture/prefs_usage_test.dart` 拦截（存量白名单只减不增），设备键
-  名字面量由 `test/architecture/settings_keys_test.dart` 扫描；
-- `settings_access.dart`：模块面 `SettingsAccess`（`read` / `write` / `clear`）；
+  播放手感、触感、下载、缓存策略、省流、更新渠道、窗口几何 / 托盘、曲库浏览 /
+  分组折叠、音乐文件夹、全局字体、首次引导标记）新代码的统一入口 ——
+  `DeviceSettingKey` 只有名字 / 默认值 / 类型（由泛型决定），
+  `DeviceJsonSettingKey` / `DeviceJsonListSettingKey` 由键自己持有 decode /
+  encode 与默认值（对象 / 数组）；键表一张，JSON 一个编解码入口，写动作跨实例
+  串行（同一偏好文件共用一条链），读失败回默认、写失败只记日志。
+  `readIfPresent` 区分「缺键」与「存的就是默认值」，`readJson` /
+  `readJsonList` 缺键或损坏返回 `null` 让 store 走旧版兜底（如音量的
+  `playback_volume` / `playback_muted`、窗口的 `window_bounds_x…` 四键）。
+  哪些键已迁移以 `device_settings_keys.dart` 的键表为准，store 只保留字段选择与
+  旧版兜底；不登记、不同步。新代码直连 `SharedPreferences` 由
+  `test/architecture/prefs_usage_test.dart` 拦截（白名单只剩非设置状态，只减不增），
+  设备键名字面量由 `test/architecture/settings_keys_test.dart` 扫描；
+- `settings_access.dart`：模块面 `SettingsAccess`（`read` / `contains` /
+  `write` / `clear`；`contains` 只用于「缺键才物化默认值」）；
   重载只能经 `SettingsRegistry.mount(SettingsModule)` 与作用域一起绑定，
   同步适配器只依赖窄接口 `SettingsSyncSurface`（`entries` / `readRaw` /
   `applyRemote` / `reloadApplied`）。整表与 `onWrite` 不下放。

@@ -1241,19 +1241,24 @@
   （见 `docs/adr/0003` §6 修订）。
 - **Settings key（登记键）** — `lib/data/settings/settings_key.dart`：一个设置键的
   全部事实（名字 / 默认值 / 同步类别 / 存放盒）；只有有「第二消费者」的键才登记
-  （同步、备份、应用远端后的重载、整表驱动的测试）。设备本地键不登记：已迁移的
-  走 `DeviceSettings`，未迁移的暂时留在各自模块，等后续阶段收拢。
+  （同步、备份、应用远端后的重载、整表驱动的测试）。设备本地键不登记：设置项已
+  走 `DeviceSettings`；剩余直连偏好的是缓存 / 会话 / 同步记账 / AI 历史 / 发件箱
+  等**非设置状态**，在棘轮白名单里逐项注明。
 - **Device-local settings（设备本地设置）** — `lib/data/settings/device_settings.dart`：
-  不跟人走的键（音量、播放手感、首次引导标记…）**新代码的唯一入口**；迁移前的
-  直连文件仍在白名单里，只减不增。`DeviceSettingKey` 只有名字 / 默认值 / 类型
-  （由泛型决定：bool / int / double / String / List<String>），没有同步类别；
-  `DeviceJsonSettingKey` 额外持有该键的 decode / encode，多个标量合并成 JSON 时
-  字段形状只声明一次。已迁移的键登记在 `lib/data/settings/device_settings_keys.dart`，
+  不跟人走的键（音量与播放手感、触感、下载目录与模板、缓存策略、省流、更新渠道、
+  窗口几何与托盘行为、曲库浏览 / 分组折叠、音乐文件夹、全局应用字体、首次引导
+  标记）**新代码的唯一入口**。`DeviceSettingKey` 只有名字 / 默认值 / 类型（由泛型
+  决定：bool / int / double / String / List<String>），没有同步类别；
+  `DeviceJsonSettingKey` / `DeviceJsonListSettingKey` 额外持有该键的 decode /
+  encode（对象 / 数组各一种），合并存储时字段形状只声明一次。
+  `readIfPresent` 区分「缺键」与「存的就是默认值」（缓存上限借设备容量算建议值、
+  旧版窗口四键整组兜底）；`readJson` / `readJsonList` 缺键或损坏返回 `null`，让
+  store 走旧键兜底。已迁移的键登记在 `lib/data/settings/device_settings_keys.dart`，
   名字与迁移前逐字一致。读写策略只有一份：读失败回键默认并记日志，写失败只记日志
   （本次会话值由调用方保留）；写动作跨实例串行（同一偏好文件共用一条链）、
-  JSON 只有一个编解码入口。新代码直连 `SharedPreferences` 由 `test/architecture/prefs_usage_test.dart`
-  拦截；设备键名字面量由 `test/architecture/settings_keys_test.dart` 拦截。
-  登记键仍走 `SettingsRegistry`。
+  JSON 只有一个编解码入口。新代码直连 `SharedPreferences` 由
+  `test/architecture/prefs_usage_test.dart` 拦截（白名单只减不增）；设备键名字面量
+  由 `test/architecture/settings_keys_test.dart` 拦截。登记键仍走 `SettingsRegistry`。
 - **Settings subpage chrome（设置子页 chrome）** — `lib/widgets/settings/settings_subpage.dart`：
   设置内层 Navigator 子页（含 AI 推歌 / 听歌统计）的
   `Scaffold + M3EAppBar.top + ListView(kSettingsPadding)` 唯一实现
@@ -1486,7 +1491,7 @@
 - **Local songs（本地歌曲合集）** — 收藏页的伪合集（`downloadsSentinel` ↔ `downloadsOrderKey`）：数据来自 `DownloadService.downloads`（下载副本 + 本地导入）与 `TrackLocalDataService.cachedAudioTrackIds`（播放历史 × 完整音频缓存命中且无音频下载，一次目录列举），不落列表表；仅在下载能力可用（`DownloadService.supported`）时出现在合集弹层，排序固定按下载 / 导入时间倒序。合集弹层打开前先把缓存行重算到当前输入，弹层计数与列表行数同源。
 - **Local import（本地导入）** — `downloads` 表 `imported` 行 = **就地引用**用户自己的音频文件：`originSourceKey = 'local'`、`originSongId` = 稳定 `localKey`（`file:<uuid>`，同路径重复导入按 `filePath` 复用），`filePath` 指向原文件；删除记录只移行、不删文件，补发布跳过。导入曲目的领域身份是 `TrackId(local, localKey)`，记录键是 `local:<localKey>`；路径不再是身份（见 **Local identity**）。写入唯一入口 `DownloadService.importLocalFiles`（标签解析见 `lib/data/downloads/audio_tag_reader.dart`：mp3 ID3v2 / flac Vorbis Comment，其余格式按文件名兜底）。
 - **Local identity（本地稳定身份）** — `lib/data/local_identity.dart`：导入曲目的设备本地 id 规则（`localKey = file:<uuid v4>`、旧身份 `local:<绝对路径>` 的判定、封面键是否设备本地）。迁移改写见 `local_identity_migration.dart`，封面键清扫见 `local_cover_identity_sweep.dart`；规则与后果见 ADR-0021。下载副本不在此列：它的本地 id 就是原音源键（`wy:123`），本来就不依赖路径。
-- **Music folders（音乐文件夹）** — `lib/services/local/music_folders.dart`：设备本地目录配置（稳定 id / 根 locator / 添加时间 / 最近扫描摘要）；桌面根是绝对路径，Android 根是 SAF `content://` 树 URI，另存 provider 显示名且 UI 不展示裸 URI。去重、拒绝嵌套路径根、移除只停扫描不碰文件。用户可见文案是「音乐文件夹 / Music folder」，与列表「分组 / Group」严格区分；不登记设置注册表、不参与同步。
+- **Music folders（音乐文件夹）** — `lib/services/local/music_folders.dart`：设备本地目录配置（稳定 id / 根 locator / 添加时间 / 最近扫描摘要）；桌面根是绝对路径，Android 根是 SAF `content://` 树 URI，另存 provider 显示名且 UI 不展示裸 URI。去重、拒绝嵌套路径根、移除只停扫描不碰文件。用户可见文案是「音乐文件夹 / Music folder」，与列表「分组 / Group」严格区分；配置存 `music_folders_v1`（JSON 数组键，走 `DeviceSettings`），不登记设置注册表、不参与同步。
 - **Music folder scanner（音乐文件夹扫描器）** — `lib/services/local/music_folder_scanner.dart`：经 `domain/ports/music_folder_tree.dart` 树端口流式枚举、按 `locator + mtime + size` 增量、取消、跳过原因分类与缺文件标记；只读文件头，不复制 / 移动 / 删除用户文件。扫描目标以 `LocalScanChange` 批次提交（≤200 条）。桌面树实现保留深度 / 符号链接 / 隐藏文件 / 排序规则。
 - **Music folder tree（音乐文件夹树端口）** — `lib/domain/ports/music_folder_tree.dart`：扫描器与文件系统的窄接口（`displayName` / `stat` / `canonicalLocator` / `walk`）。桌面实现 `lib/data/files/music_folder_tree_io.dart` 走 `dart:io`；Android 实现 `lib/data/saf/saf_music_folder_tree.dart` 经 `SafBridge`（Pigeon channel 主路径、旧 `top.stillmisty.molia/saf` 通道回退；`createSafBridge()` 装配），locator 是 SAF 文档 URI。
 - **Music folder watcher（音乐文件夹监听）** — `lib/services/local/music_folder_watcher.dart`：`Directory.watch` 只是防抖后的重扫触发器；能定位路径时只重查该路径，事件过多 / 无法定位时回退整树增量；监听失败静默降级为启动 / 手动扫描。只用于桌面路径根（Android SAF 不提供目录监听）。
