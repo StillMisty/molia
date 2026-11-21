@@ -16,6 +16,7 @@ import '../support/fake_save_as.dart';
 import '../support/memory_database.dart';
 import '../support/notification_recorder.dart';
 import '../support/sync_test_support.dart';
+import '../support/settings_test_support.dart';
 
 /// 年度报告页：单页滚动、一个分享主操作、空年份隐藏行动。
 void main() {
@@ -26,6 +27,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    attachStaticSettingsForTest(testSettingsRegistry());
     db = openMemoryDatabase();
     repository = PlayStatisticsRepository(
       databaseProvider: () => db,

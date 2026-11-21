@@ -419,6 +419,7 @@ void main() {
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
       final registry = testSettingsRegistry();
+      attachStaticSettingsForTest(registry);
       theme = ThemeProvider(settings: registry);
       await theme.preferencesReady;
       playback = buildTestPlaybackProvider(

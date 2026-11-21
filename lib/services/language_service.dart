@@ -13,9 +13,22 @@ class LanguageService {
   static const MethodChannel _channel = MethodChannel('language_channel');
 
   /// 设置注册表（组合根启动时注入；本服务全静态，reload 也由组合根代绑）。
-  static late final SettingsAccess _settings;
+  static SettingsAccess? _settings;
 
   static void attachSettings(SettingsAccess settings) => _settings = settings;
+
+  /// 清掉注入并回到未接线状态：测试隔离用，生产不要调用。
+  @visibleForTesting
+  static void resetSettingsForTest() {
+    _settings = null;
+    localeNotifier.value = null;
+  }
+
+  /// 未接线就访问设置直接失败：静默 no-op 会让「换了语言但没保存」在测试与
+  /// 生产里都无声发生（组合根在 `catalog_stack.dart` 统一 attach）。
+  static SettingsAccess get _requireSettings =>
+      _settings ??
+      (throw StateError('LanguageService.attachSettings 未调用：界面语言在组合根装配前被访问'));
 
   /// 应用界面语言的运行时通知源。
   ///
@@ -41,8 +54,9 @@ class LanguageService {
 
   /// 获取当前保存的语言设置
   static Future<Locale?> getSavedLocale() async {
+    final settings = _requireSettings;
     try {
-      final languageCode = await _settings.read(kSelectedLanguage);
+      final languageCode = await settings.read(kSelectedLanguage);
 
       if (languageCode == null) return null;
 
@@ -62,12 +76,13 @@ class LanguageService {
 
   /// 保存语言设置
   static Future<void> saveLocale(Locale locale) async {
+    final settings = _requireSettings;
     try {
       final languageCode = locale.countryCode != null
           ? '${locale.languageCode}_${locale.countryCode}'
           : locale.languageCode;
 
-      await _settings.write(kSelectedLanguage, languageCode);
+      await settings.write(kSelectedLanguage, languageCode);
       localeNotifier.value = locale;
     } catch (e) {
       logger.fine('Error saving locale: $e');
@@ -76,8 +91,9 @@ class LanguageService {
 
   /// 清除语言设置（跟随系统）
   static Future<void> clearSavedLocale() async {
+    final settings = _requireSettings;
     try {
-      await _settings.clear(kSelectedLanguage);
+      await settings.clear(kSelectedLanguage);
       localeNotifier.value = null;
     } catch (e) {
       logger.fine('Error clearing saved locale: $e');

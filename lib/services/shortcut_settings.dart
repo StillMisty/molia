@@ -71,15 +71,34 @@ class ShortcutSettings extends ChangeNotifier {
   static final ShortcutSettings instance = ShortcutSettings._();
 
   /// 设置注册表（组合根启动时注入；reload 由组合根代绑，同语言 / 品牌名）。
-  ///
-  /// 可为 null（测试 / 独立挂载）：此时状态只留在内存，不落盘。
   static SettingsAccess? _settings;
+
+  /// 未接线就访问设置直接失败：静默 no-op 会让「改了绑定但没保存」在测试与
+  /// 生产里都无声发生（组合根在 `catalog_stack.dart` 统一 attach）。
+  static SettingsAccess get _requireSettings =>
+      _settings ??
+      (throw StateError('ShortcutSettings.attachSettings 未调用：快捷键设置在组合根装配前被访问'));
 
   /// 注入注册表并触发一次异步载入（组合根不必 await：读取完成后
   /// [notifyListeners] 驱动 UI 与监听方）。
   static void attachSettings(SettingsAccess settings) {
     _settings = settings;
     unawaited(load());
+  }
+
+  /// 清掉注入并回到未接线状态：测试隔离用，生产不要调用。
+  @visibleForTesting
+  static void resetSettingsForTest() {
+    _settings = null;
+    instance._resetState();
+  }
+
+  void _resetState() {
+    _inAppEnabled = kShortcutsEnabled.defaultValue;
+    _globalEnabled = kGlobalShortcutsEnabled.defaultValue;
+    _inAppBindings = ShortcutBindings(ShortcutScope.inApp, const {});
+    _globalBindings = ShortcutBindings(ShortcutScope.global, const {});
+    _recordingOwner = null;
   }
 
   // 默认值与登记键默认值一致（见 settings_keys.dart）：软件内开、全局关。
@@ -120,10 +139,9 @@ class ShortcutSettings extends ChangeNotifier {
     if (identical(_recordingOwner, owner)) _recordingOwner = null;
   }
 
-  /// 读四个登记键；读取失败 / 未接线保持当前值。
+  /// 读四个登记键；读取失败保持当前值。
   static Future<void> load() async {
-    final settings = _settings;
-    if (settings == null) return;
+    final settings = _requireSettings;
     final self = instance;
     try {
       final inAppEnabled = await settings.read(kShortcutsEnabled);
@@ -304,8 +322,7 @@ class ShortcutSettings extends ChangeNotifier {
 
   /// 写登记键；失败只影响下次启动的持久化，本次会话已生效（与品牌名同口径）。
   Future<void> _write<T extends Object?>(SettingsKey<T> key, T value) async {
-    final settings = _settings;
-    if (settings == null) return;
+    final settings = _requireSettings;
     try {
       await settings.write(key, value);
     } catch (_) {}
