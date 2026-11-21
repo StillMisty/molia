@@ -10,6 +10,7 @@ import 'package:molia/sources/builtin/tx_lyric.dart';
 import 'package:molia/sources/builtin/tx_qrc.dart';
 
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 import 'package:molia/sources/builtin/zlib_io.dart' as zlib_impl;
 
@@ -90,7 +91,7 @@ void main() {
         ],
       });
 
-      transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) async {
           if (request.uri.path.contains('/search')) {
             return bytesResponse(utf8.encode(search), statusCode: 200);
@@ -136,7 +137,7 @@ void main() {
           '[00:00.000]<1120,-1120>你<2400,160>好\n'
           '[00:02.250]<3150,-3150>译<6750,450>文\n'
           '[00:02.250]<3150,-3150>原<6750,450>文\n';
-      transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) async {
           return bytesResponse(encodeLrcx(lrcx), statusCode: 200);
         }),
@@ -183,7 +184,7 @@ void main() {
       // 明文按 4 个 UTF-16 码元一组分组长，尾部以 \x00 补齐。
       expect(decrypted!.replaceAll(RegExp(r'\x00+$'), ''), raw);
 
-      transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) async {
           return textResponse(encrypted, statusCode: 200);
         }),

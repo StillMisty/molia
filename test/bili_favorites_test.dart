@@ -10,6 +10,7 @@ import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
 import 'support/bili_session_mock.dart';
+import 'support/transport_test_support.dart';
 
 /// B 站收藏夹：链接形态解析、全部分页、视频过滤、私密失败与详情字段。
 void main() {
@@ -26,7 +27,7 @@ void main() {
           as Map<String, dynamic>;
 
   setUp(() {
-    transport = BuiltinTransport();
+    transport = testTransport();
     BiliApi.reset();
     pages = {
       1: fixture('bili_favorites_page1.json'),
@@ -36,8 +37,6 @@ void main() {
     errorCode = null;
     infoNull = false;
   });
-
-  tearDown(() {});
 
   MockDioAdapter install() {
     final adapter = MockDioAdapter((options) async {
@@ -79,7 +78,7 @@ void main() {
           return textResponse('{}', statusCode: 500);
       }
     });
-    transport = BuiltinTransport(dio: createAppDio(adapter: adapter));
+    transport = testTransport(dio: createAppDio(adapter: adapter));
     return adapter;
   }
 
@@ -160,7 +159,7 @@ void main() {
         }
         return textResponse('');
       });
-      transport = BuiltinTransport(dio: createAppDio(adapter: adapter));
+      transport = testTransport(dio: createAppDio(adapter: adapter));
 
       expect(
         await BiliFavorites.parseMediaId(transport, 'https://b23.tv/abcdef'),

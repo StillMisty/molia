@@ -9,12 +9,13 @@ import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/discover_runner.dart';
 
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 void main() {
   late BuiltinTransport transport;
 
   setUp(() {
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((_) async => textResponse('{}', statusCode: 200)),
     );
   });

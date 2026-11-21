@@ -13,6 +13,7 @@ import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
 import 'support/bili_session_mock.dart';
+import 'support/transport_test_support.dart';
 
 /// B 站发现能力：榜单 + 热搜；歌单浏览显式不支持，收藏夹只走导入详情。
 void main() {
@@ -27,7 +28,7 @@ void main() {
           as Map<String, dynamic>;
 
   setUp(() {
-    transport = BuiltinTransport();
+    transport = testTransport();
     BiliApi.reset();
   });
 
@@ -42,7 +43,7 @@ void main() {
           return onRequest(options);
       }
     });
-    transport = BuiltinTransport(dio: createAppDio(adapter: adapter));
+    transport = testTransport(dio: createAppDio(adapter: adapter));
     return adapter;
   }
 

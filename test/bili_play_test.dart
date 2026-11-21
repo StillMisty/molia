@@ -9,6 +9,7 @@ import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
 import 'support/bili_session_mock.dart';
+import 'support/transport_test_support.dart';
 
 /// B 站取链：分 P → WBI playurl → dash 音频选档；直链 headers / 有效期 /
 /// 业务码映射都用注入传输验证。
@@ -25,7 +26,7 @@ void main() {
   late bool noDash;
 
   setUp(() {
-    transport = BuiltinTransport();
+    transport = testTransport();
     BiliApi.reset();
     BiliPlay.reset();
     requests = [];
@@ -40,7 +41,7 @@ void main() {
         'https://upos-sz-mirrorcos.bilivideo.com/bfs/audio/$name.m4s'
         '?deadline=$deadline&gen=playurlv3';
 
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         requests.add(request.uri);
         options.add(request);
@@ -239,7 +240,7 @@ void main() {
   test('网络失败：riskOnly 不刷新会话', () async {
     var sessionFetches = 0;
     var playCalls = 0;
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         if (request.uri.path == '/x/frontend/finger/spi') sessionFetches++;
         final sessionResponse = biliSessionResponse(request);

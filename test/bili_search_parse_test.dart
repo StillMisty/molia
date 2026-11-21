@@ -9,6 +9,7 @@ import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
 import 'support/bili_session_mock.dart';
+import 'support/transport_test_support.dart';
 
 /// B 站搜索解析：真实响应结构（`test/fixtures/bili_search.json`）→ 曲目 /
 /// 分页信息；搜索请求经注入传输，不访问网络。
@@ -21,7 +22,7 @@ void main() {
 
   late BuiltinTransport transport;
   setUp(() {
-    transport = BuiltinTransport();
+    transport = testTransport();
     BiliApi.reset();
   });
 
@@ -83,7 +84,7 @@ void main() {
 
   test('searchWithMeta：签名请求、分页信息与末页判定', () async {
     final requests = <Uri>[];
-    final transport = BuiltinTransport(
+    final transport = testTransport(
       dio: mockDio((request) async {
         requests.add(request.uri);
         final sessionResponse = biliSessionResponse(request);
@@ -127,7 +128,7 @@ void main() {
   test('风控 -403：刷新会话一次后重试，搜索仍成功', () async {
     var searchCalls = 0;
     var navCalls = 0;
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         final sessionResponse = biliSessionResponse(
           request,
@@ -156,7 +157,7 @@ void main() {
   test('普通业务拒绝 -1：按 ADR-0014 刷新会话一次后重试', () async {
     var searchCalls = 0;
     var navCalls = 0;
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         final sessionResponse = biliSessionResponse(
           request,
@@ -185,7 +186,7 @@ void main() {
   test('传输失败：刷新会话一次后重试成功', () async {
     var searchCalls = 0;
     var navCalls = 0;
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         final sessionResponse = biliSessionResponse(
           request,
@@ -214,7 +215,7 @@ void main() {
       BiliApi.reset();
       var searchCalls = 0;
       var navCalls = 0;
-      transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) async {
           final sessionResponse = biliSessionResponse(
             request,
@@ -246,7 +247,7 @@ void main() {
   test('刷新会话失败：返回第一次失败，不把刷新错误当结果', () async {
     var sessionFetches = 0;
     var searchCalls = 0;
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         if (request.uri.path == '/x/frontend/finger/spi') {
           sessionFetches++;
@@ -273,7 +274,7 @@ void main() {
   test('刷新后仍失败：报告第二次失败，不循环', () async {
     var searchCalls = 0;
     var navCalls = 0;
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         final sessionResponse = biliSessionResponse(
           request,
@@ -300,7 +301,7 @@ void main() {
   });
 
   test('空结果：正常空结果，不因缺分页字段误报下一页', () async {
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         switch (request.uri.path) {
           case '/x/frontend/finger/spi':

@@ -15,6 +15,7 @@ import 'package:molia/sources/builtin/tx_album.dart';
 import 'package:molia/sources/builtin/wy_album.dart';
 
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 /// 专辑取数链路（请求构造 / 分页参数 / 业务码失败）的离线单测：
 /// 用 `MockDioAdapter` 拦在真实 socket 之前，不联网。
@@ -28,7 +29,7 @@ void main() {
     FutureOr<ResponseBody> Function(RequestOptions options) handler,
   ) {
     final adapter = MockDioAdapter(handler);
-    transport = BuiltinTransport(dio: createAppDio(adapter: adapter));
+    transport = testTransport(dio: createAppDio(adapter: adapter));
     return adapter;
   }
 

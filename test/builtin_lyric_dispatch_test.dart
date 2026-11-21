@@ -10,6 +10,7 @@ import 'package:molia/sources/builtin/zlib_io.dart' as zlib_impl;
 import 'package:molia/sources/source_track.dart';
 
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 /// 内置平台原生取词派发（BuiltinLyricDispatch）契约：五平台分派、空 raw
 /// 降级、缓存与失败不缓存。只经 [BuiltinLyricDispatch.fetch] 接口验证。
@@ -41,7 +42,7 @@ void main() {
 
   test('五平台分派：请求落到各自平台端点，命中解码结果', () async {
     final requests = <Uri>[];
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         requests.add(request.uri);
         switch (request.uri.host) {
@@ -142,7 +143,7 @@ void main() {
 
   test('空 raw / 非内置平台：降级返回 null 且不发请求', () async {
     final requests = <RequestOptions>[];
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         requests.add(request);
         return textResponse('{}', statusCode: 200);
@@ -165,7 +166,7 @@ void main() {
   test('clearCache：清空后重新取词，重复调用安全', () async {
     final song = track('wy', {'songmid': '77'});
     var calls = 0;
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         calls++;
         return textResponse(
@@ -194,7 +195,7 @@ void main() {
     final song = track('wy', {'songmid': '42'});
     var calls = 0;
     var healthy = false;
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         calls++;
         if (!healthy) {

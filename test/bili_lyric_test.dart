@@ -12,6 +12,7 @@ import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/bili_session_mock.dart';
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 /// B 站 CC 字幕歌词：登录态、WBI 取字幕、选轨、LRC 时间轴与失败降级。
 void main() {
@@ -42,7 +43,7 @@ void main() {
       {'lan': 'zh-CN', 'lan_doc': '中文（中国）', 'subtitle_url': zhUrl},
     ];
 
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         options.add(request);
         final sessionResponse = biliSessionResponse(request);
@@ -180,7 +181,7 @@ void main() {
   test('WBI 失败时退回 unsigned 账号接口', () async {
     login();
     var wbiCalls = 0;
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         options.add(request);
         final sessionResponse = biliSessionResponse(request);

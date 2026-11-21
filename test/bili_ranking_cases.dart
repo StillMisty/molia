@@ -10,6 +10,7 @@ import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
 import 'support/bili_session_mock.dart';
+import 'support/transport_test_support.dart';
 
 /// B 站音乐榜：唯一榜单表、`rid:day` 解析、cid 透传与 5 分钟缓存。
 void main() {
@@ -23,7 +24,7 @@ void main() {
   ) as Map<String, dynamic>;
 
   setUp(() {
-    transport = BuiltinTransport();
+    transport = testTransport();
     BiliApi.reset();
     rankingCalls = 0;
   });
@@ -42,7 +43,7 @@ void main() {
           return textResponse('{}', statusCode: 500);
       }
     });
-    transport = BuiltinTransport(dio: createAppDio(adapter: adapter));
+    transport = testTransport(dio: createAppDio(adapter: adapter));
     return adapter;
   }
 

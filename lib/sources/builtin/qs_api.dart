@@ -92,6 +92,7 @@ abstract final class QsApi {
       },
     );
     return _withEmptyRetry(
+      http: http,
       tries: tries,
       send: () => lxHttpGet(http, uri.toString(), headers: _pcHeaders()),
     );
@@ -105,6 +106,7 @@ abstract final class QsApi {
     int tries = defaultTries,
   }) {
     return _withEmptyRetry(
+      http: http,
       tries: tries,
       send: () =>
           lxHttpPost(http, '$pcHost$path', headers: _appHeaders(), body: body),
@@ -123,6 +125,7 @@ abstract final class QsApi {
   }) async {
     final uri = Uri.https('www.qishui.com', path, query);
     final html = await _withEmptyRetry(
+      http: http,
       tries: tries,
       send: () => lxHttpGetText(
         http,
@@ -138,6 +141,7 @@ abstract final class QsApi {
   }
 
   static Future<T> _withEmptyRetry<T>({
+    required BuiltinTransport http,
     required int tries,
     required Future<T> Function() send,
   }) async {
@@ -145,8 +149,7 @@ abstract final class QsApi {
     Object? lastError;
     for (var attempt = 0; attempt < maxTries; attempt++) {
       if (attempt > 0) {
-        await (BuiltinTransport.retryDelayOverride ??
-            BuiltinTransport.retryBackoff)(attempt);
+        await (http.retryDelay ?? BuiltinTransport.retryBackoff)(attempt);
       }
       try {
         return await send();

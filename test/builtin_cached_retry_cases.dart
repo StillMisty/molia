@@ -9,9 +9,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 void main() {
-  BuiltinTransport transport() => BuiltinTransport(
+  BuiltinTransport transport() => testTransport(
     dio: mockDio((_) async {
       return textResponse('{}', statusCode: 200);
     }),
@@ -82,16 +83,12 @@ void main() {
       expect(calls, 1);
     });
 
-    test('重试之间调用退避钩子，参数从 1 递增', () async {
+    test('显式 delay 参与重试，参数从 1 递增', () async {
       final delays = <int>[];
-      final previous = BuiltinTransport.retryDelayOverride;
-      BuiltinTransport.retryDelayOverride = (attempt) async =>
-          delays.add(attempt);
-      addTearDown(() => BuiltinTransport.retryDelayOverride = previous);
-
       var calls = 0;
       final result = await runBuiltinAttempts<int>(
         maxTries: 3,
+        delay: (attempt) async => delays.add(attempt),
         attempt: (_) async => ++calls == 3 ? 7 : null,
       );
       expect(result, 7);
@@ -161,9 +158,9 @@ void main() {
       expect(calls, 4, reason: '失败不缓存：两次调用各重试 2 次');
     });
 
-    test('实例注入的 retryDelay 参与重试（优先于全局钩子）', () async {
+    test('实例注入的 retryDelay 参与重试', () async {
       final delays = <int>[];
-      final instance = BuiltinTransport(
+      final instance = testTransport(
         dio: mockDio((_) async => textResponse('{}', statusCode: 200)),
         retryDelay: (attempt) async => delays.add(attempt),
       );

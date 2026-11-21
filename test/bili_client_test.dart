@@ -9,10 +9,10 @@ import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_client.dart';
 import 'package:molia/sources/builtin/bili_session.dart';
-import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/bili_session_mock.dart';
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 /// B 站请求生命周期：[BiliClient] 的鉴权 / 风控 / 业务码 / 空响应口径。
 ///
@@ -39,7 +39,7 @@ void main() {
   }
 
   BiliClient clientOf(MockDioAdapter adapter) => BiliClient(
-    transport: BuiltinTransport(dio: createAppDio(adapter: adapter)),
+    transport: testTransport(dio: createAppDio(adapter: adapter)),
     session: session,
   );
 

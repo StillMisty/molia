@@ -4,7 +4,6 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/services/app_logging.dart';
 import 'package:molia/services/playback_session_store.dart';
-import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/memory_database.dart';
 
@@ -22,8 +21,5 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   // 不触碰真实文件或 path_provider 通道。
   PlaybackSessionStore.debugDatabaseOverride = () => sharedSessionDatabase;
   setUp(resetSharedSessionDatabase);
-  // 传输层重试退避在测试里跳过：单测断言的是「重试次数与结果」，
-  // 真实等待只会拖慢用例（生产仍是默认的指数退避 + 抖动）。
-  BuiltinTransport.retryDelayOverride = (_) async {};
   await testMain();
 }

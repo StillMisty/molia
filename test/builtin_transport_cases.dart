@@ -7,6 +7,7 @@ import 'package:molia/sources/builtin/kw_search.dart';
 import 'package:molia/sources/builtin/wy_hot_search.dart';
 
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 /// 内置传输层：客户端注入、请求头/超时、响应级重试、JSON 解码；
 /// 并验证平台搜索 fetch 路径可被 MockClient 完整覆盖。
@@ -16,7 +17,7 @@ void main() {
   test('getJson：成功解码并合并默认请求头', () async {
     Uri? seenUri;
     Map<String, dynamic>? seenHeaders;
-    final transport = BuiltinTransport(
+    final transport = testTransport(
       dio: mockDio((request) async {
         seenUri = request.uri;
         seenHeaders = request.headers;
@@ -32,7 +33,7 @@ void main() {
 
   test('getJson：空 body / 非法 JSON 抛 BuiltinHttpException 且不重试', () async {
     var calls = 0;
-    final transport = BuiltinTransport(
+    final transport = testTransport(
       dio: mockDio((_) async {
         calls++;
         return textResponse('', statusCode: 200);
@@ -48,7 +49,7 @@ void main() {
 
   test('getJson：retryIf 响应级重试，耗尽后返回最后一次结果', () async {
     var calls = 0;
-    final transport = BuiltinTransport(
+    final transport = testTransport(
       dio: mockDio((_) async {
         calls++;
         return textResponse(jsonEncode({'code': calls}), statusCode: 200);
@@ -66,7 +67,7 @@ void main() {
 
   test('传输异常：重试耗尽后抛 BuiltinHttpException', () async {
     var calls = 0;
-    final transport = BuiltinTransport(
+    final transport = testTransport(
       dio: mockDio((_) async {
         calls++;
         throw Exception('boom');
@@ -83,7 +84,7 @@ void main() {
   test('postJson：form 编码与 Content-Type', () async {
     String? seenBody;
     String? contentType;
-    final transport = BuiltinTransport(
+    final transport = testTransport(
       dio: mockDio((request) async {
         seenBody = requestBodyText(request);
         contentType = request.headers['Content-Type'];
@@ -101,7 +102,7 @@ void main() {
   });
 
   test('平台搜索 fetch 路径：注入 MockClient 后 KwSearch 端到端解析', () async {
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         expect(request.uri.host, 'search.kuwo.cn');
         return textResponse(
@@ -133,7 +134,7 @@ void main() {
 
   test('平台搜索响应级重试：首轮空页后重试成功', () async {
     var calls = 0;
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((_) async {
         calls++;
         final first = calls == 1;
@@ -167,7 +168,7 @@ void main() {
 
   test('clearCache：清空结果缓存，在途结果不复活，可重复调用', () async {
     var calls = 0;
-    final transport = BuiltinTransport(
+    final transport = testTransport(
       dio: mockDio((_) async => textResponse('{}', statusCode: 200)),
     );
 
@@ -208,7 +209,7 @@ void main() {
 
   test('发现适配器 fetch：WyHotSearch 走注入客户端且结果被缓存', () async {
     var requests = 0;
-    transport = BuiltinTransport(
+    transport = testTransport(
       dio: mockDio((request) async {
         requests++;
         return bytesResponse(

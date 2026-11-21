@@ -1,8 +1,10 @@
 import 'dart:convert';
+
+import 'support/transport_test_support.dart';
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/builtin/channel/channels.dart';
 import 'package:molia/sources/builtin/kg_lyric_search.dart';
@@ -144,7 +146,7 @@ void main() {
     test('未知音源：抛 unsupported', () {
       expect(
         () => BuiltinLyricSearch.searchWithMeta(
-          BuiltinTransport(),
+          testTransport(),
           'unknown',
           '雨下整夜',
         ),

@@ -9,6 +9,10 @@
 /// （single-flight 缓存，成功才缓存）；没有 key（外层已经缓存整张结果）走
 /// [runBuiltinAttempts]（共享尝试循环）。重试预算在 [BuiltinRetryBudget]，
 /// 退避在传输层唯一实现，平台文件只保留 URL / 参数与解析。
+///
+/// Stage 2 遗留：少数发现端点仍直接 `http.cached(...)`（历史迁移成本），
+/// 由 `test/builtin_discover_cache_ratchet_test.dart` 锁定只减不增；新增端点
+/// 必须走本文件。
 library;
 
 import 'dart:async';
@@ -84,6 +88,8 @@ Future<T> runDiscoverCall<T>(DiscoverCall<T> call, BuiltinTransport transport) {
       maxTries: call.budget,
       message: call.message,
       attempt: attempt,
+      // 无缓存 key 的端点也使用调用方注入的退避（测试可瞬时完成）。
+      delay: transport.retryDelay,
     );
   }
   return transport.cachedRetry(

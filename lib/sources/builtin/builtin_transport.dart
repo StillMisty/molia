@@ -40,11 +40,6 @@ class BuiltinTransport {
   /// （从 1 开始）。默认指数退避 + 抖动。
   final Future<void> Function(int attempt)? retryDelay;
 
-  /// 全局测试钩子（`test/flutter_test_config.dart` 置为 no-op）：不逐个
-  /// 构造函数注入也能让测试不产生真实等待。生产恒为 null；发现端点走的
-  /// [runBuiltinAttempts] 复用同一钩子（两处退避是同一策略）。
-  static Future<void> Function(int attempt)? retryDelayOverride;
-
   /// 默认重试退避：`base × 2^(n-1)` 封顶 [_retryBackoffMax]，叠加 ±30% 抖动。
   ///
   /// 退避而非紧挨着连发：平台限流（403/429）时立刻重发只会把限流打成更长
@@ -64,7 +59,7 @@ class BuiltinTransport {
   }
 
   Future<void> _delayBefore(int attempt) =>
-      (retryDelay ?? retryDelayOverride ?? retryBackoff)(attempt);
+      (retryDelay ?? retryBackoff)(attempt);
 
   /// 统一结果缓存 TTL（发现/热搜等，5 分钟）。
   static const Duration defaultCacheTtl = Duration(minutes: 5);
@@ -367,8 +362,8 @@ abstract final class BuiltinRetryBudget {
 /// - [attempt] 抛异常直接向上传播（异常不是「本次尝试失败」，不重试也不吞）；
 /// - 用尽 [maxTries] 抛 [StateError]（[message] 是调用方与上游约定的信号，
 ///   见 `wy_leaderboard` 对 `'try max num'` 的豁免）；
-/// - 重试之间走 [delay]（传输实例注入）→ [BuiltinTransport.retryDelayOverride]
-///   → [BuiltinTransport.retryBackoff]，与传输层同一条指数退避 + 抖动策略。
+/// - 重试之间走 [delay]（调用方显式传入）→ [BuiltinTransport.retryBackoff]，
+///   与传输层同一条指数退避 + 抖动策略。
 ///
 /// 需要缓存时用 [BuiltinTransport.cachedRetry]；这里只负责尝试，不碰缓存。
 Future<T> runBuiltinAttempts<T>({
@@ -379,10 +374,7 @@ Future<T> runBuiltinAttempts<T>({
 }) async {
   for (var tryNum = 0; tryNum < maxTries; tryNum++) {
     if (tryNum > 0) {
-      final wait =
-          delay ??
-          BuiltinTransport.retryDelayOverride ??
-          BuiltinTransport.retryBackoff;
+      final wait = delay ?? BuiltinTransport.retryBackoff;
       await wait(tryNum);
     }
     final result = await attempt(tryNum);

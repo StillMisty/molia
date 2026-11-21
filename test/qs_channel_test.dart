@@ -10,6 +10,7 @@ import 'package:molia/sources/builtin/qs_search.dart';
 import 'package:molia/sources/source_track.dart';
 
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 dynamic _fixture(String path) =>
     jsonDecode(File('test/fixtures/$path').readAsStringSync());
@@ -91,7 +92,7 @@ void main() {
     });
 
     test('原生取词派发：track_id → seo_track → 逐字歌词', () async {
-      transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) {
           expect(request.uri.path, '/luna/h5/seo_track');
           expect(
@@ -125,7 +126,7 @@ void main() {
   group('qs 搜索', () {
     test('空响应重试后成功；分页按平台 20 条游标走', () async {
       var calls = 0;
-      transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) {
           calls++;
           if (calls <= 2) return textResponse('');
@@ -157,7 +158,7 @@ void main() {
     });
 
     test('平台正常返回空结果：不是失败', () async {
-      transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((_) => textResponse('{"extra":{"empty_search":1}}')),
       );
       final result = await QsSearch.searchWithMeta(transport, '没有这首歌');
@@ -169,7 +170,7 @@ void main() {
   group('qs 歌手', () {
     test('分享页样本 + 同名搜索按歌手 id 补齐（不混入他人曲目）', () async {
       final artistPage = _fixture('artists/qs_page.json');
-      transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) {
           if (request.uri.host == 'www.qishui.com') {
             expect(request.uri.path, '/share/artist');

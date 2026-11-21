@@ -14,6 +14,7 @@ import 'package:molia/sources/builtin/comment_source.dart';
 
 import 'support/mock_dio.dart';
 import 'support/bili_session_mock.dart';
+import 'support/transport_test_support.dart';
 
 /// B 站评论：热门/最新 mode、游标翻页、嵌套回复、IP 归属地与业务码失败。
 void main() {
@@ -23,7 +24,7 @@ void main() {
   late String fixtureText;
 
   setUp(() {
-    transport = BuiltinTransport();
+    transport = testTransport();
     BiliApi.reset();
     BiliComment.resetForTest();
     fixtureText = File('test/fixtures/bili_comment.json').readAsStringSync();
@@ -47,7 +48,7 @@ void main() {
           return textResponse('{}', statusCode: 500);
       }
     });
-    transport = BuiltinTransport(dio: createAppDio(adapter: adapter));
+    transport = testTransport(dio: createAppDio(adapter: adapter));
     return adapter;
   }
 
