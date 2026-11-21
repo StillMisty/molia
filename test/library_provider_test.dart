@@ -1772,6 +1772,40 @@ void main() {
       expect(after.syncId, before.syncId);
     });
 
+    test('单曲收藏一次操作只通知一次', () async {
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: 'seed',
+        title: 'Seed',
+      );
+      await settle();
+      await provider.refreshPlaylists(force: true);
+      await provider.ensureFavoritesLoaded(force: true);
+      final favorites = provider.playlists.singleWhere((p) => p.isFavorites);
+      await provider.loadPlaylistTracks(favorites.id, force: true);
+
+      var notifications = 0;
+      void count() => notifications++;
+      provider.addListener(count);
+      addTearDown(() => provider.removeListener(count));
+
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(notifications, 1, reason: '写入入口与仓库事件只合成一次通知');
+
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(notifications, 2);
+    });
+
     test('批量收藏校准只通知一次（列表清单落地后再发）', () async {
       final favoritesId = await repository.createPlaylist('__favorites__');
       final scratch = await repository.createPlaylist('scratch');

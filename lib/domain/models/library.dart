@@ -127,28 +127,20 @@ class PlaylistInfo {
     this.isFavorites = false,
   });
 
-  /// 复制列表行并替换指定字段。
+  /// 复制列表行并替换曲目计数。
   ///
-  /// 收藏计数是内存补丁（DB 行不变），只改 `trackCount` 时必须保留描述 /
-  /// 分组 / 封面 / syncId，不能重建一个只剩基础列的对象。
-  PlaylistInfo copyWith({
-    String? name,
-    int? trackCount,
-    String? description,
-    String? folder,
-    String? coverKey,
-    String? syncId,
-    bool? isFavorites,
-  }) => PlaylistInfo(
+  /// 计数是内存补丁（DB 行不变），只改 `trackCount` 时必须保留描述 / 分组 /
+  /// 封面 / syncId，不能重建一个只剩基础列的对象。
+  PlaylistInfo withTrackCount(int trackCount) => PlaylistInfo(
     id: id,
-    name: name ?? this.name,
+    name: name,
     createdAt: createdAt,
-    trackCount: trackCount ?? this.trackCount,
-    description: description ?? this.description,
-    folder: folder ?? this.folder,
-    coverKey: coverKey ?? this.coverKey,
-    syncId: syncId ?? this.syncId,
-    isFavorites: isFavorites ?? this.isFavorites,
+    trackCount: trackCount,
+    description: description,
+    folder: folder,
+    coverKey: coverKey,
+    syncId: syncId,
+    isFavorites: isFavorites,
   );
 
   /// 列表封面键：行内有指针用行内的，否则从稳定 syncId 推导。

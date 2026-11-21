@@ -328,6 +328,91 @@ void main() {
     expect(fact.count, 1);
   });
 
+  test('reload：无在途切换也更新键与计数', () async {
+    await repository.addFavorites([track('1'), track('2')]);
+
+    await fact.reload();
+
+    expect(fact.contains('wy', '1'), isTrue);
+    expect(fact.contains('wy', '2'), isTrue);
+    expect(fact.count, 2);
+  });
+
+  test('invalidate 丢弃可信基线与行，下一次 reload 恢复键 / 计数', () async {
+    await seedFavorites([track('1')]);
+    await fact.ensureLoaded(force: true);
+    adoptRows([track('1')]);
+
+    fact.invalidate();
+    expect(fact.rows, isNull);
+
+    // 权威基线已清掉：清单计数可以重新成为依据。
+    fact.bindPlaylist(null, databaseCount: 9);
+    expect(fact.count, 9);
+
+    await fact.reload();
+    expect(fact.contains('wy', '1'), isTrue);
+    expect(fact.count, 1);
+  });
+
+  test('bindPlaylist 换 id：丢弃旧行并让换之前的行快照作废', () async {
+    await seedFavorites([track('1')]);
+    await fact.ensureLoaded(force: true);
+    adoptRows([track('1')]);
+    final version = fact.rowsVersion;
+
+    fact.bindPlaylist(999, databaseCount: 1);
+    expect(fact.rows, isNull);
+    expect(fact.rowsVersion, greaterThan(version));
+
+    fact.adoptRows([track('1')], version: version);
+    expect(fact.rows, isNull);
+  });
+
+  test('通知契约：applyChange 一次一个，重复补丁不通知', () {
+    var notifications = 0;
+    fact.addListener(() => notifications++);
+
+    fact.applyChange(addToggle(track('1')));
+    expect(notifications, 1);
+
+    fact.applyChange(addToggle(track('1')));
+    expect(notifications, 1, reason: '幂等重放不重复通知');
+  });
+
+  test('通知契约：生命周期方法静默，读取结束只通知一次', () async {
+    var notifications = 0;
+    fact.addListener(() => notifications++);
+
+    fact.bindPlaylist(null, databaseCount: 3);
+    fact.releaseRows();
+    fact.invalidate();
+    expect(notifications, 0, reason: 'provider 驱动的生命周期方法由调用方通知');
+
+    await fact.reload();
+    expect(notifications, 1, reason: '一次读取结束只发一次通知');
+  });
+
+  test('通知契约：读取期间切换 + 旧快照重放不重复通知', () async {
+    await seedFavorites([track('1')]);
+    await fact.ensureLoaded(force: true);
+
+    var notifications = 0;
+    fact.addListener(() => notifications++);
+    final gate = Completer<Set<String>>();
+    repository.nextKeys = gate;
+    final reading = fact.ensureLoaded(force: true);
+    await Future<void>.delayed(Duration.zero);
+
+    fact.applyChange(addToggle(track('2')));
+    expect(notifications, 1);
+
+    gate.complete({'wy:1'});
+    await reading;
+    expect(notifications, 2, reason: '重放与读取完成共用一次通知');
+    expect(fact.contains('wy', '2'), isTrue);
+  });
+
   test('外部行投影：与事实同一插入顺序，无变化返回原引用', () {
     BrowseTrack browse(String id, {int sortOrder = 0, int addedAt = 0}) =>
         BrowseTrack(
@@ -339,28 +424,28 @@ void main() {
         );
 
     final rows = [browse('a', sortOrder: 0, addedAt: 1)];
-    final added = fact.applyToggleToProjection(
+    final added = applyFavoriteToggleToProjection(
       rows: rows,
       toggle: addToggle(track('b', sortOrder: 1, addedAt: 2)),
       wrap: BrowseTrack.fromPlaylistTrack,
     );
     expect(added.map((row) => row.songId), ['a', 'b']);
 
-    final duplicate = fact.applyToggleToProjection(
+    final duplicate = applyFavoriteToggleToProjection(
       rows: added,
       toggle: addToggle(track('b', sortOrder: 1, addedAt: 2)),
       wrap: BrowseTrack.fromPlaylistTrack,
     );
     expect(identical(duplicate, added), isTrue, reason: '重复收藏不重建投影');
 
-    final removed = fact.applyToggleToProjection(
+    final removed = applyFavoriteToggleToProjection(
       rows: added,
       toggle: removeToggle('a'),
       wrap: BrowseTrack.fromPlaylistTrack,
     );
     expect(removed.map((row) => row.songId), ['b']);
 
-    final missing = fact.applyToggleToProjection(
+    final missing = applyFavoriteToggleToProjection(
       rows: removed,
       toggle: removeToggle('missing'),
       wrap: BrowseTrack.fromPlaylistTrack,

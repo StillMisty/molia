@@ -11,6 +11,7 @@ import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 
 import '../app/perf/data_path_trace.dart';
+import '../data/library/favorite_fact.dart';
 import '../data/library_repository.dart';
 import '../data/play_statistics_repository.dart';
 import '../domain/models/download.dart';
@@ -151,9 +152,9 @@ class LocalLibraryProvider extends ChangeNotifier {
 
   /// 单曲收藏切换：只改缓存的 [BrowseSource] 一行再重建索引，不重读整表。
   ///
-  /// 行投影的增删 / 位置交给资料库 provider 持有的收藏事实：浏览行保留惰性
-  /// raw，不能直接换成事实里的 `PlaylistTrack`，但排序口径必须与收藏列表
-  /// 完全一致。取消收藏只删 favorites 里的键；该曲若仍在下载 / 用户列表里，
+  /// 行投影的增删 / 位置交给收藏事实的纯函数：浏览行保留惰性 raw，不能直接
+  /// 换成事实里的 `PlaylistTrack`，但排序口径必须与收藏列表完全一致。
+  /// 取消收藏只删 favorites 里的键；该曲若仍在下载 / 用户列表里，
   /// 重建时的合并优先级（收藏 → 下载 / 导入 → 自建列表）会把它补回来。
   /// 批量 / 换源 / 同步不带 toggle，仍走整库重读；已有整库重读在排队或进行
   /// 中时不能拿旧缓存增量，否则会丢掉那次重读要校准的数据。
@@ -167,7 +168,7 @@ class LocalLibraryProvider extends ChangeNotifier {
       schedule(browse: true, stats: false);
       return;
     }
-    final favorites = library.favoriteFact.applyToggleToProjection(
+    final favorites = applyFavoriteToggleToProjection(
       rows: source.favorites,
       toggle: toggle,
       wrap: BrowseTrack.fromPlaylistTrack,

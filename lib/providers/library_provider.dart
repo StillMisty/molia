@@ -106,10 +106,10 @@ class LibraryProvider extends ChangeNotifier {
   /// payload（脚本取链参数）常驻内存。超过上限按最近访问淘汰。
   static const int kPlaylistTracksCacheLimit = 5;
 
-  /// 播放历史 / 列表清单 / 收藏键的读投影。
+  /// 播放历史 / 列表清单的读投影。
   ///
-  /// 三者都是「整表单值」视图：读取可能被写入或另一次读取竞争，策略分别
-  /// 由 merge / replay / supersede 参数表达，状态机本身只实现一次。
+  /// 两者都是「整表单值」视图：读取可能被写入或另一次读取竞争，策略分别
+  /// 由 merge / replay 参数表达，状态机本身只实现一次。
   late final ReadReconciliation<List<PlayHistoryEntry>, PlayHistoryEntry>
   _historyRead;
   late final ReadReconciliation<List<PlaylistInfo>, Never> _playlistsRead;
@@ -130,10 +130,8 @@ class LibraryProvider extends ChangeNotifier {
   int? _activePlaylistId;
 
   bool _disposed = false;
+  bool _favoriteNotifyScheduled = false;
   Future<void>? _pendingReload;
-
-  /// 收藏事实（供浏览索引等投影复用同一份顺序与补丁规则）。
-  FavoriteFact get favoriteFact => _favorites;
 
   /// 收藏状态版本（单调递增）：收藏相关订阅方（收藏按钮 / 发现页）据此做
   /// O(1) 的失效判定，不必对每次历史写入都重建。
@@ -438,14 +436,24 @@ class LibraryProvider extends ChangeNotifier {
     _notify();
   }
 
-  /// 收藏事实变化：把计数投影回列表清单，并统一通知一次。
+  /// 收藏事实变化：把计数投影回列表清单，并合并成一次通知。
+  ///
+  /// 一次用户切换会先后补键、补行（写入口与仓库事件各一次），两次都是
+  /// 事实变化；同步转发会让 UI 在一帧里收到两次重建。通知推迟到微任务并
+  /// 去重，保证一次用户动作只通知一次。
   ///
   /// 计数仍放在 `PlaylistInfo.trackCount`（列表行是 UI 模型）；事实是唯一
   /// 真值，这里只做同值跳过，不会反过来再写事实。
   void _onFavoriteFactChanged() {
     if (_disposed) return;
     _syncFavoriteCount();
-    _notify();
+    if (_favoriteNotifyScheduled) return;
+    _favoriteNotifyScheduled = true;
+    scheduleMicrotask(() {
+      _favoriteNotifyScheduled = false;
+      if (_disposed) return;
+      _notify();
+    });
   }
 
   void _syncFavoriteCount() {
@@ -457,7 +465,7 @@ class LibraryProvider extends ChangeNotifier {
       (current) => [
         for (final playlist in current)
           if (playlist.id == favorites.id)
-            playlist.copyWith(trackCount: count)
+            playlist.withTrackCount(count)
           else
             playlist,
       ],
@@ -944,18 +952,11 @@ class LibraryProvider extends ChangeNotifier {
       );
       _playlistsRevision++;
     } else if (playlists[index].trackCount < rows.length) {
-      final playlist = playlists[index];
       _playlistsRead.patch(
         (current) => [
           for (final item in current)
             if (item.id == playlistId)
-              PlaylistInfo(
-                id: playlist.id,
-                name: playlist.name,
-                createdAt: playlist.createdAt,
-                trackCount: rows.length,
-                isFavorites: playlist.isFavorites,
-              )
+              item.withTrackCount(rows.length)
             else
               item,
         ],

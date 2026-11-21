@@ -730,9 +730,10 @@
   （`sortOrder` → `addedAt`）。对外是 `contains` / `rows` / `rowsVersion` /
   `count` / `revision`、`bindPlaylist`、`ensureLoaded` / `reload` /
   `adoptRows` / `releaseRows` / `invalidate` / `applyChange`、`toggle` /
-  `addAll` / `removeAll`、`applyToggleToProjection` 与变更通知；重放缓冲、
-  计数候选与比较器不进入公开接口。浏览索引的惰性 raw 行不能直接换成列表行，
-  经 `applyToggleToProjection` 复用同一份插入规则。
+  `addAll` / `removeAll` 与变更通知；重放缓冲、计数候选与比较器不进入公开
+  接口。浏览索引的惰性 raw 行不能直接换成列表行，经同文件的纯函数
+  `applyFavoriteToggleToProjection` 复用同一份插入规则；provider 不暴露事实
+  实例的写入口。
 - **Library mutation gateway（资料库变更网关）** — `lib/providers/library_provider.dart`：
   收藏 / 播放历史 / 列表写入的唯一实现。收藏唯一入口 `toggleFavoriteTrack(Track)`
   （播放页不再直连 `LibraryRepository`）；批量操作按 `PlaylistTrack` 规范形状，

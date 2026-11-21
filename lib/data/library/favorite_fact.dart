@@ -1,13 +1,12 @@
 /// 收藏事实的唯一持有者：键集合、顺序行、计数与版本。
 ///
 /// 为什么单独一层：收藏不是「一个列表的一行」，而是跨播放页心形、收藏页、
-/// 浏览索引、同步失效判定的同一个事实。键集合、列表行、列表计数此前分别
-/// 由三个读投影 / 缓存补丁维护，顺序口径也不一致；这里把它们收成一个模块，
-/// 写入只有一条路径，读取阶段的缓冲与重放也不再外泄给消费方。
+/// 浏览索引、同步失效判定的同一个事实。键集合、顺序行、计数与版本在这里
+/// 一起维护，写入只有一条路径，读取阶段的缓冲与重放不向消费方外泄。
 ///
-/// 模块不订阅仓库变更：组合根（`LibraryProvider`）负责把 `changes` 路由进来，
-/// 这样「读投影 + 写补丁」仍然只发生在收藏事实上，而资料库其它视图的失效
-/// 范围不会被收藏的读状态机绑架。
+/// 模块不订阅仓库变更：资料库 provider（`LibraryProvider`）负责把 `changes`
+/// 路由进来，这样「读投影 + 写补丁」仍然只发生在收藏事实上，而资料库其它
+/// 视图的失效范围不会被收藏的读状态机绑架。
 library;
 
 import 'package:flutter/foundation.dart';
@@ -91,6 +90,9 @@ class FavoriteFact extends ChangeNotifier {
   /// 行读取需要 id；id 变化说明旧行已不属于当前收藏列表，直接丢弃并让
   /// 在途行读取作废。计数只在没有更可信依据时采用 [databaseCount]（整表键 >
   /// 已加载行 > 清单计数）。
+  ///
+  /// 由 provider 驱动，方法本身不通知；调用方（列表清单读取）负责在同一轮
+  /// 投影后统一通知。
   void bindPlaylist(int? playlistId, {required int databaseCount}) {
     if (_playlistId != playlistId) {
       _playlistId = playlistId;
@@ -170,18 +172,22 @@ class FavoriteFact extends ChangeNotifier {
   ///
   /// [version] 是读取开始前捕获的 [rowsVersion]。版本不一致说明期间发生过
   /// 切换 / 释放 / 校准：这份快照可能删掉刚写入的行，必须丢弃。
+  ///
+  /// 由 provider 的行读取路径驱动，方法本身不通知；调用方在整轮读取结束后
+  /// 统一通知一次。
   void adoptRows(List<PlaylistTrack> rows, {required int version}) {
     if (_disposed || version != _rowsVersion) return;
     _rows = List<PlaylistTrack>.of(rows);
     _rowsVersion++;
     _recount();
-    _notify();
   }
 
   /// 释放收藏行（托盘隐藏 / 低内存 / 整表失效）。
   ///
   /// 键与计数保留：恢复后心形与收藏入口立即有依据；行在页面重新 ensure 时
   /// 再读。版本自增让释放前的在途行读取落地后作废（即使当前还没有行）。
+  ///
+  /// 由 provider 驱动，方法本身不通知；调用方释放缓存后统一通知。
   void releaseRows() {
     _rows = null;
     _rowsVersion++;
@@ -191,6 +197,9 @@ class FavoriteFact extends ChangeNotifier {
   ///
   /// 键先保留（UI 不闪空），但不再被当作计数 / 去重的权威快照；随后的
   /// 校准会把真实快照读回来。
+  ///
+  /// 由 provider 驱动，方法本身不通知；`_invalidateAll` 会在整轮失效后
+  /// 统一通知。
   void invalidate() {
     _keysLoaded = false;
     _keysAuthoritative = false;
@@ -199,7 +208,6 @@ class FavoriteFact extends ChangeNotifier {
     _rows = null;
     _pending.clear();
     _revision++;
-    _notify();
   }
 
   /// 应用一次已落库的单曲切换（仓库变更事件）。
@@ -215,11 +223,12 @@ class FavoriteFact extends ChangeNotifier {
         track: toggle.favorite ? (toggle.track ?? previous?.track) : null,
       );
     }
-    _mutate(
+    final changed = _mutate(
       add: toggle.favorite ? [toggle.key] : const [],
       remove: toggle.favorite ? const [] : [toggle.key],
       rows: [if (toggle.favorite && toggle.track != null) toggle.track!],
     );
+    if (changed) _notify();
   }
 
   /// 收藏 / 取消收藏（唯一写入路径）。
@@ -248,22 +257,25 @@ class FavoriteFact extends ChangeNotifier {
       raw: raw,
     );
     final key = _keyOf(sourceKey, songId);
-    _mutate(
+    final changed = _mutate(
       add: favorite ? [key] : const [],
       remove: favorite ? const [] : [key],
     );
+    if (changed) _notify();
     return favorite;
   }
 
   /// 批量收藏；返回实际新增数（跳过已收藏）。
   ///
-  /// 批量路径拿不到每行的落库位置，只立即补键与计数；行交给随后的整表
-  /// 校准，避免先展示一份顺序错误 / 不完整的列表。
+  /// 批量路径拿不到每行的落库位置：只立即补键；行留给随后的整表校准。
+  /// 已加载行时计数仍以当前行数为准（不会先多报），等校准把新行读回来才
+  /// 增加；没有键 / 行依据时才按净变化推测。
   Future<int> addAll(List<PlaylistTrack> tracks) async {
     if (tracks.isEmpty) return 0;
     final added = await _repository.addFavorites(tracks);
     if (added > 0) {
-      _mutate(add: [for (final track in tracks) track.key]);
+      final changed = _mutate(add: [for (final track in tracks) track.key]);
+      if (changed) _notify();
     }
     return added;
   }
@@ -273,35 +285,12 @@ class FavoriteFact extends ChangeNotifier {
     if (keys.isEmpty) return 0;
     final removed = await _repository.removeFavorites(keys);
     if (removed > 0) {
-      _mutate(
+      final changed = _mutate(
         remove: [for (final key in keys) _keyOf(key.sourceKey, key.songId)],
       );
+      if (changed) _notify();
     }
     return removed;
-  }
-
-  /// 把一次单曲切换应用到外部的有序行投影。
-  ///
-  /// 浏览索引持有惰性 raw 行（不能直接使用本模块的 [PlaylistTrack] 行），
-  /// 但又必须与收藏列表同序；这是它复用同一份插入规则的唯一入口。
-  /// 返回同一列表引用表示没有变化，调用方可以跳过重建。
-  List<T> applyToggleToProjection<T extends FavoriteOrderedRow>({
-    required List<T> rows,
-    required FavoriteToggle toggle,
-    required T Function(PlaylistTrack track) wrap,
-  }) {
-    if (!toggle.favorite) {
-      final next = [
-        for (final row in rows)
-          if (row.key != toggle.key) row,
-      ];
-      return next.length == rows.length ? rows : next;
-    }
-    final track = toggle.track;
-    if (track == null || rows.any((row) => row.key == toggle.key)) {
-      return rows;
-    }
-    return _insertOrdered(rows, wrap(track));
   }
 
   void _replaceKeys(Set<String> fresh) {
@@ -407,7 +396,6 @@ class FavoriteFact extends ChangeNotifier {
     // 键或行变了：任何在途的行快照都可能是旧基线（会删掉刚写入的行）。
     _rowsVersion++;
     _recount(delta: addedCount - removedCount);
-    _notify();
     return true;
   }
 
@@ -457,4 +445,28 @@ class FavoriteFact extends ChangeNotifier {
     _pending.clear();
     super.dispose();
   }
+}
+
+/// 把一次单曲切换应用到外部的有序行投影。
+///
+/// 浏览索引持有惰性 raw 行（不能直接使用 [PlaylistTrack] 行），但又必须与
+/// 收藏列表同序；这是它复用事实内部插入规则的唯一入口。返回同一列表引用
+/// 表示没有变化，调用方可以跳过重建。
+List<T> applyFavoriteToggleToProjection<T extends FavoriteOrderedRow>({
+  required List<T> rows,
+  required FavoriteToggle toggle,
+  required T Function(PlaylistTrack track) wrap,
+}) {
+  if (!toggle.favorite) {
+    final next = [
+      for (final row in rows)
+        if (row.key != toggle.key) row,
+    ];
+    return next.length == rows.length ? rows : next;
+  }
+  final track = toggle.track;
+  if (track == null || rows.any((row) => row.key == toggle.key)) {
+    return rows;
+  }
+  return FavoriteFact._insertOrdered(rows, wrap(track));
 }
