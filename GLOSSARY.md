@@ -415,11 +415,13 @@
 
 - **Now playing bar（底栏播放条）** — `lib/app/desktop/now_playing_bar.dart`：桌面 80dp 播放条（左：封面/歌名/收藏，点击进播放页并复用封面飞行；中：Playback transport 控件 + 可拖波浪进度 + 时间；右：模式按钮 / 音量弹层 / 队列入口）。只在非播放页出现（播放页沉浸，整条让位）；队列入口 = 跳播放页 + 切队列 tab。进度拖动语义与播放页共用 **Seek preview**，传输控件共用 **Playback transport**，宿主只负责版式。
 
-- **NowPlayingController（播放页请求通道 + 展开态快照）** — `lib/widgets/now_playing_controller.dart`：壳 ↔ 播放页的唯一请求通道：`showQueueTab` / `showLyricsTab` / `showInfoTab`（只有 `tabRequestVersion` 前进才算新的 tab 请求，收起播放器不会重放上一次 tab）、`expand()` / `collapse()`（`takeExpansionRequest()` 消费一次意图，同方向重复请求不叠加）。只读快照 `expanded`（窄版式播放页是否展开；宽版式 / 桌面恒 false）、`miniCapable`（当前布局是否有收起态，决定顶栏显示播放条还是品牌位）、`activeTab`。页面在布局 / 动画落定时回写；壳层据此决定返回键是否先收起、底栏重复点击切换到哪个方向。底栏队列入口与 Esc 的「关闭队列」都经它落点，壳层只读这三个只读快照，不直接操作页内界面。
+- **NowPlayingController（播放页请求通道）** — `lib/widgets/now_playing_controller.dart`：壳 ↔ 播放页的请求通道：`showQueueTab` / `showLyricsTab` / `showInfoTab`（只有 `tabRequestVersion` 前进才算新的 tab 请求，收起播放器不会重放上一次 tab）、`expand()` / `collapse()`（`takeExpansionRequest()` 消费一次意图，同方向重复请求不叠加）。只读快照只剩 `activeTab`（桌面 Esc 判断队列是否打开）。展开态 / 布局能力不在这里：唯一所有者是 **Shell presentation**，页面通过 `NowPlaying.onExpansionChanged` / `onMiniCapableChanged` 回写。底栏队列入口与 Esc 的「关闭队列」都经它落点，壳层不直接操作页内界面。
+
+- **Shell presentation（壳层展示决策）** — `lib/app/shell/shell_presentation.dart::ShellPresentation`：壳层展示状态的唯一所有者（纯判定，不 import widget / page / material）。目的地：存储选中项 / 有效目的地（隐藏时回退首个可见项、恢复后自动回到原选中项）/ 上一目的地（淡出层）；播放页：`expanded` + `miniCapable`（页面在布局 / 动画落定时回写）+ `flightInProgress`（共享封面飞行守卫）与 `expansionVerdict`（不在播放页 / 无收起态 / 飞行中 → 拒绝）；派生 `showsPlayerBar`（顶栏播放条唯一口径）与 `interceptsBack`（播放页 + 可收起 + 展开）；`handleBack({required bool pageClaimsBack})` 先接收调用方给来的页面级占用（生产为 `BackClaims.any`，模块不读进程级登记表），再决定「收起展开的播放页 / 交给系统退出」。目的地枚举在 `lib/domain/models/shell_destination.dart`（`NavProvider` 转出同一类型）。壳层 State 只做渲染（弹簧 / Overlay 飞行 / 骨架），接口级测试可不挂 `MyApp` 直接覆盖判定矩阵（`test/app/shell_presentation_test.dart`）。
 
 - **Now-playing lyrics on enter（回到播放页时显示歌词）** — `kShellNowPlayingLyricsOnEnter`（默认开，`SyncCategory.settings` 跟人走），由 `NavProvider.showLyricsOnEnter` 持有；只在「从其它一级页进入播放页」时切到歌词 tab，播放页内部打开的二级页返回不重置当前 tab。设置入口在高级设置 › 播放细节。见 ADR-0039。
 
-- **Root destination back（一级页返回）** — 移动端三个一级目的地（资料 / 发现、收藏、播放页）是平级根页面：系统返回直接退出应用，不再「回上一目的地」。唯一页内层级是展开的播放页：第一次返回先收起（高度归 0，顶栏播放条回来），第二次才退出。页面级 `BackClaims`（多选 / 搜索 / 排序 / 弹层）优先，壳层让位。桌面 Esc 复用「展开态先收起」的判定，但先处理播放页队列（先收队列）；其它一级页保持原命令落点。见 ADR-0039。
+- **Root destination back（一级页返回）** — 移动端三个一级目的地（资料 / 发现、收藏、播放页）是平级根页面：系统返回直接退出应用，不再「回上一目的地」。唯一页内层级是展开的播放页：第一次返回先收起（高度归 0，顶栏播放条回来），第二次才退出。页面级 `BackClaims`（多选 / 搜索 / 排序 / 弹层）优先，壳层让位（判定收在 **Shell presentation** 的 `handleBack`）。桌面 Esc 复用「展开态先收起」的判定，但先处理播放页队列（先收队列）；其它一级页保持原命令落点。见 ADR-0039。
 
 - **VolumeControl（音量入口组件）** — `lib/widgets/volume_control.dart`：音量图标按钮 + 弹出面板（静音开关 / 滑杆 / 百分比读数，面板夹取进宿主可绘制区）的唯一实现，底栏与播放页共用；锚点 key 由宿主给出，Esc 经 `EscapeClaims` 登记自收。
 

@@ -62,6 +62,8 @@ import '../desktop/desktop_shell.dart';
 import '../shell_chrome.dart';
 import '../tray_dormant_gate.dart';
 import 'layout_skipping_offstage.dart';
+import 'shell_page_layer_presentation.dart';
+import 'shell_presentation.dart';
 
 part 'app_keys.dart';
 part 'pairing_queue.dart';
@@ -184,6 +186,12 @@ class _MyAppState extends State<MyApp>
   /// 页面侧消费时机见 `widgets/now_playing_controller.dart`。
   final NowPlayingController _nowPlaying = NowPlayingController();
 
+  /// 壳层展示决策的唯一所有者（目的地 / 展开 / 顶栏播放条 / 返回层级）。
+  ///
+  /// 壳层 State 只做渲染：跑弹簧、发共享封面飞行、搭骨架。页面在布局 /
+  /// 动画落定时把 `expanded` / `miniCapable` 回写进来。
+  late final ShellPresentation _presentation;
+
   /// 页面实例固定（key 稳定），顺序/显隐只影响底栏映射与分层透明度，
   /// 页面状态（滚动/搜索词等）天然保持。
   late final Map<ShellDestination, Widget> _pages = {
@@ -193,6 +201,9 @@ class _MyAppState extends State<MyApp>
       // 页面自己的展开 / 收起手势（圆点、内容下拉、播放器拖拽）只表达意图，
       // 由壳层同时发起顶栏 ⇄ 播放页的共享封面飞行。
       onRequestExpansion: _requestPlayerExpansion,
+      // 展开态 / 布局能力由页面回写到展示模块，壳层只消费判定。
+      onExpansionChanged: _presentation.setExpanded,
+      onMiniCapableChanged: _presentation.setMiniCapable,
       // 桌面骨架的播放页换成「封面 + 控制 / 队列·歌词·信息」版式（无收起态）；
       // 移动 / 平板骨架保持 PageView 版式。
       desktopLayout: _desktopShell,
@@ -211,33 +222,6 @@ class _MyAppState extends State<MyApp>
   /// 非空时以它为准（测试强制走另一侧骨架）。
   bool get _desktopShell => widget.desktopShell ?? isDesktopPlatform();
 
-  /// 当前选中的目的地（与底栏顺序解耦；初值 = 导航偏好的启动首页）。
-  ///
-  /// 这是「存储的选中项」，可能被运行时隐藏（如同步关掉当前底栏项）；
-  /// 壳层渲染与交互一律消费 [_effectiveDestination]，不要直接读它。
-  late ShellDestination _selectedDestination;
-  late ShellDestination _previousDestination;
-
-  /// 最近一次渲染（或由用户选中）的有效目的地。
-  ///
-  /// 可见性变化（如同步隐藏 / 恢复当前目的地）会绕过 [_selectDestination]
-  /// 改写有效选中项，[didChangeDependencies] 据此识别并同步播放页 morph 状态。
-  late ShellDestination _renderedDestination;
-
-  /// 实际生效的选中目的地：导航 chrome、页面栈与重复点击判定共用的唯一来源。
-  ///
-  /// 存储的选中项被运行时隐藏（如同步应用远端导航设置）时回退到第一个可见
-  /// 目的地。只读计算，不回写 [_selectedDestination]：隐藏项重新可见后天然
-  /// 恢复原选中项，也避免同步应用期间写回造成回环。
-  ShellDestination get _effectiveDestination {
-    final visible = context.read<NavProvider>().visibleDestinations;
-    // NavProvider 保证至少保留 1 个可见项；空列表仅作防御。
-    if (visible.isEmpty) return _selectedDestination;
-    return visible.contains(_selectedDestination)
-        ? _selectedDestination
-        : visible.first;
-  }
-
   @override
   void initState() {
     super.initState();
@@ -247,21 +231,18 @@ class _MyAppState extends State<MyApp>
         widget.showOnboarding && !OnboardingStore.completedInSession;
     WidgetsBinding.instance.addObserver(this);
     _morphAnimation.addListener(_onMorphTick);
-    // 展开态变化要重算 PopScope.canPop（壳层返回层级的第一优先是收起
-    // 播放器）；页面只在动画落定 / 布局后写，不会在构建期触发这里。
-    _nowPlaying.expanded.addListener(_onNowPlayingExpandedChanged);
-    // 布局能否收起（窄单栏 / 宽版式）决定顶栏显示播放条还是品牌位。
-    _nowPlaying.miniCapable.addListener(_onNowPlayingExpandedChanged);
     // 启动首页：导航偏好在首帧前已就绪（组合根 await 过 preferencesReady），
     // 这里同步读取即可；存储值不可见时 effectiveHomeDestination 已回退到
-    // 第一个可见目的地。
-    _selectedDestination = context.read<NavProvider>().effectiveHomeDestination;
-    _previousDestination = _selectedDestination;
-    _renderedDestination = _selectedDestination;
+    // 第一个可见目的地。目的地 / 展开 / 顶栏判定统一交给展示模块。
+    final nav = context.read<NavProvider>();
+    _presentation = ShellPresentation(
+      initialDestination: nav.effectiveHomeDestination,
+      visibleDestinations: nav.visibleDestinations,
+    )..addListener(_onPresentationChanged);
     // 顶栏 / 底栏的曲目信息区必须与「手动进入播放页」后的状态一致（播放页
     // 激活即收起封面）：否则恢复会话后顶栏会重复显示曲目封面/进度。
     _morph.setBarHeaderHidden(
-      _selectedDestination == ShellDestination.nowPlaying,
+      _presentation.effectiveDestination == ShellDestination.nowPlaying,
     );
     _barReveal = _BarHeaderReveal(
       vsync: this,
@@ -281,18 +262,31 @@ class _MyAppState extends State<MyApp>
   /// protected 的 `setState`（Dart 限制），留一个私有转发。
   void _rebuildShell() => setState(() {});
 
+  /// 展开态 / 布局能力翻转 → 重算 `PopScope.canPop` 与顶栏内容。
+  ///
+  /// 飞行中由 [PlayerMorphController.barHeaderHidden] 驱动顶栏文字 / 按钮 /
+  /// 进度条的过渡；没有飞行时才直接对齐，避免与飞行副本抢节奏。
+  void _onPresentationChanged() {
+    if (!mounted) return;
+    _rebuildShell();
+    if (!_presentation.flightInProgress) {
+      _morph.setBarHeaderHidden(!_presentation.showsPlayerBar);
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // 可见性变化（如同步隐藏当前目的地）会改写有效选中项，但没有经过
     // [_selectDestination]；把播放页 morph 状态对齐到新的有效选中项，
     // 避免页面栈已回退、顶栏却仍停留在播放页形态（曲目区/进度条收起）。
-    final effective = _effectiveDestination;
-    if (effective == _renderedDestination) return;
-    _renderedDestination = effective;
+    final bool effectiveChanged = _presentation.syncVisibility(
+      context.read<NavProvider>().visibleDestinations,
+    );
+    if (!effectiveChanged) return;
     _completeMorph();
     _morph.setPageHeaderHidden(false);
-    _morph.setBarHeaderHidden(!_showPlayerBar);
+    _morph.setBarHeaderHidden(!_presentation.showsPlayerBar);
   }
 
   @override
@@ -306,8 +300,8 @@ class _MyAppState extends State<MyApp>
     _morphEntry?.remove();
     _morphEntry = null;
     _morph.dispose();
-    _nowPlaying.expanded.removeListener(_onNowPlayingExpandedChanged);
-    _nowPlaying.miniCapable.removeListener(_onNowPlayingExpandedChanged);
+    _presentation.removeListener(_onPresentationChanged);
+    _presentation.dispose();
     _nowPlaying.dispose();
     _globalSearch.dispose();
     for (final signal in _reselect.values) {
@@ -338,15 +332,16 @@ class _MyAppState extends State<MyApp>
   /// 进入播放页的飞行期间忽略重复点击：此刻切换会与飞行副本抢封面，
   /// 等飞行落定（~0.4s）再切换。
   void _onDestinationSelected(ShellDestination destination) {
-    if (destination != _effectiveDestination) {
+    if (destination != _presentation.effectiveDestination) {
       _selectDestination(destination);
       return;
     }
     if (destination == ShellDestination.nowPlaying) {
-      if (_morphGeometry != null) return;
-      if (!_nowPlaying.miniCapable.value) return;
+      if (_presentation.expansionVerdict != ShellExpansionVerdict.accepted) {
+        return;
+      }
       HapticsService.lightImpact();
-      _requestPlayerExpansion(!_nowPlaying.expanded.value);
+      _requestPlayerExpansion(!_presentation.expanded);
       return;
     }
     // 重复点击是一次真实的点按（列表回顶是肉眼可见的动作），给一次轻震：
@@ -364,7 +359,7 @@ class _MyAppState extends State<MyApp>
   void _onFavoritesLongPress() {
     const favorites = ShellDestination.favorites;
     if (!context.read<NavProvider>().isVisible(favorites)) return;
-    if (_effectiveDestination != favorites) {
+    if (_presentation.effectiveDestination != favorites) {
       _selectDestination(favorites);
     } else {
       HapticsService.lightImpact();
@@ -374,12 +369,16 @@ class _MyAppState extends State<MyApp>
 
   void _selectDestination(ShellDestination destination) {
     final nav = context.read<NavProvider>();
+    // 同一帧里可见集合可能刚变（导航偏好重载 / 同步应用）：先同步再判定，
+    // 否则会拿旧可见集合切到一个已经隐藏的目的地。
+    _presentation.syncVisibility(nav.visibleDestinations);
     // 隐藏目的地不参与导航（与 chrome / 页面栈同一可见集合）：否则 raw
     // 选中项会再次与有效选中项分叉，页面栈回退到另一个可见项。
-    if (!nav.isVisible(destination)) return;
+    if (!_presentation.isVisible(destination)) return;
     // 过渡的起点必须是当前真正显示的页，而不是被隐藏的 raw 选中项。
-    final current = _effectiveDestination;
+    final current = _presentation.effectiveDestination;
     if (destination == current) return;
+    if (!_presentation.select(destination)) return;
     HapticsService.lightImpact();
     final bool enteringPlayer = destination == ShellDestination.nowPlaying;
     final bool leavingPlayer = current == ShellDestination.nowPlaying;
@@ -389,11 +388,9 @@ class _MyAppState extends State<MyApp>
     if (enteringPlayer && nav.showLyricsOnEnter) {
       _nowPlaying.showLyricsTab();
     }
-    setState(() {
-      _previousDestination = current;
-      _selectedDestination = destination;
-      _renderedDestination = destination;
-    });
+    // 目的地不是通知型状态（见 ShellPresentation 类注释）：切页这一帧由
+    // 壳层自己推进，与下一行的封面飞行共用同一帧。
+    setState(() {});
     if (reduceMotionOf(context)) {
       // 减弱动效：tab 淡入淡出与封面飞行都直达终态（不 forward(from: 0)、
       // 不插 Overlay 飞行副本）；两端状态仍按「谁在播放页」对齐。
@@ -413,7 +410,7 @@ class _MyAppState extends State<MyApp>
       // 宽版式 / 桌面两栏没有收起态、expanded 恒为 false，但播放页是完整
       // 可见的，离开时同样要从页内封面飞回顶栏（否则共享飞行直接消失）。
       // 只有窄版式且已收起（高度 0）才没有可起飞的页内封面。
-      if (!_nowPlaying.miniCapable.value || _nowPlaying.expanded.value) {
+      if (!_presentation.miniCapable || _presentation.expanded) {
         _startMorphBackToBar();
       } else {
         _alignMorphEnds(onPlayerPage: false);
@@ -447,31 +444,24 @@ class _MyAppState extends State<MyApp>
   /// 看不到页内 tab，命令按目的地生效 —— 在播放页里把队列视图收成默认页
   /// （停在其它栏时同样回默认页，等于「回默认页」）；其它目的地 no-op。
   void _closeQueuePanel() {
-    if (_effectiveDestination != ShellDestination.nowPlaying) return;
+    if (_presentation.effectiveDestination != ShellDestination.nowPlaying) {
+      return;
+    }
     _nowPlaying.showLyricsTab();
   }
-
-  /// 顶栏是否显示播放条（封面 + 歌名/作者 + 播放/下一首 + 进度）。
-  ///
-  /// 移动端顶栏是唯一的迷你播放器：不在播放页时恒显示；在播放页时只有
-  /// 窄版式且已收起才显示，展开后让位给品牌位（页内封面 / 标题承接）。
-  /// 宽版式 / 桌面两栏没有收起态，顶栏永远是品牌位。
-  bool get _showPlayerBar =>
-      _effectiveDestination != ShellDestination.nowPlaying ||
-      (_nowPlaying.miniCapable.value && !_nowPlaying.expanded.value);
 
   /// 播放页展开 / 收起的唯一入口（底栏重复点击、顶栏曲目区、页内手势、
   /// 返回键共用）。
   ///
   /// 页面只消费 [NowPlayingController] 的意图并跑高度动画；共享封面飞行
   /// 在这里发起，保证「页内手势」与「进入播放页」走同一套 Spring / 副本，
-  /// 不新增第二套动画系统。
+  /// 不新增第二套动画系统。守卫（页面 / 布局能力 / 飞行）由
+  /// [ShellPresentation.expansionVerdict] 裁决。
   void _requestPlayerExpansion(bool expand) {
-    if (_effectiveDestination != ShellDestination.nowPlaying) return;
-    if (!_nowPlaying.miniCapable.value) return;
-    // 飞行中忽略：两端副本正在占着封面，切换会与它抢同一份几何。
-    if (_morphGeometry != null) return;
-    final bool wasExpanded = _nowPlaying.expanded.value;
+    if (_presentation.expansionVerdict != ShellExpansionVerdict.accepted) {
+      return;
+    }
+    final bool wasExpanded = _presentation.expanded;
     if (expand) {
       if (wasExpanded) {
         _nowPlaying.expand();
@@ -503,11 +493,11 @@ class _MyAppState extends State<MyApp>
   /// 顶栏曲目区点击：不在播放页走目的地切换（含歌词偏好 + 展开 + 飞行），
   /// 已在播放页收起态则就地展开。
   void _openPlayerFromBar() {
-    if (_effectiveDestination != ShellDestination.nowPlaying) {
+    if (_presentation.effectiveDestination != ShellDestination.nowPlaying) {
       _selectDestination(ShellDestination.nowPlaying);
       return;
     }
-    if (_nowPlaying.expanded.value) return;
+    if (_presentation.expanded) return;
     _requestPlayerExpansion(true);
   }
 
@@ -544,7 +534,7 @@ class _MyAppState extends State<MyApp>
 
   /// 页面分层：选中页在最上层淡入，上一页快速淡出（fade-through）。
   Widget _buildPageStack() {
-    final selectedDestination = _effectiveDestination;
+    final selectedDestination = _presentation.effectiveDestination;
     final ordered = <ShellDestination>[
       for (final destination in ShellDestination.values)
         if (destination != selectedDestination) destination,
@@ -557,7 +547,7 @@ class _MyAppState extends State<MyApp>
             key: ValueKey(destination),
             selected: destination == selectedDestination,
             outgoing:
-                destination == _previousDestination &&
+                destination == _presentation.previousDestination &&
                 destination != selectedDestination,
             animation: _tabTransition,
             child: _pages[destination]!,
@@ -578,13 +568,14 @@ class _MyAppState extends State<MyApp>
       return OnboardingFlow(onFinished: _finishOnboarding);
     }
     final l10n = AppLocalizations.of(context)!;
-    final visibleDestinations = context
-        .watch<NavProvider>()
-        .visibleDestinations;
+    // 订阅导航偏好：可见集合变化要重建；渲染列表从展示模块取，与
+    // selectedIndex 同一权威（didChangeDependencies 已同步）。
+    context.watch<NavProvider>();
+    final visibleDestinations = _presentation.visibleDestinations;
     // 选中项被隐藏时回退到第一个可见目的地（重新显示后自动恢复）；
     // chrome、页面栈与点击判定共用同一 resolver。
-    final selectedDestination = _effectiveDestination;
-    final selectedIndex = visibleDestinations.indexOf(selectedDestination);
+    final selectedDestination = _presentation.effectiveDestination;
+    final selectedIndex = _presentation.selectedIndex;
 
     // 导航 / 顶栏 spec：两套骨架共用一份（目的地映射 / 标签 / 设置按钮 /
     // 窗口控件 / 拖动区），骨架各自适配渲染（见 shell_chrome.dart）。
@@ -637,7 +628,7 @@ class _MyAppState extends State<MyApp>
     // 顶栏由 ShellChrome 统一构造（标题 / 动作 / 拖动区装配在 ShellAppBar）：
     // 整条顶栏是窗口拖动区（隐藏标题栏后唯一的拖动入口），高度 = 56 工具行
     // + 10 进度条槽，非桌面平台 WindowDragArea 是纯透传。
-    final bool showPlayerBar = _showPlayerBar;
+    final bool showPlayerBar = _presentation.showsPlayerBar;
     final appBar = chrome.appBar(
       context: context,
       title: WindowDoubleTapMaximize(

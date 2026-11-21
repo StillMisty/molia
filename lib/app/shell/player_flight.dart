@@ -8,18 +8,6 @@ part of 'app_shell.dart';
 /// part 共享 library 私有状态，行为与内联完全一致。
 
 extension _ShellPlayerFlight on _MyAppState {
-  /// 展开态 / 布局能力翻转 → 重算 PopScope.canPop 与顶栏内容。
-  ///
-  /// 飞行中由 [PlayerMorphController.barHeaderHidden] 驱动顶栏文字 / 按钮 /
-  /// 进度条的过渡；没有飞行时才直接对齐，避免与飞行副本抢节奏。
-  void _onNowPlayingExpandedChanged() {
-    if (!mounted) return;
-    _rebuildShell();
-    if (_morphGeometry == null) {
-      _morph.setBarHeaderHidden(!_showPlayerBar);
-    }
-  }
-
   /// 顶栏 → 播放页的飞行：起点与终点分两帧抓。
   ///
   /// 起点（顶栏封面）只在点击这一帧存在——顶栏播放条在进入播放页后让位，
@@ -44,7 +32,7 @@ extension _ShellPlayerFlight on _MyAppState {
     _morph.setPageDeckReveal(0);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_effectiveDestination != ShellDestination.nowPlaying) {
+      if (_presentation.effectiveDestination != ShellDestination.nowPlaying) {
         // 一帧之内又离开了播放页：这次进入被撤销，两端状态按「不在播放页」
         // 对齐（两端真身都可见、侧槽落位）。
         _alignMorphEnds(onPlayerPage: false);
@@ -86,7 +74,7 @@ extension _ShellPlayerFlight on _MyAppState {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (destinationChanged &&
-          _effectiveDestination == ShellDestination.nowPlaying) {
+          _presentation.effectiveDestination == ShellDestination.nowPlaying) {
         // 一帧之内又回到播放页：这次离开被撤销，状态按「在播放页」对齐
         // （顶栏封面仍收起，与启动就落在播放页时同一口径）。
         _alignMorphEnds(onPlayerPage: true);
@@ -112,6 +100,7 @@ extension _ShellPlayerFlight on _MyAppState {
     // 首帧就不能亮，离开时也不能留到最后才收）。
     _morph.setPageHeaderHidden(true);
     _morphGeometry = geometry;
+    _presentation.setFlightInProgress(true);
     final url = nowPlayingCoverUrl(context, context.read<PlaybackProvider>());
     final token = ++_morphToken;
     _morphEntry = OverlayEntry(
@@ -158,6 +147,7 @@ extension _ShellPlayerFlight on _MyAppState {
     _morphToken++;
     final geometry = _morphGeometry;
     _morphGeometry = null;
+    _presentation.setFlightInProgress(false);
     // 失败 / 落定都回到稳态展开：落位帧副本移除、真身与侧槽同一帧就位。
     _morph.setPageDeckReveal(1);
     if (geometry == null) {

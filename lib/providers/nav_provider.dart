@@ -5,14 +5,11 @@ import 'package:logging/logging.dart';
 
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
+import '../domain/models/shell_destination.dart';
+
+export '../domain/models/shell_destination.dart' show ShellDestination;
 
 final logger = Logger('molia.nav_provider');
-
-/// 壳层底部导航的三个目的地。
-///
-/// 枚举声明顺序 = IndexedStack 的固定子页顺序：调整导航顺序/可见性只影响
-/// 底栏渲染与选中映射，不移动 IndexedStack 子节点，页面状态天然保持。
-enum ShellDestination { nowPlaying, favorites, library }
 
 typedef _NavLayout = ({
   List<ShellDestination> order,
