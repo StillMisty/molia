@@ -554,10 +554,13 @@
   每个请求自带触发原因 / 外发 / anti-entropy / 类别范围；在途轮次上到达的请求
   合并成至多一个补跑轮——手动优先，手动固定「推送 + 全部启用类别」，其余请求
   外发取或、范围「全部」优先否则并集，一轮从不与另一轮重叠。交付判据也只有
-  一处：结论为 `ok` / `noChanges`，且本轮开始有脏类别时至少一路传输有
-  `pushed > 0` / `skippedUnchanged > 0` 的真实传输证据（纯 `peersSeen` 不算），
-  然后按本轮开始时的类别范围清待发标记；`noPeers` / `partial` / `failed` 都
-  保守地不算交付。传输报告只有逐对端粒度，类别范围是协议可得的最细交付粒度。
+  一处：结论为 `ok` / `noChanges`，成功证据必须来自**启用**传输且没有任何
+  启用传输带失败 / 不可用证据（未运行 / `unavailableReason` / 失败计数 /
+  `error`）——本轮开始有脏类别时还要求至少一路启用传输有 `pushed > 0` /
+  `skippedUnchanged > 0`（纯 `peersSeen` 不算），然后按本轮开始时的类别范围
+  清待发标记；`noPeers` / `partial` / `failed` 都保守地不算交付。传输报告只有
+  逐对端粒度，类别范围是协议可得的最细交付粒度；局域网成功 + WebDAV 失败或
+  WebDAV 成功 + 局域网不可用都不清。
   手动轮因此同样能清掉调度器标的待发类别，轮内新写入的类别则留给下一轮。
   拉取前由 `SyncRoundRunner._pullPlan` 生成一份**拉取计划**（`SyncPullPlan`：逐对端
   `cursor` / `forceFull` + discovery）；局域网与 WebDAV 只提供证据（局域网

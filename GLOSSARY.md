@@ -1075,11 +1075,14 @@
   类别与唯一交付判据的持有者。每个请求自带 trigger / push / antiEntropy /
   onlyCategories；在途轮次上的请求合并成至多一个补跑轮——手动优先且固定
   「推送 + 全部启用类别」，其余外发取或、范围 null（全部）优先否则并集。
-  交付只认 `ok` / `noChanges`；本轮开始有待发类别时还要求至少一路传输
-  `pushed > 0 || skippedUnchanged > 0`（纯 `peersSeen` 不算），`noPeers` /
-  `partial` / `failed` 保守地不算。清待发只清「轮次开始时就脏、轮内没有被重新
-  标记、且落在本轮类别范围内」的类别；传输报告只有逐对端粒度，类别范围是
-  协议可得的最细交付粒度。调度器只决定「何时」，引擎只负责入口闸门与轮末提交。
+  交付只认 `ok` / `noChanges`；本轮开始有待发类别时还要求至少一路**启用**
+  传输 `pushed > 0 || skippedUnchanged > 0`（纯 `peersSeen` 不算），且没有
+  任何启用传输带失败 / 不可用证据（未运行 / `unavailableReason` / 失败计数 /
+  `error`）；`noPeers` / `partial` / `failed` 保守地不算。传输报告是逐对端
+  收敛证据（协议没有逐类别回执），类别范围是可得的最细交付粒度；「另一路
+  没工作就保留待发」是刻意的保守——代价是重复外发，收益是不丢本地变更。
+  清待发只清「轮次开始时就脏、轮内没有被重新标记、且落在本轮类别范围内」的
+  类别。调度器只决定「何时」，引擎只负责入口闸门与轮末提交。
 - **Sync book（同步状态的窄接口与单一提交）** — `lib/data/sync/sync_book.dart`：
   按用途声明 `SyncStampLedger`（适配器）/ `SyncPublicationState`（发布台账）/
   `SyncRoundState`（轮次）/ `SyncEngineState`（引擎）/ `SyncTransportState` /
