@@ -21,10 +21,9 @@ const int nowPlayingInfoTabIndex = 2;
 /// 播放页的外部请求通道（壳 → 播放页）。
 ///
 /// 由组合根创建并注入 `NowPlaying`；调用方只发请求，不读界面状态。
-/// 展开态 / 布局能力（`expanded` / `miniCapable`）是壳层展示决策，唯一所有者
-/// 是 `lib/app/shell/shell_presentation.dart::ShellPresentation`；页面通过
-/// `NowPlaying.onExpansionChanged` / `onMiniCapableChanged` 回写，不再经过
-/// 本控制器——留一份副本就会重新出现「两边都要对齐」的问题。
+/// 展开态 / 布局能力（`expanded` / `miniCapable`）由
+/// `lib/app/shell/shell_presentation.dart::ShellPresentation` 持有；页面通过
+/// `NowPlaying.onExpansionChanged` / `onMiniCapableChanged` 回写该模块。
 ///
 /// 壳层仍需 [activeTab]：桌面 Esc 要先判断播放页右栏是否停在队列。
 class NowPlayingController extends ChangeNotifier {

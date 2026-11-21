@@ -40,8 +40,7 @@ class NowPlaying extends StatefulWidget {
 
   /// 展开态回写：页面在布局 / 动画落定时把「是否完整展开」交给壳层。
   ///
-  /// 壳层的 `ShellPresentation` 是展开态的唯一所有者；页面只报告自己的高度
-  /// 状态，不持有第二份壳层可见副本。
+  /// 壳层的 `ShellPresentation` 持有真值；页面只报告自己的高度状态。
   final ValueChanged<bool>? onExpansionChanged;
 
   /// 布局能力回写：当前版式是否有收起态（窄单栏 true / 宽版式、桌面 false）。
@@ -142,8 +141,8 @@ class _NowPlayingState extends State<NowPlaying>
   /// tab 请求共用一次通知，只有 tab 版本前进才重放 tab。
   int _handledTabRequest = 0;
 
-  /// 最近一次回写给壳层的展开态 / 布局能力（只用于去重，不是第二份状态）：
-  /// 壳层展示模块持有真值，这里只避免每次 build 都排一个帧末写入。
+  /// 最近一次回写给壳层的展开态 / 布局能力：真值在壳层展示模块，这里只做
+  /// 去重，避免每次 build 都排一个帧末写入。
   bool? _reportedExpansion;
   bool _reportedMiniCapable = false;
 

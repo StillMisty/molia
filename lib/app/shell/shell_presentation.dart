@@ -1,21 +1,18 @@
 /// 壳层展示决策的唯一所有者（目的地、播放页展开、顶栏播放条、返回层级）。
 ///
-/// **为什么单独成模块**：这些判断原先散在 `_MyAppState`（选中 / 有效 / 上一
-/// 目的地、`_showPlayerBar`）、`NowPlayingController`（`expanded` /
-/// `miniCapable`）和 `player_flight.dart`（`_morphGeometry` 兼作飞行守卫）里，
-/// 壳层每次渲染都要在几份副本之间对齐，只有挂载整个 `MyApp` 才能验证。
-/// 把决策收进这里后，widget 层只剩动画 / Overlay / 布局，测试可以在接口上
-/// 直接覆盖 ADR-0039 的判定矩阵。
+/// 目的地解析、展开守卫、顶栏播放条可见性与返回裁决在这里集中计算，壳层
+/// State 只消费结果并执行弹簧 / Overlay 飞行 / 布局。判定都是纯函数式状态
+/// 读取，接口测试可以直接覆盖 ADR-0039 的矩阵，不需要挂载 `MyApp`。
 ///
-/// **边界**：本模块只依赖 foundation + [ShellDestination] 枚举与页面级
-/// 返回登记；不 import widgets / pages / material，不持有 Ticker、Overlay 或
-/// 页面实例。弹簧、共享封面飞行、淡入淡出仍由壳层渲染层执行。
+/// **边界**：只依赖 foundation + [ShellDestination]；不 import widgets /
+/// pages / material，不持有 Ticker、Overlay 或页面实例，也不读进程级登记表
+/// （页面级返回占用由调用方以参数传入）。弹簧、共享封面飞行、淡入淡出由
+/// 壳层渲染层执行。
 library;
 
 import 'package:flutter/foundation.dart';
 
-import '../../providers/nav_provider.dart' show ShellDestination;
-import '../../services/back_claims.dart';
+import '../../domain/models/shell_destination.dart';
 
 /// 一次展开 / 收起请求此刻能否执行。
 ///
@@ -37,7 +34,7 @@ enum ShellExpansionVerdict {
 
 /// 壳层级返回（Android back）的裁决。
 enum ShellBackIntent {
-  /// 不拦：非展开播放页，或页面级临时状态（[BackClaims]）正接管返回。
+  /// 不拦：非展开播放页，或页面级临时状态正接管返回。
   exit,
 
   /// 壳层先收起展开的播放页；调用方随后执行收起动画，页面落定时回写
@@ -50,7 +47,7 @@ enum ShellBackIntent {
 /// 状态所有权：
 /// - 目的地由壳层在点击 / 可见性变化时写入（[select] / [syncVisibility]）；
 /// - [expanded] / [miniCapable] 由播放页在布局或动画落定时回写（[setExpanded] /
-///   [setMiniCapable]），壳层不再持有第二份；
+///   [setMiniCapable]）；
 /// - [flightInProgress] 由壳层在共享封面起飞 / 落定时写（[setFlightInProgress]）。
 ///
 /// 通知只在 [expanded] / [miniCapable] 变化时发出：它们是页面异步回写的
@@ -104,6 +101,9 @@ class ShellPresentation extends ChangeNotifier {
     if (_visible.isEmpty) return _selected;
     return _visible.contains(_selected) ? _selected : _visible.first;
   }
+
+  /// 当前目的地是否是播放页。
+  bool get onPlayerPage => effectiveDestination == ShellDestination.nowPlaying;
 
   /// [effectiveDestination] 在 [visibleDestinations] 中的下标（不在列表时 -1）。
   int get selectedIndex => _visible.indexOf(effectiveDestination);
@@ -162,24 +162,20 @@ class ShellPresentation extends ChangeNotifier {
   /// 移动端顶栏是唯一的迷你播放器：不在播放页时恒显示；在播放页时只有
   /// 窄版式且已收起才显示，展开后让位给品牌位。宽版式 / 桌面没有收起态，
   /// 在播放页永远不显示。
-  bool get showsPlayerBar =>
-      effectiveDestination != ShellDestination.nowPlaying ||
-      (_miniCapable && !_expanded);
+  bool get showsPlayerBar => !onPlayerPage || (_miniCapable && !_expanded);
 
   /// 壳层是否要拦截系统返回（展开的播放页是唯一的页内层级）。
   ///
-  /// 页面级占用（[BackClaims]）不参与 `canPop`：它们由页面自己的 `PopScope`
-  /// 声明 `canPop == false`，壳层在回调里让位（见 [handleBack]）。
-  bool get interceptsBack =>
-      effectiveDestination == ShellDestination.nowPlaying && _expanded;
+  /// 同时要求 [miniCapable]：桌面 / 宽版式没有收起态，残留的 expanded 不能
+  /// 吞掉返回。页面级占用不参与 `canPop`：它们由页面自己的 `PopScope` 声明
+  /// `canPop == false`，壳层在回调里让位（见 [handleBack]）。
+  bool get interceptsBack => onPlayerPage && _miniCapable && _expanded;
 
   /// 展开 / 收起请求的裁决；调用方只在 [ShellExpansionVerdict.accepted] 时执行。
   ///
   /// 方向不影响守卫（展开与收起共用同一组前提），因此不接收 `expand`。
   ShellExpansionVerdict get expansionVerdict {
-    if (effectiveDestination != ShellDestination.nowPlaying) {
-      return ShellExpansionVerdict.notOnPlayerPage;
-    }
+    if (!onPlayerPage) return ShellExpansionVerdict.notOnPlayerPage;
     if (!_miniCapable) return ShellExpansionVerdict.layoutCannotCollapse;
     if (_flightInProgress) return ShellExpansionVerdict.flightInProgress;
     return ShellExpansionVerdict.accepted;
@@ -187,10 +183,13 @@ class ShellPresentation extends ChangeNotifier {
 
   /// 壳层级返回的裁决：页面级占用优先，其次「展开的播放页先收起」。
   ///
+  /// [pageClaimsBack] 由调用方传入（生产为 `BackClaims.any`）：本模块不读
+  /// 进程级登记表，接口测试可以用布尔值覆盖优先级。
+  ///
   /// 只做判定，不改 [expanded]：页面在收起动画落定时才回写，提前清零会让
   /// 收起途中第二次返回直接退出应用。
-  ShellBackIntent handleBack() {
-    if (BackClaims.any) return ShellBackIntent.exit;
+  ShellBackIntent handleBack({required bool pageClaimsBack}) {
+    if (pageClaimsBack) return ShellBackIntent.exit;
     if (!interceptsBack) return ShellBackIntent.exit;
     return ShellBackIntent.collapsePlayer;
   }

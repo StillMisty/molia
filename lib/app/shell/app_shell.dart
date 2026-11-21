@@ -34,6 +34,7 @@ import '../../providers/playback_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/app_branding_service.dart';
+import '../../services/back_claims.dart';
 import '../../services/haptics.dart';
 import '../../services/language_service.dart';
 import '../../services/onboarding_store.dart';
@@ -61,6 +62,7 @@ import '../desktop/desktop_shell.dart';
 import '../shell_chrome.dart';
 import '../tray_dormant_gate.dart';
 import 'layout_skipping_offstage.dart';
+import 'shell_page_layer_presentation.dart';
 import 'shell_presentation.dart';
 
 part 'app_keys.dart';
@@ -186,8 +188,8 @@ class _MyAppState extends State<MyApp>
 
   /// 壳层展示决策的唯一所有者（目的地 / 展开 / 顶栏播放条 / 返回层级）。
   ///
-  /// 壳层 State 只做渲染：跑弹簧、发共享封面飞行、搭骨架。判定都在这里，
-  /// 页面在布局 / 动画落定时把 `expanded` / `miniCapable` 回写进来。
+  /// 壳层 State 只做渲染：跑弹簧、发共享封面飞行、搭骨架。页面在布局 /
+  /// 动画落定时把 `expanded` / `miniCapable` 回写进来。
   late final ShellPresentation _presentation;
 
   /// 页面实例固定（key 稳定），顺序/显隐只影响底栏映射与分层透明度，
@@ -199,7 +201,7 @@ class _MyAppState extends State<MyApp>
       // 页面自己的展开 / 收起手势（圆点、内容下拉、播放器拖拽）只表达意图，
       // 由壳层同时发起顶栏 ⇄ 播放页的共享封面飞行。
       onRequestExpansion: _requestPlayerExpansion,
-      // 展开态 / 布局能力由页面回写，壳层不再持有第二份副本。
+      // 展开态 / 布局能力由页面回写到展示模块，壳层只消费判定。
       onExpansionChanged: _presentation.setExpanded,
       onMiniCapableChanged: _presentation.setMiniCapable,
       // 桌面骨架的播放页换成「封面 + 控制 / 队列·歌词·信息」版式（无收起态）；
@@ -267,7 +269,7 @@ class _MyAppState extends State<MyApp>
   void _onPresentationChanged() {
     if (!mounted) return;
     _rebuildShell();
-    if (_morphGeometry == null) {
+    if (!_presentation.flightInProgress) {
       _morph.setBarHeaderHidden(!_presentation.showsPlayerBar);
     }
   }
@@ -367,12 +369,16 @@ class _MyAppState extends State<MyApp>
 
   void _selectDestination(ShellDestination destination) {
     final nav = context.read<NavProvider>();
+    // 同一帧里可见集合可能刚变（导航偏好重载 / 同步应用）：先同步再判定，
+    // 否则会拿旧可见集合切到一个已经隐藏的目的地。
+    _presentation.syncVisibility(nav.visibleDestinations);
     // 隐藏目的地不参与导航（与 chrome / 页面栈同一可见集合）：否则 raw
     // 选中项会再次与有效选中项分叉，页面栈回退到另一个可见项。
-    if (!nav.isVisible(destination)) return;
+    if (!_presentation.isVisible(destination)) return;
     // 过渡的起点必须是当前真正显示的页，而不是被隐藏的 raw 选中项。
     final current = _presentation.effectiveDestination;
     if (destination == current) return;
+    if (!_presentation.select(destination)) return;
     HapticsService.lightImpact();
     final bool enteringPlayer = destination == ShellDestination.nowPlaying;
     final bool leavingPlayer = current == ShellDestination.nowPlaying;
@@ -382,7 +388,6 @@ class _MyAppState extends State<MyApp>
     if (enteringPlayer && nav.showLyricsOnEnter) {
       _nowPlaying.showLyricsTab();
     }
-    _presentation.select(destination);
     // 目的地不是通知型状态（见 ShellPresentation 类注释）：切页这一帧由
     // 壳层自己推进，与下一行的封面飞行共用同一帧。
     setState(() {});
@@ -563,9 +568,10 @@ class _MyAppState extends State<MyApp>
       return OnboardingFlow(onFinished: _finishOnboarding);
     }
     final l10n = AppLocalizations.of(context)!;
-    final visibleDestinations = context
-        .watch<NavProvider>()
-        .visibleDestinations;
+    // 订阅导航偏好：可见集合变化要重建；渲染列表从展示模块取，与
+    // selectedIndex 同一权威（didChangeDependencies 已同步）。
+    context.watch<NavProvider>();
+    final visibleDestinations = _presentation.visibleDestinations;
     // 选中项被隐藏时回退到第一个可见目的地（重新显示后自动恢复）；
     // chrome、页面栈与点击判定共用同一 resolver。
     final selectedDestination = _presentation.effectiveDestination;

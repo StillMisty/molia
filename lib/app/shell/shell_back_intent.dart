@@ -13,7 +13,8 @@ extension _ShellBackIntent on _MyAppState {
   /// 需要壳层先收起；页面级 `BackClaims` 优先也由模块统一判定。返回 false
   /// 表示「不再拦」，交给系统 pop。
   bool _handleShellBack() {
-    if (_presentation.handleBack() != ShellBackIntent.collapsePlayer) {
+    if (_presentation.handleBack(pageClaimsBack: BackClaims.any) !=
+        ShellBackIntent.collapsePlayer) {
       return false;
     }
     _requestPlayerExpansion(false);

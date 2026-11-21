@@ -1,8 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/app/shell/app_shell.dart' show shellPageLayerPresentation;
+import 'package:molia/app/shell/shell_page_layer_presentation.dart';
 import 'package:molia/app/shell/shell_presentation.dart';
-import 'package:molia/providers/nav_provider.dart' show ShellDestination;
-import 'package:molia/services/back_claims.dart';
+import 'package:molia/domain/models/shell_destination.dart';
 
 /// `ShellPresentation` 的接口级用例：不挂载 `MyApp`、不 pump 壳层帧。
 ///
@@ -103,6 +102,13 @@ void main() {
               destination: favorites,
               miniCapable: false,
               expanded: true,
+              showsPlayerBar: true,
+            ),
+            (
+              name: '其它页 + 可收起 + 收起',
+              destination: library,
+              miniCapable: true,
+              expanded: false,
               showsPlayerBar: true,
             ),
             (
@@ -212,22 +218,30 @@ void main() {
   });
 
   group('返回层级', () {
-    setUp(BackClaims.reset);
-    tearDown(BackClaims.reset);
-
-    test('收起态 / 其它页不拦返回', () {
-      final presentation = build(selected: nowPlaying);
-      presentation.setMiniCapable(true);
-      expect(presentation.interceptsBack, isFalse);
-      expect(presentation.handleBack(), ShellBackIntent.exit);
+    test('收起态 / 其它页 / 无收起态都不拦返回', () {
+      final collapsed = build(selected: nowPlaying);
+      collapsed.setMiniCapable(true);
+      expect(collapsed.interceptsBack, isFalse);
+      expect(collapsed.handleBack(pageClaimsBack: false), ShellBackIntent.exit);
 
       // 其它页即使残留展开态（异常顺序）也不拦：一级页返回即退出。
       final otherPage = build(selected: favorites);
       otherPage.setExpanded(true);
       expect(otherPage.interceptsBack, isFalse);
-      expect(otherPage.handleBack(), ShellBackIntent.exit);
+      expect(otherPage.handleBack(pageClaimsBack: false), ShellBackIntent.exit);
+
+      // 桌面 / 宽版式没有收起态：expanded 残留不能吞掉返回。
+      final noCollapse = build(selected: nowPlaying);
+      noCollapse.setExpanded(true);
+      expect(noCollapse.interceptsBack, isFalse);
+      expect(
+        noCollapse.handleBack(pageClaimsBack: false),
+        ShellBackIntent.exit,
+      );
+
+      noCollapse.dispose();
       otherPage.dispose();
-      presentation.dispose();
+      collapsed.dispose();
     });
 
     test('展开的播放页先收起，页面级占用优先', () {
@@ -236,15 +250,16 @@ void main() {
         ..setMiniCapable(true)
         ..setExpanded(true);
       expect(presentation.interceptsBack, isTrue);
-      expect(presentation.handleBack(), ShellBackIntent.collapsePlayer);
+      expect(
+        presentation.handleBack(pageClaimsBack: false),
+        ShellBackIntent.collapsePlayer,
+      );
 
-      // 页面级临时状态（多选 / 搜索 / 排序 / 弹层）登记时壳层让位。
-      var pageClaimsBack = true;
-      BackClaims.add(() => pageClaimsBack);
-      expect(presentation.handleBack(), ShellBackIntent.exit);
-
-      pageClaimsBack = false;
-      expect(presentation.handleBack(), ShellBackIntent.collapsePlayer);
+      // 页面级临时状态（多选 / 搜索 / 排序 / 弹层）接管时壳层让位。
+      expect(
+        presentation.handleBack(pageClaimsBack: true),
+        ShellBackIntent.exit,
+      );
       presentation.dispose();
     });
   });
