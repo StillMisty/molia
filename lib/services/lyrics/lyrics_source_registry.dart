@@ -27,7 +27,7 @@ class LyricsSourceRegistry {
   /// 只是它的生产默认绑定。
   factory LyricsSourceRegistry.forSession(
     BiliSession session, {
-    BuiltinTransport? transport,
+    required BuiltinTransport transport,
   }) => LyricsSourceRegistry(_standardStrategies(session, transport));
 
   /// 来源声明顺序：自动回退的并行竞速顺序，也是歌词换源的默认顺序
@@ -42,17 +42,11 @@ class LyricsSourceRegistry {
 
   /// 标准来源集合（渠道顺序取 `SongChannels.keys`，LRCLIB 兜底放最后）。
   ///
-  /// static final 延迟初始化：只在首次访问时创建 provider（含 Dio），
-  /// 组合根构造 [LyricsService] 不额外产生网络请求。B 站可用性闭包绑定
-  /// [BiliSession.shared]（生产账号服务默认写同一份）；其它实例走
-  /// [LyricsSourceRegistry.forSession]。
-  static final LyricsSourceRegistry standard = LyricsSourceRegistry.forSession(
-    BiliSession.shared,
-  );
-
+  /// 必须由组合根用共享传输构造；没有进程级默认实例，避免出现第二份
+  /// `BuiltinTransport` / 第二套缓存。
   static List<LyricsSourceStrategy> _standardStrategies(
     BiliSession session,
-    BuiltinTransport? transport,
+    BuiltinTransport transport,
   ) {
     // 五个音乐平台沿用各自的专用 provider：搜索后需要平台特有字段
     // （kg 的 hash、mg 的 mrc/lrc/trc URL、tx 的数字 songId 等）才能取词，
@@ -85,7 +79,7 @@ class LyricsSourceRegistry {
           channelKey: channel.key,
           provider: BuiltinLyricProvider(
             channel.key,
-            http: transport ?? BuiltinTransport(),
+            http: transport,
             adapter: channel.key == 'bili'
                 ? (http, raw) =>
                       BiliLyric(transport: http, session: session).fetch(raw)

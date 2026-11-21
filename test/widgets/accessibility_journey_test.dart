@@ -12,6 +12,7 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/domain/models/lyric_line.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/lyrics_provider.dart';
+import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/widgets/responsive.dart';
@@ -30,7 +31,8 @@ import '../support/fakes.dart';
 import '../support/settings_test_support.dart';
 
 class _FakeLyricsProvider extends LyricsProvider {
-  _FakeLyricsProvider(this._state);
+  _FakeLyricsProvider(this._state)
+    : super(service: LyricsService(providers: const []));
 
   final LyricsState _state;
 

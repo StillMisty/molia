@@ -73,7 +73,7 @@ class SourceSwapPage extends StatefulWidget {
     required this.lyricsProvider,
     this.initialTab = SourceSwapTab.audio,
     this.embedded = false,
-    this.lyricsSources,
+    required this.lyricsSources,
   });
 
   final SourceSwapRequest request;
@@ -85,7 +85,7 @@ class SourceSwapPage extends StatefulWidget {
   final bool embedded;
 
   /// 测试注入歌词来源（缺省走标准歌词来源注册表）。
-  final List<LyricsSourceStrategy>? lyricsSources;
+  final List<LyricsSourceStrategy> lyricsSources;
 
   @override
   State<SourceSwapPage> createState() => _SourceSwapPageState();

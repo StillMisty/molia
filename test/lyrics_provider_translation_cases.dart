@@ -97,7 +97,7 @@ void main() {
 }
 
 class _FakeLyricsService extends LyricsService {
-  _FakeLyricsService(this.result);
+  _FakeLyricsService(this.result) : super(providers: const []);
 
   final LyricsResult? result;
 

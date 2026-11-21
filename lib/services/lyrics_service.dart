@@ -9,7 +9,6 @@ import '../domain/models/lyrics_result.dart';
 import 'cache_service.dart';
 import 'lyrics_cache.dart';
 import 'lyrics/lyric_provider.dart';
-import 'lyrics/lyrics_source_registry.dart';
 
 export '../domain/models/lyrics_result.dart';
 
@@ -43,16 +42,12 @@ class LyricsService {
   /// 等待网络）。没有同渠道 provider 的曲目保持原有并行竞速。
   final Duration sameSourceTimeout;
 
-  /// [providers] 只用于测试注入；缺省取 [LyricsSourceRegistry.standard] 的
-  /// 自动回退来源（五个专用 provider 的音乐平台 + LRCLIB；
-  /// 汽水 / B 站字幕只进手动换源）。
+  /// 自动回退来源由组合根注入（`LyricsSourceRegistry.autoProviders`）。
   ///
-  /// 注册表是 static final（延迟初始化），这里只读列表，不创建实例、不发
-  /// 请求；provider 的网络调用仍只发生在真正取词时。`standard` 的 B 站
-  /// 可用性闭包绑定 `BiliSession.shared`（生产账号服务默认写同一份）；
-  /// 自动回退列表本来就不含 B 站，会话注入不改变取词顺序。
+  /// 没有进程级默认注册表：歌词 provider 与内置音源共用同一个传输实例，
+  /// 测试也显式传自己的列表。
   LyricsService({
-    List<LyricProvider>? providers,
+    required List<LyricProvider> providers,
     SharedPreferences? prefs,
     CacheService? cacheService,
     LyricsCache? lyricsCache,
@@ -60,7 +55,9 @@ class LyricsService {
     this._networkFallbackAllowed,
     this._nativeLyricAvailable,
     this.sameSourceTimeout = const Duration(seconds: 3),
-  }) : _providers = providers ?? LyricsSourceRegistry.standard.autoProviders,
+  })
+    // ignore: prefer_initializing_formals
+    : _providers = providers,
        _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
        _cacheService = cacheService ?? CacheService.instance;
 

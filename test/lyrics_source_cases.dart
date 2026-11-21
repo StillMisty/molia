@@ -15,6 +15,7 @@ import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/bili_session_mock.dart';
 import 'support/mock_dio.dart';
+import 'support/transport_test_support.dart';
 
 /// 歌词来源注册表与通用内置 platform provider：渠道自动派生、B 站登录
 /// 门槛、手动换源的搜索 / 取词（raw 透传）与失败收口。
@@ -33,7 +34,7 @@ void main() {
 
   setUp(() {
     // 每个用例都从独立传输基线出发：上一个用例注入的 mock 不外溢。
-    transport = BuiltinTransport();
+    transport = testTransport();
     BiliApi.reset();
     BiliPlay.reset();
   });
@@ -50,7 +51,7 @@ void main() {
     FutureOrResponse endpoint, {
     List<RequestOptions>? requests,
   }) {
-    return BuiltinTransport(
+    return testTransport(
       dio: mockDio((request) async {
         requests?.add(request);
         final session = biliSessionResponse(request);
@@ -62,7 +63,10 @@ void main() {
 
   group('lyrics source registry', () {
     test('standard：渠道按内置顺序声明，B 站只进手动换源', () {
-      final registry = LyricsSourceRegistry.standard;
+      final registry = LyricsSourceRegistry.forSession(
+        BiliSession.shared,
+        transport: testTransport(),
+      );
 
       expect(registry.strategies.map((strategy) => strategy.channelKey), [
         'tx',
@@ -117,8 +121,10 @@ void main() {
 
     test('B 站可用性按调用时求值：登录后消失、退出后恢复', () {
       final session = BiliSession();
-      final bili = LyricsSourceRegistry.forSession(session).strategies
-          .firstWhere((s) => s.channelKey == 'bili');
+      final bili = LyricsSourceRegistry.forSession(
+        session,
+        transport: testTransport(),
+      ).strategies.firstWhere((s) => s.channelKey == 'bili');
 
       expect(bili.unavailable!(), LyricsSourceUnavailable.biliLoginRequired);
 
@@ -238,7 +244,7 @@ void main() {
 
     test('未登录：B 站取词直接返回 null，不发请求', () async {
       final requests = <RequestOptions>[];
-      transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) async {
           requests.add(request);
           return textResponse('{}', statusCode: 500);
@@ -270,7 +276,7 @@ void main() {
 
     test('空关键词：不搜索、不请求', () async {
       final requests = <RequestOptions>[];
-      transport = BuiltinTransport(
+      transport = testTransport(
         dio: mockDio((request) async {
           requests.add(request);
           return textResponse('{}', statusCode: 500);
