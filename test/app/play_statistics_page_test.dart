@@ -7,7 +7,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/pages/play_statistics_page.dart';
+import 'package:molia/pages/statistics/play_statistics_page.dart'
+    show playStatisticsPosterFileName;
 import 'package:molia/providers/play_statistics_provider.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/save_as.dart';
@@ -82,7 +85,11 @@ void main() {
     await db.close();
   });
 
-  Future<void> pumpPage(WidgetTester tester) async {
+  Future<void> pumpPage(
+    WidgetTester tester, {
+    PlayStatisticsProvider? withProvider,
+  }) async {
+    final active = withProvider ?? provider;
     await tester.pumpWidget(
       M3EMaterialApp(
         locale: const Locale('zh'),
@@ -95,9 +102,7 @@ void main() {
         theme: ThemeData.light(),
         home: MultiProvider(
           providers: [
-            ChangeNotifierProvider<PlayStatisticsProvider>.value(
-              value: provider,
-            ),
+            ChangeNotifierProvider<PlayStatisticsProvider>.value(value: active),
             Provider<SaveAs>.value(value: saveAs),
             Provider<NotificationService?>.value(value: notifications),
           ],
@@ -198,6 +203,41 @@ void main() {
     expect(call.fileName, startsWith('molia_listening_stats_month_'));
     expect(call.bytes, isNotEmpty);
     expect(notifications.last, contains('posters/'));
+  });
+
+  test('海报文件名时间戳只来自统计窗口', () {
+    expect(
+      playStatisticsPosterFileName(
+        DateTime(2030, 12, 31, 23, 59, 59),
+        PlayStatisticsRange.month,
+      ),
+      'molia_listening_stats_month_2030-12-31T23-59-59.000.png',
+    );
+    expect(
+      playStatisticsPosterFileName(null, PlayStatisticsRange.week),
+      'molia_listening_stats_week.png',
+      reason: '没有已接受窗口时不退回墙钟',
+    );
+  });
+
+  testWidgets('导出文件名与载荷时间戳取统计窗口的 now', (tester) async {
+    final fixed = DateTime(2030, 12, 31, 23, 59, 59);
+    final scoped = PlayStatisticsProvider(
+      repository: repository,
+      clock: () => fixed,
+    );
+    addTearDown(scoped.dispose);
+
+    await pumpPage(tester, withProvider: scoped);
+    expect(scoped.window!.now, fixed);
+    await openOverflow(tester);
+    await tester.tap(find.text('导出数据'));
+    await waitFor(tester, () => saveAs.saves.isNotEmpty);
+
+    final call = saveAs.saves.single;
+    expect(call.fileName, 'molia_listening_2030-12-31T23-59-59.000.json');
+    final payload = jsonDecode(utf8.decode(call.bytes)) as Map<String, dynamic>;
+    expect(payload['exportedAt'], '2030-12-31T23:59:59.000');
   });
 
   testWidgets('导出数据在页面 ⋮ 里，仍写入 exports 目录', (tester) async {

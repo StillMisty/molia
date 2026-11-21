@@ -6,6 +6,7 @@
 /// l10n，也不查数据库。
 library;
 
+import '../../domain/models/annual_report_entry.dart';
 import '../../domain/models/play_statistics.dart';
 
 /// 一次统计加载的时间窗口：范围 + 唯一时钟值。
@@ -46,7 +47,9 @@ class ListeningStatisticsView {
     required this._weekdayHourByDuration,
     required this._weekdayHourByCount,
     required this.posterWeekdayHour,
+    required this.firstPlayedAt,
     required this.firstDay,
+    required this.annualEntry,
   });
 
   /// 从快照与窗口构建投影；只做内存分桶，不做 I/O。
@@ -62,7 +65,7 @@ class ListeningStatisticsView {
     }
 
     final weekdayHour = _weekdayHourMatrices(snapshot.byWeekdayHour);
-    final firstPlayedAt = snapshot.summary.firstPlayedAt;
+    final firstPlayedAt = snapshot.summary.firstPlayedLocal;
 
     return ListeningStatisticsView._(
       snapshot: snapshot,
@@ -72,9 +75,10 @@ class ListeningStatisticsView {
       weekdayHourByDuration: weekdayHour.duration,
       weekdayHourByCount: weekdayHour.count,
       posterWeekdayHour: _flattenWeekdayHour(weekdayHour.duration),
-      firstDay: firstPlayedAt == null
-          ? window.today
-          : _dateOnly(DateTime.fromMillisecondsSinceEpoch(firstPlayedAt)),
+      firstPlayedAt: firstPlayedAt,
+      firstDay: firstPlayedAt == null ? window.today : _dateOnly(firstPlayedAt),
+      // 年度入口与日历 / 高亮共用同一份全量日历和同一个窗口 now。
+      annualEntry: AnnualReportEntry.fromDaily(snapshot.daily, now: window.now),
     );
   }
 
@@ -89,8 +93,17 @@ class ListeningStatisticsView {
   final List<List<int>> _weekdayHourByDuration;
   final List<List<int>> _weekdayHourByCount;
 
+  /// 全局首播时刻（本地时间；无首播记录 = null）。
+  ///
+  /// 页面「数据起始日」、日历起点与年度报告覆盖起点都消费这一份事实
+  /// （年度域不再自己从 `summary.firstPlayedAt` 反推）。
+  final DateTime? firstPlayedAt;
+
   /// 日历热力图的起始日（本地零点；无首播记录时退回今天）。
   final DateTime firstDay;
+
+  /// 年度报告入口（全量日历年份 + 同一窗口的 now）。
+  final AnnualReportEntry annualEntry;
 
   /// 日历热力图的「今天」（本地零点）。
   DateTime get today => window.today;

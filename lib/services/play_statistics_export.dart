@@ -13,6 +13,10 @@ import '../domain/models/play_statistics.dart';
 /// 导出 JSON 的 schema 版本（字段变化时递增）。
 const int playStatisticsExportVersion = 1;
 
+/// 导出文件名：时间戳来自统计窗口（与载荷 `exportedAt` 同一份，不读墙钟）。
+String playStatisticsExportFileName(DateTime exportedAt) =>
+    'molia_listening_${exportedAt.toIso8601String().replaceAll(':', '-')}.json';
+
 /// 面向 AI 的固定提示语（与 UI 语言无关，英文更通用）。
 const String playStatisticsExportInstructions =
     'This is my music listening history exported from Molia. '

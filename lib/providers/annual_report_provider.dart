@@ -149,6 +149,8 @@ class AnnualReportProvider extends ChangeNotifier {
         data: data,
         now: _clock(),
         knownSourceNames: _sourceNames,
+        // 与统计页「数据起始日」同一事实；年度域不再从 summary 反推。
+        firstPlayedAt: data.firstPlayedAt,
         recordingEnabled: recordingEnabled,
       );
       _loaded = true;

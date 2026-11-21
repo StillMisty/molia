@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
+import 'package:molia/domain/models/annual_report.dart';
 import 'package:molia/domain/models/annual_report_entry.dart';
 import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/providers/play_statistics_provider.dart';
+import 'package:molia/services/play_statistics_export.dart';
 
 import '../support/memory_database.dart';
 import '../support/sync_test_support.dart';
@@ -50,7 +52,12 @@ class _FakeClock {
   void armNext() => _armed = true;
 }
 
-ListeningStatisticsSnapshot _snapshot({int totalListenedMs = 0}) {
+ListeningStatisticsSnapshot _snapshot({
+  int totalListenedMs = 0,
+  List<DayListened> daily = const [],
+  DateTime? firstPlayedAt,
+}) {
+  final firstPlayed = firstPlayedAt ?? DateTime(2030, 12, 31);
   return ListeningStatisticsSnapshot(
     summary: PlayStatisticsSummary(
       playCount: 1,
@@ -59,11 +66,11 @@ ListeningStatisticsSnapshot _snapshot({int totalListenedMs = 0}) {
       uniqueTrackCount: 1,
       completionRate: 1,
       skipRate: 0,
-      firstPlayedAt: DateTime(2030, 12, 31).millisecondsSinceEpoch,
+      firstPlayedAt: firstPlayed.millisecondsSinceEpoch,
     ),
     topTracks: const [],
     topArtists: const [],
-    daily: const [],
+    daily: daily,
     byWeekdayHour: const [],
     sources: const [],
   );
@@ -249,6 +256,82 @@ void main() {
     expect(scoped.view, same(accepted), reason: '过期结果不得覆盖新视图');
     expect(scoped.window!.now, secondNow);
     expect(scoped.snapshot!.summary.totalListenedMs, 200);
+  });
+
+  test('跨年窗口：入口 / 年度覆盖 / 导出时间戳共用已接受窗口', () async {
+    final before = DateTime(2030, 12, 31, 23, 59, 59);
+    final after = DateTime(2031, 1, 1, 0, 0, 1);
+    final firstPlayedAt = DateTime(2030, 12, 31, 23, 30);
+    final clock = _FakeClock([before, after]);
+    final repo = scripted()
+      ..enqueue(
+        () async => _snapshot(
+          daily: [
+            DayListened(
+              day: DateTime(2030, 12, 31),
+              listenedMs: 120000,
+              playCount: 1,
+            ),
+          ],
+          firstPlayedAt: firstPlayedAt,
+        ),
+      )
+      ..enqueue(() async => throw StateError('boom'));
+    addTearDown(repo.dispose);
+    final scoped = PlayStatisticsProvider(repository: repo, clock: clock.next);
+    addTearDown(scoped.dispose);
+
+    // 真实库里的事件让年度快照读到同一份首播事实。
+    await insert(DateTime(2030, 12, 31, 23, 30), 's1');
+
+    await scoped.ensureLoaded();
+    final view = scoped.view!;
+    expect(view.window.now, before);
+    expect(view.firstPlayedAt, firstPlayedAt);
+    expect(view.annualEntry.featuredYear, 2030);
+    expect(view.annualEntry.prominent, isTrue);
+
+    final annualData = await repo.annualSnapshot(
+      since: DateTime(2030).millisecondsSinceEpoch,
+      until: DateTime(2031).millisecondsSinceEpoch,
+    );
+    final report = buildAnnualReport(
+      year: view.annualEntry.featuredYear,
+      data: annualData,
+      now: view.window.now,
+      knownSourceNames: const {},
+      firstPlayedAt: view.firstPlayedAt,
+    );
+    expect(report.coverageStart, firstPlayedAt);
+    expect(report.asOfToday, isTrue);
+
+    final export = await scoped.buildExportJson();
+    expect(export.exportedAt, before);
+    expect(
+      playStatisticsExportFileName(export.exportedAt),
+      'molia_listening_2030-12-31T23-59-59.000.json',
+    );
+
+    // 跨过年后重载失败：旧视图 / 旧时间戳保持不变。
+    clock.armNext();
+    await scoped.refresh();
+    expect(scoped.hasError, isTrue);
+    expect(scoped.view, same(view));
+    expect(scoped.view!.window.now, before);
+    expect((await scoped.buildExportJson()).exportedAt, before);
+  });
+
+  test('首次加载失败：没有已接受窗口时不盖导出时间戳', () async {
+    final clock = _FakeClock([DateTime(2031, 1, 2, 12)]);
+    final repo = scripted()..enqueue(() async => throw StateError('boom'));
+    addTearDown(repo.dispose);
+    final scoped = PlayStatisticsProvider(repository: repo, clock: clock.next);
+    addTearDown(scoped.dispose);
+
+    await scoped.ensureLoaded();
+
+    expect(scoped.view, isNull);
+    await expectLater(scoped.buildExportJson(), throwsStateError);
   });
 
   test('首次加载失败：窗口 / 视图保持 null', () async {

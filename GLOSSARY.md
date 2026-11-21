@@ -858,9 +858,15 @@
   （`lib/services/statistics/listening_statistics.dart`）：一次加载的范围 + 唯一
   `now`；查询起点、日历高亮、今天与年度入口都从它派生，避免跨午夜时各读一次墙钟。
 - **Listening statistics view（统计视图）** — `ListeningStatisticsView.from(snapshot,
-  window)`：把快照投影成日历值（时长 / 次数）、稠密 7×24 矩阵、数据起始日与
-  海报的 168 槽时长矩阵；页面 / 海报 / 年度入口只消费这一份投影。
-  provider 只在加载被接受时同时替换快照与窗口，失败或过期结果不推进窗口。
+  window)`：把快照投影成日历值（时长 / 次数）、稠密 7×24 矩阵、首播事实
+  （`firstPlayedAt` / `firstDay`）、年度入口（同一窗口的 `now`）与海报的 168 槽
+  时长矩阵；页面 / 海报 / 年度入口只消费这一份投影。
+  provider 只在加载被接受时同时替换快照与窗口，失败或过期结果不推进窗口；
+  导出文件名与载荷 `exportedAt` 也取已接受窗口的 `now`，不另读墙钟。
+- **First played（首播事实）** — `PlayStatisticsSummary.firstPlayedLocal`、
+  view 的 `firstPlayedAt` / `AnnualStatisticsSnapshot.firstPlayedAt`：全局首播的
+  本地时刻（不受范围过滤影响）；统计页「数据起始日」、日历起点与年度报告覆盖
+  起点共用这一份事实，年度域不再从 `summary.firstPlayedAt` 反推。
 - **Qualified play（有效播放）** — 口径唯一在 `PlayStatisticsLimits`：
   `qualifiedThresholdMs(durationMs)` / `isQualified(...)`
   （`listenedMs ≥ min(30s, 50% × 时长)`，奇数时长向上取整）；SQL 谓词与

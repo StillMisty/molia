@@ -166,6 +166,7 @@ void main() {
       data: snapshot,
       now: DateTime(2027, 1, 2),
       knownSourceNames: const {'wy': '网易云'},
+      firstPlayedAt: snapshot.firstPlayedAt,
     );
     expect(report.monthlyListenedMs[0], 100000);
     expect(report.monthlyListenedMs[7], 100000);

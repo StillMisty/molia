@@ -453,8 +453,9 @@
   `view.snapshot.daily`（全量日历 rollup，不受 30 天范围影响），12–1 月高强调；
   报告页是设置子页，
   按 `[1 月 1 日, 次年 1 月 1 日)` 本地窗口读既有表，单页展示汇总 / 榜单 /
-  平台 / 月度 / 连续天数 / 首末播放与覆盖范围，海报离线渲染（1440×1920），
-  Top 50 可存成歌单；不改统计口径、表结构或采集链路。
+  平台 / 月度 / 连续天数 / 首末播放与覆盖范围（覆盖起点消费与统计页同一份
+  首播事实，`buildAnnualReport` 的 `firstPlayedAt` 参数），海报离线渲染
+  （1440×1920），Top 50 可存成歌单；不改统计口径、表结构或采集链路。
   与 `play_history`（最近播放，500 条上限）是两套数据。
 - **AI 推歌（可选，默认关闭）**：`lib/services/ai/**` 是唯一数据出口与
   网络层——`TasteProfileBuilder`（按发送范围读聚合画像 + 合并去重后的已听清单
@@ -1017,7 +1018,9 @@
 - **范围值类型**：`PlayStatisticsRange` + `startOf(now)` / `sinceMs(now)`
   （领域扩展）是范围 → 时间窗口的唯一映射；provider 用一次加载的
   `ListeningStatisticsWindow`（范围 + 唯一 `now`）固定查询起点与热力图高亮，
-  再由 `ListeningStatisticsView` 统一提供日历值、7×24 矩阵、起始日与海报输入；
+  再由 `ListeningStatisticsView` 统一提供日历值、7×24 矩阵、首播事实
+  （`firstPlayedAt` / `firstDay`）、年度入口与海报输入；导出文件名与载荷
+  `exportedAt` 也取已接受窗口的 `now`，失败 / 过期加载不推进窗口、不换时钟；
 - **曲目内容表**：`play_events` 只存事件字段 + `trackId`；元数据与载荷
   （gzip BLOB）在 `play_tracks` 每曲一行，写入按「内容时间取新」（旧事件不顶
   新内容），读取（`topTracks` / `dayEvents` / `listEventsForExport` / 同步导出）
