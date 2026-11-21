@@ -52,6 +52,7 @@ void main() {
     );
     final scheduler = SyncScheduler(
       host: engine,
+      queue: engine.roundQueue,
       state: state,
       cellularProbe: () async => false,
       batteryProbe: () async => BatterySnapshot.unknown,
@@ -324,6 +325,7 @@ _buildProviderWithScheduler({
   );
   final scheduler = SyncScheduler(
     host: engine,
+    queue: engine.roundQueue,
     state: state,
     cellularProbe: () async => false,
     batteryProbe: () async => BatterySnapshot.unknown,

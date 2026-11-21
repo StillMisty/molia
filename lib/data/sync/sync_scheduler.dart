@@ -7,13 +7,19 @@ import '../../domain/ports/sync_transport.dart';
 import '../../services/battery_probe.dart';
 import '../../services/data_saver_service.dart';
 import 'sync_book.dart';
+import 'sync_round_queue.dart';
 
 /// 调度器驱动一轮同步的宿主（生产 = `SyncEngine`；单测注入假实现）。
+///
+/// 在途状态不在这里声明：调度器与宿主共享 [SyncRoundQueue]，直接读
+/// `queue.running`，避免两份「是否已有轮次在跑」互相打架。
 abstract interface class SyncSchedulerHost {
   bool get syncEnabled;
 
   /// 跑一轮；[onlyCategories] 非空时只处理这些类别（蜂窝小类别策略）；
   /// [antiEntropy] 允许全量兜底（周期性指纹比对修复静默分歧）。
+  ///
+  /// 已有轮次在跑时由宿主并入补跑（按请求合并外发 / 范围），不会并发。
   Future<SyncRunOutcome> runSyncRound({
     required SyncTrigger trigger,
     required bool push,
@@ -22,21 +28,13 @@ abstract interface class SyncSchedulerHost {
   });
 }
 
-/// 一轮同步的外发结果（调度器据此维护「待外发」标记）。
+/// 一轮的接触结果（调度器据此维护重连阶梯；待发类别由队列清）。
 class SyncRunOutcome {
   const SyncRunOutcome({
-    required this.categories,
-    required this.delivered,
     this.contacted = true,
     this.contactedLan = false,
     this.retryable = true,
   });
-
-  /// 本轮实际外发的类别（蜂窝小类别轮不含历史 / 统计）。
-  final Set<SyncCategory> categories;
-
-  /// 本轮是否无失败（失败时待发标记保留，下轮重试）。
-  final bool delivered;
 
   /// 本轮是否接触到了任何对端（探测 / 拉取 / 推送）。
   ///
@@ -51,10 +49,7 @@ class SyncRunOutcome {
   /// 零对端时不能进入重连阶梯（5s / 20s / 60s / 180s），那只会做无效轮询。
   final bool retryable;
 
-  static const SyncRunOutcome none = SyncRunOutcome(
-    categories: {},
-    delivered: false,
-  );
+  static const SyncRunOutcome none = SyncRunOutcome();
 }
 
 /// 同步调度器：按同步等级决定何时跑、跑什么范围。
@@ -70,6 +65,7 @@ class SyncRunOutcome {
 class SyncScheduler {
   SyncScheduler({
     required this._host,
+    required this._queue,
     required this._state,
     Future<bool> Function()? cellularProbe,
     Future<BatterySnapshot> Function()? batteryProbe,
@@ -114,6 +110,10 @@ class SyncScheduler {
   };
 
   final SyncSchedulerHost _host;
+
+  /// 与引擎共享的轮次队列：待发类别与在途状态只在这里，调度器不再自己记。
+  final SyncRoundQueue _queue;
+
   final SyncSchedulerState _state;
   final Future<bool> Function() _cellularProbe;
   final Future<BatterySnapshot> Function() _batteryProbe;
@@ -135,12 +135,6 @@ class SyncScheduler {
   SyncLevel _level = SyncLevel.idle;
   bool _visible = true;
 
-  /// 待外发的类别（空 = 没有本地变更待发）。
-  final Set<SyncCategory> _dirtyCategories = {};
-
-  /// 其中「需要即时外发」的类别（高优先级变更；低优先级只标记不排轮次）。
-  final Set<SyncCategory> _immediateCategories = {};
-
   bool _onCellular = false;
   bool _batteryLow = false;
   bool _charging = false;
@@ -158,8 +152,6 @@ class SyncScheduler {
   StreamSubscription<void>? _peerSightSub;
   int _reconnectStep = 0;
   int _lastDiscoveryAt = 0;
-  bool _peerSightPending = false;
-  bool _roundRunning = false;
   bool _started = false;
   bool _disposed = false;
 
@@ -176,11 +168,11 @@ class SyncScheduler {
   bool get cellularRestricted =>
       _onCellular && _state.cellularPolicy == SyncCellularPolicy.auto;
 
-  /// 是否还有未外发的本地变更。
-  bool get dirty => _dirtyCategories.isNotEmpty;
+  /// 是否还有未外发的本地变更（待发类别台账在共享队列里）。
+  bool get dirty => _queue.dirty;
 
   /// 待外发的类别（观测与测试用）。
-  Set<SyncCategory> get dirtyCategories => Set.unmodifiable(_dirtyCategories);
+  Set<SyncCategory> get dirtyCategories => _queue.dirtyCategories;
 
   /// 是否存在调度器定时器（单测断言「后台零定时」用）。
   bool get hasPendingTimer =>
@@ -236,25 +228,23 @@ class SyncScheduler {
       _logger.fine(() => '网络类型探测失败（按非蜂窝处理）: $e');
       _onCellular = false;
     }
+    // 类别开关可能在用户动作里变了：关闭的类别不再待发（不必等一轮失败）。
+    _queue.pruneDisabledCategories();
     _applyLevel(_evaluate());
   }
 
   /// 数据变更：标记待外发类别。
   ///
   /// [categories] 省略时标记全部启用类别；[immediate] 为 false 时只标记、
-  /// 不续期活跃窗口也不排去抖轮次（高频写入如播放会话进度用）。
+  /// 不续期活跃窗口也不排去抖轮次（高频写入如播放会话进度用）。标记本身在
+  /// 共享队列里，手动轮与自动轮看到的是同一份待发集合。
   void notifyLocalChange({
     Set<SyncCategory>? categories,
     bool immediate = true,
   }) {
     if (_disposed) return;
-    final enabled = _state.enabledCategories;
-    final pending = categories == null
-        ? enabled
-        : categories.intersection(enabled);
-    _dirtyCategories.addAll(pending);
+    _queue.markLocalChange(categories: categories, immediate: immediate);
     if (!immediate) return;
-    _immediateCategories.addAll(pending);
     _lastInteractionAt = _nowMs();
     _applyLevel(_evaluate());
   }
@@ -338,8 +328,13 @@ class SyncScheduler {
       );
       return;
     }
-    // 冷却起点在真正开跑时由 `_runAndMark` 记录：上一轮未结束时本轮不会
-    // 实际开跑，pending 的公告不能因此被冷却窗口吞掉。
+    // 一轮未结束：公告不能丢（对端可能只公告一次），重新走 1s 去抖，
+    // 等轮次结束后再判定冷却——不能在冷却窗口里把 pending 的公告吞掉。
+    if (_queue.running) {
+      _peerSightTimer = Timer(_peerSightDebounce, _firePeerSight);
+      return;
+    }
+    // 冷却起点在真正开跑时由 `_runAndMark` 记录。
     unawaited(_runAndMark(SyncTrigger.discovery, push: true));
   }
 
@@ -349,7 +344,6 @@ class SyncScheduler {
     if (!_visible) return;
     _visible = false;
     _cancelAuxiliaryTimers();
-    _peerSightPending = false;
     _applyLevel(_evaluate());
     if (!canRunAutomatically || !dirty) return;
     unawaited(_runAndMark(SyncTrigger.pause, push: true));
@@ -357,10 +351,9 @@ class SyncScheduler {
 
   /// 打开同步页时检查连接状态。
   ///
-  /// 不是手动轮：同步关闭、已有轮次在跑、省电 / 蜂窝暂停策略生效时都不跑，
-  /// 也不做 anti-entropy 全量兜底（只更新「最近一轮是否接触成功」）。
-  /// 「同步关闭 / 已有轮次在跑」由 [canRunAutomatically] 与 [_runAndMark]
-  /// 统一拦住，这里不重复判断。
+  /// 不是手动轮：同步关闭、省电 / 蜂窝暂停策略生效时不跑；已有轮次在跑时
+  /// 并入共享队列的补跑轮（不并发）。不做 anti-entropy 全量兜底（只更新
+  /// 「最近一轮是否接触成功」）。
   Future<void> checkNow() async {
     if (_disposed || !canRunAutomatically) return;
     await _runAndMark(SyncTrigger.check, push: true);
@@ -452,7 +445,7 @@ class SyncScheduler {
       case SyncLevel.active:
         // 交互窗口过后自动降级为空闲（否则等级只会在事件到达时重估）。
         _armActiveDemote();
-        if (_immediateCategories.isNotEmpty && canRunAutomatically) {
+        if (_queue.hasImmediate && canRunAutomatically) {
           _armDebounce();
         }
       case SyncLevel.idle:
@@ -520,22 +513,17 @@ class SyncScheduler {
     required bool push,
     bool armLadderOnZeroPeers = false,
   }) async {
-    if (_roundRunning) {
-      // 一轮未结束不并发再跑；对端公告留到本轮结束后补一次（重新走 1s 去抖
-      // + 10s 冷却），其余触发按「本轮已覆盖同一环境」丢弃。
-      if (trigger == SyncTrigger.discovery) _peerSightPending = true;
-      return null;
-    }
-    _roundRunning = true;
+    // 在途轮次由宿主并入补跑；调度器不维护第二份在途状态。
     if (trigger == SyncTrigger.discovery) _lastDiscoveryAt = _nowMs();
     final SyncRunOutcome outcome;
     try {
       outcome = await _run(trigger, push: push);
     } finally {
-      _roundRunning = false;
+      // 待发类别由队列按交付事实清理；这里只丢弃已关闭类别（用户可能在
+      // 本轮期间改了开关）。
+      _queue.pruneDisabledCategories();
     }
     if (_disposed) return outcome;
-    _markDelivered(outcome);
     if (outcome.contactedLan || !outcome.retryable) {
       // 局域网已经看到对端，或本轮是配置缺失（重试也不会变好）：后续阶梯
       // 档位没有意义。
@@ -543,10 +531,6 @@ class SyncScheduler {
     } else if (armLadderOnZeroPeers && !outcome.contacted) {
       // 「已配对但零对端」：从 5s 档开始重连，任何一轮 LAN 接触成功即取消。
       _armReconnectLadder();
-    }
-    if (_peerSightPending) {
-      _peerSightPending = false;
-      notifyPeerSighted();
     }
     return outcome;
   }
@@ -613,19 +597,6 @@ class SyncScheduler {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     _reconnectStep = 0;
-  }
-
-  /// 按本轮外发结果清待发标记：只清「本轮外发过」的类别。
-  ///
-  /// 蜂窝小类别轮不含历史 / 统计，这些类别的标记保留到 Wi-Fi 轮；失败轮
-  /// 整体保留（下轮重试）；类别被关闭时对应标记直接丢弃（不再外发）。
-  void _markDelivered(SyncRunOutcome outcome) {
-    final enabled = _state.enabledCategories;
-    _dirtyCategories.removeWhere((category) => !enabled.contains(category));
-    _immediateCategories.removeWhere((category) => !enabled.contains(category));
-    if (!outcome.delivered) return;
-    _dirtyCategories.removeAll(outcome.categories);
-    _immediateCategories.removeAll(outcome.categories);
   }
 
   Future<SyncRunOutcome> _run(SyncTrigger trigger, {required bool push}) async {

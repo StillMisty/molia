@@ -306,6 +306,7 @@ void main() {
       addTearDown(sync.dispose);
       final scheduler = SyncScheduler(
         host: sync,
+        queue: sync.roundQueue,
         state: state,
         // 移动数据：空闲唤醒在无本地变更时零流量。
         cellularProbe: () async => true,
@@ -433,6 +434,7 @@ void main() {
       addTearDown(sync.dispose);
       final scheduler = SyncScheduler(
         host: sync,
+        queue: sync.roundQueue,
         state: state,
         cellularProbe: () async => false,
         batteryProbe: () async => BatterySnapshot.unknown,

@@ -1070,6 +1070,16 @@
   生产调用方仍只经 `runRound`。语义保留：应用成功才推进游标、forced delivery、
   缺口二次拉取、anti-entropy、入站轮；`SyncEngine` 只留公共门面（调度器宿主 /
   服务端语义 / 入站合流 / 公告过滤）。
+- **Sync round queue（轮次队列 / 待发台账）** — `lib/data/sync/sync_round_queue.dart`
+  的 `SyncRoundQueue`：待跑请求、在途轮次、补跑合并、待发（dirty / immediate）
+  类别与唯一交付判据的持有者。每个请求自带 trigger / push / antiEntropy /
+  onlyCategories；在途轮次上的请求合并成至多一个补跑轮——手动优先且固定
+  「推送 + 全部启用类别」，其余外发取或、范围 null（全部）优先否则并集。
+  交付只认 `ok` / `noChanges`；本轮开始有待发类别时还要求至少一路传输
+  `pushed > 0 || skippedUnchanged > 0`（纯 `peersSeen` 不算），`noPeers` /
+  `partial` / `failed` 保守地不算。清待发只清「轮次开始时就脏、轮内没有被重新
+  标记、且落在本轮类别范围内」的类别；传输报告只有逐对端粒度，类别范围是
+  协议可得的最细交付粒度。调度器只决定「何时」，引擎只负责入口闸门与轮末提交。
 - **Sync book（同步状态的窄接口与单一提交）** — `lib/data/sync/sync_book.dart`：
   按用途声明 `SyncStampLedger`（适配器）/ `SyncPublicationState`（发布台账）/
   `SyncRoundState`（轮次）/ `SyncEngineState`（引擎）/ `SyncTransportState` /

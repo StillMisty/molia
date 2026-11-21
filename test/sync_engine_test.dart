@@ -448,7 +448,6 @@ void main() {
       antiEntropy: false,
     );
 
-    expect(outcome.delivered, isFalse);
     expect(outcome.contacted, isFalse);
     expect(outcome.retryable, isFalse);
   });
