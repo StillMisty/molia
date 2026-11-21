@@ -94,14 +94,33 @@ class DesktopShell extends StatelessWidget {
   /// 搜索右侧空白拖动区的稳定 Key（双击最大化挂在它上面）。
   static const Key titleDragAreaKey = Key('desktopTitleDragArea');
 
+  /// 桌面顶栏内容贴窗口边缘的留白：左 / 上 / 右一致为 8。
+  ///
+  /// 工具行上下本来就是 8（40dp 胶囊居中在 56dp 工具行里）；左侧通过覆盖
+  /// 标题槽 `titleInset` 收到 8，右侧由 `ShellChrome._trailingActions` 去掉
+  /// 关闭键后面的额外留白得到。移动骨架 / macOS 没有自绘关闭键，维持包内
+  /// 默认（16）。
+  static const double topBarInset = 8;
+
+  /// 品牌标志边长：与右侧设置 / 窗口按钮的 24dp 图标同档。
+  static const double _brandMarkSize = 24;
+
+  /// 品牌胶囊内边距：四边等宽。
+  ///
+  /// 8 不是随手取的数：右侧图标按钮是 24dp 图标 + 40dp 视觉格（四边各 8），
+  /// 品牌胶囊跟同一网格，收起态（只有 LOGO）正好是 40×40 正圆，与圆形
+  /// 图标按钮同几何。
+  static const double _brandCapsulePadding = 8;
+
   /// 品牌胶囊高度：工具行里居中的可点胶囊，不占满整条工具行（56dp）。
   static const double brandCapsuleHeight = 40;
 
   /// 品牌区最大宽度：长名称在这里截断，不把右侧拖动区挤没。
   static const double brandMaxWidth = 280;
 
-  /// 品牌区最小宽度 = 胶囊左右内边距 + 标志（12 + 24 + 12）。
-  static const double _brandMinWidth = 48;
+  /// 品牌区最小宽度 = 标志 + 四边内边距（24 + 8 + 8）= 收起态的 40×40。
+  static const double _brandMinWidth =
+      _brandMarkSize + _brandCapsulePadding * 2;
 
   /// 名称至少要有的品牌区宽度：再窄就只剩 LOGO 胶囊。
   static const double _brandNameMinWidth = 220;
@@ -119,6 +138,7 @@ class DesktopShell extends StatelessWidget {
     final appBar = chrome.appBar(
       context: context,
       title: _buildTitleBar(context),
+      titleInset: DesktopShell.topBarInset,
     );
 
     return DesktopShortcuts(
@@ -200,7 +220,7 @@ class DesktopShell extends StatelessWidget {
   /// 顶栏：最左品牌区（图标 + 应用名，点击打开搜索遮罩）+ 右侧空白拖动区
   /// （双击最大化）。
   ///
-  /// 品牌块贴窗口左缘（顶栏标题槽的 titleInset 处），不再与内容左缘对齐：
+  /// 品牌块贴窗口左缘 8dp（[topBarInset]），不再与内容左缘对齐：
   /// 应用左上角就是标志本身，与侧栏折叠宽 / 页面留白解耦。
   ///
   /// 品牌区有宽度上限：长名称在胶囊内省略，右侧始终给窗口拖动留一段空白。
@@ -286,7 +306,8 @@ class _SearchBackdropBlur extends StatelessWidget {
 /// 设置 › 快捷键。桌面鼠标用户需要可点线索：hover / press 时给胶囊底色 +
 /// 手型光标，标志与文字都不位移。
 ///
-/// 胶囊本体 40dp 高、左右各 12dp 内边距，垂直居中在工具行里；外层仍保持
+/// 胶囊本体 40dp 高、四边各 8dp 内边距（与图标按钮的 24 图标 + 40 视觉格
+/// 同一网格，只有 LOGO 时是 40×40 正圆），垂直居中在工具行里；外层仍保持
 /// 工具行高度，命中区域不因视觉胶囊变矮。名称只在标题槽够宽时显示，长名称
 /// 由 `ConstrainedBox` + 单行省略收住，不把右侧拖动区挤没。
 class _BrandSearchEntry extends StatefulWidget {
@@ -353,7 +374,9 @@ class _BrandSearchEntryState extends State<_BrandSearchEntry> {
                     duration: duration,
                     curve: M3EMotion.emphasizedDecelerate,
                     height: DesktopShell.brandCapsuleHeight,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    padding: const EdgeInsets.all(
+                      DesktopShell._brandCapsulePadding,
+                    ),
                     decoration: BoxDecoration(
                       color: capsuleColor,
                       borderRadius: const BorderRadius.all(
@@ -363,7 +386,7 @@ class _BrandSearchEntryState extends State<_BrandSearchEntry> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const MoliaMark(size: 24),
+                        const MoliaMark(size: DesktopShell._brandMarkSize),
                         if (widget.showName) ...[
                           const SizedBox(width: 8),
                           Flexible(

@@ -104,16 +104,23 @@ class ShellChrome {
     required Widget title,
     List<Widget> actions = const [],
     PreferredSizeWidget? bottom,
+    double? titleInset,
   }) => ShellAppBar(
     title: title,
     actions: [...actions, ..._trailingActions()],
     bottom: bottom,
+    titleInset: titleInset,
     // 标题块随系统字号增长；固定 56 在 200% 字号下会裁掉副标题。
     toolbarHeight: MediaQuery.textScalerOf(context)
         .scale(ShellAppBar.defaultToolbarHeight),
   );
 
-  /// 顶栏尾部动作：设置 + 窗口控件 + 右侧留白（两套骨架同一份）。
+  /// 顶栏尾部动作：设置 + 窗口控件 + 右缘留白（两套骨架同一份）。
+  ///
+  /// 有自绘窗口控件（Linux / Windows）时最右是关闭键，不再补留白：标题槽
+  /// 右内边距 4 + 触控格到视觉格外扩 4 = 8，关闭键视觉右缘与工具行上下的
+  /// 8dp 留白对齐。移动骨架 / macOS 没有自绘关闭键，仍补 8 让设置按钮维持
+  /// 16dp 动作边距。
   List<Widget> _trailingActions() => [
     M3EIconButton(
       variant: M3EIconButtonVariant.standard,
@@ -123,14 +130,17 @@ class ShellChrome {
       semanticLabel: l10n.settingsTitle,
       icon: const Icon(Icons.settings_rounded),
     ),
-    if (WindowChrome.usesCustomTitleBar) const WindowControls(),
-    const SizedBox(width: 8),
+    if (WindowChrome.usesCustomTitleBar)
+      const WindowControls()
+    else
+      const SizedBox(width: 8),
   ];
 
-  /// 顶栏标题区左缘（= `M3EAppBarTheme.titleInset`，品牌区左缘对齐它）。
+  /// 顶栏标题区左缘（= `M3EAppBarTheme.titleInset`，移动骨架跟随它）。
   ///
-  /// M3E 的标题槽从 titleInset 起排，这里跟随包内默认值而不是自定一个数：
-  /// 一旦包内对齐调整，壳层与二级页顶栏一起移动。
+  /// 移动骨架跟随包内默认值而不是自定一个数：一旦包内对齐调整，壳层与二级页
+  /// 顶栏一起移动。桌面骨架另有 8dp 口径（`DesktopShell.topBarInset`），经
+  /// [appBar] 的 `titleInset` 局部覆盖，不改包内默认。
   static const double appBarTitleSpacing = 16;
 }
 

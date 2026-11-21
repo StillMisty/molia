@@ -16,7 +16,8 @@ import '../services/window/window_chrome.dart';
 /// 整条工具条（标题 + 按钮）放进 M3E 的 title 槽：桌面窗口控件是一整块可变
 /// 宽的 Row（约 180dp），而 M3E 的 actions 只按 48dp/个预留标题宽度，直接
 /// 放会与标题重叠。title 槽拿到的是「左 16dp / 右 4dp」的整宽，按钮由这一行
-/// 自己排，宽度不再依赖 M3E 的预留规则。
+/// 自己排，宽度不再依赖 M3E 的预留规则（桌面骨架经 [titleInset] 把左缘从
+/// 包内默认 16dp 收到 8dp）。
 class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
   const ShellAppBar({
     super.key,
@@ -24,6 +25,7 @@ class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.actions = const <Widget>[],
     this.bottom,
     this.toolbarHeight = defaultToolbarHeight,
+    this.titleInset,
   });
 
   /// 顶栏标题（桌面 = 品牌区 + 空白拖动区；移动 = 曲目信息区）。
@@ -44,6 +46,12 @@ class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   /// 本次构建的工具行高度：随系统字号放大（否则 200% 字号下标题块溢出）。
   final double toolbarHeight;
+
+  /// 标题槽左内边距；null 用 M3E 包内默认值（16）。
+  ///
+  /// 桌面骨架把品牌胶囊贴到距窗口左缘 8dp，与工具行上下的 8dp 留白对齐；
+  /// 移动骨架不传，继续跟随 `M3EAppBarTheme.titleInset`。
+  final double? titleInset;
 
   @override
   Size get preferredSize =>
@@ -80,10 +88,23 @@ class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
     );
+    // 只覆盖标题槽左缘：M3E 的 titleInset 是主题级默认值，移动骨架要跟随
+    // 包内口径，桌面骨架才按自己的工具行留白收窄。直接下发 InheritedTheme
+    // 数据（不走 M3ETheme，避免为一条边距重投影整套 Material Theme）。
+    final double? inset = titleInset;
+    final Widget themedBar = inset == null
+        ? bar
+        : M3EInheritedTheme(
+            data: M3ETheme.of(context).copyWith(
+              appBarTheme: M3ETheme.of(context).appBarTheme
+                  .copyWith(titleInset: inset),
+            ),
+            child: bar,
+          );
     final Widget stack = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        bar,
+        themedBar,
         if (bottom != null)
           SizedBox(
             // 高度由底部槽自己声明，这里同样钉住：进度条本体 4dp 固定在 10dp

@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/desktop/desktop_shell.dart';
+import 'package:molia/app/desktop/window_controls.dart';
 import 'package:molia/services/app_branding_service.dart';
 import 'package:molia/services/window/window_chrome.dart';
 import 'package:molia/widgets/molia_mark.dart';
@@ -150,9 +151,34 @@ void main() {
     );
     expect(
       tester.getSize(capsule).width,
-      closeTo(48, 0.01),
-      reason: '仅 LOGO 时胶囊 = 左右 12dp 内边距 + 24dp 标志',
+      closeTo(40, 0.01),
+      reason: '仅 LOGO 时胶囊 = 四边各 8dp + 24dp 标志（40×40）',
     );
+
+    // 四边等宽：收起态是正方形，LOGO 到胶囊四边的距离一致，和右侧 24/40
+    // 图标按钮同一网格。
+    final capsuleRect = tester.getRect(capsule);
+    expect(capsuleRect.width, closeTo(capsuleRect.height, 0.01));
+    expect(capsuleRect.left, closeTo(8, 0.01), reason: '胶囊左缘贴工具行 8dp 留白');
+    expect(capsuleRect.top, closeTo(8, 0.01), reason: '胶囊顶部留白与左缘一致');
+    final markRect = tester.getRect(
+      find.descendant(of: capsule, matching: find.byType(MoliaMark)),
+    );
+    expect(markRect.left - capsuleRect.left, closeTo(8, 0.01));
+    expect(capsuleRect.right - markRect.right, closeTo(8, 0.01));
+    expect(markRect.top - capsuleRect.top, closeTo(8, 0.01));
+    expect(capsuleRect.bottom - markRect.bottom, closeTo(8, 0.01));
+
+    // 窗口关闭键：顶部与右边留白同为 8（24 图标居中在 40 视觉格里，图标
+    // 自身离工具行顶 / 窗口右缘 16）。
+    final closeIconRect = tester.getRect(
+      find.descendant(
+        of: find.byType(WindowCloseButton),
+        matching: find.byIcon(Icons.close_rounded),
+      ),
+    );
+    expect(closeIconRect.top, closeTo(16, 0.01), reason: '关闭键顶部留白 = 8');
+    expect(480 - closeIconRect.right, closeTo(16, 0.01), reason: '关闭键右边留白 = 8');
 
     // 右侧仍保留一段窗口拖动区。
     expect(

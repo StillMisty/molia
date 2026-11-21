@@ -1641,18 +1641,20 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   `M3EAppBar.actions` 按 48dp/个预留标题宽度，直接放会重叠；title 槽拿到的是
   左 16 / 右 4 的整宽，按钮由这一行自己排。
   顶栏是纯工具条（无当前页标题、无播放控制、无进度线）：最左是**品牌区**
-  （`MoliaMark` + 自定义应用名，贴窗口左缘（`ShellChrome.appBarTitleSpacing`，
-  16 = 包内 `M3EAppBarTheme.titleInset`）处、不再与内容左缘对齐，品牌区左缘
-  从 12 变 16 是预期；整块可点打开搜索遮罩，**不做 tooltip**：键位提示只留在
-  设置 › 快捷键）。品牌区视觉上是一枚 40dp 高的胶囊（左右各 12dp 内边距、
-  full 圆角、在工具行里垂直居中，外层命中区仍撑满工具行）：hover 用
+  （`MoliaMark` + 自定义应用名，桌面骨架贴窗口左缘 8dp（`DesktopShell.topBarInset`，
+  局部覆盖标题槽 `titleInset`；移动骨架仍用包内默认 16），与工具行上下的 8dp
+  留白对齐，不再与内容左缘对齐；整块可点打开搜索遮罩，**不做 tooltip**：键位提示只留在
+  设置 › 快捷键）。品牌区视觉上是一枚 40dp 高的胶囊（四边各 8dp 内边距、
+  full 圆角、在工具行里垂直居中，外层命中区仍撑满工具行；与设置 / 窗口按钮的
+  24 图标 + 40 视觉格同一网格，只有 LOGO 时即 40×40 正圆）：hover 用
   `surfaceContainerHigh`、press 用 `surfaceContainerHighest`、静止透明；
   长名称单行省略，品牌区最大 280dp，标题槽不足时只剩 LOGO 胶囊，右侧始终
   至少留 96dp 拖动区——不拿窗口拖动或右侧动作去换应用名。
   品牌区右侧的空白是拖动区（双击最大化，只有它包 `WindowDoubleTapMaximize`，
   双击品牌 / 按钮不最大化）+ 设置 + 窗口按钮（仅 Linux / Windows 自画；macOS
-  保留原生标题栏与红绿灯，`WindowChrome.usesCustomTitleBar` 为 false；图标
-  按钮一律不做悬浮提示，语义走 `semanticLabel`，全应用同口径——见「按钮选型」）。
+  保留原生标题栏与红绿灯，`WindowChrome.usesCustomTitleBar` 为 false；关闭键
+  视觉格贴窗口右缘 8dp，与顶部留白一致；图标按钮一律不做悬浮提示，语义走
+  `semanticLabel`，全应用同口径——见「按钮选型」）。
   macOS 另有程序化顶层「播放」菜单（`macos/Runner/AppDelegate.swift` +
   `lib/services/window/playback_menu_io.dart`）：播放 / 暂停、上一首、下一首，
   无 key equivalent；命令回落到托盘 / 任务栏同一批 provider 闭包，文案 / 启用态
