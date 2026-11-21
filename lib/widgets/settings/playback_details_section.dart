@@ -3,13 +3,16 @@ import 'package:provider/provider.dart';
 
 import '../../domain/models/playback_feel.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/nav_provider.dart';
 import '../../providers/playback_provider.dart';
 import 'settings_tiles.dart';
 
-/// 播放细节行：淡入淡出档位 + 随机播放少放最近听过的歌。
+/// 播放细节行：淡入淡出档位 + 随机播放少放最近听过的歌 +
+/// 从其它一级页进入播放页时是否固定歌词。
 ///
 /// 首屏「播放」卡直接把这些行铺进同一张卡（[rows]），独立挂载（测试 / 旧
-/// 入口）时仍是一张自带标题的卡。两项都是设备本地值，不随同步。
+/// 入口）时仍是一张自带标题的卡。前两项是设备本地值，不随同步；歌词偏好
+/// 跟人走（由 [NavProvider] 持有）。
 class PlaybackDetailsSection extends StatelessWidget {
   const PlaybackDetailsSection({super.key});
 
@@ -19,6 +22,7 @@ class PlaybackDetailsSection extends StatelessWidget {
   /// 不要在卡内再套一层 [SettingsRows]（会重置首末形状）。
   static List<Widget> rows(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final nav = context.read<NavProvider?>();
     return [
       Selector<PlaybackProvider, PlaybackFadePreset>(
         selector: (context, provider) => provider.fadePreset,
@@ -50,6 +54,21 @@ class PlaybackDetailsSection extends StatelessWidget {
               context.read<PlaybackProvider>().setSmartShuffleEnabled(value),
         ),
       ),
+      // 没有挂 NavProvider 的独立挂载（旧入口 / 精简测试）隐藏该行，
+      // 而不是让整张卡构建失败。
+      if (nav != null)
+        Selector<NavProvider, bool>(
+          selector: (context, provider) => provider.showLyricsOnEnter,
+          builder: (context, enabled, _) => SettingsSwitchTile(
+            switchKey: const Key('settingsReturnToPlayerLyricsSwitch'),
+            icon: Icons.lyrics_rounded,
+            title: l10n.settingsReturnToPlayerLyricsTitle,
+            subtitle: l10n.settingsReturnToPlayerLyricsSubtitle,
+            value: enabled,
+            onChanged: (value) =>
+                context.read<NavProvider>().setShowLyricsOnEnter(value),
+          ),
+        ),
     ];
   }
 

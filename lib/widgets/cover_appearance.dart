@@ -1,11 +1,10 @@
 /// 封面外观与共享元素飞行（cover appearance / cover flight）。
 ///
 /// 全 App 只有这一份「封面卡片长什么样」与「共享元素飞行怎么插值」：
-/// - [CoverAppearance]：圆角 / 描边 / 阴影 / 回退图标；三个端点是命名值
-///   （[CoverAppearance.bar] / [CoverAppearance.mini] / [CoverAppearance.page]），
-///   任意两端之间可线性插值；
+/// - [CoverAppearance]：圆角 / 描边 / 阴影 / 回退图标；两个端点是命名值
+///   （[CoverAppearance.bar] / [CoverAppearance.page]），两端之间可线性插值；
 /// - [CoverCard]：按外观渲染卡片的唯一实现（外框 + 内缘裁剪 + 内容构建器），
-///   三端真身与飞行副本共用；图片内容不在这里收口——真身用 `AppNetworkImage`
+///   两端真身与飞行副本共用；图片内容不在这里收口——真身用 `AppNetworkImage`
 ///   （placeholder / errorWidget 语义），飞行副本用 [MorphCover]（同步出帧，
 ///   落位帧不闪），两者是同一取图逻辑的两个 adapter；
 /// - [CoverFlight] / [CoverFlightLayer]：一次飞行的几何与外观求值 + 副本渲染。
@@ -47,9 +46,6 @@ String? trackKeyOf(Track? track) => track?.id.uri;
 /// 起手/落点跳变）。
 const double barCoverFallbackIconSize = 22;
 
-/// 迷你播放条 48×48 封面真身的回退图标尺寸（共用理由同上）。
-const double miniCoverFallbackIconSize = 24;
-
 /// 播放页封面卡回退图标尺寸占卡片边长的比例（共用理由同上）。
 const double playerCoverFallbackIconRatio = 0.35;
 
@@ -84,12 +80,6 @@ class CoverAppearance {
   static const CoverAppearance bar = CoverAppearance(
     radius: 8,
     iconSize: barCoverFallbackIconSize,
-  );
-
-  /// 迷你播放条端（48×48 封面真身：r8、无描边阴影）。
-  static const CoverAppearance mini = CoverAppearance(
-    radius: 8,
-    iconSize: miniCoverFallbackIconSize,
   );
 
   /// 播放页端（cover deck 封面真身：r18 + 1px 描边 + 柔和阴影）。
@@ -198,7 +188,7 @@ typedef CoverCardContent = Widget Function(
   double iconSize,
 );
 
-/// 封面卡片：三端真身与飞行副本共用的唯一渲染。
+/// 封面卡片：两端真身与飞行副本共用的唯一渲染。
 ///
 /// 图片 widget 的差异留在调用侧（真身 `AppNetworkImage`、飞行副本
 /// [MorphCover]），这里只负责外观：外框（圆角/描边/阴影）+ 内缘裁剪。
@@ -393,7 +383,7 @@ class CoverFlightLayer extends StatelessWidget {
 /// 命中 Flutter ImageCache 时同步出帧（`wasSynchronouslyLoaded`），
 /// 避免 FutureBuilder 首帧占位闪烁。
 ///
-/// 顶栏↔播放页飞行与播放页内迷你⇄完整飞行共用。
+/// 顶栏 ⇄ 播放页的共享飞行副本与两端真身共用这一份取图实现。
 class MorphCover extends StatefulWidget {
   const MorphCover({
     super.key,

@@ -88,6 +88,8 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
         kShellNavOrder,
         kShellNavHidden,
         kShellHomeDestination,
+        // 进入播放页的歌词偏好与导航布局同属壳层导航偏好，共用一次重载。
+        kShellNowPlayingLyricsOnEnter,
       ],
       reload: () => navProvider.reloadFromPreferences(),
     ),

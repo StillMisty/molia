@@ -85,11 +85,29 @@ class DesktopShell extends StatelessWidget {
   /// 顶栏品牌区（= 搜索入口）的稳定 Key（测试定位用）。
   static const Key searchEntryKey = Key('desktopGlobalSearch');
 
+  /// 品牌胶囊本体的稳定 Key（测几何：40dp 高、内容内边距、hover 底色）。
+  static const Key brandCapsuleKey = Key('desktopBrandCapsule');
+
   /// 搜索遮罩背景模糊层的稳定 Key（测试定位用）。
   static const Key searchBackdropBlurKey = Key('desktopSearchBackdropBlur');
 
   /// 搜索右侧空白拖动区的稳定 Key（双击最大化挂在它上面）。
   static const Key titleDragAreaKey = Key('desktopTitleDragArea');
+
+  /// 品牌胶囊高度：工具行里居中的可点胶囊，不占满整条工具行（56dp）。
+  static const double brandCapsuleHeight = 40;
+
+  /// 品牌区最大宽度：长名称在这里截断，不把右侧拖动区挤没。
+  static const double brandMaxWidth = 280;
+
+  /// 品牌区最小宽度 = 胶囊左右内边距 + 标志（12 + 24 + 12）。
+  static const double _brandMinWidth = 48;
+
+  /// 名称至少要有的品牌区宽度：再窄就只剩 LOGO 胶囊。
+  static const double _brandNameMinWidth = 220;
+
+  /// 品牌胶囊与右侧动作之间的最小拖动区：窗口拖动不能只剩一条缝。
+  static const double _titleDragMinWidth = 96;
 
   /// 顶栏工具行高度 = M3 最小触控目标（品牌区与右侧空白拖动区同高，
   /// 取包内搜索条自己的触控尺寸默认值，不写死数值）。
@@ -184,24 +202,42 @@ class DesktopShell extends StatelessWidget {
   ///
   /// 品牌块贴窗口左缘（顶栏标题槽的 titleInset 处），不再与内容左缘对齐：
   /// 应用左上角就是标志本身，与侧栏折叠宽 / 页面留白解耦。
+  ///
+  /// 品牌区有宽度上限：长名称在胶囊内省略，右侧始终给窗口拖动留一段空白。
+  /// 标题槽被窗口按钮 / 设置挤窄时退化为「仅 LOGO 胶囊」，不拿右侧动作换
+  /// 应用名。
   Widget _buildTitleBar(BuildContext context) {
-    return Row(
-      children: [
-        _BrandSearchEntry(
-          key: DesktopShell.searchEntryKey,
-          onTap: onOpenSearch,
-        ),
-        // 空白拖动区：窗口拖动由顶栏外层的 WindowDragArea 承担，这里
-        // 只补「双击最大化」。高度取工具行那一档（与品牌区同一条工具行上
-        // 的可点区域等高）；只包空白区 —— 双击品牌区或按钮不该顺带改窗口
-        // 状态。
-        Expanded(
-          child: WindowDoubleTapMaximize(
-            key: DesktopShell.titleDragAreaKey,
-            child: SizedBox(height: DesktopShell.toolRowHeight(context)),
-          ),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxBrand = constraints.maxWidth.isFinite
+            ? (constraints.maxWidth - _titleDragMinWidth)
+                  .clamp(_brandMinWidth, DesktopShell.brandMaxWidth)
+                  .toDouble()
+            : DesktopShell.brandMaxWidth;
+        final showName = maxBrand >= _brandNameMinWidth;
+        return Row(
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxBrand),
+              child: _BrandSearchEntry(
+                key: DesktopShell.searchEntryKey,
+                onTap: onOpenSearch,
+                showName: showName,
+              ),
+            ),
+            // 空白拖动区：窗口拖动由顶栏外层的 WindowDragArea 承担，这里
+            // 只补「双击最大化」。高度取工具行那一档（与品牌区同一条工具行上
+            // 的可点区域等高）；只包空白区 —— 双击品牌区或按钮不该顺带改窗口
+            // 状态。
+            Expanded(
+              child: WindowDoubleTapMaximize(
+                key: DesktopShell.titleDragAreaKey,
+                child: SizedBox(height: DesktopShell.toolRowHeight(context)),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -247,12 +283,23 @@ class _SearchBackdropBlur extends StatelessWidget {
 ///
 /// 搜索入口不占顶栏一条搜索框，落点收到这个品牌块上（Ctrl+F 同路径）。
 /// 不做悬浮提示：整块贴着窗口左上角、文案（应用名）自解释，键位提示只留在
-/// 设置 › 快捷键。桌面鼠标用户需要可点线索：hover 时给一层胶囊底色 +
-/// 手型光标，文字与标志本身不位移（左缘仍贴 titleInset）。
+/// 设置 › 快捷键。桌面鼠标用户需要可点线索：hover / press 时给胶囊底色 +
+/// 手型光标，标志与文字都不位移。
+///
+/// 胶囊本体 40dp 高、左右各 12dp 内边距，垂直居中在工具行里；外层仍保持
+/// 工具行高度，命中区域不因视觉胶囊变矮。名称只在标题槽够宽时显示，长名称
+/// 由 `ConstrainedBox` + 单行省略收住，不把右侧拖动区挤没。
 class _BrandSearchEntry extends StatefulWidget {
-  const _BrandSearchEntry({super.key, required this.onTap});
+  const _BrandSearchEntry({
+    super.key,
+    required this.onTap,
+    required this.showName,
+  });
 
   final VoidCallback onTap;
+
+  /// 标题槽够宽时显示应用名；窄窗只留 LOGO 胶囊。
+  final bool showName;
 
   @override
   State<_BrandSearchEntry> createState() => _BrandSearchEntryState();
@@ -260,67 +307,85 @@ class _BrandSearchEntry extends StatefulWidget {
 
 class _BrandSearchEntryState extends State<_BrandSearchEntry> {
   bool _hovered = false;
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final duration = effectDurationOf(context, M3EMotion.short2);
-    return Semantics(
-      button: true,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: GestureDetector(
-          // 刻意不用 M3ETappable：它点击时会请求焦点（打断页内输入），
-          // GestureDetector 与顶栏其它手势宿主保持同一取舍。
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onTap,
-          child: SizedBox(
-            height: DesktopShell.toolRowHeight(context),
-            child: Stack(
-              alignment: Alignment.centerLeft,
-              children: [
-                // 背景层不参与布局：只做 hover 反馈，不改变品牌块左缘。
-                Positioned.fill(
-                  left: 4,
-                  child: IgnorePointer(
-                    child: AnimatedContainer(
-                      duration: duration,
-                      curve: M3EMotion.emphasizedDecelerate,
-                      decoration: BoxDecoration(
-                        color: _hovered
-                            ? scheme.surfaceContainerHigh
-                            : scheme.surfaceContainerHigh.withValues(alpha: 0),
-                        borderRadius: const BorderRadius.all(
-                          Radius.circular(M3EShapes.full),
-                        ),
+    return ValueListenableBuilder<String>(
+      valueListenable: AppBrandingService.titleNotifier,
+      builder: (context, title, _) {
+        final Color capsuleColor;
+        if (_pressed) {
+          capsuleColor = scheme.surfaceContainerHighest;
+        } else if (_hovered) {
+          capsuleColor = scheme.surfaceContainerHigh;
+        } else {
+          // 静止态用同色零 alpha 而不是 Colors.transparent：隐式动画在
+          // 同色系里插值，不会先闪一层灰再回到 surfaceContainerHigh。
+          capsuleColor = scheme.surfaceContainerHigh.withValues(alpha: 0);
+        }
+        return Semantics(
+          button: true,
+          // 只显示 LOGO 时文字不存在，用应用名补读屏；显示文字时不重复朗读。
+          label: widget.showName ? null : title,
+          excludeSemantics: !widget.showName,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() => _hovered = false),
+            child: GestureDetector(
+              // 刻意不用 M3ETappable：它点击时会请求焦点（打断页内输入），
+              // GestureDetector 与顶栏其它手势宿主保持同一取舍。
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onTap,
+              onTapDown: (_) => setState(() => _pressed = true),
+              onTapUp: (_) => setState(() => _pressed = false),
+              onTapCancel: () => setState(() => _pressed = false),
+              child: SizedBox(
+                height: DesktopShell.toolRowHeight(context),
+                child: Center(
+                  // widthFactor = 1：胶囊按内容取宽，不把品牌区撑满标题槽。
+                  widthFactor: 1,
+                  child: AnimatedContainer(
+                    key: DesktopShell.brandCapsuleKey,
+                    duration: duration,
+                    curve: M3EMotion.emphasizedDecelerate,
+                    height: DesktopShell.brandCapsuleHeight,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: capsuleColor,
+                      borderRadius: const BorderRadius.all(
+                        Radius.circular(M3EShapes.full),
                       ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const MoliaMark(size: 24),
+                        if (widget.showName) ...[
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              // 品牌位与顶栏应用名同一口径：强调字阶，
+                              // 不手写字重。
+                              style: context.emphasizedTypeScale.titleMedium,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const MoliaMark(size: 24),
-                    const SizedBox(width: 8),
-                    ValueListenableBuilder<String>(
-                      valueListenable: AppBrandingService.titleNotifier,
-                      builder: (context, title, _) => Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        // 品牌位与顶栏应用名同一口径：强调字阶，不手写字重。
-                        style: context.emphasizedTypeScale.titleMedium,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

@@ -220,10 +220,11 @@
   （Playback observer）：直连 facade 快照通道、由组合根挂接，不经 provider 的
   节流通知（避免合并窗口丢中间曲目副作用）；睡眠定时仍属 `PlaybackProvider`。
   与 `PlayStatisticsService` / `ArtworkThemeSync` 同为观察者形态。
-- **播放传输语义**：`lib/widgets/playback_transport.dart` 是播放页迷你 / 播放页
-  桌面排 / 桌面底栏 / 壳层顶栏共用的控制语义（播放暂停 / 上一首 / 下一首 /
-  模式图标与文案 / seek 宿主）：`hasTrack` 启用判据、图标与语义标签、触感与
-  provider 命令只此一份；各宿主只保留按钮变体 / 尺寸 / 布局。`PlaybackSeekBar`
+- **播放传输语义**：`lib/widgets/playback_transport.dart` 是三个播放控制面
+  （播放页 / 桌面底栏 / 移动壳层顶栏播放条）共用的控制语义（播放暂停 /
+  上一首 / 下一首 / 模式图标与文案 / seek 宿主）：`hasTrack` 启用判据、
+  图标与语义标签、触感与 provider 命令只此一份；各宿主只保留按钮变体 /
+  尺寸 / 布局。`PlaybackSeekBar`
   持有 `SeekPreviewController` 生命周期与低频 `Selector`，宿主只选时间标签档位。
   无曲目时播放 / 切歌禁用，模式仍可切换。
 - **平台音频会话与焦点**：`PlatformAudioPort`（`lib/playback/platform_audio_port.dart`）
@@ -344,8 +345,8 @@
   「这一首用哪张封面」的唯一实现：`CoverResolver` 组合 `CoverIndex`（store
   实现），`RealCover` 只允许 custom / original，`DisplayCover` 才带全局默认
   兜底；取色 / 下载 / 标签只接受 `RealCover`。widget 层经 `TrackArtwork` /
-  `CoverChangeBuilder` 统一订阅 `revision` 并渲染，歌曲信息页 / 顶部与迷你
-  播放器 / 列表行 / 歌词选择与海报 / 系统媒体 / 桌面小组件不再各自查 store；
+  `CoverChangeBuilder` 统一订阅 `revision` 并渲染，歌曲信息页 / 顶栏播放条与
+  桌面底栏 / 列表行 / 歌词选择与海报 / 系统媒体 / 桌面小组件不再各自查 store；
   换源写回（手动 + 自动）把封面复制到新曲目键。全局默认封面只兜底「歌曲没有
   封面 / 远端加载失败」的展示，不参与取色、下载与标签嵌入；
   `ArtworkPaletteService` 只消费 `RealCover`。
@@ -1513,7 +1514,7 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
 - **非视觉路径（可同步断言）**：可见性翻转（TickerMode，两个方向）与隐藏态切歌都走
   会话的 no-animation 落位（`setVisible` / 隐藏态 `observe`：`hardReset` + 身份对齐），
   宿主侧只负责控制器归位与中心身份接管。
-- **与共享飞行的关系**：顶栏↔播放页与迷你↔完整飞行只隐藏/复刻中心封面真身
+- **与共享飞行的关系**：只有顶栏播放条 ↔ 播放页飞行，它只隐藏/复刻中心封面真身
   （`morph.pageCoverKey`）；页中心显隐是零时长 `Opacity`（飞行副本精确承接，
   进入首帧就隐藏、落位帧与副本移除同帧亮出，离开方向飞行期间也收起）。
   侧邻位由 `PlayerMorphController.pageDeckReveal` 驱动：复用同一根飞行弹簧，
@@ -1527,14 +1528,12 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   矩形，reveal=1 时不叠加 transform，减弱动效直接落位。飞行期间整层
   `IgnorePointer` 关闭中心点击、侧槽点击、横滑与按压反馈；已按下的拖动由
   morph 隐藏翻转主动收尾，不依赖 PointerCancel。
-- **飞行几何与外观**：外观与插值只有一份实现（`cover_appearance.dart`）——三端真身
-  （顶栏 r8/图标 22、迷你 r8/图标 24、播放页 r18 + 1px 描边 + 柔和阴影/裁剪 17/图标
-  0.35×边长）是 `CoverAppearance` 的命名值，两个飞行是 `CoverFlight` 的薄壳；两条
-  代数不变量：描边透明度 = 描边宽度、裁剪半径 = 外圆角 − 描边宽度。飞行副本经
-  `CoverFlightLayer` 渲染（`CoverCard` + `MorphCover`），外观按「播放页端进度」
-  插值（反向起飞不跳），图标按两端真身尺寸插值。迷你⇄完整飞行在阈值收尾后仍有
-  弹簧容差拖尾（`AnimationStatus` 仍为 `forward`）：拖尾内反向切换必须由进度监听
-  补起新飞行，不能只依赖状态变化。
+- **飞行几何与外观**：外观与插值只有一份实现（`cover_appearance.dart`）——两端真身
+  （顶栏 r8/图标 22、播放页 r18 + 1px 描边 + 柔和阴影/裁剪 17/图标
+  0.35×边长）是 `CoverAppearance` 的命名值，顶栏 ↔ 播放页飞行是 `CoverFlight` 的
+  唯一薄壳；两条代数不变量：描边透明度 = 描边宽度、裁剪半径 = 外圆角 − 描边宽度。
+  飞行副本经 `CoverFlightLayer` 渲染（`CoverCard` + `MorphCover`），外观按「播放页端
+  进度」插值（反向起飞不跳），图标按两端真身尺寸插值。
 - **飞行性能结构**：`PlayerMorphFlight` 与 `CoverFlightLayer` 都包
   `RepaintBoundary`，逐帧重绘不扩散到整条 Overlay；`CoverFlightLayer` 把
   `MorphCover` 图片子树做成 `AnimatedBuilder.child`（稳定 child），逐帧只更新
@@ -1547,7 +1546,7 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   （`lib/app/shell/shell_page_layer.dart::shellPageLayerPresentation`，出场微缩
   只存在于过渡进行中）；
   ②矩形读取必须映射两角得到真实屏幕矩形（唯一实现
-  `player_morph.dart::anchorRectOf`，容器为空 = 全局坐标），祖先稳态缩放
+  `player_morph.dart::anchorRectOf(key)`，只返回全局坐标），祖先稳态缩放
   （暂停态 0.98、按压 0.96）不得让副本尺寸/位置错位。
 
 - **封面始终展示原图**：主题取色只读取原图，海报导出也使用原图。
@@ -1590,7 +1589,11 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   （`MoliaMark` + 自定义应用名，贴窗口左缘（`ShellChrome.appBarTitleSpacing`，
   16 = 包内 `M3EAppBarTheme.titleInset`）处、不再与内容左缘对齐，品牌区左缘
   从 12 变 16 是预期；整块可点打开搜索遮罩，**不做 tooltip**：键位提示只留在
-  设置 › 快捷键）；
+  设置 › 快捷键）。品牌区视觉上是一枚 40dp 高的胶囊（左右各 12dp 内边距、
+  full 圆角、在工具行里垂直居中，外层命中区仍撑满工具行）：hover 用
+  `surfaceContainerHigh`、press 用 `surfaceContainerHighest`、静止透明；
+  长名称单行省略，品牌区最大 280dp，标题槽不足时只剩 LOGO 胶囊，右侧始终
+  至少留 96dp 拖动区——不拿窗口拖动或右侧动作去换应用名。
   品牌区右侧的空白是拖动区（双击最大化，只有它包 `WindowDoubleTapMaximize`，
   双击品牌 / 按钮不最大化）+ 设置 + 窗口按钮（仅 Linux / Windows 自画；macOS
   保留原生标题栏与红绿灯，`WindowChrome.usesCustomTitleBar` 为 false；图标
@@ -1677,13 +1680,6 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   壳层可配置命令**（用户把别的命令绑到 Esc 也一样让位）；登记方自己的按键处理器
   接 Esc（与登记同源、不依赖焦点位置；收藏页多选与音量弹层都是 `HardwareKeyboard`
   处理器）。
-  系统返回 / Esc 的层级：壳层用一个 `PopScope` 按「展开的播放器 → 收起；非家
-  目的地 → 回上一目的地；家页面收起态 → 允许系统退出」处理（桌面 Esc 复用同一
-  判定，播放页右栏停在队列时仍优先收队列）。`NowPlayingController.expanded` /
-  `activeTab` 是页面回写给壳层的只读状态，`collapse()` 是意图；页面级临时状态
-  （收藏多选 / 搜索 / 排序）经 `lib/services/back_claims.dart` 登记，壳层在
-  `BackClaims.any` 时让位——`ModalRoute.onPopInvokedWithResult` 会把一次返回
-  广播给路由上所有 `PopScope`，没有这层仲裁会同时退页面状态与目的地。
   内容版式（结构判据统一在 `AdaptiveLayoutScope`；结构档位仍只由宽度给出，
   高度只额外提供一个「短横屏」布尔 `isShortViewport`（窗口高 < 480），
   宽度来源仍是窗口宽 / 窗口宽 − 侧栏折叠宽，页面不自己量窗口）：宽屏表格列（`TrackRowModel` /
@@ -1730,6 +1726,31 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   （`services/playback_recent_tracks.dart`：统计优先、历史兜底），播放层只拿
   `Set<String>`；短队列 / 关闭 / 空证据退化为均匀洗牌（`shuffle_order.dart`
   的 `shuffleWeightsFor`）。
+- **移动壳层顶栏播放条与播放页展开**（`lib/app/shell/app_shell.dart` +
+  `player_flight.dart`、`lib/pages/nowplaying.dart` + `nowplaying_gestures.dart`、
+  `lib/widgets/player.dart`、`lib/widgets/now_playing_controller.dart`，ADR-0039）：
+  移动端顶栏播放条是**唯一**迷你播放器（封面 + 歌名/作者 + 播放/暂停 + 下一首 +
+  平直进度线）。不在播放页恒显示；播放页展开后让位为品牌位，收起后再回来。
+  播放页收起高度为 **0**，没有页内迷你条（完整层按最终高度布局、顶部裁剪，
+  透明度随同一弹簧进度）；进入播放页（其它一级页 / 底栏 / 顶栏曲目区）总是
+  展开（`NowPlayingController.expand()`），收起态只能在页内主动收起后到达。
+  展开 / 收起入口（底栏重复点击、顶栏曲目区、圆点、内容下拉、播放器拖拽、
+  返回键）统一汇总到壳层 `_requestPlayerExpansion`，由壳层同时发起顶栏 ↔ 播放页
+  的共享封面飞行；页面只接收意图并跑高度动画，不自己起第二套飞行。离开播放页
+  时展开 / 完整态从页内封面飞回顶栏；窄版式且已收起（高度 0）时没有可起飞的
+  页内封面，直接对齐两端状态。桌面 / 移动宽版式 `miniCapable = false`：顶栏
+  永远是品牌位，播放页始终完整；桌面单栏也不能收起（没有顶栏播放条承接）。
+  页面内打开的二级页返回不重置当前 tab；从其它一级页进入时按设置决定是否
+  先落歌词页。返回层级：移动端一级页（资料 / 发现、收藏、播放页收起态）系统
+  返回直接退出应用；播放页展开时第一次返回先收起、第二次才退出。壳层
+  `PopScope` 只在「当前是播放页且展开」时拦，其余交给系统 pop；桌面 Esc 先看
+  播放页右栏是否停在队列（是则收队列），否则展开态先收起，其它一级页不再
+  「回上一目的地」（保持原命令落点，非播放页 no-op）。
+  `NowPlayingController.expanded` / `miniCapable` / `activeTab` 是页面回写给
+  壳层的只读状态，`expand()` / `collapse()` 是意图；页面级临时状态
+  （收藏多选 / 搜索 / 排序）经 `lib/services/back_claims.dart` 登记，壳层在
+  `BackClaims.any` 时让位——`ModalRoute.onPopInvokedWithResult` 会把一次返回
+  广播给路由上所有 `PopScope`，没有这层仲裁会同时退页面状态与目的地。
 - 取色模型（唯一优先级，见 ADR-0001）：**基础配色**（壁纸 / 自定义，单选）+
   **封面覆盖**（当前曲目已有封面取色结果时用封面 seed 覆盖基础配色，包括
   盖过莫奈；启动恢复态在首帧前用本地缓存预解析；无封面回退）+
@@ -1866,9 +1887,11 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   首屏目标 ≤30 行：下载设置 / 下载管理 / 缓存管理合并为「下载与缓存」（下载模板 /
   标签 / 通知与三类缓存保留策略都在该页），通知·锁屏
   与车机歌词并入「歌词与输出」；字体、默认封面、淡入淡出、智能随机、加入位置、
-  震动、应用名称、窗口记忆、省流音质与更新地址收进「高级设置」。高级页分组按
-  内容命名（字体与封面 / 曲库加入位置 / 震动与应用名称 / 窗口 / 省流音质 /
-  更新源与镜像），不复用首屏一级卡名；「开关打开才出现」的从属行用
+  「回到播放页时显示歌词」（默认开、跟人走，只在从其它一级页进入播放页时
+  生效）、震动、应用名称、窗口记忆、省流音质与更新地址收进「高级设置」。高级页
+  分组按内容命名（字体与封面 / 播放细节 / 曲库加入位置 / 震动与应用名称 /
+  窗口 / 省流音质 / 更新源与镜像），不复用首屏一级卡名；「开关打开才出现」的
+  从属行用
   `SettingsReveal`（AnimatedSize，减弱动效零时长），卡内行形状只按可见行计算。
   副标题只写状态、后果、权限或不可逆提示，不解释实现。
   各卡的可选子系统与平台能力（同步 / 统计 /

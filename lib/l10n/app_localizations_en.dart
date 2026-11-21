@@ -346,6 +346,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSmartShuffleSubtitle => '';
 
   @override
+  String get settingsReturnToPlayerLyricsTitle =>
+      'Show lyrics when returning to the player';
+
+  @override
+  String get settingsReturnToPlayerLyricsSubtitle =>
+      'Open on the lyrics tab when you enter the player from another page';
+
+  @override
   String get settingsDefaultPlayMode => 'Default play mode';
 
   @override

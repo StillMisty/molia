@@ -68,6 +68,7 @@ part 'shell_back_intent.dart';
 part 'shell_bar.dart';
 part 'shell_page_layer.dart';
 part 'shell_progress.dart';
+part 'player_flight.dart';
 part 'themed_app.dart';
 
 class MyApp extends StatefulWidget {
@@ -157,7 +158,10 @@ class _MyAppState extends State<MyApp>
   final ShellReselectSignal _showSearchRequest = ShellReselectSignal();
 
   /// 每个目的地一个「重复点击」意图通道：页面订阅后自行响应
-  /// （播放页 = 迷你 ⇄ 完整；资料库 / 收藏 = 回到列表顶部），壳层不消费。
+  /// （资料库 / 收藏 = 回到列表顶部），壳层不消费。
+  ///
+  /// 播放页也有一个实例保持 map 结构完整，但没有消费者：它的重复点击由
+  /// [_requestPlayerExpansion] 直接切换展开态，避免共享飞行再绕页面一圈。
   final Map<ShellDestination, ShellReselectSignal> _reselect = {
     for (final destination in ShellDestination.values)
       destination: ShellReselectSignal(),
@@ -184,9 +188,11 @@ class _MyAppState extends State<MyApp>
   late final Map<ShellDestination, Widget> _pages = {
     ShellDestination.nowPlaying: NowPlaying(
       morph: _morph,
-      reselect: _reselect[ShellDestination.nowPlaying],
       controller: _nowPlaying,
-      // 桌面骨架的播放页换成「封面 + 控制 / 队列·歌词·信息」版式（无迷你态）；
+      // 页面自己的展开 / 收起手势（圆点、内容下拉、播放器拖拽）只表达意图，
+      // 由壳层同时发起顶栏 ⇄ 播放页的共享封面飞行。
+      onRequestExpansion: _requestPlayerExpansion,
+      // 桌面骨架的播放页换成「封面 + 控制 / 队列·歌词·信息」版式（无收起态）；
       // 移动 / 平板骨架保持 PageView 版式。
       desktopLayout: _desktopShell,
     ),
@@ -243,6 +249,8 @@ class _MyAppState extends State<MyApp>
     // 展开态变化要重算 PopScope.canPop（壳层返回层级的第一优先是收起
     // 播放器）；页面只在动画落定 / 布局后写，不会在构建期触发这里。
     _nowPlaying.expanded.addListener(_onNowPlayingExpandedChanged);
+    // 布局能否收起（窄单栏 / 宽版式）决定顶栏显示播放条还是品牌位。
+    _nowPlaying.miniCapable.addListener(_onNowPlayingExpandedChanged);
     // 启动首页：导航偏好在首帧前已就绪（组合根 await 过 preferencesReady），
     // 这里同步读取即可；存储值不可见时 effectiveHomeDestination 已回退到
     // 第一个可见目的地。
@@ -268,6 +276,10 @@ class _MyAppState extends State<MyApp>
   /// 时也由它统一翻转，避免两处各判一次）。
   void _syncBarReveal() => _barReveal.setRevealed(!_morph.barHeaderHidden);
 
+  /// 壳层重建转发：`player_flight.dart` 的 extension 不能直接调用
+  /// protected 的 `setState`（Dart 限制），留一个私有转发。
+  void _rebuildShell() => setState(() {});
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -279,7 +291,7 @@ class _MyAppState extends State<MyApp>
     _renderedDestination = effective;
     _completeMorph();
     _morph.setPageHeaderHidden(false);
-    _morph.setBarHeaderHidden(effective == ShellDestination.nowPlaying);
+    _morph.setBarHeaderHidden(!_showPlayerBar);
   }
 
   @override
@@ -294,6 +306,7 @@ class _MyAppState extends State<MyApp>
     _morphEntry = null;
     _morph.dispose();
     _nowPlaying.expanded.removeListener(_onNowPlayingExpandedChanged);
+    _nowPlaying.miniCapable.removeListener(_onNowPlayingExpandedChanged);
     _nowPlaying.dispose();
     _globalSearch.dispose();
     for (final signal in _reselect.values) {
@@ -318,22 +331,26 @@ class _MyAppState extends State<MyApp>
 
   /// 目的地被点击（底栏与导航轨共用）：
   /// - 未选中 → 切页（含顶栏 ⇄ 播放页共享元素飞行）；
-  /// - 已选中 → 把重复点击交给页面：播放页切换迷你 ⇄ 完整、
-  ///   资料库 / 收藏回到列表顶部。
+  /// - 已选中播放页 → 在展开 / 收起之间切换（顶栏 ⇄ 页内封面继续走同一套
+  ///   飞行）；资料库 / 收藏回到列表顶部。
   ///
-  /// 进入播放页的飞行期间忽略重复点击：此刻折叠会与飞行副本抢封面
-  /// （页内迷你 ⇄ 完整飞行与顶栏飞行同帧竞争），等飞行落定（~0.4s）再切换。
+  /// 进入播放页的飞行期间忽略重复点击：此刻切换会与飞行副本抢封面，
+  /// 等飞行落定（~0.4s）再切换。
   void _onDestinationSelected(ShellDestination destination) {
     if (destination != _effectiveDestination) {
       _selectDestination(destination);
       return;
     }
-    if (destination == ShellDestination.nowPlaying && _morphGeometry != null) {
+    if (destination == ShellDestination.nowPlaying) {
+      if (_morphGeometry != null) return;
+      if (!_nowPlaying.miniCapable.value) return;
+      HapticsService.lightImpact();
+      _requestPlayerExpansion(!_nowPlaying.expanded.value);
       return;
     }
-    // 重复点击是一次真实的点按（列表回顶 / 播放器折叠都是肉眼可见的动作），
-    // 给一次轻震：壳层统一在此触发 —— 页面侧的重复点击响应不带触感，
-    // 避免同一次点击两次震动（命中忽略分支时不震动）。
+    // 重复点击是一次真实的点按（列表回顶是肉眼可见的动作），给一次轻震：
+    // 壳层统一在此触发 —— 页面侧的重复点击响应不带触感，避免同一次点击
+    // 两次震动（命中忽略分支时不震动）。
     HapticsService.lightImpact();
     _reselect[destination]?.trigger();
   }
@@ -363,8 +380,14 @@ class _MyAppState extends State<MyApp>
     final current = _effectiveDestination;
     if (destination == current) return;
     HapticsService.lightImpact();
-    final leavingPlayer = current == ShellDestination.nowPlaying;
-    final enteringPlayer = destination == ShellDestination.nowPlaying;
+    final bool enteringPlayer = destination == ShellDestination.nowPlaying;
+    final bool leavingPlayer = current == ShellDestination.nowPlaying;
+    // 从其它一级页进入播放页：总是展开完整播放页。播放页可能停在收起态
+    // （上一轮手动收起后离开），直接切过去会让用户落在一个「空的播放页」
+    // 上。歌词请求先发；展开请求要等飞行起点抓好之后再发。
+    if (enteringPlayer && nav.showLyricsOnEnter) {
+      _nowPlaying.showLyricsTab();
+    }
     setState(() {
       _previousDestination = current;
       _selectedDestination = destination;
@@ -373,6 +396,7 @@ class _MyAppState extends State<MyApp>
     if (reduceMotionOf(context)) {
       // 减弱动效：tab 淡入淡出与封面飞行都直达终态（不 forward(from: 0)、
       // 不插 Overlay 飞行副本）；两端状态仍按「谁在播放页」对齐。
+      if (enteringPlayer) _nowPlaying.expand();
       _tabTransition.value = 1;
       _completeMorph();
       _alignMorphEnds(onPlayerPage: enteringPlayer);
@@ -380,9 +404,19 @@ class _MyAppState extends State<MyApp>
     }
     _tabTransition.forward(from: 0);
     if (enteringPlayer) {
+      // 先抓顶栏封面再发展开请求：expand 会立刻让顶栏隐藏，顺序反过来会
+      // 先淡出再起飞（锚点还在，但观感上是两段）。
       _startMorphToPage();
+      _nowPlaying.expand();
     } else if (leavingPlayer) {
-      _startMorphBackToBar();
+      // 宽版式 / 桌面两栏没有收起态、expanded 恒为 false，但播放页是完整
+      // 可见的，离开时同样要从页内封面飞回顶栏（否则共享飞行直接消失）。
+      // 只有窄版式且已收起（高度 0）才没有可起飞的页内封面。
+      if (!_nowPlaying.miniCapable.value || _nowPlaying.expanded.value) {
+        _startMorphBackToBar();
+      } else {
+        _alignMorphEnds(onPlayerPage: false);
+      }
     } else {
       // 两端都不是播放页：不涉及共享元素，确保两端真身可见、侧槽落位。
       _alignMorphEnds(onPlayerPage: false);
@@ -416,153 +450,64 @@ class _MyAppState extends State<MyApp>
     _nowPlaying.showLyricsTab();
   }
 
-  /// 展开态翻转 → 重算 PopScope.canPop（`setState` 是 protected，扩展里
-  /// 不能直接调用，壳层留一个 3 行的转发）。
-  void _onNowPlayingExpandedChanged() {
-    if (mounted) setState(() {});
-  }
-
-  /// 底栏 → 播放页的飞行：起点与终点分两帧抓。
+  /// 顶栏是否显示播放条（封面 + 歌名/作者 + 播放/下一首 + 进度）。
   ///
-  /// 起点（底栏封面）只在点击这一帧存在——底栏在播放页整条让位，重建后就
-  /// 没了；终点（页内封面）恰恰相反——让位使内容区高 +80，页内封面随垂直
-  /// 居中下移，重建前的矩形不是落点。因此本帧抓起点、先把两端封面收进飞行
-  /// 态（避免真身与副本同帧重影），帧末（让位后的布局已成立）抓终点再起飞：
-  /// 副本飞行终点就是真身的实际落点，交接帧零位移。
-  void _startMorphToPage() {
-    _completeMorph();
-    final barCover = _morph.rectOf(_morph.barCoverKey);
-    if (barCover == null) {
-      // 起点不在场（启动就落在播放页等）：跳过飞行，只对齐两端状态。
-      _alignMorphEnds(onPlayerPage: true);
-      return;
-    }
-    _morph.setBarHeaderHidden(true);
-    _morph.setPageHeaderHidden(true);
-    // 进入首帧页中心就收起（飞行副本承接），侧邻位收回中心等飞行尾段展开。
-    _morph.setPageDeckReveal(0);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (_effectiveDestination != ShellDestination.nowPlaying) {
-        // 一帧之内又离开了播放页：这次进入被撤销，两端状态按「不在播放页」
-        // 对齐（两端真身都可见、侧槽落位）。
-        _alignMorphEnds(onPlayerPage: false);
+  /// 移动端顶栏是唯一的迷你播放器：不在播放页时恒显示；在播放页时只有
+  /// 窄版式且已收起才显示，展开后让位给品牌位（页内封面 / 标题承接）。
+  /// 宽版式 / 桌面两栏没有收起态，顶栏永远是品牌位。
+  bool get _showPlayerBar =>
+      _effectiveDestination != ShellDestination.nowPlaying ||
+      (_nowPlaying.miniCapable.value && !_nowPlaying.expanded.value);
+
+  /// 播放页展开 / 收起的唯一入口（底栏重复点击、顶栏曲目区、页内手势、
+  /// 返回键共用）。
+  ///
+  /// 页面只消费 [NowPlayingController] 的意图并跑高度动画；共享封面飞行
+  /// 在这里发起，保证「页内手势」与「进入播放页」走同一套 Spring / 副本，
+  /// 不新增第二套动画系统。
+  void _requestPlayerExpansion(bool expand) {
+    if (_effectiveDestination != ShellDestination.nowPlaying) return;
+    if (!_nowPlaying.miniCapable.value) return;
+    // 飞行中忽略：两端副本正在占着封面，切换会与它抢同一份几何。
+    if (_morphGeometry != null) return;
+    final bool wasExpanded = _nowPlaying.expanded.value;
+    if (expand) {
+      if (wasExpanded) {
+        _nowPlaying.expand();
         return;
       }
-      final pageCover = _morph.rectOf(_morph.pageCoverKey);
-      if (pageCover == null) {
-        // 终点不可用：不飞，页内封面与侧槽直接亮出（顶栏/底栏这一端不在场，
-        // 无重影）。
+      if (reduceMotionOf(context)) {
+        _nowPlaying.expand();
+        _completeMorph();
         _alignMorphEnds(onPlayerPage: true);
         return;
       }
-      _flyMorph(
-        PlayerMorphGeometry(
-          barCover: barCover,
-          pageCover: pageCover,
-          toPage: true,
-        ),
-      );
-    });
-  }
-
-  /// 播放页 → 底栏的飞行：底栏在播放页里整条让位，锚点要等它回到树里才有。
-  ///
-  /// 本帧先让底栏复位、并把两端封面收进飞行态（底栏封面出现时就是空位，
-  /// 下一帧副本从同一位置起飞，接得上）；帧末（底栏已完成布局）抓两端锚点、
-  /// 再下一帧起飞——代价是飞行比切页晚一帧（16ms），肉眼不可辨。
-  void _startMorphBackToBar() {
-    _morph.setBarHeaderHidden(true);
-    // 离开方向也从第一帧起收起页中心：飞行副本接管整段行程，页面真身
-    // 不能先在原地亮着等副本飞过来。
-    _morph.setPageHeaderHidden(true);
-    // 侧邻位从稳态开始；飞行前 45% 由 tick 时间对称地收回中心。
-    _morph.setPageDeckReveal(1);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (_effectiveDestination == ShellDestination.nowPlaying) {
-        // 一帧之内又回到播放页：这次离开被撤销，状态按「在播放页」对齐
-        // （底栏封面仍收起，与启动就落在播放页时同一口径）。
-        _alignMorphEnds(onPlayerPage: true);
-        return;
-      }
-      _completeMorph();
-      final geometry = _morph.captureGeometry(toPage: false);
-      if (geometry == null) {
-        // 锚点缺失（迷你态/首帧）：跳过飞行，两端真身可见。
-        _alignMorphEnds(onPlayerPage: false);
-        return;
-      }
-      _flyMorph(geometry);
-    });
-  }
-
-  /// 起飞：两端封面的显示状态 + Overlay 副本 + 弹簧。
-  ///
-  /// 封面 URL 与锚点在同一刻抓取：飞行期间不换图（副本承接的是起飞时那一张）。
-  void _flyMorph(PlayerMorphGeometry geometry) {
-    _morph.setBarHeaderHidden(true);
-    // 两个方向都收起页中心：副本精确承接整段几何，真身不参与飞行（进入时
-    // 首帧就不能亮，离开时也不能留到最后才收）。
-    _morph.setPageHeaderHidden(true);
-    _morphGeometry = geometry;
-    final url = nowPlayingCoverUrl(context, context.read<PlaybackProvider>());
-    final token = ++_morphToken;
-    _morphEntry = OverlayEntry(
-      builder: (context) => PlayerMorphFlight(
-        animation: _morphAnimation,
-        geometry: geometry,
-        url: url,
-        fallback: (context, iconSize) =>
-            buildFallbackArtwork(context, iconSize: iconSize),
-      ),
-    );
-    Overlay.of(context, rootOverlay: true).insert(_morphEntry!);
-    // 弹簧从起点跑满全程；落定帧由 [_onMorphTick] 完成交接（whenComplete
-    // 只是兜底：中途被新飞行接管会被取消，不触发）。
-    _morphAnimation.animateTo(1, from: 0, withVelocity: 0).whenComplete(() {
-      if (!mounted || token != _morphToken) return;
-      _completeMorph();
-    });
-  }
-
-  /// 飞行到达（[PlayerMorphFlight.flightPortion]）即在同一帧完成交接：
-  /// 先亮出目标端真身、再移除飞行副本，两端封面位置完全一致，无尾段闪烁。
-  ///
-  /// `snapToEnd` 保证最后一步 value 精确为 1.0，此处即落定帧（零速度）。
-  void _onMorphTick() {
-    final geometry = _morphGeometry;
-    if (geometry == null) return;
-    final double progress = _morphAnimation.value.clamp(0.0, 1.0);
-    // 侧邻位进入时尾段展开 / 离开时前段收回（不新增 ticker，复用同一条弹簧）。
-    _morph.setPageDeckReveal(
-      PlayerMorphController.pageDeckRevealAt(progress, toPage: geometry.toPage),
-    );
-    if (progress >= PlayerMorphFlight.flightPortion) {
-      _completeMorph();
-    }
-  }
-
-  void _removeMorphOverlay() {
-    _morphEntry?.remove();
-    _morphEntry = null;
-  }
-
-  void _completeMorph() {
-    _morphToken++;
-    final geometry = _morphGeometry;
-    _morphGeometry = null;
-    // 失败 / 落定都回到稳态展开：落位帧副本移除、真身与侧槽同一帧就位。
-    _morph.setPageDeckReveal(1);
-    if (geometry == null) {
-      _removeMorphOverlay();
+      // 先抓顶栏封面再发展开请求：expand 会立刻让顶栏隐藏，顺序反过来会
+      // 先淡出再起飞。目的地没有变化也要走正常撤销检查——同一帧切走时
+      // post-frame 会按「已离开播放页」放弃这次飞行。
+      _startMorphToPage();
+      _nowPlaying.expand();
       return;
     }
-    // 落位：目标端真身瞬时亮出（零时长 Opacity），同一帧移除飞行副本；
-    // 播放页激活时顶栏收起（内容由页面承接）。
-    _morph.setPageHeaderHidden(false);
-    _morph.setBarHeaderHidden(geometry.toPage);
-    _removeMorphOverlay();
+    _nowPlaying.collapse();
+    if (!wasExpanded) return;
+    if (reduceMotionOf(context)) {
+      _completeMorph();
+      _alignMorphEnds(onPlayerPage: false);
+      return;
+    }
+    _startMorphBackToBar(destinationChanged: false);
+  }
+
+  /// 顶栏曲目区点击：不在播放页走目的地切换（含歌词偏好 + 展开 + 飞行），
+  /// 已在播放页收起态则就地展开。
+  void _openPlayerFromBar() {
+    if (_effectiveDestination != ShellDestination.nowPlaying) {
+      _selectDestination(ShellDestination.nowPlaying);
+      return;
+    }
+    if (_nowPlaying.expanded.value) return;
+    _requestPlayerExpansion(true);
   }
 
   /// 打开设置弹层（顶栏入口，三个目的地共用）；返回处理见 [showSettingsSheet]。
@@ -691,25 +636,29 @@ class _MyAppState extends State<MyApp>
     // 顶栏由 ShellChrome 统一构造（标题 / 动作 / 拖动区装配在 ShellAppBar）：
     // 整条顶栏是窗口拖动区（隐藏标题栏后唯一的拖动入口），高度 = 56 工具行
     // + 10 进度条槽，非桌面平台 WindowDragArea 是纯透传。
+    final bool showPlayerBar = _showPlayerBar;
     final appBar = chrome.appBar(
       context: context,
       title: WindowDoubleTapMaximize(
         // 双击顶栏标题区（拖动区的非按钮部分）= 最大化 / 还原（桌面肌肉记忆）；
         // 按钮区不参与，避免双击按钮顺带改窗口状态。
         child: _ShellBarHeader(
+          key: const Key('shellBarPlayerSummary'),
           morph: _morph,
           reveal: _barReveal,
-          onOpenPlayer: () => _selectDestination(ShellDestination.nowPlaying),
+          onOpenPlayer: _openPlayerFromBar,
         ),
       ),
       actions: [
-        // 顶栏右侧：播放页只留设置（播放/切歌由页面内部控制区承担）；
-        // 其余页面（资料库 / 收藏）是迷你播放器（显式播放/暂停 + 下一首）
-        // 加设置入口 —— 设置不再只有播放页够得着。
+        // 顶栏右侧：移动端顶栏是唯一迷你播放器 —— 不在播放页、或播放页
+        // 收起时显示播放/下一首；展开后让位给品牌位。
         // 两个按钮与歌名/作者共用同一根入场弹簧（缩放 pop + 淡入）。
-        if (selectedDestination != ShellDestination.nowPlaying) ...[
-          _BarPlayPauseButton(reveal: _barReveal),
-          _BarNextButton(reveal: _barReveal),
+        if (showPlayerBar) ...[
+          _BarPlayPauseButton(
+            key: const Key('shellBarPlayPause'),
+            reveal: _barReveal,
+          ),
+          _BarNextButton(key: const Key('shellBarNext'), reveal: _barReveal),
         ],
       ],
       bottom: PreferredSize(

@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'dart:ui' show lerpDouble;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -9,27 +8,16 @@ import 'package:provider/provider.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
-import '../theme/m3e_context.dart';
-import 'playback_cover_decode.dart';
-import 'responsive.dart';
-import 'app_network_image.dart';
-import 'cover_appearance.dart';
 import 'cover_deck_metrics.dart';
 import 'now_playing_summary.dart';
+import 'playback_cover_decode.dart';
 import 'playback_transport.dart';
 import 'player_cover_deck.dart';
 import 'player_cover_semantics.dart';
 import 'player_morph.dart';
+import 'responsive.dart';
 import 'seek_bar.dart';
-import 'track_artwork.dart';
 import 'volume_control.dart';
-
-/// 迷你条封面外观与飞行定义在 `cover_appearance.dart`；这里再导出给既有
-/// import 面（迷你封面回退图标尺寸等）。
-export 'cover_appearance.dart' show miniCoverFallbackIconSize;
-
-/// 迷你播放条高度（收起态）：展开/收起动画的迷你端基准，播放页共用。
-const double miniPlayerHeight = 72;
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
 /// 此时回退到简体中文（与其它行组件同一约定）。
@@ -49,30 +37,26 @@ class Player extends StatefulWidget {
   /// 播放页音量弹层的稳定 Key。
   static const Key volumePanelKey = Key('playerVolumePanel');
 
-  /// 迷你条根节点的稳定 Key（版式测试按它定位迷你条内的标题 / 传输键）。
-  static const Key miniBarKey = Key('playerMiniBar');
-
   /// 顶栏共享元素控制器：为封面/歌名/进度提供锚点并接收隐藏状态。
   final PlayerMorphController? morph;
 
-  /// 小屏完整页的展开进度（0=迷你、1=完整）；为 null 时直接渲染完整布局。
+  /// 小屏完整页的展开进度（0 = 收起高度 0、1 = 完整布局）；为 null 时直接
+  /// 渲染完整布局。
   ///
-  /// 迷你/完整两套布局由同一控制器驱动：容器高度连续插值、封面飞行共享。
+  /// 收起态没有页内迷你播放条：顶栏是移动端唯一的迷你播放器，播放页收起后
+  /// 直接让出整块高度给歌词 / 队列 / 信息（壳层顶栏承接封面 / 歌名 / 传输键）。
+  /// 这里只负责高度裁剪与完整层透明度，不参与封面飞行。
   final Animation<double>? expandAnimation;
 
   /// 桌面骨架播放页版式：标题块下补专辑行、进度排上方补传输控制
   /// （移动/平板大屏版式不显示，纵向空间留给歌词）。
   final bool desktopLayout;
 
-  /// 迷你层被点击时请求展开（由宿主翻转 [expandAnimation]）。
-  final VoidCallback? onToggleExpand;
-
   const Player({
     super.key,
     this.isLargeScreen = false,
     this.morph,
     this.expandAnimation,
-    this.onToggleExpand,
     this.desktopLayout = false,
   });
 
@@ -150,24 +134,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   double _playerContentHeight(double art, double reservedHeight) =>
       art * coverDeckVerticalFactor + reservedHeight;
 
-  /// 迷你 ⇄ 完整切换时的封面飞行：两端锚点与页内 Stack 坐标系。
-  final GlobalKey _playerStackKey = GlobalKey(debugLabel: 'playerStack');
-  final GlobalKey _miniCoverKey = GlobalKey(debugLabel: 'miniCover');
-  final GlobalKey _fullCoverKey = GlobalKey(debugLabel: 'fullCover');
-  Rect? _coverFlightFrom;
-  Rect? _coverFlightTo;
-  bool _coverFlightActive = false;
-
-  /// 本次封面飞行的终点端：true = 收起（终点迷你），false = 展开（终点完整）。
-  /// 用于按「进度到达终端阈值」结束飞行，不等弹簧容差拖尾。
-  bool _coverFlightToMini = false;
-
-  /// 完整层是否挂载顶栏⇄播放页 morph 锚点（只在展开端点翻转）。
-  ///
-  /// 逐帧用 `t >= 1` 决定会让完整层每帧换一份 morph 身份，整棵完整布局跟着
-  /// 重建；端点本身是布尔值，在动画监听里只翻这一下即可。
-  bool _morphAttached = false;
-
   /// 切歌入场：M3E no-overshoot spatial 弹簧（aospSpatial 380/1.0）驱动文字
   /// 轻量上移落位 + 同源淡入，与封面切歌同帧启动；连续切歌带速度续跑。
   /// 弹簧保持无过冲是刻意的设计意图。
@@ -187,9 +153,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       vsync: this,
       initialValue: 1,
     );
-    widget.expandAnimation?.addStatusListener(_handleExpandStatus);
-    widget.expandAnimation?.addListener(_handleExpandValue);
-    _morphAttached = (widget.expandAnimation?.value ?? 1.0) >= 1.0;
   }
 
   @override
@@ -199,109 +162,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   }
 
   @override
-  void didUpdateWidget(covariant Player oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.expandAnimation != widget.expandAnimation) {
-      oldWidget.expandAnimation?.removeStatusListener(_handleExpandStatus);
-      oldWidget.expandAnimation?.removeListener(_handleExpandValue);
-      widget.expandAnimation?.addStatusListener(_handleExpandStatus);
-      widget.expandAnimation?.addListener(_handleExpandValue);
-      // didUpdateWidget 后必有一次 build：直接对齐端点，不需要 setState。
-      _morphAttached = (widget.expandAnimation?.value ?? 1.0) >= 1.0;
-    }
-  }
-
-  /// 迷你/完整切换开始：抓取两端封面矩形，交由页内 Stack 飞行；
-  /// 视觉落定即撤下副本（[_handleExpandValue]），状态回调仅兜底。
-  ///
-  /// 侧邻位没有独立入场演出：随页面层/完整层自身淡入以稳态出现。
-  void _handleExpandStatus(AnimationStatus status) {
-    switch (status) {
-      case AnimationStatus.forward:
-      case AnimationStatus.reverse:
-        _startCoverFlight();
-      case AnimationStatus.completed:
-      case AnimationStatus.dismissed:
-        _endCoverFlight();
-    }
-    _syncMorphAttachment();
-  }
-
-  /// 展开端点（t>=1）才把 morph 锚点交给完整层。
-  ///
-  /// 迷你态下顶栏⇄播放页飞行应走「跳过」路径，避免飞到不可见的完整封面
-  /// 锚点。只在布尔边界 setState：值监听每帧都会调用，同一端点内直接返回。
-  void _syncMorphAttachment() {
-    final bool attached = (widget.expandAnimation?.value ?? 0.0) >= 1.0;
-    if (attached == _morphAttached) return;
-    if (!mounted) {
-      _morphAttached = attached;
-      return;
-    }
-    setState(() => _morphAttached = attached);
-  }
-
-  /// 开始一段页内封面飞行：抓两端锚点并隐藏真身。
-  ///
-  /// [toMini] 为空时按当前进度决定结束端（状态迁移入口）；从值监听补起
-  /// 飞行时进度已经在目标端附近，必须由调用方给出新的方向。
-  void _startCoverFlight({bool? toMini}) {
-    // 同一份锚点几何实现（含祖先缩放的两角映射）；这里取页内 Stack 本地坐标。
-    final from = anchorRectOf(_miniCoverKey, container: _playerStackKey);
-    final to = anchorRectOf(_fullCoverKey, container: _playerStackKey);
-    if (from == null || to == null) return;
-    setState(() {
-      _coverFlightFrom = from;
-      _coverFlightTo = to;
-      _coverFlightActive = true;
-      // 起点进度决定结束端：从完整态出发 = 收起，从迷你态出发 = 展开。
-      _coverFlightToMini =
-          toMini ?? (widget.expandAnimation?.value ?? 0) >= 0.5;
-    });
-  }
-
-  /// 进度到达终端阈值（~0.5%）即结束飞行；容差拖尾内反向则重新起一段。
-  ///
-  /// 弹簧的容差拖尾让落定状态晚于视觉落定（~0.35s），不能让真身封面
-  /// 一直被副本顶替（期间点击封面会落空）。
-  void _handleExpandValue() {
-    final animation = widget.expandAnimation;
-    if (animation == null) return;
-    final double value = animation.value;
-    _syncMorphAttachment();
-
-    if (!_coverFlightActive) {
-      // 容差拖尾内再切换：motor 的 animateTo 永远把状态置为 forward，反向
-      // 不会产生新的 status 事件，只靠 [_handleExpandStatus] 会让飞行副本
-      // 一直缺席（看起来「飞行消失」）。弹簧驱动的进度重新离开端点时补一段
-      // 新飞行；拖动手势直接写 value 会把状态置为 completed/dismissed，不会
-      // 误触发（拖动仍是交叉淡化、松手才起飞行）。
-      if (animation.status == AnimationStatus.forward &&
-          value > 0.0 &&
-          value < 1.0) {
-        _startCoverFlight(toMini: value >= 0.5);
-      }
-      return;
-    }
-
-    if (_coverFlightToMini ? value <= 0.005 : value >= 0.995) {
-      _endCoverFlight();
-    }
-  }
-
-  void _endCoverFlight() {
-    if (!_coverFlightActive) return;
-    setState(() {
-      _coverFlightActive = false;
-      _coverFlightFrom = null;
-      _coverFlightTo = null;
-    });
-  }
-
-  @override
   void dispose() {
-    widget.expandAnimation?.removeStatusListener(_handleExpandStatus);
-    widget.expandAnimation?.removeListener(_handleExpandValue);
     _trackEntrance.dispose();
     super.dispose();
   }
@@ -336,9 +197,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       listen: false,
     );
 
-    // 迷你封面换图时用上一首封面做加载占位；当前曲目没有封面时不借用，
-    // 避免旧封面从新卡下面透出来（见 player_reconcile_test 的切歌占位）。
-    final previousDisplayTrack = _lastTrack;
+    // 展示曲目沿用上一次非空曲目：换歌瞬间快照可能短暂为空，直接回退到
+    // 「无曲目播放页」会让封面 / 标题闪一帧。
     final displayTrack = track ?? _lastTrack;
     if (track != null) {
       _lastTrack = track;
@@ -369,6 +229,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             child: _buildSmallScreenPlayerLayout(
               displayTrack,
               playbackProvider,
+              morph: widget.morph,
             ),
           ),
         ),
@@ -380,7 +241,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         displayTrack,
         playbackProvider,
         expand,
-        previousTrack: previousDisplayTrack,
       ),
     );
   }
@@ -415,10 +275,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                 artDimension: metrics.artDimension,
                 stackDimension: metrics.stackWidth,
                 stackHeight: metrics.stackHeight,
-                fullCoverKey: _fullCoverKey,
                 isLargeScreen: widget.isLargeScreen,
                 morph: morph,
-                coverFlightActive: _coverFlightActive,
                 onTrackSwapped: _handleTrackSwapped,
               ),
             ),
@@ -437,10 +295,16 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
   }
 
-  /// 迷你 ⇄ 完整：同一控制器驱动容器高度、交叉淡化与封面飞行。
+  /// 收起 / 展开：同一控制器驱动容器高度与完整层透明度。
   ///
-  /// 两套布局始终挂载（完整层按最终高度布局、顶部对齐裁剪），高度连续过渡；
-  /// 封面由页内飞行副本在两端锚点间插值，两套布局共享同一次飞行。
+  /// 收起高度是 **0**：移动端顶栏条是唯一的迷你播放器，播放页收起后不再
+  /// 保留页内迷你条——那会与顶栏重复一层「封面 + 歌名 + 传输键」，还把歌词
+  /// 区往下压 72dp。完整层始终按最终高度布局、顶部对齐裁剪，高度连续过渡时
+  /// 封面尺寸不会重排。
+  ///
+  /// 封面飞行不在页内做：顶栏 ⇄ 展开位置由壳层的 `PlayerMorphFlight` 统一
+  /// 承接（见 `app_shell.dart`）。收起态也把 [Player.morph] 交给封面 deck，
+  /// 让壳层在飞行起止两端都能抓到播放页封面的真实矩形。
   ///
   /// [fullHeight] 就是完整层的内容高：完整层在这个高度上重算封面尺寸，
   /// 两者必须同一口径（见 [_smallScreenDeckMetrics]），否则展开态封面会
@@ -448,9 +312,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Widget _buildExpandableSmallScreenLayout(
     Track? displayTrack,
     PlaybackProvider playbackProvider,
-    Animation<double> expand, {
-    Track? previousTrack,
-  }) {
+    Animation<double> expand,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double reservedHeight = _sectionsReservedHeightFor(context);
@@ -462,45 +325,27 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           ).artDimension,
           reservedHeight,
         );
-        // 两套布局在这里构建一次，弹簧逐帧只改下面的包装层（高度 / 收起
-        // 裁剪 / 交叉淡化 / 点击门控）与飞行副本：整棵完整层与迷你层不再随
-        // 每一帧动画重建。
+        // 完整层在这里构建一次，弹簧逐帧只改下面的包装层（高度 / 裁剪 /
+        // 透明度 / 点击门控）：整棵播放器不随每一帧动画重建。
         final Widget fullLayer = _buildSmallScreenPlayerLayout(
           displayTrack,
           playbackProvider,
-          morph: _morphAttached ? widget.morph : null,
+          morph: widget.morph,
         );
-        final Widget miniLayer = _buildMiniPlayer(
-          context,
-          displayTrack,
-          playbackProvider,
-          previousTrack: previousTrack,
-        );
-        // 飞行副本的封面 URL 在页面构建时抓一次：弹簧逐帧只改几何。
-        final String? flightUrl = coverResolverOf(context)
-            .realOf(displayTrack)
-            .url;
         return AnimatedBuilder(
           animation: expand,
           builder: (context, _) {
             // motor 弹簧进度即运动曲线；截断 0..1：
             // 高度不过冲，避免内容区随过冲回流；透明度由同一进度派生。
             final double t = expand.value.clamp(0.0, 1.0);
-            final double height = lerpDouble(miniPlayerHeight, fullHeight, t)!;
-            final double miniOpacity =
-                1 - Curves.easeOutCubic.transform((t / 0.45).clamp(0.0, 1.0));
+            final double height = fullHeight * t;
             final double fullOpacity = Curves.easeInCubic.transform(
               ((t - 0.35) / 0.65).clamp(0.0, 1.0),
             );
-            final bool flightReady =
-                _coverFlightActive &&
-                _coverFlightFrom != null &&
-                _coverFlightTo != null;
             return SizedBox(
               height: height,
               child: ClipRect(
                 child: Stack(
-                  key: _playerStackKey,
                   clipBehavior: Clip.hardEdge,
                   children: [
                     // 完整层：始终按最终高度布局，避免过渡中重排封面。
@@ -510,6 +355,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                         maxHeight: fullHeight,
                         alignment: Alignment.topCenter,
                         child: ExcludeSemantics(
+                          // 收起态（高度 0）整层不可读也不可点：读屏 / 点击
+                          // 只能落在顶栏承接下来的播放条上。
                           excluding: t < 0.5,
                           child: IgnorePointer(
                             ignoring: t < 0.5,
@@ -524,45 +371,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                         ),
                       ),
                     ),
-                    // 迷你层：固定 72，点击整条即展开。
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: miniPlayerHeight,
-                      child: ExcludeSemantics(
-                        excluding: t >= 0.5,
-                        child: IgnorePointer(
-                          ignoring: t >= 0.5,
-                          child: Opacity(
-                            opacity: miniOpacity,
-                            child: RepaintBoundary(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: widget.onToggleExpand,
-                                child: miniLayer,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    // 共享封面飞行副本：真实封面在飞行期间隐藏。
-                    if (flightReady)
-                      CoverFlightLayer(
-                        animation: expand,
-                        flight: CoverFlight(
-                          otherRect: _coverFlightFrom!,
-                          pageRect: _coverFlightTo!,
-                          otherAppearance: CoverAppearance.mini,
-                          toPage: true,
-                        ),
-                        url: flightUrl,
-                        fallbackUrl: coverResolverOf(context).defaultCoverUrl,
-                        // 两真身都是回退占位（全局默认封面 / Molia 标志）。
-                        fallback: (context, iconSize) =>
-                            buildFallbackArtwork(context, iconSize: iconSize),
-                      ),
                   ],
                 ),
               ),
@@ -577,7 +385,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   ///
   /// 拖动期间本地预览、松手才提交 seek；控制器生命周期与低频快照订阅都在
   /// `PlaybackSeekBar` 内，这里只决定版式与时间标签档位。波浪只在这一处
-  /// （播放页主场）开启，底栏 / 迷你条默认平直，避免全局 60fps 装饰动画。
+  /// （播放页主场）开启，顶栏 / 底栏的进度线默认平直，避免全局 60fps 装饰动画。
   ///
   /// 播放模式常显在进度排：播放域动作一步可达，当前模式一眼可见
   /// （见 ADR-0007 的分域与 ADR-0030 的取舍）。
@@ -669,213 +477,11 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
   /// 本地收藏按钮：加入/移出默认收藏列表（无当前曲目/资料库时隐藏）。
   ///
-  /// 尺寸是唯一宿主差异：进度排用 44 视觉格，迷你条按窄屏档位缩放。
-  Widget _buildFavoriteButton({
-    M3EIconButtonSize size = M3EIconButtonSize.sm,
-    Size visualSize = const Size(44, 44),
-  }) => NowPlayingFavoriteButton(size: size, visualSize: visualSize);
-
-  Widget _buildMiniPlayer(
-    BuildContext context,
-    Track? track,
-    PlaybackProvider playback, {
-    Track? previousTrack,
-  }) {
-    return SizedBox(
-      key: Player.miniBarKey,
-      height: miniPlayerHeight,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: context.isCompact ? 8 : 16,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  // 卡片外观（外边圆角 8、裁剪 8、回退图标 24）由 CoverAppearance.mini
-                  // 统一给出；迷你 ⇄ 完整飞行期间真身隐藏，由飞行副本承接。
-                  // 整条点击 = 展开播放页，封面的读屏语义也按这个动作标注。
-                  Opacity(
-                    opacity: _coverFlightActive ? 0 : 1,
-                    child: MiniCoverSemantics(
-                      track: track,
-                      child: CoverCard(
-                        key: _miniCoverKey,
-                        size: 48,
-                        appearance: CoverAppearance.mini,
-                        content: (context, clip, iconSize) =>
-                            _buildMiniAlbumArt(
-                              track,
-                              iconSize,
-                              previousTrack: previousTrack,
-                            ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: context.isCompact ? 8 : 16),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          track?.title ??
-                              playback.lastPlayedTrackName ??
-                              _l10n(context).noCurrentTrackPlaying,
-                          // 迷你条文本与列表页契约一致：标题 onSurface、
-                          // 作者 onSurfaceVariant，强调色只给控件。
-                          style: context.emphasizedTypeScale.titleMedium
-                              .copyWith(
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          track != null
-                              ? _artistsLabel(context, track)
-                              : playback.lastPlayedArtists ??
-                                    _l10n(context).unknownArtist,
-                          style: context.typeScale.bodyMedium.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  _buildResponsiveControlButtons(context),
-                ],
-              ),
-            ),
-          ),
-          // 收起态也要有进度：细波浪线贴底常显（展开后可拖动 seek）。
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: 10,
-            child: _buildMiniProgress(context, playback),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 迷你条底部细进度线（平直常显）。
-  ///
-  /// 不跟播放态切波浪：迷你条可能一直挂在列表底部，波浪是无限 60fps 动画，
-  /// 会在用户读列表时持续出帧；进度本身仍随 position 通道更新。
-  Widget _buildMiniProgress(BuildContext context, PlaybackProvider playback) {
-    final scheme = Theme.of(context).colorScheme;
-    return RepaintBoundary(
-      child: ValueListenableBuilder<Duration>(
-        valueListenable: playback.position,
-        builder: (context, position, _) {
-          final int durationMs = context.select<PlaybackProvider, int>(
-            (provider) => provider.snapshot.duration.inMilliseconds,
-          );
-          if (durationMs <= 0) {
-            // 无曲目/无时长：只画静态轨道。
-            return Center(
-              child: Container(
-                width: double.infinity,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest,
-                  borderRadius: M3EShapes.radiusExtraSmall,
-                ),
-              ),
-            );
-          }
-          final double fraction = (position.inMilliseconds / durationMs).clamp(
-            0.0,
-            1.0,
-          );
-          return M3EProgressIndicator.linear(
-            value: fraction,
-            linearSize: M3EProgressIndicatorSize.s,
-            strokeWidth: 3,
-            trackStrokeWidth: 3,
-            trackColor: scheme.surfaceContainerHighest,
-            color: scheme.primary,
-          );
-        },
-      ),
-    );
-  }
-
-  /// 迷你播放器控制排：与全屏控制排同序（收藏/上一首/播放/下一首）、同风格；
-  /// 极窄屏退化为仅播放键。
-  ///
-  /// 三个传输键走共享模块：无曲目（含冷启动恢复态）一律禁用，与桌面底栏 /
-  /// 顶栏 / 播放页传输排同一契约。
-  ///
-  /// 350–399 只留三个传输键：M3E 的 xs/sm 命中区各 48，四个键会把标题列挤到
-  /// 72dp（360 宽下歌名全成省略号）；收藏在播放页进度排已有入口。
-  Widget _buildResponsiveControlButtons(BuildContext context) {
-    if (context.isCompact) {
-      return const PlaybackPlayPauseButton(
-        size: M3EIconButtonSize.xs,
-        visualSize: Size(36, 36),
-      );
-    }
-    final bool narrow = context.isNarrow;
-    final visualSize = narrow ? const Size(32, 32) : const Size(40, 40);
-    final size = narrow ? M3EIconButtonSize.xs : M3EIconButtonSize.sm;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (!narrow) _buildFavoriteButton(size: size, visualSize: visualSize),
-        PlaybackPreviousButton(size: size, visualSize: visualSize),
-        PlaybackPlayPauseButton(size: size, visualSize: visualSize),
-        PlaybackNextButton(size: size, visualSize: visualSize),
-      ],
-    );
-  }
-
-  Widget _buildMiniAlbumArt(
-    Track? track,
-    double iconSize, {
-    Track? previousTrack,
-  }) {
-    final displayTrack = track ?? _lastTrack;
-    final coverEdge = playbackCoverDecodeEdge(context);
-    final covers = coverResolverOf(context);
-    final currentUrl = covers.realOf(displayTrack).url;
-    final previousUrl = previousTrack == null
-        ? null
-        : covers.realOf(previousTrack).url;
-    // 只有当前曲目自己有封面时才拿上一首封面垫底；无封面曲目直接走回退，
-    // 否则旧封面会从新卡下面透出来。
-    final placeholderUrl =
-        currentUrl != null && currentUrl.isNotEmpty && previousUrl != null
-        ? previousUrl
-        : null;
-    // 与顶栏/播放页/预加载共用同一有界解码键，迷你 ⇄ 完整飞行与切歌动画
-    // 才能复用同一张已解码图（原图解码会按封面源尺寸占 15MB/张）。
-    return TrackArtwork(
-      track: displayTrack,
-      fit: BoxFit.cover,
-      fallbackIconSize: iconSize,
-      memCacheWidth: coverEdge,
-      placeholder: placeholderUrl == null
-          ? null
-          : AppNetworkImage(
-              url: placeholderUrl,
-              fit: BoxFit.cover,
-              fallbackIconSize: iconSize,
-              memCacheWidth: coverEdge,
-            ),
-      // 加载失败是当前曲目的缺图态：不能用最近播放封面冒充。
-      errorWidget: buildFallbackArtwork(context),
-    );
-  }
+  /// 播放页进度排用 44 视觉格（顶栏 / 底栏的迷你位没有收藏键）。
+  Widget _buildFavoriteButton() => const NowPlayingFavoriteButton(
+    size: M3EIconButtonSize.sm,
+    visualSize: Size(44, 44),
+  );
 
   /// 大屏全屏播放器：与小屏同构（三封面堆叠 → 歌名/作者 → 可拖动进度排），
   /// 封面按两轴可用空间自适应。
@@ -923,10 +529,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                 artDimension: metrics.artDimension,
                 stackDimension: metrics.stackWidth,
                 stackHeight: metrics.stackHeight,
-                fullCoverKey: _fullCoverKey,
                 isLargeScreen: widget.isLargeScreen,
                 morph: widget.morph,
-                coverFlightActive: _coverFlightActive,
                 onTrackSwapped: _handleTrackSwapped,
               ),
             ),

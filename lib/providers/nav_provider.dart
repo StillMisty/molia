@@ -20,7 +20,8 @@ typedef _NavLayout = ({
   ShellDestination home,
 });
 
-/// 底部导航定制：顺序 + 显示/隐藏 + 启动首页，SharedPreferences 持久化。
+/// 底部导航定制：顺序 + 显示/隐藏 + 启动首页 + 进入播放页的歌词偏好，
+/// SharedPreferences 持久化。
 class NavProvider extends ChangeNotifier {
   NavProvider({required this._settings}) {
     _preferencesReady = _loadPreferences();
@@ -42,6 +43,9 @@ class NavProvider extends ChangeNotifier {
   ShellDestination _homeDestination = _homeOf(
     kShellHomeDestination.defaultValue,
   );
+
+  /// 从其它一级页进入播放页时是否固定先显示歌词。
+  bool _showLyricsOnEnter = kShellNowPlayingLyricsOnEnter.defaultValue;
 
   late final Future<void> _preferencesReady;
 
@@ -80,6 +84,22 @@ class NavProvider extends ChangeNotifier {
     await _persist();
   }
 
+  /// 从其它一级页进入播放页时是否固定先显示歌词。
+  bool get showLyricsOnEnter => _showLyricsOnEnter;
+
+  /// 设置「进入播放页时显示歌词」：立即生效并持久化。
+  Future<void> setShowLyricsOnEnter(bool value) async {
+    if (_showLyricsOnEnter == value) return;
+    _showLyricsOnEnter = value;
+    notifyListeners();
+    try {
+      await _settings.write(kShellNowPlayingLyricsOnEnter, value);
+    } catch (e) {
+      // 写失败保留内存值：本次运行仍按用户刚选的来，下次启动回退到存储值。
+      logger.severe('保存「进入播放页显示歌词」偏好失败: $e');
+    }
+  }
+
   /// 切换显示/隐藏；隐藏启动首页或最后一项时拒绝并返回 false。
   Future<bool> setVisible(ShellDestination destination, bool visible) async {
     if (visible) {
@@ -109,6 +129,9 @@ class NavProvider extends ChangeNotifier {
 
   Future<void> _loadPreferences() async {
     try {
+      // 与导航布局互相独立：新 JSON 分支会 early return，必须在这里先读，
+      // 否则远端应用 / 重启后该偏好永远停留在默认值。
+      _showLyricsOnEnter = await _settings.read(kShellNowPlayingLyricsOnEnter);
       final layout = _decodeLayout(await _settings.read(kShellNavLayout));
       if (layout != null) {
         _order = layout.order;

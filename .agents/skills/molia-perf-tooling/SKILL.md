@@ -27,7 +27,7 @@ description: 优化或验证 Molia 的帧 / 120Hz（jank8）、启动、包体�
 - 判定口径：`work = build + raster`，120Hz 看 **`jank8`**（>8.33ms），60Hz 看
   `jank16` / `jank33`；`totalSpan` 只用于 `latency16`，不是卡顿依据。
 - 场景都在 `integration_test/perf_flows_test.dart`：桌面滚动 / 切页 / 切歌、
-  移动壳进出播放页、迷你条展开，以及两个 120Hz 专用场景
+  移动壳进出播放页、播放器展开/收起，以及两个 120Hz 专用场景
   `desktop-favorites-toggle`（10k 真实内存库）与 `desktop-statistics-open`
   （400 天统计）。Android 跳过这两个 10k 场景。
 - **只跑改动的场景**：`tool/agent/perf.sh frames linux --only desktop-statistics-open`

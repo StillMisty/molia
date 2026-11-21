@@ -206,9 +206,14 @@ void main() {
     expect(find.byKey(const Key('settingsDefaultCoverItem')), findsOneWidget);
     expect(find.byKey(const Key('settingsHapticsSwitch')), findsOneWidget);
     expect(find.byKey(const Key('settingsAppTitleItem')), findsOneWidget);
-    // 播放 / 曲库 / 桌面：淡入淡出、智能随机、加入位置、窗口记忆。
+    // 播放 / 曲库 / 桌面：淡入淡出、智能随机、回到播放页显示歌词、加入位置、
+    // 窗口记忆。
     expect(find.byKey(const Key('settingsFadeItem')), findsOneWidget);
     expect(find.byKey(const Key('settingsSmartShuffleSwitch')), findsOneWidget);
+    final backToPlayerLyrics = tester.widget<M3ESwitch>(
+      find.byKey(const Key('settingsReturnToPlayerLyricsSwitch')),
+    );
+    expect(backToPlayerLyrics.value, isTrue, reason: '默认开');
     expect(
       find.byKey(const Key('settingsLibraryAddPositionItem')),
       findsOneWidget,

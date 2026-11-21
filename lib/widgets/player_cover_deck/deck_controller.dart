@@ -614,9 +614,9 @@ class DeckController implements CoverSwapHost {
   void handleHorizontalDragStart(DragStartDetails details) {
     // 横滑接管：按压反馈让位（拖动跟手本身就是反馈）。
     pressEnd();
-    // 过渡动画 / 迷你⇄完整封面飞行 / 顶栏⇄播放页飞行期间不接受新手势
-    // （提交等待与校正由会话自己拒绝）：一次拖动只对应一次切歌，避免两段
-    // 过渡叠加；飞行期间由副本承接，deck 本身冻结。
+    // 过渡动画 / 顶栏⇄播放页飞行期间不接受新手势（提交等待与校正由会话
+    // 自己拒绝）：一次拖动只对应一次切歌，避免两段过渡叠加；飞行期间由
+    // 副本承接，deck 本身冻结。
     if (_coverSwapMidFlight || gesturesBlockedOf()) {
       return;
     }

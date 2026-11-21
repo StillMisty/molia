@@ -116,7 +116,7 @@
     新手势/新动画被挡在门外。要按**进度阈值**判定（如 `isAnimating && value < 0.99`，
     见 `lib/widgets/player_cover_deck/deck_controller.dart::_coverSwapMidFlight`）；落定状态（completed/dismissed）
     永远取决于**目标值 vs `initialValue`**，需要用状态回调时要显式传 `initialValue`
-    （如迷你⇄完整展开传 0 再 `value = 1`）。另外 `animateTo` 的 `withVelocity` 单位是
+    （如播放页展开传 0 再 `value = 1`）。另外 `animateTo` 的 `withVelocity` 单位是
     **值域/秒**，手势速度要按进度换算（如 `-pxVelocity / range`）。
 22. **弹层内容里再套 `Navigator` 会遮蔽 M3E 的滚动联动**：M3E 底部弹层把
     `M3EBottomSheetScrollController` 经 `PrimaryScrollController` 下发给内容，靠它实现

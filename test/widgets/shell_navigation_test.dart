@@ -6,6 +6,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/app_shell.dart' as shell;
 import 'package:molia/app/desktop/now_playing_bar.dart';
+import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/sync_nearby_pairing.dart';
 import 'package:molia/pages/favorites.dart';
 import 'package:molia/pages/library.dart';
@@ -13,7 +14,11 @@ import 'package:molia/pages/nowplaying.dart';
 import 'package:molia/services/back_claims.dart';
 import 'package:molia/services/onboarding_store.dart';
 import 'package:molia/widgets/molia_mark.dart';
+import 'package:molia/widgets/now_playing_controller.dart';
+import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/player_morph.dart';
+import 'package:molia/widgets/shell_page_visibility.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/perf_app_harness.dart';
 
@@ -74,6 +79,64 @@ void main() {
       await tester.pump(const Duration(milliseconds: 16));
       if (drainOverflow) drainHostTopBarOverflow(tester);
     }
+  }
+
+  /// 壳层 PopScope 是否允许系统退出（true = 一级页，不拦返回）。
+  bool shellCanPop(WidgetTester tester) {
+    final scope = tester.widget<PopScope<dynamic>>(
+      find.byKey(const Key('shellBackScope')),
+    );
+    return scope.canPop;
+  }
+
+  /// 页面是否是壳层当前选中页（常驻页面不会离树，不能用 finder 判断切页）。
+  bool pageIsVisible(WidgetTester tester, Type page) {
+    final scope = tester.widget<ShellPageVisibility>(
+      find
+          .ancestor(
+            of: find.byType(page, skipOffstage: false),
+            matching: find.byType(ShellPageVisibility, skipOffstage: false),
+          )
+          .first,
+    );
+    return scope.visible;
+  }
+
+  /// 点底栏 / 导航轨的播放目的地（唯一一颗 Molia 标志图标）。
+  Future<void> openNowPlaying(WidgetTester tester, {int frames = 90}) async {
+    final nav = find.byType(M3ENavigationBar).evaluate().isNotEmpty
+        ? find.byType(M3ENavigationBar)
+        : find.byType(M3ENavigationRail);
+    await tester.tap(
+      find.descendant(of: nav, matching: find.byType(MoliaMark)),
+    );
+    await pumpFrames(tester, frames: frames);
+  }
+
+  /// 播放器高度：收起态为 0，展开态是内容高度。
+  double playerHeight(WidgetTester tester) =>
+      tester.getSize(find.byType(Player)).height;
+
+  /// 播放页当前落定的内容页（队列 / 歌词 / 信息）。
+  int nowPlayingPage(WidgetTester tester) {
+    final pageView = tester.widget<PageView>(
+      find.descendant(
+        of: find.byType(NowPlaying),
+        matching: find.byType(PageView),
+      ),
+    );
+    return pageView.controller!.page!.round();
+  }
+
+  Future<void> jumpNowPlayingPage(WidgetTester tester, int index) async {
+    final pageView = tester.widget<PageView>(
+      find.descendant(
+        of: find.byType(NowPlaying),
+        matching: find.byType(PageView),
+      ),
+    );
+    pageView.controller!.jumpToPage(index);
+    await pumpFrames(tester, frames: 3);
   }
 
   testWidgets('底栏切走再切回：收藏页仍挂载且滚动位置保持', (tester) async {
@@ -223,7 +286,7 @@ void main() {
     expect(settled.enabled, isFalse);
   });
 
-  testWidgets('Android 返回：非家目的地回上一页，播放页先收起不退出', (tester) async {
+  testWidgets('Android 返回：一级页允许系统退出，播放页先收起不退出', (tester) async {
     await pumpPerfApp(
       tester,
       desktopShell: false,
@@ -236,13 +299,14 @@ void main() {
     await tapDestination(tester, Icons.library_music_outlined);
     expect(find.byType(Library), findsOneWidget);
 
+    // 资料页按返回不再回收藏：一级页直接交给系统退出。
+    expect(shellCanPop(tester), isTrue, reason: '一级页不拦系统返回');
     await tester.binding.handlePopRoute();
     await pumpFrames(tester, frames: 30);
-    expect(
-      find.byType(FavoritesPage),
-      findsOneWidget,
-      reason: '非家目的地返回上一页（收藏是上一目的地 / 家）',
-    );
+    expect(find.byType(Library), findsOneWidget, reason: '不再回上一目的地');
+    expect(pageIsVisible(tester, Library), isTrue);
+    expect(pageIsVisible(tester, FavoritesPage), isFalse);
+    expect(shellCanPop(tester), isTrue, reason: '根路由退出行为不可靠，用 canPop 表达「允许退出」');
 
     // 进入播放页（单栏默认展开）：第一次返回只收起播放器。
     final nav = find.byType(M3ENavigationBar);
@@ -251,6 +315,7 @@ void main() {
     );
     await pumpFrames(tester, frames: 60);
     expect(find.byType(NowPlaying), findsOneWidget);
+    expect(shellCanPop(tester), isFalse, reason: '展开播放页由壳层拦返回');
 
     await tester.binding.handlePopRoute();
     await pumpFrames(tester, frames: 100);
@@ -259,14 +324,225 @@ void main() {
       findsOneWidget,
       reason: '展开播放页的返回是收起，不是退出目的地',
     );
-
-    // 收起后再返回：回上一目的地（收藏）。
-    await tester.binding.handlePopRoute();
-    await pumpFrames(tester, frames: 60);
-    expect(find.byType(FavoritesPage), findsOneWidget);
+    expect(pageIsVisible(tester, NowPlaying), isTrue);
+    expect(pageIsVisible(tester, FavoritesPage), isFalse);
+    expect(shellCanPop(tester), isTrue, reason: '收起后回到一级页语义：允许系统退出');
   });
 
-  testWidgets('页面级返回占用时壳层让位，第二次返回才回上一目的地', (tester) async {
+  testWidgets('移动端顶栏条是唯一迷你播放器：进入展开、返回收起、顶栏再展开', (tester) async {
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      size: const Size(500, 900),
+    );
+    expect(find.byType(FavoritesPage), findsOneWidget);
+    // 收藏首屏：顶栏播放条（封面 + 歌名 + 播放 / 下一首）可见。
+    expect(find.byKey(const Key('shellBarPlayerSummary')), findsOneWidget);
+    expect(find.byKey(const Key('shellBarPlayPause')), findsOneWidget);
+    expect(find.byKey(const Key('shellBarNext')), findsOneWidget);
+
+    // 进入播放页总是展开：页内播放器有高度，顶栏播放条让位给品牌位。
+    await openNowPlaying(tester);
+    expect(find.byType(NowPlaying), findsOneWidget);
+    expect(playerHeight(tester), greaterThan(0));
+    expect(find.byKey(const Key('shellBarPlayPause')), findsNothing);
+    expect(find.byKey(const Key('shellBarNext')), findsNothing);
+    expect(shellCanPop(tester), isFalse);
+
+    // 返回键先收起：页内高度归零、顶栏播放条在飞行落点回来。
+    await tester.binding.handlePopRoute();
+    await pumpFrames(tester, frames: 150);
+    expect(playerHeight(tester), closeTo(0, 0.5));
+    expect(find.byKey(const Key('shellBarPlayPause')), findsOneWidget);
+    expect(find.byKey(const Key('shellBarNext')), findsOneWidget);
+    expect(find.byType(NowPlaying), findsOneWidget);
+    expect(pageIsVisible(tester, NowPlaying), isTrue);
+    expect(shellCanPop(tester), isTrue, reason: '收起后一级页允许系统退出');
+
+    // 顶栏曲目区点击：已在播放页收起态，就地展开。
+    await tester.tap(find.byKey(const Key('shellBarPlayerSummary')));
+    await pumpFrames(tester, frames: 150);
+    expect(playerHeight(tester), greaterThan(0));
+    expect(find.byKey(const Key('shellBarPlayPause')), findsNothing);
+    expect(shellCanPop(tester), isFalse);
+
+    // 底栏重复点击播放目的地：再收回到 0 高度，顶栏播放条回来。
+    await openNowPlaying(tester, frames: 150);
+    expect(playerHeight(tester), closeTo(0, 0.5));
+    expect(find.byKey(const Key('shellBarPlayPause')), findsOneWidget);
+    expect(find.byType(NowPlaying), findsOneWidget);
+  });
+
+  testWidgets('从资料页进入播放页总是展开（即使上一轮收起过）', (tester) async {
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      size: const Size(500, 900),
+    );
+    await openNowPlaying(tester);
+    await tester.binding.handlePopRoute();
+    await pumpFrames(tester, frames: 150);
+    expect(playerHeight(tester), closeTo(0, 0.5));
+
+    await tapDestination(tester, Icons.library_music_outlined);
+    expect(find.byType(Library), findsOneWidget);
+
+    await openNowPlaying(tester);
+    expect(find.byType(NowPlaying), findsOneWidget);
+    expect(playerHeight(tester), greaterThan(0));
+    expect(find.byKey(const Key('shellBarPlayPause')), findsNothing);
+  });
+
+  testWidgets('设置开：从其它一级页进入播放页固定落歌词页', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'shell_home_destination': 'favorites',
+      kShellNowPlayingLyricsOnEnter.name: true,
+    });
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      size: const Size(500, 900),
+      resetPreferences: false,
+    );
+    await openNowPlaying(tester);
+    // 手动切到队列，模拟用户上次停留在别的 tab。
+    await jumpNowPlayingPage(tester, nowPlayingQueueTabIndex);
+    expect(nowPlayingPage(tester), nowPlayingQueueTabIndex);
+
+    await tapDestination(tester, Icons.favorite_border_rounded);
+    await pumpFrames(tester, frames: 60);
+    expect(pageIsVisible(tester, NowPlaying), isFalse);
+
+    await openNowPlaying(tester);
+    expect(
+      nowPlayingPage(tester),
+      nowPlayingLyricsTabIndex,
+      reason: '设置开启时，进入播放页应落到歌词页',
+    );
+    // 歌词页在可见时也应是当前 tab（隐藏页收到请求走 jump）。
+    expect(find.byKey(const Key('nowPlayingLyricsPage')), findsOneWidget);
+  });
+
+  testWidgets('设置关：回播放页保留上次停留的 tab', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'shell_home_destination': 'favorites',
+      kShellNowPlayingLyricsOnEnter.name: false,
+    });
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      size: const Size(500, 900),
+      resetPreferences: false,
+    );
+    await openNowPlaying(tester);
+    await jumpNowPlayingPage(tester, nowPlayingQueueTabIndex);
+    expect(nowPlayingPage(tester), nowPlayingQueueTabIndex);
+
+    await tapDestination(tester, Icons.favorite_border_rounded);
+    await pumpFrames(tester, frames: 60);
+    await openNowPlaying(tester);
+    expect(
+      nowPlayingPage(tester),
+      nowPlayingQueueTabIndex,
+      reason: '设置关闭时不应强制切回歌词页',
+    );
+  });
+
+  testWidgets('桌面宽版式离开播放页仍从页内封面飞回底栏', (tester) async {
+    await pumpPerfApp(
+      tester,
+      desktopShell: true,
+      favoritesCount: 3,
+      size: const Size(1280, 900),
+    );
+    await openNowPlaying(tester);
+    expect(find.byType(NowPlaying), findsOneWidget);
+    expect(pageIsVisible(tester, NowPlaying), isTrue);
+
+    // 桌面两栏没有收起态（miniCapable=false / expanded=false），但离开时
+    // 页内封面是完整可见的，必须仍然起飞回底栏。
+    final rail = find.byType(M3ENavigationRail);
+    await tester.tap(
+      find.descendant(
+        of: rail,
+        matching: find.byIcon(Icons.favorite_border_rounded),
+      ),
+    );
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      if (find.byType(PlayerMorphFlight).evaluate().isNotEmpty) break;
+    }
+    expect(
+      find.byType(PlayerMorphFlight),
+      findsOneWidget,
+      reason: '桌面两栏离开播放页丢失了封面回飞',
+    );
+    await pumpFrames(tester, frames: 80);
+    expect(find.byType(PlayerMorphFlight), findsNothing);
+    expect(pageIsVisible(tester, FavoritesPage), isTrue);
+  });
+
+  testWidgets('桌面单栏播放器向下拖拽不会停在半截高度', (tester) async {
+    await pumpPerfApp(
+      tester,
+      desktopShell: true,
+      favoritesCount: 3,
+      size: const Size(800, 700),
+    );
+    await openNowPlaying(tester);
+    final before = playerHeight(tester);
+    expect(before, greaterThan(0));
+
+    // 800 宽桌面骨架走单栏播放页，但没有顶栏播放条可承接收起态：播放器
+    // 区域不应接受下拉收起。拖拽后必须仍是完整高度。
+    await tester.drag(find.byType(Player), const Offset(0, 220));
+    await pumpFrames(tester, frames: 30);
+    expect(
+      playerHeight(tester),
+      closeTo(before, 1),
+      reason: '单栏桌面播放器被拖小后停在了半截',
+    );
+  });
+
+  testWidgets('展开请求后同一帧切走：不再起飞到已离开的播放页', (tester) async {
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      size: const Size(500, 900),
+    );
+    await openNowPlaying(tester);
+    await tester.binding.handlePopRoute();
+    await pumpFrames(tester, frames: 150);
+    expect(playerHeight(tester), closeTo(0, 0.5));
+    expect(find.byKey(const Key('shellBarPlayPause')), findsOneWidget);
+
+    // 顶栏曲目区发起展开，紧接着同一帧切到资料库：to-page 的 post-frame
+    // 必须按「已经离开播放页」放弃，不能飞向不可见的页内封面。
+    await tester.tap(find.byKey(const Key('shellBarPlayerSummary')));
+    final nav = find.byType(M3ENavigationBar);
+    await tester.tap(
+      find.descendant(
+        of: nav,
+        matching: find.byIcon(Icons.library_music_outlined),
+      ),
+    );
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      for (final element in find.byType(PlayerMorphFlight).evaluate()) {
+        final flight = element.widget as PlayerMorphFlight;
+        expect(flight.geometry.toPage, isFalse, reason: '已离开播放页后仍在飞向页内封面');
+      }
+    }
+    await pumpFrames(tester, frames: 80);
+    expect(pageIsVisible(tester, Library), isTrue);
+  });
+
+  testWidgets('页面级返回占用时壳层让位，清除后返回仍停在资料页', (tester) async {
     await pumpPerfApp(
       tester,
       desktopShell: false,
@@ -290,14 +566,36 @@ void main() {
       findsOneWidget,
       reason: '页面接管这次返回时，壳层不能同时回上一目的地',
     );
+    expect(pageIsVisible(tester, Library), isTrue);
 
+    // 清除占用后再返回：一级页不再回上一目的地，直接允许系统退出。
     pageClaimsBack = false;
     await tester.binding.handlePopRoute();
     await pumpFrames(tester, frames: 30);
-    expect(find.byType(FavoritesPage), findsOneWidget);
+    expect(find.byType(Library), findsOneWidget, reason: '不再回收藏');
+    expect(pageIsVisible(tester, Library), isTrue);
+    expect(shellCanPop(tester), isTrue);
+
+    // 播放页展开时页面占用仍优先：壳层让位、播放器不收起。
+    pageClaimsBack = true;
+    final nav = find.byType(M3ENavigationBar);
+    await tester.tap(
+      find.descendant(of: nav, matching: find.byType(MoliaMark)),
+    );
+    await pumpFrames(tester, frames: 60);
+    expect(shellCanPop(tester), isFalse);
+
+    await tester.binding.handlePopRoute();
+    await pumpFrames(tester, frames: 30);
+    expect(shellCanPop(tester), isFalse, reason: '页面占用时壳层不能同时收起播放器');
+
+    pageClaimsBack = false;
+    await tester.binding.handlePopRoute();
+    await pumpFrames(tester, frames: 100);
+    expect(shellCanPop(tester), isTrue, reason: '占用解除后返回才真正收起播放器');
   });
 
-  testWidgets('桌面 Esc：先收队列，再逐级返回上一目的地', (tester) async {
+  testWidgets('桌面 Esc：一级页不逐级返回，播放页先收队列', (tester) async {
     await pumpPerfApp(
       tester,
       desktopShell: true,
@@ -309,16 +607,15 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await pumpFrames(tester, frames: 30);
-    expect(
-      find.byType(FavoritesPage),
-      findsOneWidget,
-      reason: '资料库按 Esc 回上一目的地',
-    );
+    expect(find.byType(Library), findsOneWidget, reason: '资料库按 Esc 不再回上一目的地');
+    expect(pageIsVisible(tester, Library), isTrue);
+    expect(pageIsVisible(tester, FavoritesPage), isFalse);
 
     // 底栏队列按钮：跳播放页并打开队列。
     await tester.tap(find.byKey(DesktopNowPlayingBar.openQueueKey));
     await pumpFrames(tester, frames: 60);
     expect(find.byType(NowPlaying), findsOneWidget);
+    expect(pageIsVisible(tester, NowPlaying), isTrue);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await pumpFrames(tester, frames: 30);
@@ -327,14 +624,20 @@ void main() {
       findsOneWidget,
       reason: '队列打开时 Esc 仍优先收队列，不退回上一页',
     );
+    expect(pageIsVisible(tester, NowPlaying), isTrue);
+    expect(pageIsVisible(tester, FavoritesPage), isFalse);
 
+    // 队列已收、桌面无展开态：再一次 Esc 保持原命令落点（停在播放页），
+    // 不再回收藏。
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await pumpFrames(tester, frames: 60);
     expect(
-      find.byType(FavoritesPage),
+      find.byType(NowPlaying),
       findsOneWidget,
-      reason: '队列已收：下一次 Esc 才回上一目的地',
+      reason: '没有层级可退时 Esc 不再逐级返回',
     );
+    expect(pageIsVisible(tester, NowPlaying), isTrue);
+    expect(pageIsVisible(tester, FavoritesPage), isFalse);
   });
 
   testWidgets('引导完成（开始使用）后进入正常壳层', (tester) async {

@@ -97,15 +97,11 @@ void main() {
     await pumpFrames(tester, frames: frames);
   }
 
-  /// 当前确实停在播放页，且播放器是展开态（不是 72 的迷你条）。
+  /// 当前确实停在播放页，且播放器是展开态（收起态高度为 0）。
   void expectOnNowPlaying(WidgetTester tester) {
     final player = find.byType(Player);
     expect(player, findsOneWidget, reason: '未到达播放页');
-    expect(
-      tester.getSize(player).height,
-      greaterThan(miniPlayerHeight),
-      reason: '播放页应处于展开态',
-    );
+    expect(tester.getSize(player).height, greaterThan(0), reason: '播放页应处于展开态');
   }
 
   /// 当前确实停在收藏页（列表可见即说明页面已切到前台）。
@@ -244,7 +240,7 @@ void main() {
       final player = find.byType(Player);
       expect(
         tester.getSize(player).height,
-        greaterThan(miniPlayerHeight),
+        greaterThan(0),
         reason: '播放页应处于展开态',
       );
       final expand = tester.widget<Player>(player).expandAnimation;
@@ -254,25 +250,17 @@ void main() {
         // 这里测的是展开 / 收起动画的帧成本，不是手势命中：直接驱动播放页的
         // 同一个控制器，避免测试坐标落在滚动区 / 滑杆 pan 上导致场景无效。
         controller.animateTo(0);
-        await pumpUntilPlayerHeight(
-          tester,
-          player,
-          (height) => height <= miniPlayerHeight + 1,
-        );
+        await pumpUntilPlayerHeight(tester, player, (height) => height <= 1);
         expect(
           tester.getSize(player).height,
-          closeTo(miniPlayerHeight, 1),
-          reason: '收起动画应把播放器停在迷你条',
+          closeTo(0, 1),
+          reason: '收起动画应把播放器高度收到 0',
         );
         controller.animateTo(1);
-        await pumpUntilPlayerHeight(
-          tester,
-          player,
-          (height) => height > miniPlayerHeight + 1,
-        );
+        await pumpUntilPlayerHeight(tester, player, (height) => height > 1);
         expect(
           tester.getSize(player).height,
-          greaterThan(miniPlayerHeight),
+          greaterThan(0),
           reason: '展开动画应回到完整播放页',
         );
       }

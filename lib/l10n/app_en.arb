@@ -141,6 +141,8 @@
   "settingsFade300": "0.3 s",
   "settingsSmartShuffleTitle": "Fewer recent repeats",
   "settingsSmartShuffleSubtitle": "",
+  "settingsReturnToPlayerLyricsTitle": "Show lyrics when returning to the player",
+  "settingsReturnToPlayerLyricsSubtitle": "Open on the lyrics tab when you enter the player from another page",
   "settingsDefaultPlayMode": "Default play mode",
   "settingsDefaultPlayModeSubtitle": "Used the next time playback starts; current playback is unaffected",
   "settingsRestoreSessionTitle": "Resume last playback",

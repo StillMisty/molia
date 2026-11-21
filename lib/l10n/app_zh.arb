@@ -127,6 +127,8 @@
   "settingsFade300": "0.3 秒",
   "settingsSmartShuffleTitle": "少放最近听过的",
   "settingsSmartShuffleSubtitle": "",
+  "settingsReturnToPlayerLyricsTitle": "回到播放页时显示歌词",
+  "settingsReturnToPlayerLyricsSubtitle": "从其它页面进入播放页时，先显示歌词",
   "settingsDefaultPlayMode": "默认播放模式",
   "settingsDefaultPlayModeSubtitle": "下次开始播放时用这个模式，不影响当前播放",
   "settingsRestoreSessionTitle": "启动时恢复上次播放",

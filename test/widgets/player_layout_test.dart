@@ -9,7 +9,6 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
-import 'package:molia/widgets/now_playing_summary.dart';
 import 'package:molia/widgets/playback_transport.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/player_cover_deck.dart';
@@ -158,50 +157,67 @@ void main() {
     });
   });
 
-  testWidgets('360 宽迷你条标题可用宽度大于 100dp，且只有三个传输键', (tester) async {
+  testWidgets('360 宽收起态高度为 0，完整层不可读', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final l10n = lookupAppLocalizations(const Locale('zh'));
     const title = 'A very long song title for narrow windows';
     emitSingle(track('1', title: title));
 
     await tester.pumpWidget(
       host(
-        // 0 = 收起态：完整层被 ExcludeSemantics / IgnorePointer 挂起，
-        // 迷你条按 72dp 稳态渲染。
-        const Player(expandAnimation: AlwaysStoppedAnimation<double>(0)),
+        // 0 = 收起态：移动端顶栏播放条是唯一迷你播放器，页内不再保留 72dp
+        // 迷你条；播放器高度直接归零，完整层同时不可点 / 不可读。
+        Align(
+          alignment: Alignment.topCenter,
+          child: const Player(
+            expandAnimation: AlwaysStoppedAnimation<double>(0),
+          ),
+        ),
         size: const Size(360, 400),
       ),
     );
     await tester.pump();
 
-    final miniBar = find.byKey(Player.miniBarKey);
-    expect(miniBar, findsOneWidget);
-
-    final titleBox = tester.getSize(
-      find.descendant(of: miniBar, matching: find.text(title)),
-    );
-    expect(titleBox.width, greaterThan(100));
-
-    for (final type in const [
-      PlaybackPreviousButton,
-      PlaybackPlayPauseButton,
-      PlaybackNextButton,
-    ]) {
-      expect(
-        find.descendant(of: miniBar, matching: find.byType(type)),
-        findsOneWidget,
-        reason: '$type 应在迷你条里',
-      );
-    }
+    expect(tester.getSize(find.byType(Player)).height, 0);
     expect(
-      find.descendant(
-        of: miniBar,
-        matching: find.byType(NowPlayingFavoriteButton),
-      ),
+      find.bySemanticsLabel(l10n.openPlayerFor(title)),
       findsNothing,
-      reason: '窄档只留三个传输键，收藏在播放页进度排',
+      reason: '收起态播放页不提供「打开播放页」语义（顶栏承接了它）',
+    );
+    expect(
+      find.bySemanticsLabel('${l10n.pause} · $title'),
+      findsNothing,
+      reason: '收起态完整层不可读',
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('360 宽展开态完整播放器不溢出', (tester) async {
+    emitSingle(track('1'));
+
+    await tester.pumpWidget(
+      host(
+        Align(
+          alignment: Alignment.topCenter,
+          child: const Player(
+            expandAnimation: AlwaysStoppedAnimation<double>(1),
+          ),
+        ),
+        size: const Size(360, 640),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.byType(Player)).height, greaterThan(0));
+    // 进度条仍要有可拖宽度：封面 / 控制排不能把中间那一条挤没。
+    expect(
+      tester.getSize(find.byType(PlaybackSeekBar)).width,
+      greaterThan(200),
     );
   });
 
-  testWidgets('播放页封面语义是播放/暂停，迷你条封面仍是打开播放页', (tester) async {
+  testWidgets('播放页封面语义是播放/暂停', (tester) async {
     final semantics = tester.ensureSemantics();
     final l10n = lookupAppLocalizations(const Locale('zh'));
     final current = track('1', title: 'Now Playing');
@@ -228,21 +244,6 @@ void main() {
       isTrue,
       reason: '播放页封面语义节点必须提供 tap 动作',
     );
-
-    // 收起态：迷你条封面点击整条即展开，语义保持「打开播放页」。
-    await tester.pumpWidget(
-      host(
-        const Player(expandAnimation: AlwaysStoppedAnimation<double>(0)),
-        size: const Size(360, 400),
-      ),
-    );
-    await tester.pump();
-
-    expect(
-      find.bySemanticsLabel(l10n.openPlayerFor(current.title)),
-      findsOneWidget,
-    );
-    expect(find.bySemanticsLabel(pageLabel), findsNothing);
     semantics.dispose();
   });
 

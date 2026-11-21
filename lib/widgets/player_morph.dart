@@ -24,28 +24,20 @@ export 'cover_appearance.dart'
 /// 收起方向按同一窗口反向收回。
 const double pageDeckRevealStart = 0.55;
 
-/// 读取锚点当前矩形（含祖先变换）；元素未挂载/未布局时返回 null。
+/// 读取锚点当前屏幕矩形（含祖先变换）；元素未挂载/未布局时返回 null。
 ///
 /// 必须映射左上/右下两个角，不能用 `localToGlobal(Offset.zero) & box.size`：
 /// 祖先存在持续缩放（如暂停态的封面播放态缩放 0.98）时，后者的位置与尺寸
 /// 都不是真身的屏幕矩形，飞行副本会以错误大小/位置落位、交接瞬间跳变。
 /// 旋转中的锚点取外接矩形（可接受：抓取只发生在稳态几何上）。
 ///
-/// [container] 非空时返回相对该容器的本地矩形（播放页内迷你⇄完整飞行副本
-/// 定位用）；为空时返回全局坐标（Overlay 上的顶栏⇄播放页飞行）。
-Rect? anchorRectOf(GlobalKey key, {GlobalKey? container}) {
+/// 顶栏 ⇄ 播放页的副本挂在根 Overlay 上，两端锚点一律用全局坐标。
+Rect? anchorRectOf(GlobalKey key) {
   final box = key.currentContext?.findRenderObject() as RenderBox?;
   if (box == null || !box.hasSize) return null;
-  final Rect global = Rect.fromPoints(
+  return Rect.fromPoints(
     box.localToGlobal(Offset.zero),
     box.localToGlobal(box.size.bottomRight(Offset.zero)),
-  );
-  final containerBox =
-      container?.currentContext?.findRenderObject() as RenderBox?;
-  if (containerBox == null) return global;
-  return Rect.fromPoints(
-    containerBox.globalToLocal(global.topLeft),
-    containerBox.globalToLocal(global.bottomRight),
   );
 }
 

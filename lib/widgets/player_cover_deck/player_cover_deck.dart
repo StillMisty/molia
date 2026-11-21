@@ -37,8 +37,8 @@ import 'deck_models.dart';
 /// 完整播放器封面堆叠：三封面（槽位）渲染 + 横滑切歌手势 + 切歌会话状态。
 ///
 /// 播放器只提供布局尺寸（[artDimension]/[stackDimension]/[stackHeight]）、
-/// 共享飞行锚点（[morph]/[fullCoverKey]/[coverFlightActive]）与切歌联动回调
-/// （[onTrackSwapped]）；封面 URL、占位、拖动、切歌、对账都归本模块。
+/// 共享飞行锚点（[morph]）与切歌联动回调（[onTrackSwapped]）；封面 URL、
+/// 占位、拖动、切歌、对账都归本模块。
 class PlayerCoverDeck extends StatefulWidget {
   /// 封面区横向手势宿主 key：拖动期间 element 必须稳定（识别器不被
   /// dispose），同时供测试精确定位这一层手势。
@@ -76,10 +76,8 @@ class PlayerCoverDeck extends StatefulWidget {
     required this.artDimension,
     required this.stackDimension,
     required this.stackHeight,
-    required this.fullCoverKey,
     this.isLargeScreen = false,
     this.morph,
-    this.coverFlightActive = false,
     this.onTrackSwapped,
   });
 
@@ -93,17 +91,11 @@ class PlayerCoverDeck extends StatefulWidget {
   final double stackDimension;
   final double stackHeight;
 
-  /// 主封面锚点：迷你 ⇄ 完整飞行抓取落点矩形用（播放器持有该 key）。
-  final GlobalKey fullCoverKey;
-
   /// 大屏布局：拖动提交阈值（距离/速度）按屏型取不同值。
   final bool isLargeScreen;
 
   /// 顶栏共享飞行控制器：提供播放页封面锚点并同步隐藏状态。
   final PlayerMorphController? morph;
-
-  /// 迷你 ⇄ 完整封面飞行进行中：主封面真身隐藏、新手势被忽略。
-  final bool coverFlightActive;
 
   /// 展示曲目切换联动（切换帧的 post-frame 触发）：播放器借此清除进度
   /// 拖动残留并启动标题入场。[duringDrag] = 切换发生在拖动进行中，此时
@@ -132,11 +124,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 真实封面 URL（自定义 / 原始；默认封面只做展示兜底）。
   String? _realCoverUrlOf(Track? track) => _coverResolver.realOf(track).url;
 
-  /// 页中心封面是否隐藏：顶栏⇄播放页飞行或迷你⇄完整飞行期间，真身由
-  /// 飞行副本承接。直接乘进中心层的同一条 Opacity（不嵌套第二层，否则
-  /// 「最近透明度」观测会失真，也会多一次合成）。
-  bool get _pageCoverHidden =>
-      (widget.morph?.pageHeaderHidden ?? false) || widget.coverFlightActive;
+  /// 页中心封面是否隐藏：顶栏 ⇄ 播放页飞行期间，真身由飞行副本承接。
+  /// 直接乘进中心层的同一条 Opacity（不嵌套第二层，否则「最近透明度」观测
+  /// 会失真，也会多一次合成）。
+  bool get _pageCoverHidden => widget.morph?.pageHeaderHidden ?? false;
 
   /// 快照通知已排入微任务（同一批通知只对账一次）。
   bool _trackSyncScheduled = false;
@@ -155,8 +146,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       isLargeScreenOf: () => widget.isLargeScreen,
       isPlayingOf: () => _playback?.isPlaying ?? false,
       isMounted: () => mounted,
-      gesturesBlockedOf: () =>
-          widget.coverFlightActive || (widget.morph?.pageHeaderHidden ?? false),
+      gesturesBlockedOf: () => widget.morph?.pageHeaderHidden ?? false,
       onTrackSwapped: (duringDrag) => widget.onTrackSwapped?.call(duringDrag),
       onSkipRequested: _requestSkip,
       onVisualsChanged: _onDeckVisualsChanged,
@@ -182,12 +172,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     if (oldWidget.morph != widget.morph) {
       oldWidget.morph?.removeListener(_onMorphChanged);
       widget.morph?.addListener(_onMorphChanged);
-    }
-    if (!oldWidget.coverFlightActive && widget.coverFlightActive) {
-      // 迷你⇄完整飞行接管：已按下的拖动同样需要主动收尾（不能等指针 cancel）。
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _pageCoverHidden) _controller.abortGestureForFlight();
-      });
     }
     // provider 可能被替换：父级重建时重新检查订阅（此时 widget.displayTrack
     // 已来自新快照）。

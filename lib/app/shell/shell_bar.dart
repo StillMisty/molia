@@ -2,10 +2,12 @@ part of 'app_shell.dart';
 
 /// 顶栏头部：左侧当前曲目封面（无封面回退音符图标），旁边歌名 + 作者。
 ///
-/// 点击整条头部进入播放页（与点底栏「播放」同路径，触发共享封面飞行）；
-/// 播放页激活（或飞行中）时交叉淡出为应用图标 + 自定义应用名，不响应点击。
+/// 点击整条头部：不在播放页 → 进入并展开；已在播放页收起态 → 就地展开
+/// （共享封面飞行由壳层统一发起）。播放页展开（或飞行中）时交叉淡出为
+/// 应用图标 + 自定义应用名，不响应点击。
 class _ShellBarHeader extends StatelessWidget {
   const _ShellBarHeader({
+    super.key,
     required this.morph,
     required this.reveal,
     required this.onOpenPlayer,
@@ -167,7 +169,7 @@ class _BarHeaderTransition extends StatelessWidget {
   }
 }
 
-/// 顶栏「播放/暂停」按钮（非播放页）：图标随播放态切换；无曲目（含冷启动
+/// 顶栏播放条的「播放/暂停」按钮：图标随播放态切换；无曲目（含冷启动
 /// 恢复态）时禁用，与「下一首」同一契约。启用谓词 / 图标 / 标签 / 触感与
 /// 命令都在共享传输模块，`select` 只订阅 hasTrack / 播放态，不触发整个
 /// Shell 重建。
@@ -175,7 +177,7 @@ class _BarHeaderTransition extends StatelessWidget {
 /// 顶栏唯一的高亮按钮（tonal）：一屏只留一个视觉重点，其余图标无底色。
 /// 入场与歌名/作者共用同一根弹簧：0.92→1 缩放 pop + 透明度同步。
 class _BarPlayPauseButton extends StatelessWidget {
-  const _BarPlayPauseButton({required this.reveal});
+  const _BarPlayPauseButton({super.key, required this.reveal});
 
   final _BarHeaderReveal reveal;
 
@@ -193,13 +195,13 @@ class _BarPlayPauseButton extends StatelessWidget {
   }
 }
 
-/// 顶栏「下一首」按钮（非播放页）：无曲目（含冷启动恢复态）时禁用，
+/// 顶栏播放条的「下一首」按钮：无曲目（含冷启动恢复态）时禁用，
 /// 避免空操作误导；订阅与命令收在共享传输模块，不触发整个 Shell 重建。
 ///
 /// 无底色标准样式：顶栏唯一高亮留给旁边的播放/暂停。
 /// 入场与播放/暂停按钮同一根弹簧（与歌名/作者同源）。
 class _BarNextButton extends StatelessWidget {
-  const _BarNextButton({required this.reveal});
+  const _BarNextButton({super.key, required this.reveal});
 
   final _BarHeaderReveal reveal;
 

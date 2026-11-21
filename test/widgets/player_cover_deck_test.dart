@@ -103,7 +103,6 @@ void main() {
   late PlaybackProvider playback;
   late List<Track> queue;
   final List<bool> swapped = [];
-  final GlobalKey fullCoverKey = GlobalKey();
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -138,7 +137,6 @@ void main() {
           artDimension: 280,
           stackDimension: 360,
           stackHeight: 360,
-          fullCoverKey: fullCoverKey,
           onTrackSwapped: swapped.add,
         ),
       ),
