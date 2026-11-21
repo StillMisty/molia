@@ -60,6 +60,7 @@ const Set<String> _mobileFlowScenes = {
 const Set<String> _mobileMiniScenes = {'mobile-mini-expand'};
 const Set<String> _desktopToggleScenes = {'desktop-favorites-toggle'};
 const Set<String> _desktopStatsScenes = {'desktop-statistics-open'};
+const Set<String> _desktopResizeScenes = {'desktop-window-resize'};
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -375,5 +376,28 @@ void main() {
     skip:
         defaultTargetPlatform == TargetPlatform.android ||
         !_wantsScenes(_desktopStatsScenes),
+  );
+
+  // 窗口尺寸变化只跑桌面：移动端由宿主决定窗口，改 tester.view 测不到真实
+  // resize，而且这个场景本来就是给桌面拖拽 / 最大化用的。
+  testWidgets(
+    '桌面壳：窗口 resize（120Hz 口径）',
+    (tester) async {
+      await pumpPerfApp(tester, desktopShell: true, favoritesCount: 1000);
+      // 收藏页是桌面壳最重的常驻页（1000 行列表 + 固定表头）：先把它切到
+      // 前台并等首屏 / 图片占位稳定，计时窗口里才只剩尺寸变化的重排成本。
+      await ctrlDigit(tester, 3);
+      await pumpFrames(tester, frames: 90);
+
+      FrameStats.instance.beginScenario('desktop-window-resize');
+      // 1440×900 ↔ 1100×720 逐帧往返 6 个来回（108 帧）。两端都在 expanded
+      // 档，不跨 840 断点：把版式切换从「同一版式被拉宽拉窄」里摘出去。
+      await resizeWindow(tester, cycles: 6);
+      FrameStats.instance.reportNow('end');
+    },
+    semanticsEnabled: _withAt,
+    skip:
+        defaultTargetPlatform == TargetPlatform.android ||
+        !_wantsScenes(_desktopResizeScenes),
   );
 }

@@ -103,10 +103,18 @@ class AdaptiveLayoutScope extends InheritedWidget {
   const AdaptiveLayoutScope({
     super.key,
     required this.layout,
+    this.visible = true,
     required super.child,
   });
 
   final AdaptiveLayout layout;
+
+  /// 本作用域对应的页面是否可见（壳层页面层用）。
+  ///
+  /// 默认 true：壳层全局作用域 / 弹层 / 独立路由不受影响。页面层隐藏时会
+  /// 用最后的档位再包一层并置 false：尺寸变化不再通知隐藏页，重新可见时
+  /// 靠这次翻转通知一次并拿到最新档位。
+  final bool visible;
 
   /// 壳层入口：按窗口尺寸解析并包住 [child]。
   static Widget scope(BuildContext context, {required Widget child}) {
@@ -151,5 +159,5 @@ class AdaptiveLayoutScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(AdaptiveLayoutScope oldWidget) =>
-      layout != oldWidget.layout;
+      visible != oldWidget.visible || (visible && layout != oldWidget.layout);
 }

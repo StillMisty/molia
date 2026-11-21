@@ -6,6 +6,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/app_shell.dart' as shell;
 import 'package:molia/app/desktop/now_playing_bar.dart';
+import 'package:molia/app/shell/layout_skipping_offstage.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/sync_nearby_pairing.dart';
 import 'package:molia/pages/favorites.dart';
@@ -166,6 +167,113 @@ void main() {
     expect(list.position.pixels, before, reason: '切页不应重置滚动位置');
   });
 
+  testWidgets('LayoutSkippingOffstage：隐藏不布局子级，显示后按当前约束补布局', (tester) async {
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    tester.view.physicalSize = const Size(400, 300);
+    tester.view.devicePixelRatio = 1;
+
+    var layouts = 0;
+    BoxConstraints? lastConstraints;
+    // 探针实例固定：隐藏/显示只切换父级 gates，不重建探针本身。LayoutBuilder
+    // 在 widget 更新时会用旧约束补跑一次回调（框架保证回调树完整），那不是
+    // 本用例要测的「父级跳过子级布局」。
+    final probe = LayoutBuilder(
+      builder: (context, constraints) {
+        layouts++;
+        lastConstraints = constraints;
+        return const SizedBox.expand();
+      },
+    );
+    Widget build({required bool hidden}) => Directionality(
+      textDirection: TextDirection.ltr,
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: LayoutSkippingOffstage(hidden: hidden, child: probe),
+      ),
+    );
+
+    await tester.pumpWidget(build(hidden: true));
+    expect(layouts, 0, reason: '隐藏时不能布局子级');
+    // skipOffstage 语义与 Offstage 一致：隐藏页不在 onstage 树里。
+    expect(find.byType(LayoutBuilder), findsNothing);
+    expect(
+      tester.getSize(find.byType(LayoutSkippingOffstage)),
+      Size.zero,
+      reason: '隐藏时尺寸取 constraints.smallest',
+    );
+
+    // 隐藏期间窗口尺寸变化：子级仍不参与布局。
+    tester.view.physicalSize = const Size(500, 300);
+    await tester.pump();
+    expect(layouts, 0);
+    expect(tester.getSize(find.byType(LayoutSkippingOffstage)), Size.zero);
+
+    await tester.pumpWidget(build(hidden: false));
+    expect(layouts, 1);
+    expect(lastConstraints?.maxWidth, 500);
+    expect(find.byType(LayoutBuilder), findsOneWidget);
+    expect(tester.getSize(find.byType(LayoutBuilder)), const Size(500, 300));
+
+    // 再次隐藏：不再跟随窗口变化，显示时补一次当前约束。
+    await tester.pumpWidget(build(hidden: true));
+    expect(tester.getSize(find.byType(LayoutSkippingOffstage)), Size.zero);
+    tester.view.physicalSize = const Size(600, 300);
+    await tester.pump();
+    expect(layouts, 1, reason: '隐藏页不因窗口变化补布局');
+
+    await tester.pumpWidget(build(hidden: false));
+    expect(layouts, 2);
+    expect(lastConstraints?.maxWidth, 600);
+  });
+
+  testWidgets('窗口 resize 不重排隐藏页，切回按新尺寸且保留滚动位置', (tester) async {
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 60,
+      size: const Size(500, 900),
+    );
+
+    final list = verticalList(tester, FavoritesPage);
+    await tester.drag(find.byWidget(list.widget), const Offset(0, -600));
+    await pumpFrames(tester, frames: 20);
+    final before = list.position.pixels;
+    final beforeViewport = list.position.viewportDimension;
+    expect(before, greaterThan(0), reason: '收藏列表应已滚动');
+
+    // 切到资料库并等过渡落定：上一页不再只是 outgoing，而是真正隐藏。
+    await tapDestination(tester, Icons.library_music_outlined);
+    expect(
+      find.byType(FavoritesPage),
+      findsNothing,
+      reason: '淡出落定后隐藏页不应再是 onstage 页面',
+    );
+    expect(find.byType(FavoritesPage, skipOffstage: false), findsOneWidget);
+
+    // 窗口增高 100dp：隐藏页不参与 layout，纵向 viewport 保持旧尺寸。
+    tester.view.physicalSize = const Size(500, 1000);
+    await tester.pump();
+    await pumpFrames(tester, frames: 10);
+    expect(
+      list.position.viewportDimension,
+      beforeViewport,
+      reason: '隐藏页在窗口 resize 时不应重新布局',
+    );
+
+    // 切回：按新尺寸补一次布局，滚动位置（同一份 State）保留。
+    await tapDestination(tester, Icons.favorite_border_rounded);
+    expect(find.byType(FavoritesPage), findsOneWidget);
+    expect(list.position.pixels, before, reason: '隐藏期间不布局，切回不应丢滚动位置');
+    expect(
+      list.position.viewportDimension,
+      greaterThan(beforeViewport),
+      reason: '切回后应按新窗口高度布局',
+    );
+  });
+
   testWidgets('360 宽走底栏并可以切页', (tester) async {
     await pumpPerfApp(
       tester,
@@ -231,11 +339,13 @@ void main() {
 
     expect(find.byType(PlayerMorphFlight), findsNothing);
     expect(find.byType(NowPlaying), findsOneWidget);
+    // 出场页已隐藏（不在 onstage 树里），透明度仍在包装层上，用
+    // skipOffstage: false 读它，验证减弱动效下没有淡出中间帧。
     final outgoingOpacity = tester.widget<Opacity>(
       find
           .ancestor(
-            of: find.byType(FavoritesPage),
-            matching: find.byType(Opacity),
+            of: find.byType(FavoritesPage, skipOffstage: false),
+            matching: find.byType(Opacity, skipOffstage: false),
           )
           .first,
     );
@@ -272,14 +382,14 @@ void main() {
       reason: '出场页的淡出 / 微缩需要 ticker，过渡第一帧不能静音',
     );
 
-    // 淡出结束后上一目的地仍保留 outgoing 标记（Offstage 语义不变），
-    // 但 ticker 必须恢复静音，避免隐藏页常驻动画空转。
+    // 淡出结束后上一目的地仍保留 outgoing 标记，但它已不是 onstage 页面
+    // （布局被跳过）；ticker 必须恢复静音，避免隐藏页常驻动画空转。
     await pumpFrames(tester, frames: 60);
     final settled = tester.widget<TickerMode>(
       find
           .ancestor(
-            of: find.byType(FavoritesPage),
-            matching: find.byType(TickerMode),
+            of: find.byType(FavoritesPage, skipOffstage: false),
+            matching: find.byType(TickerMode, skipOffstage: false),
           )
           .first,
     );

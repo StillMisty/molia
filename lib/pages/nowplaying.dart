@@ -141,14 +141,15 @@ class _NowPlayingState extends State<NowPlaying>
   /// 封面 deck 跟着整页 setState 重建。
   late final ValueNotifier<int> _visibleTab;
 
-  // 页面与屏幕尺寸缓存：避免 PageView 每次重建导致歌词/队列滚动状态丢失。
+  // 页面缓存：避免 PageView 每次重建导致歌词/队列滚动状态丢失。
   List<PageData>? _cachedPages;
 
   /// 缓存页面对应的版式（单栏 / 宽版式）。版式变化必须重建页面，让两套
   /// ScrollController 各自交接（见 [_wideQueueScrollController]）。
   bool? _cachedPagesWide;
+
+  /// 上一次判定过的宽版式结果（null = 尚未判定）。
   bool? _cachedUsesWideLayout;
-  Size? _cachedScreenSize;
 
   @override
   void initState() {
@@ -325,19 +326,16 @@ class _NowPlayingState extends State<NowPlaying>
   bool get wantKeepAlive => true;
 
   bool _getUsesWideLayout(BuildContext context) {
-    final currentSize = MediaQuery.sizeOf(context);
+    final bool wide = usesWideNowPlayingLayout(AdaptiveLayoutScope.of(context));
 
-    // 尺寸变化时同时失效页面与布局缓存。
-    if (_cachedScreenSize != currentSize) {
-      _cachedScreenSize = currentSize;
-      _cachedUsesWideLayout = null;
+    // 只有版式真正切换时才失效页面缓存。窗口拖动时 MediaQuery 尺寸每帧都
+    // 变，若按尺寸清缓存，三个 tab 页会每帧重建、滚动位置与已解码内容全丢；
+    // 宽度变化本身由歌词 / 队列 / 信息页各自自适应，不需要重造页面。
+    if (wide != _cachedUsesWideLayout) {
+      _cachedUsesWideLayout = wide;
       _cachedPages = null;
     }
-
-    _cachedUsesWideLayout ??= usesWideNowPlayingLayout(
-      AdaptiveLayoutScope.of(context),
-    );
-    return _cachedUsesWideLayout!;
+    return wide;
   }
 
   /// 圆点过渡带高度：内容顶部在这条带内渐隐，圆点浮于其中。
