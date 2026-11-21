@@ -10,10 +10,10 @@
 /// - [ensureActiveScript]：脚本惰性激活回调（激活状态与限流仍在管理器）；
 /// - [engine] / [anyListenSource] / [builtinTransport] / [preferences]：执行
 ///   各路线所需的适配器；
-/// - 内置原生取词 / 取图派发在构造时按共享传输创建；其缓存是执行器唯一持有
-///   的状态，清理入口由管理器转发。
+/// - 内置原生取词 / 取图派发在首次使用时按共享传输创建；其缓存是执行器
+///   唯一持有的状态，清理入口由管理器转发。
 ///
-/// 行为契约（从 `SourceManager` 迁出时逐条保留）：
+/// 行为契约：
 /// - 路线顺序由 [SourceRouting.routesFor] 给出：歌词 / 封面脚本优先、内置
 ///   原生回退，其余能力单路线；
 /// - 内置渠道的原生能力不触发脚本激活，纯脚本源 / 未知 key 才补激活；取链
@@ -75,7 +75,7 @@ class SourceRouteExecutor {
 
   /// 内置平台原生歌词 / 封面回退（脚本不可用或未声明对应 action 时）。
   ///
-  /// 缓存随执行器生命周期；构造时按共享传输创建，避免另建一份 HTTP 栈。
+  /// 缓存随执行器生命周期；首次使用时按共享传输创建，避免另建一份 HTTP 栈。
   late final BuiltinLyricDispatch _builtinLyricFallback = BuiltinLyricDispatch(
     _builtinTransport,
   );

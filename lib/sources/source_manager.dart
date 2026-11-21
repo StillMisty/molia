@@ -67,7 +67,8 @@ class SourceManager extends ChangeNotifier {
   /// / 重试预算因此共享；测试传自己的实例即可完全隔离。
   final BuiltinTransport _builtinTransport;
 
-  /// 能力执行器：无状态，画像快照与惰性激活回调仍由本管理器提供。
+  /// 能力执行器：不持有画像 / 路由状态，只持有由管理器转交清理的内置取词 /
+  /// 取图缓存；画像快照与惰性激活回调仍由本管理器提供。
   late final SourceRouteExecutor _executor;
 
   SourceManager({
@@ -481,14 +482,7 @@ class SourceManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 分页搜索。内置平台走 Dart 移植的搜索接口，脚本自定义源走脚本扩展 action。
-  ///
-  /// 返回 [SourceSearchResult]，携带 hasMore（由平台总数或本页结果推断）与
-  /// total（平台返回时才有）。脚本扩展搜索的返回格式为社区约定，字段兼容性
-  /// 尽力而为：优先识别 isEnd / hasMore / total，否则用 tracks.length >= limit 近似。
-  ///
-  /// 内置平台的失败语义：`failure` 非空表示失败（区分「平台返回空」，
-  /// 见 `builtin_search_runner.dart`）。
+  /// 分页搜索；路由与失败语义见 [SourceRouteExecutor.searchWithMeta]。
   Future<SourceSearchResult> searchWithMeta(
     String sourceKey,
     String keyword, {
@@ -496,23 +490,8 @@ class SourceManager extends ChangeNotifier {
     int limit = 30,
   }) => _executor.searchWithMeta(sourceKey, keyword, page: page, limit: limit);
 
-  /// 解析播放流。requestedQuality 为空时使用默认音质偏好。
-  ///
-  /// 返回 [PlayableStream] 而不是 URL 字符串：B 站等平台的音频直链需要
-  /// `Referer` / `User-Agent`，这些请求头必须一路透传到播放器、边播边缓存
-  /// 与后台缓存写入；提前降级成 String 就会丢掉头部。any-listen / LX 脚本
-  /// 目前只返回 URL（headers 为空），后续原生解析器可直接返回带头的流。
-  ///
-  /// LX 分支在「该档位没地址」（notFound / unsupported）时按
-  /// [qualityFallbackCandidates] 降档重试（最多 2 档）；网络 / 超时 / 脚本
-  /// 错误不降档——那是暂时故障，同档位重试才有意义（由 CatalogService 做）。
-  ///
-  /// [timeout] 是调用方的剩余预算：降档循环用它算 deadline，每档 `getMusicUrl`
-  /// 的超时取 `min(20s, 剩余)`，剩余耗尽就停（不再发起下一档）。native /
-  /// any-listen 分支不消费该参数，由调用方自己的截止时间兜底。
-  ///
-  /// 脚本源首次使用会先尝试惰性激活（启动激活失败 / 引擎 failed 时），
-  /// 成功后再按正常流程取链。
+  /// 解析播放流（音质降档 / 请求头透传 / 惰性激活细节见
+  /// [SourceRouteExecutor.resolveStream]）。
   Future<PlayableStream> resolveStream(
     SourceTrack track, {
     String? requestedQuality,
@@ -523,10 +502,8 @@ class SourceManager extends ChangeNotifier {
     timeout: timeout,
   );
 
-  /// 获取歌词（脚本 lyric action 优先，内置平台原生实现回退）。
-  ///
-  /// 无脚本 / 脚本不支持 / 脚本失败时走内置实现：
-  /// wy eapi + yrc、QQ PlayLyricInfo + QRC、酷狗 KRC、酷我 LRCX、咪咕 MRC。
+  /// 获取歌词（脚本优先、内置平台原生回退）；细节见
+  /// [SourceRouteExecutor.fetchLyric]。
   Future<LxLyricResult?> fetchLyric(SourceTrack track) =>
       _executor.fetchLyric(track);
 
@@ -545,10 +522,8 @@ class SourceManager extends ChangeNotifier {
   /// 托盘隐藏 / 系统低内存：释放内置平台原生取图缓存（同上，幂等）。
   void releaseBuiltinPicCache() => _executor.releaseBuiltinPicCache();
 
-  /// 获取曲目评论（内置平台；脚本扩展源 / any-listen 无评论能力）。
-  ///
-  /// 失败统一归一化为 [SourceFailure]（业务拒绝 → unknown/retryable，
-  /// 传输失败 → network）；分页与缓存由 data 层 `CommentsService` 承担。
+  /// 获取曲目评论（内置平台）；失败统一为 [SourceFailure]。细节见
+  /// [SourceRouteExecutor.fetchComments]。
   Future<CommentPage> fetchComments(
     SourceTrack track, {
     required CommentKind kind,
@@ -556,11 +531,8 @@ class SourceManager extends ChangeNotifier {
     int limit = kCommentPageSize,
   }) => _executor.fetchComments(track, kind: kind, page: page, limit: limit);
 
-  /// 获取专辑（内置五平台；脚本扩展源 / any-listen 无专辑能力）。
-  ///
-  /// [albumId] 为平台内专辑 id（wy 数字 id / tx albumMid / kg/kw/mg albumId，
-  /// 取自曲目 payload 的 `albumId` / `albumMid` 原样字段）。失败统一归一化为
-  /// [SourceFailure]；分页与缓存由 data 层 `AlbumService` 承担。
+  /// 获取专辑（内置平台）；失败统一为 [SourceFailure]。细节见
+  /// [SourceRouteExecutor.fetchAlbum]。
   Future<Album> fetchAlbum(
     String sourceKey,
     String albumId, {
@@ -568,11 +540,8 @@ class SourceManager extends ChangeNotifier {
     int limit = kAlbumPageSize,
   }) => _executor.fetchAlbum(sourceKey, albumId, page: page, limit: limit);
 
-  /// 获取歌手详情 + 一页歌手歌曲（内置平台；脚本扩展源 / any-listen 无歌手能力）。
-  ///
-  /// [artistId] 为平台内歌手 id（与曲目 payload 的歌手引用同体系；取自
-  /// `_artists` 字段）。失败统一归一化为 [SourceFailure]；分页与缓存由
-  /// data 层 `ArtistService` 承担。
+  /// 获取歌手详情与一页歌曲（内置平台）；失败统一为 [SourceFailure]。细节见
+  /// [SourceRouteExecutor.fetchArtist]。
   Future<ArtistDetail> fetchArtist(
     String sourceKey,
     String artistId, {
@@ -580,10 +549,8 @@ class SourceManager extends ChangeNotifier {
     int limit = kArtistPageSize,
   }) => _executor.fetchArtist(sourceKey, artistId, page: page, limit: limit);
 
-  /// 歌手搜索（内置平台；搜索页「歌手」类型）。
-  ///
-  /// 能力位与单曲搜索同门（画像里的 `artist` 只在搜索路由可用时为真）；
-  /// 失败归一化为 [SourceFailure]，不静默吞成空结果。
+  /// 歌手搜索（内置平台）；失败统一为 [SourceFailure]。细节见
+  /// [SourceRouteExecutor.searchArtists]。
   Future<ArtistSearchPage> searchArtists(
     String sourceKey,
     String keyword, {
@@ -591,10 +558,8 @@ class SourceManager extends ChangeNotifier {
     int limit = 30,
   }) => _executor.searchArtists(sourceKey, keyword, page: page, limit: limit);
 
-  /// 按歌词搜歌（内置五平台；脚本扩展源 / any-listen 无此能力）。
-  ///
-  /// 失败归一化为 [SourceFailure]；分页与缓存由 data 层（CatalogService）
-  /// 承担。平台差异（kw 模糊匹配 / mg 排序偏翻唱）见各 `*_lyric_search.dart`。
+  /// 按歌词搜歌（内置平台）；失败统一为 [SourceFailure]。细节见
+  /// [SourceRouteExecutor.searchLyrics]。
   Future<LyricSearchPage> searchLyrics(
     String sourceKey,
     String keyword, {
@@ -602,11 +567,8 @@ class SourceManager extends ChangeNotifier {
     int limit = 30,
   }) => _executor.searchLyrics(sourceKey, keyword, page: page, limit: limit);
 
-  /// 获取封面（搜索自带封面 / 脚本 pic action / 内置平台原生实现）。
-  ///
-  /// 平台搜索响应已带封面（wy/tx/kg/kw/mg）时直接复用；否则脚本 pic 优先，
-  /// 再回退内置实现（kw/kg 取图接口、wy 歌曲详情、tx 专辑 mid 拼 URL、
-  /// mg 资源封面）。
+  /// 获取封面（脚本优先、内置平台原生回退）；细节见
+  /// [SourceRouteExecutor.fetchPic]。
   Future<String?> fetchPic(SourceTrack track) => _executor.fetchPic(track);
 
   /// 运行期 `updateAlert` 上报的更新地址记入当前激活脚本。
