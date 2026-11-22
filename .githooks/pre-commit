@@ -5,41 +5,58 @@
 # 还没准备提交的内容一起 stage。找不到 dart 时只警告不阻塞（GUI 客户端
 # 的 PATH 可能不含 Flutter SDK）。
 #
+# 性能：全程只起 3 个 git 进程（暂存清单 / 未暂存清单 / 重新 stage）和
+# 1~2 个 dart 进程，不做逐文件的 `git diff` 子进程往返。
+#
 # 启用：tool/agent/hooks.sh（等价于 git config core.hooksPath .githooks）
 set -euo pipefail
 
-# 文档 / 工具链一致性：只在本次提交涉及文档或版本文件时跑。
-# 走跨端 CLI（dart run tool/agent/cli.dart docs check），秒级；失败阻塞提交
-# （SKIP_DOCS_CHECK=1 可跳过）。
-if [[ "${SKIP_DOCS_CHECK:-0}" != "1" ]] && \
-   git diff --cached --name-only --diff-filter=ACMR | grep -Eq \
-     '(\.md$|(^|/)pubspec\.yaml$|(^|/)build\.gradle$|gradle-wrapper\.properties$|(^|/)settings\.gradle$|\.github/workflows/.*\.ya?ml$)'; then
-  if command -v dart >/dev/null 2>&1 || command -v "${DART_BIN:-dart}" >/dev/null 2>&1; then
-    if ! dart run tool/agent/cli.dart docs check; then
-      printf 'pre-commit: 文档 / 工具链检查失败，修正后重试（SKIP_DOCS_CHECK=1 可跳过）\n' >&2
-      exit 1
-    fi
-  else
-    printf 'pre-commit: 未找到 dart，跳过文档 / 工具链检查\n' >&2
-  fi
+# 一次读出全部暂存路径（-z 防换行名），文档检查与格式化共用，不再重复跑 git。
+staged=()
+while IFS= read -r -d '' file; do
+  staged+=("$file")
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+# 文档 / 工具链一致性只在这些文件进提交时跑；纯代码提交不付 `dart run` 的成本。
+docs_pattern='(\.md$|(^|/)pubspec\.yaml$|(^|/)build\.gradle$|gradle-wrapper\.properties$|(^|/)settings\.gradle$|\.github/workflows/.*\.ya?ml$)'
+docs_relevant=0
+dart_staged=0
+for file in "${staged[@]}"; do
+  if [[ "$file" =~ $docs_pattern ]]; then docs_relevant=1; fi
+  if [[ "$file" == *.dart ]]; then dart_staged=1; fi
+done
+
+if ((docs_relevant == 0 && dart_staged == 0)); then
+  exit 0
 fi
 
 dart_bin="${DART_BIN:-dart}"
 if ! command -v "$dart_bin" >/dev/null 2>&1; then
-  printf 'pre-commit: 未找到 dart，跳过自动格式化（可设 DART_BIN）\n' >&2
+  printf 'pre-commit: 未找到 dart，跳过文档检查与自动格式化（可设 DART_BIN）\n' >&2
   exit 0
 fi
 
-files=()
+if ((docs_relevant)) && [[ "${SKIP_DOCS_CHECK:-0}" != "1" ]]; then
+  # 成功静默，失败时 ERROR 行仍在 stderr（docs check 自己输出）。
+  if ! "$dart_bin" run tool/agent/cli.dart docs check >/dev/null; then
+    printf 'pre-commit: 文档 / 工具链检查失败，修正后重试（SKIP_DOCS_CHECK=1 可跳过）\n' >&2
+    exit 1
+  fi
+fi
+
+((dart_staged)) || exit 0
+
+# 未暂存改动一次查完：逐文件 `git diff --quiet` 会为每个文件起一个进程。
+dirty=()
 while IFS= read -r -d '' file; do
-  files+=("$file")
-done < <(git diff --cached --name-only --diff-filter=ACMR -z -- '*.dart')
-((${#files[@]})) || exit 0
+  dirty+=("$file")
+done < <(git diff --name-only -z -- '*.dart')
 
 format_files=()
 skipped=()
 generated=()
-for file in "${files[@]}"; do
+for file in "${staged[@]}"; do
+  [[ "$file" == *.dart ]] || continue
   [[ -f "$file" ]] || continue
   # 生成物由生成器决定格式；格式化会让 CI 的 `git diff --exit-code` 漂移
   # （ADR-0038：生成物重复生成必须无 diff）。
@@ -48,7 +65,14 @@ for file in "${files[@]}"; do
     continue
   fi
   # 同一路径既有暂存内容又有未暂存改动：格式化会污染本次提交的边界。
-  if ! git diff --quiet -- "$file"; then
+  dirty_hit=0
+  for dirty_file in "${dirty[@]}"; do
+    if [[ "$dirty_file" == "$file" ]]; then
+      dirty_hit=1
+      break
+    fi
+  done
+  if ((dirty_hit)); then
     skipped+=("$file")
     continue
   fi
