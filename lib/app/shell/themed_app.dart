@@ -324,13 +324,18 @@ class _MyThemedAppState extends State<MyThemedApp> {
                         value: systemUiOverlayStyle,
                         child: MediaQuery(
                           data: mediaData,
-                          // 用户交互（含弹层 / 菜单，都在 Navigator 之内）→
-                          // 同步调度器续期「最近交互」窗口；只观察不拦截。
-                          child: Listener(
-                            behavior: HitTestBehavior.translucent,
-                            onPointerDown: (_) =>
-                                widget.onUserInteraction?.call(),
-                            child: themedChild,
+                          // 视口粗档：`layoutType` / `horizontalPadding` /
+                          // `isLargeScreen` 只在这里按档位订阅，桌面拖拽窗口时
+                          // 不再逐像素重建页面（见 `widgets/responsive.dart`）。
+                          child: ViewportClassScope.host(
+                            // 用户交互（含弹层 / 菜单，都在 Navigator 之内）→
+                            // 同步调度器续期「最近交互」窗口；只观察不拦截。
+                            child: Listener(
+                              behavior: HitTestBehavior.translucent,
+                              onPointerDown: (_) =>
+                                  widget.onUserInteraction?.call(),
+                              child: themedChild,
+                            ),
                           ),
                         ),
                       );

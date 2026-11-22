@@ -9,7 +9,6 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
-import '../widgets/desktop_layout.dart';
 import '../widgets/lyrics.dart';
 import '../widgets/now_playing_layout_metrics.dart';
 import '../widgets/player.dart';
@@ -59,96 +58,103 @@ class NowPlayingDesktopLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final playerWidth = desktopNowPlayingPlayerWidth(
-      DesktopLayout.of(context).contentWidth,
-    );
     return Scaffold(
       key: const Key('desktopNowPlayingLayout'),
-      body: Row(
-        children: [
-          SizedBox(
-            key: const Key('desktopPlayerColumn'),
-            width: playerWidth,
-            // 大屏播放器布局：封面自适应 + 歌名/歌手两行 + 进度 + 传输控制
-            // （desktopLayout：传输排在播放器列里，见 player.dart）。
-            child: Player(
-              isLargeScreen: true,
-              desktopLayout: true,
-              morph: morph,
-            ),
-          ),
-          Expanded(
-            key: const Key('desktopSidePane'),
-            child: Column(
-              children: [
-                Padding(
-                  // 次 tab（图标 + 文案一行）：行高由 M3ETabTheme.height（48）
-                  // 决定，纵向不再叠加自拟内边距；左右 16 与下方内容同一
-                  // 内容边距（M3E 口径）。
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: M3ETabs(
-                    // 次 tab：图标在文案左侧、同一行排布（桌面右栏是内容区里
-                    // 的分组切换，不是顶层导航）。
-                    variant: M3ETabsVariant.secondary,
-                    tabs: [
-                      M3ETab(
-                        icon: const Icon(M3EIcons.queue_music_rounded),
-                        label: l10n.queueTab,
-                      ),
-                      M3ETab(
-                        icon: const Icon(M3EIcons.lyrics_rounded),
-                        label: l10n.lyricsTab,
-                      ),
-                      M3ETab(
-                        icon: const Icon(M3EIcons.info_rounded),
-                        label: l10n.trackInfoTabTitle,
-                      ),
-                    ],
-                    selectedIndex: selectedTab,
-                    onTabSelected: onTabSelected,
-                  ),
+      // 播放器列宽随可用宽连续变化：在本层按约束算。不要读
+      // `DesktopLayout.contentWidth`——它只在版式判据翻转时通知，窗口拖拽
+      // 途中会停在上一档，列宽跟不上（见 `desktop_layout.dart` 的通知判据）。
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final playerWidth = desktopNowPlayingPlayerWidth(
+            constraints.maxWidth,
+          );
+          return Row(
+            children: [
+              SizedBox(
+                key: const Key('desktopPlayerColumn'),
+                width: playerWidth,
+                // 大屏播放器布局：封面自适应 + 歌名/歌手两行 + 进度 + 传输控制
+                // （desktopLayout：传输排在播放器列里，见 player.dart）。
+                child: Player(
+                  isLargeScreen: true,
+                  desktopLayout: true,
+                  morph: morph,
                 ),
-                Expanded(
-                  child: M3ETabsView(
-                    selectedIndex: selectedTab,
-                    onTabSelected: onTabSelected,
-                    children: [
-                      RepaintBoundary(
-                        // 当前曲目由左侧播放器承载，队列页只列其后曲目
-                        // （includeCurrent 保持 false，不重复展示）。
-                        child: QueueDisplay(
-                          controller: queueController,
-                          // tab 栏与内容之间留 16（M3E 口径）。
-                          topPadding: contentTopPadding,
-                        ),
-                      ),
-                      RepaintBoundary(
-                        // 歌词页是唯一订阅播放进度的页内 tab：停在别的 tab
-                        // 时通过 nearest scope 放弃 position 订阅（与移动版式
-                        // 的 PageView 同一语义）。
-                        child: wrapLyrics(
-                          LyricsWidget(
-                            // 桌面歌词区常展开（无迷你条可让位），快捷操作常显。
-                            quickActionsEnabled: true,
-                            controller: lyricsController,
+              ),
+              Expanded(
+                key: const Key('desktopSidePane'),
+                child: Column(
+                  children: [
+                    Padding(
+                      // 次 tab（图标 + 文案一行）：行高由 M3ETabTheme.height（48）
+                      // 决定，纵向不再叠加自拟内边距；左右 16 与下方内容同一
+                      // 内容边距（M3E 口径）。
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: M3ETabs(
+                        // 次 tab：图标在文案左侧、同一行排布（桌面右栏是内容区里
+                        // 的分组切换，不是顶层导航）。
+                        variant: M3ETabsVariant.secondary,
+                        tabs: [
+                          M3ETab(
+                            icon: const Icon(M3EIcons.queue_music_rounded),
+                            label: l10n.queueTab,
                           ),
-                        ),
+                          M3ETab(
+                            icon: const Icon(M3EIcons.lyrics_rounded),
+                            label: l10n.lyricsTab,
+                          ),
+                          M3ETab(
+                            icon: const Icon(M3EIcons.info_rounded),
+                            label: l10n.trackInfoTabTitle,
+                          ),
+                        ],
+                        selectedIndex: selectedTab,
+                        onTabSelected: onTabSelected,
                       ),
-                      RepaintBoundary(
-                        // 分页左右没有圆点过渡带，顶部留白按 tab 栏下的内容间距；
-                        // 内容左右边距由内容自带（16，与 tab 栏对齐）。
-                        child: TrackInfoView(
-                          controller: infoController,
-                          topPadding: contentTopPadding,
-                        ),
+                    ),
+                    Expanded(
+                      child: M3ETabsView(
+                        selectedIndex: selectedTab,
+                        onTabSelected: onTabSelected,
+                        children: [
+                          RepaintBoundary(
+                            // 当前曲目由左侧播放器承载，队列页只列其后曲目
+                            // （includeCurrent 保持 false，不重复展示）。
+                            child: QueueDisplay(
+                              controller: queueController,
+                              // tab 栏与内容之间留 16（M3E 口径）。
+                              topPadding: contentTopPadding,
+                            ),
+                          ),
+                          RepaintBoundary(
+                            // 歌词页是唯一订阅播放进度的页内 tab：停在别的 tab
+                            // 时通过 nearest scope 放弃 position 订阅（与移动版式
+                            // 的 PageView 同一语义）。
+                            child: wrapLyrics(
+                              LyricsWidget(
+                                // 桌面歌词区常展开（无迷你条可让位），快捷操作常显。
+                                quickActionsEnabled: true,
+                                controller: lyricsController,
+                              ),
+                            ),
+                          ),
+                          RepaintBoundary(
+                            // 分页左右没有圆点过渡带，顶部留白按 tab 栏下的内容间距；
+                            // 内容左右边距由内容自带（16，与 tab 栏对齐）。
+                            child: TrackInfoView(
+                              controller: infoController,
+                              topPadding: contentTopPadding,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
