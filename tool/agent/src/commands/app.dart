@@ -4,8 +4,8 @@
 /// Windows 没有这些信号。这里统一走官方的 `flutter run --machine` 协议——
 /// 控制通道是本机 TCP（127.0.0.1 随机端口），三端行为一致。
 ///
-/// 会话信息写入 `$RUN_DIR/app-session.json`，日志写 `$RUN_DIR/flutter-run.log`
-/// （与 `tool/agent/app.sh` 共用路径，迁移期两套不打架）。
+/// 会话信息写入 `$RUN_DIR/app-session.json`，日志写 `$RUN_DIR/flutter-run.log`；
+/// 路径与 `tool/agent/app.sh` 一致，前台 / 后台入口切换时沿用同一份日志。
 library;
 
 import 'dart:async';

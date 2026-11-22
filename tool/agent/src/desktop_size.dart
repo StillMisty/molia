@@ -1,6 +1,6 @@
 /// 桌面 release bundle 的原生库清单与发布约束（`size desktop`）。
 ///
-/// 约束来源：ADR-0038 阶段 5。Android 才会加载 JNI 运行时；桌面包里的
+/// 约束来源：ADR-0038。Android 才会加载 JNI 运行时；桌面包里的
 /// `libdartjni.so` / `dartjni.dll` 是 `jni` 插件的传递产物，没有任何调用方。
 /// release 工作流先删除它，再由本文件挡回人为 / 依赖变更造成的回流。
 ///

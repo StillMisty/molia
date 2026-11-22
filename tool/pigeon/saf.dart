@@ -1,4 +1,4 @@
-// SAF 域 Pigeon **channel 模式**契约，见 issue #85 / ADR-0038 §12。
+// SAF 域 Pigeon **channel 模式**契约，见 ADR-0038 §12。
 //
 // 生成（Linux 可跑，不需要 JDK 21 / Android classpath）：
 //   dart run pigeon --input tool/pigeon/saf.dart \
@@ -17,8 +17,8 @@ import 'package:pigeon/pigeon.dart';
 @ConfigurePigeon(
   PigeonOptions(
     kotlinOptions: KotlinOptions(
-      // 同包还有 widget（#78）、DownloadsPublisher（#80）与
-      // DownloadNotifications（#82）的 Pigeon 生成文件：每个文件默认都定义
+      // 同包还有 widget、DownloadsPublisher 与 DownloadNotifications 的
+      // Pigeon 生成文件：每个文件默认都定义
       // `FlutterError`，同一 Kotlin 包里会重复声明。用独立错误类名保持各
       // 生成物互不依赖。
       errorClassName: 'SafPigeonError',

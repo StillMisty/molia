@@ -1,4 +1,4 @@
-// DownloadNotifications 域 Pigeon **channel 模式**契约，见 issue #82 / ADR-0038 §11。
+// DownloadNotifications 域 Pigeon **channel 模式**契约，见 ADR-0038 §11。
 //
 // 生成（Linux 可跑，不需要 JDK 21 / Android classpath）：
 //   dart run pigeon --input tool/pigeon/download_notifications.dart \
@@ -15,7 +15,7 @@ import 'package:pigeon/pigeon.dart';
 @ConfigurePigeon(
   PigeonOptions(
     kotlinOptions: KotlinOptions(
-      // 同包还有 widget（#78）与 DownloadsPublisher（#80）的 Pigeon 生成文件：
+      // 同包还有 widget 与 DownloadsPublisher 的 Pigeon 生成文件：
       // 每个文件默认都定义 `FlutterError`，同一 Kotlin 包里会重复声明。用独立
       // 错误类名保持各生成物互不依赖。
       errorClassName: 'DownloadNotificationsPigeonError',

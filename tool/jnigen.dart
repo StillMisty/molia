@@ -38,7 +38,7 @@ class JnigenInput {
   final List<String> classes;
 }
 
-/// 当前登记的输入。阶段 0 为空；阶段 2 起登记 Android 系统查询互操作对象。
+/// 当前登记的输入：Android 系统查询互操作对象。
 const List<JnigenInput> inputs = <JnigenInput>[
   JnigenInput(
     name: 'system_interop',

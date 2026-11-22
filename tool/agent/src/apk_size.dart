@@ -60,7 +60,7 @@ class ApkReport {
   final List<ZipSizeEntry> top;
 
   /// 供测试与 JSON 输出：分组按压缩后大小降序；同分时保持首次出现的顺序
-  /// （与体积基线表 / 旧 Python 实现一致，避免同分组的行序漂移）。
+  /// （与体积基线表一致，避免同分组的行序漂移）。
   List<MapEntry<String, SizeGroup>> get sortedGroups {
     final entries = groups.entries.toList();
     final order = <String, int>{

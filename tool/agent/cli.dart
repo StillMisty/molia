@@ -1,9 +1,8 @@
-/// molia 跨端工具 CLI（Dart 实现，Linux / macOS / Windows 共用一套命令）。
+/// molia 跨端工具 CLI（Linux / macOS / Windows 共用一套命令）。
 ///
-/// 为什么有这个入口：原来的 `tool/agent/*.sh` 只能在 WSL / Linux 跑，
-/// Windows 开发机没有 bash（也不保证有 Python），于是同一件事维护了三份
-/// 实现（sh / ps1 / py）。这里把「能在三端等价执行」的部分收进来，平台
-/// 差异留给各命令内部的平台分支或后端脚本。
+/// 只依赖 `dart:io`：不要求 bash 或 Python，Flutter 开发者一定有 Dart。
+/// 三端等价的部分直接实现；需要 Xvfb、`/proc`、Win32 等平台能力的命令
+/// 走各命令内部的平台分支或后端脚本。
 ///
 /// 用法：`dart run tool/agent/cli.dart <命令> [参数]`
 library;

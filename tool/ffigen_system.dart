@@ -2,8 +2,8 @@
 ///
 /// 用法：`dart run tool/ffigen_system.dart`
 ///
-/// 阶段 0 建立流程与边界；阶段 1 起在 `inputs` 里登记 vendored 头文件，脚本
-/// 产出 `lib/platform/<output>.g.dart`（调用方在 `output` 里写 `desktop/...`）。
+/// 在 `inputs` 里登记 vendored 头文件，脚本产出
+/// `lib/platform/<output>.g.dart`（调用方在 `output` 里写 `desktop/...`）。
 ///
 /// Apple 不在此脚本：系统字体、低电量模式统一走 Swift + Pigeon，不生成
 /// Objective-C 绑定，也不直接依赖 `package:objective_c`。
@@ -33,7 +33,7 @@ class FfigenInput {
   final List<String> compilerOptions;
 }
 
-/// 当前登记的输入：阶段 1 桌面 C（POSIX / allocator）。
+/// 当前登记的输入：桌面 C（POSIX / allocator）。
 ///
 /// Win32 不在这里生成：直接复用 `package:win32` 6.4 的上游生成绑定，避免
 /// 自己维护 Windows 声明（ADR-0038）。

@@ -1,4 +1,4 @@
-// Widget 域 Pigeon native interop（JNI）试点，见 issue #78 / ADR-0038 §9。
+// Widget 域 Pigeon native interop（JNI），见 ADR-0038 §9。
 //
 // 生成（JDK 21，Kotlin 先编译，见 tool/pigeon/generate.sh）：
 //   dart run pigeon --input tool/pigeon/widget.dart \

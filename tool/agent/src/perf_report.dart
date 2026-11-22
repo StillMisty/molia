@@ -1,5 +1,5 @@
 /// `frames` 结果汇总：把 `frames*.jsonl` / `frames*.log` 里的 `molia.frame`
-/// 行整理成 Markdown（跨端，替代 `perf.sh report()` 里的内联 Python）。
+/// 行整理成 Markdown。
 ///
 /// 口径：5s 周期汇总可能把长场景切成多个窗口；每个场景取**样本数最多**的
 /// 窗口，同样本数优先 `label=end`。只取 `end` 会在场景超过 5s 时把很短的

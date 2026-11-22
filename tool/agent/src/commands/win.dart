@@ -1,9 +1,6 @@
-/// `win`：Windows 侧的采样与窗口驱动（Dart + FFI，替代 `*.ps1`）。
+/// `win`：Windows 侧的采样与窗口驱动（Dart + FFI）。
 ///
-/// 旧实现是 5 个 PowerShell 脚本（memory / frames / startup / scroll / 旧
-/// memory.ps1），同一件事与 Linux 侧分成两套。这里把编排搬进 Dart，只把真正
-/// 需要系统调用的部分交给 [Win32]。
-///
+/// 编排留在 Dart，只把真正需要系统调用的部分交给 [Win32]。
 /// 仅 Windows 可用；其它平台直接报错，不做静默降级。
 library;
 

@@ -29,7 +29,7 @@ void resetPerfWindowBounds(String prefsPath) {
   file.writeAsStringSync(jsonEncode(decoded));
 }
 
-/// 与旧 Python 实现一致的分位：rank 向下取整，最小 p0 / 最大 p100。
+/// 分位口径：rank 向下取整，最小 p0 / 最大 p100。
 ///
 /// 返回值保留小数（样本就是毫秒浮点），不要在调用方 round。
 double quantile(List<double> values, double p) {
