@@ -419,7 +419,7 @@
 
 - **NowPlayingController（播放页请求通道）** — `lib/widgets/now_playing_controller.dart`：壳 ↔ 播放页的请求通道：`showQueueTab` / `showLyricsTab` / `showInfoTab`（只有 `tabRequestVersion` 前进才算新的 tab 请求，收起播放器不会重放上一次 tab）、`expand()` / `collapse()`（`takeExpansionRequest()` 消费一次意图，同方向重复请求不叠加）。只读快照只剩 `activeTab`（桌面 Esc 判断队列是否打开）。展开态 / 布局能力不在这里：唯一所有者是 **Shell presentation**，页面通过 `NowPlaying.onExpansionChanged` / `onMiniCapableChanged` 回写。底栏队列入口与 Esc 的「关闭队列」都经它落点，壳层不直接操作页内界面。
 
-- **Shell presentation（壳层展示决策）** — `lib/app/shell/shell_presentation.dart::ShellPresentation`：壳层展示状态的唯一所有者（纯判定，不 import widget / page / material）。目的地：存储选中项 / 有效目的地（隐藏时回退首个可见项、恢复后自动回到原选中项）/ 上一目的地（淡出层）；播放页：`expanded` + `miniCapable`（页面在布局 / 动画落定时回写）+ `flightInProgress`（共享封面飞行守卫）与 `expansionVerdict`（不在播放页 / 无收起态 / 飞行中 → 拒绝）；派生 `showsPlayerBar`（顶栏播放条唯一口径）与 `interceptsBack`（播放页 + 可收起 + 歌词整页）；`handleBack({required bool pageClaimsBack})` 先接收调用方给来的页面级占用（生产为 `BackClaims.any`，模块不读进程级登记表），再决定「恢复完整播放页 / 交给系统退出」。目的地枚举在 `lib/domain/models/shell_destination.dart`（`NavProvider` 转出同一类型）。壳层 State 只做渲染（弹簧 / Overlay 飞行 / 骨架），接口级测试可不挂 `MyApp` 直接覆盖判定矩阵（`test/app/shell_presentation_test.dart`）。
+- **Shell presentation（壳层展示决策）** — `lib/app/shell/shell_presentation.dart::ShellPresentation`：壳层展示状态的唯一所有者（纯判定，不 import widget / page / material）。目的地：存储选中项 / 有效目的地（隐藏时回退首个可见项、恢复后自动回到原选中项）/ 上一目的地（淡出层）；播放页：`expanded` + `miniCapable`（页面在布局 / 动画落定时回写）+ `flightInProgress`（共享封面飞行守卫）与 `expansionVerdict`（不在播放页 / 无收起态 / 飞行中 → 拒绝）；派生 `showsPlayerBar`（顶栏播放条唯一口径）与 `interceptsBack`（播放页 + 可收起 + 歌词整页）；`handleBack({required bool pageClaimsBack})` 先接收调用方给来的页面级占用（生产为 `BackClaims.any`，模块不读进程级登记表），再决定「恢复完整播放页 / 交给系统退出」。目的地枚举在 `lib/domain/models/shell_destination.dart`（`NavProvider` 转出同一类型）。壳层 State 只做渲染（弹簧 / Overlay 飞行 / 骨架），接口级测试可不挂 `MyApp` 直接覆盖判定矩阵（`test/app/shell_test.dart`）。
 
 - **Now-playing lyrics on enter（回到播放页时显示歌词）** — `kShellNowPlayingLyricsOnEnter`（默认开，`SyncCategory.settings` 跟人走），由 `NavProvider.showLyricsOnEnter` 持有；只在「从其它一级页进入播放页」时切到歌词 tab，播放页内部打开的二级页返回不重置当前 tab。设置入口在高级设置 › 播放细节。见 ADR-0039。
 
@@ -872,7 +872,7 @@
   `qualifiedThresholdMs(durationMs)` / `isQualified(...)`
   （`listenedMs ≥ min(30s, 50% × 时长)`，奇数时长向上取整）；SQL 谓词与
   AI 跳过判定都从它派生，SQL↔Dart 一致性由
-  `test/play_statistics_formula_test.dart` 用同一批 fixture 行钉住。
+  `test/statistics_test.dart` 用同一批 fixture 行钉住。
 - **Statistics sync store（统计同步存储）** — `lib/domain/ports/statistics_sync_store.dart`
   + `lib/data/sync/statistics_sync_store.dart`：`StatisticsSyncEvent` 是类型化的已收尾
   事件（`syncKey` + 版本三元组；`startedAt` / `endedAt` 只是内容时间）；读面
@@ -1267,8 +1267,8 @@
   名字与迁移前逐字一致。读写策略只有一份：读失败回键默认并记日志，写失败只记日志
   （本次会话值由调用方保留）；写动作跨实例串行（同一偏好文件共用一条链）、
   JSON 只有一个编解码入口。新代码直连 `SharedPreferences` 由
-  `test/architecture/prefs_usage_test.dart` 拦截（白名单只减不增）；设备键名字面量
-  由 `test/architecture/settings_keys_test.dart` 拦截。登记键仍走 `SettingsRegistry`。
+  `test/architecture/architecture_guards_test.dart` 拦截（白名单只减不增）；设备键名字面量
+  由 `test/architecture/architecture_guards_test.dart` 拦截。登记键仍走 `SettingsRegistry`。
 - **Settings subpage chrome（设置子页 chrome）** — `lib/widgets/settings/settings_subpage.dart`：
   设置内层 Navigator 子页（含 AI 推歌 / 听歌统计）的
   `Scaffold + M3EAppBar.top + ListView(kSettingsPadding)` 唯一实现
@@ -1281,9 +1281,9 @@
   （声明了键却没有重载会在启动期失败），应用远端值后按变化的键触发。快捷键开关与绑定四键（`kShortcutsEnabled` /
   `kGlobalShortcutsEnabled` / `kShortcutBindings` / `kGlobalShortcutBindings`）
   同表登记为「跟人走」。键名字面量只有一份（`settings_keys.dart`），由
-  `test/architecture/settings_keys_test.dart` 强制；私自
+  `test/architecture/architecture_guards_test.dart` 强制；私自
   `SettingsRegistry(keys: kAllSettingsKeys)` 由
-  `test/architecture/settings_registry_usage_test.dart` 扫描拦住。
+  `test/architecture/architecture_guards_test.dart` 扫描拦住。
 - **Settings access（模块设置访问面）** — `lib/data/settings/settings_access.dart`：
   `SettingsAccess` 只含模块需要的 `read` / `write` / `clear`；reload 只能经
   `SettingsRegistry.mount` 绑定，`SettingsSyncSurface`（entries / readRaw /

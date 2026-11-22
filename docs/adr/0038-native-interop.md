@@ -389,7 +389,7 @@ I/O 域，使用 Pigeon 的 **stable channel 模式**（issue #80），不用 `u
   （权限撤销 / 文件缺失）不换 transport。
 - **验证**：适配器 / bridge 单测覆盖成功、null、错误码映射、分批 / done /
   skip、取消与 close、首批失败回退、中途失败不回退、非 Android；现有
-  `test/services/saf_local_library_test.dart` 的 fake 不变；Android 做
+  `test/services/misc_services_test.dart` 的 fake 不变；Android 做
   debug / release 构建与 release 启动冒烟，有 SAF tree URI 时再验证
   stat / readRange。
 - **回滚**：删除 `PigeonFirstSafBridge` 的 Pigeon 分支（或让

@@ -35,7 +35,7 @@
   参数，也没有文件打开动作。声明音频 MIME 会让文件管理器把 Molia 列为「打开方式」，
   用户点开却无法播放。文件关联是独立功能，先做到这两个键就够。
 - `Categories` / `StartupWMClass` / `Exec` / `Icon` 的口径不变（见上文）；
-  `test/packaging/linux_desktop_test.dart` 钉住以上字段与「没有 MimeType」的契约，
+  `test/tool/tool_test.dart` 钉住以上字段与「没有 MimeType」的契约，
   `desktop-file-validate`（可用时）是最后一道门禁。
 
 ## 图标再生成（品牌更新时）
@@ -57,7 +57,7 @@ rsvg-convert -w 256 -h 256 assets/icons/molia_icon_full_bleed.svg \
   经 window_manager 的 `setIcon` 交给 `gtk_window_set_icon_from_file`；Wayland
   下该调用无害但无效（靠上面的 .desktop）；
 - hicolor 目录名必须与图片实际尺寸一致、`.desktop` 必填键与 `Icon` 名必须齐全
-  —— `test/packaging/linux_desktop_test.dart` 守住这些契约（含 PNG IHDR 尺寸）；
+  —— `test/tool/tool_test.dart` 守住这些契约（含 PNG IHDR 尺寸）；
 - Windows 的 `app_icon.ico` 不在这里生成，见根目录 `icons_launcher.yaml`。
 
 ## 约定

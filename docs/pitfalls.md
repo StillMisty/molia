@@ -182,7 +182,7 @@
     散布进 UI 会把平台实现拖进其它平台的构建/测试；统一经 `window_chrome.dart`
     / `global_hotkeys.dart` 收口（原生包只允许出现在四个桌面 IO 实现里：
     `app_tray_io` / `display_areas_io` / `window_chrome_io` /
-    `global_hotkeys_io`，见 `test/architecture/tray_import_test.dart`），同
+    `global_hotkeys_io`，见 `test/architecture/architecture_guards_test.dart`），同
     `system_fonts_service.dart` 模式。全局热键的 Wayland 门户身份来自 GTK
     `application-id`（`linux/runner/my_application.cc`），必须与安装的
     `.desktop` 文件名一致；不要在 Dart 侧另写一套应用 id。
@@ -281,7 +281,7 @@
     `assets/icons/app_icon.png`（`WindowChrome` 调 nativeapi 的
     `Application.setIcon`，与 hicolor 集合同源），Wayland 下该调用无效也不报错。
     契约由
-    `test/packaging/linux_desktop_test.dart` 守住。
+    `test/tool/tool_test.dart` 守住。
 
 39. **桌面歌词位置样本不能按到达时刻重设基准**：位置样本经 Dart（≤4Hz）→ 通道 →
     原生主线程到达，投递延迟随宿主负载波动；旧实现每次采样都 `base = 样本;
@@ -482,7 +482,7 @@
     之后新增变更的 seq（1、2、3…）全部小于游标——**永久静默跳过**。修复在两侧：
     发送侧 `since > head` → 回全量快照（让对端重新引导）；接收侧全量快照把
     游标**落在快照覆盖位置**（不是取最大），且待提交游标允许回退。回归用例见
-    `test/sync_protocol_test.dart`。任何将来「清日志 / 换载荷格式」的改动
+    `test/sync_core_test.dart`。任何将来「清日志 / 换载荷格式」的改动
     都要带上这条语义。
 52. **游标 -1 与「seq 从 1 开始」：三处 off-by-one 都会让全新对端退化成 bootstrap**：
     日志 seq 从 1 开始、`cursorSeq = -1` 表示「尚未消费任何条目」，两者相减时
@@ -497,7 +497,7 @@
     这三处在旧布局下被掩盖：局域网 `serveJournal(since = -1)` 与单文件 WebDAV
     都会给全新对端**回全量快照**（`since < baseSeq(0)`），增量窗口根本到不了
     全新对端；改成分块文件后增量直接发给全新对端，才全部暴露。回归用例：
-    `test/sync_engine_test.dart`（空窗口 / 截断）、`test/sync_protocol_test.dart`。
+    `test/sync_engine_test.dart`（空窗口 / 截断）、`test/sync_core_test.dart`。
 
 53. **统计曲目内容在 `play_tracks`，不在事件行**：`play_events` 只存
     事件自身字段（时间 / 进度 / 结束原因 / 版本 + `trackId`），曲目元数据与
@@ -519,7 +519,7 @@
     ④ **载荷预算**（`PlayStatisticsRepository.maxRetainedPayloadBytes`，默认
        16 MB）：超出按「最近播放」保留、其余清 `raw`（点播回退重新解析）——
        单条载荷大小由脚本决定，行数上限约束不了字节。
-    回归：`test/play_statistics_repository_test.dart` 的「曲目内容表」组。
+    回归：`test/statistics_test.dart` 的「曲目内容表」组。
 
 54. **横向滚动视图在桌面端「拖不动、滚轮不动」是两个独立成因**：
     ①鼠标拖动被 `ScrollBehavior.dragDevices` 挡掉——默认集合不含
@@ -685,8 +685,8 @@
     `PeerJournalNames.parse` 识别，**不列出、不读取、也不被 `deleteRemote`
     删除**（云端会一直留着）。不要为了「兼容」补迁移 / 双协议分支：混版本
     本来就不互相发现，补一条旧路径反而会把旧数据重新放进新协议的语义里。
-    回归：`test/sync_state_store_test.dart`、`test/lan_pairing_transport_test.dart`、
-    `test/lan_sync_transport_test.dart` 的旧路径 / 旧状态 / 一键配对用例。
+    回归：`test/sync_core_test.dart`、`test/sync_network_test.dart`、
+    `test/sync_network_test.dart` 的旧路径 / 旧状态 / 一键配对用例。
 67. **`MSD/1` 发现认证有固定顺序：先来源限流 → 验 MAC → 再解析 JSON**：
     `LanDiscovery._onDatagram` 的顺序是安全边界，不能为了「先看看包内容」调换：
     ① 先按来源 IP 记限流（每来源 20 包/10s、全局 100 包/10s，来源记账表上限
@@ -872,7 +872,7 @@
     `AudioPlayer(handleInterruptions: false)`，由 `LocalPlaybackService` 统一处理
     焦点事件与耳机拔出（`becomingNoisyEventStream`），并自己补上
     「系统发回可续播结束事件 → 续播」的记账；否则开关看着生效、实际仍被
-    just_audio 暂停。回归用例见 `test/playback/audio_focus_guard_test.dart`。
+    just_audio 暂停。回归用例见 `test/playback/playback_core_test.dart`。
 80. **audio_session 的 noisy receiver 只在持有音频焦点时注册**：插件在
     `requestAudioFocus` 成功后才注册 `ACTION_AUDIO_BECOMING_NOISY`，收到
     `AUDIOFOCUS_LOSS` 时内部 `abandonAudioFocus()` 会一并反注册。开启
@@ -883,8 +883,8 @@
     均不依赖焦点），按 `audio_output_policy.dart::shouldPauseForDeviceRemoval`
     只对「非内置输出设备被移除」暂停：内置扬声器 / 听筒的移除通常意味着刚
     插上耳机，不能误停。两条路都走 `pause()`，重入无副作用；回归用例见
-    `test/playback/audio_focus_guard_test.dart` 与
-    `test/playback/playback_audio_test.dart`。
+    `test/playback/playback_core_test.dart` 与
+    `test/playback/playback_core_test.dart`。
 81. **`M3ESideSheet` 不能直接包整页**：包内 header（标题 + 关闭）与 `Expanded`
     body 是固定的，页面再带 `Scaffold + M3EAppBar` 就是双层 chrome。二级页要
     提供 `embedded: true` 的正文；宽度用 `M3ESideSheetTheme.copyWith(width/maxWidth)`
@@ -1029,7 +1029,7 @@
     把它交给 `LocalPlaybackService.playTracks` 复用；恢复态追加 / 移除队列项时同步
     `extend` / `removeIndex`，模式切换时清空让 publish 重新 ensure；顺序不落盘
     （每次冷启动仍是新的一轮随机顺序）。回归用例见
-    `test/playback_session_coordinator_test.dart` 的「恢复态 shuffle → 恢复播放」。
+    `test/playback_session_test.dart` 的「恢复态 shuffle → 恢复播放」。
 
 102. **Linux MPRIS（`flutter_media_session` 3.2.1）的能力位与播放模式写入**：
     插件 Linux 实现的 `CanPlay` / `CanPause` / `CanSeek` / `CanGoNext` /
@@ -1067,7 +1067,7 @@
     必须返回 `exit`，否则退出流程会被自己取消，留下无窗口进程。实现用
     `AppQuitController` 的 saving / exiting / done 三段 + 单一 in-flight
     future；提交失败复位到 idle 允许重试。回归见
-    `test/app/bootstrap/desktop_stack_test.dart`。
+    `test/app/shell_test.dart`。
 
 105. **汽水音乐（qs）的匿名接口会「200 + 空 body」和「只给试听流」**：
     `/luna/search/track`、`/luna/search/artist` 等 PC 接口实测约半数请求返回
@@ -1096,13 +1096,13 @@
 108. **预测返回的「慢拖不动、松手直接返回」先查 detector 是否被打断**：
     跟手预览只由 `PredictiveBackPageTransitionsBuilder` 插入的 detector 提供；
     主题统一沿用依赖包默认 map（不要手写平台子集），升级依赖后用
-    `test/theme/predictive_back_test.dart` 确认 Android 仍是预测返回。
+    `test/misc_test.dart` 确认 Android 仍是预测返回。
     `NavigatorObserver.didStartUserGesture`
     里任何异常都会让 `handleStartBackGesture` 提前退出，观察者不会被登记，
     后续 progress 全部丢给 `handlePopRoute`，表现与「没开预测返回」完全一样；
     Hero 在低层路由未布局时测量 `RenderBox` 抛断言是已知来源
     （flutter#194447，Android 17 实测），SnackBar 自带的 Hero 同样参与。
-    排查顺序：`test/theme/predictive_back_test.dart` 先验证主题 builder；
+    排查顺序：`test/misc_test.dart` 先验证主题 builder；
     真机抓 `CoreBackPreview ... mIsAnimationCallback=true` 与 debug 日志里的
     首次异常；不要给 NavigatorObserver 加可能抛异常的副作用。
 

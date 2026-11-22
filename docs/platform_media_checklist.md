@@ -327,7 +327,7 @@ network client、network server 为 `true`，并断言没有开启 `device.audio
 `test/architecture/platform_config_test.dart` 断言：桌面入口文件名、CMake `APPLICATION_ID`、
 Dart `linuxMediaSessionAppId`、`StartupWMClass` 四处相等；桌面入口 `Name` 等于 Dart
 `linuxMediaSessionDisplayName`；`Exec` 等于 CMake `BINARY_NAME`。桌面入口的键 / 图标契约
-仍由 `test/packaging/linux_desktop_test.dart` 拥有，本守卫不重复。
+仍由 `test/tool/tool_test.dart` 拥有，本守卫不重复。
 
 **仍然手动**：`desktop-file-validate`、安装后 dock / app menu 图标、真实 MPRIS 总线上的
 控制响应。

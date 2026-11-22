@@ -6,7 +6,7 @@
   `lib/widgets/collection_spine.dart`、`lib/widgets/playlist_cover.dart`、
   `lib/services/library/playlist_folder_prefs.dart`、
   `lib/providers/collection_presenter.dart`、`lib/providers/library_collections.dart`、
-  ADR-0022、`docs/architecture.md` §6、`test/app/favorites_layout_test.dart`
+  ADR-0022、`docs/architecture.md` §6、`test/app/favorites_test.dart`
 
 ## 背景
 
@@ -59,9 +59,9 @@
   编辑 / 展示描述。未来若要恢复，必须重新评估列表标题行密度。
 - 动图封面是明文二进制文件，同步只接受 JPEG / GIF / WebP 且 MIME 必须与
   实际字节一致；PNG 等其它格式仍被跳过。
-- 回归钉子：`test/app/favorites_layout_test.dart`、`test/local_library_ui_test.dart`、
-  `test/playlist_experience_test.dart`、`test/services/custom_cover_store_test.dart`、
-  `test/sync_cover_adapter_test.dart`。
+- 回归钉子：`test/app/favorites_test.dart`、`test/library_test.dart`、
+  `test/collection_test.dart`、`test/services/misc_services_test.dart`、
+  `test/sync_core_test.dart`。
 
 ## 修订：桌面宽屏恢复表格列（2026-11-14）
 

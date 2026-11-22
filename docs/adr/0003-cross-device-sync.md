@@ -101,7 +101,7 @@
    > 类型转换）。登记表此前已漏掉真实键（如 `ai_dj_enabled` /
    > `source_swap_auto_enabled`），现按「跟人走」登记；
    > 漏登记从此等于显式选择不同步，由
-   > `test/architecture/settings_keys_test.dart` 守住「一个键一个家」。
+   > `test/architecture/architecture_guards_test.dart` 守住「一个键一个家」。
 7. **落位与接线**：领域模型 / 端口在 `lib/domain`；引擎、适配器、传输、状态存储在
    `lib/data/sync`；`SyncProvider` 提供 UI 状态；组合根在 `main.dart` 创建并在
    启动 / 数据变更去抖 / 每 10 分钟 / 回前台时触发同步。Web 隐藏入口（传输依赖
@@ -816,6 +816,6 @@ body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
   直到用户关闭该传输或修好配置。
 - 状态、线上格式、报告五态与 UI 文案均不变；既有日志里的 `partial` /
   `noPeers` 解释不受影响。
-- 判据矩阵固定在 `test/sync_round_queue_test.dart`（显式构造每路传输报告）：
+- 判据矩阵固定在 `test/sync_engine_test.dart`（显式构造每路传输报告）：
   两路成功 / 一路失败 / 一路不可用 / 关闭传输 / 错误但零失败计数 / 纯接触 /
   pull-only / 范围外保留。

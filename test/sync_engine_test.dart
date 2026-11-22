@@ -17,6 +17,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/memory_database.dart';
 import 'support/sync_test_support.dart';
+import 'sync_control_plane_cases.dart' as sync_control_plane;
+import 'sync_round_queue_cases.dart' as sync_round_queue;
+import 'sync_round_stage_cases.dart' as sync_round_stage;
+import 'sync_scheduler_cases.dart' as sync_scheduler;
 
 /// 引擎测试：一轮同步的拉取 → 合并 → 应用 → 推送 → **报告与日志**。
 ///
@@ -1122,6 +1126,10 @@ void main() {
     expect(state.isPeerConnectNotified('devB'), isTrue);
     expect(state.isPeerConnectNotified('devC'), isTrue);
   });
+  group('sync control plane', sync_control_plane.main);
+  group('sync round queue', sync_round_queue.main);
+  group('sync round stage', sync_round_stage.main);
+  group('sync scheduler', sync_scheduler.main);
 }
 
 LanPeerSighting _sighting({

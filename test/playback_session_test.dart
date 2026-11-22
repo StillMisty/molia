@@ -18,6 +18,9 @@ import 'package:molia/services/playback_feel_store.dart';
 import 'package:molia/services/playback_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'playback_session_coordinator_cases.dart'
+    as playback_session_coordinator;
+import 'playback_session_store_cases.dart' as playback_session_store;
 import 'support/fakes.dart';
 import 'support/memory_database.dart';
 
@@ -935,4 +938,7 @@ void main() {
     expect(store.saves, hasLength(2));
     expect(store.saves.last.position, const Duration(seconds: 8));
   });
+
+  group('playback session coordinator', playback_session_coordinator.main);
+  group('playback session store', playback_session_store.main);
 }

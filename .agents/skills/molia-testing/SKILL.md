@@ -13,7 +13,7 @@ description: 新增、修改或精简 Molia 测试（test/**、integration_test/
 ## 不写
 
 - 复述实现的断言；下层已专测的重复覆盖——同一行为只测一处，例如缓存语义只在
-  `test/catalog/request_cache_test.dart`；
+  `test/catalog/catalog_impl_test.dart`；
 - 纯冒烟 / 布局（「不溢出」「可渲染」每页至多留一条代表）；
 - 锁死动画时长与像素中间帧的实现细节（优先断言端点 + 不变量）；
 - 占位功能的完整错误矩阵（真实协议接入时在替换层补回，先留 TODO）。

@@ -3,7 +3,7 @@
 - 状态：已采纳
 - 日期：2026-11-14
 - 相关：`lib/domain/models/cast.dart`、`lib/domain/ports/cast_ports.dart`、
-  `lib/services/cast/`、`test/services/cast_test.dart`、`docs/architecture.md` §8
+  `lib/services/cast/`、`test/services/misc_services_test.dart`、`docs/architecture.md` §8
 
 ## 背景
 

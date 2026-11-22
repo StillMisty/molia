@@ -5,7 +5,7 @@
 - 相关：`lib/data/molia_database.dart`、`lib/data/molia_database.g.dart`、
   `lib/data/library_repository.dart`、`lib/data/play_statistics_repository.dart`、
   `lib/providers/local_database_provider.dart`、`build.yaml`、`drift_schemas/`、
-  `test/database_schema_test.dart`、`test/support/memory_database.dart`
+  `test/misc_test.dart`、`test/support/memory_database.dart`
 
 ## 背景
 
@@ -37,7 +37,7 @@
    用 `@TableIndex.sql('CREATE UNIQUE INDEX ... WHERE ...')` 保留原文；表级
    `UNIQUE` 与外键用 `customConstraints` 原样声明；`build.yaml` 的
    `case_from_dart_to_sql: preserve` 让 drift 不把列名转成 snake_case。
-   平移由 `test/database_schema_test.dart` 钉住（PRAGMA 逐列 + 索引 SQL 原文 +
+   平移由 `test/misc_test.dart` 钉住（PRAGMA 逐列 + 索引 SQL 原文 +
    外键级联 + UNIQUE/部分唯一索引行为）。
 4. **执行器用 `drift_flutter`，默认后台 isolate**：`driftDatabase(name: ...,
    native: DriftNativeOptions(databaseDirectory: ...))` 内部走
@@ -68,7 +68,7 @@
    `dart run build_runner build` + `dart run drift_dev make-migrations`，生成
    `drift_schemas/molia/` 的 schema 快照与 `lib/data/molia_database.steps.dart`，
    用 `stepByStep` 写增量迁移并保留数据；迁移测试在
-   `test/drift/molia/migration_test.dart`（空库 schema 校验 + 带数据升级）。
+   `test/data/data_test.dart`（空库 schema 校验 + 带数据升级）。
    当前迁移链：`v1` 基线 → `v2` 新增 `sync_known`（同步已知版本登记）
    → `v3` 新增增量日志（`sync_journal` + `sync_journal_state`）。
 
@@ -98,7 +98,7 @@
 - `package:drift/native.dart` 仍只出现在生产连接与测试内存库 helper 中；
   Web 继续不初始化数据库。
 - 本文头部的 `lib/providers/local_database_provider.dart` 与
-  `test/drift/molia/migration_test.dart` 等路径已随本次清理删除，仅作历史引用。
+  `test/data/data_test.dart` 等路径已随本次清理删除，仅作历史引用。
 
 ## 后果
 

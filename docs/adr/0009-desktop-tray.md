@@ -6,7 +6,7 @@
   `lib/services/window/tray_menu_labels.dart`、`lib/services/window/tray_settings.dart`、
   `lib/services/window/window_chrome.dart` / `window_chrome_io.dart` / `window_chrome_stub.dart`、
   `lib/widgets/settings/general_settings_section.dart`、`lib/main.dart`、`assets/icons/tray_icon.png`、
-  `test/architecture/tray_import_test.dart`、`integration_test/lx_engine_integration_test.dart`、
+  `test/architecture/architecture_guards_test.dart`、`integration_test/lx_engine_integration_test.dart`、
   ADR-0004、`docs/pitfalls.md` #30 / #35
 
 ## 背景
@@ -73,7 +73,7 @@ Linux / Windows 桌面端此前只有「关掉窗口 = 进程退出」一条路�
    组合根按当前语言解析（`TrayMenuLabels`）。
 6. **架构约束与 window_chrome 同构**：`app_tray.dart` 条件导出 stub/io，
    全仓只有 `app_tray_io.dart` import `tray_manager` / `nativeapi`，
-   由 `test/architecture/tray_import_test.dart` 扫描强制。
+   由 `test/architecture/architecture_guards_test.dart` 扫描强制。
 7. **托盘对象生命周期**：nativeapi 的 `TrayIcon` / `Menu` / `MenuItem` /
    `Image` 都挂 finalizer，对象被 GC 会释放原生句柄（图标/菜单无声消失）：
    创建过的一切由 `AppTray` 静态字段持有到 `dispose()`。
@@ -112,7 +112,7 @@ Linux / Windows 桌面端此前只有「关掉窗口 = 进程退出」一条路�
 ## 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：全绿（含 `test/architecture/tray_import_test.dart`）；
+- `flutter test --no-pub`：全绿（含 `test/architecture/architecture_guards_test.dart`）；
 - `tool/agent/test.sh linux`：集成用例全绿，含
   「桌面托盘：创建 / 更新 / 销毁冒烟」与窗口 hide → show 可见性往返
   （Xvfb 无面板环境不得崩）；

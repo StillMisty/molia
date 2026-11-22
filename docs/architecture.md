@@ -1017,7 +1017,7 @@
 - **口径唯一**：`PlayStatisticsLimits.qualifiedThresholdMs` / `isQualified`
   （`listenedMs ≥ min(30s, 50% × 时长)`）是「有效播放」的唯一实现；SQL 谓词
   （查询实现内的 `_qualifiedPredicate`）与 AI 跳过判定都从它派生，SQL↔Dart
-  一致性由 `test/play_statistics_formula_test.dart` 用同一批 fixture 行对照
+  一致性由 `test/statistics_test.dart` 用同一批 fixture 行对照
   （曾经 SQL / Dart / AI 三份手写，奇数时长上 AI 还差 1ms）；
 - **范围值类型**：`PlayStatisticsRange` + `startOf(now)` / `sinceMs(now)`
   （领域扩展）是范围 → 时间窗口的唯一映射；provider 用一次加载的
@@ -1270,7 +1270,7 @@
   `lib/services/audio_cache_store.dart`（Audio cache store），`CacheService`
   的同名实例方法是薄委托；缓存文件名写入侧（`SourceTrack.songId`）与读取侧
   （`TrackId.id`）必须同名（回归测试见
-  `test/services/track_local_data_service_test.dart`）；
+  `test/services/misc_services_test.dart`）；
 - **落库**：drift `downloads` 表（`filePath` 可空——记录可以只含
   歌词或只含封面；`publicUri` 存 Android 公共副本定位；`imported` 标记
   **本地导入**：就地引用用户文件、删除只移行）存原音源曲目键 +
@@ -1399,8 +1399,8 @@
   `playback_volume` / `playback_muted`、窗口的 `window_bounds_x…` 四键）。
   哪些键已迁移以 `device_settings_keys.dart` 的键表为准，store 只保留字段选择与
   旧版兜底；不登记、不同步。新代码直连 `SharedPreferences` 由
-  `test/architecture/prefs_usage_test.dart` 拦截（白名单只剩非设置状态，只减不增），
-  设备键名字面量由 `test/architecture/settings_keys_test.dart` 扫描；
+  `test/architecture/architecture_guards_test.dart` 拦截（白名单只剩非设置状态，只减不增），
+  设备键名字面量由 `test/architecture/architecture_guards_test.dart` 扫描；
 - `settings_access.dart`：模块面 `SettingsAccess`（`read` / `contains` /
   `write` / `clear`；`contains` 只用于「缺键才物化默认值」）；
   重载只能经 `SettingsRegistry.mount(SettingsModule)` 与作用域一起绑定，
@@ -1419,9 +1419,9 @@
   `SettingsKey.defaultValue`（主题 / 导航 / 快捷键 / 统计等），字段里不再复制
   一份字面量；
 - 键的名字字面量只准出现在 `settings_keys.dart`
-  （`test/architecture/settings_keys_test.dart` 扫描 `lib/**` 强制）；
+  （`test/architecture/architecture_guards_test.dart` 扫描 `lib/**` 强制）；
   整表注册表只准在组合根与设置层构造
-  （`test/architecture/settings_registry_usage_test.dart` 扫描强制）：
+  （`test/architecture/architecture_guards_test.dart` 扫描强制）：
   漏登记 = 显式选择「不同步」，私建注册表 = 漏同步钩子，都不再是静默漂移。
 
 同步适配器（`PrefsSyncAdapter`）不再自带键表与类型转换：键规格、默认值与读写
@@ -1841,7 +1841,7 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
 - 色彩契约：`primary` 只用于交互/选中/强调图形；正文 `onSurface`、次要文本 `onSurfaceVariant`；
   容器配 `on*Container`；状态色走 `AppSemanticColors`（错误用 `scheme.error`）。
   禁止 `Colors.*`/`Color(0x...)` 字面量、`withAlpha/withOpacity`、
-  `scaffoldBackgroundColor/dividerColor` 双源属性（`test/architecture/color_usage_test.dart` 扫描强制）。
+  `scaffoldBackgroundColor/dividerColor` 双源属性（`test/architecture/architecture_guards_test.dart` 扫描强制）。
 - 当前曲目（曲目列表）：标题 `primary` + 封面右下角 `primary` 圆形状态角标
   （播放中自绘均衡器动画（PlayingIndicator 3 柱起伏）/ 暂停同一均衡器原地冻结、
   不换暂停图标，见 `widgets/current_track_cover.dart`）；减弱动效时静态显示，
@@ -1889,11 +1889,11 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   `material_3_expressive`（版本见 `pubspec.yaml`）未公开导出 `M3EListReorderHost` /
   `M3EListReorderExclude`，公开的 `M3EList(reorder: true)` 会二次包裹行并顶掉行尾
   操作；保留显式手柄与 `itemExtent`，白名单在
-  `test/architecture/m3e_component_usage_test.dart`。
+  `test/architecture/architecture_guards_test.dart`。
 - **排版**：UI 一律 `context.typeScale`（`lib/theme/m3e_context.dart`），强调位
   （品牌名 / 播放页标题 / 收藏合集标题）用 `emphasizedTypeScale`；不直接读
   `ThemeData.textTheme`、不写 `w600/w800/w900`；护栏
-  `test/architecture/m3e_typography_test.dart`（海报服务无 context，字号走固定
+  `test/architecture/architecture_guards_test.dart`（海报服务无 context，字号走固定
   设计稿，但字重仍只用 w400 / w500 / w700 档位）。
 - **已知例外**（`m3e_component_usage_test` 白名单）：3 处 `ReorderableListView`；
   2 处 `SelectableText`（M3E 无可选文本件）；热力图 `Tooltip`（需要 400ms wait，
@@ -1943,7 +1943,7 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
 - 形状：圆角只用 `M3EShapes` 档位（xs 4 / sm 8 / md 12 / lg 16 / xl 28 / full）；
   胶囊写 `const BorderRadius.all(Radius.circular(M3EShapes.full))`（包内没有
   `radiusFull` 常量）。由尺寸推导的圆角（`height / 2` 等）不受限；护栏
-  `test/architecture/shape_usage_test.dart`。
+  `test/architecture/architecture_guards_test.dart`。
 - 设置页：首屏 9 个语义分区（外观 / 播放 / 歌词 / 音源与在线服务 /
   曲库与存储 / 数据与备份 / 通用 / 桌面〔仅桌面〕/ 关于与更新），不设纯目录
   子页；同一域只在一张卡，卡内按「常用 → 少用、开关 → 入口」排序，低频长表单
@@ -2001,7 +2001,7 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   只由它插入的手势 detector 提供，换成普通 builder 会静默退化成「能返回、无预览」
   （`WidgetsBinding._handleCommitBackGesture` 无观察者时走 `handlePopRoute`）。
   主题统一沿用依赖包默认 map（`ThemeData.pageTransitionsTheme` 不手写平台
-  子集），`test/theme/predictive_back_test.dart` 钉住 Android 仍是预测返回。
+  子集），`test/misc_test.dart` 钉住 Android 仍是预测返回。
   `<application>` 与 `MainActivity` 两处都声明 `enableOnBackInvokedCallback="true"`
   （Android 15+ 以 activity 级值为准，部分 OEM 忽略 application 级）。
   跟手预览还要求系统真的往 Dart 派发 progress：部分 OnePlus / ColorOS 机器只给
@@ -2024,11 +2024,11 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   - 子页手势：弹层 `predictiveBackShrinkX/Y` 归 0，只显示与 push 一致的
     FadeForwards 页面退场；提交只退子页，弹层保留（guard 读 coordinator 返回 false）。
   - 首屏手势：弹层正常收缩，提交关闭弹层。
-  协议本身由 `test/modal_page_navigator_test.dart` 直接覆盖
+  协议本身由 `test/collection_test.dart` 直接覆盖
   （含微任务重置时机）。
 - 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；
   唯一例外 `library_music_outlined`（资料库未选中半对；音符图标已改用 `MoliaMark` 组件）。
-  `test/architecture/icon_usage_test.dart` 扫描强制。**同一按钮的状态图标切换**统一走
+  `test/architecture/architecture_guards_test.dart` 扫描强制。**同一按钮的状态图标切换**统一走
   `lib/widgets/icon_swap.dart::IconSwap`（150ms emphasized 交叉淡入 + 0.85→1 轻微缩放、
   减弱动效跳变），不要在调用点裸写 `AnimatedSwitcher`；底部导航 `icon↔selectedIcon`
   由包内 `M3ENavIconScale` 负责，不要再叠。
@@ -2094,7 +2094,7 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
     icon-only 动作按方形静止宽渲染（sm 40×40）；**图标按钮的语义一律走
     `semanticLabel`、不做悬浮提示**（icon 自解释时，hover / 长按 / 键盘焦点弹的
     气泡只是噪音，桌面鼠标扫过尤其明显；`tooltip` 只留给图标表达不了的文本：
-    热力图数据值、页圆点隐藏标题；护栏 `test/architecture/tooltip_usage_test.dart`）。
+    热力图数据值、页圆点隐藏标题；护栏 `test/architecture/architecture_guards_test.dart`）。
     纯图标动作需要中性色时用 `style: text` +
     组级 `decoration.foregroundColor`（`material_3_expressive ≥ 1.2.0`）；
   - 「主操作 + 变体 / 次要出口」→ `M3ESplitButton`（播放全部 ▾ 随机播放全部·加入列表、

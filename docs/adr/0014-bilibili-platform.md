@@ -98,7 +98,7 @@ B 站没有「歌曲」实体：搜索结果与收藏夹都是视频，播放的
   会话重试、UP 空间接口搜索兜底、收藏夹 `info` 容忍后续页缺失；仍可能因平台
   策略变化整体不可用。
 - **WBI / buvid**：密钥轮换与 Cookie 失效靠 1 小时缓存 + 刷新兜底；算法由固定
-  测试向量钉住（`test/bili_misc_test.dart`）。
+  测试向量钉住（`test/bili_test.dart`）。
 - **请求头**：B 站直链 / 封面 / 短链都校验 UA + Referer；headers 透传由
   `test/bili_*_test.dart` 与播放链路测试覆盖，真机播放另做手工验证
   （见「待人工」）。

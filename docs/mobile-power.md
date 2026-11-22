@@ -66,9 +66,9 @@ flutter test --no-pub
 
 覆盖点：
 - `test/playback/playback_power_policy_cases.dart`：后台门控组合与幂等通知；
-- `test/services/playback_observer_test.dart`：移动端后台不预取封面、回前台补；
-- `test/services/artwork_palette_service_test.dart`：后台无悬浮窗不取色、开悬浮窗允许；
-- `test/playback/next_track_preloader_test.dart`：直链仍预热、字节预取可门控；
+- `test/services/misc_services_test.dart`：移动端后台不预取封面、回前台补；
+- `test/services/misc_services_test.dart`：后台无悬浮窗不取色、开悬浮窗允许；
+- `test/playback/playback_core_test.dart`：直链仍预热、字节预取可门控；
 - `test/playback/sleep_timer_test.dart`：前台 arm 不持锁、退后台重排持锁。
 
 真机 / 模拟器（待补基线）：

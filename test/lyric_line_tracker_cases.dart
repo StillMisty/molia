@@ -111,11 +111,6 @@ void main() {
     ]);
   });
 
-  test('正值偏移让歌词提前显示', () {
-    expect(track(const Duration(seconds: 4)).index, 0);
-    expect(track(const Duration(seconds: 4), offsetMs: 1000).index, 1);
-  });
-
   test('扩展行按开关独立组装，缺失的扩展文本不占位', () {
     expect(track(const Duration(seconds: 5)).extended, ['五']);
     expect(track(const Duration(seconds: 5), roma: true).extended, ['五', 'go']);

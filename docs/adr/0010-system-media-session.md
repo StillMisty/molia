@@ -145,7 +145,7 @@ LocalPlaybackService ──监听──▶ LocalAudioHandler ──▶ MediaSess
 ## 验证
 
 - `flutter analyze --no-pub`：0 issue；
-- `flutter test --no-pub`：全绿（含 `test/playback/media_session_backend_test.dart`、
+- `flutter test --no-pub`：全绿（含 `test/playback/playback_core_test.dart`、
   重写的 `local_audio_handler_test.dart`、`media_session_pause_session_test.dart`、
   `artwork_cache_test.dart` 的 `cachedFilePath` 用例）；
 - `flutter build apk --debug`：验证 Android 原生 / Manifest / 依赖；

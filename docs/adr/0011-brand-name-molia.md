@@ -7,7 +7,7 @@
   `ios/Runner/zh-Hans.lproj/InfoPlist.strings`、
   `linux/packaging/share/applications/top.stillmisty.molia.desktop`、
   `windows/runner/Runner.rc`、`windows/installer/molia.iss`、
-  `test/packaging/linux_desktop_test.dart`、ADR-0012、`docs/pitfalls.md` #59 / #60
+  `test/tool/tool_test.dart`、ADR-0012、`docs/pitfalls.md` #59 / #60
 
 ## 背景
 
@@ -47,7 +47,7 @@
 ## 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：全绿，含 `test/packaging/linux_desktop_test.dart`
+- `flutter test --no-pub`：全绿，含 `test/tool/tool_test.dart`
   新增的「不再有本地化名字」断言；
 - `tool/agent/test.sh linux`：端到端（托盘 / 窗口用例）不受改名影响；
 - Windows 试构建（CI `windows-dev`，见 ADR-0012）：安装后开始菜单只有 `Molia`、

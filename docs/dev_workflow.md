@@ -136,7 +136,15 @@ dart run tool/agent/cli.dart docs check  # 改文档 / 版本 / workflow 时
 - `--no-pub` 是显式声明「依赖已就绪」；首次检出或改过 `pubspec.yaml` 后不要加。
 - 测试按模块聚合：小用例并进同模块 `*_test.dart`；`*_cases.dart` 只是聚合套件的
   用例库，`flutter test` 不会单独发现它。每个测试文件都有独立的 engine/kernel 装载
-  开销（约 1s，与文件大小无关），拆得越碎全量越慢。
+  开销（约 1s，与文件大小无关），拆得越碎全量越慢。当前默认集是 45 个模块套件，
+  本机全量约 26s。
+- 聚合有两条硬边界，违反会互相污染（表现为 HTTP 一律 400、prefs 读到别的用例的
+  值）：
+  1. **真实 HTTP / 端口**用例单独成文件：同进程里只要有
+     `TestWidgetsFlutterBinding.ensureInitialized()`，后续 `HttpClient` 会被
+     flutter_test 的 HttpOverrides 桩成 400；
+  2. **依赖干净全局状态**的配置用例（prefs / 静态服务接线）单独成文件，不要和
+     会缓存 `SharedPreferences` 实例或留下异步清理的套件合并。
 - `test/architecture/` 是硬约束：分层 import、`Icons.*_rounded`、只走
   ColorScheme / `AppSemanticColors`、`context.typeScale` 排版。它们和普通单测一起
   跑，不需要单独命令。

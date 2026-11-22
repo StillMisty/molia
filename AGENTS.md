@@ -35,7 +35,7 @@ Android CLI 1.1.16919734。
 
 ```bash
 flutter analyze --no-pub   # 必须 0 error / 0 warning
-flutter test --no-pub      # 全量（默认集，本机 <30s）；单文件：flutter test test/lx_core_test.dart --no-pub
+flutter test --no-pub      # 全量（默认集，本机 <30s）；单文件：flutter test test/lx_test.dart --no-pub
 dart run tool/agent/cli.dart -h                # 跨端工具入口：info/deps/analyze/test/smoke/app/emu/win/size/perf…（ADR-0031）
 dart run tool/agent/cli.dart test linux        # 端到端（真实引擎 + 设置页 + 窗口/托盘，不含播放）；默认后台（打印日志/状态路径），--wait 等结果；Xvfb 无窗口，桌面看门狗勿删
 dart run tool/agent/cli.dart test android      # 同一套跑模拟器（先 emu start）；同样默认后台；--window / --timeout 见命令用法
@@ -124,7 +124,7 @@ sources/playback。模块布局与体积由 `test/architecture/module_layout_tes
   颜色只走 ColorScheme/`AppSemanticColors`（透明度用 `withValues(alpha:)`）；优先 `M3E*` 组件；
   禁止 import `package:flutter/material.dart`；
   排版走 `context.typeScale` / `emphasizedTypeScale`（`lib/theme/m3e_context.dart`），
-  `textTheme` 与 `w600/w800/w900` 由 `test/architecture/m3e_typography_test.dart` 拦截；
+  `textTheme` 与 `w600/w800/w900` 由 `test/architecture/architecture_guards_test.dart` 拦截；
   顶栏 / 弹层 / 排序的 M3E 口径见 `docs/architecture.md` §6；
 - UI 视觉改动（共享工具栏 / 选择器 / 弹层）先跑 `tool/agent/ui_preview.sh` 生成 360/640 图并
   `read` 检查再提交；单测的 `didExceedMaxLines` 发现不了「chip 把输入区挤窄」这类比例问题；

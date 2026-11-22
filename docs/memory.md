@@ -164,7 +164,7 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
 ## 5. 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：全绿（新增 `test/services/memory/app_memory_manager_test.dart`
+- `flutter test --no-pub`：全绿（新增 `test/services/misc_services_test.dart`
   以及 observer / ArtworkThemeSync 的后台门控用例）；
 - `dart run tool/agent/cli.dart test linux`：集成用例全绿（含窗口 chrome hide → show 往返）；
 - 真实应用托盘往返：见 §4.3 的三行 `molia.memory` 与同刻断言；
@@ -204,7 +204,7 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
 - 组合根在 `lib/app/bootstrap/wiring/memory_wiring.dart` 注册这些 releaser；
   AppMemoryManager 不反向依赖 provider。
 
-验证：`test/services/memory/app_memory_manager_test.dart` 等 17 个新增用例覆盖
+验证：`test/services/misc_services_test.dart` 等 17 个新增用例覆盖
 「托盘触发 / 最小化不触发 / 快速可见往返跳过 / 在途读取作废 / 停止播放清队列引用」。
 
 **观测限制**：同一 debug 进程、500 首收藏（mock raw 只有 `{songId}`）里，
@@ -224,7 +224,7 @@ raw payload / 多列表详情场景请按 §4 的隔离 HOME + 真实库复测�
 | `lib/services/memory/app_memory_manager.dart` | 完整上限 `kFullImageCacheLimitBytes = 64 MiB`，托盘 / 后台保持 16 MiB；`onAppBackground()` / `onAppForeground()` 供移动端生命周期使用（不写 `AppPresence`）：退后台 30s 后 `imageCache.clear()`（**不** `clearLiveImages()`）+ 上限压到 16 MiB，回前台取消计时并恢复 64 MiB；token + 重复事件幂等 |
 | 同上 | `addLowMemoryReleaser()` / `onMemoryPressure()`：只有系统低内存才释放浏览 / 搜索 / 目录缓存；Android 的 `TRIM_MEMORY_UI_HIDDEN` 也会映射成 `didHaveMemoryPressure`，用 1s 去抖 + 退后台过渡窗口取消，避免每次切后台清列表 |
 | `lib/providers/library_provider.dart` | 列表曲目读投影改 LRU（`_playlistTracksReads`），上限 5 个列表；`playlistTracksView` / `ensurePlaylistTracks` 触碰最近使用，淘汰时跳过当前展示列表；`releaseBrowseCaches()` 语义不变（全清） |
-| `test/services/memory/app_memory_manager_test.dart`、`test/library_provider_test.dart` | 覆盖 64 / 16 / 64、30s 延迟、快速往返、重复退后台、dispose、低内存与 UI_HIDDEN 区分、LRU 淘汰与 release |
+| `test/services/misc_services_test.dart`、`test/library_test.dart` | 覆盖 64 / 16 / 64、30s 延迟、快速往返、重复退后台、dispose、低内存与 UI_HIDDEN 区分、LRU 淘汰与 release |
 
 为什么移动端不 `clearLiveImages()`：Android 退后台不卸载 widget 树，当前封面仍被
 `Image` 持有；清 live 会让回前台第一帧封面空白。`imageCache.clear()` 只清
@@ -325,7 +325,7 @@ pending / keepAlive，当前展示的封面不受影响。
 | --- | --- |
 | `lib/services/memory/app_memory_manager.dart` | 新增 `addLowMemoryFlusher()`；真实低内存去抖通过后，先并发启动现场保存，再释放浏览 / 搜索 / 目录缓存。单个保存失败只记日志，不阻塞其它保存与缓存清理；UI_HIDDEN 伪低内存仍在退后台时取消，不白写盘 |
 | `lib/app/bootstrap/wiring/memory_wiring.dart` | 注册唯一保存入口：`suspendPlaybackSession()` + `playStatisticsService.flush()`。与缓存 releaser 分开注册，managers 层不反向依赖 playback / library 类型 |
-| `test/services/memory/app_memory_manager_test.dart` | 覆盖「去抖后才保存」「伪低内存不保存」「单个保存抛错不影响其它保存与缓存释放」 |
+| `test/services/misc_services_test.dart` | 覆盖「去抖后才保存」「伪低内存不保存」「单个保存抛错不影响其它保存与缓存释放」 |
 
 为什么不接金标联盟（ITGSA）的 `TRIM` / `KILL` 广播：那套协议要求 3s 内通过 Binder 回执，主要服务内存大户与商店评测；Molia 实测 PSS 约 300–400MB，离 Android 17 的 per-app 上限（4GB 设备前台约 2GB）很远。这里只复用 Android 官方 `onTrimMemory` → `didHaveMemoryPressure` 语义：真实低内存时顺手把会话与统计落盘，成本一次 prefs / DB 写，不做厂商分叉、不主动杀进程。
 

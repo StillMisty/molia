@@ -150,7 +150,7 @@ lib/playback/
 ## 开发与验证
 
 - `flutter test`：加密向量、脚本元信息解析、引擎监督状态机、在线更新流程、
-  内置平台搜索解析（真实响应夹具）、专辑解析（`test/builtin_album_parse_test.dart`，
+  内置平台搜索解析（真实响应夹具）、专辑解析（`test/builtin_test.dart`，
   真实响应夹具）、any-listen 配置、架构分层扫描。
 - `node tool/lx_prelude_harness.mjs`：在 Node 沙箱中验证 prelude 协议全链路
   （inited → request → musicUrl → response、utils 桥接）。

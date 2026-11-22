@@ -4,7 +4,7 @@
 - 日期：2026-11-16
 - 相关：`lib/pages/settings_page.dart`、`lib/pages/settings_advanced_page.dart`、
   `lib/pages/downloads_and_cache_page.dart`、`lib/pages/lyrics_display/`、
-  `docs/architecture.md` §6、`test/widgets/settings_page_test.dart`
+  `docs/architecture.md` §6、`test/widgets/settings_test.dart`
 
 ## 背景
 

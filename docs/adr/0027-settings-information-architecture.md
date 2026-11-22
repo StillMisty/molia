@@ -4,7 +4,7 @@
 - 日期：2026-11-14
 - 相关：`lib/pages/settings_page.dart`、`lib/widgets/settings/`、
   `lib/pages/bottom_nav_settings_page.dart`、`lib/pages/backup_restore_page.dart`、
-  `docs/architecture.md` §6、`test/widgets/settings_page_test.dart`
+  `docs/architecture.md` §6、`test/widgets/settings_test.dart`
 
 ## 背景
 
