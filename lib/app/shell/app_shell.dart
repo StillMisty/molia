@@ -606,10 +606,8 @@ class _MyAppState extends State<MyApp>
     // （见 `widgets/desktop_layout.dart`）。
     if (_desktopShell) {
       return _withBackScope(
-        AdaptiveLayoutScope.scope(
-          context,
-          child: DesktopLayout.scope(
-            context,
+        AdaptiveLayoutScope.host(
+          child: DesktopLayout.host(
             child: DesktopShell(
               chrome: chrome,
               pageStack: _buildPageStack(),
@@ -668,62 +666,64 @@ class _MyAppState extends State<MyApp>
       ),
     );
 
-    final adaptive = AdaptiveLayoutScope.of(context);
-    final useRail = adaptive.usesNavigationRail;
     return _withBackScope(
-      AdaptiveLayoutScope.scope(
-        context,
-        child: DesktopLayout.scope(
-          context,
-          child: Scaffold(
-            appBar: appBar,
-            // 短横屏的发现页不随键盘缩正文：手机横屏可用高本就只有 ~290，
-            // 键盘再占一半后页头（渠道 + tab）与 200% 字号会直接溢出。
-            // 搜索框在页面顶部始终可见，结果列表让键盘覆盖、继续可滚动。
-            resizeToAvoidBottomInset:
-                !(adaptive.isShortViewport &&
-                    selectedDestination == ShellDestination.library),
-            // 横屏时左右安全区（刘海 / 侧边系统栏）要留给正文：应用开了
-            // drawUnderSystemBars，Android 又用 shortEdges，不避让时导航轨会
-            // 直接压到摄像头挖孔下面。顶栏的左右留白在 ShellAppBar 内容层处理，
-            // 这里只管正文；bottom 由底栏自己的 SafeArea 承担。
-            body: SafeArea(
-              top: false,
-              bottom: false,
-              child: Row(
-                children: [
-                  if (useRail)
-                    M3ENavigationRail(
-                      // 固定 96dp 窄轨（alwaysCollapse）：无展开按钮、不可展开；
-                      // 标签常显，替代 Material 侧 hover 才出现的 tooltip。
-                      type: M3ENavigationRailType.alwaysCollapse,
-                      selectedIndex: selectedIndex,
-                      onDestinationSelected: chrome.selectDestinationAt,
-                      sections: [
-                        M3ENavigationRailSection(
-                          destinations: chrome.railDestinations(),
+      AdaptiveLayoutScope.host(
+        child: DesktopLayout.host(
+          child: Builder(
+            builder: (context) {
+              final adaptive = AdaptiveLayoutScope.of(context);
+              final useRail = adaptive.usesNavigationRail;
+              return Scaffold(
+                appBar: appBar,
+                // 短横屏的发现页不随键盘缩正文：手机横屏可用高本就只有 ~290，
+                // 键盘再占一半后页头（渠道 + tab）与 200% 字号会直接溢出。
+                // 搜索框在页面顶部始终可见，结果列表让键盘覆盖、继续可滚动。
+                resizeToAvoidBottomInset:
+                    !(adaptive.isShortViewport &&
+                        selectedDestination == ShellDestination.library),
+                // 横屏时左右安全区（刘海 / 侧边系统栏）要留给正文：应用开了
+                // drawUnderSystemBars，Android 又用 shortEdges，不避让时导航轨会
+                // 直接压到摄像头挖孔下面。顶栏的左右留白在 ShellAppBar 内容层处理，
+                // 这里只管正文；bottom 由底栏自己的 SafeArea 承担。
+                body: SafeArea(
+                  top: false,
+                  bottom: false,
+                  child: Row(
+                    children: [
+                      if (useRail)
+                        M3ENavigationRail(
+                          // 固定 96dp 窄轨（alwaysCollapse）：无展开按钮、不可展开；
+                          // 标签常显，替代 Material 侧 hover 才出现的 tooltip。
+                          type: M3ENavigationRailType.alwaysCollapse,
+                          selectedIndex: selectedIndex,
+                          onDestinationSelected: chrome.selectDestinationAt,
+                          sections: [
+                            M3ENavigationRailSection(
+                              destinations: chrome.railDestinations(),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  Expanded(child: _buildPageStack()),
-                ],
-              ),
-            ),
-            bottomNavigationBar: useRail
-                ? null
-                : SafeArea(
-                    bottom: false,
-                    child: M3ENavigationBar(
-                      // iOS 使用紧凑高度（M3E 最小档 64）。
-                      size: defaultTargetPlatform == TargetPlatform.iOS
-                          ? M3ENavBarSize.small
-                          : M3ENavBarSize.medium,
-                      labelBehavior: M3ENavBarLabelBehavior.alwaysShow,
-                      selectedIndex: selectedIndex,
-                      onDestinationSelected: chrome.selectDestinationAt,
-                      destinations: chrome.barDestinations(),
-                    ),
+                      Expanded(child: _buildPageStack()),
+                    ],
                   ),
+                ),
+                bottomNavigationBar: useRail
+                    ? null
+                    : SafeArea(
+                        bottom: false,
+                        child: M3ENavigationBar(
+                          // iOS 使用紧凑高度（M3E 最小档 64）。
+                          size: defaultTargetPlatform == TargetPlatform.iOS
+                              ? M3ENavBarSize.small
+                              : M3ENavBarSize.medium,
+                          labelBehavior: M3ENavBarLabelBehavior.alwaysShow,
+                          selectedIndex: selectedIndex,
+                          onDestinationSelected: chrome.selectDestinationAt,
+                          destinations: chrome.barDestinations(),
+                        ),
+                      ),
+              );
+            },
           ),
         ),
       ),

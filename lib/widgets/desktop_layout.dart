@@ -49,6 +49,9 @@ class DesktopLayout extends InheritedWidget {
   final bool isDesktopPlatform;
 
   /// 解析时的窗口宽（屏幕宽语义）。
+  ///
+  /// 原始像素，**不作为通知判据**（见 [updateShouldNotify]）：桌面拖拽窗口
+  /// 时它每个像素都在变，消费它做连续布局的叶子应改用 `LayoutBuilder`。
   final double windowWidth;
 
   /// 解析时的实际栏宽（= M3E 导航轨折叠宽，默认 96）。
@@ -82,20 +85,53 @@ class DesktopLayout extends InheritedWidget {
   bool tableColumnsFor(TrackRowColumnSpec spec) =>
       contentWidth >= spec.minContentWidth;
 
-  /// 壳层提供入口：解析当前 context 的窗口宽 / 平台位，并用结果包住 [child]。
-  static Widget scope(BuildContext context, {required Widget child}) =>
-      _resolveLayout(context, child: child);
+  /// 壳层入口（不随逐像素尺寸重建的宿主）。
+  ///
+  /// `scope` 在调用方 build 里读 `MediaQuery.sizeOf`，会把原始像素注册成
+  /// 调用方的依赖（壳层每 1px 重建）。宿主把这次读取收在自己这一层，
+  /// [updateShouldNotify] 只看派生判据，向下只在真正影响版式时通知。
+  static Widget host({required Widget child}) =>
+      _DesktopLayoutHost(child: child);
 
   /// 消费入口：取壳层解析结果；无壳层时按当前 context 回退解析。
   static DesktopLayout of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<DesktopLayout>() ??
       _resolveLayout(context);
 
+  /// 通知判据：只比「会改变版式」的派生量。
+  ///
+  /// [windowWidth] 原始像素不作为判据：桌面拖拽窗口时它每 1px 都变，算进来
+  /// 会让所有消费方（收藏正文 / 搜索结果整棵滚动视图 / 曲库详情）每次尺寸
+  /// 变化都整页重建。需要连续宽度的叶子用 `LayoutBuilder` 读约束；
+  /// [contentWidth] 只在判据翻转的那一帧被读到，不能当连续值用。
   @override
   bool updateShouldNotify(DesktopLayout oldWidget) =>
       visible != oldWidget.visible ||
       (visible &&
           (isDesktopPlatform != oldWidget.isDesktopPlatform ||
-              windowWidth != oldWidget.windowWidth ||
-              railWidth != oldWidget.railWidth));
+              railWidth != oldWidget.railWidth ||
+              tableColumns != oldWidget.tableColumns ||
+              tableColumnsFor(TrackRowColumnSpec.history) !=
+                  oldWidget.tableColumnsFor(TrackRowColumnSpec.history)));
+}
+
+/// [DesktopLayout.host] 的实现：读取窗口宽与侧栏宽并解析一次。
+///
+/// 自身每个像素都会重建，但向下只在 [DesktopLayout.updateShouldNotify] 的
+/// 判据翻转时通知；子树的逐像素自适应交给局部 `LayoutBuilder`。
+class _DesktopLayoutHost extends StatelessWidget {
+  const _DesktopLayoutHost({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    return DesktopLayout(
+      isDesktopPlatform: isDesktopPlatform(),
+      windowWidth: width,
+      railWidth: M3ETheme.of(context).navigationRailTheme.collapsedWidth,
+      child: child,
+    );
+  }
 }

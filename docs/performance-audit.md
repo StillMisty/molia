@@ -1107,3 +1107,82 @@ p99 在不同轮次有 40–65ms 抖动（语义树开关、GC），方向是 **
   覆盖尺寸变化触发的 build/layout；桌面 drive 的 raster 恒 0，不作为光栅基线；
 - 未测：Windows 真实窗口 150Hz 的 raster / 合成器路径（用户目标环境），需要
   在 Windows 上用同一 profile 包 + 真实拖拽复测；macOS 同理。
+
+## 2026-11-23 桌面窗口 resize：作用域只按档位 / 阈值通知
+
+> 现象（Windows 实机）：拖窗口边框时内容明显落后鼠标，同为 Flutter 的
+> LocalSend 同机不卡。
+
+### 1. 实机探测（Windows 10/11，3840×2160 @150%，144Hz，已安装的
+0.5.0-beta.1+76）
+
+用外部探针（PowerShell + SendInput）按 ~2500px/s 快速拖右下角边框 2.4s，同机
+A/B LocalSend；同时采窗口矩形与光标位置、窗口消息循环响应、进程内各线程 CPU：
+
+| 应用 | 拖拽中内容更新率 | 窗口边缘滞后 | 消息循环 p95 | 拖拽中线程 CPU |
+| --- | ---: | ---: | ---: | --- |
+| Molia | **52.8 fps** | p95 4.2px（= 探针固定内缩量，即完全跟手） | 3.1ms | 77% + 40% + 21% + 17% |
+| LocalSend | **99.7 fps** | 同上 | 0.26ms | 36% + 12% |
+
+- 窗口矩形跟着光标走、平台消息循环不阻塞：**不是原生 resize 循环 / frameless
+  命中测试的问题**（nativeapi 在 Windows 保留 `WS_CAPTION | WS_THICKFRAME`，
+  只由 `WM_NCCALCSIZE` 吃掉非客户区）；
+- Molia 每个尺寸变化只出到 1/3 刷新率的帧、CPU 是 LocalSend 的 3 倍：瓶颈在
+  **每帧出图成本**。注意 150% 缩放下可见边框只有 ~3px（窗口矩形外还有 ~9px
+  不可见阴影沟），探针瞄 `GetWindowRect` 的角点会落在阴影里点不中窗口，
+  需用 `DWMWA_EXTENDED_FRAME_BOUNDS` 定位。
+
+### 2. 根因（每像素重建）
+
+- `MyApp.build` 里 `AdaptiveLayoutScope.scope(context)` / `DesktopLayout.scope`
+  读 `MediaQuery.sizeOf`：依赖挂在**整个壳层**上，窗口每动 1px，Scaffold +
+  AppBar + 导航轨 + 底部播放条全部重建；
+- `AdaptiveLayout` 的相等性、`DesktopLayout.updateShouldNotify` 都把原始像素
+  宽算进判据：可见页（收藏正文 / 搜索结果整棵 `CustomScrollView` / 曲库详情）
+  跟着逐像素重建；
+- `responsive.dart` 的 `layoutType` / `horizontalPadding` / `isLargeScreen` 等
+  结构判据直接读 `MediaQuery`，但结果只有四档：收藏页与表格行因此也逐像素
+  build；
+- `nowplaying_desktop_layout` 的播放器列宽读 `contentWidth`（连续值），是唯一
+  真正需要原始宽度的消费方。
+
+### 3. 改动
+
+- `AdaptiveLayout`：相等性只看 `sizeClass` + `isShortViewport`；新增
+  `AdaptiveLayoutScope.host`（宿主读一次 `MediaQuery.sizeOf`，向下只在档位
+  翻转时通知），壳层不再直接依赖原始尺寸；
+- `DesktopLayout`：`updateShouldNotify` 只比派生判据（平台位 / 栏宽 /
+  标准与历史两档表格阈值）；新增 `DesktopLayout.host`；
+- 播放器列宽改在本层 `LayoutBuilder` 按约束算（`nowplaying_desktop_layout`）；
+- 新增 `lib/widgets/viewport_class.dart`：`ViewportClassScope` 只按
+  `DeviceType`（350/400/600/900 四档）通知，`layoutType` / `horizontalPadding`
+  / `isLargeScreen` 等改读它；`screenWidth/size` 保持原始像素给弹层等叶子；
+  宿主放在 `themed_app` 的 `appBuilder` 里；
+- `DesktopShell` 的搜索条占位盒（`GlobalSearchOverlay.barTopFor` 读窗口高）
+  收进 `Builder`，避免整个骨架跟着高度逐像素重建。
+
+### 4. A/B（Linux / Xvfb / profile，`desktop-window-resize`）
+
+| 版本 | build p50 | build p95 | jank8 | latency16 |
+| --- | ---: | ---: | ---: | ---: |
+| main 基线 | 4.41 | 5.06 | 0 | 0 |
+| 本分支 | 3.73 | 5.22 | 1 | 0 |
+
+- build p50 **−15%**；p95 / jank 在噪声内（两个版本各自的首轮样本分别是
+  4.4/12.16/24 与 11.61/17.45/87，同机重跑即回落，不作结论）；
+- 这个场景用 `tester.view` 改尺寸，逐像素重建被测试宿主削弱，且
+  `buildDuration` 含布局：它主要衡量可见页重排，对本次「去通知」不敏感。
+  改动的收益应按 Windows 真实窗口复测（同上探针，`-Apps molia,localsend_app`）；
+- `flutter analyze --no-pub` 0 issue；`flutter test --no-pub` 3771 passed /
+  12 skipped；新增回归用例锁住「同档位 ±1dp 不重建、跨档位 / 阈值必须重建」
+  （`test/app/adaptive_layout_cases.dart`）。
+
+### 5. 未验证 / 下一步
+
+- 本机 Windows 侧 Flutter 是 Dart 3.13.5，仓库要求 `^3.14.0`，**无法在 WSL
+  构建同版本 Windows profile 包**；上表 Windows 数字来自已安装 beta，改动后的
+  真实窗口帧率需要在 Windows 上用同版本 SDK 构建后复测；
+- 剩余嫌疑在光栅侧：LocalSend 的引擎是 Dart 3.11.5（Flutter 较早版本，Windows
+  上大概率仍是 Skia），Molia 的 3.14 引擎同时带 Impeller / Skia。要排除渲染
+  后端，用 `--no-enable-impeller` 构建一次 Windows profile 包做同探针 A/B；
+  该开关只在引擎命令行，已安装的 release 包不能靠环境变量临时切换。

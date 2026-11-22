@@ -10,22 +10,9 @@ import 'adaptive_layout.dart';
 import 'focus_restore.dart';
 import 'm3e_page_route.dart';
 import 'page_modal.dart';
+import 'viewport_class.dart';
 
-/// 响应式设计断点常量
-/// 用于在整个应用中统一响应式行为
-abstract class Breakpoints {
-  /// 极窄设备 (小型手机，如 iPhone SE)
-  static const double compact = 350;
-
-  /// 标准手机宽度
-  static const double mobile = 400;
-
-  /// 平板/大屏幕手机
-  static const double tablet = 600;
-
-  /// 桌面/超宽屏幕
-  static const double desktop = 900;
-}
+export 'viewport_class.dart';
 
 /// 桌面平台（Linux / Windows / macOS）：桌面骨架与桌面专属交互的统一判定。
 ///
@@ -42,9 +29,6 @@ bool isDesktopPlatform([TargetPlatform? platform]) =>
       TargetPlatform.macOS => true,
       _ => false,
     };
-
-/// 设备类型枚举
-enum DeviceType { compact, mobile, tablet, desktop }
 
 /// 页面布局分类
 enum ResponsivePageType { shell, browse, detail, modal, preview }
@@ -83,28 +67,37 @@ class ResponsiveLayoutSpec {
 }
 
 extension ResponsiveExtension on BuildContext {
+  /// 原始窗口宽 / 高（连续像素）。
+  ///
+  /// 只给真正需要连续尺寸的叶子用（弹层宽度、诊断信息等）。结构判定一律
+  /// 走 [deviceType] / [layoutType]：它们读粗档作用域，桌面拖拽窗口时不会
+  /// 逐像素重建整页。
   double get screenWidth => MediaQuery.sizeOf(this).width;
 
   double get screenHeight => MediaQuery.sizeOf(this).height;
 
   Size get screenSize => MediaQuery.sizeOf(this);
 
-  bool get isCompact => screenWidth < Breakpoints.compact;
+  bool get isCompact => deviceType == DeviceType.compact;
 
+  /// 窄于标准手机宽（< [Breakpoints.mobile]）。
+  ///
+  /// 唯一仍按原始宽判定的查询：它的阈值（400）落在 [DeviceType] 的 mobile
+  /// 档（350–599）中间，粗档表达不出来。只给非结构用途，版式判定用
+  /// [layoutType] / [deviceType]。
   bool get isNarrow => screenWidth < Breakpoints.mobile;
 
-  bool get isLargeScreen => screenWidth >= Breakpoints.tablet;
+  bool get isLargeScreen =>
+      deviceType == DeviceType.tablet || deviceType == DeviceType.desktop;
 
-  bool get isDesktop => screenWidth >= Breakpoints.desktop;
+  bool get isDesktop => deviceType == DeviceType.desktop;
 
-  bool get isMobile => screenWidth < Breakpoints.tablet;
+  bool get isMobile => !isLargeScreen;
 
-  DeviceType get deviceType {
-    if (screenWidth < Breakpoints.compact) return DeviceType.compact;
-    if (screenWidth < Breakpoints.tablet) return DeviceType.mobile;
-    if (screenWidth < Breakpoints.desktop) return DeviceType.tablet;
-    return DeviceType.desktop;
-  }
+  /// 当前视口粗档：优先读 [ViewportClassScope]（只在跨档位时通知），
+  /// 无宿主时按窗口宽回退。
+  DeviceType get deviceType =>
+      ViewportClassScope.maybeOf(this) ?? deviceTypeForWidth(screenWidth);
 
   int get gridCrossAxisCount {
     return adaptiveColumns(
