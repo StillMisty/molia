@@ -5,15 +5,15 @@
 <h1 align="center">Molia</h1>
 
 <p align="center">
-  多音源、本地优先的音乐播放器。把搜索、发现、播放、歌词和资料库放进一个界面，<br>
-  数据留在你自己的设备上。
+  多音源、本地优先的跨平台音乐播放器。<br>
+  搜索、发现、播放、歌词与资料库集成于单一界面，数据默认保存在本机。
 </p>
 
 <p align="center">
   <a href="https://github.com/StillMisty/molia/releases"><img alt="Release" src="https://img.shields.io/github/v/release/StillMisty/molia?include_prereleases&color=6A8F7A&label=release"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-6A8F7A"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-6A8F7A"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-Android%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20iOS%20%C2%B7%20macOS-6A8F7A">
-  <img alt="Flutter" src="https://img.shields.io/badge/Flutter-stable-6A8F7A">
+  <a href="https://github.com/flutter/flutter/releases"><img alt="Flutter" src="https://img.shields.io/github/v/release/flutter/flutter?color=6A8F7A&label=Flutter"></a>
   <a href="https://github.com/StillMisty/molia/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/StillMisty/molia/actions/workflows/ci.yml/badge.svg"></a>
 </p>
 
@@ -21,72 +21,60 @@
 | :---: | :---: | :---: |
 | <img src="docs/images/now-playing.webp" width="250" alt="正在播放：Portra 400 / Arlo Parks"> | <img src="docs/images/search.webp" width="250" alt="搜索「Portra 400」"> | <img src="docs/images/discover.webp" width="250" alt="发现歌单"> |
 
-Molia 是一个用 Flutter 写的音乐播放器：内置 QQ 音乐、网易音乐、酷狗音乐、酷我音乐、咪咕音乐、汽水音乐和哔哩哔哩七个平台，也支持导入 [LX Music](https://github.com/lyswhut/lx-music-desktop) 自定义音源脚本。
+Molia 基于 Flutter 开发，内置七个内容渠道，并支持导入 [LX Music](https://github.com/lyswhut/lx-music-desktop) 音源脚本。
 
-## 功能一览
+## 功能
 
-### 一个播放器，接上你的音源
+### 内容渠道与音源
 
-- **七个内置渠道**：QQ 音乐、网易音乐、酷狗音乐、酷我音乐、咪咕音乐、汽水音乐与哔哩哔哩。五个音乐平台支持搜索、热榜、歌单、热门搜索、歌手页、专辑、评论和按歌词搜歌；汽水音乐支持搜索、推荐歌单、歌手页、专辑、评论与逐字歌词（取链由音源脚本提供，会员曲目匿名只能试听）；哔哩哔哩支持视频搜索、CC 字幕歌词、UP 主页、音乐榜和公开收藏夹导入。
-- **LX 音源脚本**：支持文件、粘贴和链接导入，启用 / 停用 / 排序、默认音质（默认 320K，自动降级）与 `@updateUrl` 一键更新。脚本在独立的 QuickJS isolate 中运行，崩溃后退避重启，连续失败才停用。
-- **原生歌词与封面**：内置平台按平台 id 精确取词取图，包含逐字歌词、翻译和罗马音；歌词与封面优先跟随歌曲来源渠道，本渠道取不到时再按歌名严格匹配兜底（封面不贴错版本）。
-- **自动换源**：当前音源取链失败时，自动换到其它可播放的音源找同一首歌。
+- **七个内置渠道**：QQ 音乐、网易音乐、酷狗音乐、酷我音乐、咪咕音乐、汽水音乐与哔哩哔哩。前五个音乐平台支持搜索、热榜、歌单、热门搜索、歌手页、专辑、评论与按歌词搜歌；汽水音乐支持搜索、推荐歌单、歌手页、专辑、评论与逐字歌词，曲目链接由音源脚本提供，会员曲目匿名状态下仅可试听；哔哩哔哩支持视频搜索、CC 字幕歌词、UP 主页、音乐榜与公开收藏夹导入。
+- **LX 音源脚本**：支持文件、粘贴与链接导入，可启用、停用与排序，可设置默认音质（默认 320K，失败时自动降级）。
+- **歌词与封面**：内置平台按平台 id 精确匹配，支持逐字歌词、翻译与罗马音。歌词与封面优先取自曲目来源渠道，无法获取时按歌名严格匹配兜底。
+- **自动换源**：当前音源取链失败时，自动切换至其它可播放音源的同曲目。
 
-### 听歌这件事，应该更顺手
+### 播放
 
-- 列表循环 / 顺序播放 / 单曲循环 / 随机播放，队列随时可看、可拖；
-- 冷启动恢复上次的曲目、队列、模式和进度；启动即回到「上次听到哪里」；
-- 后台播放、锁屏 / 通知栏 / 耳机键控制；Android 通知栏带「收藏」和「播放顺序」；
-- 睡眠定时：1–120 分钟滑杆倒计时（仅播放时计时），可选「本曲播完再停」；
-- 下载与缓存管理，桌面端可把正在播放的流写入本地缓存；
-- 省流模式：移动数据下自动压低音质、少加载封面，Wi-Fi 下恢复。
+- 支持列表循环、顺序播放、单曲循环与随机播放；播放队列可查看与拖拽调整。
+- 冷启动时恢复上次的曲目、队列、播放模式与进度。
+- 支持后台播放，以及锁屏、通知栏与耳机键控制；Android 通知栏提供收藏与播放顺序操作。
+- 睡眠定时：1–120 分钟倒计时，仅播放时计时，可选择「本曲播完再停」。
+- 提供下载与缓存管理；桌面端可将正在播放的流写入本地缓存。
+- 省流模式：移动数据下自动降低音质并减少封面加载，切换至 Wi-Fi 后恢复。
 
 ### 歌词
 
-- 逐字染色 / 卡拉 OK 式滚动，支持翻译与罗马音双行；
-- 手动滚动后暂停跟随，点一下回到当前行；
-- 按歌词搜歌、换歌词源（本地下载曲目除外）；
-- 桌面歌词（Android 悬浮窗）：点击穿透 / 可交互、字号与配色可调；
-- 歌词海报：选行、换字体、按封面或主题取色，导出分享图；
-- 歌曲信息页可看封面、音质、来源、歌词来源、评论、专辑与歌手。
+- 逐字染色与滚动，支持翻译、罗马音双行显示。
+- 手动滚动后暂停跟随，点击可回到当前行。
+- 支持按歌词搜歌与更换歌词源（本地下载曲目除外）。
+- 桌面歌词（Android 悬浮窗）：支持点击穿透与交互，字号与配色可调。
+- 歌词海报：可选行、更换字体、按封面或主题取色，并导出分享图。
+- 歌曲信息页展示封面、音质、来源、歌词来源、评论、专辑与歌手。
+
+### 资料库
+
+- 提供收藏、自建列表与播放历史；收藏与列表支持排序、搜索与批量操作。
+- 支持导入本地音频、`.lxmc` 收藏，以及平台歌单与公开收藏夹链接。
+- 支持为单曲设置封面与全局默认封面，更换封面不改动原文件；封面可随同步发送。
+- 听歌统计：播放次数、时长、曲目 / 歌手 / 平台榜单、日历与作息热力图，支持导出 JSON。
 
 <p align="center">
   <img src="docs/images/library.webp" width="250" alt="播放历史">
   <img src="docs/images/settings.webp" width="250" alt="设置：音源与在线服务">
 </p>
 
-### 资料库
+### 可选服务
 
-- 我的收藏、自建列表、播放历史；收藏与列表支持排序、搜索、批量操作；
-- 本地音频导入，`.lxmc` 收藏导入，平台歌单 / 公开收藏夹链接导入；
-- 自定义每首封面和全局默认封面，换封面不改动原文件；封面可随同步一起发送；
-- 听歌统计：播放次数、时长、曲目 / 歌手 / 平台榜单、日历热力图与作息热力图，可导出 JSON。
-
-### AI 推歌（可选）
-
-- 自带密钥接入 DeepSeek / OpenAI / 任意 OpenAI 兼容接口；
-- 根据播放历史、收藏和偏好生成推荐，支持风格、场景、语言、年代、探索度等偏好；
-- 推荐结果会自动在可搜索渠道里找歌，播完一批可继续补歌；
-- 发送范围在每次生成前透明展示，API Key 只存本机凭据库，不写入日志；功能默认关闭。
-
-### 听歌同步（可选）
-
-- 连接 ListenBrainz 或 Last.fm，默认关闭；
-- 只在你开启后发送歌名、歌手、专辑、时长与开始播放时间，本地文件路径、歌单内容与设备标识不上传。
-
-### 跨设备同步（可选）
-
-- 两种传输：局域网直连（自动发现 + 一键配对）或自备 WebDAV；
-- 同步内容可选：歌单与收藏、音源脚本与配置、设置、统计、播放历史、上次播放、自定义封面、AI 推歌与凭证；
-- 同步口令就是信任根：快照整体加密（AES-256-GCM），不依赖云端账号；
-- 冲突按版本戳合并，删除会传播墓碑；同步页能看到每轮的五态结论、变更量与日志。
+- **AI 推歌**：使用自有密钥接入 DeepSeek、OpenAI 或任意 OpenAI 兼容接口；依据播放历史、收藏与偏好生成推荐，可按风格、场景、语言、年代与探索度限定；推荐曲目自动在可搜索渠道中匹配，可连续补充。API Key 仅保存在本机凭据库，不写入日志。
+- **听歌同步**：可连接 ListenBrainz 或 Last.fm。开启后仅发送歌名、歌手、专辑、时长与开始播放时间，不上传本地文件路径、歌单内容与设备标识。
+- **跨设备同步**：支持局域网直连（自动发现与一键配对）或自备 WebDAV。可同步收藏与歌单、音源脚本与配置、设置、统计、播放历史、上次播放、自定义封面、AI 推歌配置与凭证。快照整体加密（AES-256-GCM），不以云端账号作为信任根；冲突按版本戳合并，删除通过墓碑传播，同步页展示每轮结论、变更量与日志。
+- AI 推歌与跨设备同步默认关闭，开启前会展示数据发送范围与信任说明。
 
 ### 桌面端
 
-- Material 3 Expressive 界面，动态取色 / 跟随当前封面取色 / 纯黑背景 / 自定义字体；
-- 常驻托盘（Linux / Windows / macOS 菜单栏）、关闭到托盘、托盘菜单控制播放；Windows 任务栏缩略图按钮；
-- Linux MPRIS、Windows / macOS 系统媒体会话；全局快捷键；
-- 应用内检查更新与安装（Android / Windows / Linux 便携版）；macOS 从发布页手动更新。
+- Material 3 Expressive 界面；支持动态取色、跟随当前封面取色、纯黑背景与自定义字体。
+- 常驻托盘（Linux / Windows / macOS 菜单栏），支持关闭到托盘与托盘菜单控制播放；Windows 提供任务栏缩略图按钮。
+- 支持 Linux MPRIS、Windows / macOS 系统媒体会话与全局快捷键。
+- 支持应用内检查更新与安装（Android、Windows、Linux 便携版）；macOS 需从发布页手动更新。
 
 <p align="center">
   <img src="docs/images/desktop.webp" width="720" alt="Linux 桌面端正在播放：Portra 400 / Arlo Parks">
@@ -94,37 +82,34 @@ Molia 是一个用 Flutter 写的音乐播放器：内置 QQ 音乐、网易音�
 
 ## 下载
 
-所有安装包都在 [GitHub Releases](https://github.com/StillMisty/molia/releases) 发布。测试版会标记为 **Pre-release**。
+所有安装包均在 [GitHub Releases](https://github.com/StillMisty/molia/releases) 发布，测试版标记为 **Pre-release**。
 
-| 平台 | 系统要求 | 产物 |
+| 平台 | 系统要求 | 发布产物 |
 | :--- | :--- | :--- |
-| Android | Android 15（API 35）及以上 | `molia-<version>-android-arm64.apk`、`armv7`、`x86_64`，或 `.aab` |
+| Android | Android 15（API 35）及以上 | `molia-<version>-android-arm64.apk`（另有 `armv7`、`x86_64`）或 `.aab` |
 | Windows | Windows 10 / 11 x64 | `molia-<version>-windows-x64.zip`（便携版）或 `setup.exe`（安装版） |
-| Linux | x64，需系统安装 `mpv` / `libmpv2` | `molia-<version>-linux-x64.tar.gz`，解压后可 `./install.sh` 安装桌面入口 |
-| iOS | iOS 18 及以上，需自行签名 / 侧载 | `molia-<version>-ios-unsigned.zip`（无签名，仅供验证） |
-| macOS | macOS 12 及以上（Apple Silicon / Intel 视构建机架构） | `molia-<version>-macos-<arch>-unsigned.zip`（ad-hoc 签名、未公证，仅供验证） |
+| Linux | x64，系统需安装 `mpv` / `libmpv2` | `molia-<version>-linux-x64.tar.gz`，解压后可运行 `./install.sh` 安装桌面入口 |
+| iOS | iOS 18 及以上，需自行签名或侧载 | `molia-<version>-ios-unsigned.zip`（无签名，仅供验证） |
+| macOS | macOS 12 及以上，架构取决于构建机 | `molia-<version>-macos-<arch>-unsigned.zip`（ad-hoc 签名，未公证，仅供验证） |
 
-> Android 的应用内更新需要允许「安装未知应用」；Linux 的托盘图标需要系统有 StatusNotifier 宿主（GNOME 需 AppIndicator 扩展），缺失时会自动降级为无托盘。macOS 不提供应用内更新：在「系统设置 › 隐私与安全性」放行首次打开后，后续版本从发布页手动下载覆盖。
+- Android 应用内更新需允许「安装未知应用」。
+- Linux 托盘需要 StatusNotifier 宿主（GNOME 需安装 AppIndicator 扩展），缺失时降级为无托盘。
+- macOS 不提供应用内更新；首次打开需在「系统设置 › 隐私与安全性」中放行，后续版本从发布页下载覆盖。
 
 ## 数据与隐私
 
-- 可选登录哔哩哔哩账号，仅用于读取 B 站字幕歌词；登录信息属于凭证类别，只存本机凭据库：开启跨设备同步后随快照加密同步；
-- 完整备份默认包含全部凭证（AI Key、any-listen token、B 站登录）与用户数据，换机恢复后与备份时一致；备份文件本身是明文 JSON，请妥善保管；窗口位置、缓存策略、字体等设备相关设置与本地缓存文件不在备份内；
-- 收藏、列表、历史、统计保存在本机 SQLite；AI Key、听歌同步 Token、B 站登录与同步口令保存在本机凭据库（明文 SQLite，不依赖系统钥匙串——能读本机数据目录或备份文件的人也能读到）；
-- AI 推歌与跨设备同步默认关闭，开启前会展示数据发送范围 / 信任说明；
-- 跨设备同步的快照整体加密，同步口令不会被明文上传；
-- LX 音源脚本是第三方可执行代码：在隔离环境中运行、不暴露文件系统或平台通道，但脚本仍可发起网络请求，导入前请确认来源可信。
+- 用户数据默认仅保存在本机：收藏、列表、历史与统计存于本机 SQLite；AI Key、听歌同步 Token、哔哩哔哩登录信息与同步口令存于本机凭据库。凭据库为明文 SQLite，不依赖系统钥匙串，能够访问本机数据目录或备份文件的人员亦可读取。
+- 哔哩哔哩账号登录为可选项，仅用于读取字幕歌词；播放、搜索、评论与字幕 CDN 请求均保持匿名。
+- 跨设备同步的快照整体加密，同步口令不以明文上传；哔哩哔哩登录信息属于凭证，随快照加密同步。
+- 完整备份默认包含全部凭证与用户数据，备份文件为明文 JSON，请妥善保管。窗口位置、缓存策略、字体等设备相关设置与本机缓存文件不在备份范围内。
+- LX 音源脚本属于第三方可执行代码：运行于隔离环境，不暴露文件系统与平台通道，但仍可发起网络请求，导入前请确认来源可信。
 
-## 说明
+## 许可
 
-- 本项目不提供、不托管任何音乐内容；搜索与播放的数据来自各平台公开接口或你导入的音源脚本，版权归原权利人所有。
-- 请遵守所在地法律与各平台服务条款，仅将本项目用于学习与个人用途。
-- 内置平台接口可能随平台调整而失效，欢迎提交 issue / PR 修复。
+本项目代码以 [Apache License 2.0](LICENSE) 授权，允许商业使用、修改与再分发，须保留版权与许可声明。
+
+本项目不提供、不托管任何音乐内容：搜索与播放的数据来自各平台公开接口或用户导入的音源脚本，版权归原权利人所有。平台接口可能随平台调整而失效；使用本软件时请遵守所在地法律与各平台服务条款。
 
 ## 致谢
 
 - [LX Music](https://github.com/lyswhut/lx-music-desktop)
-
-## License
-
-[CC BY-NC-SA 4.0](LICENSE) © 2026 Molia
