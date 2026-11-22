@@ -122,7 +122,7 @@ class DiagnosticsService implements FailureRecorder {
     try {
       final stored = await history.load();
       if (_disposed) return;
-      if (stored.isNotEmpty) failures.restore(stored);
+      if (stored.isNotEmpty) failures.restore(stored, merge: true);
     } catch (error) {
       _logger.warning('恢复问题历史失败: $error');
     }

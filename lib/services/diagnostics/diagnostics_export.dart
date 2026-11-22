@@ -14,6 +14,12 @@ import 'diagnostics_bundle.dart';
 import '../../domain/models/diagnostics.dart';
 import 'diagnostics_service.dart';
 
+/// 复制诊断包时使用的独立小上限（ADR-0040）。
+///
+/// 与导出文件的 20 MB 上限分开：复制到剪贴板不需要整份日志，较小上限能让
+/// 失败更快、占用更少，同时保留完整报告的前置段落。
+const int diagnosticsCopyMaxBytes = 128 * 1024;
+
 typedef DiagnosticsSettingsGatherer =
     Future<DiagnosticsSettingsSnapshot> Function();
 typedef DiagnosticsSourcesGatherer =

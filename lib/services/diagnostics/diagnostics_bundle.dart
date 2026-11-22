@@ -266,10 +266,45 @@ String renderDiagnosticsBundle(
       output = '$withoutLogs${_trimLogsToBudget(logsText, budget, note)}';
     }
   }
-  return normalizePersonalPaths(
+  output = normalizePersonalPaths(
     redactSecrets(output),
     homeDirectories: data.homeDirectories,
   );
+  // 日志段裁剪不足以保证上限：前置段落本身可能就超过复制上限（ADR-0040）。
+  // 最后按行硬截断，保证 utf8 字节数严格 <= maxBytes。
+  return _truncateReportToBytes(output, maxBytes);
+}
+
+/// 在脱敏 / 路径规范化之后按整行保留，附加明确的省略说明。
+///
+/// 绝不切行：日志行里即使有密钥也已在 [redactSecrets] 中替换过，按行边界
+/// 截断不会留下半截原值。
+String _truncateReportToBytes(String text, int maxBytes) {
+  if (maxBytes <= 0) return '';
+  final current = utf8.encode(text).length;
+  if (current <= maxBytes) return text;
+
+  var note =
+      '\n[Report truncated: the size cap was reached before later sections '
+      'and log lines.]\n';
+  if (utf8.encode(note).length >= maxBytes) {
+    note = '[truncated]\n';
+    if (utf8.encode(note).length >= maxBytes) note = '';
+  }
+  final budget = maxBytes - utf8.encode(note).length;
+  if (budget <= 0) return note;
+
+  final buffer = StringBuffer();
+  var used = 0;
+  for (final line in text.split('\n')) {
+    final bytes = utf8.encode('$line\n').length;
+    if (used + bytes > budget) break;
+    buffer
+      ..write(line)
+      ..write('\n');
+    used += bytes;
+  }
+  return '${buffer.toString()}$note';
 }
 
 void _section(StringBuffer buffer, String title, List<String> lines) {

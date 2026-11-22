@@ -62,17 +62,51 @@ class FailureRingBuffer implements FailureRecorder {
 
   /// 用持久化历史重建缓冲（启动时调用）；仍受 [capacity] 约束。
   ///
+  /// [merge] 为 true 时把传入历史与当前内存记录合并：历史在前、当前记录在
+  /// 后，按时间排序后同一时间 + 渠道 + 类别只保留一条（后来的记录覆盖展示
+  /// 信息）。启动早期已经发生的失败不会因为历史加载而被清掉。
+  ///
   /// 不产生失败通知之外的副作用；页面已打开时也能看到恢复后的记录。
-  void restore(Iterable<DiagnosticFailureRecord> records) {
+  void restore(
+    Iterable<DiagnosticFailureRecord> records, {
+    bool merge = false,
+  }) {
     if (_changes.isClosed) return;
-    _records
-      ..clear()
-      ..addAll(records);
+    if (!merge) {
+      _records
+        ..clear()
+        ..addAll(records);
+    } else {
+      final combined = <({int order, DiagnosticFailureRecord record})>[];
+      var order = 0;
+      for (final record in records) {
+        combined.add((order: order++, record: record));
+      }
+      for (final record in _records) {
+        combined.add((order: order++, record: record));
+      }
+      combined.sort((a, b) {
+        final byTime = a.record.at.compareTo(b.record.at);
+        return byTime != 0 ? byTime : a.order.compareTo(b.order);
+      });
+      final merged = <String, DiagnosticFailureRecord>{};
+      for (final entry in combined) {
+        final record = entry.record;
+        merged[_mergeKey(record)] = record;
+      }
+      _records
+        ..clear()
+        ..addAll(merged.values);
+    }
     while (_records.length > capacity) {
       _records.removeFirst();
     }
     _changes.add(null);
   }
+
+  static String _mergeKey(DiagnosticFailureRecord record) =>
+      '${record.at.millisecondsSinceEpoch}\u0000${record.channelKey}'
+      '\u0000${record.kind.name}';
 
   Future<void> dispose() async {
     await _changes.close();

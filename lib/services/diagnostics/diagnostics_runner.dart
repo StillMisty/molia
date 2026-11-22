@@ -235,7 +235,9 @@ class DiagnosticsRunner {
       }
     } on TimeoutException {
       scope.open = false;
-      if (_isCurrent(generation) && !scope.ids.contains(check.key)) {
+      if (_isCurrent(generation)) {
+        // 即使检查已经写过部分结果（如一条 ok），超时仍追加「检查级失败」：
+        // 页面需要看到这项检查没有跑完，而不是只看到部分成功。
         _append(
           generation,
           DiagnosticCheckResult(
@@ -253,7 +255,7 @@ class DiagnosticsRunner {
       }
     } catch (error) {
       scope.open = false;
-      if (_isCurrent(generation) && !scope.ids.contains(check.key)) {
+      if (_isCurrent(generation)) {
         _append(
           generation,
           DiagnosticCheckResult(

@@ -14,6 +14,7 @@ import 'package:molia/services/diagnostics/diagnostics_history_store.dart';
 import 'package:molia/services/diagnostics/diagnostics_runner.dart';
 import 'package:molia/services/diagnostics/diagnostics_service.dart';
 import 'package:molia/services/diagnostics/diagnostics_session_store.dart';
+import 'package:molia/services/diagnostics/failure_ring_buffer.dart';
 import 'package:molia/services/diagnostics/log_tail_reader.dart';
 import 'package:molia/services/diagnostics/playback_attempt_log.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -252,6 +253,85 @@ void main() {
       expect(result.toString(), isNot(contains('raw secret')));
     });
 
+    test('检查先写 ok 后超时：仍追加检查级 failed(timeout)', () async {
+      final gate = Completer<void>();
+      final runner = DiagnosticsRunner(
+        checks: [
+          _FakeCheck(
+            key: DiagnosticCheckId.databaseIntegrity,
+            group: DiagnosticCheckGroup.storage,
+            body: (context) async {
+              context.addResult(
+                _result(
+                  context,
+                  DiagnosticCheckId.databaseIntegrity,
+                  group: DiagnosticCheckGroup.storage,
+                ),
+              );
+              await gate.future;
+            },
+          ),
+        ],
+        config: const DiagnosticRunnerConfig(
+          checkTimeout: Duration(milliseconds: 20),
+        ),
+      );
+      addTearDown(runner.dispose);
+
+      await runner.start();
+      await runner.idle;
+      final results = runner.runs.single.results;
+      expect(results, hasLength(2));
+      expect(results.first.status, DiagnosticCheckStatus.ok);
+      expect(results.last.id, DiagnosticCheckId.databaseIntegrity);
+      expect(results.last.status, DiagnosticCheckStatus.failed);
+      expect(results.last.failure?.kind, FailureKind.timeout);
+      expect(
+        runner.runs.single.overallStatus,
+        DiagnosticCheckStatus.failed,
+        reason: '部分成功不能让页面误以为检查通过',
+      );
+
+      gate.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(runner.runs.single.results, hasLength(2), reason: '迟到结果不入队');
+    });
+
+    test('检查先写 ok 后抛错：仍追加检查级 failed', () async {
+      final runner = DiagnosticsRunner(
+        checks: [
+          _FakeCheck(
+            key: DiagnosticCheckId.syncTransport,
+            group: DiagnosticCheckGroup.sync,
+            body: (context) async {
+              context.addResult(
+                _result(
+                  context,
+                  DiagnosticCheckId.syncTransport,
+                  group: DiagnosticCheckGroup.sync,
+                ),
+              );
+              throw const SourceFailure(
+                kind: FailureKind.network,
+                message: 'raw secret body',
+              );
+            },
+          ),
+        ],
+      );
+      addTearDown(runner.dispose);
+
+      await runner.start();
+      await runner.idle;
+      final results = runner.runs.single.results;
+      expect(results, hasLength(2));
+      expect(results.first.status, DiagnosticCheckStatus.ok);
+      expect(results.last.id, DiagnosticCheckId.syncTransport);
+      expect(results.last.status, DiagnosticCheckStatus.failed);
+      expect(results.last.failure?.kind, FailureKind.network);
+      expect(results.toString(), isNot(contains('raw secret body')));
+    });
+
     test('运行历史上限 3，冷却阻止重复开始', () async {
       final runner = DiagnosticsRunner(
         checks: [
@@ -415,6 +495,48 @@ void main() {
       final loaded = await DiagnosticsHistoryStore().load();
       expect(loaded.single.channelKey, 'channel7');
     });
+
+    test('merge 恢复：历史在前、内存记录在后，按时间排序并去重', () {
+      final buffer = FailureRingBuffer(capacity: 10);
+      final at0 = DateTime(2026, 1, 1, 10);
+      DiagnosticFailureRecord entry(
+        DateTime at,
+        String channel, {
+        String? display,
+      }) => DiagnosticFailureRecord(
+        at: at,
+        channelKey: channel,
+        channelDisplayName: display ?? channel,
+        kind: FailureKind.network,
+      );
+
+      final history = [
+        entry(at0, 'old'),
+        entry(at0.add(const Duration(minutes: 2)), 'later'),
+      ];
+      final early = entry(at0, 'old', display: '本次记录');
+      buffer.restore([early]);
+      buffer.restore([...history], merge: true);
+
+      expect(buffer.records.map((record) => record.channelKey), [
+        'old',
+        'later',
+      ]);
+      expect(
+        buffer.records.first.channelDisplayName,
+        '本次记录',
+        reason: '同时间 / 渠道 / 类别视为同一条，保留内存里的最新展示信息',
+      );
+
+      // 超出 capacity 时保留最新的记录。
+      final small = FailureRingBuffer(capacity: 2);
+      small.restore([
+        entry(at0, 'a'),
+        entry(at0.add(const Duration(minutes: 1)), 'b'),
+        entry(at0.add(const Duration(minutes: 2)), 'c'),
+      ], merge: true);
+      expect(small.records.map((record) => record.channelKey), ['b', 'c']);
+    });
   });
 
   group('诊断服务集成', () {
@@ -458,6 +580,38 @@ void main() {
         reason: '持久化只写类型化字段，不落 message / Cookie',
       );
       expect(service.issues, hasLength(2));
+    });
+
+    test('initialize 合并历史与启动早期失败，不丢当前记录', () async {
+      final seed = DiagnosticsHistoryStore(debounce: Duration.zero)
+        ..persist([
+          DiagnosticFailureRecord(
+            at: DateTime(2026, 1, 1, 10),
+            channelKey: 'seed',
+            channelDisplayName: '历史记录',
+            kind: FailureKind.timeout,
+          ),
+        ]);
+      await seed.flush();
+
+      final service = DiagnosticsService();
+      addTearDown(service.dispose);
+      service.recordFailure(
+        failure: const SourceFailure(
+          kind: FailureKind.network,
+          message: 'boom',
+        ),
+        channelKey: 'early',
+        channelDisplayName: '启动早期',
+      );
+      await service.initialize();
+
+      expect(service.failures.records.map((record) => record.channelKey), [
+        'seed',
+        'early',
+      ]);
+      expect(service.failures.records.first.kind, FailureKind.timeout);
+      expect(service.failures.records.last.kind, FailureKind.network);
     });
 
     test('播放尝试有界记录并合并进 changes', () async {
@@ -664,6 +818,39 @@ void main() {
       expect(text, isNot(contains('SourceFailure')));
     });
 
+    test('maxBytes 严格上限：前置段落超限时也截断并省略日志', () {
+      final data = DiagnosticsBundleData(
+        generatedAt: DateTime(2026, 11, 14, 12),
+        timezoneOffset: Duration.zero,
+        app: const DiagnosticsAppInfo(version: '1.2.3'),
+        settings: const DiagnosticsSettingsSnapshot(),
+        sources: const DiagnosticsSourcesSnapshot(),
+        failures: [
+          for (var i = 0; i < 30; i++)
+            DiagnosticFailureRecord(
+              at: DateTime(2026, 11, 14, 11).add(Duration(minutes: i)),
+              channelKey: 'channel$i',
+              channelDisplayName: '很长的渠道名称 $i ${'x' * 30}',
+              kind: FailureKind.network,
+            ),
+        ],
+        healthRuns: const [],
+        logs: const [
+          DiagnosticsLogFile(
+            name: 'molia.log',
+            content:
+                'token=SEED-SECRET-VALUE\nCookie: SESSDATA=SEED-SECRET-VALUE',
+          ),
+        ],
+      );
+
+      final text = renderDiagnosticsBundle(data, maxBytes: 400);
+      expect(utf8.encode(text).length, lessThanOrEqualTo(400));
+      expect(text, contains('[Report truncated'));
+      expect(text, isNot(contains('SEED-SECRET-VALUE')));
+      expect(text, isNot(contains('## Logs')), reason: '日志段已在硬上限之外');
+    });
+
     test('导出器把 maxBytes 传给 render，并在导出前 flush 历史 / 日志', () async {
       final root = await Directory.systemTemp.createTemp('molia_export_');
       addTearDown(() async {
@@ -702,7 +889,7 @@ void main() {
           contains('Log section truncated'),
         ),
       );
-      expect(utf8.encode(text).length, lessThanOrEqualTo(4500));
+      expect(utf8.encode(text).length, lessThanOrEqualTo(4000));
     });
   });
 }
