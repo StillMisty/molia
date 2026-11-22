@@ -29,6 +29,17 @@ class LyricsPresentation {
   /// 当前行的逐字时间轴（可空 = 该行无逐字数据，按整行着色）。
   final List<LyricWord>? words;
 
+  /// 当前主行下标（-1 = 没有当前行：前奏预览 / 无歌词回退 / 暂停回退）。
+  ///
+  /// 与 [trackId] 一起构成行身份：副歌重复同一句文本时，输出端仍能判断
+  /// 「换行了」，不会被「结构相同」的快路径吞掉换行过渡与高亮重置。
+  final int lineIndex;
+
+  /// 是否存在真实当前行（[line] 为空但该行有时间戳 = 间奏空行）。
+  ///
+  /// 为空且存在当前行时，输出端必须清空内容，不能把 [upcoming] 当成当前行。
+  final bool hasCurrentLine;
+
   /// 本次投送时的有效播放位置（毫秒，已叠加歌词偏移）。
   ///
   /// 桌面歌词用它给逐字渐染做插值基准；位置变化会让 presentation 变化，
@@ -67,6 +78,8 @@ class LyricsPresentation {
     required this.isPlaying,
     required this.hasLyrics,
     this.words,
+    this.lineIndex = -1,
+    this.hasCurrentLine = false,
     this.positionMs = 0,
     this.positionAtEpochMs = 0,
     this.scrollFollowsSinging = true,
@@ -85,6 +98,8 @@ class LyricsPresentation {
       other.isPlaying == isPlaying &&
       other.hasLyrics == hasLyrics &&
       listEquals(other.words, words) &&
+      other.lineIndex == lineIndex &&
+      other.hasCurrentLine == hasCurrentLine &&
       other.positionMs == positionMs &&
       other.positionAtEpochMs == positionAtEpochMs &&
       other.scrollFollowsSinging == scrollFollowsSinging &&
@@ -101,6 +116,8 @@ class LyricsPresentation {
     isPlaying,
     hasLyrics,
     words == null ? null : Object.hashAll(words!),
+    lineIndex,
+    hasCurrentLine,
     positionMs,
     positionAtEpochMs,
     scrollFollowsSinging,

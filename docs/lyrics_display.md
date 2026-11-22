@@ -99,7 +99,9 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
   即时切换。
 - 权限：`SYSTEM_ALERT_WINDOW`。开启流程：设置页开关 → `canDrawOverlays` 检查 →
   未授权跳 `ACTION_MANAGE_OVERLAY_PERMISSION`；未授权不自动开启；回前台重读状态；
-  权限被撤销时自动关闭开关并提示。
+  权限被撤销时自动关闭开关并提示。原生每次 `onResume` 上报
+  `desktop.onPermissionChanged {granted, shown}`：Android 可能在撤销瞬间直接
+  移除窗口，`shown` 让 Dart 以原生事实校正本地状态，重新授权后能自愈重显。
 - 息屏：`freezeOnScreenOff`（默认开）——原生上报屏幕状态，息屏期间停止下发与重绘，
   亮屏恢复并立即刷新（对齐 LX `isAutoPause` 语义，不暂停音频）。屏幕 receiver
   用 `ContextCompat.RECEIVER_EXPORTED`（`ACTION_SCREEN_ON/OFF` 是 protected
@@ -118,6 +120,10 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
   全空（清空 / 无歌词隐藏）不生成占位，避免留下大块透明触控区。滚动行行宽
   取文本宽（其余行撑满窗口，占位行不进滚动组），当前行与真实扩展行组成同一
   滚动组。
+- 行身份与空行：投送带 `trackId` / `lineIndex` / `hasCurrentLine`。文本相同的
+  副歌重复句仍按 `lineIndex` 触发换行过渡与高亮重置；有当前行但文本为空
+  （间奏空行）时整体清空，不能把 `upcoming` 当成当前行塞进第一行。前奏预览
+  是「没有当前行（`lineIndex=-1`）且 upcoming 非空」的独立状态。
 - 水平对齐（`textAlignX`）：文本在窗口内的摆位（宽度 100% 时即屏幕上的水平位置）。
   普通行（upcoming / 回退行）用系统 gravity，滚动组自身强制左对齐、由
   `applyGroupScroll` 的位移统一实现（布局宽度是超大哨兵值，系统居中 / 右对齐
@@ -165,14 +171,22 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 - 行切换动画：`showToggleAnimation`（默认开）——内容结构变化时整块滚入滚出
   （旧块上移滚出、新块自下滚入，视口高度按新内容固定，M3 强调缓动 ~240ms）；
   同结构更新（逐字进度 / 播放态）不重建视图，不打断滚动与动画；关闭则直切。
-  息屏冻结 / 亮屏恢复先收尾未完成的滚入滚出（并超时兜底），否则系统暂停
-  View 动画时旧块可能卡在视口里，与新歌词重叠。
+  过渡只有一个显式句柄（旧列 / 新列 / 清理 Runnable / 开始时刻）：任何内容、
+  配置、冻结、窗口销毁操作前都同步收尾；帧循环按超时兜底。旧列移除不依赖
+  `withEndAction`——动画只是视觉，不是正确性前提。
+- 显式清空：无歌词隐藏 / 暂停回退 clear / 间奏空行走 `desktop.clear`，原生
+  收尾过渡并移除全部内容列。清空是幂等的，Dart 只在下发状态从「有内容」切到
+  「空」时发一次。
 - 无歌词：`noLyricsBehavior = title | hide`（默认 `title`，显示歌名）。
 - 暂停：`hideOnPause`（默认开）＝**整窗隐藏**——暂停即 `desktop.hide` 移除悬浮窗
   （含触摸区），恢复播放时重建窗口 + 回投内容，位置由原生持久化（回到原处）；
   关闭该开关后按 `pauseBehavior = keep | clear | title`（默认 `keep`）在窗口内
-  做内容回退（`clear` 会留下空窗，与整窗隐藏不同）。
-- 所有策略计算在 Dart 侧完成，原生只渲染 + 交互（保持"原生哑渲染"）。
+  做内容回退（`clear` 走 `desktop.clear` 显式清空，会留下空窗，与整窗隐藏不同）。
+- 所有策略计算在 Dart 侧完成，原生只渲染 + 交互（保持"原生哑渲染"）。Dart 侧
+  以「期望状态 + 单飞 reconcile」串行下发（设置 / 权限 / 播放态 / 当前行），
+  不允许 `start` 与 `apply` 各自 await 后改 `_shown`——那会在交错时出现
+  「暂停了窗口又被 show 出来」或「原生已收窗但 Dart 仍以为在显示」。
+  `desktop.onPermissionChanged` 会同步能力状态并触发自愈重显。
 
 ### FR-4 通知栏 / 锁屏歌词（免模块）
 
@@ -320,10 +334,18 @@ abstract class LyricsOutput {
 
 ### 5.5 Android 悬浮窗实现
 
-- 文件：`lyrics/LyricsOverlayController.kt`（WindowManager 生命周期 + 位置持久化）、
+- 文件：`lyrics/LyricsOverlayHost.kt`（进程级单窗口 owner）、
+  `lyrics/LyricsOverlayController.kt`（WindowManager 生命周期 + 位置持久化）、
   `lyrics/LyricsOverlayView.kt`（自绘文本/动画/控制条/触摸）、
   `lyrics/LyricsChannelHandler.kt`（通道 + 权限 + A2DP + 屏幕状态）、
   `MainActivity.kt` 注册通道与 `onResume` 权限回读。
+- 窗口所有权：`LyricsOverlayHost` 保证进程内同一时刻只有一个悬浮窗。新引擎
+  acquire 时先销毁旧 controller；旧引擎 release 只销毁自己持有的那个。
+  `LyricsChannelHandler.dispose()` 收窗、注销屏幕 receiver / 音频回调；
+  `MainActivity.cleanUpFlutterEngine()` / `onDestroy()` 必须调用它。否则
+  Activity / 引擎重建后旧窗口会停在旧歌词上，新引擎再建一个就是双窗口叠字。
+  不引入前台 Service：悬浮窗只服务本应用播放，引擎销毁后没有数据源，正确
+  行为就是销毁窗口（与 LX Music 的 `ApplicationContext` 方案同义）。
 - 位置持久化：原生 `SharedPreferences`（左缘 = 横向可移动范围比例、底缘 = 可用高比例；
   键名 `x_fraction` / `bottom_fraction`）；拖动结束由原生直接保存。
 - 重新落位：旋转 / 字号 / 可用区 / 宽度变化走布局回调与
@@ -414,14 +436,15 @@ abstract class LyricsOutput {
 | | `desktop.canDrawOverlays` | → bool | 权限状态。 |
 | | `desktop.openOverlayPermission` | — | 跳系统授权页。 |
 | | `desktop.show` | style config map | 显示悬浮窗（已授权时）。 |
-| | `desktop.update` | `{title,line,extended[],upcoming[],isPlaying,hasLyrics,extendedSlots}` | 策略已应用，直接展示。`extendedSlots` = 翻译 / 罗马音扩展槽数（0..2，按两个开关之和固定）；与内容同一次投送，开关切换只重建一次，不先走 `setConfig`。 |
+| | `desktop.update` | `{trackId,title,line,extended[],upcoming[],isPlaying,hasLyrics,lineIndex,hasCurrentLine,extendedSlots,...}` | 策略已应用，直接展示。`extendedSlots` = 翻译 / 罗马音扩展槽数（0..2，按两个开关之和固定）；`trackId + lineIndex` 是行身份（重复文本也能触发换行）；`hasCurrentLine=true` 且 `line` 为空 = 间奏空行，原生清空而不是展示 upcoming。 |
+| | `desktop.clear` | `{isPlaying}` | 显式清空内容（无歌词隐藏 / 暂停回退 clear / 间奏空行）；原生收尾过渡并移除全部内容列，窗口可保留。`isPlaying` 让控制条图标在清空（不再发内容 update）时仍能切到正确的播放 / 暂停态。 |
 | | `desktop.setConfig` | style config map | 样式 + 锁定点击穿透即时生效。 |
 | | | ↑ config 里的 `fontFamily` | 行文本字体族（设置页「应用字体」）；`null` = 不覆盖，原生 `Typeface.create` 解析不到时同样回退系统默认。 |
 | | `desktop.hide` | — | 关闭并释放窗口。 |
 | | `desktop.resetPosition` | — | 清除原生持久化并回到默认位置。 |
 | | `audioRoute.isA2dpConnected` | → bool | 初始值。 |
 | 原生→Dart | `desktop.onAction` | `{action}` | playPause/previous/next/toggleTranslation/lock/close。 |
-| | `desktop.onPermissionChanged` | `{granted}` | 权限被撤销时上报（回前台复查）。 |
+| | `desktop.onPermissionChanged` | `{granted, shown}` | 回前台复查上报权限事实与窗口是否存在；权限撤销时原生先收窗。Dart 以 `shown` 校正本地状态，避免窗口已被系统移除却仍以为在显示。 |
 | | `desktop.onScreenState` | `{on}` | 息屏冻结用。 |
 | | `audioRoute.onA2dpChanged` | `{connected}` | 连接状态变化。 |
 
@@ -509,7 +532,7 @@ abstract class LyricsOutput {
 | 输出契约 | `lib/services/lyrics_display/lyrics_output.dart` | `LyricsOutput` / `InteractiveLyricsOutput` / `LyricsPresentation`（含 `positionAtEpochMs` 延迟补偿与 `scrollFollowsSinging`） |
 | 调度 | `lib/providers/lyrics_display_provider.dart` | 去重投送、自动取词、动作分发、能力查询、位置采样时刻与滚动跨度 |
 | 桌面歌词（Dart） | `lib/services/lyrics_display/desktop_lyrics_output.dart`、`lyrics_channel.dart` | 通道封装 + 窗口生命周期（暂停隐藏 / 恢复重显）+ 暂停与无歌词回退映射 |
-| 桌面歌词（原生） | `android/.../lyrics/LyricsChannelHandler.kt`、`LyricsOverlayController.kt`、`LyricsOverlayView.kt`、`LyricClock.kt`、`MainActivity.kt`、`AndroidManifest.xml` | 悬浮窗渲染（整行 + 逐字渐染 + 横向滚动）/ 位置时钟（`LyricClock` + `LyricSpring`）/ 拖动与可用区比例持久（夹取 / 重新落位）/ 锁定 / M3E 控制条 / 息屏冻结 / A2DP 监测；控制条图标在 `res/drawable/ic_lyrics_*` |
+| 桌面歌词（原生） | `android/.../lyrics/LyricsOverlayHost.kt`、`LyricsChannelHandler.kt`、`LyricsOverlayController.kt`、`LyricsOverlayView.kt`、`LyricClock.kt`、`MainActivity.kt`、`AndroidManifest.xml` | 悬浮窗渲染（整行 + 逐字渐染 + 横向滚动）/ 位置时钟（`LyricClock` + `LyricSpring`）/ 拖动与可用区比例持久（夹取 / 重新落位）/ 锁定 / M3E 控制条 / 息屏冻结 / A2DP 监测；控制条图标在 `res/drawable/ic_lyrics_*` |
 | 媒体元数据 | `lib/services/lyrics_display/media_lyric_composer.dart`、`media_lyric_output.dart`、`lib/playback/local_audio_handler.dart` | 通知/锁屏 + 蓝牙 profile 合成 → `MediaMetadata` 覆盖（`displaySubtitle` 无对应字段，忽略）；播放顺序动作图标在 `res/drawable/audio_service_*`（`res/raw/keep.xml` 防资源压缩，见已知坑 34） |
 | 设置页 | `lib/pages/settings_page.dart`、`lib/pages/lyrics_display/*` | 首屏三条直达入口（桌面歌词 / 歌词与输出 / 系统媒体歌词）；歌词页分组 + 输出共享分组 + 预览 + 权限引导；主题种子色与歌词颜色共用任意调色器 |
 | 颜色系统 | `lib/services/lyrics_display/lyric_color_resolver.dart`、`lib/theme/scheme_builder.dart`、`lib/services/artwork_palette_service.dart` | 跟随主题 / 跟随封面经同一解析函数与同一份封面色板；通用 HSV/Hex 任意取色 |

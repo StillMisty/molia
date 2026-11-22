@@ -52,6 +52,8 @@ void main() {
     bool hasLyrics = true,
     List<String> extended = const [],
     List<String> upcoming = const [],
+    int lineIndex = -1,
+    bool hasCurrentLine = false,
   }) => LyricsPresentation(
     trackId: 'fake:1',
     title: '歌名',
@@ -60,6 +62,8 @@ void main() {
     upcoming: upcoming,
     isPlaying: isPlaying,
     hasLyrics: hasLyrics,
+    lineIndex: lineIndex,
+    hasCurrentLine: hasCurrentLine,
   );
 
   test('显示 / 配置 / 更新 / 隐藏按协议下发', () async {
@@ -345,8 +349,10 @@ void main() {
     expect(map['extended'], isEmpty);
     expect(map['upcoming'], isEmpty);
 
-    // clear：主行清空，扩展行同样撤下。
+    // clear：主行清空，扩展行同样撤下。走显式 desktop.clear，
+    // 不再依赖一次「空文本 update」。
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.clear);
+    calls.clear();
     await output.apply(
       presentation(
         isPlaying: false,
@@ -355,10 +361,9 @@ void main() {
         upcoming: const ['下一行'],
       ),
     );
-    map = await lastUpdate();
-    expect(map['line'], '');
-    expect(map['extended'], isEmpty);
-    expect(map['upcoming'], isEmpty);
+    await pumpEventQueue();
+    expect(calls.map((call) => call.method), contains('desktop.clear'));
+    expect(calls.map((call) => call.method), isNot(contains('desktop.update')));
 
     await output.stop();
   });
@@ -534,6 +539,177 @@ void main() {
     expect(received, [LyricsOutputAction.next]);
 
     await subscription.cancel();
+    await output.stop();
+  });
+
+  test('行身份与空行标记随投送下发', () async {
+    final channel = LyricsChannel();
+    final output = DesktopLyricsOutput(channel: channel, supported: true);
+    final settings = await desktopSettings();
+    await settings.setDesktopHideOnPause(false);
+    await output.start(settings);
+
+    await output.apply(
+      presentation(line: 'B', lineIndex: 4, hasCurrentLine: true),
+    );
+    await pumpEventQueue();
+    final update = calls.lastWhere((call) => call.method == 'desktop.update');
+    final map = update.arguments as Map;
+    expect(map['trackId'], 'fake:1');
+    expect(map['lineIndex'], 4);
+    expect(map['hasCurrentLine'], isTrue);
+    expect(map['line'], 'B');
+
+    await output.stop();
+  });
+
+  test('间奏空行 / 暂停 clear 走显式清空，且间奏期间不重复发', () async {
+    final channel = LyricsChannel();
+    final output = DesktopLyricsOutput(channel: channel, supported: true);
+    final settings = await desktopSettings();
+    await settings.setDesktopHideOnPause(false);
+    await settings.setDesktopPauseBehavior(LyricsPauseBehavior.clear);
+    await output.start(settings);
+    await output.apply(
+      presentation(line: 'A', lineIndex: 0, hasCurrentLine: true),
+    );
+    await pumpEventQueue();
+
+    // 有真实当前行但文本为空：清空，不把 upcoming 当成当前行。
+    calls.clear();
+    await output.apply(
+      presentation(
+        line: '',
+        upcoming: const ['下一句'],
+        lineIndex: 1,
+        hasCurrentLine: true,
+      ),
+    );
+    expect(calls.map((call) => call.method), contains('desktop.clear'));
+    expect(calls.map((call) => call.method), isNot(contains('desktop.update')));
+    expect(
+      (calls.lastWhere((call) => call.method == 'desktop.clear').arguments
+          as Map)['isPlaying'],
+      isTrue,
+    );
+
+    // 间奏期间每个位置 tick 都会触发 apply：清空是幂等的，不再发通道。
+    calls.clear();
+    await output.apply(
+      presentation(
+        line: '',
+        upcoming: const ['下一句'],
+        lineIndex: 1,
+        hasCurrentLine: true,
+      ),
+    );
+    expect(calls, isEmpty);
+
+    // 暂停回退 clear：主行清空，同样走显式清空。
+    await output.apply(
+      presentation(line: 'A', lineIndex: 2, hasCurrentLine: true),
+    );
+    calls.clear();
+    await output.apply(presentation(isPlaying: false));
+    expect(calls.map((call) => call.method), contains('desktop.clear'));
+    expect(calls.map((call) => call.method), isNot(contains('desktop.update')));
+    expect(
+      (calls.lastWhere((call) => call.method == 'desktop.clear').arguments
+          as Map)['isPlaying'],
+      isFalse,
+    );
+
+    await output.stop();
+  });
+
+  test('权限撤销：停止投送，重新授权后自愈重建窗口', () async {
+    var granted = true;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel(channelName), (
+          call,
+        ) async {
+          calls.add(call);
+          switch (call.method) {
+            case 'desktop.canDrawOverlays':
+              return granted;
+            case 'desktop.isSupported':
+              return true;
+            case 'audioRoute.isA2dpConnected':
+              return false;
+            default:
+              return null;
+          }
+        });
+    final channel = LyricsChannel();
+    final output = DesktopLyricsOutput(channel: channel, supported: true);
+    final settings = await desktopSettings();
+    await settings.setDesktopHideOnPause(false);
+    await output.start(settings);
+    await output.apply(presentation());
+    expect(calls.map((call) => call.method), contains('desktop.show'));
+
+    // 原生权限被撤销：收窗并上报。Dart 不得继续向不存在的窗口投送。
+    channel.debugEmit(
+      const LyricsChannelEvent('desktop.onPermissionChanged', {
+        'granted': false,
+      }),
+    );
+    await pumpEventQueue();
+    expect(output.capability, LyricsOutputCapability.needsPermission);
+
+    calls.clear();
+    await output.apply(presentation(line: 'B'));
+    expect(calls.map((call) => call.method), isNot(contains('desktop.update')));
+
+    // 重新授权：期望状态还在，窗口应自愈重建并回投最新内容。
+    granted = true;
+    calls.clear();
+    await output.refreshCapability();
+    await pumpEventQueue();
+    expect(
+      calls.map((call) => call.method),
+      containsAllInOrder(['desktop.show', 'desktop.update']),
+    );
+    final update = calls.lastWhere((call) => call.method == 'desktop.update');
+    expect((update.arguments as Map)['line'], 'B');
+
+    // 系统在权限撤销瞬间直接移除窗口：granted 仍为 true，但 shown=false；
+    // Dart 必须以原生事实为准重新建窗，而不是继续向黑洞投送。
+    calls.clear();
+    channel.debugEmit(
+      const LyricsChannelEvent('desktop.onPermissionChanged', {
+        'granted': true,
+        'shown': false,
+      }),
+    );
+    await pumpEventQueue();
+    await output.apply(presentation(line: 'C'));
+    await pumpEventQueue();
+    expect(
+      calls.map((call) => call.method),
+      containsAllInOrder(['desktop.show', 'desktop.update']),
+    );
+    final recovered = calls.lastWhere(
+      (call) => call.method == 'desktop.update',
+    );
+    expect((recovered.arguments as Map)['line'], 'C');
+
+    await output.stop();
+  });
+
+  test('start 与暂停 apply 交错：不残留暂停窗口', () async {
+    final channel = LyricsChannel();
+    final output = DesktopLyricsOutput(channel: channel, supported: true);
+    final settings = await desktopSettings();
+
+    // start 内部有 canDrawOverlays 的 await；apply 在它完成前就把播放态
+    // 改成暂停。单飞 reconcile 必须保证最终不 show。
+    final starting = output.start(settings);
+    final applying = output.apply(presentation(isPlaying: false));
+    await Future.wait([starting, applying]);
+    await pumpEventQueue();
+    expect(calls.map((call) => call.method), isNot(contains('desktop.show')));
+
     await output.stop();
   });
 }

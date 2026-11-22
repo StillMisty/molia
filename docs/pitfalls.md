@@ -797,15 +797,17 @@
     移除。息屏 / 窗口不可见 / 系统暂停动画时 end action 不保证执行；若这时
     又刚好切行，旧列会永久卡在视口里，与新歌词重叠显示（尤其息屏再亮屏后）。
     收尾必须由宿主主动兜底：
-    ① `setFrozen(true)`（冻结开时）和 `setFrozen(false)` 都先
-    `finishPendingRoll()`——取消动画、移除旧列、把当前列复位到终态；
-    ② 滚入滚出启动后 `postDelayed` 一个兜底（`ROLL_DURATION_MS + 3s`，
-    覆盖系统最高 10× 动画缩放），若 `textColumn` 仍是这次的新列就收尾；
+    ① 过渡集中成唯一句柄（旧列 / 新列 / 清理 Runnable / 开始时刻）；
+    `setFrozen(true)`（冻结开时）、`setFrozen(false)`、`rebuildLineViews`、
+    `clearContent`、`onDetachedFromWindow` 都先 `finishRoll()`——取消动画、
+    移除旧列、把当前列复位到终态；
+    ② 帧循环按 `ROLL_DURATION_MS + 3s` 超时兜底（覆盖系统最高 10× 动画
+    缩放），外加 `postDelayed` 一道；任何一道先到都能收尾；
     ③ 旧列高度未就绪（`previousColumn.height <= 0`）时不要走动画分支，
     否则旧列原地淡出、与滚入的新列叠在一起；直接直切。
     收尾逻辑要幂等（end action / 兜底 / 下一次重建都可能触发），只操作
     `contentHolder` 的非 `textColumn` 子项，并复位 `textColumn` 的
-    `translationY` / `alpha`。
+    `translationY` / `alpha`；收尾后强制视口只剩当前列。
 75. **桌面歌词息屏冻结不能只靠 `ACTION_SCREEN_ON` 解冻**：屏幕 receiver 用
     `RECEIVER_NOT_EXPORTED` 时收不到高权限进程（SystemUI 等）发出的部分系统
     广播，典型是息屏能收到、亮屏收不到：原生 `frozen = true` 后解不开，新投送
@@ -815,7 +817,7 @@
     不受影响），不要用 `RECEIVER_NOT_EXPORTED`。另外 `setPresentation` 的
     `frozen` 分支必须用 `PowerManager.isInteractive` 兜底：设备已经交互就清
     `frozen` + `pending` 并立即 `render`；`setFrozen(false)` 也先
-    `finishPendingRoll()`。不要用「屏幕广播一定到达」作为解冻前提。
+    `finishRoll()`。不要用「屏幕广播一定到达」作为解冻前提。
 76. **退出流程必须在关闭窗口前停音频并落盘**：
     窗口 chrome 迁移到 nativeapi 后，关闭走 nativeapi 的 close request；Windows
     的真正退出改走 runner 的 `destroy` 通道（Dart `WindowChrome.quit()` →
@@ -1257,3 +1259,27 @@
      生成物 `foo.g.dart` 的 basename 不能被任何手写 Dart 文件占用；薄适配器
      用 `<source>_adapter.dart` 命名（现在就是 `system_interop_adapter.dart`），
      新增 JNIgen / FFIgen / Pigeon 输出前先检查同目录有没有同名手写文件。
+
+120. **桌面歌词悬浮窗必须由进程级 owner 持有并随引擎释放**：
+     `TYPE_APPLICATION_OVERLAY` 窗口挂在进程级 `WindowManagerGlobal` 上，
+     Activity / FlutterEngine 销毁不会自动移除。`LyricsChannelHandler` 如果
+     每个引擎 new 一个 controller 且不 dispose，旧窗口会停在旧歌词上，新引擎
+     再建一个就是「上一句还在、下一句叠在上面跟着进度走」的双窗口叠字。
+     规则：窗口所有权统一走 `LyricsOverlayHost`（acquire 时销毁旧 controller，
+     release 只销毁自己持有的那个）；`LyricsChannelHandler.dispose()` 收窗并
+     注销屏幕 receiver / 音频回调；`MainActivity.cleanUpFlutterEngine()` 与
+     `onDestroy()` 都要调用（幂等）。controller 用 `applicationContext`，不要
+     持有 Activity。不要用「进程被杀窗口自然消失」兜底：进程可能在后台存活
+     很久，用户会一直看到旧歌词。
+
+121. **桌面歌词的行过渡正确性不能依赖动画回调，空内容要走显式清空**：
+     `ViewPropertyAnimator.withEndAction` / `postDelayed` 在窗口不可见、系统
+     暂停动画时都不保证执行；只靠它们移除旧列，旧句会和新句一起留在视口里。
+     过渡必须集中成一个显式句柄（旧列 / 新列 / 清理 Runnable / 开始时刻），
+     任何 content / config / freeze / detach 操作前同步 `finishRoll()`，帧循环
+     再按超时兜底；收尾后强制视口只剩当前内容列。另外「空行」不能用一版空
+     文本 update 碰运气：间奏空行（`hasCurrentLine=true` 且 `line=''`）、暂停
+     clear、无歌词隐藏都应走 `desktop.clear`，同步移除全部内容列；`clear`
+     不能只把 `line` 置空，否则随后的 `setConfig` 会拿旧的 `current` 把上一句
+     重新画回来。重复文本的副歌还要带 `trackId + lineIndex` 行身份，否则
+     「结构相同」快路径会吞掉换行与高亮重置。

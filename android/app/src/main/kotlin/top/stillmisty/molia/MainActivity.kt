@@ -57,6 +57,14 @@ class MainActivity : FlutterActivity() {
         lyricsChannel?.onResume()
     }
 
+    override fun onDestroy() {
+        // cleanUpFlutterEngine 的正常路径已释放；这里再兜一次，覆盖引擎
+        // 未按预期清理的 ROM / 异常销毁路径。dispose 幂等。
+        lyricsChannel?.dispose()
+        lyricsChannel = null
+        super.onDestroy()
+    }
+
     /// Flutter 3.50 把所有 `level >= TRIM_MEMORY_RUNNING_LOW(10)` 的
     /// `onTrimMemory` 都映射成 Dart 的 `didHaveMemoryPressure`。但 Android 14+
     /// 实际只送 `UI_HIDDEN(20)` / `BACKGROUND(40)`，于是每次退后台 / 回前台都会
@@ -192,6 +200,9 @@ class MainActivity : FlutterActivity() {
         }
 
         // 歌词显示通道：桌面悬浮窗 + A2DP 状态（Android）。
+        // 同一进程内引擎重建时先释放旧 handler（含悬浮窗），否则旧窗口会
+        // 留在屏幕上显示旧歌词，新引擎再建一个就成了双窗口叠字。
+        lyricsChannel?.dispose()
         lyricsChannel = top.stillmisty.molia.lyrics.LyricsChannelHandler(
             context = this,
             messenger = flutterEngine.dartExecutor.binaryMessenger,
@@ -392,6 +403,10 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        // 悬浮窗必须随引擎一起释放：引擎销毁后 Dart 不会再投送，窗口留下
+        // 就是一块永不消失的旧歌词（且 Activity 重建后会再叠一个）。
+        lyricsChannel?.dispose()
+        lyricsChannel = null
         sleepTimerChannel?.dispose()
         sleepTimerChannel = null
         safChannel?.dispose()

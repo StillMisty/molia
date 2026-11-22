@@ -35,6 +35,17 @@ class LyricsDisplayProvider extends ChangeNotifier {
       if (output is InteractiveLyricsOutput) {
         _subscriptions.add(output.actions.listen(_onOutputAction));
       }
+      // 权限撤销 / 重新授予由原生主动上报：设置页的开关与提示要立刻跟上，
+      // 不能等下一次回前台才复查。
+      if (output is DesktopLyricsOutput) {
+        _subscriptions.add(
+          output.capabilityChanges.listen((_) {
+            if (_disposed) return;
+            notifyListeners();
+            unawaited(_syncOutputs());
+          }),
+        );
+      }
     }
     settings.addListener(_onSettingsChanged);
     _audioRoute?.addListener(_onA2dpChanged);
@@ -56,7 +67,7 @@ class LyricsDisplayProvider extends ChangeNotifier {
   /// 本次会话是否已请求过通知权限（首次开启歌词输出时请求）。
   bool _notificationPermissionAsked = false;
   final LyricLineTracker _tracker = const LyricLineTracker();
-  final List<StreamSubscription<LyricsOutputAction>> _subscriptions = [];
+  final List<StreamSubscription<dynamic>> _subscriptions = [];
   final Map<String, LyricsPresentation> _applied = {};
 
   Duration _position = Duration.zero;
@@ -196,6 +207,10 @@ class LyricsDisplayProvider extends ChangeNotifier {
       isPlaying: _isPlaying,
       hasLyrics: ready,
       words: tracked.words,
+      // 行身份：trackId + lineIndex。输出端据此识别「文本相同的下一句」，
+      // 前奏预览 / 回退 / 间奏空行则用 -1 / hasCurrentLine=false 区分。
+      lineIndex: tracked.index,
+      hasCurrentLine: tracked.index >= 0,
       // 与行跟踪同一有效位置（叠加歌词偏移），逐字渐染与之对齐。
       positionMs: _position.inMilliseconds + settings.offsetMs,
       positionAtEpochMs:

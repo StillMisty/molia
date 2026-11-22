@@ -129,12 +129,27 @@ private const val SCROLL_ROW_WIDTH_SLACK = 4
 
 /** 一次投送的行数据（Dart 侧策略结果）。 */
 internal data class OverlayPresentation(
+    val trackId: String = "",
     val title: String = "",
     val line: String = "",
     val extended: List<String> = emptyList(),
     val upcoming: List<String> = emptyList(),
     val isPlaying: Boolean = false,
     val hasLyrics: Boolean = false,
+    /**
+     * 当前主行下标（-1 = 没有当前行：前奏预览 / 无歌词回退 / 暂停回退）。
+     *
+     * 与 [trackId] 一起构成行身份：副歌重复同一句文本时，结构键仍能
+     * 判断出「换行了」，避免被「结构相同」快路径吞掉换行过渡与高亮重置。
+     */
+    val lineIndex: Int = -1,
+    /**
+     * 是否存在真实当前行（[line] 为空但该行有时间戳 = 间奏空行）。
+     *
+     * 为空且存在当前行时必须清空内容，不能把 [upcoming] 当成当前行塞进
+     * 第一行——那会让人误以为上一句没有走。
+     */
+    val hasCurrentLine: Boolean = false,
     /**
      * 翻译 / 罗马音扩展槽位数（按开关固定，0..2）：空槽也占一行高度。
      *
@@ -172,12 +187,15 @@ internal data class OverlayPresentation(
                 )
             }?.takeIf { it.isNotEmpty() }
             return OverlayPresentation(
+                trackId = map["trackId"] as? String ?: "",
                 title = map["title"] as? String ?: "",
                 line = map["line"] as? String ?: "",
                 extended = stringsOf("extended"),
                 upcoming = stringsOf("upcoming"),
                 isPlaying = map["isPlaying"] as? Boolean ?: false,
                 hasLyrics = map["hasLyrics"] as? Boolean ?: false,
+                lineIndex = (map["lineIndex"] as? Number)?.toInt() ?: -1,
+                hasCurrentLine = map["hasCurrentLine"] as? Boolean ?: false,
                 extendedSlots = ((map["extendedSlots"] as? Number)?.toInt() ?: 0)
                     .coerceIn(0, 2),
                 positionMs = (map["positionMs"] as? Number)?.toLong() ?: 0L,
@@ -471,8 +489,11 @@ internal class CurrentLineView(context: Context) : TextView(context) {
  * - 位置时基由宿主统一持有（[LyricClock]）：样本只做纠偏（含传输延迟补偿），
  *   逐帧推进 + 位移跟随（[LyricSpring]）在帧循环里完成——切行重建视图不重锚，
  *   暂停 / seek 直接落位；
- * - 行内容变化做「整块滚入滚出」过渡（旧块上移滚出、新块自下滚入）；
+ * - 行内容变化做「整块滚入滚出」过渡（旧块上移滚出、新块自下滚入）：
+ *   过渡只有一个显式句柄，任何状态变更前同步收尾，旧列移除不依赖动画回调；
  * - 同结构更新（逐字进度 / 播放态）不重建视图，不打断滚动与动画；
+ * - 空内容（间奏空行 / 暂停 clear / 无歌词隐藏）走 [clearContent] 显式清空，
+ *   不保留上一句的 TextView；
  * - 控制条是 M3E 观感的 pill（圆角容器 + 图标按钮 + 状态层），
  *   颜色由 Dart 侧解析后下发。
  */
@@ -540,6 +561,18 @@ internal class LyricsOverlayView(
 
     private var frameScheduled = false
 
+    /**
+     * 当前滚入滚出过渡的唯一句柄。
+     *
+     * 正确性不靠动画回调：`withEndAction` / 延时兜底都可能因窗口不可见、
+     * 系统暂停动画而丢失。这里把旧列、新列、清理 Runnable 和开始时刻集中
+     * 记录，任何状态变更前调 [finishRoll] 同步收尾，帧循环里再按时间兜底。
+     */
+    private var rollOutgoing: LinearLayout? = null
+    private var rollIncoming: LinearLayout? = null
+    private var rollCleanup: Runnable? = null
+    private var rollStartedAt = 0L
+
     private val frame = object : Runnable {
         override fun run() {
             frameScheduled = false
@@ -575,6 +608,8 @@ internal class LyricsOverlayView(
         val words: List<OverlayWord>?,
         /** 空槽占位：不可见、不可交互，只负责撑出固定行高。 */
         val isPlaceholder: Boolean = false,
+        /** 行身份（仅当前行有）：重复文本的副歌也能触发换行过渡。 */
+        val lineKey: String = "",
     )
 
     /**
@@ -589,6 +624,7 @@ internal class LyricsOverlayView(
         val isCurrent: Boolean,
         val isExtended: Boolean,
         val isPlaceholder: Boolean,
+        val lineKey: String,
     )
 
     init {
@@ -683,13 +719,13 @@ internal class LyricsOverlayView(
             if (config.freezeOnScreenOff) {
                 // 息屏会暂停 View 动画：先把滚入滚出收尾，否则旧列可能留在
                 // 视口里，亮屏后与新歌词重叠。
-                finishPendingRoll()
+                finishRoll()
                 stopFrames()
             }
             return
         }
         // 亮屏：无论冻结开关，先收尾可能被系统暂停的滚入滚出。
-        finishPendingRoll()
+        finishRoll()
         val next = pending
         if (next != null) {
             pending = null
@@ -702,8 +738,58 @@ internal class LyricsOverlayView(
     }
 
     override fun onDetachedFromWindow() {
+        // 窗口移除 / 引擎销毁：动画与延时回调都不该继续持有旧内容。
+        finishRoll()
         stopFrames()
         super.onDetachedFromWindow()
+    }
+
+    /**
+     * 显式清空内容：收尾过渡 → 移除全部内容列 → 只留一个空列。
+     *
+     * 与「投送空文本」走同一条重建路径不同，这个入口保证无论当前处于
+     * 过渡中、冻结中还是视图尚未布局，都会把旧 TextView 从视图树里摘掉。
+     * 幂等：已经是空列时直接返回。
+     */
+    fun clearContent(isPlaying: Boolean? = null) {
+        finishRoll()
+        stopFrames()
+        spring.snap(0f, SystemClock.elapsedRealtime())
+        // 保留播放态等非文本字段：清空后若恰好有 setConfig（改字号 / 颜色），
+        // applyConfig 会用 current 重渲染——不更新它就会把上一句又画回来。
+        // isPlaying 由 desktop.clear 一并带上（暂停回退 clear 时控制条图标要变）。
+        current = current.copy(
+            line = "",
+            extended = emptyList(),
+            upcoming = emptyList(),
+            words = null,
+            lineIndex = -1,
+            hasCurrentLine = false,
+            isPlaying = isPlaying ?: current.isPlaying,
+        )
+        updatePlayPauseIconIfNeeded()
+        if (renderedStructure.isEmpty() &&
+            contentHolder.childCount == 1 &&
+            textColumn.childCount == 0
+        ) {
+            return
+        }
+        currentLineView = null
+        entryViews.clear()
+        scrollGroup.clear()
+        renderedStructure = emptyList()
+        val empty = LinearLayout(context).apply { orientation = VERTICAL }
+        (contentHolder.layoutParams as? LinearLayout.LayoutParams)?.height =
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        contentHolder.removeAllViews()
+        contentHolder.addView(
+            empty,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        textColumn = empty
     }
 
     // --- 帧循环（时钟推进 + 位移跟随 + 着色） ---
@@ -732,6 +818,9 @@ internal class LyricsOverlayView(
     private fun applyFrame(advance: Boolean) {
         if (isFrozen) return
         val now = SystemClock.elapsedRealtime()
+        // 过渡兜底：动画回调 / postDelayed 都可能因窗口不可见被系统暂停。
+        // 播放中帧循环持续运行，这里按时间强制收尾，旧列不会永久留在视口里。
+        checkRollTimeout(now)
         val positionMs = if (advance) clock.advance(now) else clock.currentMs
         val line = currentLineView
         if (line == null) {
@@ -807,8 +896,19 @@ internal class LyricsOverlayView(
     private fun render(presentation: OverlayPresentation, animate: Boolean, force: Boolean) {
         current = presentation
         val entries = buildEntries(presentation)
+        if (entries.isEmpty()) {
+            // 无当前行 / 间奏空行 / 回退清空：显式清空，绝不保留上一句。
+            if (renderedStructure.isNotEmpty() ||
+                contentHolder.childCount != 1 ||
+                textColumn.childCount != 0
+            ) {
+                clearContent()
+            }
+            updatePlayPauseIconIfNeeded()
+            return
+        }
         val structure = entries.map {
-            EntryKey(it.text, it.isCurrent, it.isExtended, it.isPlaceholder)
+            EntryKey(it.text, it.isCurrent, it.isExtended, it.isPlaceholder, it.lineKey)
         }
         val structureSame = !force &&
             structure == renderedStructure &&
@@ -848,10 +948,23 @@ internal class LyricsOverlayView(
         val mainSlots = config.maxLines.coerceAtLeast(1)
         val extendedSlots = presentation.extendedSlots.coerceIn(0, 2)
 
+        // 真实空行 / 间奏：当前行存在但文本为空。必须整体清空，不能把
+        // upcoming 塞进第一行（否则看起来像当前句一直没换、下一句提前出现）。
+        // 前奏预览是另一回事：没有当前行（lineIndex = -1），此时才展示 upcoming。
+        if (presentation.line.isEmpty() && presentation.hasCurrentLine) {
+            return emptyList()
+        }
+
         val mainEntries = mutableListOf<Entry>()
         if (presentation.line.isNotEmpty()) {
             mainEntries.add(
-                Entry(presentation.line, true, false, presentation.words),
+                Entry(
+                    text = presentation.line,
+                    isCurrent = true,
+                    isExtended = false,
+                    words = presentation.words,
+                    lineKey = "${presentation.trackId}#${presentation.lineIndex}",
+                ),
             )
         }
         for (line in presentation.upcoming) {
@@ -978,7 +1091,7 @@ internal class LyricsOverlayView(
      * 旧块上移滚出、新块自下滚入，视口高度按新内容固定，窗口高度不抖。
      */
     private fun rebuildLineViews(entries: List<Entry>, animate: Boolean) {
-        finishPendingRoll()
+        finishRoll()
         val previousColumn = textColumn
         val newColumn = buildColumn(entries)
         val holderParams = contentHolder.layoutParams as? LinearLayout.LayoutParams
@@ -1009,15 +1122,8 @@ internal class LyricsOverlayView(
         holderParams?.height = newHeight
         newColumn.translationY = newHeight.toFloat()
         newColumn.alpha = 0f
+        // 先挂旧列、再挂新列：新列在上层，滚出过程中不会被旧列盖住。
         contentHolder.removeView(previousColumn)
-        contentHolder.addView(
-            newColumn,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-            ),
-        )
-        // 旧块留在视口里做滚出（结束动作里移除；被新块盖住也无妨）。
         contentHolder.addView(
             previousColumn,
             FrameLayout.LayoutParams(
@@ -1025,51 +1131,93 @@ internal class LyricsOverlayView(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
             ),
         )
+        contentHolder.addView(
+            newColumn,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
         textColumn = newColumn
         currentLineView?.let { bindCurrentLine(it) }
+        beginRoll(previousColumn, newColumn, oldHeight)
+    }
 
-        previousColumn.animate()
+    /** 启动一次滚入滚出；旧列 / 新列 / 兜底回调由 [finishRoll] 统一收口。 */
+    private fun beginRoll(
+        outgoing: LinearLayout,
+        incoming: LinearLayout,
+        oldHeight: Int,
+    ) {
+        rollOutgoing = outgoing
+        rollIncoming = incoming
+        rollStartedAt = SystemClock.elapsedRealtime()
+        // 防御：窗口不可见 / 系统暂停 View 动画时 withEndAction 不保证执行。
+        // 正常动画早已结束；兜底时长留足系统动画缩放（最高 10×）的余量。
+        // 帧循环里还有 [checkRollTimeout] 的第二道兜底。
+        val cleanup = Runnable {
+            if (rollIncoming === incoming) finishRoll()
+        }
+        rollCleanup = cleanup
+        incoming.postDelayed(cleanup, ROLL_DURATION_MS + ROLL_CLEANUP_GRACE_MS)
+        outgoing.animate()
             .translationY(-oldHeight.toFloat())
             .alpha(0f)
             .setDuration(ROLL_DURATION_MS)
             .setInterpolator(EASE_DECELERATE)
             .withEndAction {
-                if (previousColumn.parent === contentHolder) {
-                    contentHolder.removeView(previousColumn)
-                }
+                if (rollOutgoing === outgoing) finishRoll()
             }
             .start()
-        newColumn.animate()
+        incoming.animate()
             .translationY(0f)
             .alpha(1f)
             .setDuration(ROLL_DURATION_MS)
             .setInterpolator(EASE_DECELERATE)
             .start()
-        // 防御：窗口不可见 / 系统暂停 View 动画时 withEndAction 不保证执行，
-        // 旧列会永久留在视口里与当前歌词重叠。正常动画早已结束；兜底时长
-        // 留足系统动画缩放（最高 10×）的余量。
-        newColumn.postDelayed(
-            {
-                if (textColumn === newColumn) finishPendingRoll()
-            },
-            ROLL_DURATION_MS + ROLL_CLEANUP_GRACE_MS,
-        )
     }
 
-    /** 结束未完成的滚入滚出：旧块直接移除、视口回到跟随内容。 */
-    private fun finishPendingRoll() {
+    /** 帧循环兜底：过渡超时（系统动画被暂停 / 回调丢失）时强制收尾。 */
+    private fun checkRollTimeout(nowUptimeMs: Long) {
+        if (rollOutgoing == null) return
+        if (nowUptimeMs - rollStartedAt <= ROLL_DURATION_MS + ROLL_CLEANUP_GRACE_MS) {
+            return
+        }
+        finishRoll()
+    }
+
+    /**
+     * 结束未完成的滚入滚出：取消动画、移除旧列、把当前列复位到终态。
+     *
+     * 幂等；任何内容 / 配置 / 冻结 / 窗口销毁操作前都先走这里。旧列移除
+     * 不依赖动画的 `withEndAction`——它只是正常路径上的加速，不是正确性前提。
+     */
+    private fun finishRoll() {
+        val outgoing = rollOutgoing ?: return
+        val incoming = rollIncoming
+        val cleanup = rollCleanup
+        rollOutgoing = null
+        rollIncoming = null
+        rollCleanup = null
+        rollStartedAt = 0L
+        if (cleanup != null) incoming?.removeCallbacks(cleanup)
+        outgoing.animate().cancel()
+        incoming?.animate()?.cancel()
+        if (outgoing.parent === contentHolder) {
+            contentHolder.removeView(outgoing)
+        }
+        if (incoming === textColumn) {
+            incoming.translationY = 0f
+            incoming.alpha = 1f
+        }
+        (contentHolder.layoutParams as? LinearLayout.LayoutParams)?.height =
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        // 不变量：收尾后视口里只允许当前内容列；任何历史列都清掉。
         for (i in contentHolder.childCount - 1 downTo 0) {
-            val child = contentHolder.getChildAt(i)
-            if (child !== textColumn) {
-                child.animate().cancel()
+            if (contentHolder.getChildAt(i) !== textColumn) {
                 contentHolder.removeViewAt(i)
             }
         }
-        textColumn.animate().cancel()
-        textColumn.translationY = 0f
-        textColumn.alpha = 1f
-        (contentHolder.layoutParams as? LinearLayout.LayoutParams)?.height =
-            LinearLayout.LayoutParams.WRAP_CONTENT
     }
 
     private fun bindCurrentLine(line: CurrentLineView) {

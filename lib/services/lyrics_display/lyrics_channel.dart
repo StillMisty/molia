@@ -55,14 +55,32 @@ class LyricsChannel {
   Future<void> openOverlayPermission() =>
       _invokeVoid('desktop.openOverlayPermission');
 
-  Future<void> showDesktop(Map<String, Object?> config) =>
-      _invokeVoid('desktop.show', config);
+  /// 显示悬浮窗；返回是否真正建窗（权限在检查后又被撤销时返回 false）。
+  ///
+  /// reconcile 以返回值更新本地的 `shown` 事实，避免 show 失败后仍以为
+  /// 窗口存在、重新授权时也不再重试。
+  Future<bool> showDesktop(Map<String, Object?> config) async {
+    try {
+      await _channel.invokeMethod<void>('desktop.show', config);
+      return true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
 
   Future<void> updateDesktop(Map<String, Object?> presentation) =>
       _invokeVoid('desktop.update', presentation);
 
   Future<void> setDesktopConfig(Map<String, Object?> config) =>
       _invokeVoid('desktop.setConfig', config);
+
+  /// 显式清空内容（无歌词隐藏 / 暂停回退 clear）。
+  ///
+  /// 清空不发内容 update，[isPlaying] 用于同步原生控制条的播放 / 暂停图标。
+  Future<void> clearDesktop({required bool isPlaying}) =>
+      _invokeVoid('desktop.clear', {'isPlaying': isPlaying});
 
   Future<void> hideDesktop() => _invokeVoid('desktop.hide');
 

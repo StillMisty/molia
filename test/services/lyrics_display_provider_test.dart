@@ -83,6 +83,45 @@ void main() {
     expect(output.stopped, isTrue);
   });
 
+  test('文本相同的连续两行仍按行身份下发（重复副歌不被去重吞掉）', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
+    await settings.setDesktopEnabled(true);
+    final output = _FakeOutput(LyricsOutputIds.desktop);
+    final provider = LyricsDisplayProvider(
+      settings: settings,
+      outputs: [output],
+    );
+    await pumpEventQueue();
+
+    provider.syncPlayback(PlaybackSnapshot(current: track(), isPlaying: true));
+    provider.syncLyrics(
+      LyricsState(
+        trackId: 'fake:1',
+        status: LyricsStatus.ready,
+        lines: const [
+          LyricLine(Duration.zero, '啊'),
+          LyricLine(Duration(seconds: 5), '啊'),
+        ],
+      ),
+    );
+    await pumpEventQueue();
+    expect(output.applied.last.line, '啊');
+    expect(output.applied.last.lineIndex, 0);
+    final baseline = output.applied.length;
+
+    provider.updatePosition(const Duration(seconds: 6));
+    await pumpEventQueue();
+    expect(
+      output.applied.length,
+      baseline + 1,
+      reason: '第 1 行 → 第 2 行文本相同，仍要下发（lineIndex 变化）',
+    );
+    expect(output.applied.last.lineIndex, 1);
+
+    provider.dispose();
+  });
+
   test('全部输出关闭时不下发；打开后按当前状态补发', () async {
     SharedPreferences.setMockInitialValues({});
     final settings = LyricsDisplaySettings(settings: testSettingsRegistry());

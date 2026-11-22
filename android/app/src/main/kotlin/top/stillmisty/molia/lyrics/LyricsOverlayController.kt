@@ -20,6 +20,11 @@ import kotlin.math.max
  * 桌面歌词悬浮窗生命周期：显示 / 更新 / 配置 / 位置持久化 / 息屏冻结。
  *
  * 放在应用上下文即可：进程存活期间窗口不受 Activity 前后台影响。
+ * 窗口所有权由 [LyricsOverlayHost] 保证（进程内单窗口），controller 自身
+ * 只维护 `Hidden / Shown` 两态，所有命令幂等：
+ * - 隐藏时收到内容先缓存，show 时一起投送（不丢首次更新）；
+ * - 重复 show 复用现有视图，只重下发配置；
+ * - dispose 后所有命令变为 no-op，旧引擎的迟到调用不会复活窗口。
  *
  * 坐标空间：`TYPE_APPLICATION_OVERLAY` 默认按 system bars / 刘海 insets 收边
  * （fitTypes），`LayoutParams.x` 从安全区左缘起算、`y` 从安全区**底缘**起算
@@ -37,20 +42,25 @@ import kotlin.math.max
  * 可用区；高度变化只需夹取，不需要搬动窗口。
  */
 internal class LyricsOverlayController(
-    private val context: Context,
+    context: Context,
     private val onAction: (String) -> Unit,
     private val onScreenState: (Boolean) -> Unit,
 ) {
+    private val appContext = context.applicationContext ?: context
     private val windowManager =
-        context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val prefs: SharedPreferences =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     private var view: LyricsOverlayView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var currentConfig: OverlayConfig? = null
     private var receiverRegistered = false
     private var callbacksRegistered = false
+    private var disposed = false
+
+    /** 隐藏态收到的最后一次内容：show 时补投，避免「先 update 后 show」丢内容。 */
+    private var pendingPresentation: OverlayPresentation? = null
 
     /** 上次落位时的窗口尺寸：布局回调靠它区分「真变了」与「只是被拖动」。 */
     private var anchoredWidth = 0
@@ -98,42 +108,84 @@ internal class LyricsOverlayController(
         override fun onLowMemory() {}
     }
 
-    fun canDrawOverlays(): Boolean = Settings.canDrawOverlays(context)
+    fun canDrawOverlays(): Boolean = Settings.canDrawOverlays(appContext)
 
     fun isShown(): Boolean = view != null
 
     fun show(configMap: Map<*, *>?) {
+        if (disposed) return
         val config = OverlayConfig.fromMap(configMap)
         if (view == null) {
             createView(config)
         }
         applyConfig(config)
+        // 先 update 后 show（或暂停隐藏后恢复）时缓存的内容在这里补投，
+        // 保证窗口第一次可见就已经是当前行，而不是空白等下一次位置 tick。
+        pendingPresentation?.let { view?.setPresentation(it) }
     }
 
+    /**
+     * 内容投送。窗口隐藏时只缓存，不做任何视图操作——这样暂停隐藏 /
+     * 权限切换期间的投送不会丢失，也不会对已移除的窗口产生副作用。
+     */
     fun update(presentationMap: Map<*, *>?) {
-        view?.setPresentation(OverlayPresentation.fromMap(presentationMap))
+        if (disposed) return
+        val presentation = OverlayPresentation.fromMap(presentationMap)
+        pendingPresentation = presentation
+        val current = view ?: return
+        current.setPresentation(presentation)
+    }
+
+    /**
+     * 显式清空内容（无歌词隐藏 / 暂停回退 clear）：同步收尾过渡并移除所有
+     * 内容列，不依赖一次「空文本 update」碰巧走到同一条重建路径。
+     *
+     * 入参可带 `isPlaying`：清空不发内容 update，控制条的播放 / 暂停图标
+     * 仍需要知道最新播放态（尤其是暂停回退 clear）。
+     */
+    fun clear(presentationMap: Map<*, *>?) {
+        if (disposed) return
+        val playing = presentationMap?.get("isPlaying") as? Boolean
+        pendingPresentation = OverlayPresentation(
+            isPlaying = playing ?: false,
+        )
+        view?.clearContent(playing)
     }
 
     fun setConfig(configMap: Map<*, *>?) {
+        if (disposed) return
         applyConfig(OverlayConfig.fromMap(configMap))
     }
 
     fun hide() {
+        // 即使当前没有视图也要丢掉缓存内容：隐藏 / 释放之后迟到的 show
+        // 不该把上一轮歌词重新带出来。
+        pendingPresentation = null
         val current = view ?: return
         view = null
         layoutParams = null
         currentConfig = null
         anchoredWidth = 0
         anchoredHeight = 0
+        // 显式收尾动画：窗口移除后旧列不应继续持有动画 / 回调。
+        current.clearContent()
         try {
-            windowManager.removeView(current)
+            windowManager.removeViewImmediate(current)
         } catch (_: Exception) {
         }
         unregisterSideEffects()
     }
 
+    /** 释放窗口与所有系统回调；之后本对象的命令全部 no-op。 */
+    fun dispose() {
+        if (disposed) return
+        disposed = true
+        hide()
+    }
+
     /** 重置位置到默认（屏幕下方居中）并清除持久化。 */
     fun resetPosition() {
+        if (disposed) return
         prefs.edit().remove(KEY_X).remove(KEY_Y).apply()
         xFraction = DEFAULT_X
         bottomFraction = DEFAULT_Y
@@ -184,7 +236,7 @@ internal class LyricsOverlayController(
         layoutParams = params
 
         val overlayView = LyricsOverlayView(
-            context = context,
+            context = appContext,
             windowManager = windowManager,
             layoutParams = params,
             areaSize = ::safeSize,
@@ -253,7 +305,7 @@ internal class LyricsOverlayController(
 
     /** 拖动结束：把当前矩形换算成比例并持久化（原生直接保存，不经通道回传）。 */
     private fun onDragFinished() {
-        if (view == null) return
+        if (disposed || view == null) return
         val params = layoutParams ?: return
         val area = safeSize()
         val maxX = max(0, area.x - params.width)
@@ -307,7 +359,7 @@ internal class LyricsOverlayController(
                 // 停在息屏前那一行。系统广播用 EXPORTED；其他应用无法伪造
                 // protected broadcast，安全性不受影响。
                 ContextCompat.registerReceiver(
-                    context,
+                    appContext,
                     screenReceiver,
                     filter,
                     ContextCompat.RECEIVER_EXPORTED,
@@ -318,7 +370,7 @@ internal class LyricsOverlayController(
         }
         if (!callbacksRegistered) {
             try {
-                context.registerComponentCallbacks(configurationCallbacks)
+                appContext.registerComponentCallbacks(configurationCallbacks)
                 callbacksRegistered = true
             } catch (_: Exception) {
             }
@@ -328,14 +380,14 @@ internal class LyricsOverlayController(
     private fun unregisterSideEffects() {
         if (receiverRegistered) {
             try {
-                context.unregisterReceiver(screenReceiver)
+                appContext.unregisterReceiver(screenReceiver)
             } catch (_: Exception) {
             }
             receiverRegistered = false
         }
         if (callbacksRegistered) {
             try {
-                context.unregisterComponentCallbacks(configurationCallbacks)
+                appContext.unregisterComponentCallbacks(configurationCallbacks)
             } catch (_: Exception) {
             }
             callbacksRegistered = false
