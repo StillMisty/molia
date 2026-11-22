@@ -13,6 +13,7 @@ import 'dart:io';
 import 'src/apk_size.dart';
 import 'src/commands/analyze.dart';
 import 'src/commands/app.dart';
+import 'src/commands/clean.dart';
 import 'src/commands/docs.dart';
 import 'src/commands/emu.dart';
 import 'src/commands/smoke.dart';
@@ -38,6 +39,7 @@ molia 跨端工具（Linux / macOS / Windows 同一套命令）
   test <平台> [选项]        集成测试：linux / android / all
   smoke linux              启动首帧烟测（真实 main + provider tree）
   app <命令>               run / reload / restart / stop / log / status（--machine 控制通道）
+  clean [选项]             清构建产物（默认保留 native assets 缓存；--deep / --full）
   emu <命令>               start / stop / status（Android 模拟器）
   win <命令>               Windows 采样：mem / scroll / frames / startup（Dart + FFI）
   size apk|desktop [<路径>...]  APK / 桌面 bundle 体积与 native 库约束
@@ -131,6 +133,8 @@ Future<void> main(List<String> args) async {
       await runSmoke(context, rest);
     case 'app':
       await runApp(context, rest);
+    case 'clean':
+      await runClean(context, rest);
     case 'emu':
       await runEmu(context, rest);
     case 'win':
@@ -166,6 +170,7 @@ bool _wantsHelp(String arg) => arg == '-h' || arg == '--help';
 String _usageFor(String command) => switch (command) {
   'info' => _infoUsage,
   'deps' => _depsUsage,
+  'clean' => cleanUsage,
   'size' => _sizeUsage,
   'perf' => _perfUsage,
   'help' => _topUsage,

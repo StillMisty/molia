@@ -39,6 +39,7 @@ flutter test --no-pub      # 全量（默认集，本机 <30s）；单文件：f
 dart run tool/agent/cli.dart -h                # 跨端工具入口：info/deps/analyze/test/smoke/app/emu/win/size/perf…（ADR-0031）
 dart run tool/agent/cli.dart test linux        # 端到端（真实引擎 + 设置页 + 窗口/托盘，不含播放）；默认后台（打印日志/状态路径），--wait 等结果；Xvfb 无窗口，桌面看门狗勿删
 dart run tool/agent/cli.dart test android      # 同一套跑模拟器（先 emu start）；同样默认后台；--window / --timeout 见命令用法
+dart run tool/agent/cli.dart clean             # 清 build/ 但保留 native assets 缓存（--deep / --full 逐级加严）
 dart run tool/agent/cli.dart smoke linux       # 启动首帧烟测（真实 main + provider tree；Xvfb，抓 runApp 前崩溃）
 tool/agent/ui_preview.sh                       # 无设备 UI 预览：真实壳层 / 设置弹层 360+640 PNG（先看比例再提交）
 dart run tool/agent/cli.dart deps              # 依赖/工具链体检：pub outdated + analyze suggestions + Gradle 实际版本
