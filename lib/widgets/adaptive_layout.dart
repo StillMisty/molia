@@ -79,21 +79,27 @@ class AdaptiveLayout {
   /// 结构导航：medium 起用导航轨；compact 用底栏。
   bool get usesNavigationRail => !isCompact;
 
+  /// 相等的判据只有档位与短横屏。
+  ///
+  /// [windowWidth] / [windowHeight] 是原始像素，桌面拖拽窗口时每个像素都在
+  /// 变；把它们算进相等性会让 [AdaptiveLayoutScope] 每 1px 通知一次，可见页
+  /// 跟着整页重建（2026-11 窗口 resize 帧体检：Molia 拖拽中只出到 ~53fps，
+  /// 同机 LocalSend ~100fps，主因就是这类逐像素通知）。需要连续尺寸的叶子
+  /// 自己用 `LayoutBuilder` 读约束，不要读这两个字段。
   @override
   bool operator ==(Object other) =>
       other is AdaptiveLayout &&
       other.sizeClass == sizeClass &&
-      other.windowWidth == windowWidth &&
-      other.windowHeight == windowHeight;
+      other.isShortViewport == isShortViewport;
 
   @override
-  int get hashCode => Object.hash(sizeClass, windowWidth, windowHeight);
+  int get hashCode => Object.hash(sizeClass, isShortViewport);
 }
 
 /// 壳层解析一次的布局档位：页面 / 分栏 / 弹层只消费。
 ///
 /// **作用域优先级**：
-/// - 壳层（移动 / 桌面）用 [scope] 包住整个导航壳，页面读到的就是窗口尺寸；
+/// - 壳层（移动 / 桌面）用 [host] 包住整个导航壳，页面读到的就是窗口尺寸；
 /// - 页面型弹层 / 侧滑弹层用 [local] 包住内容，档位按**弹层自身约束**解析
 ///   （设置弹层被 880 上限夹住时不会误读整窗宽度；高度同理，短弹层不会被
 ///   当成整窗高度）；
@@ -117,13 +123,12 @@ class AdaptiveLayoutScope extends InheritedWidget {
   final bool visible;
 
   /// 壳层入口：按窗口尺寸解析并包住 [child]。
-  static Widget scope(BuildContext context, {required Widget child}) {
-    final size = MediaQuery.sizeOf(context);
-    return AdaptiveLayoutScope(
-      layout: AdaptiveLayout.fromSize(size.width, size.height),
-      child: child,
-    );
-  }
+  ///
+  /// 供**不随尺寸重建**的调用方使用：`scope` 在调用方 build 里读
+  /// `MediaQuery.sizeOf`，会把原始像素注册成调用方的依赖；这里的宿主把这次
+  /// 读取收在自己这一层，向下只在档位 / 短横屏翻转时通知。
+  static Widget host({required Widget child}) =>
+      _AdaptiveLayoutHost(child: child);
 
   /// 弹层 / 侧滑入口：按本层实际约束解析（有限宽高才用约束）。
   ///
@@ -160,4 +165,24 @@ class AdaptiveLayoutScope extends InheritedWidget {
   @override
   bool updateShouldNotify(AdaptiveLayoutScope oldWidget) =>
       visible != oldWidget.visible || (visible && layout != oldWidget.layout);
+}
+
+/// [AdaptiveLayoutScope.host] 的实现：读取窗口尺寸并解析一次档位。
+///
+/// 自身每个像素都会重建（它订阅了 `MediaQuery.sizeOf`），但它把同一个
+/// [child] 实例往下传，[AdaptiveLayout] 的相等性只看档位，所以子树不会跟着
+/// 逐像素重建。
+class _AdaptiveLayoutHost extends StatelessWidget {
+  const _AdaptiveLayoutHost({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return AdaptiveLayoutScope(
+      layout: AdaptiveLayout.fromSize(size.width, size.height),
+      child: child,
+    );
+  }
 }

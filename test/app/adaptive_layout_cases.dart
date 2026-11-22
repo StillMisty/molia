@@ -9,7 +9,9 @@ import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/widgets/adaptive_layout.dart';
 import 'package:molia/widgets/desktop_layout.dart';
 import 'package:molia/widgets/now_playing_layout_metrics.dart';
+import 'package:molia/widgets/responsive.dart';
 import 'package:molia/widgets/settings/settings_section_grid.dart';
+import 'package:molia/widgets/track_row.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -467,6 +469,110 @@ void main() {
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  // 桌面拖拽窗口时尺寸每个像素都在变；这些作用域把「逐像素」收窄到
+  // 「跨档位 / 跨阈值」。回归住它，避免有人把原始宽加回相等性 / 通知判据。
+  group('窗口逐像素变化不通知', () {
+    Widget wrap(Size size, Widget child) => Directionality(
+      textDirection: TextDirection.ltr,
+      child: MediaQuery(
+        data: MediaQueryData(size: size),
+        child: child,
+      ),
+    );
+
+    testWidgets('AdaptiveLayoutScope.host：同档位不重建，跨 840 / 480 才重建', (
+      tester,
+    ) async {
+      var builds = 0;
+      AdaptiveLayout? layout;
+      final host = AdaptiveLayoutScope.host(
+        child: Builder(
+          builder: (context) {
+            builds++;
+            layout = AdaptiveLayoutScope.of(context);
+            return const SizedBox.shrink();
+          },
+        ),
+      );
+
+      await tester.pumpWidget(wrap(const Size(900, 900), host));
+      expect(builds, 1);
+      expect(layout!.isExpanded, isTrue);
+
+      await tester.pumpWidget(wrap(const Size(899, 899), host));
+      expect(builds, 1, reason: '同一档位内逐像素变化不应重建');
+      expect(layout!.isExpanded, isTrue);
+
+      await tester.pumpWidget(wrap(const Size(839, 900), host));
+      expect(builds, 2);
+      expect(layout!.sizeClass, WindowSizeClass.medium);
+
+      await tester.pumpWidget(wrap(const Size(600, 479), host));
+      expect(builds, 3, reason: '短横屏翻转也要通知');
+      expect(layout!.isShortViewport, isTrue);
+    });
+
+    testWidgets('ViewportClassScope.host：同档位不重建，跨 900 才重建', (tester) async {
+      var builds = 0;
+      double? padding;
+      final host = ViewportClassScope.host(
+        child: Builder(
+          builder: (context) {
+            builds++;
+            padding = context
+                .layoutType(ResponsivePageType.browse)
+                .horizontalPadding;
+            return const SizedBox.shrink();
+          },
+        ),
+      );
+
+      await tester.pumpWidget(wrap(const Size(1000, 900), host));
+      expect(builds, 1);
+      expect(padding, 24);
+
+      await tester.pumpWidget(wrap(const Size(999, 899), host));
+      expect(builds, 1, reason: 'desktop 档内逐像素变化不应重建');
+
+      await tester.pumpWidget(wrap(const Size(899, 899), host));
+      expect(builds, 2);
+      expect(padding, 24);
+    });
+
+    test('DesktopLayout：原始宽不参与通知，表格判据翻转才通知', () {
+      DesktopLayout make(double width) => DesktopLayout(
+        isDesktopPlatform: true,
+        windowWidth: width,
+        railWidth: 96,
+        child: const SizedBox.shrink(),
+      );
+
+      // 内容宽 = 窗口宽 − 96：720 是标准表格列阈值，812 是播放历史档。
+      expect(make(815).tableColumns, isFalse);
+      expect(make(816).tableColumns, isTrue);
+      expect(make(816).updateShouldNotify(make(815)), isTrue);
+      expect(make(816).updateShouldNotify(make(817)), isFalse);
+      expect(make(907).tableColumnsFor(TrackRowColumnSpec.history), isFalse);
+      expect(make(908).tableColumnsFor(TrackRowColumnSpec.history), isTrue);
+      expect(make(908).updateShouldNotify(make(907)), isTrue);
+    });
+
+    test('AdaptiveLayout：相等性只看档位与短横屏', () {
+      expect(
+        AdaptiveLayout.fromSize(900, 900),
+        AdaptiveLayout.fromSize(999, 880),
+      );
+      expect(
+        AdaptiveLayout.fromSize(900, 900),
+        isNot(AdaptiveLayout.fromSize(839, 900)),
+      );
+      expect(
+        AdaptiveLayout.fromSize(900, 460),
+        isNot(AdaptiveLayout.fromSize(900, 900)),
+      );
     });
   });
 }

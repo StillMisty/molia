@@ -175,15 +175,21 @@ class DesktopShell extends StatelessWidget {
                 ),
                 // 搜索遮罩宿主：不可见占位盒只提供搜索条的静止位置（中上、居中），
                 // 内容由 GlobalSearchOverlay 挂到根导航器上呈现。
-                Positioned(
-                  top: GlobalSearchOverlay.barTopFor(context),
-                  left: 0,
-                  right: 0,
-                  height: appSearchBarMinHeightOf(context),
-                  child: Center(
-                    child: GlobalSearchOverlay(
-                      controller: searchController,
-                      onViewAllResults: onViewAllResults,
+                //
+                // 用 `Builder` 收窄尺寸订阅：`barTopFor` 读窗口高，直接在
+                // DesktopShell 里读会让整个骨架随窗口拖拽逐像素重建；这里只让
+                // 这一个占位盒跟着高度走（重生成本 = 一个 Positioned）。
+                Builder(
+                  builder: (context) => Positioned(
+                    top: GlobalSearchOverlay.barTopFor(context),
+                    left: 0,
+                    right: 0,
+                    height: appSearchBarMinHeightOf(context),
+                    child: Center(
+                      child: GlobalSearchOverlay(
+                        controller: searchController,
+                        onViewAllResults: onViewAllResults,
+                      ),
                     ),
                   ),
                 ),
