@@ -1294,3 +1294,17 @@
      留下的 `GeneratedPluginRegistrant.java` 带 dev-only 的 `integration_test`，
      紧接着 `flutter build apk --release --no-pub` 会因包不存在直接失败；release
      构建不要加 `--no-pub`。
+
+123. **壳层 / InheritedWidget 不要用原始像素宽做通知判据**：桌面拖窗口时窗口宽
+     每个像素都在变。把 `windowWidth` / `windowHeight` 算进 `AdaptiveLayout`
+     的相等性或 `DesktopLayout.updateShouldNotify`，会让壳层与可见页（收藏正文 /
+     搜索结果 / 曲库详情）逐像素重建；`MyApp.build` 里直接
+     `AdaptiveLayoutScope.scope(context)` 也会把 `MediaQuery.sizeOf` 的依赖挂在
+     整个壳层上。统一走：
+     - 结构判据（`layoutType` / `horizontalPadding` / `isLargeScreen` / 表格列）
+       只按档位 / 阈值通知：`AdaptiveLayoutScope.host`、`DesktopLayout.host`、
+       `ViewportClassScope.host`；
+     - 真正连续的尺寸用局部 `LayoutBuilder` 读约束（如桌面播放页左栏宽）；
+     - 壳层里个别读窗口尺寸的槽位（搜索条占位）用 `Builder` 收窄订阅范围。
+     阈值与档位的回归用例在 `test/app/adaptive_layout_cases.dart`
+     （「窗口逐像素变化不通知」组）。
