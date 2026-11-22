@@ -7,7 +7,7 @@ library;
 
 import '../../domain/models/diagnostics.dart';
 
-/// 把一轮健康检查投影为统一结果（搜索 + 可选取链各一条）。
+/// 把一轮健康检查投影为统一结果（每渠道的搜索 / 取链 / 流探测各一条）。
 ///
 /// 空结果按 warning 处理：渠道通了但没有搜到东西，通常值得排查而不是直接
 /// 判失败；[HealthStepStatus.skipped] 保持 skipped。
@@ -17,29 +17,52 @@ List<DiagnosticCheckResult> healthRunCheckResults(
 }) {
   final when = at ?? run.finishedAt ?? run.startedAt;
   return [
-    for (final channel in run.results) ...[
+    for (final channel in run.results)
+      ...healthChannelCheckResults(channel, at: when),
+  ];
+}
+
+/// 把单个渠道结果投影为统一结果（顺序：搜索 → 取链 → 首字节）。
+///
+/// 统一检查执行器按渠道逐条写入结果时直接复用本函数，保持与整轮投影同一
+/// 口径；[HealthStepResult] 为空（无能力 / 未执行）时不出对应 id。
+List<DiagnosticCheckResult> healthChannelCheckResults(
+  HealthChannelResult channel, {
+  required DateTime at,
+}) {
+  return [
+    DiagnosticCheckResult(
+      id: DiagnosticCheckId.channelSearch,
+      group: DiagnosticCheckGroup.sources,
+      status: _statusOf(channel.search),
+      at: at,
+      failure: channel.search.failure,
+      latencyMs: channel.search.latencyMs,
+      channelKey: channel.channelKey,
+      channelDisplayName: channel.channelDisplayName,
+    ),
+    if (channel.resolve != null)
       DiagnosticCheckResult(
-        id: DiagnosticCheckId.channelSearch,
+        id: DiagnosticCheckId.channelResolve,
         group: DiagnosticCheckGroup.sources,
-        status: _statusOf(channel.search),
-        at: when,
-        failure: channel.search.failure,
-        latencyMs: channel.search.latencyMs,
+        status: _statusOf(channel.resolve!),
+        at: at,
+        failure: channel.resolve!.failure,
+        latencyMs: channel.resolve!.latencyMs,
         channelKey: channel.channelKey,
         channelDisplayName: channel.channelDisplayName,
       ),
-      if (channel.resolve != null)
-        DiagnosticCheckResult(
-          id: DiagnosticCheckId.channelResolve,
-          group: DiagnosticCheckGroup.sources,
-          status: _statusOf(channel.resolve!),
-          at: when,
-          failure: channel.resolve!.failure,
-          latencyMs: channel.resolve!.latencyMs,
-          channelKey: channel.channelKey,
-          channelDisplayName: channel.channelDisplayName,
-        ),
-    ],
+    if (channel.stream != null)
+      DiagnosticCheckResult(
+        id: DiagnosticCheckId.channelStream,
+        group: DiagnosticCheckGroup.sources,
+        status: _statusOf(channel.stream!),
+        at: at,
+        failure: channel.stream!.failure,
+        latencyMs: channel.stream!.latencyMs,
+        channelKey: channel.channelKey,
+        channelDisplayName: channel.channelDisplayName,
+      ),
   ];
 }
 

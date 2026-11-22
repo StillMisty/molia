@@ -10,6 +10,7 @@ import 'dart:async';
 import '../../domain/models/diagnostics.dart';
 import '../../domain/models/failure.dart';
 import '../../domain/models/track.dart';
+import '../../domain/ports/music_source.dart' show PlayableStream;
 
 export '../../domain/models/diagnostics.dart'
     show
@@ -43,7 +44,11 @@ abstract interface class SourceHealthProbe {
   Future<Track?> search(SourceHealthTarget target);
 
   /// 对搜索结果中的一首曲目取一次播放链接；失败抛任意异常。
-  Future<void> resolve(SourceHealthTarget target, Track track);
+  Future<PlayableStream> resolve(SourceHealthTarget target, Track track);
+
+  /// 对解析出的地址做一次有界首字节探测（带 [PlayableStream.headers]，
+  /// 绝不附加账号 Cookie）；失败抛任意异常。
+  Future<void> stream(PlayableStream stream);
 }
 
 /// 检查器配置（常量集中，便于测试压短）。
@@ -51,6 +56,7 @@ class SourceHealthConfig {
   const SourceHealthConfig({
     this.searchTimeout = const Duration(seconds: 8),
     this.resolveTimeout = const Duration(seconds: 5),
+    this.streamTimeout = const Duration(seconds: 5),
     this.gap = const Duration(milliseconds: 300),
     this.cooldown = const Duration(seconds: 30),
     this.maxChannels = 20,
@@ -59,6 +65,7 @@ class SourceHealthConfig {
 
   final Duration searchTimeout;
   final Duration resolveTimeout;
+  final Duration streamTimeout;
   final Duration gap;
   final Duration cooldown;
   final int maxChannels;
@@ -87,11 +94,16 @@ class SourceHealthChecker {
   DateTime? _lastStartedAt;
   int _generation = 0;
   bool _disposed = false;
+  Completer<void>? _idleCompleter;
+  Future<void> _idle = Future<void>.value();
 
   /// 状态变化通知（开始 / 单个渠道完成 / 取消 / 完成）。
   Stream<void> get changes => _changes.stream;
 
   bool get running => _running;
+
+  /// 当前运行结束（或取消）时完成；未在跑时立即完成。
+  Future<void> get idle => _idle;
 
   /// 最近一次开始时间（冷却判据）。
   DateTime? get lastStartedAt => _lastStartedAt;
@@ -117,6 +129,9 @@ class SourceHealthChecker {
     _running = true;
     _lastStartedAt = _now();
     final generation = ++_generation;
+    final idle = Completer<void>();
+    _idleCompleter = idle;
+    _idle = idle.future;
     final targets = List<SourceHealthTarget>.of(
       _probe.targets.take(_config.maxChannels),
     );
@@ -181,13 +196,22 @@ class SourceHealthChecker {
                 latencyMs: 0,
               )
             : null,
+        stream: target.canResolve
+            ? const HealthStepResult(
+                status: HealthStepStatus.skipped,
+                latencyMs: 0,
+              )
+            : null,
       );
     }
 
     final resolveWatch = Stopwatch()..start();
     HealthStepResult resolve;
+    PlayableStream? stream;
     try {
-      await _probe.resolve(target, track).timeout(_config.resolveTimeout);
+      stream = await _probe
+          .resolve(target, track)
+          .timeout(_config.resolveTimeout);
       resolve = HealthStepResult(
         status: HealthStepStatus.ok,
         latencyMs: resolveWatch.elapsedMilliseconds,
@@ -201,11 +225,43 @@ class SourceHealthChecker {
       );
     }
     if (generation != _generation) return null;
+    if (resolve.status != HealthStepStatus.ok || stream == null) {
+      return HealthChannelResult(
+        channelKey: target.key,
+        channelDisplayName: target.displayName,
+        search: search,
+        resolve: resolve,
+        stream: const HealthStepResult(
+          status: HealthStepStatus.skipped,
+          latencyMs: 0,
+        ),
+        latencyMs: total.elapsedMilliseconds,
+      );
+    }
+
+    final streamWatch = Stopwatch()..start();
+    HealthStepResult streamResult;
+    try {
+      await _probe.stream(stream).timeout(_config.streamTimeout);
+      streamResult = HealthStepResult(
+        status: HealthStepStatus.ok,
+        latencyMs: streamWatch.elapsedMilliseconds,
+      );
+    } catch (error) {
+      if (generation != _generation) return null;
+      streamResult = HealthStepResult(
+        status: HealthStepStatus.failed,
+        latencyMs: streamWatch.elapsedMilliseconds,
+        failure: HealthFailure.from(SourceFailure.from(error)),
+      );
+    }
+    if (generation != _generation) return null;
     return HealthChannelResult(
       channelKey: target.key,
       channelDisplayName: target.displayName,
       search: search,
       resolve: resolve,
+      stream: streamResult,
       latencyMs: total.elapsedMilliseconds,
     );
   }
@@ -221,6 +277,7 @@ class SourceHealthChecker {
         _runs.removeLast();
       }
     }
+    _completeIdle();
     _notify();
   }
 
@@ -238,7 +295,14 @@ class SourceHealthChecker {
         _runs.removeLast();
       }
     }
+    _completeIdle();
     _notify();
+  }
+
+  void _completeIdle() {
+    final idle = _idleCompleter;
+    if (idle != null && !idle.isCompleted) idle.complete();
+    _idleCompleter = null;
   }
 
   void _notify() {

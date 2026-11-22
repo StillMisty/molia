@@ -90,6 +90,7 @@ Future<CoreStacks> buildCoreStacks({
     messenger: AppUiMessenger(platform.notifications),
     powerPolicy: platform.powerPolicy,
     failures: diagnostics.failures,
+    attempts: diagnostics.service.attempts,
     mediaSessionFactory: (service, session) => initSystemMediaSession(
       service,
       // handler 只翻译动作；恢复态回落、阶段路由与提交都在会话命令面。

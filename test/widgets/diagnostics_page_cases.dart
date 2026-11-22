@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/diagnostics_page.dart';
 import 'package:molia/providers/diagnostics_provider.dart';
@@ -223,7 +224,16 @@ class _FakeProbe implements SourceHealthProbe {
   ];
 
   @override
-  Future<void> resolve(SourceHealthTarget target, Track track) async {}
+  Future<PlayableStream> resolve(
+    SourceHealthTarget target,
+    Track track,
+  ) async => PlayableStream(
+    Uri.parse('https://example.test/${target.key}.mp3'),
+    headers: const {'Referer': 'https://example.test/'},
+  );
+
+  @override
+  Future<void> stream(PlayableStream stream) async {}
 
   @override
   Future<Track?> search(SourceHealthTarget target) async => Track(

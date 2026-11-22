@@ -823,5 +823,36 @@ void main() {
       expect(noMatchLog.attempts.last.succeeded, isFalse);
       expect(noMatchLog.attempts.last.failure?.kind, FailureKind.network);
     });
+
+    test('PlaybackProvider 注入 attempts 后失败恢复写入同一日志', () async {
+      final backend = FakePlaybackFacade();
+      final log = PlaybackAttemptLog();
+      final provider = buildTestPlaybackProvider(
+        facade: backend,
+        attempts: log,
+      );
+      addTearDown(provider.dispose);
+      await provider.preferencesReady;
+
+      final failing = track('fake', 'a');
+      backend.emit(
+        PlaybackSnapshot(
+          current: failing,
+          queue: [failing],
+          currentIndex: 0,
+          error: networkFailure,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(
+        log.attempts.map((attempt) => attempt.phase),
+        contains(PlaybackAttemptPhase.reload),
+      );
+      expect(
+        log.attempts.every((attempt) => attempt.sourceKey == 'fake'),
+        isTrue,
+      );
+    });
   });
 }

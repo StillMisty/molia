@@ -79,20 +79,28 @@ class HealthChannelResult {
     required this.search,
     required this.latencyMs,
     this.resolve,
+    this.stream,
   });
 
   final String channelKey;
   final String channelDisplayName;
   final HealthStepResult search;
   final HealthStepResult? resolve;
+
+  /// 首字节探测结果；无取链能力 / 搜索为空时为 null 或 skipped。
+  final HealthStepResult? stream;
   final int latencyMs;
 
-  /// 用户可读的结论：取链失败优先于搜索空结果。
+  /// 用户可读的结论：搜索失败 → 取链失败 → 流探测失败 → 搜索空结果 → ok。
   HealthStepStatus get overallStatus {
     if (search.status == HealthStepStatus.failed) return search.status;
     final resolve = this.resolve;
     if (resolve != null && resolve.status == HealthStepStatus.failed) {
       return resolve.status;
+    }
+    final stream = this.stream;
+    if (stream != null && stream.status == HealthStepStatus.failed) {
+      return stream.status;
     }
     if (search.status == HealthStepStatus.empty) return search.status;
     return HealthStepStatus.ok;

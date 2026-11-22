@@ -11,9 +11,11 @@ import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/settings/settings_secret_store.dart';
 import 'package:molia/data/diagnostics/settings_snapshot.dart';
 import 'package:molia/domain/models/catalog.dart';
+import 'package:molia/domain/models/diagnostics.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/services/diagnostics/app_info.dart';
 import 'package:molia/services/diagnostics/diagnostics_bundle.dart';
 import 'package:molia/services/diagnostics/diagnostics_export.dart';
@@ -22,6 +24,7 @@ import 'package:molia/services/diagnostics/failure_ring_buffer.dart';
 import 'package:molia/services/diagnostics/log_file_sink.dart';
 import 'package:molia/services/diagnostics/redaction.dart';
 import 'package:molia/services/diagnostics/resolve_metrics.dart';
+import 'package:molia/services/diagnostics/source_health_check_adapter.dart';
 import 'package:molia/services/diagnostics/source_health_checker.dart';
 
 import '../support/fake_music_source.dart';
@@ -365,6 +368,179 @@ void main() {
       expect(run.results.first.resolve?.status, HealthStepStatus.ok);
       expect(run.results.last.resolve, isNull);
       expect(run.results.first.latencyMs, greaterThanOrEqualTo(0));
+    });
+
+    test('首字节 HTTP 状态映射为类型化失败，不携带 URL / 正文', () {
+      expect(streamHttpFailure(206), isNull);
+      expect(streamHttpFailure(401)?.kind, FailureKind.unauthorized);
+      expect(streamHttpFailure(403)?.kind, FailureKind.unauthorized);
+      expect(streamHttpFailure(404)?.kind, FailureKind.notFound);
+      expect(streamHttpFailure(429)?.kind, FailureKind.rateLimited);
+      expect(streamHttpFailure(500)?.kind, FailureKind.network);
+      expect(streamHttpFailure(503)?.kind, FailureKind.network);
+      expect(streamHttpFailure(400)?.kind, FailureKind.unknown);
+      expect(
+        streamHttpFailure(403).toString(),
+        isNot(contains('http://')),
+        reason: '状态映射只带状态码',
+      );
+    });
+
+    test('首字节探测带 Range 与 PlayableStream.headers，且不附加 Cookie', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      final seen = <String, String?>{};
+      server.listen((request) async {
+        seen['range'] = request.headers.value(HttpHeaders.rangeHeader);
+        seen['referer'] = request.headers.value('Referer');
+        seen['cookie'] = request.headers.value(HttpHeaders.cookieHeader);
+        request.response.statusCode = HttpStatus.partialContent;
+        request.response.add(const [1, 2]);
+        await request.response.close();
+      });
+
+      final probe = CatalogSourceHealthProbe(
+        registry: FakeSourceRegistry(const {}),
+      );
+      // flutter_test 默认把 HttpClient 替换成一律 400 的 mock；本用例要连
+      // 本机临时 HttpServer，在这个 zone 里用真实实现（不泄漏到其它用例）。
+      final direct = _DirectHttpOverrides();
+      await HttpOverrides.runZoned(
+        () => probe.stream(
+          PlayableStream(
+            Uri.parse('http://127.0.0.1:${server.port}/track.mp3'),
+            headers: const {'Referer': 'https://example.test/'},
+          ),
+        ),
+        createHttpClient: direct.createHttpClient,
+      );
+
+      expect(seen['range'], 'bytes=0-1');
+      expect(seen['referer'], 'https://example.test/');
+      expect(seen['cookie'], isNull);
+    });
+
+    test('搜索 + 取链 + 首字节全部成功时逐级记录状态', () async {
+      final probe = _FakeProbe([
+        const SourceHealthTarget(
+          key: 'kw',
+          displayName: '酷我',
+          canResolve: true,
+        ),
+      ]);
+      final checker = SourceHealthChecker(
+        probe: probe,
+        config: const SourceHealthConfig(
+          cooldown: Duration.zero,
+          gap: Duration.zero,
+        ),
+        delay: (_) async {},
+      );
+      addTearDown(checker.dispose);
+
+      await checker.start();
+      await checker.idle;
+
+      final channel = checker.runs.single.results.single;
+      expect(channel.search.status, HealthStepStatus.ok);
+      expect(channel.resolve?.status, HealthStepStatus.ok);
+      expect(channel.stream?.status, HealthStepStatus.ok);
+      expect(channel.overallStatus, HealthStepStatus.ok);
+      expect(probe.streamCalls.single.headers['Referer'], isNotNull);
+    });
+
+    test('取链成功但首字节失败 → overall failed，且不保存原始异常', () async {
+      final probe = _FakeProbe(
+        const [
+          SourceHealthTarget(key: 'kw', displayName: '酷我', canResolve: true),
+        ],
+        streamErrors: {
+          'kw': const SourceFailure(
+            kind: FailureKind.network,
+            message: 'raw body secret',
+          ),
+        },
+      );
+      final checker = SourceHealthChecker(
+        probe: probe,
+        config: const SourceHealthConfig(
+          cooldown: Duration.zero,
+          gap: Duration.zero,
+        ),
+        delay: (_) async {},
+      );
+      addTearDown(checker.dispose);
+
+      await checker.start();
+      await checker.idle;
+
+      final channel = checker.runs.single.results.single;
+      expect(channel.stream?.status, HealthStepStatus.failed);
+      expect(channel.stream?.failure?.kind, FailureKind.network);
+      expect(channel.overallStatus, HealthStepStatus.failed);
+      expect(channel.stream!.failure.toString(), isNot(contains('secret')));
+      expect(
+        healthRunCheckResults(checker.runs.single).map((result) => result.id),
+        contains(DiagnosticCheckId.channelStream),
+      );
+    });
+
+    test('首字节超时按 timeout 记录', () async {
+      final gate = Completer<void>();
+      final probe = _FakeProbe(const [
+        SourceHealthTarget(key: 'kw', displayName: '酷我', canResolve: true),
+      ], streamGate: gate);
+      final checker = SourceHealthChecker(
+        probe: probe,
+        config: const SourceHealthConfig(
+          cooldown: Duration.zero,
+          gap: Duration.zero,
+          streamTimeout: Duration(milliseconds: 20),
+        ),
+        delay: (_) async {},
+      );
+      addTearDown(checker.dispose);
+      addTearDown(() async {
+        if (!gate.isCompleted) gate.complete();
+      });
+
+      await checker.start();
+      await checker.idle;
+
+      final channel = checker.runs.single.results.single;
+      expect(channel.stream?.status, HealthStepStatus.failed);
+      expect(channel.stream?.failure?.kind, FailureKind.timeout);
+      expect(channel.overallStatus, HealthStepStatus.failed);
+    });
+
+    test('取消后丢弃在途首字节结果', () async {
+      final gate = Completer<void>();
+      final probe = _FakeProbe(const [
+        SourceHealthTarget(key: 'kw', displayName: '酷我', canResolve: true),
+      ], streamGate: gate);
+      final checker = SourceHealthChecker(
+        probe: probe,
+        config: const SourceHealthConfig(
+          cooldown: Duration.zero,
+          gap: Duration.zero,
+        ),
+        delay: (_) async {},
+      );
+      addTearDown(checker.dispose);
+      addTearDown(() async {
+        if (!gate.isCompleted) gate.complete();
+      });
+
+      await checker.start();
+      while (probe.streamCalls.isEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      checker.cancel();
+      gate.complete();
+      await checker.idle;
+
+      expect(checker.runs.single.cancelled, isTrue);
+      expect(checker.runs.single.results, isEmpty);
     });
 
     test('空结果 / 搜索失败 / 取链失败 / 超时都是类型化结果，不存原始异常', () async {
@@ -812,21 +988,30 @@ class _BlockingStore extends IoDiagnosticLogStore {
   }
 }
 
+/// 连接真实本机 HttpServer 的 `HttpOverrides`：不覆盖任何工厂，走 dart:io
+/// 默认实现（仅测试 zone 内使用）。
+class _DirectHttpOverrides extends HttpOverrides {}
+
 class _FakeProbe implements SourceHealthProbe {
   _FakeProbe(
     this.targets, {
     this.searchErrors = const {},
     this.resolveErrors = const {},
+    this.streamErrors = const {},
     this.searchGate,
+    this.streamGate,
   });
 
   @override
   final List<SourceHealthTarget> targets;
   final Map<String, Object> searchErrors;
   final Map<String, Object> resolveErrors;
+  final Map<String, Object> streamErrors;
   final Completer<void>? searchGate;
+  final Completer<void>? streamGate;
   final List<String> searchCalls = [];
   final List<String> resolveCalls = [];
+  final List<PlayableStream> streamCalls = [];
 
   @override
   Future<Track?> search(SourceHealthTarget target) async {
@@ -843,9 +1028,22 @@ class _FakeProbe implements SourceHealthProbe {
   }
 
   @override
-  Future<void> resolve(SourceHealthTarget target, Track track) async {
+  Future<PlayableStream> resolve(SourceHealthTarget target, Track track) async {
     resolveCalls.add(target.key);
     final error = resolveErrors[target.key];
+    if (error != null) throw error;
+    return PlayableStream(
+      Uri.parse('https://example.test/${target.key}.mp3'),
+      headers: {'Referer': 'https://example.test/'},
+    );
+  }
+
+  @override
+  Future<void> stream(PlayableStream stream) async {
+    streamCalls.add(stream);
+    if (streamGate != null) await streamGate!.future;
+    final key = stream.uri.pathSegments.last.split('.').first;
+    final error = streamErrors[key];
     if (error != null) throw error;
   }
 }
