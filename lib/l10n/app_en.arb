@@ -2126,8 +2126,17 @@
   "updateChannelSubtitle": "Stable gets releases only; Beta is early access",
   "updateChannelStable": "Stable",
   "updateChannelBeta": "Beta",
-  "updateAutoCheckTitle": "Check for updates automatically",
-  "updateAutoCheckSubtitle": "Check at startup, at most once a day",
+  "updateCheckOnStartupTitle": "Check at startup",
+  "updateCheckOnStartupSubtitle": "Check app and source updates every time Molia starts",
+  "updateCheckDailyTitle": "Check daily",
+  "updateCheckDailySubtitle": "Check at most once a day while Molia is running",
+  "updateAvailableTitle": "Updates available",
+  "updateAvailableAppLine": "Molia {version} is ready to update",
+  "updateAvailableSourcesTitle": "Source updates",
+  "updateAvailableSourceLine": "{name}: {current} → {latest}",
+  "updateAvailableLater": "Later",
+  "updateAvailableAppAction": "App update",
+  "updateAvailableSourcesAction": "Source updates",
   "updateCheckTitle": "Check for updates",
   "updateStatusIdle": "Not checked yet",
   "updateStatusChecking": "Checking…",
@@ -2189,6 +2198,26 @@
   "@updateStatusAvailable": {
     "placeholders": {
       "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateAvailableAppLine": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateAvailableSourceLine": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "current": {
+        "type": "String"
+      },
+      "latest": {
         "type": "String"
       }
     }

@@ -17,7 +17,8 @@ import '../widgets/settings/settings_tiles.dart';
 final DateFormat _releaseDateFormat = DateFormat('yyyy-MM-dd');
 final DateFormat _checkedAtDateFormat = DateFormat('yyyy-MM-dd HH:mm');
 
-/// 「关于与更新」子页：渠道 / 自动检查 / 检查更新 / 新版本下载安装 / 高级 / 关于。
+/// 「关于与更新」子页：渠道 / 启动时与每日检查 / 检查更新 / 新版本下载安装 /
+/// 高级 / 关于。
 ///
 /// 从设置首屏「通用与数据」进入（入口副标题显示当前版本或可更新版本）。
 /// 平台差异（Android 系统安装器 / 桌面替换重启 / iOS 不支持）
@@ -54,7 +55,7 @@ class UpdateSettingsPage extends StatelessWidget {
   }
 }
 
-/// 更新：渠道 / 自动检查 / 检查更新入口。
+/// 更新：渠道 / 启动时与每日检查 / 检查更新入口。
 class _UpdateSection extends StatelessWidget {
   const _UpdateSection({required this.provider, required this.l10n});
 
@@ -90,12 +91,20 @@ class _UpdateSection extends StatelessWidget {
           onChanged: (channel) => unawaited(provider.setChannel(channel)),
         ),
         SettingsSwitchTile(
-          switchKey: const Key('settingsUpdateAutoCheckSwitch'),
+          switchKey: const Key('settingsUpdateCheckOnStartupSwitch'),
+          icon: Icons.rocket_launch_rounded,
+          title: l10n.updateCheckOnStartupTitle,
+          subtitle: l10n.updateCheckOnStartupSubtitle,
+          value: provider.checkOnStartup,
+          onChanged: (value) => unawaited(provider.setCheckOnStartup(value)),
+        ),
+        SettingsSwitchTile(
+          switchKey: const Key('settingsUpdateCheckDailySwitch'),
           icon: Icons.schedule_rounded,
-          title: l10n.updateAutoCheckTitle,
-          subtitle: l10n.updateAutoCheckSubtitle,
-          value: provider.autoCheckEnabled,
-          onChanged: (value) => unawaited(provider.setAutoCheckEnabled(value)),
+          title: l10n.updateCheckDailyTitle,
+          subtitle: l10n.updateCheckDailySubtitle,
+          value: provider.checkDaily,
+          onChanged: (value) => unawaited(provider.setCheckDaily(value)),
         ),
         SettingsNavTile(
           key: const Key('settingsUpdateCheckItem'),

@@ -90,9 +90,6 @@ class UpdateProvider extends ChangeNotifier {
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
-  /// 启动静默检查的节流间隔。
-  static const Duration autoCheckInterval = Duration(hours: 24);
-
   static const Duration _progressThrottle = Duration(milliseconds: 100);
 
   final UpdateService _service;
@@ -158,7 +155,11 @@ class UpdateProvider extends ChangeNotifier {
 
   DateTime? get lastCheckedAt => _preferences.lastCheckedAt;
 
-  bool get autoCheckEnabled => _preferences.autoCheckEnabled;
+  bool get checkOnStartup => _preferences.checkOnStartup;
+
+  bool get checkDaily => _preferences.checkDaily;
+
+  bool get anyAutoCheckEnabled => _preferences.anyAutoCheckEnabled;
 
   UpdateChannel get channel => _preferences.channel;
 
@@ -198,8 +199,8 @@ class UpdateProvider extends ChangeNotifier {
   ///
   /// 为什么后移：读包信息要过平台通道，读偏好要碰磁盘，两者都不参与首帧
   /// 内容，放在 `runApp` 之前只是让用户多等一次 IPC（桌面实测 ~14ms）。
-  /// 后移不改变可见行为——自动检查（[maybeAutoCheck]）本来就排在首帧之后，
-  /// 且排在 [start] 之后（见 `post_frame_init.dart`）。
+  /// 后移不改变可见行为——自动检查（`UpdateCheckCoordinator.start`）本来
+  /// 就排在首帧之后，且排在 [start] 之后（见 `post_frame_init.dart`）。
   Future<void> start() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -234,21 +235,7 @@ class UpdateProvider extends ChangeNotifier {
     await _preferences.clearPendingUpdate();
   }
 
-  /// 启动时的静默检查：已开启且距上次超过 [autoCheckInterval] 才发请求。
-  ///
-  /// 只在启动后由组合根调用一次（见 `post_frame_init.dart`）：不做常驻轮询，
-  /// 也不在回前台时触发；[autoCheckInterval] 只决定这次冷启动是否跳过。
-  Future<bool> maybeAutoCheck() async {
-    if (!autoCheckEnabled) return false;
-    final last = _preferences.lastCheckedAt;
-    if (last != null && _now().difference(last) < autoCheckInterval) {
-      return false;
-    }
-    await check(silent: true);
-    return true;
-  }
-
-  /// 检查更新。[silent] 为 true 时不进入错误态（启动静默检查失败静默）。
+  /// 检查应用更新。[silent] 为 true 时不进入错误态（启动静默检查失败静默）。
   Future<void> check({bool silent = false}) async {
     if (_status == UpdateStatus.checking ||
         _status == UpdateStatus.downloading ||
@@ -319,6 +306,15 @@ class UpdateProvider extends ChangeNotifier {
         _setStatus(UpdateStatus.error);
       }
     }
+  }
+
+  /// 自动检查入口：静默检查并只返回「刚发现、尚未下载」的发布。
+  ///
+  /// 已进入下载 / 已下载状态的同一版本不再弹提示，避免打断正在进行的安装。
+  Future<AppRelease?> checkForAutoPrompt() async {
+    await check(silent: true);
+    if (_status != UpdateStatus.available) return null;
+    return _release;
   }
 
   /// 下载并安装。
@@ -507,9 +503,15 @@ class UpdateProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> setAutoCheckEnabled(bool value) async {
-    if (_preferences.autoCheckEnabled == value) return;
-    await _preferences.setAutoCheckEnabled(value);
+  Future<void> setCheckOnStartup(bool value) async {
+    if (_preferences.checkOnStartup == value) return;
+    await _preferences.setCheckOnStartup(value);
+    notifyListeners();
+  }
+
+  Future<void> setCheckDaily(bool value) async {
+    if (_preferences.checkDaily == value) return;
+    await _preferences.setCheckDaily(value);
     notifyListeners();
   }
 

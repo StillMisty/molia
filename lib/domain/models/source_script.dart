@@ -78,6 +78,21 @@ class SourceUpdateCheck {
   });
 }
 
+/// 一次批量检查里「有更新」的脚本摘要（弹窗只展示名称与版本）。
+class SourceScriptUpdate {
+  final String id;
+  final String name;
+  final String currentVersion;
+  final String latestVersion;
+
+  const SourceScriptUpdate({
+    required this.id,
+    required this.name,
+    required this.currentVersion,
+    required this.latestVersion,
+  });
+}
+
 /// 运行期 `updateAlert` 的纯数据视图。
 class SourceUpdateAlert {
   final String log;

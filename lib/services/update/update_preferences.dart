@@ -43,6 +43,8 @@ class UpdatePreferences {
     : _settings = settings ?? DeviceSettings();
 
   static const String keyAutoCheck = kUpdateAutoCheckKeyName;
+  static const String keyCheckOnStartup = kUpdateCheckOnStartupKeyName;
+  static const String keyCheckDaily = kUpdateCheckDailyKeyName;
   static const String keyChannel = kUpdateChannelKeyName;
   static const String keyManifestOverride = kUpdateManifestOverrideKeyName;
   static const String keyDownloadPrefix = kUpdateDownloadPrefixKeyName;
@@ -51,20 +53,27 @@ class UpdatePreferences {
   static const String keyPendingBuild = kUpdatePendingBuildKeyName;
 
   /// 自动检查默认关闭：更新是低频行为，且桌面端会自动替换文件，
-  /// 必须由用户显式开启（设置页「自动检查更新」）。
-  static const bool defaultAutoCheck = kDefaultUpdateAutoCheck;
+  /// 必须由用户显式开启（设置页「启动时检查 / 每日检查」）。
+  static const bool defaultCheckOnStartup = kDefaultUpdateCheckOnStartup;
+  static const bool defaultCheckDaily = kDefaultUpdateCheckDaily;
   static const UpdateChannel defaultChannel = UpdateChannel.stable;
 
   final DeviceSettings _settings;
 
-  bool _autoCheck = defaultAutoCheck;
+  bool _checkOnStartup = defaultCheckOnStartup;
+  bool _checkDaily = defaultCheckDaily;
   UpdateChannel _channel = defaultChannel;
   String _manifestOverride = '';
   String _downloadPrefix = '';
   DateTime? _lastCheckedAt;
   PendingUpdate? _pendingUpdate;
 
-  bool get autoCheckEnabled => _autoCheck;
+  bool get checkOnStartup => _checkOnStartup;
+  bool get checkDaily => _checkDaily;
+
+  /// 任一种自动检查开启（诊断导出与设置入口副标题使用）。
+  bool get anyAutoCheckEnabled => _checkOnStartup || _checkDaily;
+
   UpdateChannel get channel => _channel;
   String get manifestUrlOverride => _manifestOverride;
   String get downloadPrefix => _downloadPrefix;
@@ -73,7 +82,19 @@ class UpdatePreferences {
 
   Future<void> load() async {
     try {
-      _autoCheck = await _settings.read(kUpdateAutoCheckKey);
+      // 旧版只有一个「自动检查」开关（启动时 + 24h 节流）。新键缺失时把它
+      // 迁移成「启动时检查 + 每日检查」，用户主动改过任一开关后新键即落盘，
+      // 后续不再读旧值。
+      final startup = await _settings.readIfPresent(kUpdateCheckOnStartupKey);
+      final daily = await _settings.readIfPresent(kUpdateCheckDailyKey);
+      if (startup == null && daily == null) {
+        final legacy = await _settings.read(kUpdateAutoCheckKey);
+        _checkOnStartup = legacy;
+        _checkDaily = legacy;
+      } else {
+        _checkOnStartup = startup ?? defaultCheckOnStartup;
+        _checkDaily = daily ?? defaultCheckDaily;
+      }
       _channel = UpdateChannel.fromWire(
         await _settings.read(kUpdateChannelKey),
       );
@@ -101,9 +122,21 @@ class UpdatePreferences {
     }
   }
 
-  Future<void> setAutoCheckEnabled(bool value) async {
-    _autoCheck = value;
-    await _settings.write(kUpdateAutoCheckKey, value);
+  Future<void> setCheckOnStartup(bool value) async {
+    _checkOnStartup = value;
+    await _writeAutoCheckKeys();
+  }
+
+  Future<void> setCheckDaily(bool value) async {
+    _checkDaily = value;
+    await _writeAutoCheckKeys();
+  }
+
+  /// 两个新键一起写：任一开关被用户改过即完成旧键迁移，避免下次启动
+  /// 又从旧 `update_auto_check` 回填。
+  Future<void> _writeAutoCheckKeys() async {
+    await _settings.write(kUpdateCheckOnStartupKey, _checkOnStartup);
+    await _settings.write(kUpdateCheckDailyKey, _checkDaily);
   }
 
   Future<void> setChannel(UpdateChannel channel) async {

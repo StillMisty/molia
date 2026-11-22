@@ -59,10 +59,12 @@ void main() {
   test('更新偏好：渠道 / 镜像 / 待确认回执往返，缺 build 不算待确认', () async {
     final update = UpdatePreferences();
     await update.load();
-    expect(update.autoCheckEnabled, isFalse);
+    expect(update.checkOnStartup, isFalse);
+    expect(update.checkDaily, isFalse);
     expect(update.channel, UpdateChannel.stable);
 
-    await update.setAutoCheckEnabled(true);
+    await update.setCheckOnStartup(true);
+    await update.setCheckDaily(true);
     await update.setChannel(UpdateChannel.beta);
     await update.setManifestUrlOverride(' https://example.com ');
     await update.setDownloadPrefix(' https://cdn.example.com ');
@@ -71,7 +73,9 @@ void main() {
 
     final reloaded = UpdatePreferences();
     await reloaded.load();
-    expect(reloaded.autoCheckEnabled, isTrue);
+    expect(reloaded.checkOnStartup, isTrue);
+    expect(reloaded.checkDaily, isTrue);
+    expect(reloaded.anyAutoCheckEnabled, isTrue);
     expect(reloaded.channel, UpdateChannel.beta);
     expect(reloaded.manifestUrlOverride, 'https://example.com');
     expect(reloaded.downloadPrefix, 'https://cdn.example.com');
@@ -91,6 +95,32 @@ void main() {
     final partial = UpdatePreferences();
     await partial.load();
     expect(partial.pendingUpdate, isNull);
+  });
+
+  test('更新偏好：旧版单开关迁移成启动 + 每日，写新键后不再回填旧值', () async {
+    SharedPreferences.setMockInitialValues({
+      UpdatePreferences.keyAutoCheck: true,
+    });
+    final migrated = UpdatePreferences();
+    await migrated.load();
+    expect(migrated.checkOnStartup, isTrue);
+    expect(migrated.checkDaily, isTrue);
+
+    await migrated.setCheckDaily(false);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool(UpdatePreferences.keyCheckOnStartup), isTrue);
+    expect(prefs.getBool(UpdatePreferences.keyCheckDaily), isFalse);
+
+    // 即使用户把两个开关都关掉、旧键仍是 true，也以新键为准。
+    SharedPreferences.setMockInitialValues({
+      UpdatePreferences.keyAutoCheck: true,
+      UpdatePreferences.keyCheckOnStartup: false,
+      UpdatePreferences.keyCheckDaily: false,
+    });
+    final disabled = UpdatePreferences();
+    await disabled.load();
+    expect(disabled.checkOnStartup, isFalse);
+    expect(disabled.checkDaily, isFalse);
   });
 
   test('曲库浏览模式：默认专辑，未知值回退专辑', () async {

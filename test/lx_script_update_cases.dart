@@ -632,6 +632,37 @@ void main() {
     });
   });
 
+  group('SourceManager · checkScriptUpdates', () {
+    test('只返回有更新的脚本，单个失败不影响其他脚本', () async {
+      final fixture = await _fixture();
+      final updatedUrl = server.url('/updated.js');
+      final brokenUrl = server.url('/broken.js');
+      final currentUrl = server.url('/current.js');
+      server.text(
+        '/updated.js',
+        _script(updateUrl: updatedUrl, version: '2.0.0'),
+      );
+      server.text('/broken.js', 'boom', status: 500);
+      server.text('/current.js', _script(updateUrl: currentUrl));
+
+      final updated = await fixture.manager.importScript(
+        _script(updateUrl: updatedUrl),
+      );
+      await fixture.manager.importScript(_script(updateUrl: brokenUrl));
+      final current = await fixture.manager.importScript(
+        _script(updateUrl: currentUrl),
+      );
+      await fixture.manager.importScript(_script());
+
+      final updates = await fixture.manager.checkScriptUpdates();
+
+      expect(updates.map((update) => update.id), [updated.id]);
+      expect(updates.single.currentVersion, '1.0.0');
+      expect(updates.single.latestVersion, '2.0.0');
+      expect(updates.any((update) => update.id == current.id), isFalse);
+    });
+  });
+
   group('SourceManager · applyScriptUpdate', () {
     test('替换内容并保留 id + 激活态，激活中脚本重新激活（重放新脚本）', () async {
       final fixture = await _fixture();

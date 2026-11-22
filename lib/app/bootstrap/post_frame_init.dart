@@ -85,8 +85,8 @@ void initAfterFirstFrame({
   startLibraryAfterFirstFrame(library);
 
   // 更新：包信息 / 偏好 / 平台信息在这里读（start 完成前不动更新状态；
-  // 设置页此刻也还没机会被打开），读完才做启动自动检查——开关与节流
-  // 都来自偏好，必须排在 start 之后。可选子系统：初始化失败只记日志。
+  // 设置页此刻也还没机会被打开），读完才启动自动检查——开关与节流都来自
+  // 偏好，必须排在 start 之后。可选子系统：初始化失败只记日志。
   final updateWatch = Stopwatch()..start();
   unawaited(
     () async {
@@ -95,7 +95,7 @@ void initAfterFirstFrame({
       } catch (e) {
         debugPrint('[Molia] 更新初始化失败（继续启动）: $e');
       }
-      await update.provider.maybeAutoCheck();
+      await update.coordinator.start();
     }().whenComplete(
       () => markStartupStep('sub.update.start/check（首帧后）', updateWatch),
     ),

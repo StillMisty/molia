@@ -217,7 +217,10 @@ const DeviceSettingKey<bool> kDataSaverCoversKey = DeviceSettingKey(
 // 应用内更新（安装渠道）
 // ---------------------------------------------------------------------------
 
+/// 旧版单开关：只读迁移用，新代码不再写入。
 const String kUpdateAutoCheckKeyName = 'update_auto_check';
+const String kUpdateCheckOnStartupKeyName = 'update_check_on_startup';
+const String kUpdateCheckDailyKeyName = 'update_check_daily';
 const String kUpdateChannelKeyName = 'update_channel';
 const String kUpdateManifestOverrideKeyName = 'update_manifest_override';
 const String kUpdateDownloadPrefixKeyName = 'update_download_prefix';
@@ -227,6 +230,8 @@ const String kUpdatePendingBuildKeyName = 'update_pending_build';
 
 /// 自动检查默认关闭：更新是低频行为，且桌面端会自动替换文件。
 const bool kDefaultUpdateAutoCheck = false;
+const bool kDefaultUpdateCheckOnStartup = false;
+const bool kDefaultUpdateCheckDaily = false;
 
 /// 更新渠道缺键回稳定版；未知值同样由 `UpdateChannel.fromWire` 回退。
 const String kDefaultUpdateChannelWireName = 'stable';
@@ -237,6 +242,14 @@ const int kDefaultUpdatePendingBuild = 0;
 const DeviceSettingKey<bool> kUpdateAutoCheckKey = DeviceSettingKey(
   kUpdateAutoCheckKeyName,
   kDefaultUpdateAutoCheck,
+);
+const DeviceSettingKey<bool> kUpdateCheckOnStartupKey = DeviceSettingKey(
+  kUpdateCheckOnStartupKeyName,
+  kDefaultUpdateCheckOnStartup,
+);
+const DeviceSettingKey<bool> kUpdateCheckDailyKey = DeviceSettingKey(
+  kUpdateCheckDailyKeyName,
+  kDefaultUpdateCheckDaily,
 );
 const DeviceSettingKey<String> kUpdateChannelKey = DeviceSettingKey(
   kUpdateChannelKeyName,
@@ -528,6 +541,8 @@ const List<DeviceSettingEntry> kDeviceSettingsKeys = [
   kDataSaverQualityKey,
   kDataSaverCoversKey,
   kUpdateAutoCheckKey,
+  kUpdateCheckOnStartupKey,
+  kUpdateCheckDailyKey,
   kUpdateChannelKey,
   kUpdateManifestOverrideKey,
   kUpdateDownloadPrefixKey,

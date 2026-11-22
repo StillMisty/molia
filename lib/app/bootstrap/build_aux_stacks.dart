@@ -93,7 +93,19 @@ Future<AuxStacks> buildAuxStacks({
     searchProvider: core.searchProvider,
   );
   // ⑪ 应用内更新（纯构造；包信息 / 偏好 / 平台信息读取后移到首帧）。
-  final update = buildUpdateStack(quitApp: features.desktop.quitApp);
+  final update = buildUpdateStack(
+    quitApp: features.desktop.quitApp,
+    // 脚本仓库就绪即可检查；不跟引擎激活串行，避免拖慢启动检查。
+    checkSourceUpdates: () async {
+      // 仓库初始化极端情况下卡住时不让自动检查一起悬着：超时按「没有脚本」
+      // 处理，下一次每日检查 / 下次启动再试。
+      await catalog.sourceManager.scriptsReady.timeout(
+        const Duration(seconds: 20),
+        onTimeout: () {},
+      );
+      return catalog.sourceManager.checkScriptUpdates();
+    },
+  );
   markStartupStep('更新栈（装配完成）', platform.startup);
 
   // 诊断导出器：设置 / 渠道 / 数据库 / 更新信息由注入的 gatherer 读取；
@@ -102,7 +114,7 @@ Future<AuxStacks> buildAuxStacks({
     service: platform.diagnostics.service,
     appInfo: DiagnosticsAppInfoGatherer(
       updateChannel: () => update.provider.channel.wireName,
-      updateAutoCheck: () => update.provider.autoCheckEnabled,
+      updateAutoCheck: () => update.provider.anyAutoCheckEnabled,
     ),
     settings: () => gatherDiagnosticsSettings(
       registry: catalog.settings,
@@ -113,7 +125,8 @@ Future<AuxStacks> buildAuxStacks({
         'data_saver_quality_cap': local.dataSaver.qualityCap,
         DataSaverService.keyCovers: local.dataSaver.coversSaverEnabled,
         UpdatePreferences.keyChannel: update.provider.channel.wireName,
-        UpdatePreferences.keyAutoCheck: update.provider.autoCheckEnabled,
+        UpdatePreferences.keyCheckOnStartup: update.provider.checkOnStartup,
+        UpdatePreferences.keyCheckDaily: update.provider.checkDaily,
       },
     ),
     sources: () async => gatherDiagnosticsSources(catalog.sourceManager),

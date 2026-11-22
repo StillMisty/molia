@@ -321,6 +321,8 @@ void main() {
       'data_saver_quality',
       'data_saver_covers',
       'update_auto_check',
+      'update_check_on_startup',
+      'update_check_daily',
       'update_channel',
       'update_manifest_override',
       'update_download_prefix',

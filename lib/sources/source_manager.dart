@@ -24,6 +24,7 @@ import '../domain/models/album.dart';
 import '../domain/models/artist.dart';
 import '../domain/models/comment.dart';
 import '../domain/models/source.dart' show SourceCapabilities, SourceDescriptor;
+import '../domain/models/source_script.dart' show SourceScriptUpdate;
 import '../domain/ports/music_source.dart' show PlayableStream;
 
 // UI（音源页）白名单仅允许直连 source_manager，这里把在线更新流程的
@@ -111,6 +112,10 @@ class SourceManager extends ChangeNotifier {
   final Duration _lazyActivationCooldown;
 
   bool _initialized = false;
+
+  /// 脚本仓库读完即可做批量更新检查（不必等引擎激活完成）。
+  final Completer<void> _scriptsReady = Completer<void>();
+
   String? _activatingId;
   String? _activeError;
   Map<String, LxSourceDecl> _activeSources = {};
@@ -127,6 +132,7 @@ class SourceManager extends ChangeNotifier {
   Future<bool>? _retryEngineInFlight;
 
   bool get initialized => _initialized;
+  Future<void> get scriptsReady => _scriptsReady.future;
   bool get isActivating => _activatingId != null;
   String? get activeError => _activeError;
   Map<String, LxSourceDecl> get activeSources =>
@@ -220,7 +226,12 @@ class SourceManager extends ChangeNotifier {
   }
 
   Future<void> init() async {
-    await repository.init();
+    try {
+      await repository.init();
+    } finally {
+      // 批量更新检查只需要脚本仓库，不跟引擎激活串行。
+      if (!_scriptsReady.isCompleted) _scriptsReady.complete();
+    }
     await _preferences.load();
     // 只读本地配置，不发起网络请求；失败时 AnyListenSource 维持默认（未配置）。
     await _anyListenSource.init();
@@ -621,6 +632,42 @@ class SourceManager extends ChangeNotifier {
       latestVersion: latest.version,
       latestScript: latest,
     );
+  }
+
+  /// 批量检查所有声明了更新地址的脚本（自动检查用）。
+  ///
+  /// 单个脚本失败（下载超时 / 页面不是脚本 / 地址失效）只跳过它，不让整轮
+  /// 检查失败；无更新地址的脚本不参与。并发上限 3，避免启动时同时打开太多
+  /// 连接。调用前应等 [scriptsReady]。
+  Future<List<SourceScriptUpdate>> checkScriptUpdates() async {
+    final candidates = repository.scripts
+        .where((script) => (script.updateUrl?.trim().isNotEmpty ?? false))
+        .toList(growable: false);
+    final updates = <SourceScriptUpdate>[];
+    const batchSize = 3;
+    for (var start = 0; start < candidates.length; start += batchSize) {
+      final end = (start + batchSize).clamp(0, candidates.length);
+      final batch = candidates.sublist(start, end);
+      final results = await Future.wait(
+        batch.map((script) async {
+          try {
+            final check = await checkScriptUpdate(script.id);
+            if (!check.hasUpdate) return null;
+            return SourceScriptUpdate(
+              id: script.id,
+              name: script.name,
+              currentVersion: check.currentVersion,
+              latestVersion: check.latestVersion,
+            );
+          } catch (e) {
+            debugPrint('[SourceManager] 检查音源更新失败（${script.id}）: $e');
+            return null;
+          }
+        }),
+      );
+      updates.addAll(results.whereType<SourceScriptUpdate>());
+    }
+    return updates;
   }
 
   /// 应用在线更新：下载最新脚本并原地替换（保留 id / 导入时间 / 激活态）。

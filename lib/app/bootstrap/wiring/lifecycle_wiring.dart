@@ -108,7 +108,12 @@ LifecycleWiring buildLifecycleWiring({
       ),
     )
     ..register(
-      AppLifecycleParticipant(onResumed: update.provider.handleAppResumed),
+      AppLifecycleParticipant(
+        onResumed: () async {
+          await update.provider.handleAppResumed();
+          await update.coordinator.handleAppResumed();
+        },
+      ),
     )
     ..register(
       AppLifecycleParticipant(onResumed: local.dataSaver.refreshConnectivity),

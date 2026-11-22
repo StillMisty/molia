@@ -16,6 +16,8 @@ import 'notification_cases.dart' as services_notification;
 import 'playback_observer_cases.dart' as services_playback_observer;
 import 'scrobble_cases.dart' as services_scrobble;
 import 'shortcut_bindings_cases.dart' as services_shortcut_bindings;
+import 'update_check_coordinator_cases.dart'
+    as services_update_check_coordinator;
 import 'swap_query_planner_cases.dart' as services_swap_query_planner;
 import 'window_bounds_cases.dart' as services_window_bounds;
 import 'window_bounds_store_cases.dart' as services_window_bounds_store;
@@ -40,6 +42,7 @@ void main() {
   group('playback observer', services_playback_observer.main);
   group('scrobble', services_scrobble.main);
   group('shortcut bindings', services_shortcut_bindings.main);
+  group('update check coordinator', services_update_check_coordinator.main);
   group('swap query planner', services_swap_query_planner.main);
   group('window bounds', services_window_bounds.main);
   group('window bounds store', services_window_bounds_store.main);

@@ -7032,17 +7032,71 @@ abstract class AppLocalizations {
   /// **'Beta'**
   String get updateChannelBeta;
 
-  /// No description provided for @updateAutoCheckTitle.
+  /// No description provided for @updateCheckOnStartupTitle.
   ///
   /// In en, this message translates to:
-  /// **'Check for updates automatically'**
-  String get updateAutoCheckTitle;
+  /// **'Check at startup'**
+  String get updateCheckOnStartupTitle;
 
-  /// No description provided for @updateAutoCheckSubtitle.
+  /// No description provided for @updateCheckOnStartupSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Check at startup, at most once a day'**
-  String get updateAutoCheckSubtitle;
+  /// **'Check app and source updates every time Molia starts'**
+  String get updateCheckOnStartupSubtitle;
+
+  /// No description provided for @updateCheckDailyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Check daily'**
+  String get updateCheckDailyTitle;
+
+  /// No description provided for @updateCheckDailySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Check at most once a day while Molia is running'**
+  String get updateCheckDailySubtitle;
+
+  /// No description provided for @updateAvailableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Updates available'**
+  String get updateAvailableTitle;
+
+  /// No description provided for @updateAvailableAppLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Molia {version} is ready to update'**
+  String updateAvailableAppLine(String version);
+
+  /// No description provided for @updateAvailableSourcesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Source updates'**
+  String get updateAvailableSourcesTitle;
+
+  /// No description provided for @updateAvailableSourceLine.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}: {current} → {latest}'**
+  String updateAvailableSourceLine(String name, String current, String latest);
+
+  /// No description provided for @updateAvailableLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get updateAvailableLater;
+
+  /// No description provided for @updateAvailableAppAction.
+  ///
+  /// In en, this message translates to:
+  /// **'App update'**
+  String get updateAvailableAppAction;
+
+  /// No description provided for @updateAvailableSourcesAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Source updates'**
+  String get updateAvailableSourcesAction;
 
   /// No description provided for @updateCheckTitle.
   ///
