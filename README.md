@@ -13,7 +13,7 @@
   <a href="https://github.com/StillMisty/molia/releases"><img alt="Release" src="https://img.shields.io/github/v/release/StillMisty/molia?include_prereleases&color=6A8F7A&label=release"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-6A8F7A"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-Android%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20iOS%20%C2%B7%20macOS-6A8F7A">
-  <a href="https://github.com/flutter/flutter/releases"><img alt="Flutter" src="https://img.shields.io/github/v/release/flutter/flutter?color=6A8F7A&label=Flutter"></a>
+  <a href="https://github.com/flutter/flutter/releases"><img alt="Flutter" src="https://img.shields.io/github/v/tag/flutter/flutter?sort=semver&color=6A8F7A&label=Flutter"></a>
   <a href="https://github.com/StillMisty/molia/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/StillMisty/molia/actions/workflows/ci.yml/badge.svg"></a>
 </p>
 

@@ -35,7 +35,6 @@ tool/agent/setup.sh               # 可选：Android 模拟器 / SDK 组件（�
   （会让锁文件整体漂移），升级后跑全量测试。
 - **版本策略**：本仓保持最新 stable，不因“更稳妥”降级；升级必须过
   `flutter analyze --no-pub` + `flutter test --no-pub` + 发布矩阵 dry-run。
-  被压制的告警与例外登记在 `AGENTS.md`「工具链」的「已知例外」。
 - **依赖体检**：`dart run tool/agent/cli.dart deps` 汇总 `pub outdated`、`flutter analyze --suggestions`、
   Gradle 的 KGP/AGP 实际版本与 Android CLI 版本；结果写到 `$RUN_DIR/deps-*`，升级前跑一次。
 - **跨端入口**：`dart run tool/agent/cli.dart <命令>` 是 Linux / macOS / Windows 同一套
