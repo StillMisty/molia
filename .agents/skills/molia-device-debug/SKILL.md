@@ -6,7 +6,7 @@ description: 在 Android 模拟器或 Linux 桌面跑 Molia、热重载、截图
 # Molia 设备调试
 
 ```bash
-tool/agent/emu.sh start        # 启动模拟器（默认 headless，阻塞到 boot 完成；--window 经 WSLg 显示）
+dart run tool/agent/cli.dart emu start   # 启动模拟器（默认 headless，阻塞到 boot 完成；--window 经 WSLg 显示）
 tool/agent/app.sh run          # 后台 flutter run（默认 Android；首次需 Gradle 构建）
 tool/agent/app.sh run -d linux # Linux 桌面热重载（免模拟器；无显示加 --headless 走 Xvfb）
 tool/agent/app.sh reload       # 热重载；restart 热重启；status 看 pid / 设备 / VM Service / 日志路径
@@ -14,7 +14,7 @@ tool/agent/shot.sh [name]      # 截图 → ${TMPDIR:-/tmp}/molia-agent/shots/*.
 tool/agent/ui_preview.sh       # 无设备 360/640 预览 → ${TMPDIR:-/tmp}/molia-agent/ui-preview/*.png
 tool/agent/ui.sh layout|tap|swipe|text|key|launch|force-stop
 tool/agent/seed.sh android|linux <cmd>  # 数据注入：favorites/covers/history/session/mock-source/status/clear/restore
-tool/agent/emu.sh stop         # 停止模拟器（app.sh stop 只停 flutter run）
+dart run tool/agent/cli.dart emu stop    # 停止模拟器（app.sh stop 只停 flutter run）
 ```
 
 ## 要点
@@ -28,7 +28,7 @@ tool/agent/emu.sh stop         # 停止模拟器（app.sh stop 只停 flutter ru
 - 视觉验收优先 `tool/agent/ui_preview.sh`：widget test 渲染真实壳层 / 设置弹层的
   360 与 640 PNG，不依赖模拟器或显示服务；图里的中文可能因测试字体显示为方块，
   看比例 / 溢出 / 密度，不用于校对文案。需要真实系统 UI（通知 / 权限 / 手势）才用模拟器；
-- 模拟器在 WSL 上不稳定（本仓遇到过 RenderThread coredump / SIGILL）：`emu.sh start`
+- 模拟器在 WSL 上不稳定（本仓遇到过 RenderThread coredump / SIGILL）：`dart run tool/agent/cli.dart emu start`
   已用 setsid 让模拟器脱离 agent 后台命令的进程组；仍失败时改用 Linux 桌面 + Xvfb，
   不要在 `shot.sh` 上反复等 30s；
 - 模拟器默认 16 KB 页；镜像、AVD 与 WSL 限制等细节见 `docs/dev_environment.md`（权威出处）。

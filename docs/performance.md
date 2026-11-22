@@ -58,7 +58,7 @@ GTK 建窗 ~46ms + libmpv `dlopen` ~39ms + 引擎与首帧渲染 ~100ms；我们
 
 ```bash
 tool/agent/startup.sh                 # Linux 桌面：构建 release 后采样 5 次，打印中位数
-tool/agent/startup.sh android         # Android：默认取运行中的模拟器（先 tool/agent/emu.sh start）
+tool/agent/startup.sh android         # Android：默认取运行中的模拟器（先 dart run tool/agent/cli.dart emu start）
 tool/agent/startup.sh --runs 9        # 采样 9 次
 tool/agent/startup.sh --no-build      # 复用已有产物（只重测）
 tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会弹窗）

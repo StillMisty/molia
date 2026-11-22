@@ -165,7 +165,7 @@ sample_android() {
   if [[ -z "$serial" ]]; then
     serial="$(running_emulator)"
   fi
-  [[ -n "$serial" ]] || die "没有运行中的模拟器（先 tool/agent/emu.sh start）"
+  [[ -n "$serial" ]] || die "没有运行中的模拟器（先 dart run tool/agent/cli.dart emu start）"
   local dev=("$ADB" -s "$serial")
   if [[ -z "$pid" ]]; then
     pid="$("${dev[@]}" shell pidof "$APP_ID" | tr -d '\r' || true)"

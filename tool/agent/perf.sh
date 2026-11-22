@@ -246,7 +246,7 @@ run_frames_android() {
   local serial="${1:-$DEVICE_ID}"
   local out_dir="$2" target="${3:-$FRAME_TEST_TARGET}"
   "$ADB" -s "$serial" get-state >/dev/null 2>&1 ||
-    die "设备 $serial 未连接（先 tool/agent/emu.sh start）"
+    die "设备 $serial 未连接（先 dart run tool/agent/cli.dart emu start）"
   log "帧场景（Android $serial / profile）：结果 $out_dir"
   [[ -n "$PERF_ONLY" ]] && log "只跑场景：$PERF_ONLY"
   "$ADB" -s "$serial" logcat -c || true
@@ -461,7 +461,7 @@ run_data_android() { # out_dir [serial]
   ensure_adb
   local out="$1" serial="${2:-}"
   [[ -n "$serial" ]] || serial="$(running_emulator)"
-  [[ -n "$serial" ]] || die "没有运行中的模拟器（先 tool/agent/emu.sh start）"
+  [[ -n "$serial" ]] || die "没有运行中的模拟器（先 dart run tool/agent/cli.dart emu start）"
   DEVICE_ID="$serial"
   adb_dev() { "$ADB" -s "$serial" "$@"; }
   ensure_android_root "$serial"
@@ -596,7 +596,7 @@ run_memory_android() { # out_dir [serial]
   ensure_adb
   local out="$1" serial="${2:-}"
   [[ -n "$serial" ]] || serial="$(running_emulator)"
-  [[ -n "$serial" ]] || die "没有运行中的模拟器（先 tool/agent/emu.sh start）"
+  [[ -n "$serial" ]] || die "没有运行中的模拟器（先 dart run tool/agent/cli.dart emu start）"
   DEVICE_ID="$serial"
   adb_dev() { "$ADB" -s "$serial" "$@"; }
   ensure_android_root "$serial"
@@ -676,7 +676,7 @@ run_cpu_android() { # out_dir [serial]
   ensure_adb
   local out="$1" serial="${2:-}"
   [[ -n "$serial" ]] || serial="$(running_emulator)"
-  [[ -n "$serial" ]] || die "没有运行中的模拟器（先 tool/agent/emu.sh start）"
+  [[ -n "$serial" ]] || die "没有运行中的模拟器（先 dart run tool/agent/cli.dart emu start）"
   DEVICE_ID="$serial"
   adb_dev() { "$ADB" -s "$serial" "$@"; }
   ensure_android_root "$serial"

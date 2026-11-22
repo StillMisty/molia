@@ -101,4 +101,4 @@ if [[ -f "$cfg" ]]; then
     "$cfg"
 fi
 
-log "环境就绪: AVD=$AVD_NAME（emu.sh start / app.sh run / shot.sh）"
+log "环境就绪: AVD=$AVD_NAME（cli.dart emu start / app.sh run / shot.sh）"

@@ -1,7 +1,7 @@
 /// `emu`：模拟器生命周期（包装 Android CLI 的 emulator 子命令 + adb）。
 ///
-/// 与 `tool/agent/emu.sh` 同口径：默认 headless、默认 AVD 取 `$AVD_NAME`；
-/// 三端都能跑（Android CLI 与 adb 在 Windows / macOS 上同样可用）。
+/// 默认 headless、默认 AVD 取 `$AVD_NAME`；三端都能跑（Android CLI 与 adb
+/// 在 Windows / macOS 上同样可用）。
 library;
 
 import 'dart:io';
@@ -78,7 +78,10 @@ Future<void> _start(ToolContext context, List<String> args) async {
     return;
   }
 
+  // 新会话启动：agent 的后台命令结束时会清理自己的进程组，直接前台调用会
+  // 把模拟器一起带走（表现为「启动成功，下一个命令 adb devices 空」）。
   final command = [
+    ..._setsidPrefix(context),
     androidCli,
     'emulator',
     'start',
@@ -95,6 +98,16 @@ Future<void> _start(ToolContext context, List<String> args) async {
   }
   final serial = runningEmulator(adb);
   context.log('模拟器就绪：${serial ?? '（adb 尚未列出，稍等再用 emu status 确认）'}');
+}
+
+List<String> _setsidPrefix(ToolContext context) {
+  if (!Platform.isLinux) return const [];
+  final setsid = context.which('setsid');
+  if (setsid == null) return const [];
+  // 已经是进程组长时 setsid 会 fork；--wait 保证调用方等到模拟器真正退出。
+  final supportsWait =
+      Process.runSync(setsid, const ['--wait', 'true']).exitCode == 0;
+  return supportsWait ? [setsid, '--wait'] : [setsid];
 }
 
 Future<void> _stop(ToolContext context, List<String> args) async {

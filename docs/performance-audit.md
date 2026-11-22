@@ -89,7 +89,7 @@ tool/agent/perf.sh frames windows --real        # release 真实窗口 + 滚轮�
 # Windows 侧（构建目录是脚本同步过去的 %USERPROFILE%\molia-perf）
 flutter run --profile -d windows --trace-to-file=%USERPROFILE%\molia-perf\perf-scroll.binpb
 # 另一个终端跑滚轮（脚本只驱动，不启动/退出应用）
-powershell -File tool/agent/scroll_windows.ps1 -Steps 80
+dart run tool/agent/cli.dart win scroll --steps 80
 ```
 
 结束后停掉应用，Perfetto trace 里按 `work` 找长切片；本轮实测见 §3.2.1。

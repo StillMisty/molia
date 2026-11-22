@@ -3,7 +3,7 @@
 #
 # 用法:
 #   tool/agent/startup.sh                # Linux 桌面：构建 release 后跑 5 次（无显示时 xvfb-run）
-#   tool/agent/startup.sh android        # Android：默认取运行中的模拟器（先 tool/agent/emu.sh start）
+#   tool/agent/startup.sh android        # Android：默认取运行中的模拟器（先 dart run tool/agent/cli.dart emu start）
 #   tool/agent/startup.sh android <serial>
 #   tool/agent/startup.sh --runs 9       # 采样次数
 #   tool/agent/startup.sh --no-build     # 复用已有产物，只重测
@@ -108,7 +108,7 @@ setup_android() {
   if [[ -z "$serial" ]]; then
     serial="$(running_emulator)"
   fi
-  [[ -n "$serial" ]] || die "没有运行中的模拟器（先执行 tool/agent/emu.sh start，或传 serial）"
+  [[ -n "$serial" ]] || die "没有运行中的模拟器（先执行 dart run tool/agent/cli.dart emu start，或传 serial）"
   DEVICE_ID="$serial"
   adb_dev() { "$ADB" -s "$serial" "$@"; }
 

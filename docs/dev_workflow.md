@@ -55,7 +55,7 @@ tool/agent/setup.sh               # 可选：Android 模拟器 / SDK 组件（�
 
 ```bash
 flutter run -d linux                     # 桌面，前台，r / R / q 直接可用
-tool/agent/emu.sh start                  # 没有模拟器时先起（默认 headless）
+dart run tool/agent/cli.dart emu start  # 没有模拟器时先起（默认 headless）
 flutter run -d emulator-5554             # Android 模拟器
 tool/agent/app.sh run -d linux           # 无 TTY / 后台：官方 --pid-file + SIGUSR1/2
 tool/agent/app.sh run -d linux --headless  # 无图形显示：显式 Xvfb
@@ -152,7 +152,7 @@ dart run tool/agent/cli.dart docs check  # 改文档 / 版本 / workflow 时
 
 ```bash
 dart run tool/agent/cli.dart test linux              # 真实引擎 + 设置页 + 窗口/托盘；默认 Xvfb
-dart run tool/agent/cli.dart test android            # 同一套跑模拟器（先 emu.sh start）
+dart run tool/agent/cli.dart test android            # 同一套跑模拟器（先 dart run tool/agent/cli.dart emu start）
 dart run tool/agent/cli.dart smoke linux             # 真实 main() + provider tree 的首帧烟测
 ```
 

@@ -84,7 +84,7 @@ Android 侧调试全部在 WSL 内完成（KVM 原生模拟器，不依赖 Windo
 
 ```bash
 tool/agent/setup.sh        # 一次性：装 emulator + API 37 镜像 + 建 AVD（幂等）
-tool/agent/emu.sh start    # 启动模拟器（默认 headless，阻塞到 boot 完成；--window 经 WSLg 显示）
+dart run tool/agent/cli.dart emu start   # 启动模拟器（默认 headless，阻塞到 boot 完成；--window 经 WSLg 显示）
 tool/agent/app.sh run      # 后台 flutter run（默认 Android 模拟器；首次需 Gradle 构建）
 tool/agent/app.sh run -d linux   # Linux 桌面热重载（免模拟器；无显示加 --headless 走 Xvfb）
 tool/agent/app.sh reload   # 热重载；restart = 热重启（无 TTY 走 --pid-file + SIGUSR1/2）
@@ -94,15 +94,18 @@ tool/agent/ui.sh layout|tap|swipe|text|key|launch|force-stop
 tool/agent/seed.sh android favorites|covers|history|session|lang|mock-source|status|clear|restore
                            # 数据注入：收藏 / 最近播放 / 恢复会话 / mock 音源（见下）
 dart run tool/agent/cli.dart test android # 集成测试（官方 flutter test 路径；自动构建/安装 debug APK，跑完卸载）
-tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
+dart run tool/agent/cli.dart emu stop     # 停止模拟器（app.sh stop 只停 flutter run）
 ```
 
 - `app.sh` 把运行设备记入 `${TMPDIR:-/tmp}/molia-agent/flutter-run.device`，`reload`/`stop`/`status`
   均按它操作：`-d linux` 起的桌面会话不会误发给 adb，反之亦然。
-- 模拟器默认 16 KB 页（`google_apis_ps16k` 镜像，`emu.sh status` 会打印页大小）；
-  回 4 KB 需另建 AVD（`-k "system-images;android-37.0;google_apis;x86_64"`）并 `AVD_NAME=... emu.sh start`。
-  应用最低支持版本与 targetSdk 见 `AGENTS.md`「工具链」；默认镜像取当前 targetSdk
-  （覆盖局域网权限等行为），验最低版本时另建对应 API 的 AVD 并 `AVD_NAME=... emu.sh start`。
+- 模拟器默认 16 KB 页（`google_apis_ps16k` 镜像，`dart run tool/agent/cli.dart emu status`
+  会打印页大小）；回 4 KB 需另建 AVD
+  （`-k "system-images;android-37.0;google_apis;x86_64"`）并
+  `AVD_NAME=... dart run tool/agent/cli.dart emu start`。应用最低支持版本与
+  targetSdk 见 `AGENTS.md`「工具链」；默认镜像取当前 targetSdk（覆盖局域网权限等
+  行为），验最低版本时另建对应 API 的 AVD 并
+  `AVD_NAME=... dart run tool/agent/cli.dart emu start`。
 - 日志 / 截图 / pid 统一放在 `${TMPDIR:-/tmp}/molia-agent`（默认 `/tmp/molia-agent`，
   可用 `RUN_DIR` 覆盖；临时目录，重启可清）；集成测试日志为
   `it-<platform>-<时间戳>.log`，同批次的 `.status` 在跑完时写入退出码（`starting` 表示
