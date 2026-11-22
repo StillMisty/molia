@@ -71,8 +71,17 @@ class _GeneralSettingsSectionState extends State<GeneralSettingsSection> {
           ? SettingsSectionHint(text: l10n.settingsStartupPageHiddenHint)
           : null,
       children: [
-        // 行序按改动频率：启动页（常改）→ 底栏 → 语言。
+        // 行序按改动频率与依赖：恢复上次页面（决定落点）→ 启动页 → 底栏 →
+        // 语言。启动页在恢复开启时置灰（见 _StartupPageSettings）。
         if (nav != null) ...[
+          SettingsSwitchTile(
+            switchKey: const Key('settingsRestoreLastPageSwitch'),
+            icon: Icons.history_rounded,
+            title: l10n.settingsRestoreLastPageTitle,
+            subtitle: l10n.settingsRestoreLastPageSubtitle,
+            value: nav.restoreLastDestination,
+            onChanged: nav.setRestoreLastDestination,
+          ),
           _StartupPageSettings(provider: nav),
           SettingsNavTile(
             key: const Key('settingsBottomNavItem'),
@@ -105,6 +114,8 @@ class _GeneralSettingsSectionState extends State<GeneralSettingsSection> {
 /// 不可见的目的地不筛掉、只禁用：分段布局不随显隐变化（否则改一次显隐
 /// 选项就会跳位）。存储值可能因同步推来的隐藏当前不可见——此时副标题改用
 /// [AppLocalizations.settingsStartupPageHidden] 说明实际进入的兜底页。
+/// 「恢复上次页面」开启时整行置灰：落点由上次停留页决定，这一项只在没有
+/// 记录时兜底。
 class _StartupPageSettings extends StatelessWidget {
   const _StartupPageSettings({required this.provider});
 
@@ -116,17 +127,25 @@ class _StartupPageSettings extends StatelessWidget {
     final nav = provider;
     final home = nav.homeDestination;
     final homeVisible = nav.isVisible(home);
+    final restoring = nav.restoreLastDestination;
+    final String subtitle;
+    if (restoring) {
+      subtitle = l10n.settingsStartupPageRestoreHint;
+    } else if (homeVisible) {
+      subtitle = l10n.settingsStartupPageSubtitle;
+    } else {
+      subtitle = l10n.settingsStartupPageHidden(
+        home.label(l10n),
+        nav.effectiveHomeDestination.label(l10n),
+      );
+    }
 
     return SettingsChoiceRow<ShellDestination>(
       key: const Key('settingsStartupPageItem'),
       icon: Icons.rocket_launch_rounded,
       title: l10n.settingsStartupPageTitle,
-      subtitle: homeVisible
-          ? l10n.settingsStartupPageSubtitle
-          : l10n.settingsStartupPageHidden(
-              home.label(l10n),
-              nav.effectiveHomeDestination.label(l10n),
-            ),
+      subtitle: subtitle,
+      enabled: !restoring,
       value: home,
       options: [
         for (final destination in nav.order)

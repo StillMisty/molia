@@ -443,10 +443,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'This page is the startup page — change “Startup page” first';
 
   @override
+  String get settingsRestoreLastPageTitle => 'Remember last page';
+
+  @override
+  String get settingsRestoreLastPageSubtitle => 'Open the page you last used';
+
+  @override
   String get settingsStartupPageTitle => 'Startup page';
 
   @override
   String get settingsStartupPageSubtitle => 'Page opened when the app starts';
+
+  @override
+  String get settingsStartupPageRestoreHint =>
+      'Not used while “Remember last page” is on';
 
   @override
   String settingsStartupPageHidden(String page, String effective) {

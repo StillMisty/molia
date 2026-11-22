@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
+import '../data/settings/device_settings.dart';
+import '../data/settings/device_settings_keys.dart';
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
 import '../domain/models/shell_destination.dart';
@@ -20,11 +22,15 @@ typedef _NavLayout = ({
 /// 底部导航定制：顺序 + 显示/隐藏 + 启动首页 + 进入播放页的歌词偏好，
 /// SharedPreferences 持久化。
 class NavProvider extends ChangeNotifier {
-  NavProvider({required this._settings}) {
+  /// [deviceSettings] 仅测试注入；生产构造自己的设备本地入口，保存上次
+  /// 停留的一级页（不跟人走，见 `kShellLastDestinationKey`）。
+  NavProvider({required this._settings, DeviceSettings? deviceSettings})
+    : _deviceSettings = deviceSettings ?? DeviceSettings() {
     _preferencesReady = _loadPreferences();
   }
 
   final SettingsAccess _settings;
+  final DeviceSettings _deviceSettings;
 
   /// 默认顺序来自登记键默认值（资料 / 播放 / 收藏），避免两处各写一份。
   static List<ShellDestination> get defaultOrder =>
@@ -43,6 +49,12 @@ class NavProvider extends ChangeNotifier {
 
   /// 从其它一级页进入播放页时是否固定先显示歌词。
   bool _showLyricsOnEnter = kShellNowPlayingLyricsOnEnter.defaultValue;
+
+  /// 启动时是否恢复到上次停留的一级页。
+  bool _restoreLastDestination = kShellRestoreLastDestination.defaultValue;
+
+  /// 上次停留的一级页；null = 没有记录。
+  ShellDestination? _lastDestination;
 
   late final Future<void> _preferencesReady;
 
@@ -72,6 +84,18 @@ class NavProvider extends ChangeNotifier {
       ? _homeDestination
       : _order.firstWhere(isVisible, orElse: () => _order.first);
 
+  /// 启动落点：「恢复上次页面」开启且记录仍可见时回到上次停留的一级页，
+  /// 否则按 [effectiveHomeDestination]。
+  ///
+  /// 记录可能指向同步后已隐藏的目的地：此时不强行切到不可见页，回退启动页。
+  ShellDestination get startupDestination {
+    final last = _lastDestination;
+    if (_restoreLastDestination && last != null && isVisible(last)) {
+      return last;
+    }
+    return effectiveHomeDestination;
+  }
+
   /// 设置启动首页：立即生效并持久化。
   Future<void> setHomeDestination(ShellDestination destination) async {
     // 重复选中同一项不触发写入：避免制造一次内容无变化的同步变更。
@@ -83,6 +107,37 @@ class NavProvider extends ChangeNotifier {
 
   /// 从其它一级页进入播放页时是否固定先显示歌词。
   bool get showLyricsOnEnter => _showLyricsOnEnter;
+
+  /// 启动时是否恢复到上次停留的一级页。
+  bool get restoreLastDestination => _restoreLastDestination;
+
+  /// 设置「恢复上次页面」：立即生效并持久化。
+  ///
+  /// 关闭时清掉记录，避免很久以后重新打开时恢复到一个早已无关的页面。
+  Future<void> setRestoreLastDestination(bool value) async {
+    if (_restoreLastDestination == value) return;
+    _restoreLastDestination = value;
+    if (!value) _lastDestination = null;
+    notifyListeners();
+    if (!value) {
+      await _deviceSettings.remove(kShellLastDestinationKey);
+    }
+    try {
+      await _settings.write(kShellRestoreLastDestination, value);
+    } catch (e) {
+      logger.severe('保存「恢复上次页面」偏好失败: $e');
+    }
+  }
+
+  /// 记录用户切到的顶级页，供下次启动恢复。
+  ///
+  /// 开关关闭时不写：记录只在「恢复」启用期间有意义（见
+  /// [setRestoreLastDestination] 的清理）。
+  Future<void> recordLastDestination(ShellDestination destination) async {
+    if (!_restoreLastDestination || _lastDestination == destination) return;
+    _lastDestination = destination;
+    await _deviceSettings.write(kShellLastDestinationKey, destination.name);
+  }
 
   /// 设置「进入播放页时显示歌词」：立即生效并持久化。
   Future<void> setShowLyricsOnEnter(bool value) async {
@@ -127,8 +182,14 @@ class NavProvider extends ChangeNotifier {
   Future<void> _loadPreferences() async {
     try {
       // 与导航布局互相独立：新 JSON 分支会 early return，必须在这里先读，
-      // 否则远端应用 / 重启后该偏好永远停留在默认值。
+      // 否则远端应用 / 重启后这些偏好永远停留在默认值。
       _showLyricsOnEnter = await _settings.read(kShellNowPlayingLyricsOnEnter);
+      _restoreLastDestination = await _settings.read(
+        kShellRestoreLastDestination,
+      );
+      _lastDestination = _destinationOf(
+        await _deviceSettings.read(kShellLastDestinationKey),
+      );
       final layout = _decodeLayout(await _settings.read(kShellNavLayout));
       if (layout != null) {
         _order = layout.order;
@@ -219,6 +280,14 @@ class NavProvider extends ChangeNotifier {
               destination.name == kShellHomeDestination.defaultValue,
         ),
       );
+
+  /// 解析存储的一级页名字；空串 / 未知值返回 null（当作没有记录）。
+  static ShellDestination? _destinationOf(String name) {
+    for (final destination in ShellDestination.values) {
+      if (destination.name == name) return destination;
+    }
+    return null;
+  }
 
   Future<void> _persist() async {
     try {

@@ -177,6 +177,7 @@ void main() {
       CollectionModeStore.prefsKey: '曲库浏览模式（UI 状态）',
       LibraryCollections.orderKey: '合集顺序（UI 状态）',
       PlaylistFolderCollapseController.prefsKey: '分组折叠（UI 状态）',
+      kShellLastDestinationKeyName: '上次停留的一级页（设备本地使用事实）',
       ArtworkPaletteSeedStore.storageKey: '封面取色缓存（可重算）',
     };
     for (final entry in deviceLocal.entries) {

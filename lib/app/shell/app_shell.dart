@@ -232,11 +232,12 @@ class _MyAppState extends State<MyApp>
     WidgetsBinding.instance.addObserver(this);
     _morphAnimation.addListener(_onMorphTick);
     // 启动首页：导航偏好在首帧前已就绪（组合根 await 过 preferencesReady），
-    // 这里同步读取即可；存储值不可见时 effectiveHomeDestination 已回退到
-    // 第一个可见目的地。目的地 / 展开 / 顶栏判定统一交给展示模块。
+    // 这里同步读取即可。开启「恢复上次页面」时回到上次停留的一级页，否则
+    // 用存储的启动页；记录 / 启动页不可见时都已回退到可见目的地。目的地 /
+    // 展开 / 顶栏判定统一交给展示模块。
     final nav = context.read<NavProvider>();
     _presentation = ShellPresentation(
-      initialDestination: nav.effectiveHomeDestination,
+      initialDestination: nav.startupDestination,
       visibleDestinations: nav.visibleDestinations,
     )..addListener(_onPresentationChanged);
     // 顶栏 / 底栏的曲目信息区必须与「手动进入播放页」后的状态一致（播放页
@@ -380,6 +381,8 @@ class _MyAppState extends State<MyApp>
     if (destination == current) return;
     if (!_presentation.select(destination)) return;
     HapticsService.lightImpact();
+    // 记录切页，供下次启动恢复；开关关闭时 provider 自己跳过。
+    unawaited(nav.recordLastDestination(destination));
     final bool enteringPlayer = destination == ShellDestination.nowPlaying;
     final bool leavingPlayer = current == ShellDestination.nowPlaying;
     // 从其它一级页进入播放页：总是展开完整播放页。播放页可能停在收起态

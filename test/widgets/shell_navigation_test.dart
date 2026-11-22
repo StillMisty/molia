@@ -7,7 +7,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/app_shell.dart' as shell;
 import 'package:molia/app/desktop/now_playing_bar.dart';
 import 'package:molia/app/shell/layout_skipping_offstage.dart';
+import 'package:molia/data/settings/device_settings_keys.dart';
 import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/domain/models/shell_destination.dart';
 import 'package:molia/domain/models/sync_nearby_pairing.dart';
 import 'package:molia/pages/favorites.dart';
 import 'package:molia/pages/library.dart';
@@ -301,6 +303,51 @@ void main() {
       drainOverflow: true,
     );
     expect(find.byType(FavoritesPage), findsOneWidget);
+  });
+
+  testWidgets('启动恢复到上次停留的页面（而不是启动页）', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'shell_home_destination': 'favorites',
+      kShellLastDestinationKeyName: 'library',
+    });
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      size: const Size(500, 900),
+      resetPreferences: false,
+      waitForHome: false,
+    );
+    await pumpFrames(tester, frames: 30);
+
+    expect(pageIsVisible(tester, Library), isTrue);
+    expect(pageIsVisible(tester, FavoritesPage), isFalse);
+  });
+
+  testWidgets('切换一级页会记下上次页面，供下次启动恢复', (tester) async {
+    await pumpPerfApp(
+      tester,
+      desktopShell: false,
+      favoritesCount: 3,
+      size: const Size(500, 900),
+    );
+    final prefs = await SharedPreferences.getInstance();
+    // 首屏落点不算「切换」，不写记录。
+    expect(prefs.getString(kShellLastDestinationKeyName), isNull);
+
+    await tapDestination(tester, Icons.library_music_outlined);
+    await pumpFrames(tester, frames: 5);
+    expect(
+      prefs.getString(kShellLastDestinationKeyName),
+      ShellDestination.library.name,
+    );
+
+    await tapDestination(tester, Icons.favorite_border_rounded);
+    await pumpFrames(tester, frames: 5);
+    expect(
+      prefs.getString(kShellLastDestinationKeyName),
+      ShellDestination.favorites.name,
+    );
   });
 
   testWidgets('640 宽走导航轨并可以切页', (tester) async {

@@ -95,6 +95,16 @@ const kShellNowPlayingLyricsOnEnter = SettingsKey<bool>(
   category: SyncCategory.settings,
 );
 
+/// 启动时恢复到上次停留的一级页（资料 / 播放 / 收藏，跟人走，默认开）。
+///
+/// 跟人走的是「是否恢复」这个意愿；具体停留在哪一页属于设备本地使用事实，
+/// 记录在 `kShellLastDestinationKey`。关闭后按启动页偏好进入。
+const kShellRestoreLastDestination = SettingsKey<bool>(
+  'shell_restore_last_destination',
+  true,
+  category: SyncCategory.settings,
+);
+
 /// 发现页当前渠道（跟人走）：`''` = 使用内置默认渠道。
 ///
 /// 全局唯一的渠道偏好：同时决定热榜 / 歌单与搜索（搜索 tab / Ctrl+F 都只
@@ -322,6 +332,7 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kShellNavHidden,
   kShellHomeDestination,
   kShellNowPlayingLyricsOnEnter,
+  kShellRestoreLastDestination,
   kDiscoverChannelKey,
   kShortcutsEnabled,
   kGlobalShortcutsEnabled,
