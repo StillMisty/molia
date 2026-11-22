@@ -71,7 +71,7 @@ class CatalogSourceHealthProbe implements SourceHealthProbe {
   }
 
   /// 有界首字节探测：只带取链结果给出的请求头（B 站直链需要 Referer / UA），
-  /// 绝不附加账号 Cookie；读到第一块 body 立即取消并关闭连接。
+  /// 并在设置前过滤掉账号类敏感头；绝不附加账号 Cookie。
   ///
   /// 这里刻意不使用播放 / 缓存链路：探测结果不落盘、不进目录缓存，也不改变
   /// 任何播放状态。
@@ -81,7 +81,7 @@ class CatalogSourceHealthProbe implements SourceHealthProbe {
       ..connectionTimeout = const Duration(seconds: 10);
     try {
       final request = await client.getUrl(stream.uri);
-      for (final entry in stream.headers.entries) {
+      for (final entry in sanitizeStreamHeaders(stream.headers).entries) {
         request.headers.set(entry.key, entry.value);
       }
       // Range 最后设置：无论音源给了什么头，探测都只请求 1 字节。
@@ -112,6 +112,31 @@ class CatalogSourceHealthProbe implements SourceHealthProbe {
     }
     return source;
   }
+}
+
+/// 诊断流探测永不发送的账号 / 凭证请求头（比较时统一转小写）。
+const Set<String> kSensitiveStreamHeaderNames = {
+  'cookie',
+  'set-cookie',
+  'authorization',
+  'proxy-authorization',
+  'x-api-key',
+  'api-key',
+  'x-auth-token',
+  'x-access-token',
+};
+
+/// 过滤播放直链请求头：保留 Referer / User-Agent 等播放必需头，去掉任何
+/// 可能携带账号凭据的头。大小写不敏感。
+Map<String, String> sanitizeStreamHeaders(Map<String, String> headers) {
+  final sanitized = <String, String>{};
+  for (final entry in headers.entries) {
+    if (kSensitiveStreamHeaderNames.contains(entry.key.toLowerCase())) {
+      continue;
+    }
+    sanitized[entry.key] = entry.value;
+  }
+  return sanitized;
 }
 
 /// HTTP 状态 → 类型化失败；`null` 表示可接受（2xx）。

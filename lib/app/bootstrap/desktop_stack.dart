@@ -137,6 +137,10 @@ Future<DesktopStack> buildDesktopStack({
 
   /// 退出前的音频收尾（暂停 + 释放播放器）；无真实播放后端 / 测试时为空。
   Future<void> Function()? shutdownAudio,
+
+  /// 真正销毁窗口前的额外收尾（例如诊断会话写「已正常关闭」）。
+  /// 有界 1s、失败不阻塞；`onDetach` 仍保留作为兜底。
+  Future<void> Function()? beforeQuit,
 }) async {
   // 托盘与关闭行为（设备本地偏好，不登记设置注册表）：关闭窗口时默认
   // 最小化到托盘（播放不中断）；偏好可在设置 › 通用 › 桌面 切换为直接退出。
@@ -179,6 +183,7 @@ Future<DesktopStack> buildDesktopStack({
       commitSession: playback.suspendPlaybackSession,
       shutdownAudio: shutdownAudio,
       flushStatistics: playStatisticsService.flush,
+      beforeQuit: beforeQuit,
       onBeforeQuitWindow: onBeforeQuitWindow,
       quitWindow: _quitPlatformApp,
     ),
@@ -376,11 +381,15 @@ Future<void> commitBeforeQuit({
   required Future<void> Function() quitWindow,
   Future<void> Function()? shutdownAudio,
 
+  /// 真正销毁窗口前的额外收尾（诊断会话标记等）；有界、失败不阻塞退出。
+  Future<void> Function()? beforeQuit,
+
   /// 真正销毁窗口前的同步钩子（退出状态机切到「销毁中」）。
   void Function()? onBeforeQuitWindow,
   Duration sessionTimeout = const Duration(seconds: 2),
   Duration audioTimeout = const Duration(milliseconds: 500),
   Duration statisticsTimeout = const Duration(milliseconds: 500),
+  Duration beforeQuitTimeout = const Duration(seconds: 1),
 }) async {
   final sessionWatch = Stopwatch()..start();
   try {
@@ -425,6 +434,24 @@ Future<void> commitBeforeQuit({
     '音频 ${audioWatch.elapsedMilliseconds}ms，'
     '统计 ${statsWatch.elapsedMilliseconds}ms',
   );
+
+  final beforeQuitAction = beforeQuit;
+  if (beforeQuitAction != null) {
+    final extraWatch = Stopwatch()..start();
+    try {
+      await beforeQuitAction().timeout(beforeQuitTimeout);
+    } on TimeoutException {
+      debugPrint(
+        '[Molia] 退出前收尾钩子超时'
+        '（${beforeQuitTimeout.inMilliseconds}ms，继续退出）',
+      );
+    } catch (e) {
+      debugPrint('[Molia] 退出前收尾钩子失败（继续退出）: $e');
+    }
+    extraWatch.stop();
+    _quitLog.info('退出收尾：附加动作 ${extraWatch.elapsedMilliseconds}ms');
+  }
+
   onBeforeQuitWindow?.call();
   await quitWindow();
 }

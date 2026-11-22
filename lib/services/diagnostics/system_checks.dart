@@ -298,6 +298,7 @@ class SourceHealthCheck implements DiagnosticCheck {
 
   DateTime? _activeRunStartedAt;
   int _projected = 0;
+  int _writtenThisRun = 0;
   Completer<void>? _pendingWake;
 
   @override
@@ -311,6 +312,7 @@ class SourceHealthCheck implements DiagnosticCheck {
 
   @override
   Future<void> run(DiagnosticCheckContext context) async {
+    _writtenThisRun = 0;
     if (checker.targetCount == 0) {
       context.addResult(
         DiagnosticCheckResult(
@@ -338,7 +340,8 @@ class SourceHealthCheck implements DiagnosticCheck {
     }
 
     final subscription = checker.changes.listen((_) {
-      _pendingWake?.complete();
+      final wake = _pendingWake;
+      if (wake != null && !wake.isCompleted) wake.complete();
       _drain(context);
     });
     try {
@@ -372,6 +375,19 @@ class SourceHealthCheck implements DiagnosticCheck {
         await _waitForChange();
       }
       _drain(context);
+      if (_writtenThisRun == 0) {
+        // start() 竞态失败（另一个入口刚好开始 / 冷却变化）且之后没有任何
+        // 渠道结果：不能让这次检查完全空白。
+        context.addResult(
+          DiagnosticCheckResult(
+            id: key,
+            group: group,
+            status: DiagnosticCheckStatus.skipped,
+            at: context.now(),
+            stableValue: 'cooldown',
+          ),
+        );
+      }
     } finally {
       _pendingWake = null;
       await subscription.cancel();
@@ -398,12 +414,14 @@ class SourceHealthCheck implements DiagnosticCheck {
     final results = run.results;
     for (var index = _projected; index < results.length; index++) {
       if (context.isCancelled) return;
-      for (final result in healthChannelCheckResults(
+      final projected = healthChannelCheckResults(
         results[index],
         at: context.now(),
-      )) {
+      );
+      for (final result in projected) {
         context.addResult(result);
       }
+      _writtenThisRun += projected.length;
     }
     _projected = results.length;
   }

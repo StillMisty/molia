@@ -386,14 +386,19 @@ void main() {
       );
     });
 
-    test('首字节探测带 Range 与 PlayableStream.headers，且不附加 Cookie', () async {
+    test('首字节探测带 Range，过滤 Cookie / Authorization 但保留 Referer / UA', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() => server.close(force: true));
       final seen = <String, String?>{};
       server.listen((request) async {
         seen['range'] = request.headers.value(HttpHeaders.rangeHeader);
         seen['referer'] = request.headers.value('Referer');
+        seen['userAgent'] = request.headers.value(HttpHeaders.userAgentHeader);
         seen['cookie'] = request.headers.value(HttpHeaders.cookieHeader);
+        seen['authorization'] = request.headers.value(
+          HttpHeaders.authorizationHeader,
+        );
+        seen['xApiKey'] = request.headers.value('X-Api-Key');
         request.response.statusCode = HttpStatus.partialContent;
         request.response.add(const [1, 2]);
         await request.response.close();
@@ -409,7 +414,13 @@ void main() {
         () => probe.stream(
           PlayableStream(
             Uri.parse('http://127.0.0.1:${server.port}/track.mp3'),
-            headers: const {'Referer': 'https://example.test/'},
+            headers: const {
+              'Referer': 'https://example.test/',
+              'User-Agent': 'MoliaTest/1.0',
+              'Cookie': 'SESSDATA=secret',
+              'authorization': 'Bearer secret-token',
+              'X-Api-Key': 'secret-key',
+            },
           ),
         ),
         createHttpClient: direct.createHttpClient,
@@ -417,7 +428,31 @@ void main() {
 
       expect(seen['range'], 'bytes=0-1');
       expect(seen['referer'], 'https://example.test/');
+      expect(seen['userAgent'], 'MoliaTest/1.0');
       expect(seen['cookie'], isNull);
+      expect(seen['authorization'], isNull);
+      expect(seen['xApiKey'], isNull);
+    });
+
+    test('请求头过滤大小写不敏感，保留播放所需头', () {
+      final sanitized = sanitizeStreamHeaders({
+        'Referer': 'https://example.test/',
+        'User-Agent': 'MoliaTest/1.0',
+        'COOKIE': 'a=1',
+        'Authorization': 'Bearer x',
+        'Proxy-Authorization': 'Basic y',
+        'X-Auth-Token': 'z',
+        'X-Access-Token': 'z2',
+        'api-key': 'k',
+        'Set-Cookie': 'session=1',
+      });
+      expect(sanitized['Referer'], 'https://example.test/');
+      expect(sanitized['User-Agent'], 'MoliaTest/1.0');
+      expect(
+        sanitized.keys.map((key) => key.toLowerCase()),
+        isNot(contains('cookie')),
+      );
+      expect(sanitized, hasLength(2));
     });
 
     test('搜索 + 取链 + 首字节全部成功时逐级记录状态', () async {

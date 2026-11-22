@@ -339,6 +339,80 @@ void main() {
       expect(checker.running, isFalse);
     });
 
+    test('changes 连续触发不会重复 complete，结果不重复', () async {
+      final gate = Completer<void>();
+      final probe = _FakeProbe(
+        [
+          const SourceHealthTarget(
+            key: 'a',
+            displayName: 'A',
+            canResolve: true,
+          ),
+        ],
+        gates: {'a': gate},
+      );
+      final checker = _BurstChangesChecker(probe: probe);
+      addTearDown(checker.dispose);
+      addTearDown(() async {
+        if (!gate.isCompleted) gate.complete();
+      });
+      final runner = DiagnosticsRunner(
+        checks: [
+          SourceHealthCheck(
+            checker: checker,
+            pollInterval: const Duration(milliseconds: 2),
+          ),
+        ],
+        config: const DiagnosticRunnerConfig(
+          checkTimeout: Duration(seconds: 5),
+        ),
+      );
+      addTearDown(runner.dispose);
+
+      await runner.start();
+      // 等检查进入等待唤醒状态，再在同一轮事件循环里连续触发两次。
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      checker.emitBurst();
+      checker.emitBurst();
+      gate.complete();
+      await runner.idle;
+
+      final results = runner.runs.single.results;
+      expect(results, hasLength(3));
+      expect(results.map((result) => result.id).toSet(), {
+        DiagnosticCheckId.channelSearch,
+        DiagnosticCheckId.channelResolve,
+        DiagnosticCheckId.channelStream,
+      });
+    });
+
+    test('start 竞态返回 false 且无结果时写入 skipped(cooldown)', () async {
+      final probe = _FakeProbe([
+        const SourceHealthTarget(key: 'a', displayName: 'A', canResolve: true),
+      ]);
+      final checker = _RejectingStartChecker(probe: probe);
+      addTearDown(checker.dispose);
+      final runner = DiagnosticsRunner(
+        checks: [
+          SourceHealthCheck(
+            checker: checker,
+            pollInterval: const Duration(milliseconds: 1),
+          ),
+        ],
+        config: const DiagnosticRunnerConfig(
+          checkTimeout: Duration(seconds: 2),
+        ),
+      );
+      addTearDown(runner.dispose);
+
+      await runner.start();
+      await runner.idle;
+
+      final result = runner.runs.single.results.single;
+      expect(result.status, DiagnosticCheckStatus.skipped);
+      expect(result.stableValue, 'cooldown');
+    });
+
     test('runner 挂到诊断服务后可由 startChecks 触发来源检查', () async {
       final probe = _FakeProbe([
         const SourceHealthTarget(key: 'a', displayName: 'A', canResolve: true),
@@ -497,6 +571,57 @@ void main() {
       expect(ok.status, DiagnosticCheckStatus.ok);
     });
   });
+}
+
+Future<void> _noDelay(Duration _) async {}
+
+/// 只替换 `changes` 的检查器：用于在同一轮事件循环里连续发两个通知。
+class _BurstChangesChecker extends SourceHealthChecker {
+  _BurstChangesChecker({required super.probe})
+    : super(
+        config: const SourceHealthConfig(
+          cooldown: Duration.zero,
+          gap: Duration.zero,
+        ),
+        delay: _noDelay,
+      );
+
+  final StreamController<void> _burst = StreamController<void>.broadcast();
+
+  @override
+  Stream<void> get changes => _burst.stream;
+
+  void emitBurst() {
+    _burst.add(null);
+    _burst.add(null);
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _burst.close();
+    await super.dispose();
+  }
+}
+
+/// `canStart` 为 true 但 `start()` 因竞态返回 false、且没有运行结果的检查器。
+class _RejectingStartChecker extends SourceHealthChecker {
+  _RejectingStartChecker({required super.probe})
+    : super(
+        config: const SourceHealthConfig(
+          cooldown: Duration.zero,
+          gap: Duration.zero,
+        ),
+        delay: _noDelay,
+      );
+
+  @override
+  bool get canStart => true;
+
+  @override
+  bool get running => false;
+
+  @override
+  Future<bool> start() async => false;
 }
 
 class _FakeProbe implements SourceHealthProbe {
