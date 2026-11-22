@@ -170,8 +170,11 @@
   "settingsBottomNavHint": "Drag to reorder; toggle to show or hide a tab (at least one stays visible)",
   "settingsBottomNavKeepOne": "Keep at least one tab visible",
   "settingsBottomNavKeepHome": "This page is the startup page — change “Startup page” first",
+  "settingsRestoreLastPageTitle": "Remember last page",
+  "settingsRestoreLastPageSubtitle": "Open the page you last used",
   "settingsStartupPageTitle": "Startup page",
   "settingsStartupPageSubtitle": "Page opened when the app starts",
+  "settingsStartupPageRestoreHint": "Not used while “Remember last page” is on",
   "settingsStartupPageHidden": "“{page}” is hidden; the app opens “{effective}” instead",
   "@settingsStartupPageHidden": {
     "placeholders": {

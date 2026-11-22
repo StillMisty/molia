@@ -425,10 +425,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsBottomNavKeepHome => '该页正在作为启动首页，请先在「启动时打开」中更改';
 
   @override
+  String get settingsRestoreLastPageTitle => '记住上次页面';
+
+  @override
+  String get settingsRestoreLastPageSubtitle => '打开应用回到上次停留的页面';
+
+  @override
   String get settingsStartupPageTitle => '启动时打开';
 
   @override
   String get settingsStartupPageSubtitle => '打开应用时默认进入的页面';
+
+  @override
+  String get settingsStartupPageRestoreHint => '「记住上次页面」开启时不会生效';
 
   @override
   String settingsStartupPageHidden(String page, String effective) {

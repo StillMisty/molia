@@ -1768,8 +1768,11 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   发现页短横屏也不随键盘缩正文（搜索框在顶部始终可见，结果列表让键盘覆盖
   并继续滚动），否则 200% 字号 + 键盘会把渠道 / tab 页头直接挤溢出。
   页边距：桌面档与平板档同宽（24），内容区宽度由「窗口宽 − 侧栏折叠宽」表达。
-  启动首页由 `NavProvider.effectiveHomeDestination` 决定（设置 › 通用 › 启动时打开，
-  默认播放页；存储首页被隐藏时按导航顺序兜底且**不改写存储**，避免同步回环）。
+  启动落点由 `NavProvider.startupDestination` 决定：开启「记住上次页面」
+  （设置 › 通用，登记设置、默认开）且上次停留的一级页仍可见时回到该页；
+  否则按启动页（设置 › 通用 › 启动时打开，默认播放页；存储首页被隐藏时按
+  导航顺序兜底且**不改写存储**，避免同步回环）。上次页面记录在设备本地
+  （`shell_last_destination_v1`），不随同步带到其它设备。
   应用内音量（`PlaybackProvider.volume/muted`，设备本地持久化、落盘防抖 400ms）
   经 `PlaybackFacade.setVolume` 落到 just_audio（桌面 media_kit 同一播放器）。
   播放手感（`lib/services/playback_feel_store.dart` 单键 JSON，设备本地）：

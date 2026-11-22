@@ -908,6 +908,18 @@ abstract class AppLocalizations {
   /// **'This page is the startup page — change “Startup page” first'**
   String get settingsBottomNavKeepHome;
 
+  /// No description provided for @settingsRestoreLastPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remember last page'**
+  String get settingsRestoreLastPageTitle;
+
+  /// No description provided for @settingsRestoreLastPageSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the page you last used'**
+  String get settingsRestoreLastPageSubtitle;
+
   /// No description provided for @settingsStartupPageTitle.
   ///
   /// In en, this message translates to:
@@ -919,6 +931,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Page opened when the app starts'**
   String get settingsStartupPageSubtitle;
+
+  /// No description provided for @settingsStartupPageRestoreHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Not used while “Remember last page” is on'**
+  String get settingsStartupPageRestoreHint;
 
   /// No description provided for @settingsStartupPageHidden.
   ///

@@ -340,6 +340,7 @@ void main() {
       'library_browse_mode_v1',
       'playlist_folder_collapsed_v1',
       'music_folders_v1',
+      'shell_last_destination_v1',
       'scrobble_master_enabled_v1',
       'scrobble_listenbrainz_enabled_v1',
       'scrobble_lastfm_enabled_v1',

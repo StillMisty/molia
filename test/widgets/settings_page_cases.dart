@@ -165,6 +165,10 @@ void main() {
 
     // 通用：震动与应用名称下沉。
     expect(find.byKey(const Key('settingsStartupPageItem')), findsOneWidget);
+    expect(
+      find.byKey(const Key('settingsRestoreLastPageSwitch')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('settingsBottomNavItem')), findsOneWidget);
     expect(find.byKey(const Key('settingsLanguageItem')), findsOneWidget);
     expect(find.byKey(const Key('settingsHapticsSwitch')), findsNothing);
@@ -329,6 +333,37 @@ void main() {
 
     final l10n = lookupAppLocalizations(const Locale('zh'));
     expect(find.text(l10n.settingsStartupPageHiddenHint), findsOneWidget);
+  });
+
+  testWidgets('恢复上次页面：开启时启动页置灰，关闭后恢复可选', (tester) async {
+    await pumpSettings(tester);
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+
+    expect(nav.restoreLastDestination, isTrue);
+    expect(find.text(l10n.settingsStartupPageRestoreHint), findsOneWidget);
+    expect(
+      tester
+          .widget<SettingsChoiceRow<ShellDestination>>(
+            find.byKey(const Key('settingsStartupPageItem')),
+          )
+          .enabled,
+      isFalse,
+      reason: '落点由上次页面决定时，启动页不可编辑',
+    );
+
+    await tester.tap(find.byKey(const Key('settingsRestoreLastPageSwitch')));
+    await tester.pumpAndSettle();
+
+    expect(nav.restoreLastDestination, isFalse);
+    expect(find.text(l10n.settingsStartupPageSubtitle), findsOneWidget);
+    expect(
+      tester
+          .widget<SettingsChoiceRow<ShellDestination>>(
+            find.byKey(const Key('settingsStartupPageItem')),
+          )
+          .enabled,
+      isTrue,
+    );
   });
 
   testWidgets('底部导航入口打开独立子页，拖拽列表不再占首屏', (tester) async {

@@ -5,6 +5,7 @@ library;
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/device_settings_keys.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -78,6 +79,75 @@ void main() {
     expect(reloaded.showLyricsOnEnter, isFalse);
     // 两项偏好各自一个键，互不覆盖。
     expect(prefs.getString(kShellNavLayout.name), isNull);
+  });
+
+  test('恢复上次页面：默认开启，没有记录时按启动页落点', () async {
+    final nav = await buildProvider();
+
+    expect(nav.restoreLastDestination, isTrue);
+    expect(nav.startupDestination, ShellDestination.nowPlaying);
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getString(kShellLastDestinationKeyName),
+      isNull,
+      reason: '没有切页就不写记录',
+    );
+  });
+
+  test('记录切页：写入设备本地键，重建后从上次页面启动', () async {
+    final nav = await buildProvider();
+    await nav.recordLastDestination(ShellDestination.library);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(kShellLastDestinationKeyName), 'library');
+
+    final reloaded = await buildProvider();
+    expect(reloaded.startupDestination, ShellDestination.library);
+  });
+
+  test('关闭恢复：清记录、按启动页进入，之后切页不再记录', () async {
+    final nav = await buildProvider();
+    await nav.recordLastDestination(ShellDestination.favorites);
+    await nav.setHomeDestination(ShellDestination.library);
+    await nav.setRestoreLastDestination(false);
+
+    expect(nav.restoreLastDestination, isFalse);
+    expect(nav.startupDestination, ShellDestination.library);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(kShellLastDestinationKeyName), isNull);
+    expect(prefs.getBool(kShellRestoreLastDestination.name), isFalse);
+
+    await nav.recordLastDestination(ShellDestination.nowPlaying);
+    expect(prefs.getString(kShellLastDestinationKeyName), isNull);
+
+    // 重新开启：记录已清，仍按启动页落点，不会跳回很久以前的页面。
+    await nav.setRestoreLastDestination(true);
+    expect(nav.startupDestination, ShellDestination.library);
+  });
+
+  test('记录指向已隐藏页面：启动回退到有效启动页', () async {
+    final layout = jsonEncode({
+      'order': ['library', 'nowPlaying', 'favorites'],
+      'hidden': [ShellDestination.library.name],
+      'home': ShellDestination.favorites.name,
+    });
+    SharedPreferences.setMockInitialValues({
+      kShellNavLayout.name: layout,
+      kShellLastDestinationKeyName: ShellDestination.library.name,
+    });
+    final nav = await buildProvider();
+
+    expect(nav.isVisible(ShellDestination.library), isFalse);
+    expect(nav.startupDestination, ShellDestination.favorites);
+  });
+
+  test('记录损坏：未知名字当作没有记录', () async {
+    SharedPreferences.setMockInitialValues({
+      kShellLastDestinationKeyName: 'discover',
+    });
+    final nav = await buildProvider();
+
+    expect(nav.startupDestination, nav.effectiveHomeDestination);
   });
 
   test('隐藏启动首页被拒：返回 false、仍可见、不写 hidden', () async {

@@ -426,6 +426,12 @@ const String kLibraryBrowseModeKeyName = 'library_browse_mode_v1';
 const String kPlaylistFolderCollapsedKeyName = 'playlist_folder_collapsed_v1';
 const String kMusicFoldersKeyName = 'music_folders_v1';
 
+/// 上次停留的一级页（`ShellDestination.name`）；空串 = 没有记录。
+///
+/// 与启动页偏好分开：记录是这台设备的使用事实（换设备不该把另一台设备
+/// 最后停留的页带过去），启动页偏好则跟人走。
+const String kShellLastDestinationKeyName = 'shell_last_destination_v1';
+
 /// 曲库默认浏览专辑；未知值由 store 回退到这里。
 const String kDefaultLibraryBrowseModeName = 'albums';
 
@@ -435,6 +441,10 @@ const DeviceSettingKey<String> kLibraryBrowseModeKey = DeviceSettingKey(
 );
 const DeviceSettingKey<List<String>> kPlaylistFolderCollapsedKey =
     DeviceSettingKey(kPlaylistFolderCollapsedKeyName, <String>[]);
+const DeviceSettingKey<String> kShellLastDestinationKey = DeviceSettingKey(
+  kShellLastDestinationKeyName,
+  '',
+);
 Object? _encodeMusicFolder(MusicFolder folder) => folder.toJson();
 
 const DeviceJsonListSettingKey<MusicFolder> kMusicFoldersKey =
@@ -547,6 +557,7 @@ const List<DeviceSettingEntry> kDeviceSettingsKeys = [
   kLibraryBrowseModeKey,
   kPlaylistFolderCollapsedKey,
   kMusicFoldersKey,
+  kShellLastDestinationKey,
   kScrobbleMasterEnabledKey,
   kScrobbleListenBrainzEnabledKey,
   kScrobbleLastFmEnabledKey,
