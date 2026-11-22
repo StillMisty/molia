@@ -10,8 +10,10 @@ library;
 import '../../data/downloads/download_notifications.dart';
 import '../../data/update/update_downloader.dart';
 import '../../data/update/update_manifest_client.dart';
+import '../../domain/models/source_script.dart' show SourceScriptUpdate;
 import '../../providers/update_provider.dart';
 import '../../services/notification_permission.dart';
+import '../../services/update/update_check_coordinator.dart';
 import '../../services/update/update_installer.dart';
 import '../../services/update/update_notification_presenter.dart';
 import '../../services/update/update_preferences.dart';
@@ -21,12 +23,16 @@ import '../../services/update/update_service.dart';
 typedef UpdateStack = ({
   UpdatePreferences preferences,
   UpdateProvider provider,
+  UpdateCheckCoordinator coordinator,
 });
 
 /// 装配更新链路；[quitApp] 是统一退出路径（桌面端替换脚本就绪后由 provider
 /// 触发退出，走 flush + 无视关闭策略销毁窗口，否则会被「关闭最小化到托盘」
 /// 拦截，替换脚本永远等不到进程退出）。
-UpdateStack buildUpdateStack({required Future<void> Function() quitApp}) {
+UpdateStack buildUpdateStack({
+  required Future<void> Function() quitApp,
+  required Future<List<SourceScriptUpdate>> Function() checkSourceUpdates,
+}) {
   final updatePreferences = UpdatePreferences();
   final updateProvider = UpdateProvider(
     service: UpdateService(
@@ -46,6 +52,20 @@ UpdateStack buildUpdateStack({required Future<void> Function() quitApp}) {
     ensureNotificationPermission: NotificationPermission.ensureRequested,
     quitApp: quitApp,
   );
+  final updateCoordinator = UpdateCheckCoordinator(
+    hooks: UpdateCheckHooks(
+      checkOnStartup: () => updateProvider.checkOnStartup,
+      checkDaily: () => updateProvider.checkDaily,
+      lastCheckedAt: () => updateProvider.lastCheckedAt,
+      checkApp: updateProvider.checkForAutoPrompt,
+      checkSources: checkSourceUpdates,
+      settingsListenable: updateProvider,
+    ),
+  );
 
-  return (preferences: updatePreferences, provider: updateProvider);
+  return (
+    preferences: updatePreferences,
+    provider: updateProvider,
+    coordinator: updateCoordinator,
+  );
 }

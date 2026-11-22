@@ -52,6 +52,7 @@ import '../../services/scrobble/scrobble_service.dart';
 import '../../services/save_as.dart';
 import '../../services/shortcut_settings.dart';
 import '../../services/track_local_data_service.dart';
+import '../../services/update/update_check_coordinator.dart';
 import 'ai_stack.dart';
 import 'catalog_stack.dart';
 import 'desktop_stack.dart';
@@ -286,5 +287,7 @@ List<SingleChildWidget> buildAppProviders({
     ChangeNotifierProvider.value(value: ShortcutSettings.instance),
     // 应用内更新：设置页读写（渠道 / 自动检查 / 下载安装）。
     ChangeNotifierProvider.value(value: update.provider),
+    // 启动 / 每日自动检查与更新弹窗数据（应用 + 音源）。
+    Provider<UpdateCheckCoordinator>.value(value: update.coordinator),
   ];
 }

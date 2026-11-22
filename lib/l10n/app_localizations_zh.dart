@@ -3766,10 +3766,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateChannelBeta => '测试版';
 
   @override
-  String get updateAutoCheckTitle => '自动检查更新';
+  String get updateCheckOnStartupTitle => '启动时检查';
 
   @override
-  String get updateAutoCheckSubtitle => '启动时检查，每天最多一次';
+  String get updateCheckOnStartupSubtitle => '每次打开 Molia 时检查应用与音源更新';
+
+  @override
+  String get updateCheckDailyTitle => '每日检查';
+
+  @override
+  String get updateCheckDailySubtitle => '应用运行期间每天最多检查一次';
+
+  @override
+  String get updateAvailableTitle => '发现可用更新';
+
+  @override
+  String updateAvailableAppLine(String version) {
+    return 'Molia $version 可以更新';
+  }
+
+  @override
+  String get updateAvailableSourcesTitle => '音源更新';
+
+  @override
+  String updateAvailableSourceLine(String name, String current, String latest) {
+    return '$name：$current → $latest';
+  }
+
+  @override
+  String get updateAvailableLater => '稍后';
+
+  @override
+  String get updateAvailableAppAction => '查看应用更新';
+
+  @override
+  String get updateAvailableSourcesAction => '查看音源更新';
 
   @override
   String get updateCheckTitle => '检查更新';

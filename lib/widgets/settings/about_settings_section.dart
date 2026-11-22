@@ -24,7 +24,7 @@ class AboutSettingsSection extends StatelessWidget {
     return SettingsSectionCard(
       title: l10n.settingsUpdateTitle,
       children: [
-        // 版本与更新：渠道 / 自动检查 / 下载安装。
+        // 版本与更新：渠道 / 启动时与每日检查 / 下载安装。
         // 可更新只由副标题表达（「可更新至 x.y.z」），不再叠 badge：设置行是
         // 低频入口，行角红点在列表里读起来像未读消息，信息量与文案重复。
         if (update != null)

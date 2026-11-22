@@ -1740,8 +1740,17 @@
   "updateChannelSubtitle": "稳定版只收正式发布，测试版提前体验",
   "updateChannelStable": "稳定版",
   "updateChannelBeta": "测试版",
-  "updateAutoCheckTitle": "自动检查更新",
-  "updateAutoCheckSubtitle": "启动时检查，每天最多一次",
+  "updateCheckOnStartupTitle": "启动时检查",
+  "updateCheckOnStartupSubtitle": "每次打开 Molia 时检查应用与音源更新",
+  "updateCheckDailyTitle": "每日检查",
+  "updateCheckDailySubtitle": "应用运行期间每天最多检查一次",
+  "updateAvailableTitle": "发现可用更新",
+  "updateAvailableAppLine": "Molia {version} 可以更新",
+  "updateAvailableSourcesTitle": "音源更新",
+  "updateAvailableSourceLine": "{name}：{current} → {latest}",
+  "updateAvailableLater": "稍后",
+  "updateAvailableAppAction": "查看应用更新",
+  "updateAvailableSourcesAction": "查看音源更新",
   "updateCheckTitle": "检查更新",
   "updateStatusIdle": "尚未检查",
   "updateStatusChecking": "正在检查…",
@@ -1803,6 +1812,26 @@
   "@updateStatusAvailable": {
     "placeholders": {
       "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateAvailableAppLine": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateAvailableSourceLine": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "current": {
+        "type": "String"
+      },
+      "latest": {
         "type": "String"
       }
     }

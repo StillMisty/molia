@@ -38,6 +38,12 @@ class _MyThemedAppState extends State<MyThemedApp> {
   /// 展示弹层）；提前持有 provider，宿主 context 消失后仍能拒绝排队请求。
   late final SyncProvider _sync;
 
+  /// 自动检查（启动 / 每日）发现的更新：弹一次合并提示，展示完清空。
+  late final UpdateCheckCoordinator? _updateChecks;
+
+  /// 更新弹窗未关闭前不再响应新通知；关闭时再处理排队中的最新一条。
+  bool _updatePromptOpen = false;
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +59,10 @@ class _MyThemedAppState extends State<MyThemedApp> {
     _incomingPairing = sync.state.incomingPairingRequests.listen(
       _onIncomingPairing,
     );
+    _updateChecks = context.read<UpdateCheckCoordinator?>();
+    _updateChecks?.notice.addListener(_onUpdateNotice);
+    // 检查可能在本 State 挂载前已完成（启动检查很快），补一次。
+    _onUpdateNotice();
   }
 
   /// 首次与某台设备真正交换数据：提示一次（名称缺失时用短设备 id 兜底）。
@@ -119,9 +129,54 @@ class _MyThemedAppState extends State<MyThemedApp> {
     if (mounted) setState(() {});
   }
 
+  /// 自动检查发现应用 / 音源更新：在 root navigator 上弹合并提示。
+  void _onUpdateNotice() {
+    final notice = _updateChecks?.notice.value;
+    if (notice == null || _updatePromptOpen) return;
+    _updatePromptOpen = true;
+    // 通知可能来自启动尾巴（首帧之后），等一帧确保 Navigator 可用。
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _presentUpdateNotice(notice);
+    });
+  }
+
+  Future<void> _presentUpdateNotice(UpdateCheckNotice notice) async {
+    try {
+      final hostContext = navigatorKey.currentContext;
+      if (!mounted || hostContext == null) return;
+      final action = await showUpdateAvailableDialog(hostContext, notice);
+      if (!mounted) return;
+      // 只清掉「这一条」；弹窗期间若又发现新版本，保留给下一轮。
+      if (identical(_updateChecks?.notice.value, notice)) {
+        _updateChecks?.notice.value = null;
+      }
+      final page = switch (action) {
+        UpdatePromptAction.app => const UpdateSettingsPage(),
+        UpdatePromptAction.sources => const SourcesPage(),
+        UpdatePromptAction.later => null,
+      };
+      if (page != null && navigatorKey.currentContext != null) {
+        await showSettingsSheet(
+          navigatorKey.currentContext!,
+          initialPage: page,
+        );
+      }
+    } finally {
+      _updatePromptOpen = false;
+      // 弹窗 / 设置页期间到达的新通知在这里补弹；宿主还没就绪时保持静默，
+      // 由下一次通知 / 回前台再触发，避免 post-frame 自循环。
+      if (mounted &&
+          _updateChecks?.notice.value != null &&
+          navigatorKey.currentContext != null) {
+        _onUpdateNotice();
+      }
+    }
+  }
+
   @override
   void dispose() {
     AppBrandingService.titleNotifier.removeListener(_onBrandingChanged);
+    _updateChecks?.notice.removeListener(_onUpdateNotice);
     unawaited(_peerConnected?.cancel());
     unawaited(_incomingPairing?.cancel());
     super.dispose();

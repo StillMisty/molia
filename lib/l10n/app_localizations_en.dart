@@ -3924,10 +3924,43 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updateChannelBeta => 'Beta';
 
   @override
-  String get updateAutoCheckTitle => 'Check for updates automatically';
+  String get updateCheckOnStartupTitle => 'Check at startup';
 
   @override
-  String get updateAutoCheckSubtitle => 'Check at startup, at most once a day';
+  String get updateCheckOnStartupSubtitle =>
+      'Check app and source updates every time Molia starts';
+
+  @override
+  String get updateCheckDailyTitle => 'Check daily';
+
+  @override
+  String get updateCheckDailySubtitle =>
+      'Check at most once a day while Molia is running';
+
+  @override
+  String get updateAvailableTitle => 'Updates available';
+
+  @override
+  String updateAvailableAppLine(String version) {
+    return 'Molia $version is ready to update';
+  }
+
+  @override
+  String get updateAvailableSourcesTitle => 'Source updates';
+
+  @override
+  String updateAvailableSourceLine(String name, String current, String latest) {
+    return '$name: $current → $latest';
+  }
+
+  @override
+  String get updateAvailableLater => 'Later';
+
+  @override
+  String get updateAvailableAppAction => 'App update';
+
+  @override
+  String get updateAvailableSourcesAction => 'Source updates';
 
   @override
   String get updateCheckTitle => 'Check for updates';
