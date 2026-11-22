@@ -79,8 +79,10 @@ else
     log "警告：没有用户级签名配置，源工作区也没有 android/key.properties / *.jks；release 构建仍会缺签名"
 fi
 
-# native assets hooks 缓存：sqlite3/cnativeapi 的预编译产物。只复制 shared，
-# 不复制整个 .dart_tool（体积大且含本 worktree 专属状态）。
+# native assets hooks 缓存：只复制 shared（sqlite3 等下载的预编译产物），
+# 不复制整个 .dart_tool（体积大且含本 worktree 专属状态）。注意 hook 的
+# input.json 带绝对路径，跨 worktree 仍会重编（cnativeapi 3 个 ABI 约 2 分钟），
+# 这里只保证受限网络下不重新下载。
 if [[ -d "$source_dir/.dart_tool/hooks_runner/shared" &&
       ! -d "$target/.dart_tool/hooks_runner/shared" ]]; then
   mkdir -p "$target/.dart_tool/hooks_runner"
