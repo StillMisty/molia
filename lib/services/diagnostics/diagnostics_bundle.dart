@@ -161,6 +161,10 @@ class DiagnosticsBundleData {
     required this.sources,
     required this.failures,
     required this.healthRuns,
+    this.checks = const [],
+    this.session,
+    this.playbackAttempts = const [],
+    this.issues = const [],
     this.database,
     this.databaseNote,
     this.logs = const [],
@@ -175,6 +179,14 @@ class DiagnosticsBundleData {
   final DiagnosticsSourcesSnapshot sources;
   final List<DiagnosticFailureRecord> failures;
   final List<HealthRun> healthRuns;
+
+  /// 统一检查（新 → 旧）；为空时诊断包仍会给出说明行。
+  final List<DiagnosticCheckRun> checks;
+  final DiagnosticSessionInfo? session;
+  final List<PlaybackAttempt> playbackAttempts;
+
+  /// 由最近失败聚合的问题组；为空时仍渲染段落说明。
+  final List<DiagnosticIssueGroup> issues;
   final DiagnosticsDatabaseCounts? database;
   final String? databaseNote;
   final List<DiagnosticsLogFile> logs;
@@ -224,7 +236,15 @@ String renderDiagnosticsBundle(
   sections.writeln();
   _failuresSection(sections, data.failures);
   sections.writeln();
+  _issueGroupsSection(sections, data.issues);
+  sections.writeln();
   _healthSection(sections, data.healthRuns);
+  sections.writeln();
+  _checksSection(sections, data.checks);
+  sections.writeln();
+  _sessionSection(sections, data.session);
+  sections.writeln();
+  _playbackAttemptsSection(sections, data.playbackAttempts);
   sections.writeln();
   _databaseSection(sections, data.database, data.databaseNote);
   sections.writeln();
@@ -353,6 +373,29 @@ void _failuresSection(
   buffer.writeln();
 }
 
+void _issueGroupsSection(
+  StringBuffer buffer,
+  List<DiagnosticIssueGroup> groups,
+) {
+  buffer
+    ..writeln('## Issue groups')
+    ..writeln();
+  if (groups.isEmpty) {
+    buffer.writeln('No grouped issues recorded.');
+  } else {
+    for (final group in groups) {
+      buffer.writeln(
+        '- ${group.channelDisplayName} (${group.channelKey}) | '
+        '${group.kind.name} | count=${group.count} | '
+        'first=${_dateTime(group.firstAt)} | last=${_dateTime(group.lastAt)}'
+        '${group.l10nKey == null ? '' : ' | ${group.l10nKey}'}'
+        '${group.retryable ? ' | retryable' : ''}',
+      );
+    }
+  }
+  buffer.writeln();
+}
+
 void _healthSection(StringBuffer buffer, List<HealthRun> runs) {
   buffer
     ..writeln('## Source health')
@@ -374,6 +417,86 @@ void _healthSection(StringBuffer buffer, List<HealthRun> runs) {
           ' | ${result.latencyMs} ms',
         );
       }
+    }
+  }
+  buffer.writeln();
+}
+
+void _checksSection(StringBuffer buffer, List<DiagnosticCheckRun> runs) {
+  buffer
+    ..writeln('## Checks')
+    ..writeln();
+  if (runs.isEmpty) {
+    buffer.writeln('No diagnostic check has been run yet.');
+  } else {
+    for (final run in runs) {
+      buffer.writeln(
+        '- run ${_dateTime(run.startedAt)}'
+        '${run.finishedAt == null ? '' : ' -> ${_dateTime(run.finishedAt!)}'}'
+        '${run.cancelled ? ' | stopped by user' : ' | completed'}'
+        ' | ${run.overallStatus.name}',
+      );
+      for (final result in run.results) {
+        final failure = result.failure;
+        final detail = failure == null
+            ? ''
+            : ' | ${failure.kind.name}'
+                  '${failure.l10nKey == null ? '' : ', key=${failure.l10nKey}'}'
+                  '${failure.retryable ? ', retryable' : ''}';
+        buffer.writeln(
+          '  - ${result.group.name}/${result.id.name}: ${result.status.name}'
+          '${result.channelKey == null ? '' : ' | ${result.channelDisplayName ?? result.channelKey} (${result.channelKey})'}'
+          '${result.stableValue == null ? '' : ' | ${result.stableValue}'}'
+          ' | ${result.latencyMs} ms$detail',
+        );
+      }
+    }
+  }
+  buffer.writeln();
+}
+
+void _sessionSection(StringBuffer buffer, DiagnosticSessionInfo? session) {
+  buffer
+    ..writeln('## Session')
+    ..writeln();
+  if (session == null) {
+    buffer.writeln('(unavailable)');
+  } else {
+    buffer.writeln('- this launch: ${_dateTime(session.startedAt)}');
+    final previous = session.previousExitAt;
+    buffer.writeln(
+      previous == null
+          ? '- previous exit: not recorded'
+          : '- previous exit: ${_dateTime(previous)}'
+                '${session.previousVersion == null ? '' : ' | version ${session.previousVersion}'}',
+    );
+    buffer.writeln(
+      '- previous exit abnormal: '
+      '${_yesNo(session.previousAbnormalExit)}',
+    );
+  }
+  buffer.writeln();
+}
+
+void _playbackAttemptsSection(
+  StringBuffer buffer,
+  List<PlaybackAttempt> attempts,
+) {
+  buffer
+    ..writeln('## Playback attempts')
+    ..writeln();
+  if (attempts.isEmpty) {
+    buffer.writeln('No playback recovery attempts recorded.');
+  } else {
+    for (final attempt in attempts) {
+      final failure = attempt.failure;
+      buffer.writeln(
+        '- ${_dateTime(attempt.at)} | ${attempt.phase.name} | '
+        '${attempt.sourceKey} | ${attempt.succeeded ? 'ok' : 'failed'}'
+        '${failure == null ? '' : ' (${failure.kind.name}'
+                  '${failure.l10nKey == null ? '' : ', key=${failure.l10nKey}'}'
+                  '${failure.retryable ? ', retryable' : ''})'}',
+      );
     }
   }
   buffer.writeln();

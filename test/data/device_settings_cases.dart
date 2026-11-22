@@ -351,6 +351,8 @@ void main() {
       'scrobble_listenbrainz_account_v1',
       'scrobble_lastfm_account_v1',
       'app_font_family',
+      'diagnostic_session_state_v1',
+      'diagnostic_failure_history_v1',
     ]);
     final names = kDeviceSettingsKeys.map((key) => key.name).toSet();
     expect(names.length, kDeviceSettingsKeys.length, reason: '键名必须唯一');

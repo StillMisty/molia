@@ -10,6 +10,8 @@ library;
 
 import 'dart:ui' show Rect;
 
+import '../../domain/models/diagnostics.dart';
+import '../../domain/models/failure.dart';
 import '../../domain/models/music_folder.dart';
 import '../../domain/models/playback_feel.dart';
 import 'device_settings.dart';
@@ -529,6 +531,114 @@ const DeviceSettingKey<String> kAppFontFamilyKey = DeviceSettingKey(
   '',
 );
 
+// ---------------------------------------------------------------------------
+// 问题排查（设备本地：退出状态 / 最近问题历史）
+// ---------------------------------------------------------------------------
+
+/// 上一次进程最后可见状态；只用于解释本次启动是否异常。
+const String kDiagnosticSessionStateKeyName = 'diagnostic_session_state_v1';
+
+/// 最近失败记录的设备内副本（跨重启可见；不含 message / payload / URL）。
+const String kDiagnosticFailureHistoryKeyName = 'diagnostic_failure_history_v1';
+
+typedef DiagnosticSessionState = ({
+  DiagnosticSessionPhase phase,
+  int lastSeenAtMs,
+  String version,
+});
+
+const DiagnosticSessionState kDefaultDiagnosticSessionState = (
+  phase: DiagnosticSessionPhase.closed,
+  lastSeenAtMs: 0,
+  version: '',
+);
+
+DiagnosticSessionPhase? _decodeDiagnosticSessionPhase(String name) {
+  for (final phase in DiagnosticSessionPhase.values) {
+    if (phase.name == name) return phase;
+  }
+  return null;
+}
+
+DiagnosticSessionState? _decodeDiagnosticSessionState(
+  Map<String, dynamic> json,
+) {
+  final phaseName = json['state'];
+  final lastSeenAtMs = json['lastSeenAt'];
+  final version = json['version'];
+  if (phaseName is! String || lastSeenAtMs is! int || version is! String) {
+    return null;
+  }
+  final phase = _decodeDiagnosticSessionPhase(phaseName);
+  if (phase == null) return null;
+  return (phase: phase, lastSeenAtMs: lastSeenAtMs, version: version);
+}
+
+Map<String, Object?> _encodeDiagnosticSessionState(
+  DiagnosticSessionState value,
+) => {
+  'state': value.phase.name,
+  'lastSeenAt': value.lastSeenAtMs,
+  'version': value.version,
+};
+
+DiagnosticFailureRecord? _decodeDiagnosticFailureRecord(Object? raw) {
+  if (raw is! Map<String, dynamic>) return null;
+  final at = raw['at'];
+  final channelKey = raw['channelKey'];
+  final channelDisplayName = raw['channelDisplayName'];
+  final kindName = raw['kind'];
+  final l10nKey = raw['l10nKey'];
+  final retryable = raw['retryable'];
+  if (at is! int ||
+      channelKey is! String ||
+      channelDisplayName is! String ||
+      kindName is! String) {
+    return null;
+  }
+  FailureKind? kind;
+  for (final candidate in FailureKind.values) {
+    if (candidate.name == kindName) {
+      kind = candidate;
+      break;
+    }
+  }
+  if (kind == null) return null;
+  return DiagnosticFailureRecord(
+    at: DateTime.fromMillisecondsSinceEpoch(at),
+    channelKey: channelKey,
+    channelDisplayName: channelDisplayName,
+    kind: kind,
+    l10nKey: l10nKey is String ? l10nKey : null,
+    retryable: retryable == true,
+  );
+}
+
+Object? _encodeDiagnosticFailureRecord(DiagnosticFailureRecord record) => {
+  'at': record.at.millisecondsSinceEpoch,
+  'channelKey': record.channelKey,
+  'channelDisplayName': record.channelDisplayName,
+  'kind': record.kind.name,
+  'l10nKey': record.l10nKey,
+  'retryable': record.retryable,
+};
+
+const DeviceJsonSettingKey<DiagnosticSessionState> kDiagnosticSessionStateKey =
+    DeviceJsonSettingKey(
+      kDiagnosticSessionStateKeyName,
+      kDefaultDiagnosticSessionState,
+      decode: _decodeDiagnosticSessionState,
+      encode: _encodeDiagnosticSessionState,
+    );
+
+const DeviceJsonListSettingKey<DiagnosticFailureRecord>
+kDiagnosticFailureHistoryKey = DeviceJsonListSettingKey(
+  kDiagnosticFailureHistoryKeyName,
+  <DiagnosticFailureRecord>[],
+  decode: _decodeDiagnosticFailureRecord,
+  encode: _encodeDiagnosticFailureRecord,
+);
+
 /// 已迁移的设备本地键（顺序即登记顺序；唯一性由测试核对）。
 const List<DeviceSettingEntry> kDeviceSettingsKeys = [
   kPlaybackFeelStateKey,
@@ -581,4 +691,6 @@ const List<DeviceSettingEntry> kDeviceSettingsKeys = [
   kScrobbleListenBrainzAccountKey,
   kScrobbleLastFmAccountKey,
   kAppFontFamilyKey,
+  kDiagnosticSessionStateKey,
+  kDiagnosticFailureHistoryKey,
 ];

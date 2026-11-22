@@ -60,6 +60,20 @@ class FailureRingBuffer implements FailureRecorder {
     _changes.add(null);
   }
 
+  /// 用持久化历史重建缓冲（启动时调用）；仍受 [capacity] 约束。
+  ///
+  /// 不产生失败通知之外的副作用；页面已打开时也能看到恢复后的记录。
+  void restore(Iterable<DiagnosticFailureRecord> records) {
+    if (_changes.isClosed) return;
+    _records
+      ..clear()
+      ..addAll(records);
+    while (_records.length > capacity) {
+      _records.removeFirst();
+    }
+    _changes.add(null);
+  }
+
   Future<void> dispose() async {
     await _changes.close();
   }

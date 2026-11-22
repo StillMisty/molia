@@ -201,6 +201,7 @@ class _FakeBuilder implements DiagnosticsBundleBuilder {
     double? screenWidth,
     double? screenHeight,
     double? devicePixelRatio,
+    int maxBytes = defaultDiagnosticsBundleMaxBytes,
   }) async => Uint8List.fromList(utf8.encode('diagnostics bundle'));
 
   @override
@@ -208,6 +209,7 @@ class _FakeBuilder implements DiagnosticsBundleBuilder {
     double? screenWidth,
     double? screenHeight,
     double? devicePixelRatio,
+    int maxBytes = defaultDiagnosticsBundleMaxBytes,
   }) async => 'diagnostics bundle';
 
   @override
