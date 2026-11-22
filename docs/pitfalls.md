@@ -1283,3 +1283,14 @@
      不能只把 `line` 置空，否则随后的 `setConfig` 会拿旧的 `current` 把上一句
      重新画回来。重复文本的副歌还要带 `trackId + lineIndex` 行身份，否则
      「结构相同」快路径会吞掉换行与高亮重置。
+
+122. **`flutter clean` 会删掉 native assets 预编译缓存，构建时间差一个数量级**：
+     `.dart_tool/hooks_runner/` 是 cnativeapi / quickjs / sqlite3 的 build hook
+     产物，`flutter clean` 连 `.dart_tool/` 一起删。删掉后 Android 首次构建要为
+     3 个 ABI 重新编译 cnativeapi（单个约 42s），实测 `flutter build apk --debug`
+     从 2m37s 起步；只删 `build/` 时同样能拿到干净打包产物，但约 10–15s。日常清理用
+     `dart run tool/agent/cli.dart clean`（`--deep` / `--full` 逐级加严），不要
+     直接 `flutter clean`。附带坑：`--no-pub` 会跳过插件注入，debug/test 之后
+     留下的 `GeneratedPluginRegistrant.java` 带 dev-only 的 `integration_test`，
+     紧接着 `flutter build apk --release --no-pub` 会因包不存在直接失败；release
+     构建不要加 `--no-pub`。

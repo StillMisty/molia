@@ -146,6 +146,9 @@ tool/agent/seed.sh android restore       # 用最近一次备份还原（第一�
   `tool/agent/worktree_prepare.sh <worktree-dir> [branch]`：会补分支、签名
   （优先用户级 `~/.config/molia/android.properties`）与 native assets hooks 缓存
   （受限网络下 sqlite3 下载会卡）。Gradle wrapper 已入库，不需要复制。
+- 清构建产物用 `dart run tool/agent/cli.dart clean`，不要直接 `flutter clean`：
+  后者会删 `.dart_tool/hooks_runner` 的 native assets 预编译缓存，下次 Android
+  构建要多花约 2 分钟（见 `docs/pitfalls.md` #122）。
 - APK 内容明细：`dart run tool/agent/cli.dart size apk [--check] <apk>`；不依赖 `unzip`。
   内存采样：`tool/agent/perf.sh memory android`（先 `adb root`）。
 

@@ -86,6 +86,27 @@ tool/agent/app.sh run -d linux --headless  # 无图形显示：显式 Xvfb
 - **视觉改动先在 360 与 640 宽各渲染一次**（共享工具栏 / 选择器 / 弹层尤其）。
   只靠 `didExceedMaxLines` 发现不了「chip 把输入区挤窄」这类比例问题。
 
+### 3.4 清理构建产物
+
+**不要用 `flutter clean` 做日常清理**：它会连 `.dart_tool/` 一起删掉，其中
+`.dart_tool/hooks_runner/` 是 native assets（cnativeapi / quickjs / sqlite3）的
+预编译产物。删掉后 Android 首次构建要为 3 个 ABI 重新编译（实测冷构建 2m37s），
+而只删 `build/` 的增量构建约 10–15s。按需要选档：
+
+```bash
+dart run tool/agent/cli.dart clean            # 删 build/；保留 hooks 与 Dart 增量缓存（下次 ~10–15s）
+dart run tool/agent/cli.dart clean --deep     # 再删 .dart_tool/flutter_build 与平台 ephemeral（~25s）
+dart run tool/agent/cli.dart clean --full     # 官方 flutter clean + pub get（~2m30s，换工具链/依赖后用）
+dart run tool/agent/cli.dart clean --dry-run  # 只打印路径，不删
+```
+
+- 只有怀疑生成物 / native 库真的坏了，或切换 Flutter / NDK / 依赖大版本时才用
+  `--full`；平时 `--deep` 已经能保证 Dart 与平台工程重新生成。
+- release 构建**不要加 `--no-pub`**：`--no-pub` 会跳过插件注入，debug / test 之后
+  留下的 `GeneratedPluginRegistrant.java` 仍带 dev-only 的 `integration_test`，
+  release 编译期直接报 `package dev.flutter.plugins.integration_test does not exist`；
+  不加 `--no-pub` 才会按 release 过滤重新生成（实测只多约 1s）。
+
 ## 4. 代码生成
 
 | 改了什么 | 命令 | 产物 / 检查 |
