@@ -2320,39 +2320,222 @@
   "biliAccountQrSemantics": "哔哩哔哩登录二维码",
   "providerBilibili": "哔哩哔哩",
   "diagnosticsTitle": "问题排查",
-  "diagnosticsSubtitle": "导出运行记录与设备信息",
-  "diagnosticsOverviewSection": "概览",
-  "diagnosticsAppVersion": "应用版本",
-  "diagnosticsVersionValue": "{version}（构建 {build}）",
-  "diagnosticsPlatform": "系统",
-  "diagnosticsPlatformValue": "{platform} · {os}",
-  "diagnosticsLogStatus": "本地运行记录",
-  "diagnosticsLogRecording": "正在记录",
-  "diagnosticsLogUnavailable": "记录不可用",
-  "diagnosticsLogStopped": "已停止",
+  "diagnosticsSubtitle": "检查问题、查看日志并生成报告",
+  "diagnosticsAppInfoValue": "Molia {version}（构建 {build}）· {platform}",
+  "diagnosticsSummarySection": "状态摘要",
+  "diagnosticsSummaryNotChecked": "还没有检查",
+  "diagnosticsSummaryNotCheckedHint": "运行一次全面检查，确认搜索、播放和存储是否正常。",
+  "diagnosticsSummaryRunning": "正在检查…",
+  "diagnosticsCheckingHint": "结果会逐项出现。",
+  "diagnosticsSummaryOk": "一切正常",
+  "diagnosticsSummaryOkHint": "搜索、播放、存储和账号同步都正常。",
+  "diagnosticsSummaryFailed": "{count} 项需要处理",
+  "diagnosticsSummaryFailedHint": "先处理下方失败项。",
+  "diagnosticsSummaryWarning": "{count} 项需要注意",
+  "diagnosticsSummaryWarningHint": "不影响使用，但值得留意。",
+  "diagnosticsSummaryStopped": "检查已停止",
+  "diagnosticsSummaryStoppedHint": "已完成的部分仍可查看。",
+  "diagnosticsPrimaryStart": "开始全面检查",
+  "diagnosticsPrimaryStop": "停止检查",
+  "diagnosticsPrimaryRunning": "正在检查…",
+  "diagnosticsCheckStartFailed": "暂时无法开始检查，请稍后再试。",
+  "diagnosticsCheckedAt": "最近检查：{time}",
+  "diagnosticsAbnormalExitTime": "上次可能异常退出（{time}）",
+  "diagnosticsCheckResultsSection": "检查结果",
+  "diagnosticsCheckResultsHint": "按应用、音源、播放、存储和账号同步分组；失败项排在最前。",
+  "diagnosticsCheckResultsEmpty": "还没有检查结果",
+  "diagnosticsCheckResultsEmptyHint": "点「开始全面检查」后，结果会按分组显示。",
+  "diagnosticsCheckNoChannelsHint": "先启用一个可搜索的音源。",
+  "diagnosticsOpenDetails": "查看详情",
+  "diagnosticsGroupApp": "应用",
+  "diagnosticsGroupSources": "音源",
+  "diagnosticsGroupPlayback": "播放",
+  "diagnosticsGroupStorage": "存储",
+  "diagnosticsGroupSync": "账号与同步",
+  "diagnosticsCheckAppVersion": "应用版本",
+  "diagnosticsCheckSessionExit": "上次退出",
+  "diagnosticsCheckNotification": "通知权限",
+  "diagnosticsCheckAudioBackend": "播放后端",
+  "diagnosticsCheckSourceEngine": "音源脚本",
+  "diagnosticsCheckLogWrite": "运行记录",
+  "diagnosticsCheckDatabaseSchema": "数据库结构",
+  "diagnosticsCheckDatabaseIntegrity": "数据库完整性",
+  "diagnosticsCheckSync": "数据同步",
+  "diagnosticsCheckBiliAccount": "哔哩哔哩账号",
+  "diagnosticsChannelSearch": "搜索",
+  "diagnosticsChannelResolve": "播放链接",
+  "diagnosticsChannelStream": "播放流",
+  "diagnosticsChannelStatusCancelled": "已停止",
+  "diagnosticsStatusOk": "正常",
+  "diagnosticsStatusWarning": "需要注意",
+  "diagnosticsStatusFailed": "失败",
+  "diagnosticsStatusSkipped": "未检查",
+  "diagnosticsCheckStep": "{label}：{status}",
+  "diagnosticsCheckStepLatency": "{label}：{status}，{ms} 毫秒",
+  "diagnosticsCheckTotalLatency": "共 {ms} 毫秒",
+  "diagnosticsLatencyMs": "{ms} 毫秒",
+  "diagnosticsStableUnknown": "未知",
+  "diagnosticsStableAbnormal": "上次异常退出",
+  "diagnosticsStableClean": "上次正常退出",
+  "diagnosticsStableAvailable": "可用",
+  "diagnosticsStableUnavailable": "不可用",
+  "diagnosticsStableNotDesktop": "仅桌面端检查",
+  "diagnosticsStableNoScript": "未启用脚本",
+  "diagnosticsStableRecording": "正在记录",
+  "diagnosticsStableStopped": "已停止",
+  "diagnosticsStableUnreadable": "无法读取",
+  "diagnosticsStableOk": "正常",
+  "diagnosticsStableCorrupt": "需要修复",
+  "diagnosticsStableOff": "未启用",
+  "diagnosticsStableNone": "没有可用的同步方式",
+  "diagnosticsStableLoggedOut": "未登录",
+  "diagnosticsStableExpired": "登录已过期",
+  "diagnosticsStableLoggedIn": "已登录",
+  "diagnosticsStableCooldown": "刚检查过，稍后再试",
+  "diagnosticsStableNoChannels": "没有可检查的渠道",
+  "diagnosticsStableTimeout": "超时",
+  "diagnosticsStableGranted": "已允许",
+  "diagnosticsStableDenied": "未允许",
+  "diagnosticsStablePermanentlyDenied": "已拒绝，需在系统设置开启",
+  "diagnosticsStableUnsupported": "系统不支持",
+  "diagnosticsStableVersion": "版本 {value}",
+  "diagnosticsStableSchema": "版本 {value}",
+  "diagnosticsStableSchemaMismatch": "版本 {actual}（预期 {expected}）",
+  "diagnosticsStableScript": "脚本 {name}",
+  "diagnosticsSyncTransport": "{name}：{state}",
+  "diagnosticsTransportWebdav": "WebDAV",
+  "diagnosticsTransportLan": "局域网",
+  "diagnosticsTransportOk": "正常",
+  "diagnosticsTransportStopped": "已停止",
+  "diagnosticsTransportPermissionDenied": "需要授权",
+  "diagnosticsTransportUnavailable": "不可用",
+  "diagnosticsCheckDetailTitle": "检查详情",
+  "diagnosticsCheckDetailGroup": "分组",
+  "diagnosticsCheckDetailStatus": "状态",
+  "diagnosticsCheckDetailTime": "检查时间",
+  "diagnosticsCheckDetailLatency": "耗时",
+  "diagnosticsCheckDetailValue": "检查结果",
+  "diagnosticsCheckDetailFailure": "失败原因",
+  "diagnosticsCheckDetailSteps": "检查步骤",
+  "diagnosticsActionRetryCheck": "重新检查",
+  "diagnosticsActionRetryCheckHint": "重新跑一轮全面检查。",
+  "diagnosticsActionRestartEngine": "重启音源引擎",
+  "diagnosticsActionRestartEngineHint": "不会改动脚本或设置。",
+  "diagnosticsActionOpenSources": "打开音源设置",
+  "diagnosticsActionOpenSourcesHint": "检查脚本、渠道与账号。",
+  "diagnosticsActionOpenAccount": "打开账号设置",
+  "diagnosticsActionOpenAccountHint": "重新登录或查看登录状态。",
+  "diagnosticsActionOpenSync": "打开同步设置",
+  "diagnosticsActionOpenSyncHint": "检查传输开关与配对设备。",
+  "diagnosticsActionOpenNotifications": "打开通知设置",
+  "diagnosticsActionOpenNotificationsHint": "在系统设置里允许通知。",
+  "diagnosticsActionOpenLogs": "打开日志",
+  "diagnosticsActionOpenLogsHint": "查看最近的运行记录。",
+  "diagnosticsActionCopyDetails": "复制详情",
+  "diagnosticsActionCopyDetailsHint": "复制后可粘贴到反馈里。",
+  "diagnosticsActionCopied": "已复制到剪贴板",
+  "diagnosticsActionCopyFailed": "复制失败，请重试",
+  "diagnosticsEngineRestarted": "音源引擎已重启",
+  "diagnosticsEngineRestartFailed": "音源引擎重启失败",
   "diagnosticsRecentIssuesSection": "最近问题",
   "diagnosticsRecentIssuesEmpty": "还没有记录到问题",
   "diagnosticsRecentIssuesEmptyHint": "出现问题时会在这里记下渠道与原因。",
-  "diagnosticsChannelCheckSection": "渠道检查",
-  "diagnosticsChannelCheckHint": "只检查已启用且可搜索的渠道，不影响播放。",
-  "diagnosticsChannelCheckStart": "检查渠道",
-  "diagnosticsChannelCheckStop": "停止检查",
-  "diagnosticsChannelCheckRunning": "正在检查…",
-  "diagnosticsChannelCheckEmpty": "还没有检查记录",
-  "diagnosticsChannelCheckEmptyHint": "检查后这里会显示每个渠道的结果。",
-  "diagnosticsChannelCheckNone": "没有可检查的渠道",
-  "diagnosticsChannelCheckNoneHint": "先启用一个可搜索的音源。",
-  "diagnosticsChannelStatusOk": "正常",
-  "diagnosticsChannelStatusEmpty": "没有结果",
-  "diagnosticsChannelStatusCancelled": "已停止",
-  "diagnosticsChannelSearch": "搜索",
-  "diagnosticsChannelResolve": "播放链接",
-  "diagnosticsLatencyMs": "{ms} 毫秒",
-  "diagnosticsCheckedAt": "最近检查：{time}",
-  "diagnosticsExportAction": "导出诊断文件",
+  "diagnosticsIssueOccurrences": "{count} 次",
+  "diagnosticsIssueOccurrencesTitle": "次数",
+  "diagnosticsIssueLastAt": "最近 {time}",
+  "diagnosticsIssueDetailTitle": "问题详情",
+  "diagnosticsIssueChannel": "渠道",
+  "diagnosticsIssueCategory": "类别",
+  "diagnosticsIssueKey": "错误标记",
+  "diagnosticsIssueKeyUnknown": "没有标记",
+  "diagnosticsIssueRetryableTitle": "重试",
+  "diagnosticsIssueRetryable": "可以重试",
+  "diagnosticsIssueNotRetryable": "暂时无法重试",
+  "diagnosticsIssueFirst": "首次",
+  "diagnosticsIssueLast": "最近",
+  "diagnosticsIssueAdvice": "可能原因与建议",
+  "diagnosticsIssueSuggestionNetwork": "网络不稳定或平台临时不可用。换网络后再试，或稍后重试。",
+  "diagnosticsIssueSuggestionTimeout": "平台响应太慢。稍后再试，或换一个渠道。",
+  "diagnosticsIssueSuggestionUnsupported": "这个渠道不支持当前操作。换一个渠道试试。",
+  "diagnosticsIssueSuggestionNotFound": "平台没有返回内容。换关键词或渠道。",
+  "diagnosticsIssueSuggestionUnauthorized": "登录已失效或需要登录。打开账号设置重新登录。",
+  "diagnosticsIssueSuggestionRateLimited": "请求过于频繁。稍等几分钟再试。",
+  "diagnosticsIssueSuggestionScript": "音源脚本出错。重启音源引擎，或检查脚本来源。",
+  "diagnosticsIssueSuggestionEngineRestarting": "音源正在重启。稍等片刻再试。",
+  "diagnosticsIssueSuggestionCancelled": "操作被取消。需要时可以重新检查。",
+  "diagnosticsIssueSuggestionPlayback": "播放后端无法播放这个链接。换一个渠道或重新检查。",
+  "diagnosticsIssueSuggestionUnknown": "原因不明确。可以重新检查，或查看日志。",
+  "diagnosticsIssueRecheck": "重新检查",
+  "diagnosticsIssueRecheckHint": "重新跑一轮全面检查。",
+  "diagnosticsSessionSection": "本次运行",
+  "diagnosticsSessionDuration": "运行时长",
+  "diagnosticsDurationLessThanMinute": "不到 1 分钟",
+  "diagnosticsDurationMinutes": "{minutes} 分钟",
+  "diagnosticsDurationHoursMinutes": "{hours} 小时 {minutes} 分钟",
+  "diagnosticsPreviousExit": "上次退出",
+  "diagnosticsPreviousExitClean": "正常退出（{time}）",
+  "diagnosticsPreviousExitAbnormal": "可能异常退出（{time}）",
+  "diagnosticsPreviousExitUnknown": "没有记录",
+  "diagnosticsResolveSection": "播放链接（本次运行）",
+  "diagnosticsResolveHint": "只统计本次运行，重启应用后清零。",
+  "diagnosticsResolveCalls": "链接请求",
+  "diagnosticsResolveFailures": "失败",
+  "diagnosticsResolveTimeouts": "超时",
+  "diagnosticsResolveCount": "{count} 次",
+  "diagnosticsResolveCacheHitRate": "缓存命中 {percent}%",
+  "diagnosticsResolveNoData": "本次运行还没有播放链接请求。",
+  "diagnosticsResolveFailureKinds": "失败类别",
+  "diagnosticsLogStatus": "运行记录",
+  "diagnosticsLogRecording": "正在记录",
+  "diagnosticsLogUnavailable": "记录不可用",
+  "diagnosticsLogStopped": "已停止",
+  "diagnosticsLogView": "查看日志",
+  "diagnosticsLogsTitle": "日志",
+  "diagnosticsLogsLevelAll": "全部",
+  "diagnosticsLogsLevelWarning": "警告以上",
+  "diagnosticsLogsLevelError": "错误",
+  "diagnosticsLogsLevelWarningBadge": "警告",
+  "diagnosticsLogsLevelInfo": "信息",
+  "diagnosticsLogsLevelDebug": "调试",
+  "diagnosticsLogsLevelOther": "其它",
+  "diagnosticsLogsSearchHint": "关键词、模块或错误信息",
+  "diagnosticsLogsFilterSemantics": "日志级别",
+  "diagnosticsLogsResultCount": "{count} 条",
+  "diagnosticsLogsEmpty": "还没有日志",
+  "diagnosticsLogsEmptyHint": "应用运行时会在这里留下记录。",
+  "diagnosticsLogsUnavailable": "日志不可用",
+  "diagnosticsLogsUnavailableHint": "日志目录打不开，或还没有写入权限。",
+  "diagnosticsLogsCopy": "复制当前结果",
+  "diagnosticsLogsCopied": "已复制 {count} 条日志",
+  "diagnosticsLogsCopyEmpty": "当前筛选没有可复制的日志",
+  "diagnosticsLogsOpenDirectory": "打开日志目录",
+  "diagnosticsLogsOpenDirectoryHint": "在文件管理器里查看日志文件。",
+  "diagnosticsLogsOpenDirectoryFailed": "无法打开日志目录",
+  "diagnosticsLogsRefresh": "刷新日志",
+  "diagnosticsLogsFilteredEmpty": "没有符合条件的日志",
+  "diagnosticsLogsFilteredEmptyHint": "换个级别或关键词再试。",
+  "diagnosticsReportSection": "报告与日志",
+  "diagnosticsReportPreview": "预览报告",
+  "diagnosticsReportPreviewSubtitle": "先看一遍，再决定复制或分享。",
+  "diagnosticsCopyReport": "复制报告",
+  "diagnosticsCopyReportSubtitle": "只复制结论和最近日志，最多约 128 KB。",
+  "diagnosticsSaveReportSubtitle": "完整报告保存到本机，最多 20 MB。",
+  "diagnosticsShareReport": "分享报告",
+  "diagnosticsShareReportSubtitle": "分享前请确认内容；可能包含歌名和本地路径。",
+  "diagnosticsReportSheetTitle": "诊断报告预览",
+  "diagnosticsReportSheetPrivacy": "报告只在本机生成。分享前请确认内容，可能包含歌名和本地路径。",
+  "diagnosticsReportPreviewTruncated": "预览只显示结论和日志末尾，保存文件可查看完整内容。",
+  "diagnosticsReportCopied": "报告已复制",
+  "diagnosticsReportCopyFailed": "复制失败，请重试",
+  "diagnosticsReportShared": "报告已交给系统分享",
+  "diagnosticsReportShareFallback": "当前系统不支持分享，已保存到 {path}",
+  "diagnosticsReportShareFailed": "分享失败，请改存文件",
+  "diagnosticsReportUnavailable": "报告暂时无法生成",
+  "diagnosticsExportAction": "保存诊断文件",
   "diagnosticsExportPrivacy": "文件只保存在本机，不会自动上传。",
   "diagnosticsExportWarning": "分享前请先打开检查；文件可能包含歌名和本地路径。",
   "diagnosticsExporting": "正在准备…",
+  "diagnosticsLoading": "读取中…",
   "diagnosticsFailureNetwork": "网络问题",
   "diagnosticsFailureTimeout": "等待超时",
   "diagnosticsFailureUnsupported": "渠道不支持",
@@ -2364,44 +2547,16 @@
   "diagnosticsFailureCancelled": "已取消",
   "diagnosticsFailurePlayback": "播放失败",
   "diagnosticsFailureUnknown": "未知原因",
-  "diagnosticsResolveSection": "播放链接（本次运行）",
-  "diagnosticsResolveHint": "只统计本次运行，重启应用后清零。",
-  "diagnosticsResolveCalls": "链接请求",
-  "diagnosticsResolveCacheHits": "缓存命中",
-  "diagnosticsResolveRetries": "重试",
-  "diagnosticsResolveFailures": "失败",
-  "diagnosticsResolveTimeouts": "超时",
-  "diagnosticsResolveCount": "{count} 次",
-  "@diagnosticsResolveCount": {
+  "@diagnosticsSummaryFailed": {
     "placeholders": {
       "count": {
         "type": "int"
       }
     }
   },
-  "@diagnosticsVersionValue": {
+  "@diagnosticsSummaryWarning": {
     "placeholders": {
-      "version": {
-        "type": "String"
-      },
-      "build": {
-        "type": "String"
-      }
-    }
-  },
-  "@diagnosticsPlatformValue": {
-    "placeholders": {
-      "platform": {
-        "type": "String"
-      },
-      "os": {
-        "type": "String"
-      }
-    }
-  },
-  "@diagnosticsLatencyMs": {
-    "placeholders": {
-      "ms": {
+      "count": {
         "type": "int"
       }
     }
@@ -2413,8 +2568,170 @@
       }
     }
   },
-  "diagnosticsLoading": "读取中…",
-  "diagnosticsExportSection": "导出",
+  "@diagnosticsAppInfoValue": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      },
+      "build": {
+        "type": "String"
+      },
+      "platform": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsAbnormalExitTime": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsCheckStep": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsCheckStepLatency": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      },
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsCheckTotalLatency": {
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsLatencyMs": {
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsStableVersion": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsStableSchema": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsStableSchemaMismatch": {
+    "placeholders": {
+      "actual": {
+        "type": "String"
+      },
+      "expected": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsStableScript": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsSyncTransport": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "state": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsIssueOccurrences": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsIssueLastAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsDurationMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsDurationHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsResolveCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsResolveCacheHitRate": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsLogsResultCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsLogsCopied": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsReportShareFallback": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "musicFoldersTitle": "音乐文件夹",
   "musicFoldersSubtitle": "自动收录文件夹里的音频，不会移动文件",
   "musicFoldersAdd": "添加文件夹",

@@ -4757,38 +4757,387 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsTitle => '问题排查';
 
   @override
-  String get diagnosticsSubtitle => '导出运行记录与设备信息';
+  String get diagnosticsSubtitle => '检查问题、查看日志并生成报告';
 
   @override
-  String get diagnosticsOverviewSection => '概览';
-
-  @override
-  String get diagnosticsAppVersion => '应用版本';
-
-  @override
-  String diagnosticsVersionValue(String version, String build) {
-    return '$version（构建 $build）';
+  String diagnosticsAppInfoValue(
+    String version,
+    String build,
+    String platform,
+  ) {
+    return 'Molia $version（构建 $build）· $platform';
   }
 
   @override
-  String get diagnosticsPlatform => '系统';
+  String get diagnosticsSummarySection => '状态摘要';
 
   @override
-  String diagnosticsPlatformValue(String platform, String os) {
-    return '$platform · $os';
+  String get diagnosticsSummaryNotChecked => '还没有检查';
+
+  @override
+  String get diagnosticsSummaryNotCheckedHint => '运行一次全面检查，确认搜索、播放和存储是否正常。';
+
+  @override
+  String get diagnosticsSummaryRunning => '正在检查…';
+
+  @override
+  String get diagnosticsCheckingHint => '结果会逐项出现。';
+
+  @override
+  String get diagnosticsSummaryOk => '一切正常';
+
+  @override
+  String get diagnosticsSummaryOkHint => '搜索、播放、存储和账号同步都正常。';
+
+  @override
+  String diagnosticsSummaryFailed(int count) {
+    return '$count 项需要处理';
   }
 
   @override
-  String get diagnosticsLogStatus => '本地运行记录';
+  String get diagnosticsSummaryFailedHint => '先处理下方失败项。';
 
   @override
-  String get diagnosticsLogRecording => '正在记录';
+  String diagnosticsSummaryWarning(int count) {
+    return '$count 项需要注意';
+  }
 
   @override
-  String get diagnosticsLogUnavailable => '记录不可用';
+  String get diagnosticsSummaryWarningHint => '不影响使用，但值得留意。';
 
   @override
-  String get diagnosticsLogStopped => '已停止';
+  String get diagnosticsSummaryStopped => '检查已停止';
+
+  @override
+  String get diagnosticsSummaryStoppedHint => '已完成的部分仍可查看。';
+
+  @override
+  String get diagnosticsPrimaryStart => '开始全面检查';
+
+  @override
+  String get diagnosticsPrimaryStop => '停止检查';
+
+  @override
+  String get diagnosticsPrimaryRunning => '正在检查…';
+
+  @override
+  String get diagnosticsCheckStartFailed => '暂时无法开始检查，请稍后再试。';
+
+  @override
+  String diagnosticsCheckedAt(String time) {
+    return '最近检查：$time';
+  }
+
+  @override
+  String diagnosticsAbnormalExitTime(String time) {
+    return '上次可能异常退出（$time）';
+  }
+
+  @override
+  String get diagnosticsCheckResultsSection => '检查结果';
+
+  @override
+  String get diagnosticsCheckResultsHint => '按应用、音源、播放、存储和账号同步分组；失败项排在最前。';
+
+  @override
+  String get diagnosticsCheckResultsEmpty => '还没有检查结果';
+
+  @override
+  String get diagnosticsCheckResultsEmptyHint => '点「开始全面检查」后，结果会按分组显示。';
+
+  @override
+  String get diagnosticsCheckNoChannelsHint => '先启用一个可搜索的音源。';
+
+  @override
+  String get diagnosticsOpenDetails => '查看详情';
+
+  @override
+  String get diagnosticsGroupApp => '应用';
+
+  @override
+  String get diagnosticsGroupSources => '音源';
+
+  @override
+  String get diagnosticsGroupPlayback => '播放';
+
+  @override
+  String get diagnosticsGroupStorage => '存储';
+
+  @override
+  String get diagnosticsGroupSync => '账号与同步';
+
+  @override
+  String get diagnosticsCheckAppVersion => '应用版本';
+
+  @override
+  String get diagnosticsCheckSessionExit => '上次退出';
+
+  @override
+  String get diagnosticsCheckNotification => '通知权限';
+
+  @override
+  String get diagnosticsCheckAudioBackend => '播放后端';
+
+  @override
+  String get diagnosticsCheckSourceEngine => '音源脚本';
+
+  @override
+  String get diagnosticsCheckLogWrite => '运行记录';
+
+  @override
+  String get diagnosticsCheckDatabaseSchema => '数据库结构';
+
+  @override
+  String get diagnosticsCheckDatabaseIntegrity => '数据库完整性';
+
+  @override
+  String get diagnosticsCheckSync => '数据同步';
+
+  @override
+  String get diagnosticsCheckBiliAccount => '哔哩哔哩账号';
+
+  @override
+  String get diagnosticsChannelSearch => '搜索';
+
+  @override
+  String get diagnosticsChannelResolve => '播放链接';
+
+  @override
+  String get diagnosticsChannelStream => '播放流';
+
+  @override
+  String get diagnosticsChannelStatusCancelled => '已停止';
+
+  @override
+  String get diagnosticsStatusOk => '正常';
+
+  @override
+  String get diagnosticsStatusWarning => '需要注意';
+
+  @override
+  String get diagnosticsStatusFailed => '失败';
+
+  @override
+  String get diagnosticsStatusSkipped => '未检查';
+
+  @override
+  String diagnosticsCheckStep(String label, String status) {
+    return '$label：$status';
+  }
+
+  @override
+  String diagnosticsCheckStepLatency(String label, String status, int ms) {
+    return '$label：$status，$ms 毫秒';
+  }
+
+  @override
+  String diagnosticsCheckTotalLatency(int ms) {
+    return '共 $ms 毫秒';
+  }
+
+  @override
+  String diagnosticsLatencyMs(int ms) {
+    return '$ms 毫秒';
+  }
+
+  @override
+  String get diagnosticsStableUnknown => '未知';
+
+  @override
+  String get diagnosticsStableAbnormal => '上次异常退出';
+
+  @override
+  String get diagnosticsStableClean => '上次正常退出';
+
+  @override
+  String get diagnosticsStableAvailable => '可用';
+
+  @override
+  String get diagnosticsStableUnavailable => '不可用';
+
+  @override
+  String get diagnosticsStableNotDesktop => '仅桌面端检查';
+
+  @override
+  String get diagnosticsStableNoScript => '未启用脚本';
+
+  @override
+  String get diagnosticsStableRecording => '正在记录';
+
+  @override
+  String get diagnosticsStableStopped => '已停止';
+
+  @override
+  String get diagnosticsStableUnreadable => '无法读取';
+
+  @override
+  String get diagnosticsStableOk => '正常';
+
+  @override
+  String get diagnosticsStableCorrupt => '需要修复';
+
+  @override
+  String get diagnosticsStableOff => '未启用';
+
+  @override
+  String get diagnosticsStableNone => '没有可用的同步方式';
+
+  @override
+  String get diagnosticsStableLoggedOut => '未登录';
+
+  @override
+  String get diagnosticsStableExpired => '登录已过期';
+
+  @override
+  String get diagnosticsStableLoggedIn => '已登录';
+
+  @override
+  String get diagnosticsStableCooldown => '刚检查过，稍后再试';
+
+  @override
+  String get diagnosticsStableNoChannels => '没有可检查的渠道';
+
+  @override
+  String get diagnosticsStableTimeout => '超时';
+
+  @override
+  String get diagnosticsStableGranted => '已允许';
+
+  @override
+  String get diagnosticsStableDenied => '未允许';
+
+  @override
+  String get diagnosticsStablePermanentlyDenied => '已拒绝，需在系统设置开启';
+
+  @override
+  String get diagnosticsStableUnsupported => '系统不支持';
+
+  @override
+  String diagnosticsStableVersion(String value) {
+    return '版本 $value';
+  }
+
+  @override
+  String diagnosticsStableSchema(String value) {
+    return '版本 $value';
+  }
+
+  @override
+  String diagnosticsStableSchemaMismatch(String actual, String expected) {
+    return '版本 $actual（预期 $expected）';
+  }
+
+  @override
+  String diagnosticsStableScript(String name) {
+    return '脚本 $name';
+  }
+
+  @override
+  String diagnosticsSyncTransport(String name, String state) {
+    return '$name：$state';
+  }
+
+  @override
+  String get diagnosticsTransportWebdav => 'WebDAV';
+
+  @override
+  String get diagnosticsTransportLan => '局域网';
+
+  @override
+  String get diagnosticsTransportOk => '正常';
+
+  @override
+  String get diagnosticsTransportStopped => '已停止';
+
+  @override
+  String get diagnosticsTransportPermissionDenied => '需要授权';
+
+  @override
+  String get diagnosticsTransportUnavailable => '不可用';
+
+  @override
+  String get diagnosticsCheckDetailTitle => '检查详情';
+
+  @override
+  String get diagnosticsCheckDetailGroup => '分组';
+
+  @override
+  String get diagnosticsCheckDetailStatus => '状态';
+
+  @override
+  String get diagnosticsCheckDetailTime => '检查时间';
+
+  @override
+  String get diagnosticsCheckDetailLatency => '耗时';
+
+  @override
+  String get diagnosticsCheckDetailValue => '检查结果';
+
+  @override
+  String get diagnosticsCheckDetailFailure => '失败原因';
+
+  @override
+  String get diagnosticsCheckDetailSteps => '检查步骤';
+
+  @override
+  String get diagnosticsActionRetryCheck => '重新检查';
+
+  @override
+  String get diagnosticsActionRetryCheckHint => '重新跑一轮全面检查。';
+
+  @override
+  String get diagnosticsActionRestartEngine => '重启音源引擎';
+
+  @override
+  String get diagnosticsActionRestartEngineHint => '不会改动脚本或设置。';
+
+  @override
+  String get diagnosticsActionOpenSources => '打开音源设置';
+
+  @override
+  String get diagnosticsActionOpenSourcesHint => '检查脚本、渠道与账号。';
+
+  @override
+  String get diagnosticsActionOpenAccount => '打开账号设置';
+
+  @override
+  String get diagnosticsActionOpenAccountHint => '重新登录或查看登录状态。';
+
+  @override
+  String get diagnosticsActionOpenSync => '打开同步设置';
+
+  @override
+  String get diagnosticsActionOpenSyncHint => '检查传输开关与配对设备。';
+
+  @override
+  String get diagnosticsActionOpenNotifications => '打开通知设置';
+
+  @override
+  String get diagnosticsActionOpenNotificationsHint => '在系统设置里允许通知。';
+
+  @override
+  String get diagnosticsActionOpenLogs => '打开日志';
+
+  @override
+  String get diagnosticsActionOpenLogsHint => '查看最近的运行记录。';
+
+  @override
+  String get diagnosticsActionCopyDetails => '复制详情';
+
+  @override
+  String get diagnosticsActionCopyDetailsHint => '复制后可粘贴到反馈里。';
+
+  @override
+  String get diagnosticsActionCopied => '已复制到剪贴板';
+
+  @override
+  String get diagnosticsActionCopyFailed => '复制失败，请重试';
+
+  @override
+  String get diagnosticsEngineRestarted => '音源引擎已重启';
+
+  @override
+  String get diagnosticsEngineRestartFailed => '音源引擎重启失败';
 
   @override
   String get diagnosticsRecentIssuesSection => '最近问题';
@@ -4800,59 +5149,302 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsRecentIssuesEmptyHint => '出现问题时会在这里记下渠道与原因。';
 
   @override
-  String get diagnosticsChannelCheckSection => '渠道检查';
-
-  @override
-  String get diagnosticsChannelCheckHint => '只检查已启用且可搜索的渠道，不影响播放。';
-
-  @override
-  String get diagnosticsChannelCheckStart => '检查渠道';
-
-  @override
-  String get diagnosticsChannelCheckStop => '停止检查';
-
-  @override
-  String get diagnosticsChannelCheckRunning => '正在检查…';
-
-  @override
-  String get diagnosticsChannelCheckEmpty => '还没有检查记录';
-
-  @override
-  String get diagnosticsChannelCheckEmptyHint => '检查后这里会显示每个渠道的结果。';
-
-  @override
-  String get diagnosticsChannelCheckNone => '没有可检查的渠道';
-
-  @override
-  String get diagnosticsChannelCheckNoneHint => '先启用一个可搜索的音源。';
-
-  @override
-  String get diagnosticsChannelStatusOk => '正常';
-
-  @override
-  String get diagnosticsChannelStatusEmpty => '没有结果';
-
-  @override
-  String get diagnosticsChannelStatusCancelled => '已停止';
-
-  @override
-  String get diagnosticsChannelSearch => '搜索';
-
-  @override
-  String get diagnosticsChannelResolve => '播放链接';
-
-  @override
-  String diagnosticsLatencyMs(int ms) {
-    return '$ms 毫秒';
+  String diagnosticsIssueOccurrences(int count) {
+    return '$count 次';
   }
 
   @override
-  String diagnosticsCheckedAt(String time) {
-    return '最近检查：$time';
+  String get diagnosticsIssueOccurrencesTitle => '次数';
+
+  @override
+  String diagnosticsIssueLastAt(String time) {
+    return '最近 $time';
   }
 
   @override
-  String get diagnosticsExportAction => '导出诊断文件';
+  String get diagnosticsIssueDetailTitle => '问题详情';
+
+  @override
+  String get diagnosticsIssueChannel => '渠道';
+
+  @override
+  String get diagnosticsIssueCategory => '类别';
+
+  @override
+  String get diagnosticsIssueKey => '错误标记';
+
+  @override
+  String get diagnosticsIssueKeyUnknown => '没有标记';
+
+  @override
+  String get diagnosticsIssueRetryableTitle => '重试';
+
+  @override
+  String get diagnosticsIssueRetryable => '可以重试';
+
+  @override
+  String get diagnosticsIssueNotRetryable => '暂时无法重试';
+
+  @override
+  String get diagnosticsIssueFirst => '首次';
+
+  @override
+  String get diagnosticsIssueLast => '最近';
+
+  @override
+  String get diagnosticsIssueAdvice => '可能原因与建议';
+
+  @override
+  String get diagnosticsIssueSuggestionNetwork => '网络不稳定或平台临时不可用。换网络后再试，或稍后重试。';
+
+  @override
+  String get diagnosticsIssueSuggestionTimeout => '平台响应太慢。稍后再试，或换一个渠道。';
+
+  @override
+  String get diagnosticsIssueSuggestionUnsupported => '这个渠道不支持当前操作。换一个渠道试试。';
+
+  @override
+  String get diagnosticsIssueSuggestionNotFound => '平台没有返回内容。换关键词或渠道。';
+
+  @override
+  String get diagnosticsIssueSuggestionUnauthorized => '登录已失效或需要登录。打开账号设置重新登录。';
+
+  @override
+  String get diagnosticsIssueSuggestionRateLimited => '请求过于频繁。稍等几分钟再试。';
+
+  @override
+  String get diagnosticsIssueSuggestionScript => '音源脚本出错。重启音源引擎，或检查脚本来源。';
+
+  @override
+  String get diagnosticsIssueSuggestionEngineRestarting => '音源正在重启。稍等片刻再试。';
+
+  @override
+  String get diagnosticsIssueSuggestionCancelled => '操作被取消。需要时可以重新检查。';
+
+  @override
+  String get diagnosticsIssueSuggestionPlayback => '播放后端无法播放这个链接。换一个渠道或重新检查。';
+
+  @override
+  String get diagnosticsIssueSuggestionUnknown => '原因不明确。可以重新检查，或查看日志。';
+
+  @override
+  String get diagnosticsIssueRecheck => '重新检查';
+
+  @override
+  String get diagnosticsIssueRecheckHint => '重新跑一轮全面检查。';
+
+  @override
+  String get diagnosticsSessionSection => '本次运行';
+
+  @override
+  String get diagnosticsSessionDuration => '运行时长';
+
+  @override
+  String get diagnosticsDurationLessThanMinute => '不到 1 分钟';
+
+  @override
+  String diagnosticsDurationMinutes(int minutes) {
+    return '$minutes 分钟';
+  }
+
+  @override
+  String diagnosticsDurationHoursMinutes(int hours, int minutes) {
+    return '$hours 小时 $minutes 分钟';
+  }
+
+  @override
+  String get diagnosticsPreviousExit => '上次退出';
+
+  @override
+  String diagnosticsPreviousExitClean(Object time) {
+    return '正常退出（$time）';
+  }
+
+  @override
+  String diagnosticsPreviousExitAbnormal(Object time) {
+    return '可能异常退出（$time）';
+  }
+
+  @override
+  String get diagnosticsPreviousExitUnknown => '没有记录';
+
+  @override
+  String get diagnosticsResolveSection => '播放链接（本次运行）';
+
+  @override
+  String get diagnosticsResolveHint => '只统计本次运行，重启应用后清零。';
+
+  @override
+  String get diagnosticsResolveCalls => '链接请求';
+
+  @override
+  String get diagnosticsResolveFailures => '失败';
+
+  @override
+  String get diagnosticsResolveTimeouts => '超时';
+
+  @override
+  String diagnosticsResolveCount(int count) {
+    return '$count 次';
+  }
+
+  @override
+  String diagnosticsResolveCacheHitRate(int percent) {
+    return '缓存命中 $percent%';
+  }
+
+  @override
+  String get diagnosticsResolveNoData => '本次运行还没有播放链接请求。';
+
+  @override
+  String get diagnosticsResolveFailureKinds => '失败类别';
+
+  @override
+  String get diagnosticsLogStatus => '运行记录';
+
+  @override
+  String get diagnosticsLogRecording => '正在记录';
+
+  @override
+  String get diagnosticsLogUnavailable => '记录不可用';
+
+  @override
+  String get diagnosticsLogStopped => '已停止';
+
+  @override
+  String get diagnosticsLogView => '查看日志';
+
+  @override
+  String get diagnosticsLogsTitle => '日志';
+
+  @override
+  String get diagnosticsLogsLevelAll => '全部';
+
+  @override
+  String get diagnosticsLogsLevelWarning => '警告以上';
+
+  @override
+  String get diagnosticsLogsLevelError => '错误';
+
+  @override
+  String get diagnosticsLogsLevelWarningBadge => '警告';
+
+  @override
+  String get diagnosticsLogsLevelInfo => '信息';
+
+  @override
+  String get diagnosticsLogsLevelDebug => '调试';
+
+  @override
+  String get diagnosticsLogsLevelOther => '其它';
+
+  @override
+  String get diagnosticsLogsSearchHint => '关键词、模块或错误信息';
+
+  @override
+  String get diagnosticsLogsFilterSemantics => '日志级别';
+
+  @override
+  String diagnosticsLogsResultCount(int count) {
+    return '$count 条';
+  }
+
+  @override
+  String get diagnosticsLogsEmpty => '还没有日志';
+
+  @override
+  String get diagnosticsLogsEmptyHint => '应用运行时会在这里留下记录。';
+
+  @override
+  String get diagnosticsLogsUnavailable => '日志不可用';
+
+  @override
+  String get diagnosticsLogsUnavailableHint => '日志目录打不开，或还没有写入权限。';
+
+  @override
+  String get diagnosticsLogsCopy => '复制当前结果';
+
+  @override
+  String diagnosticsLogsCopied(int count) {
+    return '已复制 $count 条日志';
+  }
+
+  @override
+  String get diagnosticsLogsCopyEmpty => '当前筛选没有可复制的日志';
+
+  @override
+  String get diagnosticsLogsOpenDirectory => '打开日志目录';
+
+  @override
+  String get diagnosticsLogsOpenDirectoryHint => '在文件管理器里查看日志文件。';
+
+  @override
+  String get diagnosticsLogsOpenDirectoryFailed => '无法打开日志目录';
+
+  @override
+  String get diagnosticsLogsRefresh => '刷新日志';
+
+  @override
+  String get diagnosticsLogsFilteredEmpty => '没有符合条件的日志';
+
+  @override
+  String get diagnosticsLogsFilteredEmptyHint => '换个级别或关键词再试。';
+
+  @override
+  String get diagnosticsReportSection => '报告与日志';
+
+  @override
+  String get diagnosticsReportPreview => '预览报告';
+
+  @override
+  String get diagnosticsReportPreviewSubtitle => '先看一遍，再决定复制或分享。';
+
+  @override
+  String get diagnosticsCopyReport => '复制报告';
+
+  @override
+  String get diagnosticsCopyReportSubtitle => '只复制结论和最近日志，最多约 128 KB。';
+
+  @override
+  String get diagnosticsSaveReportSubtitle => '完整报告保存到本机，最多 20 MB。';
+
+  @override
+  String get diagnosticsShareReport => '分享报告';
+
+  @override
+  String get diagnosticsShareReportSubtitle => '分享前请确认内容；可能包含歌名和本地路径。';
+
+  @override
+  String get diagnosticsReportSheetTitle => '诊断报告预览';
+
+  @override
+  String get diagnosticsReportSheetPrivacy => '报告只在本机生成。分享前请确认内容，可能包含歌名和本地路径。';
+
+  @override
+  String get diagnosticsReportPreviewTruncated => '预览只显示结论和日志末尾，保存文件可查看完整内容。';
+
+  @override
+  String get diagnosticsReportCopied => '报告已复制';
+
+  @override
+  String get diagnosticsReportCopyFailed => '复制失败，请重试';
+
+  @override
+  String get diagnosticsReportShared => '报告已交给系统分享';
+
+  @override
+  String diagnosticsReportShareFallback(String path) {
+    return '当前系统不支持分享，已保存到 $path';
+  }
+
+  @override
+  String get diagnosticsReportShareFailed => '分享失败，请改存文件';
+
+  @override
+  String get diagnosticsReportUnavailable => '报告暂时无法生成';
+
+  @override
+  String get diagnosticsExportAction => '保存诊断文件';
 
   @override
   String get diagnosticsExportPrivacy => '文件只保存在本机，不会自动上传。';
@@ -4862,6 +5454,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagnosticsExporting => '正在准备…';
+
+  @override
+  String get diagnosticsLoading => '读取中…';
 
   @override
   String get diagnosticsFailureNetwork => '网络问题';
@@ -4895,38 +5490,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagnosticsFailureUnknown => '未知原因';
-
-  @override
-  String get diagnosticsResolveSection => '播放链接（本次运行）';
-
-  @override
-  String get diagnosticsResolveHint => '只统计本次运行，重启应用后清零。';
-
-  @override
-  String get diagnosticsResolveCalls => '链接请求';
-
-  @override
-  String get diagnosticsResolveCacheHits => '缓存命中';
-
-  @override
-  String get diagnosticsResolveRetries => '重试';
-
-  @override
-  String get diagnosticsResolveFailures => '失败';
-
-  @override
-  String get diagnosticsResolveTimeouts => '超时';
-
-  @override
-  String diagnosticsResolveCount(int count) {
-    return '$count 次';
-  }
-
-  @override
-  String get diagnosticsLoading => '读取中…';
-
-  @override
-  String get diagnosticsExportSection => '导出';
 
   @override
   String get musicFoldersTitle => '音乐文件夹';

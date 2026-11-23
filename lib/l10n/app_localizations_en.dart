@@ -4966,38 +4966,403 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagnosticsTitle => 'Troubleshooting';
 
   @override
-  String get diagnosticsSubtitle => 'Export run records and device details';
+  String get diagnosticsSubtitle => 'Check issues, logs, and reports';
 
   @override
-  String get diagnosticsOverviewSection => 'Overview';
-
-  @override
-  String get diagnosticsAppVersion => 'App version';
-
-  @override
-  String diagnosticsVersionValue(String version, String build) {
-    return '$version (build $build)';
+  String diagnosticsAppInfoValue(
+    String version,
+    String build,
+    String platform,
+  ) {
+    return 'Molia $version (build $build) · $platform';
   }
 
   @override
-  String get diagnosticsPlatform => 'System';
+  String get diagnosticsSummarySection => 'Status';
 
   @override
-  String diagnosticsPlatformValue(String platform, String os) {
-    return '$platform · $os';
+  String get diagnosticsSummaryNotChecked => 'Not checked yet';
+
+  @override
+  String get diagnosticsSummaryNotCheckedHint =>
+      'Run a full check to confirm search, playback, and storage are working.';
+
+  @override
+  String get diagnosticsSummaryRunning => 'Checking…';
+
+  @override
+  String get diagnosticsCheckingHint => 'Results appear one by one.';
+
+  @override
+  String get diagnosticsSummaryOk => 'Everything looks normal';
+
+  @override
+  String get diagnosticsSummaryOkHint =>
+      'Search, playback, storage, and account sync are working.';
+
+  @override
+  String diagnosticsSummaryFailed(int count) {
+    return '$count need attention';
   }
 
   @override
-  String get diagnosticsLogStatus => 'Local run records';
+  String get diagnosticsSummaryFailedHint =>
+      'Start with the failed items below.';
 
   @override
-  String get diagnosticsLogRecording => 'Being recorded';
+  String diagnosticsSummaryWarning(int count) {
+    return '$count worth a look';
+  }
 
   @override
-  String get diagnosticsLogUnavailable => 'Records unavailable';
+  String get diagnosticsSummaryWarningHint =>
+      'Not blocking, but worth watching.';
 
   @override
-  String get diagnosticsLogStopped => 'Stopped';
+  String get diagnosticsSummaryStopped => 'Check stopped';
+
+  @override
+  String get diagnosticsSummaryStoppedHint =>
+      'Completed results are still available.';
+
+  @override
+  String get diagnosticsPrimaryStart => 'Run full check';
+
+  @override
+  String get diagnosticsPrimaryStop => 'Stop check';
+
+  @override
+  String get diagnosticsPrimaryRunning => 'Checking…';
+
+  @override
+  String get diagnosticsCheckStartFailed =>
+      'Can\'t start a check right now. Try again later.';
+
+  @override
+  String diagnosticsCheckedAt(String time) {
+    return 'Last checked: $time';
+  }
+
+  @override
+  String diagnosticsAbnormalExitTime(String time) {
+    return 'May have closed unexpectedly ($time)';
+  }
+
+  @override
+  String get diagnosticsCheckResultsSection => 'Check results';
+
+  @override
+  String get diagnosticsCheckResultsHint =>
+      'Grouped by app, sources, playback, storage, and account sync. Failed items come first.';
+
+  @override
+  String get diagnosticsCheckResultsEmpty => 'No results yet';
+
+  @override
+  String get diagnosticsCheckResultsEmptyHint =>
+      'Results appear here after you run a full check.';
+
+  @override
+  String get diagnosticsCheckNoChannelsHint =>
+      'Enable a searchable source first.';
+
+  @override
+  String get diagnosticsOpenDetails => 'View details';
+
+  @override
+  String get diagnosticsGroupApp => 'App';
+
+  @override
+  String get diagnosticsGroupSources => 'Sources';
+
+  @override
+  String get diagnosticsGroupPlayback => 'Playback';
+
+  @override
+  String get diagnosticsGroupStorage => 'Storage';
+
+  @override
+  String get diagnosticsGroupSync => 'Account & sync';
+
+  @override
+  String get diagnosticsCheckAppVersion => 'App version';
+
+  @override
+  String get diagnosticsCheckSessionExit => 'Last exit';
+
+  @override
+  String get diagnosticsCheckNotification => 'Notification permission';
+
+  @override
+  String get diagnosticsCheckAudioBackend => 'Playback backend';
+
+  @override
+  String get diagnosticsCheckSourceEngine => 'Source script';
+
+  @override
+  String get diagnosticsCheckLogWrite => 'Run records';
+
+  @override
+  String get diagnosticsCheckDatabaseSchema => 'Database schema';
+
+  @override
+  String get diagnosticsCheckDatabaseIntegrity => 'Database integrity';
+
+  @override
+  String get diagnosticsCheckSync => 'Data sync';
+
+  @override
+  String get diagnosticsCheckBiliAccount => 'Bilibili account';
+
+  @override
+  String get diagnosticsChannelSearch => 'Search';
+
+  @override
+  String get diagnosticsChannelResolve => 'Playback link';
+
+  @override
+  String get diagnosticsChannelStream => 'Playback stream';
+
+  @override
+  String get diagnosticsChannelStatusCancelled => 'Stopped';
+
+  @override
+  String get diagnosticsStatusOk => 'Normal';
+
+  @override
+  String get diagnosticsStatusWarning => 'Worth a look';
+
+  @override
+  String get diagnosticsStatusFailed => 'Failed';
+
+  @override
+  String get diagnosticsStatusSkipped => 'Not run';
+
+  @override
+  String diagnosticsCheckStep(String label, String status) {
+    return '$label: $status';
+  }
+
+  @override
+  String diagnosticsCheckStepLatency(String label, String status, int ms) {
+    return '$label: $status, $ms ms';
+  }
+
+  @override
+  String diagnosticsCheckTotalLatency(int ms) {
+    return '$ms ms total';
+  }
+
+  @override
+  String diagnosticsLatencyMs(int ms) {
+    return '$ms ms';
+  }
+
+  @override
+  String get diagnosticsStableUnknown => 'Unknown';
+
+  @override
+  String get diagnosticsStableAbnormal => 'Last exit was abnormal';
+
+  @override
+  String get diagnosticsStableClean => 'Last exit was clean';
+
+  @override
+  String get diagnosticsStableAvailable => 'Available';
+
+  @override
+  String get diagnosticsStableUnavailable => 'Unavailable';
+
+  @override
+  String get diagnosticsStableNotDesktop => 'Desktop only';
+
+  @override
+  String get diagnosticsStableNoScript => 'No script enabled';
+
+  @override
+  String get diagnosticsStableRecording => 'Recording';
+
+  @override
+  String get diagnosticsStableStopped => 'Stopped';
+
+  @override
+  String get diagnosticsStableUnreadable => 'Unreadable';
+
+  @override
+  String get diagnosticsStableOk => 'Normal';
+
+  @override
+  String get diagnosticsStableCorrupt => 'Needs repair';
+
+  @override
+  String get diagnosticsStableOff => 'Off';
+
+  @override
+  String get diagnosticsStableNone => 'No usable sync method';
+
+  @override
+  String get diagnosticsStableLoggedOut => 'Signed out';
+
+  @override
+  String get diagnosticsStableExpired => 'Sign-in expired';
+
+  @override
+  String get diagnosticsStableLoggedIn => 'Signed in';
+
+  @override
+  String get diagnosticsStableCooldown => 'Just checked, try again shortly';
+
+  @override
+  String get diagnosticsStableNoChannels => 'No channels to check';
+
+  @override
+  String get diagnosticsStableTimeout => 'Timed out';
+
+  @override
+  String get diagnosticsStableGranted => 'Allowed';
+
+  @override
+  String get diagnosticsStableDenied => 'Not allowed';
+
+  @override
+  String get diagnosticsStablePermanentlyDenied =>
+      'Denied; enable in system settings';
+
+  @override
+  String get diagnosticsStableUnsupported => 'Not supported here';
+
+  @override
+  String diagnosticsStableVersion(String value) {
+    return 'Version $value';
+  }
+
+  @override
+  String diagnosticsStableSchema(String value) {
+    return 'Version $value';
+  }
+
+  @override
+  String diagnosticsStableSchemaMismatch(String actual, String expected) {
+    return 'Version $actual (expected $expected)';
+  }
+
+  @override
+  String diagnosticsStableScript(String name) {
+    return 'Script $name';
+  }
+
+  @override
+  String diagnosticsSyncTransport(String name, String state) {
+    return '$name: $state';
+  }
+
+  @override
+  String get diagnosticsTransportWebdav => 'WebDAV';
+
+  @override
+  String get diagnosticsTransportLan => 'LAN';
+
+  @override
+  String get diagnosticsTransportOk => 'Normal';
+
+  @override
+  String get diagnosticsTransportStopped => 'Stopped';
+
+  @override
+  String get diagnosticsTransportPermissionDenied => 'Needs permission';
+
+  @override
+  String get diagnosticsTransportUnavailable => 'Unavailable';
+
+  @override
+  String get diagnosticsCheckDetailTitle => 'Check details';
+
+  @override
+  String get diagnosticsCheckDetailGroup => 'Group';
+
+  @override
+  String get diagnosticsCheckDetailStatus => 'Status';
+
+  @override
+  String get diagnosticsCheckDetailTime => 'Checked at';
+
+  @override
+  String get diagnosticsCheckDetailLatency => 'Time taken';
+
+  @override
+  String get diagnosticsCheckDetailValue => 'Result';
+
+  @override
+  String get diagnosticsCheckDetailFailure => 'Failure reason';
+
+  @override
+  String get diagnosticsCheckDetailSteps => 'Check steps';
+
+  @override
+  String get diagnosticsActionRetryCheck => 'Check again';
+
+  @override
+  String get diagnosticsActionRetryCheckHint => 'Runs another full check.';
+
+  @override
+  String get diagnosticsActionRestartEngine => 'Restart source engine';
+
+  @override
+  String get diagnosticsActionRestartEngineHint =>
+      'Doesn\'t change scripts or settings.';
+
+  @override
+  String get diagnosticsActionOpenSources => 'Open source settings';
+
+  @override
+  String get diagnosticsActionOpenSourcesHint =>
+      'Review scripts, channels, and accounts.';
+
+  @override
+  String get diagnosticsActionOpenAccount => 'Open account settings';
+
+  @override
+  String get diagnosticsActionOpenAccountHint =>
+      'Sign in again or check the login state.';
+
+  @override
+  String get diagnosticsActionOpenSync => 'Open sync settings';
+
+  @override
+  String get diagnosticsActionOpenSyncHint =>
+      'Review transports and paired devices.';
+
+  @override
+  String get diagnosticsActionOpenNotifications => 'Open notification settings';
+
+  @override
+  String get diagnosticsActionOpenNotificationsHint =>
+      'Allow notifications in system settings.';
+
+  @override
+  String get diagnosticsActionOpenLogs => 'Open logs';
+
+  @override
+  String get diagnosticsActionOpenLogsHint => 'Read the latest run records.';
+
+  @override
+  String get diagnosticsActionCopyDetails => 'Copy details';
+
+  @override
+  String get diagnosticsActionCopyDetailsHint => 'Paste it into your feedback.';
+
+  @override
+  String get diagnosticsActionCopied => 'Copied';
+
+  @override
+  String get diagnosticsActionCopyFailed => 'Couldn\'t copy. Try again.';
+
+  @override
+  String get diagnosticsEngineRestarted => 'Source engine restarted';
+
+  @override
+  String get diagnosticsEngineRestartFailed =>
+      'Couldn\'t restart the source engine';
 
   @override
   String get diagnosticsRecentIssuesSection => 'Recent issues';
@@ -5007,65 +5372,331 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagnosticsRecentIssuesEmptyHint =>
-      'When something goes wrong, the channel and reason will appear here.';
+      'When something goes wrong, the channel and reason appear here.';
 
   @override
-  String get diagnosticsChannelCheckSection => 'Channel check';
-
-  @override
-  String get diagnosticsChannelCheckHint =>
-      'Only enabled searchable channels are checked; playback is not affected.';
-
-  @override
-  String get diagnosticsChannelCheckStart => 'Check channels';
-
-  @override
-  String get diagnosticsChannelCheckStop => 'Stop';
-
-  @override
-  String get diagnosticsChannelCheckRunning => 'Checking…';
-
-  @override
-  String get diagnosticsChannelCheckEmpty => 'No check yet';
-
-  @override
-  String get diagnosticsChannelCheckEmptyHint =>
-      'Results for each channel will appear here after a check.';
-
-  @override
-  String get diagnosticsChannelCheckNone => 'No channels to check';
-
-  @override
-  String get diagnosticsChannelCheckNoneHint =>
-      'Enable a searchable source first.';
-
-  @override
-  String get diagnosticsChannelStatusOk => 'OK';
-
-  @override
-  String get diagnosticsChannelStatusEmpty => 'No results';
-
-  @override
-  String get diagnosticsChannelStatusCancelled => 'Stopped';
-
-  @override
-  String get diagnosticsChannelSearch => 'Search';
-
-  @override
-  String get diagnosticsChannelResolve => 'Playback link';
-
-  @override
-  String diagnosticsLatencyMs(int ms) {
-    return '$ms ms';
+  String diagnosticsIssueOccurrences(int count) {
+    return '$count×';
   }
 
   @override
-  String diagnosticsCheckedAt(String time) {
-    return 'Last checked: $time';
+  String get diagnosticsIssueOccurrencesTitle => 'Count';
+
+  @override
+  String diagnosticsIssueLastAt(String time) {
+    return 'Last $time';
   }
 
   @override
-  String get diagnosticsExportAction => 'Export diagnostics';
+  String get diagnosticsIssueDetailTitle => 'Issue details';
+
+  @override
+  String get diagnosticsIssueChannel => 'Channel';
+
+  @override
+  String get diagnosticsIssueCategory => 'Category';
+
+  @override
+  String get diagnosticsIssueKey => 'Error tag';
+
+  @override
+  String get diagnosticsIssueKeyUnknown => 'No tag';
+
+  @override
+  String get diagnosticsIssueRetryableTitle => 'Retry';
+
+  @override
+  String get diagnosticsIssueRetryable => 'Can retry';
+
+  @override
+  String get diagnosticsIssueNotRetryable => 'Can\'t retry right now';
+
+  @override
+  String get diagnosticsIssueFirst => 'First seen';
+
+  @override
+  String get diagnosticsIssueLast => 'Last seen';
+
+  @override
+  String get diagnosticsIssueAdvice => 'Possible cause and next step';
+
+  @override
+  String get diagnosticsIssueSuggestionNetwork =>
+      'The network or platform is temporarily unavailable. Try another network or retry later.';
+
+  @override
+  String get diagnosticsIssueSuggestionTimeout =>
+      'The platform is slow to respond. Retry later or switch channels.';
+
+  @override
+  String get diagnosticsIssueSuggestionUnsupported =>
+      'This channel doesn\'t support the action. Try another channel.';
+
+  @override
+  String get diagnosticsIssueSuggestionNotFound =>
+      'The platform returned nothing. Try another keyword or channel.';
+
+  @override
+  String get diagnosticsIssueSuggestionUnauthorized =>
+      'The sign-in expired or is required. Open account settings and sign in again.';
+
+  @override
+  String get diagnosticsIssueSuggestionRateLimited =>
+      'Too many requests. Wait a few minutes and try again.';
+
+  @override
+  String get diagnosticsIssueSuggestionScript =>
+      'The source script failed. Restart the source engine or check where the script came from.';
+
+  @override
+  String get diagnosticsIssueSuggestionEngineRestarting =>
+      'The source engine is restarting. Wait a moment and try again.';
+
+  @override
+  String get diagnosticsIssueSuggestionCancelled =>
+      'The action was cancelled. Check again when you need to.';
+
+  @override
+  String get diagnosticsIssueSuggestionPlayback =>
+      'The playback backend can\'t play this link. Switch channels or check again.';
+
+  @override
+  String get diagnosticsIssueSuggestionUnknown =>
+      'The cause is unclear. Check again or open the logs.';
+
+  @override
+  String get diagnosticsIssueRecheck => 'Check again';
+
+  @override
+  String get diagnosticsIssueRecheckHint => 'Runs another full check.';
+
+  @override
+  String get diagnosticsSessionSection => 'This session';
+
+  @override
+  String get diagnosticsSessionDuration => 'Running for';
+
+  @override
+  String get diagnosticsDurationLessThanMinute => 'Less than a minute';
+
+  @override
+  String diagnosticsDurationMinutes(int minutes) {
+    return '$minutes min';
+  }
+
+  @override
+  String diagnosticsDurationHoursMinutes(int hours, int minutes) {
+    return '$hours h $minutes min';
+  }
+
+  @override
+  String get diagnosticsPreviousExit => 'Last exit';
+
+  @override
+  String diagnosticsPreviousExitClean(Object time) {
+    return 'Clean exit ($time)';
+  }
+
+  @override
+  String diagnosticsPreviousExitAbnormal(Object time) {
+    return 'Maybe unexpected ($time)';
+  }
+
+  @override
+  String get diagnosticsPreviousExitUnknown => 'No record';
+
+  @override
+  String get diagnosticsResolveSection => 'Playback links (this session)';
+
+  @override
+  String get diagnosticsResolveHint =>
+      'Counts this session only; resets when the app restarts.';
+
+  @override
+  String get diagnosticsResolveCalls => 'Requests';
+
+  @override
+  String get diagnosticsResolveFailures => 'Failed';
+
+  @override
+  String get diagnosticsResolveTimeouts => 'Timed out';
+
+  @override
+  String diagnosticsResolveCount(int count) {
+    return '$count';
+  }
+
+  @override
+  String diagnosticsResolveCacheHitRate(int percent) {
+    return '$percent% cache hits';
+  }
+
+  @override
+  String get diagnosticsResolveNoData =>
+      'No playback link requests this session.';
+
+  @override
+  String get diagnosticsResolveFailureKinds => 'Failure types';
+
+  @override
+  String get diagnosticsLogStatus => 'Run records';
+
+  @override
+  String get diagnosticsLogRecording => 'Recording';
+
+  @override
+  String get diagnosticsLogUnavailable => 'Records unavailable';
+
+  @override
+  String get diagnosticsLogStopped => 'Stopped';
+
+  @override
+  String get diagnosticsLogView => 'View logs';
+
+  @override
+  String get diagnosticsLogsTitle => 'Logs';
+
+  @override
+  String get diagnosticsLogsLevelAll => 'All';
+
+  @override
+  String get diagnosticsLogsLevelWarning => 'Warnings+';
+
+  @override
+  String get diagnosticsLogsLevelError => 'Errors';
+
+  @override
+  String get diagnosticsLogsLevelWarningBadge => 'Warning';
+
+  @override
+  String get diagnosticsLogsLevelInfo => 'Info';
+
+  @override
+  String get diagnosticsLogsLevelDebug => 'Debug';
+
+  @override
+  String get diagnosticsLogsLevelOther => 'Other';
+
+  @override
+  String get diagnosticsLogsSearchHint => 'Keyword, module, or error text';
+
+  @override
+  String get diagnosticsLogsFilterSemantics => 'Log level';
+
+  @override
+  String diagnosticsLogsResultCount(int count) {
+    return '$count entries';
+  }
+
+  @override
+  String get diagnosticsLogsEmpty => 'No logs yet';
+
+  @override
+  String get diagnosticsLogsEmptyHint =>
+      'Records appear here while the app runs.';
+
+  @override
+  String get diagnosticsLogsUnavailable => 'Logs unavailable';
+
+  @override
+  String get diagnosticsLogsUnavailableHint =>
+      'The log folder can\'t be opened or isn\'t writable.';
+
+  @override
+  String get diagnosticsLogsCopy => 'Copy current results';
+
+  @override
+  String diagnosticsLogsCopied(int count) {
+    return 'Copied $count log entries';
+  }
+
+  @override
+  String get diagnosticsLogsCopyEmpty => 'Nothing to copy with this filter';
+
+  @override
+  String get diagnosticsLogsOpenDirectory => 'Open log folder';
+
+  @override
+  String get diagnosticsLogsOpenDirectoryHint =>
+      'View the log files in your file manager.';
+
+  @override
+  String get diagnosticsLogsOpenDirectoryFailed =>
+      'Couldn\'t open the log folder';
+
+  @override
+  String get diagnosticsLogsRefresh => 'Refresh logs';
+
+  @override
+  String get diagnosticsLogsFilteredEmpty => 'No matching logs';
+
+  @override
+  String get diagnosticsLogsFilteredEmptyHint =>
+      'Try another level or keyword.';
+
+  @override
+  String get diagnosticsReportSection => 'Reports & logs';
+
+  @override
+  String get diagnosticsReportPreview => 'Preview report';
+
+  @override
+  String get diagnosticsReportPreviewSubtitle =>
+      'Read it before copying or sharing.';
+
+  @override
+  String get diagnosticsCopyReport => 'Copy report';
+
+  @override
+  String get diagnosticsCopyReportSubtitle =>
+      'Conclusion and recent logs only, up to about 128 KB.';
+
+  @override
+  String get diagnosticsSaveReportSubtitle =>
+      'Save the full report on this device, up to 20 MB.';
+
+  @override
+  String get diagnosticsShareReport => 'Share report';
+
+  @override
+  String get diagnosticsShareReportSubtitle =>
+      'Review it first; it may contain song titles and local paths.';
+
+  @override
+  String get diagnosticsReportSheetTitle => 'Diagnostic report preview';
+
+  @override
+  String get diagnosticsReportSheetPrivacy =>
+      'The report is generated on this device. Review it before sharing; it may contain song titles and local paths.';
+
+  @override
+  String get diagnosticsReportPreviewTruncated =>
+      'The preview shows the conclusion and the end of the logs. Save the file to see everything.';
+
+  @override
+  String get diagnosticsReportCopied => 'Report copied';
+
+  @override
+  String get diagnosticsReportCopyFailed => 'Couldn\'t copy. Try again.';
+
+  @override
+  String get diagnosticsReportShared => 'Report handed to system share';
+
+  @override
+  String diagnosticsReportShareFallback(String path) {
+    return 'Sharing isn\'t supported here. Saved to $path';
+  }
+
+  @override
+  String get diagnosticsReportShareFailed =>
+      'Couldn\'t share. Save the file instead.';
+
+  @override
+  String get diagnosticsReportUnavailable =>
+      'Report isn\'t available right now';
+
+  @override
+  String get diagnosticsExportAction => 'Save diagnostics file';
 
   @override
   String get diagnosticsExportPrivacy =>
@@ -5077,6 +5708,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagnosticsExporting => 'Preparing…';
+
+  @override
+  String get diagnosticsLoading => 'Loading…';
 
   @override
   String get diagnosticsFailureNetwork => 'Network problem';
@@ -5110,39 +5744,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagnosticsFailureUnknown => 'Unknown reason';
-
-  @override
-  String get diagnosticsResolveSection => 'Playback links (this session)';
-
-  @override
-  String get diagnosticsResolveHint =>
-      'Counts only this session; they reset when the app restarts.';
-
-  @override
-  String get diagnosticsResolveCalls => 'Link requests';
-
-  @override
-  String get diagnosticsResolveCacheHits => 'Cache hits';
-
-  @override
-  String get diagnosticsResolveRetries => 'Retries';
-
-  @override
-  String get diagnosticsResolveFailures => 'Failed';
-
-  @override
-  String get diagnosticsResolveTimeouts => 'Timed out';
-
-  @override
-  String diagnosticsResolveCount(int count) {
-    return '$count';
-  }
-
-  @override
-  String get diagnosticsLoading => 'Loading…';
-
-  @override
-  String get diagnosticsExportSection => 'Export';
 
   @override
   String get musicFoldersTitle => 'Music folders';
