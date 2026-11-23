@@ -94,6 +94,27 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
   `PlaybackProvider` 的查询路径）保留 `maybeXxxProvider`，避免把“未接线”从可表达
   状态变成启动期异常。
 
+### 内部状态快照（第二批）
+
+以下 UI 状态已从 `ChangeNotifier` 改成真正的 `Notifier<ImmutableState>`，
+消费方读 `ref.watch(xProvider)`、命令走 `ref.read(xProvider.notifier)`：
+
+- `ThemeProvider` → `ThemeState`
+- `CollectionModeStore` → `CollectionModeState`
+- `AnnualReportProvider` → `AnnualReportState`
+- `PlayStatisticsProvider` → `PlayStatisticsState`
+- `TrackInfoController` → `TrackInfoState`
+- `CommentsProvider` → `CommentsState`
+- `NavProvider` → `NavState`
+- `TraySettings` → `TraySettingsState`
+
+仍以 `ChangeNotifier` 实现、经 `LegacyListenableNotifier` 暴露的类有两类：
+启动期服务（`SourceManager`、`DownloadService`、`ScrobbleService`、数据层
+store…）与体量较大的页面状态（`PlaybackProvider`、`LibraryProvider`、
+`AiDjProvider`、`DiscoverProvider` 等）。它们与启动顺序 / 服务生命周期
+强耦合，内部快照化需要单独重排组合根，按模块继续推进；UI 契约已经统一为
+`ref`，后续替换不改变页面代码。
+
 ## 后果
 
 - provider 图显式可测；页面级状态可自动释放；测试不再依赖 `ChangeNotifier` 生命周期。

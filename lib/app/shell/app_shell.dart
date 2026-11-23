@@ -21,7 +21,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 
 import '../../domain/models/device_sync.dart';
-import '../../domain/models/shell_destination.dart';
 import '../../domain/models/sync_nearby_pairing.dart';
 import '../../domain/models/update_check_notice.dart';
 import '../../l10n/app_localizations.dart';
@@ -34,6 +33,7 @@ import '../../pages/sync_nearby_pairing_dialogs.dart';
 import '../../pages/sync_notices.dart';
 import '../../pages/update_settings_page.dart';
 import '../../providers/app_providers.dart';
+import '../../providers/nav_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/app_branding_service.dart';
@@ -393,7 +393,9 @@ class _MyAppState extends ConsumerState<MyApp>
     if (!_presentation.select(destination)) return;
     HapticsService.lightImpact();
     // 记录切页，供下次启动恢复；开关关闭时 provider 自己跳过。
-    unawaited(nav.recordLastDestination(destination));
+    unawaited(
+      ref.read(navProvider.notifier).recordLastDestination(destination),
+    );
     final bool enteringPlayer = destination == ShellDestination.nowPlaying;
     final bool leavingPlayer = current == ShellDestination.nowPlaying;
     // 从其它一级页进入播放页：总是展开完整播放页。播放页可能停在收起态

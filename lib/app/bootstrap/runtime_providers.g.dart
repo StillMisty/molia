@@ -119,3 +119,49 @@ final class SettingsRegistryProvider
 }
 
 String _$settingsRegistryHash() => r'02409dbe7e4c796bf753f3acc3635a42caffd311';
+
+/// 设备本地设置入口（SharedPreferences）。测试可 override 为内存实现。
+
+@ProviderFor(deviceSettings)
+final deviceSettingsProvider = DeviceSettingsProvider._();
+
+/// 设备本地设置入口（SharedPreferences）。测试可 override 为内存实现。
+
+final class DeviceSettingsProvider
+    extends $FunctionalProvider<DeviceSettings, DeviceSettings, DeviceSettings>
+    with $Provider<DeviceSettings> {
+  /// 设备本地设置入口（SharedPreferences）。测试可 override 为内存实现。
+  DeviceSettingsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'deviceSettingsProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$deviceSettingsHash();
+
+  @$internal
+  @override
+  $ProviderElement<DeviceSettings> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  DeviceSettings create(Ref ref) {
+    return deviceSettings(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(DeviceSettings value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<DeviceSettings>(value),
+    );
+  }
+}
+
+String _$deviceSettingsHash() => r'173a162b5c75388ede60280c9ce85fd4b7386130';

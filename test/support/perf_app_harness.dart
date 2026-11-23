@@ -30,8 +30,8 @@ import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/local_library_provider.dart';
 import 'package:molia/providers/lyrics_provider.dart';
-import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/play_statistics_provider.dart';
+import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
@@ -127,10 +127,6 @@ Future<FakePlaybackFacade> pumpPerfApp(
   await ShortcutSettings.instance.resetScope(ShortcutScope.global);
   EscapeClaims.reset();
   BackClaims.reset();
-
-  final nav = NavProvider(settings: testSettingsRegistry());
-  addTearDown(nav.dispose);
-  await nav.preferencesReady;
 
   final repository = FakeLibraryRepository();
   addTearDown(repository.dispose);
@@ -259,7 +255,6 @@ Future<FakePlaybackFacade> pumpPerfApp(
     ..put<SearchProvider>(search)
     ..put<LyricsProvider>(lyrics)
     ..put<LyricsDisplaySettings>(lyricsDisplay)
-    ..put<NavProvider>(nav)
     ..put<CustomCoverStore>(CustomCoverStore());
   configureRuntime?.call(runtime);
   final container = ProviderContainer(
@@ -272,6 +267,12 @@ Future<FakePlaybackFacade> pumpPerfApp(
   addTearDown(container.dispose);
   final theme = container.read(themeProvider.notifier);
   await theme.preferencesReady;
+  await container.read(navProvider.notifier).preferencesReady;
+  if (realLibrary != null && realLibrary.statisticsDays > 0) {
+    realLibrary._statisticsProvider = container.read(
+      playStatisticsPageProvider.notifier,
+    );
+  }
 
   await tester.pumpWidget(
     UncontrolledProviderScope(
@@ -379,32 +380,19 @@ Future<List<Override>> _installRealLibrary(
   );
   addTearDown(localLibrary.dispose);
 
-  PlayStatisticsProvider? statisticsProvider;
-  if (handle.statisticsDays > 0) {
-    statisticsProvider = PlayStatisticsProvider(
-      repository: statisticsRepository,
-    );
-    addTearDown(statisticsProvider.dispose);
-  }
-
   handle
     .._database = db
     .._repository = repository
     .._localLibrary = localLibrary
-    .._statisticsRepository = statisticsRepository
-    .._statisticsProvider = statisticsProvider;
+    .._statisticsRepository = statisticsRepository;
 
-  final stats = statisticsProvider;
   return [
     localLibraryProvider.overrideWith(
       () => LazyNullableListenableNotifier<LocalLibraryProvider>.withValue(
         localLibrary,
       ),
     ),
-    if (stats != null)
-      playStatisticsPageProvider.overrideWith(
-        () => LazyListenableNotifier<PlayStatisticsProvider>.withValue(stats),
-      ),
+    playStatisticsRepositoryProvider.overrideWithValue(statisticsRepository),
   ];
 }
 

@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
 
 import '../../domain/models/track.dart';
@@ -141,11 +142,12 @@ Future<DesktopStack> buildDesktopStack({
   /// 真正销毁窗口前的额外收尾（例如诊断会话写「已正常关闭」）。
   /// 有界 1s、失败不阻塞；`onDetach` 仍保留作为兜底。
   Future<void> Function()? beforeQuit,
+  required ProviderContainer container,
 }) async {
   // 托盘与关闭行为（设备本地偏好，不登记设置注册表）：关闭窗口时默认
   // 最小化到托盘（播放不中断）；偏好可在设置 › 通用 › 桌面 切换为直接退出。
-  final traySettings = TraySettings();
-  await traySettings.init();
+  final traySettings = container.read(traySettingsProvider.notifier);
+  await traySettings.preferencesReady;
 
   // Windows 任务栏缩略图工具栏：与托盘共用同一批动作与同一份文案，
   // 非 Windows 平台上所有方法都是空操作。

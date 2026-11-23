@@ -13,7 +13,6 @@ import 'package:material_ui/material_ui.dart';
 import '../domain/models/comment.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/app_providers.dart';
 import '../providers/comments_provider.dart';
 import '../widgets/responsive.dart';
 import '../widgets/comment_list_view.dart';
@@ -52,7 +51,7 @@ class SongCommentsPage extends ConsumerStatefulWidget {
 class _SongCommentsPageState extends ConsumerState<SongCommentsPage> {
   static const List<CommentKind> _tabs = [CommentKind.hot, CommentKind.latest];
 
-  late final CommentsProvider _provider = ref.read(commentsProvider)!;
+  late final CommentsProvider _provider = ref.read(commentsProvider.notifier);
 
   late CommentKind _kind = CommentKind.hot;
 
@@ -90,7 +89,6 @@ class _SongCommentsPageState extends ConsumerState<SongCommentsPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final provider = ref.watch(commentsProvider);
-    if (provider == null) return const SizedBox.shrink();
     final selectedIndex = _tabs.indexOf(_kind);
 
     final body = Column(

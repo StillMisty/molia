@@ -67,17 +67,10 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   // 与「远端应用后整表重读」都在 provider 内完成。这里只取实例做首帧预解析
   // 与取色接线（容器在 runApp 后继续为 UI 提供同一实例）。
   final theme = container.read(themeProvider.notifier);
-  // 导航偏好提前创建：跨设备同步应用远端设置后需要定向重载。
-  late final NavProvider navProvider;
-  final navSettings = catalog.settings.mount(
-    SettingsModule(
-      // 键表由 provider 声明：读写的每个登记键都在作用域内，避免漏挂载
-      // 后在启动加载时被作用域拦下（偏好会静默回默认）。
-      keys: NavProvider.settingsKeys,
-      reload: () => navProvider.reloadFromPreferences(),
-    ),
-  );
-  navProvider = NavProvider(settings: navSettings);
+  // 导航偏好由 Riverpod provider 持有：作用域挂载与远端重载都在 provider 内；
+  // 首帧前等一次读盘，壳层可直接读启动落点。
+  final nav = container.read(navProvider.notifier);
+  await nav.preferencesReady;
   // 封面取色服务：全局主题、桌面歌词、海报共用的唯一取色入口。
   // seed 持久化按封面内容身份（URL + 文件大小 + 修改时间），设备本地派生
   // 缓存，不参与同步；启动命中时不必再解码封面。
@@ -210,7 +203,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   await (
     theme.preferencesReady,
     playback.preferencesReady,
-    navProvider.preferencesReady,
+    nav.preferencesReady,
   ).wait;
   markStartupStep('sub.theme/nav/playback.prefs', prefsWatch);
   theme.applyPlatformBrightness(
@@ -265,7 +258,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
 
   return (
     themeProvider: theme,
-    navProvider: navProvider,
+    navProvider: nav,
     artworkPaletteService: artworkPaletteService,
     lyricsDisplaySettings: lyricsDisplaySettings,
     lyricsDisplay: lyricsDisplay,

@@ -48,7 +48,7 @@ class _AnnualReportPageState extends ConsumerState<AnnualReportPage> {
   @override
   void initState() {
     super.initState();
-    _provider = ref.read(annualReportPageProvider);
+    _provider = ref.read(annualReportPageProvider.notifier);
     final SourceRegistry? registry = ref.read(sourceRegistryProvider);
     final sourceNames = <String, String>{
       for (final descriptor
@@ -79,24 +79,24 @@ class _AnnualReportPageState extends ConsumerState<AnnualReportPage> {
   Widget build(BuildContext context) {
     return Consumer(
       builder: (context, ref, _) {
-        final provider = ref.watch(annualReportPageProvider);
+        ref.watch(annualReportPageProvider);
         final l10n = AppLocalizations.of(context)!;
         return SettingsSubPage.body(
           title: l10n.annualReportTitle,
           safeArea: true,
           actions: [
-            _yearPicker(l10n, provider),
-            if (provider.report?.hasData ?? false)
+            _yearPicker(l10n, _provider),
+            if (_provider.report?.hasData ?? false)
               M3EIconButton(
                 variant: M3EIconButtonVariant.standard,
                 icon: const Icon(Icons.ios_share_rounded),
                 semanticLabel: l10n.shareAction,
                 onPressed: _shareSheetOpen
                     ? null
-                    : () => unawaited(_openShareSheet(provider)),
+                    : () => unawaited(_openShareSheet(_provider)),
               ),
           ],
-          body: _body(context, l10n, provider),
+          body: _body(context, l10n, _provider),
         );
       },
     );

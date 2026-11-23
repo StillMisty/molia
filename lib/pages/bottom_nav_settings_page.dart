@@ -20,8 +20,9 @@ class BottomNavSettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final nav = ref.watch(navProvider);
-    final order = nav.order;
+    final navState = ref.watch(navProvider);
+    final nav = ref.read(navProvider.notifier);
+    final order = navState.order;
 
     return SettingsSubPage(
       title: l10n.settingsBottomNavTitle,

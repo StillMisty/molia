@@ -74,7 +74,7 @@ class _PlayStatisticsPageState extends ConsumerState<PlayStatisticsPage> {
   @override
   void initState() {
     super.initState();
-    _provider = ref.read(playStatisticsPageProvider);
+    _provider = ref.read(playStatisticsPageProvider.notifier);
     // provider 可能在本帧才被懒创建：加载会立即 notify，必须等首帧结束再写，
     // 否则会在 Provider 挂载期间触发重建断言（与年度报告页同一约定）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -136,16 +136,16 @@ class _PlayStatisticsPageState extends ConsumerState<PlayStatisticsPage> {
       ],
       body: Consumer(
         builder: (context, ref, _) {
-          final provider = ref.watch(playStatisticsPageProvider);
+          ref.watch(playStatisticsPageProvider);
           // 首帧 provider 还没开始加载（加载在 post-frame 里启动）：先显示
           // 加载态。否则会用空快照先建一遍日历（80 周 × 7 = 560 个格子），
           // 数据回来后再整页重建一次——开页实测白付一帧 20ms+ 和同帧 GC。
-          if (!provider.hasLoaded) {
-            return provider.hasError
-                ? _errorState(l10n, provider)
+          if (!_provider.hasLoaded) {
+            return _provider.hasError
+                ? _errorState(l10n, _provider)
                 : const Center(child: M3ELoadingIndicator());
           }
-          return _content(l10n, provider);
+          return _content(l10n, _provider);
         },
       ),
     );

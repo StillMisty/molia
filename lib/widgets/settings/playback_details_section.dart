@@ -22,7 +22,7 @@ class PlaybackDetailsSection extends ConsumerWidget {
   /// 不要在卡内再套一层 [SettingsRows]（会重置首末形状）。
   static List<Widget> rows(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final NavProvider? nav = ref.read(navProvider);
+
     return [
       Consumer(
         builder: (context, ref, _) {
@@ -62,25 +62,22 @@ class PlaybackDetailsSection extends ConsumerWidget {
           );
         },
       ),
-      // 没有挂 NavProvider 的独立挂载（旧入口 / 精简测试）隐藏该行，
-      // 而不是让整张卡构建失败。
-      if (nav != null)
-        Consumer(
-          builder: (context, ref, _) {
-            final enabled = ref.watch(
-              navProvider.select((provider) => provider.showLyricsOnEnter),
-            );
-            return SettingsSwitchTile(
-              switchKey: const Key('settingsReturnToPlayerLyricsSwitch'),
-              icon: Icons.lyrics_rounded,
-              title: l10n.settingsReturnToPlayerLyricsTitle,
-              subtitle: l10n.settingsReturnToPlayerLyricsSubtitle,
-              value: enabled,
-              onChanged: (value) =>
-                  ref.read(navProvider).setShowLyricsOnEnter(value),
-            );
-          },
-        ),
+      Consumer(
+        builder: (context, ref, _) {
+          final enabled = ref.watch(
+            navProvider.select((provider) => provider.showLyricsOnEnter),
+          );
+          return SettingsSwitchTile(
+            switchKey: const Key('settingsReturnToPlayerLyricsSwitch'),
+            icon: Icons.lyrics_rounded,
+            title: l10n.settingsReturnToPlayerLyricsTitle,
+            subtitle: l10n.settingsReturnToPlayerLyricsSubtitle,
+            value: enabled,
+            onChanged: (value) =>
+                ref.read(navProvider.notifier).setShowLyricsOnEnter(value),
+          );
+        },
+      ),
     ];
   }
 

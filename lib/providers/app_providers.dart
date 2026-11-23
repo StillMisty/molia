@@ -11,8 +11,6 @@
 /// （ADR-0041）。
 library;
 
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:molia/app/bootstrap/runtime_providers.dart';
@@ -24,10 +22,7 @@ import 'package:molia/domain/ports/album_repository.dart';
 import 'package:molia/domain/ports/artist_repository.dart';
 import 'package:molia/domain/ports/source_registry.dart';
 import 'package:molia/providers/ai_dj_provider.dart';
-import 'package:molia/providers/annual_report_provider.dart';
 import 'package:molia/providers/channel_selection.dart';
-import 'package:molia/providers/collection_mode.dart';
-import 'package:molia/providers/comments_provider.dart';
 import 'package:molia/providers/diagnostics_provider.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_collection_request.dart';
@@ -35,14 +30,11 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/local_library_provider.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/lyrics_provider.dart';
-import 'package:molia/providers/nav_provider.dart';
-import 'package:molia/providers/play_statistics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/providers/source_swap_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/sync_provider.dart';
-import 'package:molia/providers/track_info_controller.dart';
 import 'package:molia/providers/update_provider.dart';
 import 'package:molia/services/ai/ai_recommendation_service.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
@@ -77,7 +69,6 @@ import 'package:molia/services/source_swap/source_swap_settings.dart';
 import 'package:molia/services/source_swap/swap_query_planner.dart';
 import 'package:molia/services/track_local_data_service.dart';
 import 'package:molia/services/update/update_check_coordinator.dart';
-import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/sources/source_manager.dart';
 
 /// 把一个启动期 `ChangeNotifier` 实例暴露成 Riverpod provider。
@@ -268,10 +259,7 @@ final lyricsDisplaySettingsProvider =
         (ref) => _require<LyricsDisplaySettings>(ref),
       ),
     );
-final navProvider =
-    NotifierProvider<LegacyListenableNotifier<NavProvider>, NavProvider>(
-      () => LegacyListenableNotifier((ref) => _require<NavProvider>(ref)),
-    );
+
 final syncProvider =
     NotifierProvider<LegacyListenableNotifier<SyncProvider>, SyncProvider>(
       () => LegacyListenableNotifier((ref) => _require<SyncProvider>(ref)),
@@ -296,10 +284,7 @@ final libraryAddSettingsProvider =
       () =>
           LegacyListenableNotifier((ref) => _require<LibraryAddSettings>(ref)),
     );
-final traySettingsProvider =
-    NotifierProvider<LegacyListenableNotifier<TraySettings>, TraySettings>(
-      () => LegacyListenableNotifier((ref) => _require<TraySettings>(ref)),
-    );
+
 final shortcutSettingsProvider =
     NotifierProvider<
       LegacyListenableNotifier<ShortcutSettings>,
@@ -375,8 +360,6 @@ final maybeDataSaverServiceProvider = _maybeListenable<DataSaverService>();
 final maybeAudioFocusSettingsProvider = _maybeListenable<AudioFocusSettings>();
 final maybeSourceSwapSettingsProvider = _maybeListenable<SourceSwapSettings>();
 final maybeLyricsDisplayProvider = _maybeListenable<LyricsDisplayProvider>();
-final maybeNavProvider = _maybeListenable<NavProvider>();
-final maybeTraySettingsProvider = _maybeListenable<TraySettings>();
 final maybeUpdateProvider = _maybeListenable<UpdateProvider>();
 final maybeScrobbleServiceProvider = _maybeListenable<ScrobbleService>();
 final maybeLibraryAddSettingsProvider = _maybeListenable<LibraryAddSettings>();
@@ -494,18 +477,6 @@ final localLibraryProvider =
       }),
     );
 
-final collectionModeProvider =
-    NotifierProvider<
-      LazyListenableNotifier<CollectionModeStore>,
-      CollectionModeStore
-    >(
-      () => LazyListenableNotifier((ref) {
-        final store = CollectionModeStore();
-        unawaited(store.load());
-        return store;
-      }),
-    );
-
 final libraryCollectionRequestProvider =
     NotifierProvider<
       LazyListenableNotifier<LibraryCollectionRequest>,
@@ -532,19 +503,6 @@ final sourcesProvider =
       () => LazyListenableNotifier(
         (ref) => SourcesProvider(ref.read(sourceManagerProvider)),
       ),
-    );
-
-final commentsProvider =
-    NotifierProvider<
-      LazyNullableListenableNotifier<CommentsProvider>,
-      CommentsProvider?
-    >(
-      () => LazyNullableListenableNotifier((ref) {
-        final service = ref.read(appRuntimeProvider).maybe<CommentsService>();
-        final registry = ref.read(appRuntimeProvider).maybe<SourceRegistry>();
-        if (service == null || registry == null) return null;
-        return CommentsProvider(service: service, registry: registry);
-      }),
     );
 
 final sourceSwapProvider =
@@ -582,49 +540,6 @@ final discoverProvider =
           libraryProvider: ref.read(libraryProvider),
           selection: ref.read(channelSelectionProvider),
           builtinTransport: ref.read(sourceManagerProvider).builtinTransport,
-        ),
-      ),
-    );
-
-final trackInfoControllerProvider =
-    NotifierProvider<
-      LazyListenableNotifier<TrackInfoController>,
-      TrackInfoController
-    >(
-      () => LazyListenableNotifier(
-        (ref) => TrackInfoController(
-          playback: ref.read(playbackProvider),
-          cacheService: ref.read(cacheServiceProvider),
-          localDataService: ref.read(trackLocalDataServiceProvider),
-          downloadRecords: ref.read(downloadRecordsProvider),
-          dataSaver: ref.read(dataSaverServiceProvider),
-        ),
-      ),
-    );
-
-final playStatisticsPageProvider =
-    NotifierProvider<
-      LazyListenableNotifier<PlayStatisticsProvider>,
-      PlayStatisticsProvider
-    >(
-      () => LazyListenableNotifier(
-        (ref) => PlayStatisticsProvider(
-          repository: ref.read(playStatisticsRepositoryProvider),
-        ),
-      ),
-    );
-
-final annualReportPageProvider =
-    NotifierProvider<
-      LazyListenableNotifier<AnnualReportProvider>,
-      AnnualReportProvider
-    >(
-      () => LazyListenableNotifier(
-        (ref) => AnnualReportProvider(
-          repository: ref.read(playStatisticsRepositoryProvider),
-          recordingEnabled: ref
-              .read(playStatisticsServiceProvider)
-              ?.enabledNotifier,
         ),
       ),
     );

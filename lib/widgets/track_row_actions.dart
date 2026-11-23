@@ -91,13 +91,7 @@ List<RowAction> trackCommonActions(
             .read(sourceRegistryProvider)
             ?.byKey(track.id.sourceKey)
             ?.capabilities;
-  final supportsComments = ref != null
-      ? ref.watch(
-          commentsProvider.select(
-            (comments) => comments?.supports(track) ?? false,
-          ),
-        )
-      : container.read(commentsProvider)?.supports(track) ?? false;
+  final supportsComments = capabilities?.comment ?? false;
   if (supportsComments) {
     actions.add(
       RowAction(

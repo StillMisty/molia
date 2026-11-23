@@ -10,6 +10,10 @@ import 'package:molia/providers/play_statistics_provider.dart';
 import 'package:molia/services/play_statistics_export.dart';
 
 import '../support/memory_database.dart';
+import '../support/provider_test_scope.dart';
+
+import 'package:molia/providers/app_providers.dart';
+
 import '../support/sync_test_support.dart';
 
 /// 每次 `snapshot()` 的脚本；用于失败 / 乱序返回等无法用真库表达的时序。
@@ -77,6 +81,20 @@ ListeningStatisticsSnapshot _snapshot({
 }
 
 /// provider 的加载状态：全量日历 rollup、窗口一致性与失败 / 乱序返回。
+
+PlayStatisticsProvider _scopedProvider(
+  PlayStatisticsRepository repo,
+  DateTime Function() clock,
+) {
+  final scope = ProviderTestScope(
+    overrides: [
+      playStatisticsRepositoryProvider.overrideWithValue(repo),
+      playStatisticsClockProvider.overrideWithValue(clock),
+    ],
+  );
+  return scope.container.read(playStatisticsPageProvider.notifier);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -90,11 +108,15 @@ void main() {
       databaseProvider: () => db,
       statisticsSync: testStatisticsSyncStore(() => db),
     );
-    provider = PlayStatisticsProvider(repository: repository);
+    final scope = ProviderTestScope(
+      overrides: [
+        playStatisticsRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    provider = scope.container.read(playStatisticsPageProvider.notifier);
   });
 
   tearDown(() async {
-    provider.dispose();
     await repository.dispose();
     await db.close();
   });
@@ -146,11 +168,7 @@ void main() {
     final second = DateTime(2031, 1, 2, 0, 0, 1);
     final third = DateTime(2031, 1, 3, 12);
     final clock = _FakeClock([first, second, third]);
-    final scoped = PlayStatisticsProvider(
-      repository: repository,
-      clock: clock.next,
-    );
-    addTearDown(scoped.dispose);
+    final scoped = _scopedProvider(repository, clock.next);
 
     final startedAt = first.subtract(const Duration(days: 1));
     await insertPlayEvent(
@@ -205,8 +223,7 @@ void main() {
       ..enqueue(() async => _snapshot(totalListenedMs: 100))
       ..enqueue(() async => throw StateError('boom'));
     addTearDown(repo.dispose);
-    final scoped = PlayStatisticsProvider(repository: repo, clock: clock.next);
-    addTearDown(scoped.dispose);
+    final scoped = _scopedProvider(repo, clock.next);
 
     await scoped.ensureLoaded();
     final accepted = scoped.view!;
@@ -235,8 +252,7 @@ void main() {
     final firstNow = DateTime(2031, 1, 1, 23, 59, 59);
     final secondNow = DateTime(2031, 1, 2, 0, 0, 1);
     final clock = _FakeClock([firstNow, secondNow]);
-    final scoped = PlayStatisticsProvider(repository: repo, clock: clock.next);
-    addTearDown(scoped.dispose);
+    final scoped = _scopedProvider(repo, clock.next);
 
     final firstLoad = scoped.ensureLoaded();
     clock.armNext();
@@ -278,8 +294,7 @@ void main() {
       )
       ..enqueue(() async => throw StateError('boom'));
     addTearDown(repo.dispose);
-    final scoped = PlayStatisticsProvider(repository: repo, clock: clock.next);
-    addTearDown(scoped.dispose);
+    final scoped = _scopedProvider(repo, clock.next);
 
     // 真实库里的事件让年度快照读到同一份首播事实。
     await insert(DateTime(2030, 12, 31, 23, 30), 's1');
@@ -325,8 +340,7 @@ void main() {
     final clock = _FakeClock([DateTime(2031, 1, 2, 12)]);
     final repo = scripted()..enqueue(() async => throw StateError('boom'));
     addTearDown(repo.dispose);
-    final scoped = PlayStatisticsProvider(repository: repo, clock: clock.next);
-    addTearDown(scoped.dispose);
+    final scoped = _scopedProvider(repo, clock.next);
 
     await scoped.ensureLoaded();
 
@@ -338,8 +352,7 @@ void main() {
     final clock = _FakeClock([DateTime(2031, 1, 2, 12)]);
     final repo = scripted()..enqueue(() async => throw StateError('boom'));
     addTearDown(repo.dispose);
-    final scoped = PlayStatisticsProvider(repository: repo, clock: clock.next);
-    addTearDown(scoped.dispose);
+    final scoped = _scopedProvider(repo, clock.next);
 
     await scoped.ensureLoaded();
 

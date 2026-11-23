@@ -7,6 +7,7 @@ library;
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../data/settings/device_settings.dart';
 import '../../data/settings/settings_registry.dart';
 import 'app_runtime.dart';
 
@@ -27,3 +28,7 @@ AppRuntime appRuntime(Ref ref) =>
 SettingsRegistry settingsRegistry(Ref ref) => throw StateError(
   'settingsRegistryProvider 必须由组合根（ProviderScope override）注入',
 );
+
+/// 设备本地设置入口（SharedPreferences）。测试可 override 为内存实现。
+@Riverpod(keepAlive: true, name: 'deviceSettingsProvider')
+DeviceSettings deviceSettings(Ref ref) => DeviceSettings();

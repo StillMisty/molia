@@ -48,16 +48,13 @@ void main() {
     FakeSaveAs? saveAs,
     RecordingNotificationService? notifications,
   }) async {
-    final report = AnnualReportProvider(
-      repository: repository,
-      clock: () => DateTime(2026, 11, 14),
-    );
-    addTearDown(report.dispose);
     final scope = ProviderTestScope(
       overrides: [
-        annualReportPageProvider.overrideWith(
-          () => LazyListenableNotifier<AnnualReportProvider>.withValue(report),
+        annualReportClockProvider.overrideWithValue(
+          () => DateTime(2026, 11, 14),
         ),
+        playStatisticsRepositoryProvider.overrideWithValue(repository),
+        annualReportRecordingEnabledProvider.overrideWithValue(null),
       ],
     );
     scope.put<CustomCoverStore>(CustomCoverStore());

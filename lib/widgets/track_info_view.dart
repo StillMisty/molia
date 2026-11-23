@@ -11,6 +11,7 @@ import '../pages/source_swap_page.dart';
 import '../pages/track_local_data_page.dart';
 import '../providers/app_providers.dart';
 import '../providers/sleep_timer.dart';
+import '../providers/track_info_controller.dart';
 import '../providers/sources_provider.dart';
 import 'labels/lyrics_provider_label.dart';
 import 'labels/source_label.dart';
@@ -56,7 +57,8 @@ class TrackInfoView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     // 本地数据 / 省流 / 切歌订阅都在控制器内；页面只读不可变状态。
-    final info = ref.watch(trackInfoControllerProvider);
+    final infoState = ref.watch(trackInfoControllerProvider);
+    final info = ref.read(trackInfoControllerProvider.notifier);
     // 订阅音质偏好（音源页）：「本次播放音质」是偏好、省流与恢复态的
     // 派生值，改完设置要立即刷新，不等下一次播放通知。
     final sources = ref.watch(sourcesProvider);
@@ -75,14 +77,14 @@ class TrackInfoView extends ConsumerWidget {
         (provider) => provider.isCurrentQualityOverridden,
       ),
     );
-    final commentsSupported = ref.watch(
-      commentsProvider.select(
-        (provider) =>
-            track == null ? false : provider?.supports(track) ?? false,
-      ),
-    );
     // 专辑行：映射层派生了专辑 id 且渠道能力位为真时可点（否则保持只读信息行）。
     final sourceRegistry = ref.watch(sourceRegistryProvider);
+    final commentsSupported =
+        sourceRegistry
+            ?.byKey(track?.id.sourceKey ?? '')
+            ?.capabilities
+            .comment ??
+        false;
     final albumSupported =
         track != null &&
         track.platformAlbumId != null &&
@@ -107,7 +109,7 @@ class TrackInfoView extends ConsumerWidget {
     final qualityLabel = qualityType.isEmpty
         ? l10n.trackInfoQualityUnknown
         : sourceQualityLabel(l10n, qualityType);
-    final dataSaverActive = info.state.dataSaverActive;
+    final dataSaverActive = infoState.dataSaverActive;
     final showDataSaverHint = dataSaverActive && !qualityOverridden;
 
     return Scrollbar(
@@ -190,7 +192,7 @@ class TrackInfoView extends ConsumerWidget {
                             localData.data!,
                             localSource: track.id.sourceKey == kLocalSourceKey,
                           ),
-                    onTap: !info.state.localDataAvailable
+                    onTap: !infoState.localDataAvailable
                         ? null
                         : () => unawaited(
                             showTrackLocalDataPage(context, track: track),

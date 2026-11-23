@@ -20,10 +20,11 @@ import 'lyrics_source_search_view.dart';
 
 /// 当前曲目渠道是否支持评论（能力位唯一判定；无 provider 时按不支持）。
 bool trackSupportsComments(BuildContext context, Track track) =>
-    ProviderScope.containerOf(
-      context,
-      listen: false,
-    ).read(commentsProvider)?.supports(track) ??
+    ProviderScope.containerOf(context, listen: false)
+        .read(sourceRegistryProvider)
+        ?.byKey(track.id.sourceKey)
+        ?.capabilities
+        .comment ??
     false;
 
 /// 打开评论页（能力位由调用方先行判定，这里只做守卫与打开）。

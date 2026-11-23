@@ -12,7 +12,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models/comment.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/app_providers.dart';
 import '../providers/comments_provider.dart';
 import '../theme/m3e_context.dart';
 import 'comment_avatar.dart';
@@ -47,9 +46,9 @@ class CommentListView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final provider = ref.watch(commentsProvider);
-    if (provider == null) return const SizedBox.shrink();
+    final controller = ref.read(commentsProvider.notifier);
     final state = provider.stateOf(kind);
-    if (!provider.isSupported) {
+    if (!controller.isSupported) {
       return DetailPageEmpty(
         icon: Icons.comments_disabled_rounded,
         message: _l10n(context).commentsUnsupported,
@@ -82,7 +81,7 @@ class CommentListView extends ConsumerWidget {
         hasMore: state.hasMore,
         isLoadingMore: state.isLoadingMore,
         loadMoreFailed: state.loadMoreFailed,
-        onLoadMore: () => unawaited(provider.loadMore()),
+        onLoadMore: () => unawaited(controller.loadMore()),
         child: ListView.builder(
           padding: const EdgeInsets.only(bottom: 24),
           // 末项固定为页脚（加载中 / 加载更多失败 / 已到底）。
@@ -93,7 +92,7 @@ class CommentListView extends ConsumerWidget {
                 hasMore: state.hasMore,
                 isLoadingMore: state.isLoadingMore,
                 loadMoreFailed: state.loadMoreFailed,
-                onRetry: () => unawaited(provider.loadMore()),
+                onRetry: () => unawaited(controller.loadMore()),
                 failureLabel: _l10n(context).commentsLoadMoreFailed,
                 endLabel: _l10n(context).commentsNoMore,
                 retryKey: const Key('commentsLoadMoreRetry'),
@@ -113,7 +112,7 @@ class CommentListView extends ConsumerWidget {
     }
     return M3ERefreshIndicator(
       // 首屏失败没有缓存可清，重试直接重新取数；其余状态刷新当前 tab。
-      onRefresh: state.failed ? provider.retry : provider.refresh,
+      onRefresh: state.failed ? controller.retry : controller.refresh,
       child: content,
     );
   }

@@ -46,10 +46,10 @@ void main() {
       facade: FakePlaybackFacade(),
     );
     await playback.preferencesReady;
-    nav = NavProvider(settings: registry);
+    nav = scope.container.read(navProvider.notifier);
     await nav.preferencesReady;
-    tray = TraySettings();
-    await tray.init();
+    tray = scope.container.read(traySettingsProvider.notifier);
+    await tray.preferencesReady;
     libraryAdd = LibraryAddSettings(settings: registry);
     await libraryAdd.init();
     final db = openMemoryDatabase();
@@ -62,16 +62,12 @@ void main() {
       ),
     );
     scope.put<PlaybackProvider>(playback);
-    scope.put<NavProvider>(nav);
-    scope.put<TraySettings>(tray);
     scope.put<LibraryAddSettings>(libraryAdd);
     scope.put<PlayStatisticsService>(statistics);
     putCoverStore(scope);
   });
 
   tearDown(() {
-    nav.dispose();
-    tray.dispose();
     libraryAdd.dispose();
     playback.dispose();
   });

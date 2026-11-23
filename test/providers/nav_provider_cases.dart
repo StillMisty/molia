@@ -8,10 +8,10 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/device_settings_keys.dart';
 import 'package:molia/data/settings/settings_keys.dart';
-import 'package:molia/data/settings/settings_module.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 void main() {
@@ -21,36 +21,18 @@ void main() {
 
   /// 按真实注册表构造并等待偏好加载。
   Future<NavProvider> buildProvider() async {
-    final nav = NavProvider(
-      settings: testSettingsRegistry(
+    final scope = ProviderTestScope(
+      registry: testSettingsRegistry(
         preferences: await SharedPreferences.getInstance(),
       ),
     );
+    final nav = scope.container.read(navProvider.notifier);
     await nav.preferencesReady;
-    addTearDown(nav.dispose);
     return nav;
   }
 
-  /// 按生产装配构造：注册表 + 导航模块作用域（组合根挂载的同一份键表）。
-  ///
-  /// 作用域只放行 [NavProvider.settingsKeys]：provider 若读写表外的键，这里
-  /// 会像生产一样抛错、被加载路径的 catch 吞掉，偏好停在默认值。
-  Future<NavProvider> buildScopedProvider() async {
-    final registry = testSettingsRegistry(
-      preferences: await SharedPreferences.getInstance(),
-    );
-    late final NavProvider nav;
-    final scope = registry.mount(
-      SettingsModule(
-        keys: NavProvider.settingsKeys,
-        reload: () => nav.reloadFromPreferences(),
-      ),
-    );
-    nav = NavProvider(settings: scope);
-    await nav.preferencesReady;
-    addTearDown(nav.dispose);
-    return nav;
-  }
+  /// 生产装配：provider 在 build 内按 NavProvider.settingsKeys 挂载作用域。
+  Future<NavProvider> buildScopedProvider() => buildProvider();
 
   test('生产作用域：上次页面记录与导航布局一起加载', () async {
     SharedPreferences.setMockInitialValues({

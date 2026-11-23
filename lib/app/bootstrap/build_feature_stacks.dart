@@ -39,6 +39,7 @@ Future<FeatureStacks> buildFeatureStacks({
     // 系统退出请求）；在销毁窗口前补写「已正常关闭」，避免下次启动误报
     // 异常退出。`onDetach` 仍保留兜底。
     beforeQuit: () => platform.diagnostics.service.session.onDetached(),
+    container: container,
   ).whenComplete(() => markStartupStep('sub.desktop.build', desktopWatch));
   final ai = buildAiStack(
     catalog: catalog,

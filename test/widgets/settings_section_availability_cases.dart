@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/nav_provider.dart';
+import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/sync_provider.dart';
 import 'package:molia/providers/update_provider.dart';
@@ -12,9 +13,9 @@ import 'package:molia/services/lyrics_display/lyrics_output.dart';
 import 'package:molia/services/play_statistics_service.dart';
 import 'package:molia/services/scrobble/scrobble_service.dart';
 import 'package:molia/services/source_swap/source_swap_settings.dart';
-import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/widgets/settings/settings_section_availability.dart';
 
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 /// 设置卡可用性探针：每类可选子系统「在」与「不在」两种取值下的行决定。
@@ -141,8 +142,9 @@ void main() {
     });
 
     test('托盘行同时需要平台能力与偏好实例', () {
-      final tray = TraySettings();
-      addTearDown(tray.dispose);
+      final tray = ProviderTestScope().container.read(
+        traySettingsProvider.notifier,
+      );
 
       expect(
         SettingsSectionAvailability(
@@ -195,9 +197,9 @@ SettingsSectionAvailability _allAvailable({
     libraryAdd: LibraryAddSettings(settings: testSettingsRegistry()),
     statistics: _FakePlayStatisticsService(),
     sync: _FakeSyncProvider(),
-    tray: TraySettings(),
+    tray: ProviderTestScope().container.read(traySettingsProvider.notifier),
     update: _FakeUpdateProvider(),
-    nav: NavProvider(settings: testSettingsRegistry()),
+    nav: ProviderTestScope().container.read(navProvider.notifier),
     platform: platform,
     traySupported: traySupported,
   );

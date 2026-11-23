@@ -518,7 +518,7 @@ Widget buildFavoritesLibraryBrowse(
         child: CollectionModeSwitch(
           mode: mode,
           onChanged: (next) {
-            unawaited(ref.read(collectionModeProvider).setMode(next));
+            unawaited(ref.read(collectionModeProvider.notifier).setMode(next));
           },
         ),
       ),

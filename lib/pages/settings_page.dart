@@ -4,6 +4,8 @@ import 'package:material_ui/material_ui.dart';
 import '../l10n/app_localizations.dart';
 import '../domain/models/play_mode.dart';
 import '../providers/app_providers.dart';
+import '../services/window/tray_settings.dart';
+import '../providers/nav_provider.dart';
 import '../providers/theme_provider.dart';
 import '../theme/m3e_context.dart';
 import '../theme/scheme_builder.dart';
@@ -85,13 +87,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     //   更新）→ watch：它们变化时整页要重算行；
     // - 只决定「有没有」的服务 → read：挂载关系由组合根在启动时固定，不值得
     //   为同步进度之类的通知重建九张卡。
+    ref.watch(navProvider);
     final availability = SettingsSectionAvailability(
       dataSaver: ref.watch(maybeDataSaverServiceProvider),
       sourceSwap: ref.watch(maybeSourceSwapSettingsProvider),
       audioFocus: ref.watch(maybeAudioFocusSettingsProvider),
       lyricsDisplay: ref.watch(maybeLyricsDisplayProvider),
-      nav: ref.watch(maybeNavProvider),
-      tray: ref.watch(maybeTraySettingsProvider),
+      nav: ref.read(navProvider.notifier),
+      tray: ref.read(traySettingsProvider.notifier),
       update: ref.watch(maybeUpdateProvider),
       sources: ref.read(maybeSourcesProvider),
       scrobble: ref.read(maybeScrobbleServiceProvider),

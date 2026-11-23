@@ -30,6 +30,7 @@ void main() {
   late MoliaDatabase db;
   late PlayStatisticsRepository repository;
   late PlayStatisticsProvider provider;
+  late ProviderTestScope providerScope;
   late FakeSaveAs saveAs;
   late RecordingNotificationService notifications;
   late List<String> sharedPaths;
@@ -44,7 +45,14 @@ void main() {
       databaseProvider: () => db,
       statisticsSync: testStatisticsSyncStore(() => db),
     );
-    provider = PlayStatisticsProvider(repository: repository);
+    providerScope = ProviderTestScope(
+      overrides: [
+        playStatisticsRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    provider = providerScope.container.read(
+      playStatisticsPageProvider.notifier,
+    );
     saveAs = FakeSaveAs();
     notifications = RecordingNotificationService();
     sharedPaths = [];
@@ -83,24 +91,15 @@ void main() {
   });
 
   tearDown(() async {
-    provider.dispose();
     await repository.dispose();
     await db.close();
   });
 
   Future<void> pumpPage(
     WidgetTester tester, {
-    PlayStatisticsProvider? withProvider,
+    ProviderTestScope? withProviderScope,
   }) async {
-    final active = withProvider ?? provider;
-    final scope = ProviderTestScope(
-      overrides: [
-        playStatisticsPageProvider.overrideWith(
-          () =>
-              LazyListenableNotifier<PlayStatisticsProvider>.withValue(active),
-        ),
-      ],
-    );
+    final scope = withProviderScope ?? providerScope;
     scope.put<SaveAs>(saveAs);
     scope.put<NotificationService>(notifications);
     await tester.pumpWidget(
@@ -230,13 +229,17 @@ void main() {
 
   testWidgets('导出文件名与载荷时间戳取统计窗口的 now', (tester) async {
     final fixed = DateTime(2030, 12, 31, 23, 59, 59);
-    final scoped = PlayStatisticsProvider(
-      repository: repository,
-      clock: () => fixed,
+    final scopedScope = ProviderTestScope(
+      overrides: [
+        playStatisticsRepositoryProvider.overrideWithValue(repository),
+        playStatisticsClockProvider.overrideWithValue(() => fixed),
+      ],
     );
-    addTearDown(scoped.dispose);
+    final scoped = scopedScope.container.read(
+      playStatisticsPageProvider.notifier,
+    );
 
-    await pumpPage(tester, withProvider: scoped);
+    await pumpPage(tester, withProviderScope: scopedScope);
     expect(scoped.window!.now, fixed);
     await openOverflow(tester);
     await tester.tap(find.text('导出数据'));
