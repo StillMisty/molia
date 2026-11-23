@@ -25,6 +25,24 @@ typedef DiagnosticsTempFileWriter = Future<String> Function(
   Uint8List bytes,
 );
 
+/// GitHub 新建 issue 页地址；报告正文只走剪贴板，不进入 URL。
+Uri buildDiagnosticsIssueUri({
+  required String version,
+  required String platform,
+}) => Uri.https('github.com', '/StillMisty/molia/issues/new', {
+  'title': '[Troubleshooting] Molia $version on $platform',
+  'body': [
+    'What happened',
+    '',
+    '',
+    'Steps to reproduce',
+    '',
+    '',
+    'Diagnostic report',
+    'Paste the copied report here.',
+  ].join('\n'),
+});
+
 class DiagnosticsReportController {
   DiagnosticsReportController({
     required this.builder,

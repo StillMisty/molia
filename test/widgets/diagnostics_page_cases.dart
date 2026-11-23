@@ -355,6 +355,33 @@ void main() {
     expect(harness.notifications.last, '报告已交给系统分享');
   });
 
+  testWidgets('报告问题复制后打开 GitHub，不带报告正文', (tester) async {
+    final opened = <Uri>[];
+    final harness = await _Harness.create(
+      openExternal: (uri) async {
+        opened.add(uri);
+        return true;
+      },
+    );
+    addTearDown(harness.dispose);
+    await _pumpPage(tester, harness);
+
+    final row = find.byKey(const Key('diagnosticsReportIssue'));
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+
+    expect(harness.copied.single, 'diagnostics text');
+    expect(opened.single.host, 'github.com');
+    expect(opened.single.path, '/StillMisty/molia/issues/new');
+    expect(opened.single.queryParameters['title'], contains('9.9.9'));
+    expect(opened.single.queryParameters['title'], contains('linux'));
+    expect(opened.single.queryParameters['body'], contains('What happened'));
+    expect(opened.single.query, isNot(contains('diagnostics')));
+    expect(harness.notifications.last, '报告已复制，已打开 GitHub 新建 issue 页面。');
+  });
+
   testWidgets('报告弹层先预览再复制', (tester) async {
     final harness = await _Harness.create();
     addTearDown(harness.dispose);
@@ -469,6 +496,7 @@ class _Harness {
 
   static Future<_Harness> create({
     List<DiagnosticCheck> checks = const [],
+    Future<bool> Function(Uri uri)? openExternal,
   }) async {
     final service = DiagnosticsService(
       failures: FailureRingBuffer(),
@@ -493,6 +521,7 @@ class _Harness {
       shareFile: (path) async => shared.add(path),
       writeTempFile: (name, bytes) async => '/tmp/$name',
       deleteTempFile: (_) async {},
+      openExternal: openExternal,
     );
     return _Harness(
       service: service,

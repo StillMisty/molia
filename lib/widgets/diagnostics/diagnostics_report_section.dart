@@ -21,6 +21,7 @@ class DiagnosticsReportSection extends StatelessWidget {
     required this.onCopyReport,
     required this.onSaveReport,
     required this.onShareReport,
+    required this.onReportIssue,
     required this.onOpenLogs,
     required this.onRevealLogs,
   });
@@ -30,6 +31,7 @@ class DiagnosticsReportSection extends StatelessWidget {
   final VoidCallback onCopyReport;
   final VoidCallback onSaveReport;
   final VoidCallback onShareReport;
+  final VoidCallback onReportIssue;
   final VoidCallback onOpenLogs;
   final VoidCallback onRevealLogs;
 
@@ -98,6 +100,14 @@ class DiagnosticsReportSection extends StatelessWidget {
                       title: l10n.diagnosticsShareReport,
                       subtitle: l10n.diagnosticsShareReportSubtitle,
                       onTap: busy ? null : onShareReport,
+                    ),
+                    _actionRow(
+                      context,
+                      key: const Key('diagnosticsReportIssue'),
+                      icon: Icons.bug_report_rounded,
+                      title: l10n.diagnosticsReportIssue,
+                      subtitle: l10n.diagnosticsReportIssueSubtitle,
+                      onTap: busy ? null : onReportIssue,
                     ),
                     _actionRow(
                       context,

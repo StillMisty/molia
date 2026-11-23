@@ -105,6 +105,13 @@ class DiagnosticsShareResult {
   final SaveAsResult? saved;
 }
 
+/// 「报告问题」动作的类型化结果。
+enum DiagnosticsReportIssueOutcome {
+  copiedAndOpened,
+  copiedButOpenFailed,
+  copyFailed,
+}
+
 /// 页面按渠道合并后的检查行：渠道检查三步收一行，非渠道检查一行一项。
 class DiagnosticCheckRow {
   DiagnosticCheckRow({

@@ -116,6 +116,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
           onCopyReport: () => unawaited(_copyReport(context, provider, l10n)),
           onSaveReport: () => unawaited(_saveReport(context, provider, l10n)),
           onShareReport: () => unawaited(_shareReport(context, provider, l10n)),
+          onReportIssue: () => unawaited(_reportIssue(context, provider, l10n)),
           onOpenLogs: () => _openLogs(context),
           onRevealLogs: () => unawaited(_revealLogs(context, provider, l10n)),
         ),
@@ -210,6 +211,32 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
         }
       case DiagnosticsShareOutcome.failed:
         notifications?.showErrorSnackBar(l10n.diagnosticsReportShareFailed);
+    }
+  }
+
+  Future<void> _reportIssue(
+    BuildContext context,
+    DiagnosticsProvider provider,
+    AppLocalizations l10n,
+  ) async {
+    final notifications = context.read<NotificationService?>();
+    final info = provider.appInfo.value;
+    final size = MediaQuery.sizeOf(context);
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final outcome = await provider.reportIssue(
+      version: info?.version ?? 'unknown',
+      platform: info?.platform ?? 'unknown',
+      screenWidth: size.width,
+      screenHeight: size.height,
+      devicePixelRatio: dpr,
+    );
+    switch (outcome) {
+      case DiagnosticsReportIssueOutcome.copiedAndOpened:
+        notifications?.showSuccessSnackBar(l10n.diagnosticsReportIssueOpened);
+      case DiagnosticsReportIssueOutcome.copiedButOpenFailed:
+        notifications?.showSnackBar(l10n.diagnosticsReportIssueOpenFailed);
+      case DiagnosticsReportIssueOutcome.copyFailed:
+        notifications?.showErrorSnackBar(l10n.diagnosticsReportCopyFailed);
     }
   }
 

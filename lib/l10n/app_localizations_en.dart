@@ -5686,6 +5686,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagnosticsReportShared => 'Report handed to system share';
 
   @override
+  String get diagnosticsReportIssue => 'Report an issue';
+
+  @override
+  String get diagnosticsReportIssueSubtitle =>
+      'Copies the report, then opens a new GitHub issue. Paste it there.';
+
+  @override
+  String get diagnosticsReportIssueOpened =>
+      'Report copied and the GitHub issue page opened.';
+
+  @override
+  String get diagnosticsReportIssueOpenFailed =>
+      'Report copied, but the GitHub page couldn\'t be opened.';
+
+  @override
   String diagnosticsReportShareFallback(String path) {
     return 'Sharing isn\'t supported here. Saved to $path';
   }

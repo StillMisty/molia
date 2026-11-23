@@ -40,6 +40,7 @@ void main() {
     DiagnosticsTempFileWriter? writeTempFile,
     Future<void> Function(String path)? deleteTempFile,
     List<String>? homeDirectories,
+    Future<bool> Function(Uri uri)? openExternal,
   }) async {
     service = DiagnosticsService(
       failures: FailureRingBuffer(),
@@ -72,6 +73,7 @@ void main() {
       writeTempFile: writeTempFile,
       deleteTempFile: deleteTempFile,
       homeDirectories: homeDirectories,
+      openExternal: openExternal,
       restartEngine: restartEngine,
     );
     addTearDown(() async {
@@ -170,6 +172,68 @@ void main() {
     expect(await provider.copyReport(), isTrue);
     expect(builder.textMaxBytes, diagnosticsCopyMaxBytes);
     expect(copied.single, 'diagnostics text');
+  });
+
+  test('报告问题先复制再打开 GitHub，地址不含报告正文', () async {
+    Uri? opened;
+    await buildProvider(
+      openExternal: (uri) async {
+        opened = uri;
+        return true;
+      },
+    );
+    final outcome = await provider.reportIssue(
+      version: '9.9.9',
+      platform: 'linux',
+    );
+    expect(outcome, DiagnosticsReportIssueOutcome.copiedAndOpened);
+    expect(copied.single, 'diagnostics text');
+    expect(opened?.host, 'github.com');
+    expect(opened?.path, '/StillMisty/molia/issues/new');
+    expect(opened?.queryParameters['title'], contains('9.9.9'));
+    expect(opened?.queryParameters['title'], contains('linux'));
+    expect(opened?.queryParameters['body'], contains('What happened'));
+    expect(
+      opened?.queryParameters['body'],
+      contains('Paste the copied report here.'),
+    );
+    expect(opened?.query, isNot(contains('diagnostics')));
+  });
+
+  test('报告问题打不开页面时保留已复制结果', () async {
+    await buildProvider(openExternal: (_) async => false);
+    final outcome = await provider.reportIssue(
+      version: '9.9.9',
+      platform: 'linux',
+    );
+    expect(outcome, DiagnosticsReportIssueOutcome.copiedButOpenFailed);
+    expect(copied.single, 'diagnostics text');
+  });
+
+  test('报告问题复制失败时不打开页面', () async {
+    final service = DiagnosticsService(
+      failures: FailureRingBuffer(),
+      metrics: ResolveMetrics(),
+    );
+    var opened = false;
+    final provider = DiagnosticsProvider(
+      service: service,
+      builder: _ThrowingBuilder(),
+      saveAs: FakeSaveAs(),
+      copyText: (_) async {},
+      openExternal: (_) async {
+        opened = true;
+        return true;
+      },
+    );
+    final outcome = await provider.reportIssue(
+      version: '9.9.9',
+      platform: 'linux',
+    );
+    expect(outcome, DiagnosticsReportIssueOutcome.copyFailed);
+    expect(opened, isFalse);
+    provider.dispose();
+    await service.dispose();
   });
 
   test('保存报告使用完整上限与 exports 目录', () async {
@@ -457,6 +521,27 @@ class _GatedBuilder implements DiagnosticsBundleBuilder {
     await _wait();
     return 'diagnostics text';
   }
+
+  @override
+  String suggestedFileName([DateTime? at]) => 'molia_diagnostics_test.txt';
+}
+
+class _ThrowingBuilder implements DiagnosticsBundleBuilder {
+  @override
+  Future<Uint8List> buildBytes({
+    double? screenWidth,
+    double? screenHeight,
+    double? devicePixelRatio,
+    int maxBytes = defaultDiagnosticsBundleMaxBytes,
+  }) async => throw StateError('build failed');
+
+  @override
+  Future<String> buildText({
+    double? screenWidth,
+    double? screenHeight,
+    double? devicePixelRatio,
+    int maxBytes = defaultDiagnosticsBundleMaxBytes,
+  }) async => throw StateError('build failed');
 
   @override
   String suggestedFileName([DateTime? at]) => 'molia_diagnostics_test.txt';

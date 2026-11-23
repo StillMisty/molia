@@ -5436,6 +5436,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsReportShared => '报告已交给系统分享';
 
   @override
+  String get diagnosticsReportIssue => '报告问题';
+
+  @override
+  String get diagnosticsReportIssueSubtitle =>
+      '先复制报告，再打开 GitHub 新建 issue 页面，粘贴即可。';
+
+  @override
+  String get diagnosticsReportIssueOpened => '报告已复制，已打开 GitHub 新建 issue 页面。';
+
+  @override
+  String get diagnosticsReportIssueOpenFailed => '报告已复制，但打不开 GitHub 页面。';
+
+  @override
   String diagnosticsReportShareFallback(String path) {
     return '当前系统不支持分享，已保存到 $path';
   }

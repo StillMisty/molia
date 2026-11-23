@@ -9,6 +9,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../domain/models/diagnostics.dart';
 import '../services/diagnostics/diagnostics_bundle.dart';
@@ -23,7 +24,11 @@ import 'diagnostics/diagnostics_report_controller.dart';
 import 'diagnostics/diagnostics_view_models.dart';
 
 export 'diagnostics/diagnostics_report_controller.dart'
-    show DiagnosticsCopyText, DiagnosticsShareFile, DiagnosticsTempFileWriter;
+    show
+        DiagnosticsCopyText,
+        DiagnosticsShareFile,
+        DiagnosticsTempFileWriter,
+        buildDiagnosticsIssueUri;
 export 'diagnostics/diagnostics_view_models.dart';
 
 /// 页面状态与动作的唯一入口；所有通知都走窄 [ValueListenable]。
@@ -41,6 +46,7 @@ class DiagnosticsProvider extends ChangeNotifier {
     DiagnosticsTempFileWriter? writeTempFile,
     Future<void> Function(String path)? deleteTempFile,
     this.homeDirectories,
+    this.openExternal,
     DateTime Function()? now,
   }) : _appInfoLoader = appInfo,
        // ignore: prefer_initializing_formals
@@ -73,6 +79,9 @@ class DiagnosticsProvider extends ChangeNotifier {
 
   /// 日志复制时归一化的个人目录；null 时读取当前平台环境变量。
   final List<String>? homeDirectories;
+
+  /// 打开外部链接；null 时用 `launchUrl`（系统外部应用）。测试可注入。
+  final Future<bool> Function(Uri uri)? openExternal;
 
   final Future<DiagnosticsAppInfo> Function()? _appInfoLoader;
   final Future<bool> Function()? _restartEngine;
@@ -194,6 +203,32 @@ class DiagnosticsProvider extends ChangeNotifier {
           ],
     );
     return _report.copyPlainText(text);
+  }
+
+  /// 复制脱敏报告后打开 GitHub 新建 issue 页面；报告正文只走剪贴板。
+  Future<DiagnosticsReportIssueOutcome> reportIssue({
+    required String version,
+    required String platform,
+    double? screenWidth,
+    double? screenHeight,
+    double? devicePixelRatio,
+  }) async {
+    final copied = await copyReport(
+      screenWidth: screenWidth,
+      screenHeight: screenHeight,
+      devicePixelRatio: devicePixelRatio,
+    );
+    if (!copied) return DiagnosticsReportIssueOutcome.copyFailed;
+    final uri = buildDiagnosticsIssueUri(version: version, platform: platform);
+    var opened = false;
+    try {
+      opened = await (openExternal ?? _launchExternal)(uri);
+    } catch (_) {
+      opened = false;
+    }
+    return opened
+        ? DiagnosticsReportIssueOutcome.copiedAndOpened
+        : DiagnosticsReportIssueOutcome.copiedButOpenFailed;
   }
 
   Future<SaveAsResult> saveReport({
@@ -349,6 +384,14 @@ class DiagnosticsProvider extends ChangeNotifier {
     logsState.dispose();
     metrics.dispose();
     super.dispose();
+  }
+}
+
+Future<bool> _launchExternal(Uri uri) async {
+  try {
+    return await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } catch (_) {
+    return false;
   }
 }
 

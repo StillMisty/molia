@@ -10108,6 +10108,30 @@ abstract class AppLocalizations {
   /// **'Report handed to system share'**
   String get diagnosticsReportShared;
 
+  /// No description provided for @diagnosticsReportIssue.
+  ///
+  /// In en, this message translates to:
+  /// **'Report an issue'**
+  String get diagnosticsReportIssue;
+
+  /// No description provided for @diagnosticsReportIssueSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Copies the report, then opens a new GitHub issue. Paste it there.'**
+  String get diagnosticsReportIssueSubtitle;
+
+  /// No description provided for @diagnosticsReportIssueOpened.
+  ///
+  /// In en, this message translates to:
+  /// **'Report copied and the GitHub issue page opened.'**
+  String get diagnosticsReportIssueOpened;
+
+  /// No description provided for @diagnosticsReportIssueOpenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Report copied, but the GitHub page couldn\'t be opened.'**
+  String get diagnosticsReportIssueOpenFailed;
+
   /// No description provided for @diagnosticsReportShareFallback.
   ///
   /// In en, this message translates to:
