@@ -2,13 +2,13 @@
 
 - 状态：已采纳
 - 日期：2026-11-23
-- 相关：`lib/pages/diagnostics_page.dart`、`lib/providers/diagnostics_provider.dart`、
-  `lib/domain/models/diagnostics.dart`、`lib/services/diagnostics/`、
-  `lib/widgets/settings/about_settings_section.dart`、
+- 相关：`lib/pages/diagnostics_page.dart`、`lib/pages/diagnostics_log_page.dart`、
+  `lib/widgets/diagnostics/`、`lib/providers/diagnostics_provider.dart`、
+  `lib/providers/diagnostics/`、`lib/domain/models/diagnostics.dart`、
+  `lib/services/diagnostics/`、`lib/app/bootstrap/diagnostics_checks.dart`、
+  `lib/services/diagnostics/system_checks.dart`、`lib/widgets/settings/about_settings_section.dart`、
   `test/services/diagnostics_cases.dart`、`test/widgets/diagnostics_page_cases.dart`、
-  `docs/architecture.md` §3、`GLOSSARY.md`。计划新增（名称以实现为准）：
-  `lib/pages/diagnostics_log_page.dart`、`lib/services/diagnostics/diagnostics_runner.dart`、
-  `lib/services/diagnostics/diagnostics_session_store.dart`、`lib/services/diagnostics/log_tail_reader.dart`。
+  `docs/architecture.md` §3、`GLOSSARY.md`。
 
 ## 背景
 
@@ -63,9 +63,10 @@
 用户可读结论、下一步提示与可逆动作由页面按 `id × 状态 × 失败类别` 映射，不进模型。
 
 一次自检是 `DiagnosticCheckRun`：固定顺序的检查结果 + 起止时间 + 是否取消。渠道健康
-检查降为「音源」域下的一组检查，不再拥有独立模型；最近失败仍走内存环形缓冲，
-页面读取时按「同渠道 + 同失败类别」分组去重，组内保留次数、首次与最近时间，展开
-才显示单次时间与渠道；分组是只读记录上的纯函数，不改写事实。
+检查保留自己的顺序 / 冷却 / 取消与内部结果形状，接入统一运行时投影为「音源」域的
+一组检查，页面只消费统一结果；最近失败仍走内存环形缓冲，页面读取时按「同渠道 +
+同失败类别」分组去重，组内保留次数、首次与最近时间，展开才显示单次时间与渠道；
+分组是只读记录上的纯函数，不改写事实。
 
 模型不持有原始异常、`SourceFailure.message`、响应正文、URL、请求头或 Cookie；
 分组（同渠道 + 同失败类别）、文案与排序都只基于只读记录投影，不回写事实。原始异常
@@ -93,13 +94,19 @@
 
 `lib/services/diagnostics/` 仍是唯一实现：
 
-- 新增诊断 runner，只依赖端口：应用信息、目录搜索 / 取链、播放流首字节读取、
-  播放后端能力、数据库计数 / 查询、账号与同步状态。生产适配器由组合根装配，测试
-  注入假实现；探针不绕过 `SourceFailure` 归一化。
+- 诊断 runner（`diagnostics_runner.dart`）只依赖端口：应用信息、目录搜索 / 取链、
+  播放流首字节读取、播放后端能力、数据库计数 / 查询、账号与同步状态。生产适配器
+  在 `lib/app/bootstrap/diagnostics_checks.dart` 装配，测试注入假实现；探针不绕过
+  `SourceFailure` 归一化。
+- 单项检查超时 7 分钟（覆盖渠道 × 搜索 / 取链 / 流的最坏情况），源检查另设 6 分
+  30 秒总预算；渠道检查订阅 `SourceHealthChecker.changes`，逐渠道增量写入
+  「搜索 / 取链 / 流」三条结果，不重跑探针，取消或超时前已写入的结果保留。
 - `DiagnosticsService` 继续持有最近失败缓冲、最近一轮运行、轮转日志 sink 与运行
   标记；组合根在 catalog / playback 栈之前构造它，catalog 建好后挂上检查器。
-- `DiagnosticsProvider` 只做快照投影与动作转发；页面按分区订阅（摘要 / 自检 /
-  问题 / 日志入口 / 报告），逐条结果到达时只重建对应分区，不整页刷新。
+- `DiagnosticsProvider` 只保留 service 订阅、刷新与动作转发，纯投影 / 报告 / 日志
+  控制面在 `lib/providers/diagnostics/`；对外是窄 `ValueListenable`：`summary` /
+  `checkResults` / `issueGroups` / `session` / `appInfo` / `reportState` / `logsState` /
+  `metrics`，页面各卡片只订阅自己那一份，不整页刷新。
 
 ### 5. 最近问题分组与异常退出标记
 
@@ -115,9 +122,12 @@
 
 ### 6. 日志查看器与设置子页
 
-- 新增设置 › 问题排查下的只读「日志」子页，不新增一级导航入口；
-- 经 diagnostics 服务读取当前与轮转文件的**有界尾部**，级别 / 文本筛选只在
-  内存结果上执行，不改写文件；不提供删除 / 清空（轮转自动处理）；
+- 设置 › 问题排查下的只读「日志」子页（`lib/pages/diagnostics_log_page.dart`），
+  不新增一级导航入口；
+- 经 `LogTailReader` 读取当前与轮转文件的**有界尾部**（512 KB / 500 条），级别 /
+  文本筛选只在内存结果上执行，不改写文件；不提供删除 / 清空（轮转自动处理）；
+- 日志目录的唯一来源是 `RotatingFileLogSink.directory`，导出器与日志读取器都由
+  组合根注入，不另拼路径；
 - 落盘前已按 `redactSecrets` 脱敏，读取展示与导出再走同一套脱敏规则；
 - 日志入口在问题排查页只占一行（状态 + 最近时间），不把日志正文铺在首页。
 
@@ -128,15 +138,16 @@
 
 诊断报告 = 现有纯文本诊断包：环境、自检结论、问题组、数据库计数与日志尾部。
 
-- **预览**：页面内查看与保存相同的报告文本；
-- **复制**：独立小上限（默认约 128 KB，常量集中在导出模块并被测试钉住），只含结论、
-  问题组与日志末尾；超出部分明确写出省略；
-- **保存 / 分享**：沿用 20MB 硬上限，完整日志段仍按最新内容截断并声明省略；分享走
-  系统分享面板，平台没有分享入口时退化为保存；
+- **预览**：页面内查看报告，上限 64 KB（`diagnosticsReportPreviewMaxBytes`）；
+- **复制**：独立小上限 128 KB（`diagnosticsCopyMaxBytes`，常量集中在导出模块并被
+  测试钉住），只含结论、问题组与日志末尾；超出部分明确写出省略；
+- **保存 / 分享**：沿用 20MB 硬上限（`defaultDiagnosticsBundleMaxBytes`），完整日志段
+  仍按最新内容截断并声明省略；分享写临时文件走系统分享，平台没有分享入口时退化为
+  保存；
 - 报告默认只在本机生成与保存，**不自动上传、不做遥测**；分享必须由用户显式发起，
   并保留「可能包含歌名和本地路径」的提醒。
 
-复制与保存共用同一份组装实现，避免两份文本在脱敏或截断上漂移。
+三档共用同一份组装实现与脱敏，避免不同出口在截断或编辑上漂移。
 
 ### 8. 只做可逆修复动作
 
@@ -149,21 +160,22 @@
 
 - 用户先看到结论与下一步，再按域定位；同一问题不再重复占满列表，日志不用先导出
   就能看。
-- 检查从「渠道搜索 + 取链」扩展为五个域；现有健康检查器拆成音源域探针，旧的
-  `HealthChannelResult` / `HealthStepResult` 形状迁移到 `DiagnosticCheckResult`，页面与
-  文案映射随之收敛成一份。
-- 打开页面仍保持轻量（无自动检查、无日志扫描）；代价是完整自检可能多花几秒，且
-  会发起真实搜索、取链与一次首字节请求——因此必须由用户触发并可取消。
-- 复制是有意不完整的证据（大小上限 + 省略声明）；完整证据仍走保存 / 分享的 20MB
-  报告。分享入口依赖平台能力，缺失时退化为保存。
+- 检查从「渠道搜索 + 取链」扩展为五个域；现有健康检查器保留自己的顺序 / 冷却 /
+  取消，接入统一运行时后投影成 `DiagnosticCheckResult`，页面与文案映射只消费统一
+  结果。
+- 打开页面仍保持轻量（无自动检查、无日志扫描）；代价是完整自检可能持续数分钟，
+  且会发起真实搜索、取链与一次首字节请求——因此必须由用户触发并可取消。
+- 复制与预览是有意不完整的证据（大小上限 + 省略声明）；完整证据仍走保存 / 分享的
+  20MB 报告。分享入口依赖平台能力，缺失时退化为保存。
 - 运行标记与问题分组带来新的测试面：异常退出判定、分组去重、单检查超时 / 取消、
-  首字节探针不缓存字节、复制 / 保存上限与脱敏一致性。
+  渠道增量结果、首字节探针不缓存字节、三档上限与脱敏一致性。
 - 没有新增遥测、崩溃上报或远程支持通道；「日志子页」是设置内的本地只读视图。
 
 ## 后续
 
-- 实施顺序：统一模型与 runner → 五域探针与摘要 / 分组页面 → 日志子页 →
-  复制 / 预览 / 分享出口 → 清理旧文案与页面头注释（代码注释与 l10n 由实现提交同步）。
+- 核心、五域探针、页面与日志子页已落地；provider 可按纯投影 / 报告控制面继续拆
+  文件，但 `summary` / `checkResults` / `issueGroups` / `session` / `appInfo` /
+  `reportState` / `logsState` / `metrics` 这组读口保持不变。
 - 同步更新 `GLOSSARY.md` 与 `docs/architecture.md` 的相关条目；`docs/pitfalls.md`
   里指向旧分区名的观测入口在改名时改成模块说法。
 - 若将来要把自检做成后台周期任务、加入自动修复或上传通道，需要新的 ADR 与真实

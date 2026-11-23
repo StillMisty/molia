@@ -53,9 +53,10 @@
   只展示组，展开才看单次记录；聚合不改写缓冲，也不新增持久化。
 - **Diagnostic report（诊断报告）** — `lib/services/diagnostics/diagnostics_bundle.dart`
   组装的纯文本报告（环境、自检结论、问题组、数据库计数、日志尾部），
-  `diagnostics_export.dart` 在后台 isolate 读取 / 脱敏 / 生成字节。默认只落本机：
-  预览与保存共用同一份文本，复制用独立小上限，保存 / 分享保留 20MB 硬上限；
-  报告是快照，不是实时视图，永不自动上传。
+  `diagnostics_export.dart` 在后台 isolate 读取 / 脱敏 / 生成字节。默认只落本机；
+  预览 / 复制 / 保存 / 分享三档共用同一组装实现与脱敏：预览 64 KB、复制 128 KB
+  （只含结论、问题组与日志末尾）、保存 / 分享沿用 20MB 硬上限；报告是快照，
+  不是实时视图，永不自动上传。
 - **Session marker（运行标记）** — `DiagnosticSessionInfo` / `DiagnosticSessionPhase`
   （`lib/domain/models/diagnostics.dart`，状态由 `lib/services/diagnostics/` 落盘）：
   启动与前后台切换记录最后可见阶段（前台 / 后台 / 已正常关闭）；下次启动读到上次

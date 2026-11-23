@@ -1437,7 +1437,7 @@
 决策）、派生缓存与 UI 状态（折叠 / 滚动 / 浏览模式）。新增可跟随偏好应进
 登记表并归 `SyncCategory.settings`；不登记即显式选择「不同步」。
 
-### 问题排查（diagnostics，ADR-0040 落地口径）
+### 问题排查（diagnostics，ADR-0040）
 
 - **模型**：`lib/domain/models/diagnostics.dart` 是诊断只读模型的唯一位置。自检统一为
   `DiagnosticCheckResult`（稳定 id / 分组 / 状态 / 耗时 / 可选渠道标识与稳定短值），
@@ -1445,25 +1445,41 @@
   `FailureKind` 的内存记录，问题组按「同渠道 + 同失败类别」由纯函数聚合。模型只含
   可展示字段，原始异常、响应正文、URL、请求头与 Cookie 不入模型；结论文案与可逆
   动作是页面投影。
-- **runner 与 service**：`lib/services/diagnostics/` 仍是唯一实现。runner 顺序执行
-  五类域（应用 / 音源 / 播放后端 / 存储与数据库 / 账号与同步）的检查，单条有超时、
-  整轮可取消、保留冷却；打开页面不自动跑，无后台轮询。`DiagnosticsService` 持有最近
-  失败缓冲、最近一轮运行、轮转日志 sink 与运行标记；组合根在 catalog / playback 栈
-  之前构造它，catalog 建好后挂上检查器。
-- **探针注入**：runner 只依赖端口（应用信息、目录搜索 / 取链、播放流首字节读取、
-  播放后端能力、数据库计数 / 查询、账号与同步状态）。生产适配器由组合根装配，测试
-  注入假实现；首字节探针只验证状态码 / `PlayableStream.headers` / 可读性，读完立即
-  关闭，不缓存字节，也不得进入播放路径。
-- **页面订阅**：`DiagnosticsProvider` 把 service 快照投影成页面状态，页面按分区
-  （摘要 / 自检 / 问题 / 日志入口 / 报告）各自订阅，逐条结果到达只重建对应分区。
-  页面只发用户动作（检查 / 停止 / 重试 / 重启引擎 / 打开设置或日志 / 复制 / 预览 /
-  保存 / 分享），不直接依赖 sources / playback / data 层。
-- **报告 isolate**：`lib/services/diagnostics/diagnostics_export.dart` 在后台 isolate
-  读取日志尾部、脱敏并组装报告；复制走独立小上限，预览与保存 / 分享共用同一份文本，
-  保存 / 分享保留 20MB 硬上限。报告默认只在本机生成，不自动上传。
-- **日志子页**：设置 › 问题排查下的只读子页（不新增一级导航），经 diagnostics 服务
-  读取当前与轮转文件的有界尾部，级别 / 文本筛选只作用于内存结果；落盘与查看共用同一
-  脱敏规则，不提供删除 / 清空。
+- **检查与执行**：五域检查实例在 `lib/services/diagnostics/system_checks.dart`，组合根
+  在 `lib/app/bootstrap/diagnostics_checks.dart` 按依赖装配成 runner。runner 顺序执行、
+  整轮可取消；单项超时 7 分钟（覆盖渠道 × 搜索 / 取链 / 流的最坏情况），源检查另设
+  6 分 30 秒总预算。渠道检查不重跑探针：`SourceHealthCheck` 订阅
+  `SourceHealthChecker.changes`，每完成一个渠道就按「搜索 → 取链 → 流」投影成三行
+  增量写入 runner，页面再按渠道合并成一行三步；取消 / 超时前已写入的结果保留。
+- **service 与探针注入**：`lib/services/diagnostics/` 是唯一实现。`DiagnosticsService`
+  持有最近失败缓冲、最近一轮运行、轮转日志 sink 与运行标记；组合根在 catalog /
+  playback 栈之前构造它，catalog 建好后挂上检查器。runner 只依赖端口（应用信息、
+  目录搜索 / 取链、播放流首字节读取、播放后端能力、数据库计数 / 查询、账号与同步
+  状态），生产适配器由组合根装配，测试注入假实现；首字节探针只验证状态码 /
+  `PlayableStream.headers` / 可读性，读完立即关闭，不缓存字节，也不得进入播放路径。
+- **provider 与页面**：`lib/providers/diagnostics_provider.dart` 只保留 service 订阅、
+  刷新与动作转发，纯投影 / 报告 / 日志控制面在 `lib/providers/diagnostics/`；对外是
+  窄 `ValueListenable`：`summary` / `checkResults` / `issueGroups` / `session` /
+  `appInfo` / `reportState` / `logsState` / `metrics`。`lib/pages/diagnostics_page.dart`
+  与 `lib/widgets/diagnostics/` 的每张卡片只订阅自己那一份，逐条结果到达只重建对应
+  分区；打开页面不自动跑检查、不读日志（日志子页按需读一次），页面只发用户动作
+  （检查 / 停止 / 重试 / 重启引擎 / 打开设置或日志 / 复制 / 预览 / 保存 / 分享），
+  不直接依赖 sources / playback / data 层。
+- **报告三档上限**：`lib/services/diagnostics/diagnostics_export.dart` 在后台 isolate
+  读取日志尾部、脱敏并组装报告，复制 / 预览 / 保存共用同一实现。复制
+  `diagnosticsCopyMaxBytes` 128 KB（只含结论、问题组与日志末尾），预览
+  `diagnosticsReportPreviewMaxBytes` 64 KB，保存 / 分享 `defaultDiagnosticsBundleMaxBytes`
+  20 MB；分享写临时文件走系统分享，平台不支持时退化为保存。报告默认只在本机生成，
+  不自动上传。
+- **日志子页**：`lib/pages/diagnostics_log_page.dart` 是设置 › 问题排查下的只读子页
+  （不新增一级导航），经 `LogTailReader` 读取当前与轮转文件的有界尾部（512 KB /
+  500 条），级别 / 文本筛选只作用于内存结果；落盘与查看共用同一脱敏规则，不提供
+  删除 / 清空。日志目录的唯一来源是 `RotatingFileLogSink.directory`（导出器与读取器
+  由组合根注入，不另拼路径）。
+- **运行标记**：`DiagnosticSessionTracker` 把最后可见阶段（前台 / 后台 / 已关闭）写入
+  设备本地；桌面正常退出走 `beforeQuit` 写 `closed`，移动端与兜底走
+  `AppLifecycleListener.onDetach`，桌面托盘 `AppPresence` 同步阶段。只有上次仍停在
+  前台才判「可能异常退出」，后台被系统回收不算异常。
 
 ## 4. 状态与通知策略
 
