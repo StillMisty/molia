@@ -15,6 +15,8 @@ import 'dart:async';
 import 'package:logging/logging.dart';
 
 import '../data/catalog/catalog_service.dart';
+import '../domain/models/diagnostics.dart'
+    show HealthFailure, PlaybackAttemptPhase, PlaybackAttemptRecorder;
 import '../domain/models/failure.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
@@ -57,6 +59,7 @@ class PlaybackErrorRecovery {
     this._onAutoSourceSwapped,
     this._failures,
     this._channelDisplayName,
+    this._attempts,
     this.provenanceCap = 64,
   });
 
@@ -79,6 +82,9 @@ class PlaybackErrorRecovery {
   /// 最近失败记录（类型化，不含 message / 响应正文）。
   final FailureRecorder? _failures;
   final String Function(String sourceKey)? _channelDisplayName;
+
+  /// 恢复链的本次运行记录（阶段 / 渠道 / 成败；不含标题、payload、URL）。
+  final PlaybackAttemptRecorder? _attempts;
 
   /// provenance 的条目上限：每个曲目一条已尝试来源集合，防止长期泄漏。
   final int provenanceCap;
@@ -120,7 +126,20 @@ class PlaybackErrorRecovery {
 
     // 失败即失效该曲目的取链缓存（失败本身不入缓存，下次播放重新取链）。
     // 只清这一首：一条过期 URL 不应让同音源其它曲目全部重新取链。
-    _catalogService?.invalidateResolveForTrack(track);
+    final catalog = _catalogService;
+    if (catalog != null) {
+      try {
+        catalog.invalidateResolveForTrack(track);
+        _recordAttempt(PlaybackAttemptPhase.invalidateCache, track);
+      } catch (error) {
+        _recordAttempt(
+          PlaybackAttemptPhase.invalidateCache,
+          track,
+          failure: error,
+        );
+        rethrow;
+      }
+    }
     final failureKey =
         '${track.id.uri}|${failure.kind.name}|${failure.l10nKey}|'
         '${failure.retryable}|${failure.message}';
@@ -168,7 +187,9 @@ class PlaybackErrorRecovery {
           try {
             // 重取也是会话命令：阶段路由与「返回前已提交」交给协调者。
             await _commands.reloadCurrentStream();
+            _recordAttempt(PlaybackAttemptPhase.reload, track);
           } catch (e) {
+            _recordAttempt(PlaybackAttemptPhase.reload, track, failure: e);
             _logger.severe('播放失败原地重取失败', e);
           }
           if (!_stillFailingOn(track)) return;
@@ -185,7 +206,9 @@ class PlaybackErrorRecovery {
         try {
           try {
             await _commands.playQueueIndex(index);
+            _recordAttempt(PlaybackAttemptPhase.retry, track);
           } catch (e) {
+            _recordAttempt(PlaybackAttemptPhase.retry, track, failure: e);
             _logger.severe('播放失败自动重试失败', e);
           }
           if (!_stillFailingOn(track)) return;
@@ -223,7 +246,10 @@ class PlaybackErrorRecovery {
       final tried = _triedSources[uri] ?? <String>{};
       tried.add(track.id.sourceKey);
       final match = await resolver(track, excludeSourceKeys: tried);
-      if (match == null || match.id.uri == uri) return;
+      if (match == null || match.id.uri == uri) {
+        _recordAttempt(PlaybackAttemptPhase.autoSwap, track, failure: failure);
+        return;
+      }
       // 搜索期间可能已切歌 / 被手动换源：只替换仍是这首的当前曲目。
       if (_readSnapshot().current?.id.uri != uri) return;
       _rememberProvenance(match.id.uri, {...tried, match.id.sourceKey});
@@ -236,12 +262,32 @@ class PlaybackErrorRecovery {
           _logger.warning('自动换源后同步本地数据失败: $e');
         }
       }
+      _recordAttempt(PlaybackAttemptPhase.autoSwap, track);
       _onOutcome(outcome);
     } catch (e) {
+      _recordAttempt(PlaybackAttemptPhase.autoSwap, track, failure: e);
       _logger.warning('自动换源失败: $e');
     } finally {
       _swapping.remove(uri);
     }
+  }
+
+  /// 记录一次恢复尝试；成功 = 命令 / 查找完成且没有异常或空结果。
+  void _recordAttempt(
+    PlaybackAttemptPhase phase,
+    Track track, {
+    Object? failure,
+  }) {
+    final attempts = _attempts;
+    if (attempts == null) return;
+    attempts.recordPlaybackAttempt(
+      phase: phase,
+      sourceKey: track.id.sourceKey,
+      succeeded: failure == null,
+      failure: failure == null
+          ? null
+          : HealthFailure.from(SourceFailure.from(failure)),
+    );
   }
 
   void _rememberProvenance(String uri, Set<String> tried) {

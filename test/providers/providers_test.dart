@@ -5,6 +5,7 @@ import 'ai_dj_history_controller_cases.dart'
 import 'album_artist_view_model_cases.dart'
     as providers_album_artist_view_model;
 import 'annual_report_provider_cases.dart' as providers_annual_report_provider;
+import 'diagnostics_provider_cases.dart' as providers_diagnostics;
 import 'favorites_view_model_cases.dart' as providers_favorites_view_model;
 import 'library_read_projection_cases.dart'
     as providers_library_read_projection;
@@ -22,6 +23,7 @@ void main() {
   group('ai dj history controller', providers_ai_dj_history_controller.main);
   group('album artist view model', providers_album_artist_view_model.main);
   group('annual report provider', providers_annual_report_provider.main);
+  group('diagnostics provider', providers_diagnostics.main);
   group('favorites view model', providers_favorites_view_model.main);
   group('library read projection', providers_library_read_projection.main);
   group('nav provider', providers_nav_provider.main);

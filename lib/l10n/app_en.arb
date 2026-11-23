@@ -2737,39 +2737,227 @@
   "biliAccountQrSemantics": "Bilibili sign-in QR code",
   "providerBilibili": "Bilibili",
   "diagnosticsTitle": "Troubleshooting",
-  "diagnosticsSubtitle": "Export run records and device details",
-  "diagnosticsOverviewSection": "Overview",
-  "diagnosticsAppVersion": "App version",
-  "diagnosticsVersionValue": "{version} (build {build})",
-  "diagnosticsPlatform": "System",
-  "diagnosticsPlatformValue": "{platform} · {os}",
-  "diagnosticsLogStatus": "Local run records",
-  "diagnosticsLogRecording": "Being recorded",
-  "diagnosticsLogUnavailable": "Records unavailable",
-  "diagnosticsLogStopped": "Stopped",
-  "diagnosticsRecentIssuesSection": "Recent issues",
-  "diagnosticsRecentIssuesEmpty": "No issues recorded yet",
-  "diagnosticsRecentIssuesEmptyHint": "When something goes wrong, the channel and reason will appear here.",
-  "diagnosticsChannelCheckSection": "Channel check",
-  "diagnosticsChannelCheckHint": "Only enabled searchable channels are checked; playback is not affected.",
-  "diagnosticsChannelCheckStart": "Check channels",
-  "diagnosticsChannelCheckStop": "Stop",
-  "diagnosticsChannelCheckRunning": "Checking…",
-  "diagnosticsChannelCheckEmpty": "No check yet",
-  "diagnosticsChannelCheckEmptyHint": "Results for each channel will appear here after a check.",
-  "diagnosticsChannelCheckNone": "No channels to check",
-  "diagnosticsChannelCheckNoneHint": "Enable a searchable source first.",
-  "diagnosticsChannelStatusOk": "OK",
-  "diagnosticsChannelStatusEmpty": "No results",
-  "diagnosticsChannelStatusCancelled": "Stopped",
+  "diagnosticsSubtitle": "Check issues, logs, and reports",
+  "diagnosticsAppInfoValue": "Molia {version} (build {build}) · {platform}",
+  "diagnosticsSummarySection": "Status",
+  "diagnosticsSummaryNotChecked": "Not checked yet",
+  "diagnosticsSummaryNotCheckedHint": "Run a full check to confirm search, playback, and storage are working.",
+  "diagnosticsSummaryAllSkippedHint": "No checks actually ran. Check your network or enabled sources.",
+  "diagnosticsSummaryRunning": "Checking…",
+  "diagnosticsCheckingHint": "Results appear one by one.",
+  "diagnosticsSummaryOk": "Everything looks normal",
+  "diagnosticsSummaryOkHint": "No issues need attention.",
+  "diagnosticsSummaryFailed": "{count} need attention",
+  "diagnosticsSummaryFailedHint": "Start with the failed items below.",
+  "diagnosticsSummaryWarning": "{count} worth a look",
+  "diagnosticsSummaryWarningHint": "Not blocking, but worth watching.",
+  "diagnosticsSummaryStopped": "Check stopped",
+  "diagnosticsSummaryStoppedHint": "Completed results are still available.",
+  "diagnosticsPrimaryStart": "Run full check",
+  "diagnosticsPrimaryStop": "Stop check",
+  "diagnosticsPrimaryRunning": "Checking…",
+  "diagnosticsCheckStartFailed": "Can't start a check right now. Try again later.",
+  "diagnosticsCheckedAt": "Last checked: {time}",
+  "diagnosticsAbnormalExitTime": "May have closed unexpectedly ({time})",
+  "diagnosticsCheckResultsSection": "Check results",
+  "diagnosticsCheckResultsHint": "Grouped by app, sources, playback, storage, and account sync. Failed items come first.",
+  "diagnosticsCheckResultsEmpty": "No results yet",
+  "diagnosticsCheckResultsEmptyHint": "Results appear here after you run a full check.",
+  "diagnosticsCheckNoChannelsHint": "Enable a searchable source first.",
+  "diagnosticsOpenDetails": "View details",
+  "diagnosticsGroupApp": "App",
+  "diagnosticsGroupSources": "Sources",
+  "diagnosticsGroupPlayback": "Playback",
+  "diagnosticsGroupStorage": "Storage",
+  "diagnosticsGroupSync": "Account & sync",
+  "diagnosticsCheckAppVersion": "App version",
+  "diagnosticsCheckSessionExit": "Last exit",
+  "diagnosticsCheckNotification": "Notification permission",
+  "diagnosticsCheckAudioBackend": "Playback backend",
+  "diagnosticsCheckSourceEngine": "Source script",
+  "diagnosticsCheckLogWrite": "Run records",
+  "diagnosticsCheckDatabaseSchema": "Database schema",
+  "diagnosticsCheckDatabaseIntegrity": "Database integrity",
+  "diagnosticsCheckSync": "Data sync",
+  "diagnosticsCheckBiliAccount": "Bilibili account",
   "diagnosticsChannelSearch": "Search",
   "diagnosticsChannelResolve": "Playback link",
+  "diagnosticsChannelStream": "Playback stream",
+  "diagnosticsChannelStatusCancelled": "Stopped",
+  "diagnosticsStatusOk": "Normal",
+  "diagnosticsStatusWarning": "Worth a look",
+  "diagnosticsStatusFailed": "Failed",
+  "diagnosticsStatusSkipped": "Not run",
+  "diagnosticsCheckStep": "{label}: {status}",
+  "diagnosticsCheckStepLatency": "{label}: {status}, {ms} ms",
+  "diagnosticsCheckTotalLatency": "{ms} ms total",
   "diagnosticsLatencyMs": "{ms} ms",
-  "diagnosticsCheckedAt": "Last checked: {time}",
-  "diagnosticsExportAction": "Export diagnostics",
+  "diagnosticsStableUnknown": "Unknown",
+  "diagnosticsStableAbnormal": "Last exit was abnormal",
+  "diagnosticsStableClean": "Last exit was clean",
+  "diagnosticsStableAvailable": "Available",
+  "diagnosticsStableUnavailable": "Unavailable",
+  "diagnosticsStableNotDesktop": "Desktop only",
+  "diagnosticsStableNoScript": "No script enabled",
+  "diagnosticsStableRecording": "Recording",
+  "diagnosticsStableStopped": "Stopped",
+  "diagnosticsStableUnreadable": "Unreadable",
+  "diagnosticsStableOk": "Normal",
+  "diagnosticsStableCorrupt": "Integrity check failed",
+  "diagnosticsStableOff": "Off",
+  "diagnosticsStableNone": "No usable sync method",
+  "diagnosticsStableLoggedOut": "Signed out",
+  "diagnosticsStableExpired": "Sign-in expired",
+  "diagnosticsStableLoggedIn": "Signed in",
+  "diagnosticsStableCooldown": "Just checked, try again shortly",
+  "diagnosticsStableNoChannels": "No channels to check",
+  "diagnosticsStableTimeout": "Timed out",
+  "diagnosticsStableGranted": "Allowed",
+  "diagnosticsStableDenied": "Not allowed",
+  "diagnosticsStablePermanentlyDenied": "Denied; enable in system settings",
+  "diagnosticsStableUnsupported": "Not supported here",
+  "diagnosticsStableVersion": "Version {value}",
+  "diagnosticsStableSchema": "Version {value}",
+  "diagnosticsStableSchemaMismatch": "Version {actual} (expected {expected})",
+  "diagnosticsStableScript": "Script {name}",
+  "diagnosticsSyncTransport": "{name}: {state}",
+  "diagnosticsTransportWebdav": "WebDAV",
+  "diagnosticsTransportLan": "LAN",
+  "diagnosticsTransportOk": "Normal",
+  "diagnosticsTransportStopped": "Stopped",
+  "diagnosticsTransportPermissionDenied": "Needs permission",
+  "diagnosticsTransportUnavailable": "Unavailable",
+  "diagnosticsCheckDetailTitle": "Check details",
+  "diagnosticsCheckDetailGroup": "Group",
+  "diagnosticsCheckDetailStatus": "Status",
+  "diagnosticsCheckDetailTime": "Checked at",
+  "diagnosticsCheckDetailLatency": "Time taken",
+  "diagnosticsCheckDetailValue": "Result",
+  "diagnosticsCheckDetailFailure": "Failure reason",
+  "diagnosticsCheckDetailSteps": "Check steps",
+  "diagnosticsActionRetryCheck": "Check again (all)",
+  "diagnosticsActionRetryCheckHint": "Runs another full check.",
+  "diagnosticsActionRestartEngine": "Restart source engine",
+  "diagnosticsActionRestartEngineHint": "Doesn't change scripts or settings.",
+  "diagnosticsActionOpenSources": "Open source settings",
+  "diagnosticsActionOpenSourcesHint": "Review scripts, channels, and accounts.",
+  "diagnosticsActionOpenAccount": "Open account settings",
+  "diagnosticsActionOpenAccountHint": "Sign in again or check the login state.",
+  "diagnosticsActionOpenSync": "Open sync settings",
+  "diagnosticsActionOpenSyncHint": "Review transports and paired devices.",
+  "diagnosticsActionOpenNotifications": "Open notification settings",
+  "diagnosticsActionOpenNotificationsHint": "Allow notifications in system settings.",
+  "diagnosticsActionOpenLogs": "Open logs",
+  "diagnosticsActionOpenLogsHint": "Read the latest run records.",
+  "diagnosticsActionCopyDetails": "Copy details",
+  "diagnosticsActionCopyDetailsHint": "Paste it into your feedback.",
+  "diagnosticsActionCopied": "Copied",
+  "diagnosticsActionCopyFailed": "Couldn't copy. Try again.",
+  "diagnosticsEngineRestarted": "Source engine restarted",
+  "diagnosticsEngineRestartFailed": "Couldn't restart the source engine",
+  "diagnosticsRecentIssuesSection": "Recent issues",
+  "diagnosticsRecentIssuesEmpty": "No issues recorded yet",
+  "diagnosticsRecentIssuesEmptyHint": "When something goes wrong, the channel and reason appear here.",
+  "diagnosticsIssueOccurrences": "{count}×",
+  "diagnosticsIssueOccurrencesTitle": "Count",
+  "diagnosticsIssueLastAt": "Last {time}",
+  "diagnosticsIssueDetailTitle": "Issue details",
+  "diagnosticsIssueChannel": "Channel",
+  "diagnosticsIssueCategory": "Category",
+  "diagnosticsIssueKey": "Error tag",
+  "diagnosticsIssueKeyUnknown": "No tag",
+  "diagnosticsIssueRetryableTitle": "Retry",
+  "diagnosticsIssueRetryable": "Can retry",
+  "diagnosticsIssueNotRetryable": "Can't retry right now",
+  "diagnosticsIssueFirst": "First seen",
+  "diagnosticsIssueLast": "Last seen",
+  "diagnosticsIssueAdvice": "Possible cause and next step",
+  "diagnosticsIssueSuggestionNetwork": "The network or platform is temporarily unavailable. Try another network or retry later.",
+  "diagnosticsIssueSuggestionTimeout": "The platform is slow to respond. Retry later or switch channels.",
+  "diagnosticsIssueSuggestionUnsupported": "This channel doesn't support the action. Try another channel.",
+  "diagnosticsIssueSuggestionNotFound": "The platform returned nothing. Try another keyword or channel.",
+  "diagnosticsIssueSuggestionUnauthorized": "The sign-in expired or is required. Open account settings and sign in again.",
+  "diagnosticsIssueSuggestionRateLimited": "Too many requests. Wait a few minutes and try again.",
+  "diagnosticsIssueSuggestionScript": "The source script failed. Restart the source engine or check where the script came from.",
+  "diagnosticsIssueSuggestionEngineRestarting": "The source engine is restarting. Wait a moment and try again.",
+  "diagnosticsIssueSuggestionCancelled": "The action was cancelled. Check again when you need to.",
+  "diagnosticsIssueSuggestionPlayback": "The playback backend can't play this link. Switch channels or check again.",
+  "diagnosticsIssueSuggestionUnknown": "The cause is unclear. Check again or open the logs.",
+  "diagnosticsIssueRecheck": "Check again",
+  "diagnosticsIssueRecheckHint": "Runs another full check.",
+  "diagnosticsSessionSection": "This session",
+  "diagnosticsSessionDuration": "Running for",
+  "diagnosticsDurationLessThanMinute": "Less than a minute",
+  "diagnosticsDurationMinutes": "{minutes} min",
+  "diagnosticsDurationHoursMinutes": "{hours} h {minutes} min",
+  "diagnosticsPreviousExit": "Last exit",
+  "diagnosticsPreviousExitClean": "Clean exit ({time})",
+  "diagnosticsPreviousExitAbnormal": "Maybe unexpected ({time})",
+  "diagnosticsPreviousExitUnknown": "No record",
+  "diagnosticsResolveSection": "Playback links (this session)",
+  "diagnosticsResolveHint": "Counts this session only; resets when the app restarts.",
+  "diagnosticsResolveCalls": "Requests",
+  "diagnosticsResolveFailures": "Failed",
+  "diagnosticsResolveTimeouts": "Timed out",
+  "diagnosticsResolveCount": "{count}",
+  "diagnosticsResolveCacheHitRate": "{percent}% cache hits",
+  "diagnosticsResolveNoData": "No playback link requests this session.",
+  "diagnosticsResolveFailureKinds": "Failure types",
+  "diagnosticsLogStatus": "Run records",
+  "diagnosticsLogRecording": "Recording",
+  "diagnosticsLogUnavailable": "Records unavailable",
+  "diagnosticsLogStopped": "Stopped",
+  "diagnosticsLogView": "View logs",
+  "diagnosticsLogsTitle": "Logs",
+  "diagnosticsLogsLevelAll": "All",
+  "diagnosticsLogsLevelWarning": "Warnings+",
+  "diagnosticsLogsLevelError": "Errors",
+  "diagnosticsLogsLevelWarningBadge": "Warning",
+  "diagnosticsLogsLevelInfo": "Info",
+  "diagnosticsLogsLevelDebug": "Debug",
+  "diagnosticsLogsLevelOther": "Other",
+  "diagnosticsLogsSearchHint": "Keyword, module, or error text",
+  "diagnosticsLogsFilterSemantics": "Log level",
+  "diagnosticsLogsResultCount": "{count} entries",
+  "diagnosticsLogsEmpty": "No logs yet",
+  "diagnosticsLogsEmptyHint": "Records appear here while the app runs.",
+  "diagnosticsLogsUnavailable": "Logs unavailable",
+  "diagnosticsLogsUnavailableHint": "The log folder can't be opened or isn't writable.",
+  "diagnosticsLogsCopy": "Copy current results",
+  "diagnosticsLogsCopied": "Copied {count} log entries",
+  "diagnosticsLogsCopyEmpty": "Nothing to copy with this filter",
+  "diagnosticsLogsOpenDirectory": "Open log folder",
+  "diagnosticsLogsOpenDirectoryHint": "View the log files in your file manager.",
+  "diagnosticsLogsOpenDirectoryFailed": "Couldn't open the log folder",
+  "diagnosticsLogsRefresh": "Refresh logs",
+  "diagnosticsLogsFilteredEmpty": "No matching logs",
+  "diagnosticsLogsFilteredEmptyHint": "Try another level or keyword.",
+  "diagnosticsReportSection": "Reports & logs",
+  "diagnosticsReportPreview": "Preview report",
+  "diagnosticsReportPreviewSubtitle": "Read it before copying or sharing.",
+  "diagnosticsCopyReport": "Copy report",
+  "diagnosticsCopyReportSubtitle": "Conclusion and recent logs only, up to about 128 KB.",
+  "diagnosticsSaveReportSubtitle": "Save the full report on this device, up to 20 MB.",
+  "diagnosticsShareReport": "Share report",
+  "diagnosticsShareReportSubtitle": "Review it first; it may contain song titles and local paths.",
+  "diagnosticsReportSheetTitle": "Diagnostic report preview",
+  "diagnosticsReportSheetPrivacy": "The report is generated on this device. Review it before sharing; it may contain song titles and local paths.",
+  "diagnosticsReportPreviewTruncated": "The preview shows up to 64 KB. Save the file to see everything.",
+  "diagnosticsReportCopied": "Report copied",
+  "diagnosticsReportCopyFailed": "Couldn't copy. Try again.",
+  "diagnosticsReportShared": "Report handed to system share",
+  "diagnosticsReportIssue": "Report an issue",
+  "diagnosticsReportIssueSubtitle": "Copies the report, then opens a new GitHub issue. Paste it there.",
+  "diagnosticsReportIssueOpened": "Report copied and the GitHub issue page opened.",
+  "diagnosticsReportIssueOpenFailed": "Report copied, but the GitHub page couldn't be opened.",
+  "diagnosticsReportShareFallback": "Sharing isn't supported here. Saved to {path}",
+  "diagnosticsReportShareFailed": "Couldn't share. Save the file instead.",
+  "diagnosticsReportUnavailable": "Report isn't available right now",
+  "diagnosticsExportAction": "Save diagnostics file",
   "diagnosticsExportPrivacy": "The file stays on this device and is not uploaded automatically.",
   "diagnosticsExportWarning": "Open and review it before sharing; it may contain song titles and local paths.",
   "diagnosticsExporting": "Preparing…",
+  "diagnosticsLoading": "Loading…",
   "diagnosticsFailureNetwork": "Network problem",
   "diagnosticsFailureTimeout": "Timed out",
   "diagnosticsFailureUnsupported": "Not supported by this channel",
@@ -2781,44 +2969,16 @@
   "diagnosticsFailureCancelled": "Cancelled",
   "diagnosticsFailurePlayback": "Playback failed",
   "diagnosticsFailureUnknown": "Unknown reason",
-  "diagnosticsResolveSection": "Playback links (this session)",
-  "diagnosticsResolveHint": "Counts only this session; they reset when the app restarts.",
-  "diagnosticsResolveCalls": "Link requests",
-  "diagnosticsResolveCacheHits": "Cache hits",
-  "diagnosticsResolveRetries": "Retries",
-  "diagnosticsResolveFailures": "Failed",
-  "diagnosticsResolveTimeouts": "Timed out",
-  "diagnosticsResolveCount": "{count}",
-  "@diagnosticsResolveCount": {
+  "@diagnosticsSummaryFailed": {
     "placeholders": {
       "count": {
         "type": "int"
       }
     }
   },
-  "@diagnosticsVersionValue": {
+  "@diagnosticsSummaryWarning": {
     "placeholders": {
-      "version": {
-        "type": "String"
-      },
-      "build": {
-        "type": "String"
-      }
-    }
-  },
-  "@diagnosticsPlatformValue": {
-    "placeholders": {
-      "platform": {
-        "type": "String"
-      },
-      "os": {
-        "type": "String"
-      }
-    }
-  },
-  "@diagnosticsLatencyMs": {
-    "placeholders": {
-      "ms": {
+      "count": {
         "type": "int"
       }
     }
@@ -2830,8 +2990,170 @@
       }
     }
   },
-  "diagnosticsLoading": "Loading…",
-  "diagnosticsExportSection": "Export",
+  "@diagnosticsAppInfoValue": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      },
+      "build": {
+        "type": "String"
+      },
+      "platform": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsAbnormalExitTime": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsCheckStep": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsCheckStepLatency": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      },
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsCheckTotalLatency": {
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsLatencyMs": {
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsStableVersion": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsStableSchema": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsStableSchemaMismatch": {
+    "placeholders": {
+      "actual": {
+        "type": "String"
+      },
+      "expected": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsStableScript": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsSyncTransport": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "state": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsIssueOccurrences": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsIssueLastAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "@diagnosticsDurationMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsDurationHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsResolveCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsResolveCacheHitRate": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsLogsResultCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsLogsCopied": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@diagnosticsReportShareFallback": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "musicFoldersTitle": "Music folders",
   "musicFoldersSubtitle": "Adds audio from these folders. Files stay where they are.",
   "musicFoldersAdd": "Add folder",

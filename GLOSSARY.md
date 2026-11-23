@@ -35,6 +35,42 @@
   （any-listen：`AnyListenException.toSourceFailure()` 保留 unauthorized 等语义；
   内置传输：`SourceFailure.from` 按类型名识别 `BuiltinHttpException`），
   providers/UI 只消费 kind / l10nKey / retryable，不再逐层重包装。
+- **Diagnostic check（诊断检查项）** — `lib/domain/models/diagnostics.dart` 的
+  `DiagnosticCheckResult`：一次分层自检的单条结果，含稳定 `DiagnosticCheckId`、
+  `DiagnosticCheckGroup`（app / sources / playback / storage / sync）、状态
+  （ok / warning / failed / skipped）、耗时、可选渠道标识与稳定短值（版本号 / 后端名 /
+  表版本等，由检查实现脱敏）。失败只带 `FailureKind` / l10nKey / retryable，不持有
+  原始异常、响应正文、URL、请求头或 Cookie；结论文案与可逆动作由页面按 id × 状态映射，
+  分组与排序是只读记录上的纯函数投影。
+- **Diagnostic run（诊断运行）** — `lib/domain/models/diagnostics.dart` 的
+  `DiagnosticCheckRun`：用户手动触发的一轮分层自检，含固定顺序的结果 + 起止时间 +
+  是否取消；同一时间只跑一轮，取消保留已完成结果，运行中项的 `skipped` 表示本轮
+  未执行。打开页面不自动跑、不做后台轮询；运行只产生内存快照，不负责导出、写日志
+  或上传。
+- **Diagnostic issue group（问题组）** — `DiagnosticIssueGroup` + `groupDiagnosticFailures`：
+  最近失败记录按「同渠道 + 同失败类别」聚合的只读投影（次数、首次 / 最近时间、渠道
+  展示名、l10nKey、可重试性；组内描述取最近一条，渠道改名不重写历史）。页面与报告
+  只展示组，展开才看单次记录；聚合不改写缓冲，也不新增持久化。
+- **Diagnostic report（诊断报告）** — `lib/services/diagnostics/diagnostics_bundle.dart`
+  组装的纯文本报告（环境、自检结论、问题组、数据库计数、日志尾部），
+  `diagnostics_export.dart` 在后台 isolate 读取 / 脱敏 / 生成字节。默认只落本机；
+  预览 / 复制 / 保存 / 分享三档共用同一组装实现与脱敏：预览 64 KB、复制 128 KB
+  （只含结论、问题组与日志末尾）、保存 / 分享沿用 20MB 硬上限；报告是快照，
+  不是实时视图，永不自动上传。
+- **Session marker（运行标记）** — `DiagnosticSessionInfo` / `DiagnosticSessionPhase`
+  （`lib/domain/models/diagnostics.dart`，状态由 `lib/services/diagnostics/` 落盘）：
+  启动与前后台切换记录最后可见阶段（前台 / 后台 / 已正常关闭）；下次启动读到上次
+  仍停在前台时，状态摘要与诊断报告给出「上次可能异常退出」并指向日志尾部（后台被
+  系统回收不算异常）。只存时间、版本与阶段，不同步、不含设备名 / 账号 / 使用行为，
+  不构成遥测。
+- **Diagnostic log entry（诊断日志条目）** — `DiagnosticLogEntry`：轮转日志里的一条
+  记录（时间 / 级别 / logger / 已脱敏正文与续行），落盘前由 `redactSecrets` 处理
+  （格式由日志 sink 固定）。日志查看器与诊断报告共用同一有界尾部读取路径，查看器
+  只做级别 / 文本筛选，不改写磁盘；条目不是结构化事件，不承担统计或同步。
+- **Playback attempt（播放恢复尝试）** — `PlaybackAttempt` / `PlaybackAttemptPhase`：
+  恢复链里的一次阶段记录（失效取链缓存 → 原地重取 → 整首重试 → 自动换源），只作为
+  诊断字段进入播放检查详情与问题记录，用来区分链路第几步失败；不改变恢复策略，
+  也不是统计口径的 **Play event**（一次实际播放），两者名称不互用。
 
 ## 播放
 

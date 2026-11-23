@@ -57,12 +57,13 @@ void main() {
     expect(commits, 1);
   });
 
-  test('commitBeforeQuit 在销毁窗口前调用状态切换钩子', () async {
+  test('commitBeforeQuit 在销毁窗口前调用收尾与状态切换钩子', () async {
     final order = <String>[];
     await commitBeforeQuit(
       commitSession: () async => order.add('session'),
       shutdownAudio: () async => order.add('audio'),
       flushStatistics: () => order.add('statistics'),
+      beforeQuit: () async => order.add('before-quit'),
       onBeforeQuitWindow: () => order.add('before-window-quit'),
       quitWindow: () async => order.add('quit-window'),
     );
@@ -70,9 +71,40 @@ void main() {
       'session',
       'audio',
       'statistics',
+      'before-quit',
       'before-window-quit',
       'quit-window',
     ]);
+  });
+
+  test('退出前收尾钩子抛错仍继续销毁窗口', () async {
+    final order = <String>[];
+    await commitBeforeQuit(
+      commitSession: () async {},
+      flushStatistics: () {},
+      beforeQuit: () async {
+        order.add('before-quit');
+        throw StateError('marker failed');
+      },
+      onBeforeQuitWindow: () => order.add('before-window-quit'),
+      quitWindow: () async => order.add('quit-window'),
+    );
+    expect(order, <String>['before-quit', 'before-window-quit', 'quit-window']);
+  });
+
+  test('退出前收尾钩子超时仍继续销毁窗口', () async {
+    final pending = Completer<void>();
+    final order = <String>[];
+    await commitBeforeQuit(
+      commitSession: () async {},
+      flushStatistics: () {},
+      beforeQuit: () => pending.future,
+      beforeQuitTimeout: const Duration(milliseconds: 10),
+      onBeforeQuitWindow: () => order.add('before-window-quit'),
+      quitWindow: () async => order.add('quit-window'),
+    );
+    expect(order, <String>['before-window-quit', 'quit-window']);
+    pending.complete();
   });
 
   test('提交失败会复位门闩，下一次退出请求可以重试', () async {

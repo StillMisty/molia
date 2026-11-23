@@ -12,12 +12,14 @@ import 'package:flutter/widgets.dart';
 import '../../data/diagnostics/database_counts.dart';
 import '../../data/diagnostics/settings_snapshot.dart';
 import '../../data/diagnostics/source_snapshot.dart';
+import '../../playback/desktop_audio_init.dart' show desktopAudioAvailable;
 import '../../providers/sync_ui_state.dart';
 import '../../services/data_saver_service.dart';
 import '../../services/diagnostics/app_info.dart';
 import '../../services/diagnostics/diagnostics_export.dart';
 import '../../services/update/update_preferences.dart';
 import 'app_dependencies.dart';
+import 'diagnostics_checks.dart';
 import 'startup_trace.dart';
 import 'sync_stack.dart';
 import 'update_stack.dart';
@@ -110,12 +112,14 @@ Future<AuxStacks> buildAuxStacks({
 
   // 诊断导出器：设置 / 渠道 / 数据库 / 更新信息由注入的 gatherer 读取；
   // 日志读取、脱敏与组装在后台 isolate 完成。未打开诊断页时不执行。
+  // 包信息 gatherer 与统一检查共用同一实例（内部缓存一次读取）。
+  final appInfoGatherer = DiagnosticsAppInfoGatherer(
+    updateChannel: () => update.provider.channel.wireName,
+    updateAutoCheck: () => update.provider.anyAutoCheckEnabled,
+  );
   final diagnosticsExporter = DiagnosticsExporter(
     service: platform.diagnostics.service,
-    appInfo: DiagnosticsAppInfoGatherer(
-      updateChannel: () => update.provider.channel.wireName,
-      updateAutoCheck: () => update.provider.anyAutoCheckEnabled,
-    ),
+    appInfo: appInfoGatherer,
     settings: () => gatherDiagnosticsSettings(
       registry: catalog.settings,
       sync: _diagnosticsSyncInfo(sync.provider.state),
@@ -133,6 +137,18 @@ Future<AuxStacks> buildAuxStacks({
     database: gatherDiagnosticsDatabaseCounts,
     logDirectory: platform.diagnostics.logSink.directory,
   );
+  // 统一检查执行器：五域检查在 runApp 前挂到同一个诊断服务上。渠道检查
+  // 复用 `buildCoreStacks` 已 attach 的健康检查器（不另建探针）；runner 的
+  // 单项超时覆盖整组渠道的最坏情况，避免默认 10s 截断。
+  platform.diagnostics.service.attachRunner(
+    buildDiagnosticsRunner(
+      service: platform.diagnostics.service,
+      catalog: catalog,
+      syncProvider: sync.provider,
+      loadAppInfo: appInfoGatherer.load,
+      desktopAudioAvailable: desktopAudioAvailable,
+    ),
+  );
 
   // 生命周期扇出与托盘存在态：先建协调者与前后台回调，再挂托盘监听
   // （不可见时补防抖写 + trim），最后接原生 AppLifecycleListener。
@@ -145,10 +161,12 @@ Future<AuxStacks> buildAuxStacks({
     display: features.display,
     powerPolicy: platform.powerPolicy,
     mobilePowerPolicy: platform.mobilePowerPolicy,
+    diagnostics: platform.diagnostics.service,
   );
   wireTrayPresence(
     playback: playback,
     flushDeferredWrites: lifecycle.flushDeferredWrites,
+    diagnostics: platform.diagnostics.service,
   );
   lifecycle.install(
     desktop: features.desktop,

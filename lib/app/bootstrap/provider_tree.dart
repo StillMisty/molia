@@ -40,6 +40,7 @@ import '../../services/download/download_requests.dart';
 import '../../services/download/download_maintenance.dart';
 import '../../services/diagnostics/diagnostics_export.dart';
 import '../../services/diagnostics/diagnostics_service.dart';
+import '../../services/diagnostics/log_tail_reader.dart';
 import '../../services/download/download_manager.dart';
 import '../../services/download/download_records.dart';
 import '../../services/local/local_library_service.dart';
@@ -112,12 +113,17 @@ List<SingleChildWidget> buildAppProviders({
   return [
     Provider<SaveAs>.value(value: saveAs),
     // 问题排查页：服务由组合根持有；provider 只在这里暴露快照与导出动作。
+    // 日志尾部读取与落盘共用同一个 sink 目录，不在这里复制目录规则。
     ChangeNotifierProvider(
       create: (_) => DiagnosticsProvider(
         service: diagnosticsService,
         builder: diagnosticsExporter,
         saveAs: saveAs,
         appInfo: diagnosticsExporter.appInfo.load,
+        restartEngine: () => sourceManager.retryEngine(),
+        logReader: LogTailReader(
+          directory: diagnosticsService.logSink?.directory ?? () async => null,
+        ),
       ),
     ),
     ChangeNotifierProvider.value(value: sourceManager),

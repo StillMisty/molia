@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
+import 'package:molia/domain/models/diagnostics.dart'
+    show PlaybackAttemptRecorder;
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/ports/library_store.dart';
@@ -451,6 +453,7 @@ PlaybackProvider buildTestPlaybackProvider({
   PlaybackFeelStore? feelStore,
   Future<Set<String>> Function()? recentTrackIds,
   bool Function()? smartShuffleEnabled,
+  PlaybackAttemptRecorder? attempts,
 }) {
   final playbackFacade = facade ?? FakePlaybackFacade();
   // 设置注册表一处实例：provider 的重载钩子与协调者的读取同源（组合根口径）。
@@ -481,6 +484,7 @@ PlaybackProvider buildTestPlaybackProvider({
     settings: registry,
     volumePersistDebounce: volumePersistDebounce,
     feelStore: feelStore,
+    attempts: attempts,
   );
   // 与组合根同构：provider 先订阅、观察者后挂接（facade 监听顺序一致）。
   observer.attach();

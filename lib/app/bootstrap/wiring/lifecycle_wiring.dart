@@ -10,6 +10,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../../../playback/playback_power_policy.dart';
+import '../../../services/diagnostics/diagnostics_service.dart';
 import '../../../services/memory/app_memory_manager.dart';
 import '../../app_lifecycle_coordinator.dart';
 import '../desktop_stack.dart';
@@ -77,19 +78,32 @@ class LifecycleWiring {
       },
       onPause: () => onAppBackground(paused: true),
       onHide: onAppBackground,
-      // 进程销毁：关掉文件日志（有界刷盘）+ 取消音源引擎的网络恢复订阅，
-      // 不影响系统回收速度。
+      // 进程销毁：先写「已正常关闭」再释放诊断（有界，不拖住系统回收），
+      // 同时取消音源引擎的网络恢复订阅。
       onDetach: () {
         unawaited(sourceEngineRecovery.dispose());
-        unawaited(diagnostics.service.dispose());
+        unawaited(_detachDiagnostics(diagnostics));
       },
     );
+  }
+
+  /// 退出标记先于 dispose：异常退出判定依赖这次写入；存储卡住最多等 1s。
+  Future<void> _detachDiagnostics(DiagnosticsStack diagnostics) async {
+    try {
+      await diagnostics.service.session.onDetached().timeout(
+        const Duration(seconds: 1),
+      );
+    } catch (_) {
+      // 退出路径有界：写标记失败不能拖住进程销毁。
+    }
+    await diagnostics.service.dispose();
   }
 }
 
 /// 建生命周期协调者并注册各子系统的前后台反应。
 ///
-/// 注册顺序与拆分前一致：同步 → 更新 → 省流网络刷新 → 播放会话 / 统计落盘。
+/// 注册顺序与拆分前一致：同步 → 更新 → 省流网络刷新 → 播放会话 / 统计落盘；
+/// 诊断会话标记排在最前（它只写本地设置，不依赖其它子系统）。
 LifecycleWiring buildLifecycleWiring({
   required LocalDataStack local,
   required LibraryStack library,
@@ -99,8 +113,16 @@ LifecycleWiring buildLifecycleWiring({
   required LyricsDisplayStack display,
   required PlaybackPowerPolicy powerPolicy,
   required bool mobilePowerPolicy,
+  required DiagnosticsService diagnostics,
 }) {
   final appLifecycle = AppLifecycleCoordinator()
+    ..register(
+      AppLifecycleParticipant(
+        onResumed: diagnostics.session.onResumed,
+        onHidden: diagnostics.session.onHidden,
+        onPaused: diagnostics.session.onPaused,
+      ),
+    )
     ..register(
       AppLifecycleParticipant(
         onResumed: sync.provider.onAppResumed,

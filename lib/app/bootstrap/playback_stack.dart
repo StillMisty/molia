@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../domain/ports/playback_facade.dart';
 import '../../domain/ports/ui_messenger.dart';
+import '../../domain/models/diagnostics.dart' show PlaybackAttemptRecorder;
 import '../../data/settings/settings_keys.dart';
 import '../../data/settings/settings_module.dart';
 import '../../data/settings/settings_registry.dart';
@@ -91,6 +92,7 @@ Future<PlaybackStack> buildPlaybackStack({
   PlaybackFacade? facade,
   PlaybackPowerPolicy? powerPolicy,
   FailureRecorder? failures,
+  PlaybackAttemptRecorder? attempts,
 }) async {
   final sourceManager = catalog.sourceManager;
   final dataSaver = local.dataSaver;
@@ -220,6 +222,7 @@ Future<PlaybackStack> buildPlaybackStack({
         .findMatch(track, excludeSourceKeys: excludeSourceKeys),
     onAutoSourceSwapped: covers.carryOver,
     failures: failures,
+    attempts: attempts,
   );
   playbackObserver.attach();
 

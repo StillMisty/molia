@@ -12,6 +12,7 @@ import '../data/settings/settings_keys.dart';
 import '../data/mapping/track_mapper.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/playback_feel.dart';
+import '../domain/models/diagnostics.dart' show PlaybackAttemptRecorder;
 import '../domain/models/track.dart';
 import '../domain/ports/playback_facade.dart';
 import '../domain/ports/state_listenable.dart';
@@ -168,6 +169,7 @@ class PlaybackProvider extends ChangeNotifier {
     AutoSourceSwapResolver? autoSwapResolver,
     AutoSourceSwapTrackHook? onAutoSourceSwapped,
     FailureRecorder? failures,
+    PlaybackAttemptRecorder? attempts,
     required this._settings,
     bool Function()? isForeground,
     // 仅在测试里压短；生产用默认 400ms（见 [_volumePersistDebounce]）。
@@ -184,6 +186,7 @@ class PlaybackProvider extends ChangeNotifier {
       autoSwapResolver: autoSwapResolver,
       onAutoSourceSwapped: onAutoSourceSwapped,
       failures: failures,
+      attempts: attempts,
       channelDisplayName: _channelDisplayName,
     );
     _notifyThrottler = CategorizedNotifyThrottler(

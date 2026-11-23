@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
+import 'package:molia/domain/models/diagnostics.dart'
+    show PlaybackAttemptPhase, PlaybackAttemptRecorder;
 import 'package:molia/domain/ports/playback_facade.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
@@ -12,6 +14,7 @@ import 'package:molia/playback/playback_error_recovery.dart';
 import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/diagnostics/failure_ring_buffer.dart';
+import 'package:molia/services/diagnostics/playback_attempt_log.dart';
 import 'package:molia/services/playback_session_store.dart';
 import 'package:molia/services/source_swap/source_swap_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -456,6 +459,7 @@ void main() {
       Future<Track?> Function(Track seed, Set<String> exclude)? resolver,
       SourceSwapSettings? swapSettings,
       FailureRecorder? failures,
+      PlaybackAttemptRecorder? attempts,
       int provenanceCap = 64,
     }) {
       final commands = _RecordingCommands();
@@ -479,6 +483,7 @@ void main() {
           swapped.add((oldTrack, newTrack));
         },
         failures: failures,
+        attempts: attempts,
         provenanceCap: provenanceCap,
       );
       return (
@@ -751,6 +756,103 @@ void main() {
 
       expect(h.calls.last.uri, 's1:a');
       expect(h.calls.last.exclude, {'s1'}, reason: '最早条目已被 cap 淘汰');
+    });
+
+    test('恢复链记录类型化 attempt：重取 / 重试 / 换源成功', () async {
+      final failing = track('fake', 'a');
+      final replacement = track('kg', 'a');
+      final log = PlaybackAttemptLog();
+      final h = buildRecovery(
+        attempts: log,
+        resolver: (seed, exclude) async => replacement,
+      );
+      h.box.value = failureSnapshot(failing);
+
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+
+      expect(log.attempts.map((attempt) => attempt.phase), [
+        PlaybackAttemptPhase.reload,
+        PlaybackAttemptPhase.retry,
+        PlaybackAttemptPhase.autoSwap,
+      ]);
+      expect(log.attempts.every((attempt) => attempt.succeeded), isTrue);
+      expect(
+        log.attempts.every((attempt) => attempt.sourceKey == 'fake'),
+        isTrue,
+      );
+      expect(
+        log.attempts.any((attempt) => attempt.toString().contains('Title a')),
+        isFalse,
+        reason: 'attempt 不含曲目标题 / payload / URL',
+      );
+    });
+
+    test('命令失败与无匹配都记录 failed attempt（类型化 failure）', () async {
+      final failing = track('fake', 'a');
+      final replacement = track('kg', 'a');
+      final log = PlaybackAttemptLog();
+      final h = buildRecovery(
+        attempts: log,
+        resolver: (seed, exclude) async => replacement,
+      );
+      h.commands.reloadError = StateError('reload failed');
+      h.commands.playError = StateError('play failed');
+      h.commands.replaceError = StateError('replace failed');
+      h.box.value = failureSnapshot(failing);
+
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+
+      expect(log.attempts, hasLength(3));
+      expect(log.attempts.every((attempt) => attempt.succeeded), isFalse);
+      expect(log.attempts.map((attempt) => attempt.failure?.kind), [
+        FailureKind.unknown,
+        FailureKind.unknown,
+        FailureKind.unknown,
+      ]);
+
+      final noMatchLog = PlaybackAttemptLog();
+      final noMatch = buildRecovery(attempts: noMatchLog);
+      noMatch.box.value = failureSnapshot(failing);
+      noMatch.recovery.onPlaybackError(noMatch.box.value);
+      await pumpEventQueue();
+
+      expect(noMatchLog.attempts, hasLength(3));
+      expect(noMatchLog.attempts.last.phase, PlaybackAttemptPhase.autoSwap);
+      expect(noMatchLog.attempts.last.succeeded, isFalse);
+      expect(noMatchLog.attempts.last.failure?.kind, FailureKind.network);
+    });
+
+    test('PlaybackProvider 注入 attempts 后失败恢复写入同一日志', () async {
+      final backend = FakePlaybackFacade();
+      final log = PlaybackAttemptLog();
+      final provider = buildTestPlaybackProvider(
+        facade: backend,
+        attempts: log,
+      );
+      addTearDown(provider.dispose);
+      await provider.preferencesReady;
+
+      final failing = track('fake', 'a');
+      backend.emit(
+        PlaybackSnapshot(
+          current: failing,
+          queue: [failing],
+          currentIndex: 0,
+          error: networkFailure,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(
+        log.attempts.map((attempt) => attempt.phase),
+        contains(PlaybackAttemptPhase.reload),
+      );
+      expect(
+        log.attempts.every((attempt) => attempt.sourceKey == 'fake'),
+        isTrue,
+      );
     });
   });
 }

@@ -32,6 +32,10 @@ Future<FeatureStacks> buildFeatureStacks({
     playStatisticsService: library.playStatisticsService,
     // 退出前先让音频设备停下来，再销毁窗口（Windows 上避免爆音）。
     shutdownAudio: playback.localPlaybackService?.shutdownAudioForQuit,
+    // 桌面正常退出不一定触发生命周期 `onDetach`（托盘退出 / 更新重启 /
+    // 系统退出请求）；在销毁窗口前补写「已正常关闭」，避免下次启动误报
+    // 异常退出。`onDetach` 仍保留兜底。
+    beforeQuit: () => platform.diagnostics.service.session.onDetached(),
   ).whenComplete(() => markStartupStep('sub.desktop.build', desktopWatch));
   final ai = buildAiStack(
     catalog: catalog,

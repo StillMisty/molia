@@ -14,6 +14,12 @@ import 'diagnostics_bundle.dart';
 import '../../domain/models/diagnostics.dart';
 import 'diagnostics_service.dart';
 
+/// 复制诊断包时使用的独立小上限（ADR-0040）。
+///
+/// 与导出文件的 20 MB 上限分开：复制到剪贴板不需要整份日志，较小上限能让
+/// 失败更快、占用更少，同时保留完整报告的前置段落。
+const int diagnosticsCopyMaxBytes = 128 * 1024;
+
 typedef DiagnosticsSettingsGatherer =
     Future<DiagnosticsSettingsSnapshot> Function();
 typedef DiagnosticsSourcesGatherer =
@@ -29,12 +35,14 @@ abstract interface class DiagnosticsBundleBuilder {
     double? screenWidth,
     double? screenHeight,
     double? devicePixelRatio,
+    int maxBytes = defaultDiagnosticsBundleMaxBytes,
   });
 
   Future<String> buildText({
     double? screenWidth,
     double? screenHeight,
     double? devicePixelRatio,
+    int maxBytes = defaultDiagnosticsBundleMaxBytes,
   });
 }
 
@@ -74,11 +82,13 @@ class DiagnosticsExporter implements DiagnosticsBundleBuilder {
     double? screenWidth,
     double? screenHeight,
     double? devicePixelRatio,
+    int maxBytes = defaultDiagnosticsBundleMaxBytes,
   }) async {
     final job = await _gather(
       screenWidth: screenWidth,
       screenHeight: screenHeight,
       devicePixelRatio: devicePixelRatio,
+      maxBytes: maxBytes,
     );
     if (!runInIsolate) return _renderJobBytes(job);
     try {
@@ -95,11 +105,13 @@ class DiagnosticsExporter implements DiagnosticsBundleBuilder {
     double? screenWidth,
     double? screenHeight,
     double? devicePixelRatio,
+    int maxBytes = defaultDiagnosticsBundleMaxBytes,
   }) async => utf8.decode(
     await buildBytes(
       screenWidth: screenWidth,
       screenHeight: screenHeight,
       devicePixelRatio: devicePixelRatio,
+      maxBytes: maxBytes,
     ),
   );
 
@@ -107,6 +119,7 @@ class DiagnosticsExporter implements DiagnosticsBundleBuilder {
     double? screenWidth,
     double? screenHeight,
     double? devicePixelRatio,
+    int maxBytes = defaultDiagnosticsBundleMaxBytes,
   }) async {
     final app = (await appInfo.load()).copyWith(
       screenWidth: screenWidth,
@@ -136,12 +149,12 @@ class DiagnosticsExporter implements DiagnosticsBundleBuilder {
     } catch (_) {
       databaseNote = 'Database counts unavailable.';
     }
-    // 导出前把队列里的最后一批日志落盘，避免漏掉最近约 1 秒的记录。
-    // flush 自身有界且不抛异常；日志不可用时只影响日志段。
+    // 导出前把队列里的最后一批日志落盘，并 flush 问题历史（去抖中的写入），
+    // 避免漏掉最近约 1 秒的记录。两者自身有界且不抛异常；不可用只影响对应段。
     try {
-      await service.logSink?.flush();
+      await service.flushPendingWrites();
     } catch (_) {
-      // 日志不可用不阻塞其余诊断段。
+      // 日志 / 历史不可用不阻塞其余诊断段。
     }
     Directory? logDir;
     try {
@@ -157,9 +170,14 @@ class DiagnosticsExporter implements DiagnosticsBundleBuilder {
       sources: sourcesSnapshot,
       failures: List<DiagnosticFailureRecord>.of(service.failures.records),
       healthRuns: List<HealthRun>.of(service.healthRuns),
+      checks: List<DiagnosticCheckRun>.of(service.checkRuns),
+      session: service.sessionInfo,
+      playbackAttempts: List<PlaybackAttempt>.of(service.playbackAttempts),
+      issues: List<DiagnosticIssueGroup>.of(service.issues),
       database: databaseSnapshot,
       databaseNote: databaseNote,
       logDirectoryPath: logDir?.path,
+      maxBytes: maxBytes,
     );
   }
 }
@@ -173,9 +191,14 @@ class _BundleJob {
     required this.sources,
     required this.failures,
     required this.healthRuns,
+    required this.checks,
+    required this.session,
+    required this.playbackAttempts,
+    required this.issues,
     required this.database,
     required this.databaseNote,
     required this.logDirectoryPath,
+    required this.maxBytes,
   });
 
   final DateTime generatedAt;
@@ -185,9 +208,14 @@ class _BundleJob {
   final DiagnosticsSourcesSnapshot sources;
   final List<DiagnosticFailureRecord> failures;
   final List<HealthRun> healthRuns;
+  final List<DiagnosticCheckRun> checks;
+  final DiagnosticSessionInfo? session;
+  final List<PlaybackAttempt> playbackAttempts;
+  final List<DiagnosticIssueGroup> issues;
   final DiagnosticsDatabaseCounts? database;
   final String? databaseNote;
   final String? logDirectoryPath;
+  final int maxBytes;
 }
 
 Uint8List _renderJobBytes(_BundleJob job) =>
@@ -233,6 +261,10 @@ String _renderJob(_BundleJob job) {
     sources: job.sources,
     failures: job.failures,
     healthRuns: job.healthRuns,
+    checks: job.checks,
+    session: job.session,
+    playbackAttempts: job.playbackAttempts,
+    issues: job.issues,
     database: job.database,
     databaseNote: job.databaseNote,
     logs: logs,
@@ -243,7 +275,7 @@ String _renderJob(_BundleJob job) {
       ?Platform.environment['LOCALAPPDATA'],
     ],
   );
-  return renderDiagnosticsBundle(data);
+  return renderDiagnosticsBundle(data, maxBytes: job.maxBytes);
 }
 
 /// 活动文件最后、归档从旧到新（`molia.2.log` → `molia.1.log` → `molia.log`）。

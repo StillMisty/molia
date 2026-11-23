@@ -1,29 +1,34 @@
 import 'dart:async';
 
-import 'package:intl/intl.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../domain/models/diagnostics.dart';
-import '../domain/models/failure.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/diagnostics_provider.dart';
+import '../services/notification_permission.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
+import '../widgets/diagnostics/diagnostics_check_detail.dart';
+import '../widgets/diagnostics/diagnostics_check_section.dart';
+import '../widgets/diagnostics/diagnostics_issue_detail.dart';
+import '../widgets/diagnostics/diagnostics_issue_section.dart';
+import '../widgets/diagnostics/diagnostics_report_section.dart';
+import '../widgets/diagnostics/diagnostics_session_section.dart';
+import '../widgets/diagnostics/diagnostics_summary_card.dart';
 import '../widgets/labels/save_as_label.dart';
-import '../widgets/card_list_surface.dart';
-import '../widgets/empty_state.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
+import 'bili_account_page.dart';
+import 'diagnostics_log_page.dart';
+import 'sources_page.dart';
+import 'sync_settings_page.dart';
 
-// 固定 pattern 与 locale 无关，按模块复用：渠道检查行与失败行共用同一实例。
-final DateFormat _shortTimeFormat = DateFormat('MM-dd HH:mm');
-
-/// 问题排查页：概览 / 最近问题 / 渠道检查 / 导出一个主操作。
+/// 问题排查页：支持中心定位，顺序为状态摘要 → 检查结果 → 最近问题 →
+/// 本次运行 → 报告与日志。
 ///
-/// 只读内存快照与一次包信息读取；打开页面不触发渠道检查、数据库扫描或
-/// 日志读取。没有图表、日志查看器、筛选器或新的导航入口。
+/// 打开页面只读一次包信息；不自动跑检查、不扫库、不读日志。所有自检由用户
+/// 点击主按钮触发，各分区独立订阅 provider 的窄 notifier。
 class DiagnosticsPage extends StatefulWidget {
   const DiagnosticsPage({super.key});
 
@@ -36,280 +41,134 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
   void initState() {
     super.initState();
     // 包信息是轻量平台元数据，不联网、不扫盘；只读一次。
-    context.read<DiagnosticsProvider>().ensureAppInfo();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<DiagnosticsProvider>().ensureAppInfo();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // 每个分区独立监听：健康检查逐条到达时只重建渠道段，不重建整页。
     final provider = context.read<DiagnosticsProvider>();
     return SettingsSubPage(
       title: l10n.diagnosticsTitle,
       actions: [
-        // 导出是辅助动作，收进顶栏；页面唯一的按钮留给「检查渠道」。
-        ListenableBuilder(
-          listenable: provider,
-          builder: (context, _) => M3EIconButton(
-            key: const Key('diagnosticsExportButton'),
+        ValueListenableBuilder<DiagnosticsReportState>(
+          valueListenable: provider.reportState,
+          builder: (context, report, _) => M3EIconButton(
+            key: const Key('diagnosticsCopyReportAction'),
             variant: M3EIconButtonVariant.standard,
             icon: Icon(
-              provider.isExporting
+              report.busy
                   ? Icons.hourglass_top_rounded
-                  : Icons.save_alt_rounded,
+                  : Icons.content_copy_rounded,
             ),
-            semanticLabel: l10n.diagnosticsExportAction,
-            onPressed: provider.isExporting
+            semanticLabel: l10n.diagnosticsCopyReport,
+            onPressed: report.busy
                 ? null
-                : () => unawaited(_runExport(context, l10n)),
+                : () => unawaited(_copyReport(context, provider, l10n)),
           ),
         ),
       ],
       children: [
-        ListenableBuilder(
-          listenable: provider,
-          builder: (context, _) => _overview(context, l10n, provider),
+        DiagnosticsSummaryCard(
+          provider: provider,
+          onStart: () => unawaited(_startChecks(context, provider, l10n)),
+          onStop: provider.stopChecks,
+          onOpenLogs: () => _openLogs(context),
         ),
         const SizedBox(height: kSettingsSectionSpacing),
-        ListenableBuilder(
-          listenable: provider,
-          builder: (context, _) => _resolveStats(context, l10n, provider),
-        ),
-        const SizedBox(height: kSettingsSectionSpacing),
-        ListenableBuilder(
-          listenable: provider,
-          builder: (context, _) => _recentIssues(context, l10n, provider),
-        ),
-        const SizedBox(height: kSettingsSectionSpacing),
-        ListenableBuilder(
-          listenable: provider,
-          builder: (context, _) => _channelCheck(context, l10n, provider),
-        ),
-        const SizedBox(height: kSettingsSectionSpacing),
-        // 导出的隐私与提醒留在页尾，不再占一张卡或一个主按钮。
-        SettingsSectionHint(text: l10n.diagnosticsExportPrivacy),
-        const SizedBox(height: 4),
-        SettingsSectionHint(text: l10n.diagnosticsExportWarning),
-      ],
-    );
-  }
-
-  Widget _overview(
-    BuildContext context,
-    AppLocalizations l10n,
-    DiagnosticsProvider provider,
-  ) {
-    final info = provider.appInfo;
-    return SettingsSectionCard(
-      title: l10n.diagnosticsOverviewSection,
-      children: [
-        SettingsInfoTile(
-          icon: Icons.info_rounded,
-          title: l10n.diagnosticsAppVersion,
-          subtitle: info == null
-              ? l10n.diagnosticsLoading
-              : l10n.diagnosticsVersionValue(info.version, info.buildNumber),
-        ),
-        SettingsInfoTile(
-          icon: Icons.devices_rounded,
-          title: l10n.diagnosticsPlatform,
-          subtitle: info == null
-              ? l10n.diagnosticsLoading
-              : l10n.diagnosticsPlatformValue(info.platform, info.osVersion),
-        ),
-        SettingsInfoTile(
-          icon: Icons.receipt_long_rounded,
-          title: l10n.diagnosticsLogStatus,
-          subtitle: _logStatusText(l10n, provider.logStatus),
-        ),
-      ],
-    );
-  }
-
-  /// 本次运行的播放链接统计：只读计数，无按钮、无清空入口。
-  ///
-  /// 失败先给总数，再按类别分行（类别文案与「最近问题」共用同一映射）；
-  /// 计数为 0 的类别不出现，避免整卡片堆满「0 次」。
-  Widget _resolveStats(
-    BuildContext context,
-    AppLocalizations l10n,
-    DiagnosticsProvider provider,
-  ) {
-    final metrics = provider.resolveMetrics;
-    return SettingsSectionCard(
-      title: l10n.diagnosticsResolveSection,
-      footer: SettingsSectionHint(text: l10n.diagnosticsResolveHint),
-      children: [
-        SettingsInfoTile(
-          icon: Icons.bolt_rounded,
-          title: l10n.diagnosticsResolveCalls,
-          subtitle: l10n.diagnosticsResolveCount(metrics.calls),
-        ),
-        SettingsInfoTile(
-          icon: Icons.cached_rounded,
-          title: l10n.diagnosticsResolveCacheHits,
-          subtitle: l10n.diagnosticsResolveCount(metrics.cacheHits),
-        ),
-        SettingsInfoTile(
-          icon: Icons.replay_rounded,
-          title: l10n.diagnosticsResolveRetries,
-          subtitle: l10n.diagnosticsResolveCount(metrics.retries),
-        ),
-        SettingsInfoTile(
-          icon: Icons.error_outline_rounded,
-          title: l10n.diagnosticsResolveFailures,
-          subtitle: l10n.diagnosticsResolveCount(metrics.failures),
-        ),
-        SettingsInfoTile(
-          icon: Icons.timer_off_rounded,
-          title: l10n.diagnosticsResolveTimeouts,
-          subtitle: l10n.diagnosticsResolveCount(metrics.timeouts),
-        ),
-        for (final entry in metrics.failureKinds)
-          SettingsInfoTile(
-            key: ValueKey('diagnosticsResolveFailure-${entry.key.name}'),
-            icon: Icons.report_rounded,
-            title: diagnosticFailureReason(l10n, entry.key),
-            subtitle: l10n.diagnosticsResolveCount(entry.value),
-          ),
-      ],
-    );
-  }
-
-  Widget _recentIssues(
-    BuildContext context,
-    AppLocalizations l10n,
-    DiagnosticsProvider provider,
-  ) {
-    final failures = provider.failures;
-    return SettingsSectionCard(
-      title: l10n.diagnosticsRecentIssuesSection,
-      children: failures.isEmpty
-          ? [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: EmptyState(
-                  icon: Icons.check_circle_outline_rounded,
-                  message: l10n.diagnosticsRecentIssuesEmpty,
-                  hint: l10n.diagnosticsRecentIssuesEmptyHint,
-                ),
-              ),
-            ]
-          : [
-              for (final record in failures.reversed)
-                _FailureRow(key: ValueKey(record), record: record),
-            ],
-    );
-  }
-
-  Widget _channelCheck(
-    BuildContext context,
-    AppLocalizations l10n,
-    DiagnosticsProvider provider,
-  ) {
-    final current = provider.currentHealthRun;
-    final run = current ?? provider.healthRuns.firstOrNull;
-    final running = provider.isChecking;
-    final canCheck = running || provider.canStartCheck;
-    final hasChannels = provider.hasCheckableChannels;
-    final actionLabel = running
-        ? l10n.diagnosticsChannelCheckStop
-        : l10n.diagnosticsChannelCheckStart;
-    return SettingsSectionCard(
-      title: l10n.diagnosticsChannelCheckSection,
-      footer: SettingsSectionHint(text: l10n.diagnosticsChannelCheckHint),
-      children: [
-        if (!hasChannels && (run == null || run.results.isEmpty))
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: EmptyState(
-              icon: Icons.search_off_rounded,
-              message: l10n.diagnosticsChannelCheckNone,
-              hint: l10n.diagnosticsChannelCheckNoneHint,
-            ),
-          )
-        else if (run == null)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: EmptyState(
-              icon: Icons.network_check_rounded,
-              message: l10n.diagnosticsChannelCheckEmpty,
-              hint: l10n.diagnosticsChannelCheckEmptyHint,
-            ),
-          )
-        else ...[
-          for (final result in run.results)
-            _HealthRow(
-              key: ValueKey('${run.startedAt}-${result.channelKey}'),
-              result: result,
-              l10n: l10n,
-            ),
-          if (run.cancelled)
-            SettingsInfoTile(
-              icon: Icons.stop_circle_rounded,
-              title: l10n.diagnosticsChannelCheckSection,
-              subtitle: l10n.diagnosticsChannelStatusCancelled,
-            )
-          else if (run.finishedAt != null)
-            SettingsInfoTile(
-              icon: Icons.schedule_rounded,
-              title: l10n.diagnosticsChannelCheckSection,
-              subtitle: l10n.diagnosticsCheckedAt(
-                _shortTimeFormat.format(run.startedAt),
-              ),
-            ),
-        ],
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: SizedBox(
-            width: double.infinity,
-            child: M3EButton.tonal(
-              key: const Key('diagnosticsCheckButton'),
-              enabled: canCheck,
-              onPressed: () {
-                if (running) {
-                  provider.stopHealthCheck();
-                } else {
-                  unawaited(provider.startHealthCheck());
-                }
-              },
-              semanticLabel: actionLabel,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (running) ...[
-                    M3EProgressIndicator.circular(size: 16, strokeWidth: 2),
-                    const SizedBox(width: 8),
-                  ],
-                  Semantics(
-                    liveRegion: running,
-                    child: Text(
-                      running
-                          ? l10n.diagnosticsChannelCheckRunning
-                          : actionLabel,
-                    ),
-                  ),
-                ],
-              ),
+        DiagnosticsCheckSection(
+          provider: provider,
+          onOpenCheck: (row) => unawaited(
+            showDiagnosticsCheckDetail(
+              context,
+              provider: provider,
+              row: row,
+              onOpenSources: () => _openSources(context),
+              onOpenAccount: () => _openAccount(context),
+              onOpenSync: () => _openSync(context),
+              onOpenNotifications: _openNotifications,
+              onOpenLogs: () => _openLogs(context),
             ),
           ),
         ),
+        const SizedBox(height: kSettingsSectionSpacing),
+        DiagnosticsIssueSection(
+          provider: provider,
+          onOpenIssue: (group) => unawaited(
+            showDiagnosticsIssueDetail(
+              context,
+              provider: provider,
+              group: group,
+              onOpenSources: () => _openSources(context),
+            ),
+          ),
+        ),
+        const SizedBox(height: kSettingsSectionSpacing),
+        DiagnosticsSessionSection(provider: provider),
+        const SizedBox(height: kSettingsSectionSpacing),
+        DiagnosticsReportSection(
+          provider: provider,
+          onPreviewReport: () => unawaited(
+            showDiagnosticsReportSheet(context, provider: provider),
+          ),
+          onCopyReport: () => unawaited(_copyReport(context, provider, l10n)),
+          onSaveReport: () => unawaited(_saveReport(context, provider, l10n)),
+          onShareReport: () => unawaited(_shareReport(context, provider, l10n)),
+          onReportIssue: () => unawaited(_reportIssue(context, provider, l10n)),
+          onOpenLogs: () => _openLogs(context),
+          onRevealLogs: () => unawaited(_revealLogs(context, provider, l10n)),
+        ),
       ],
     );
   }
 
-  Future<void> _runExport(BuildContext context, AppLocalizations l10n) async {
-    final provider = context.read<DiagnosticsProvider>();
+  Future<void> _startChecks(
+    BuildContext context,
+    DiagnosticsProvider provider,
+    AppLocalizations l10n,
+  ) async {
+    final notifications = context.read<NotificationService?>();
+    final ok = await provider.startChecks();
+    if (!ok) {
+      notifications?.showSnackBar(l10n.diagnosticsCheckStartFailed);
+    }
+  }
+
+  Future<void> _copyReport(
+    BuildContext context,
+    DiagnosticsProvider provider,
+    AppLocalizations l10n,
+  ) async {
     final notifications = context.read<NotificationService?>();
     final size = MediaQuery.sizeOf(context);
     final dpr = MediaQuery.devicePixelRatioOf(context);
-    final result = await provider.export(
+    final ok = await provider.copyReport(
+      screenWidth: size.width,
+      screenHeight: size.height,
+      devicePixelRatio: dpr,
+    );
+    notifications?.showSnackBar(
+      ok ? l10n.diagnosticsReportCopied : l10n.diagnosticsReportCopyFailed,
+      isError: !ok,
+    );
+  }
+
+  Future<void> _saveReport(
+    BuildContext context,
+    DiagnosticsProvider provider,
+    AppLocalizations l10n,
+  ) async {
+    final notifications = context.read<NotificationService?>();
+    final size = MediaQuery.sizeOf(context);
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final result = await provider.saveReport(
       dialogTitle: l10n.diagnosticsExportAction,
       screenWidth: size.width,
       screenHeight: size.height,
       devicePixelRatio: dpr,
     );
-    if (!mounted) return;
     switch (result) {
       case SaveAsSaved(:final displayPath, :final kind):
         notifications?.showSuccessSnackBar(
@@ -321,179 +180,95 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
         notifications?.showErrorSnackBar(l10n.saveFailed);
     }
   }
-}
 
-class _FailureRow extends StatelessWidget {
-  const _FailureRow({super.key, required this.record});
-
-  final DiagnosticFailureRecord record;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final m3e = M3ETheme.of(context);
-    final time = _shortTimeFormat.format(record.at);
-    final reason = diagnosticFailureReason(l10n, record.kind);
-    return CardListSurface(
-      position: SettingsRowPosition.of(context),
-      padding: kSettingsRowPadding,
-      onPressed: null,
-      semanticLabel: '$time, ${record.channelDisplayName}, $reason',
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(
-              Icons.error_outline_rounded,
-              size: 18,
-              color: m3e.colorScheme.error,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$time · ${record.channelDisplayName}',
-                  style: m3e.typeScale.bodyMedium,
-                ),
-                Text(
-                  reason,
-                  style: m3e.typeScale.bodySmall.copyWith(
-                    color: m3e.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HealthRow extends StatelessWidget {
-  const _HealthRow({super.key, required this.result, required this.l10n});
-
-  final HealthChannelResult result;
-  final AppLocalizations l10n;
-
-  @override
-  Widget build(BuildContext context) {
-    final m3e = M3ETheme.of(context);
-    final status = result.overallStatus;
-    final isOk = status == HealthStepStatus.ok;
-    final isFailed = status == HealthStepStatus.failed;
-    final failure = isFailed
-        ? (result.search.failure ?? result.resolve?.failure)
-        : null;
-    final detail = <String>[
-      _stepText(l10n, l10n.diagnosticsChannelSearch, result.search),
-      if (result.resolve != null &&
-          result.resolve!.status != HealthStepStatus.skipped)
-        _stepText(l10n, l10n.diagnosticsChannelResolve, result.resolve!),
-      l10n.diagnosticsLatencyMs(result.latencyMs),
-    ].join(' · ');
-    return CardListSurface(
-      position: SettingsRowPosition.of(context),
-      padding: kSettingsRowPadding,
-      onPressed: null,
-      semanticLabel:
-          '${result.channelDisplayName}, ${_statusText(l10n, status, failure)}',
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(
-              isOk
-                  ? Icons.check_circle_outline_rounded
-                  : (isFailed
-                        ? Icons.error_outline_rounded
-                        : Icons.remove_circle_outline_rounded),
-              size: 18,
-              color: isFailed
-                  ? m3e.colorScheme.error
-                  : m3e.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '${result.channelDisplayName} · '
-                  '${_statusText(l10n, status, failure)}',
-                  style: m3e.typeScale.bodyMedium,
-                ),
-                Text(
-                  detail,
-                  style: m3e.typeScale.bodySmall.copyWith(
-                    color: m3e.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _stepText(
+  Future<void> _shareReport(
+    BuildContext context,
+    DiagnosticsProvider provider,
     AppLocalizations l10n,
-    String label,
-    HealthStepResult step,
-  ) {
-    if (step.status == HealthStepStatus.failed && step.failure != null) {
-      return '$label: ${diagnosticFailureReason(l10n, step.failure!.kind)}';
+  ) async {
+    final notifications = context.read<NotificationService?>();
+    final size = MediaQuery.sizeOf(context);
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final result = await provider.shareReport(
+      screenWidth: size.width,
+      screenHeight: size.height,
+      devicePixelRatio: dpr,
+    );
+    switch (result.outcome) {
+      case DiagnosticsShareOutcome.shared:
+        notifications?.showSuccessSnackBar(l10n.diagnosticsReportShared);
+      case DiagnosticsShareOutcome.savedFallback:
+        switch (result.saved) {
+          case SaveAsSaved(:final displayPath):
+            notifications?.showSuccessSnackBar(
+              l10n.diagnosticsReportShareFallback(displayPath),
+            );
+          case SaveAsCancelled():
+            return;
+          case SaveAsFailed():
+          case null:
+            notifications?.showErrorSnackBar(l10n.diagnosticsReportShareFailed);
+        }
+      case DiagnosticsShareOutcome.failed:
+        notifications?.showErrorSnackBar(l10n.diagnosticsReportShareFailed);
     }
-    return '$label: ${_statusText(l10n, step.status, step.failure)}';
   }
-}
 
-/// 失败类别 → 用户文案（不展示原始异常）。
-String diagnosticFailureReason(AppLocalizations l10n, FailureKind kind) {
-  return switch (kind) {
-    FailureKind.network => l10n.diagnosticsFailureNetwork,
-    FailureKind.timeout => l10n.diagnosticsFailureTimeout,
-    FailureKind.unsupported => l10n.diagnosticsFailureUnsupported,
-    FailureKind.notFound => l10n.diagnosticsFailureNotFound,
-    FailureKind.unauthorized => l10n.diagnosticsFailureUnauthorized,
-    FailureKind.rateLimited => l10n.diagnosticsFailureRateLimited,
-    FailureKind.scriptError => l10n.diagnosticsFailureScript,
-    FailureKind.engineRestarting => l10n.diagnosticsFailureEngineRestarting,
-    FailureKind.cancelled => l10n.diagnosticsFailureCancelled,
-    FailureKind.playback => l10n.diagnosticsFailurePlayback,
-    FailureKind.unknown => l10n.diagnosticsFailureUnknown,
-  };
-}
-
-String _statusText(
-  AppLocalizations l10n,
-  HealthStepStatus status,
-  HealthFailure? failure,
-) {
-  if (status == HealthStepStatus.failed && failure != null) {
-    return diagnosticFailureReason(l10n, failure.kind);
+  Future<void> _reportIssue(
+    BuildContext context,
+    DiagnosticsProvider provider,
+    AppLocalizations l10n,
+  ) async {
+    final notifications = context.read<NotificationService?>();
+    final info = provider.appInfo.value;
+    final size = MediaQuery.sizeOf(context);
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final outcome = await provider.reportIssue(
+      version: info?.version ?? 'unknown',
+      platform: info?.platform ?? 'unknown',
+      screenWidth: size.width,
+      screenHeight: size.height,
+      devicePixelRatio: dpr,
+    );
+    switch (outcome) {
+      case DiagnosticsReportIssueOutcome.copiedAndOpened:
+        notifications?.showSuccessSnackBar(l10n.diagnosticsReportIssueOpened);
+      case DiagnosticsReportIssueOutcome.copiedButOpenFailed:
+        notifications?.showSnackBar(l10n.diagnosticsReportIssueOpenFailed);
+      case DiagnosticsReportIssueOutcome.copyFailed:
+        notifications?.showErrorSnackBar(l10n.diagnosticsReportCopyFailed);
+    }
   }
-  return switch (status) {
-    HealthStepStatus.ok => l10n.diagnosticsChannelStatusOk,
-    HealthStepStatus.empty => l10n.diagnosticsChannelStatusEmpty,
-    HealthStepStatus.failed => l10n.diagnosticsFailureUnknown,
-    HealthStepStatus.skipped => l10n.diagnosticsChannelStatusCancelled,
-  };
-}
 
-String _logStatusText(AppLocalizations l10n, DiagnosticLogStatus status) {
-  return switch (status) {
-    DiagnosticLogStatus.recording => l10n.diagnosticsLogRecording,
-    DiagnosticLogStatus.unavailable => l10n.diagnosticsLogUnavailable,
-    DiagnosticLogStatus.stopped => l10n.diagnosticsLogStopped,
-  };
+  Future<void> _revealLogs(
+    BuildContext context,
+    DiagnosticsProvider provider,
+    AppLocalizations l10n,
+  ) async {
+    final notifications = context.read<NotificationService?>();
+    final ok = await provider.revealLogDirectory();
+    if (!ok) {
+      notifications?.showErrorSnackBar(l10n.diagnosticsLogsOpenDirectoryFailed);
+    }
+  }
+
+  void _openLogs(BuildContext context) {
+    unawaited(openSettingsSubPage(context, const DiagnosticsLogPage()));
+  }
+
+  void _openSources(BuildContext context) {
+    unawaited(openSettingsSubPage(context, const SourcesPage()));
+  }
+
+  void _openAccount(BuildContext context) {
+    unawaited(openSettingsSubPage(context, const BiliAccountPage()));
+  }
+
+  void _openSync(BuildContext context) {
+    unawaited(openSettingsSubPage(context, const SyncSettingsPage()));
+  }
+
+  void _openNotifications() {
+    unawaited(NotificationPermission.openSettings());
+  }
 }

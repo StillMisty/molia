@@ -42,8 +42,10 @@ Future<PlatformBootstrap> bootstrapPlatform() async {
   // 日志装配（package:logging 的 handler / level 只在这里和测试配置里设一次）
   initAppLogging();
   // 诊断核心（失败缓冲 + 轮转文件日志）：构造无 I/O；文件 sink 在首次写入时
-  // 才解析应用数据目录，启动不等待磁盘。
+  // 才解析应用数据目录，启动不等待磁盘。历史恢复与会话前台标记立刻起跑：
+  // 必须在 catalog / playback 可能产生失败之前完成，且不能阻塞启动。
   final diagnostics = buildDiagnosticsStack();
+  unawaited(diagnostics.service.initialize());
 
   // 帧统计：默认编译期关闭；`MOLIA_PERF_TRACE=true` 时才注册回调。
   FrameStats.instance.install();

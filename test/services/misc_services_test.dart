@@ -9,6 +9,8 @@ import 'cast_cases.dart' as services_cast;
 import 'cover_image_codec_cases.dart' as services_cover_image_codec;
 import 'device_local_store_cases.dart' as services_device_local_store;
 import 'diagnostics_cases.dart' as services_diagnostics;
+import 'diagnostics_checks_cases.dart' as services_diagnostics_checks;
+import 'diagnostics_core_cases.dart' as services_diagnostics_core;
 import 'escape_claims_cases.dart' as services_escape_claims;
 import 'global_hotkeys_cases.dart' as services_global_hotkeys;
 import 'key_claims_cases.dart' as services_key_claims;
@@ -35,6 +37,8 @@ void main() {
   group('cover image codec', services_cover_image_codec.main);
   group('device local store', services_device_local_store.main);
   group('diagnostics', services_diagnostics.main);
+  group('diagnostics checks', services_diagnostics_checks.main);
+  group('diagnostics core', services_diagnostics_core.main);
   group('escape claims', services_escape_claims.main);
   group('global hotkeys', services_global_hotkeys.main);
   group('key claims', services_key_claims.main);
