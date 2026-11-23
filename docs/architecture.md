@@ -1469,8 +1469,11 @@
   读取日志尾部、脱敏并组装报告，复制 / 预览 / 保存共用同一实现。复制
   `diagnosticsCopyMaxBytes` 128 KB（只含结论、问题组与日志末尾），预览
   `diagnosticsReportPreviewMaxBytes` 64 KB，保存 / 分享 `defaultDiagnosticsBundleMaxBytes`
-  20 MB；分享写临时文件走系统分享，平台不支持时退化为保存。报告默认只在本机生成，
-  不自动上传。
+  20 MB；分享写临时文件走系统分享，平台不支持时退化为保存。页面另有「报告问题」
+  动作：先复制同一份 128 KB 脱敏报告，再打开 GitHub 新建 issue 页面（英文模板
+  title / body），**URL 不含报告正文**，复制失败不打开；结果为
+  `copiedAndOpened` / `copiedButOpenFailed` / `copyFailed` 三态并给类型化提示。
+  报告默认只在本机生成，不自动上传。
 - **日志子页**：`lib/pages/diagnostics_log_page.dart` 是设置 › 问题排查下的只读子页
   （不新增一级导航），经 `LogTailReader` 读取当前与轮转文件的有界尾部（512 KB /
   500 条），级别 / 文本筛选只作用于内存结果；落盘与查看共用同一脱敏规则，不提供
