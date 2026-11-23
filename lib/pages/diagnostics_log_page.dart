@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import '../domain/models/diagnostics.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/diagnostics_provider.dart';
-import '../services/diagnostics/log_tail_reader.dart';
 import '../services/notification_service.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/diagnostics/diagnostics_labels.dart';
@@ -231,7 +230,7 @@ class _DiagnosticsLogPageState extends State<DiagnosticsLogPage> {
       notifications?.showSnackBar(l10n.diagnosticsLogsCopyEmpty);
       return;
     }
-    final ok = await provider.copyPlainText(renderLogEntries(filtered));
+    final ok = await provider.copyLogEntries(filtered);
     notifications?.showSnackBar(
       ok
           ? l10n.diagnosticsLogsCopied(filtered.length)

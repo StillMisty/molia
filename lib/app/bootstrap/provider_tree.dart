@@ -6,14 +6,11 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 
-import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 
 import '../../data/catalog/catalog_service.dart';
-import '../../data/files/app_data_directory.dart';
 import '../../data/play_statistics_repository.dart';
 import '../../domain/ports/album_repository.dart';
 import '../../domain/ports/artist_repository.dart';
@@ -116,7 +113,7 @@ List<SingleChildWidget> buildAppProviders({
   return [
     Provider<SaveAs>.value(value: saveAs),
     // 问题排查页：服务由组合根持有；provider 只在这里暴露快照与导出动作。
-    // 日志尾部读取与诊断栈使用同一应用数据目录（`logs/`），打开页面不读盘。
+    // 日志尾部读取与落盘共用同一个 sink 目录，不在这里复制目录规则。
     ChangeNotifierProvider(
       create: (_) => DiagnosticsProvider(
         service: diagnosticsService,
@@ -125,10 +122,7 @@ List<SingleChildWidget> buildAppProviders({
         appInfo: diagnosticsExporter.appInfo.load,
         restartEngine: () => sourceManager.retryEngine(),
         logReader: LogTailReader(
-          directory: () async {
-            final data = await appDataDirectory();
-            return Directory(p.join(data.path, 'logs'));
-          },
+          directory: diagnosticsService.logSink?.directory ?? () async => null,
         ),
       ),
     ),

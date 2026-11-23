@@ -37,6 +37,9 @@ void main() {
     DiagnosticSessionTracker? session,
     Future<void> Function(String path)? shareFile,
     Future<bool> Function()? restartEngine,
+    DiagnosticsTempFileWriter? writeTempFile,
+    Future<void> Function(String path)? deleteTempFile,
+    List<String>? homeDirectories,
   }) async {
     service = DiagnosticsService(
       failures: FailureRingBuffer(),
@@ -66,6 +69,9 @@ void main() {
       copyText: (text) async => copied.add(text),
       shareFile: shareFile,
       tempDirectory: () async => logDir,
+      writeTempFile: writeTempFile,
+      deleteTempFile: deleteTempFile,
+      homeDirectories: homeDirectories,
       restartEngine: restartEngine,
     );
     addTearDown(() async {
@@ -175,14 +181,55 @@ void main() {
     expect(saveAs.saves.single.fileName, 'molia_diagnostics_test.txt');
   });
 
-  test('分享失败时退化为保存', () async {
+  test('分享成功后清理临时文件', () async {
+    final deleted = <String>[];
+    await buildProvider(
+      shareFile: (_) async {},
+      writeTempFile: (name, bytes) async => '/tmp/$name',
+      deleteTempFile: (path) async => deleted.add(path),
+    );
+    final result = await provider.shareReport();
+    expect(result.outcome, DiagnosticsShareOutcome.shared);
+    expect(deleted, ['/tmp/molia_diagnostics_test.txt']);
+  });
+
+  test('分享失败退化为保存后也清理临时文件', () async {
+    final deleted = <String>[];
     await buildProvider(
       shareFile: (_) async => throw StateError('share unavailable'),
+      writeTempFile: (name, bytes) async => '/tmp/$name',
+      deleteTempFile: (path) async => deleted.add(path),
     );
     final result = await provider.shareReport();
     expect(result.outcome, DiagnosticsShareOutcome.savedFallback);
     expect(result.saved, isA<SaveAsSaved>());
     expect(saveAs.saves, hasLength(1));
+    expect(deleted, ['/tmp/molia_diagnostics_test.txt']);
+  });
+
+  test('全部 skipped 不显示一切正常', () async {
+    await buildProvider(checks: [_SkippedCheck()]);
+    expect(await provider.startChecks(), isTrue);
+    await service.runner!.idle;
+    await pumpEventQueue();
+    expect(provider.summary.value.tone, DiagnosticsSummaryTone.notChecked);
+    expect(provider.summary.value.allSkipped, isTrue);
+  });
+
+  test('复制日志归一化个人目录并脱敏', () async {
+    await buildProvider(homeDirectories: const ['/home/alice']);
+    final entries = [
+      DiagnosticLogEntry(
+        time: DateTime(2026, 11, 23, 10),
+        level: 'INFO',
+        logger: 'molia.test',
+        message: 'read /home/alice/Music/song.mp3 Cookie: SESSDATA=raw-secret',
+      ),
+    ];
+    expect(await provider.copyLogEntries(entries), isTrue);
+    expect(copied.single, contains('~/Music/song.mp3'));
+    expect(copied.single, isNot(contains('/home/alice/')));
+    expect(copied.single, isNot(contains('SESSDATA=raw-secret')));
   });
 
   test('日志只在请求时读取，刷新会重新读盘', () async {
@@ -298,4 +345,28 @@ class _RecordingBuilder implements DiagnosticsBundleBuilder {
 
   @override
   String suggestedFileName([DateTime? at]) => 'molia_diagnostics_test.txt';
+}
+
+class _SkippedCheck implements DiagnosticCheck {
+  @override
+  DiagnosticCheckId get key => DiagnosticCheckId.databaseSchema;
+
+  @override
+  DiagnosticCheckGroup get group => DiagnosticCheckGroup.storage;
+
+  @override
+  bool get requiresNetwork => true;
+
+  @override
+  Future<void> run(DiagnosticCheckContext context) async {
+    context.addResult(
+      DiagnosticCheckResult(
+        id: key,
+        group: group,
+        status: DiagnosticCheckStatus.skipped,
+        at: context.now(),
+        stableValue: 'unknown',
+      ),
+    );
+  }
 }

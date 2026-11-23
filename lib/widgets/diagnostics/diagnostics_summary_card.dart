@@ -15,11 +15,13 @@ class DiagnosticsSummaryCard extends StatelessWidget {
     required this.provider,
     required this.onStart,
     required this.onStop,
+    required this.onOpenLogs,
   });
 
   final DiagnosticsProvider provider;
   final VoidCallback onStart;
   final VoidCallback onStop;
+  final VoidCallback onOpenLogs;
 
   @override
   Widget build(BuildContext context) {
@@ -68,15 +70,19 @@ class DiagnosticsSummaryCard extends StatelessWidget {
       ),
       DiagnosticsSummaryTone.stopped => l10n.diagnosticsSummaryStopped,
     };
-    final hint = switch (summary.tone) {
-      DiagnosticsSummaryTone.notChecked =>
-        l10n.diagnosticsSummaryNotCheckedHint,
-      DiagnosticsSummaryTone.running => l10n.diagnosticsCheckingHint,
-      DiagnosticsSummaryTone.ok => l10n.diagnosticsSummaryOkHint,
-      DiagnosticsSummaryTone.failed => l10n.diagnosticsSummaryFailedHint,
-      DiagnosticsSummaryTone.warning => l10n.diagnosticsSummaryWarningHint,
-      DiagnosticsSummaryTone.stopped => l10n.diagnosticsSummaryStoppedHint,
-    };
+    final hint = summary.allSkipped
+        ? l10n.diagnosticsSummaryAllSkippedHint
+        : switch (summary.tone) {
+            DiagnosticsSummaryTone.notChecked =>
+              l10n.diagnosticsSummaryNotCheckedHint,
+            DiagnosticsSummaryTone.running => l10n.diagnosticsCheckingHint,
+            DiagnosticsSummaryTone.ok => l10n.diagnosticsSummaryOkHint,
+            DiagnosticsSummaryTone.failed => l10n.diagnosticsSummaryFailedHint,
+            DiagnosticsSummaryTone.warning =>
+              l10n.diagnosticsSummaryWarningHint,
+            DiagnosticsSummaryTone.stopped =>
+              l10n.diagnosticsSummaryStoppedHint,
+          };
     final running = summary.tone == DiagnosticsSummaryTone.running;
     final canAct = running || checks.canStart;
     return Column(
@@ -134,13 +140,26 @@ class DiagnosticsSummaryCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  l10n.diagnosticsAbnormalExitTime(
-                    diagnosticShortTime(summary.previousExitAt!),
-                  ),
-                  style: m3e.typeScale.bodySmall.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      l10n.diagnosticsAbnormalExitTime(
+                        diagnosticShortTime(summary.previousExitAt!),
+                      ),
+                      style: m3e.typeScale.bodySmall.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    M3EChip(
+                      key: const Key('diagnosticsSummaryOpenLogs'),
+                      type: M3EChipType.assist,
+                      label: l10n.diagnosticsLogView,
+                      onPressed: onOpenLogs,
+                    ),
+                  ],
                 ),
               ),
             ],

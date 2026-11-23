@@ -4778,6 +4778,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsSummaryNotCheckedHint => '运行一次全面检查，确认搜索、播放和存储是否正常。';
 
   @override
+  String get diagnosticsSummaryAllSkippedHint => '本轮没有实际执行检查，请确认网络或音源已启用。';
+
+  @override
   String get diagnosticsSummaryRunning => '正在检查…';
 
   @override
@@ -4787,7 +4790,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsSummaryOk => '一切正常';
 
   @override
-  String get diagnosticsSummaryOkHint => '搜索、播放、存储和账号同步都正常。';
+  String get diagnosticsSummaryOkHint => '没有发现需要处理的问题。';
 
   @override
   String diagnosticsSummaryFailed(int count) {
@@ -4974,7 +4977,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsStableOk => '正常';
 
   @override
-  String get diagnosticsStableCorrupt => '需要修复';
+  String get diagnosticsStableCorrupt => '完整性检查未通过';
 
   @override
   String get diagnosticsStableOff => '未启用';
@@ -5080,7 +5083,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsCheckDetailSteps => '检查步骤';
 
   @override
-  String get diagnosticsActionRetryCheck => '重新检查';
+  String get diagnosticsActionRetryCheck => '重新检查（全部）';
 
   @override
   String get diagnosticsActionRetryCheckHint => '重新跑一轮全面检查。';
@@ -5421,7 +5424,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagnosticsReportSheetPrivacy => '报告只在本机生成。分享前请确认内容，可能包含歌名和本地路径。';
 
   @override
-  String get diagnosticsReportPreviewTruncated => '预览只显示结论和日志末尾，保存文件可查看完整内容。';
+  String get diagnosticsReportPreviewTruncated => '预览最多显示 64 KB；保存文件可查看完整内容。';
 
   @override
   String get diagnosticsReportCopied => '报告已复制';

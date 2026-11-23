@@ -22,6 +22,7 @@ import 'package:molia/services/diagnostics/failure_ring_buffer.dart';
 import 'package:molia/services/diagnostics/log_tail_reader.dart';
 import 'package:molia/services/diagnostics/resolve_metrics.dart';
 import 'package:molia/services/notification_service.dart';
+import 'package:molia/widgets/diagnostics/diagnostics_check_detail.dart';
 
 import '../support/fake_save_as.dart';
 import '../support/notification_recorder.dart';
@@ -192,6 +193,102 @@ void main() {
     await tester.pumpAndSettle();
     expect(harness.copied.last, contains('酷我'));
     expect(harness.notifications.last, '已复制到剪贴板');
+
+    await tester.tap(find.byKey(const Key('diagnosticsCheckRetry')));
+    await _settle(tester);
+    expect(find.text('检查详情'), findsNothing);
+    await _finishChecks(tester, harness);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('全部跳过不给一切正常结论', (tester) async {
+    final harness = await _Harness.create(checks: [_SkippedCheck()]);
+    addTearDown(harness.dispose);
+    await _pumpPage(tester, harness);
+    await tester.tap(find.byKey(const Key('diagnosticsPrimaryAction')));
+    await _finishChecks(tester, harness);
+    await tester.pumpAndSettle();
+
+    expect(find.text('还没有检查'), findsOneWidget);
+    expect(find.text('本轮没有实际执行检查，请确认网络或音源已启用。'), findsOneWidget);
+    expect(find.text('一切正常'), findsNothing);
+  });
+
+  testWidgets('检查详情的设置动作先关弹层，窄屏不溢出', (tester) async {
+    final harness = await _Harness.create();
+    addTearDown(harness.dispose);
+    final row = buildDiagnosticCheckGroups([
+      DiagnosticCheckResult(
+        id: DiagnosticCheckId.sourceEngine,
+        group: DiagnosticCheckGroup.sources,
+        status: DiagnosticCheckStatus.failed,
+        at: DateTime(2026, 11, 23, 10),
+        failure: const HealthFailure(
+          kind: FailureKind.scriptError,
+          retryable: true,
+        ),
+      ),
+    ]).single.rows.single;
+    var opened = false;
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<DiagnosticsProvider>.value(
+            value: harness.provider,
+          ),
+          Provider<NotificationService>.value(value: harness.notifications),
+        ],
+        child: M3EMaterialApp(
+          data: M3EThemeData.fromMaterial(ThemeData.light()),
+          theme: ThemeData.light(),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: M3EButton.filled(
+                  onPressed: () => showDiagnosticsCheckDetail(
+                    context,
+                    provider: harness.provider,
+                    row: row,
+                    onOpenSources: () => opened = true,
+                    onOpenAccount: () {},
+                    onOpenSync: () {},
+                    onOpenNotifications: () {},
+                    onOpenLogs: () {},
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.text('检查详情'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('diagnosticsCheckOpenSources')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('diagnosticsCheckOpenSources')));
+    await tester.pumpAndSettle();
+    expect(opened, isTrue);
+    expect(find.text('检查详情'), findsNothing);
   });
 
   testWidgets('最近问题按渠道与原因分组，详情可复制', (tester) async {
@@ -241,11 +338,8 @@ void main() {
     expect(harness.notifications.last, '报告已复制');
 
     final saveRow = find.byKey(const Key('diagnosticsSaveReport'));
-    await tester.scrollUntilVisible(
-      saveRow,
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await tester.ensureVisible(saveRow);
+    await tester.pumpAndSettle();
     await tester.tap(saveRow);
     await tester.pumpAndSettle();
     expect(harness.saveAs.saves, hasLength(1));
@@ -253,11 +347,8 @@ void main() {
     expect(harness.notifications.last, isNotEmpty);
 
     final shareRow = find.byKey(const Key('diagnosticsShareReport'));
-    await tester.scrollUntilVisible(
-      shareRow,
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await tester.ensureVisible(shareRow);
+    await tester.pumpAndSettle();
     await tester.tap(shareRow);
     await tester.pumpAndSettle();
     expect(harness.shared, hasLength(1));
@@ -401,6 +492,7 @@ class _Harness {
       copyText: (text) async => copied.add(text),
       shareFile: (path) async => shared.add(path),
       writeTempFile: (name, bytes) async => '/tmp/$name',
+      deleteTempFile: (_) async {},
     );
     return _Harness(
       service: service,
@@ -547,4 +639,28 @@ class _FakeLogReader extends LogTailReader {
 
   @override
   Future<List<DiagnosticLogEntry>> read() async => const [];
+}
+
+class _SkippedCheck implements DiagnosticCheck {
+  @override
+  DiagnosticCheckId get key => DiagnosticCheckId.databaseSchema;
+
+  @override
+  DiagnosticCheckGroup get group => DiagnosticCheckGroup.storage;
+
+  @override
+  bool get requiresNetwork => true;
+
+  @override
+  Future<void> run(DiagnosticCheckContext context) async {
+    context.addResult(
+      DiagnosticCheckResult(
+        id: key,
+        group: group,
+        status: DiagnosticCheckStatus.skipped,
+        at: context.now(),
+        stableValue: 'unknown',
+      ),
+    );
+  }
 }

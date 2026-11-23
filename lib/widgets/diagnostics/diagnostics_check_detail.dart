@@ -72,6 +72,7 @@ Future<void> showDiagnosticsCheckDetail(
               _actionsCard(
                 context,
                 l10n,
+                navigator: navigator,
                 provider: provider,
                 row: row,
                 running: running,
@@ -198,6 +199,7 @@ String? _valueText(AppLocalizations l10n, DiagnosticCheckRow row) {
 Widget _actionsCard(
   BuildContext context,
   AppLocalizations l10n, {
+  required NavigatorState navigator,
   required DiagnosticsProvider provider,
   required DiagnosticCheckRow row,
   required bool running,
@@ -220,7 +222,12 @@ Widget _actionsCard(
         icon: Icons.refresh_rounded,
         title: l10n.diagnosticsActionRetryCheck,
         subtitle: l10n.diagnosticsActionRetryCheckHint,
-        onTap: running ? null : () => unawaited(provider.startChecks()),
+        onTap: running
+            ? null
+            : () => _closeThen(
+                navigator,
+                () => unawaited(provider.startChecks()),
+              ),
       ),
       if (sourceRelated)
         _actionRow(
@@ -238,7 +245,7 @@ Widget _actionsCard(
           icon: Icons.library_music_rounded,
           title: l10n.diagnosticsActionOpenSources,
           subtitle: l10n.diagnosticsActionOpenSourcesHint,
-          onTap: onOpenSources,
+          onTap: () => _closeThen(navigator, onOpenSources),
         ),
       if (id == DiagnosticCheckId.biliAccount)
         _actionRow(
@@ -247,7 +254,7 @@ Widget _actionsCard(
           icon: Icons.person_rounded,
           title: l10n.diagnosticsActionOpenAccount,
           subtitle: l10n.diagnosticsActionOpenAccountHint,
-          onTap: onOpenAccount,
+          onTap: () => _closeThen(navigator, onOpenAccount),
         ),
       if (id == DiagnosticCheckId.syncTransport)
         _actionRow(
@@ -256,7 +263,7 @@ Widget _actionsCard(
           icon: Icons.sync_rounded,
           title: l10n.diagnosticsActionOpenSync,
           subtitle: l10n.diagnosticsActionOpenSyncHint,
-          onTap: onOpenSync,
+          onTap: () => _closeThen(navigator, onOpenSync),
         ),
       if (id == DiagnosticCheckId.notificationPermission)
         _actionRow(
@@ -265,16 +272,17 @@ Widget _actionsCard(
           icon: Icons.notifications_rounded,
           title: l10n.diagnosticsActionOpenNotifications,
           subtitle: l10n.diagnosticsActionOpenNotificationsHint,
-          onTap: onOpenNotifications,
+          onTap: () => _closeThen(navigator, onOpenNotifications),
         ),
-      if (id == DiagnosticCheckId.logWrite)
+      if (id == DiagnosticCheckId.logWrite ||
+          id == DiagnosticCheckId.sessionExit)
         _actionRow(
           context,
           key: const Key('diagnosticsCheckOpenLogs'),
           icon: Icons.receipt_long_rounded,
           title: l10n.diagnosticsActionOpenLogs,
           subtitle: l10n.diagnosticsActionOpenLogsHint,
-          onTap: onOpenLogs,
+          onTap: () => _closeThen(navigator, onOpenLogs),
         ),
       _actionRow(
         context,
@@ -303,6 +311,11 @@ Widget _actionRow(
     subtitle: subtitle,
     onPressed: onTap,
   );
+}
+
+void _closeThen(NavigatorState navigator, VoidCallback action) {
+  navigator.pop();
+  action();
 }
 
 Future<void> _restartEngine(

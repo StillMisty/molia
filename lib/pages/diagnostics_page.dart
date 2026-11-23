@@ -75,6 +75,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
           provider: provider,
           onStart: () => unawaited(_startChecks(context, provider, l10n)),
           onStop: provider.stopChecks,
+          onOpenLogs: () => _openLogs(context),
         ),
         const SizedBox(height: kSettingsSectionSpacing),
         DiagnosticsCheckSection(

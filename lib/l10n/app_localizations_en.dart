@@ -4988,6 +4988,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Run a full check to confirm search, playback, and storage are working.';
 
   @override
+  String get diagnosticsSummaryAllSkippedHint =>
+      'No checks actually ran. Check your network or enabled sources.';
+
+  @override
   String get diagnosticsSummaryRunning => 'Checking…';
 
   @override
@@ -4997,8 +5001,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagnosticsSummaryOk => 'Everything looks normal';
 
   @override
-  String get diagnosticsSummaryOkHint =>
-      'Search, playback, storage, and account sync are working.';
+  String get diagnosticsSummaryOkHint => 'No issues need attention.';
 
   @override
   String diagnosticsSummaryFailed(int count) {
@@ -5192,7 +5195,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagnosticsStableOk => 'Normal';
 
   @override
-  String get diagnosticsStableCorrupt => 'Needs repair';
+  String get diagnosticsStableCorrupt => 'Integrity check failed';
 
   @override
   String get diagnosticsStableOff => 'Off';
@@ -5299,7 +5302,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagnosticsCheckDetailSteps => 'Check steps';
 
   @override
-  String get diagnosticsActionRetryCheck => 'Check again';
+  String get diagnosticsActionRetryCheck => 'Check again (all)';
 
   @override
   String get diagnosticsActionRetryCheckHint => 'Runs another full check.';
@@ -5671,7 +5674,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagnosticsReportPreviewTruncated =>
-      'The preview shows the conclusion and the end of the logs. Save the file to see everything.';
+      'The preview shows up to 64 KB. Save the file to see everything.';
 
   @override
   String get diagnosticsReportCopied => 'Report copied';

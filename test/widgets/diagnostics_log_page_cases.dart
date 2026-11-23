@@ -34,13 +34,13 @@ void main() {
     await _pumpLogPage(tester, harness);
 
     expect(find.text('first info'), findsOneWidget);
-    expect(find.text('cache miss'), findsOneWidget);
+    expect(find.textContaining('cache miss'), findsOneWidget);
     expect(find.textContaining('4 条'), findsOneWidget);
 
     await tester.tap(find.text('警告以上'));
     await _settle(tester);
     expect(find.text('first info'), findsNothing);
-    expect(find.text('cache miss'), findsOneWidget);
+    expect(find.textContaining('cache miss'), findsOneWidget);
     expect(find.text('cache failed'), findsOneWidget);
     expect(find.textContaining('2 条'), findsOneWidget);
 
@@ -49,7 +49,7 @@ void main() {
       'failed',
     );
     await _settle(tester);
-    expect(find.text('cache miss'), findsNothing);
+    expect(find.textContaining('cache miss'), findsNothing);
     expect(find.text('cache failed'), findsOneWidget);
     expect(find.textContaining('1 条'), findsOneWidget);
   });
@@ -57,6 +57,7 @@ void main() {
   testWidgets('复制当前筛选结果', (tester) async {
     final harness = await _LogHarness.create(
       entries: _entries.take(3).toList(),
+      homeDirectories: const ['/home/alice'],
     );
     addTearDown(harness.dispose);
     await _pumpLogPage(tester, harness);
@@ -69,6 +70,9 @@ void main() {
     expect(harness.copied.single, contains('cache miss'));
     expect(harness.copied.single, contains('cache failed'));
     expect(harness.copied.single, isNot(contains('first info')));
+    expect(harness.copied.single, contains('~/Music/a.mp3'));
+    expect(harness.copied.single, isNot(contains('/home/alice/')));
+    expect(harness.copied.single, isNot(contains('SESSDATA=secret')));
     expect(harness.notifications.last, '已复制 2 条日志');
   });
 
@@ -102,7 +106,11 @@ void main() {
 
 final List<DiagnosticLogEntry> _entries = [
   _entry(0, 'INFO', 'first info'),
-  _entry(1, 'WARNING', 'cache miss'),
+  _entry(
+    1,
+    'WARNING',
+    'cache miss /home/alice/Music/a.mp3 Cookie: SESSDATA=secret',
+  ),
   _entry(2, 'SEVERE', 'cache failed'),
   _entry(3, 'FINE', 'detail line'),
 ];
@@ -171,6 +179,7 @@ class _LogHarness {
   static Future<_LogHarness> create({
     List<DiagnosticLogEntry> entries = const [],
     bool unavailable = false,
+    List<String>? homeDirectories,
   }) async {
     final service = DiagnosticsService(
       failures: FailureRingBuffer(),
@@ -184,6 +193,8 @@ class _LogHarness {
       logReader: _FakeLogReader(entries: entries, unavailable: unavailable),
       copyText: (text) async => copied.add(text),
       writeTempFile: (name, bytes) async => '/tmp/$name',
+      deleteTempFile: (_) async {},
+      homeDirectories: homeDirectories,
     );
     return _LogHarness(
       service: service,

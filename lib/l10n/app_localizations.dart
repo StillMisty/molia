@@ -8884,6 +8884,12 @@ abstract class AppLocalizations {
   /// **'Run a full check to confirm search, playback, and storage are working.'**
   String get diagnosticsSummaryNotCheckedHint;
 
+  /// No description provided for @diagnosticsSummaryAllSkippedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'No checks actually ran. Check your network or enabled sources.'**
+  String get diagnosticsSummaryAllSkippedHint;
+
   /// No description provided for @diagnosticsSummaryRunning.
   ///
   /// In en, this message translates to:
@@ -8905,7 +8911,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagnosticsSummaryOkHint.
   ///
   /// In en, this message translates to:
-  /// **'Search, playback, storage, and account sync are working.'**
+  /// **'No issues need attention.'**
   String get diagnosticsSummaryOkHint;
 
   /// No description provided for @diagnosticsSummaryFailed.
@@ -9247,7 +9253,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagnosticsStableCorrupt.
   ///
   /// In en, this message translates to:
-  /// **'Needs repair'**
+  /// **'Integrity check failed'**
   String get diagnosticsStableCorrupt;
 
   /// No description provided for @diagnosticsStableOff.
@@ -9439,7 +9445,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagnosticsActionRetryCheck.
   ///
   /// In en, this message translates to:
-  /// **'Check again'**
+  /// **'Check again (all)'**
   String get diagnosticsActionRetryCheck;
 
   /// No description provided for @diagnosticsActionRetryCheckHint.
@@ -10081,7 +10087,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagnosticsReportPreviewTruncated.
   ///
   /// In en, this message translates to:
-  /// **'The preview shows the conclusion and the end of the logs. Save the file to see everything.'**
+  /// **'The preview shows up to 64 KB. Save the file to see everything.'**
   String get diagnosticsReportPreviewTruncated;
 
   /// No description provided for @diagnosticsReportCopied.
