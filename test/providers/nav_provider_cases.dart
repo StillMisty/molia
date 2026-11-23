@@ -1,5 +1,6 @@
-/// NavProvider 启动首页契约：默认值、持久化往返、显示/隐藏锁定与
-/// 「同步隐藏存储首页」不一致态的兜底（不改写存储、有效值取首个可见项）。
+/// NavProvider 启动首页契约：默认值、持久化往返、显示/隐藏锁定、
+/// 「同步隐藏存储首页」不一致态的兜底，以及生产作用域（按键收窄的
+/// `SettingsScope`）下偏好能完整加载与写回。
 library;
 
 import 'dart:convert';
@@ -7,6 +8,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/device_settings_keys.dart';
 import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_module.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,7 +19,7 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  /// 按真实注册表构造并等待偏好加载（与组合根装配方式一致）。
+  /// 按真实注册表构造并等待偏好加载。
   Future<NavProvider> buildProvider() async {
     final nav = NavProvider(
       settings: testSettingsRegistry(
@@ -28,6 +30,55 @@ void main() {
     addTearDown(nav.dispose);
     return nav;
   }
+
+  /// 按生产装配构造：注册表 + 导航模块作用域（组合根挂载的同一份键表）。
+  ///
+  /// 作用域只放行 [NavProvider.settingsKeys]：provider 若读写表外的键，这里
+  /// 会像生产一样抛错、被加载路径的 catch 吞掉，偏好停在默认值。
+  Future<NavProvider> buildScopedProvider() async {
+    final registry = testSettingsRegistry(
+      preferences: await SharedPreferences.getInstance(),
+    );
+    late final NavProvider nav;
+    final scope = registry.mount(
+      SettingsModule(
+        keys: NavProvider.settingsKeys,
+        reload: () => nav.reloadFromPreferences(),
+      ),
+    );
+    nav = NavProvider(settings: scope);
+    await nav.preferencesReady;
+    addTearDown(nav.dispose);
+    return nav;
+  }
+
+  test('生产作用域：上次页面记录与导航布局一起加载', () async {
+    SharedPreferences.setMockInitialValues({
+      kShellNavLayout.name: jsonEncode({
+        'order': ['favorites', 'library', 'nowPlaying'],
+        'hidden': <String>[],
+        'home': ShellDestination.favorites.name,
+      }),
+      kShellLastDestinationKeyName: ShellDestination.library.name,
+    });
+    final nav = await buildScopedProvider();
+
+    expect(nav.order.first, ShellDestination.favorites);
+    expect(nav.homeDestination, ShellDestination.favorites);
+    expect(nav.startupDestination, ShellDestination.library);
+  });
+
+  test('生产作用域：关闭恢复写入登记键，重建后仍关闭', () async {
+    final nav = await buildScopedProvider();
+    await nav.setRestoreLastDestination(false);
+
+    expect(nav.restoreLastDestination, isFalse);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool(kShellRestoreLastDestination.name), isFalse);
+
+    final reloaded = await buildScopedProvider();
+    expect(reloaded.restoreLastDestination, isFalse);
+  });
 
   test('默认启动首页：nowPlaying，有效值同值', () async {
     final nav = await buildProvider();

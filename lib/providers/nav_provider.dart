@@ -6,6 +6,7 @@ import 'package:logging/logging.dart';
 import '../data/settings/device_settings.dart';
 import '../data/settings/device_settings_keys.dart';
 import '../data/settings/settings_access.dart';
+import '../data/settings/settings_key.dart';
 import '../data/settings/settings_keys.dart';
 import '../domain/models/shell_destination.dart';
 
@@ -37,6 +38,22 @@ class NavProvider extends ChangeNotifier {
       List<ShellDestination>.unmodifiable(
         _orderOf(kShellNavOrder.defaultValue),
       );
+
+  /// 本 provider 读写的登记设置键：组合根按这份表挂载 `SettingsScope`。
+  ///
+  /// 必须覆盖 [_loadPreferences] 与各 setter 用到的全部登记键：作用域外的
+  /// 键在读写时会抛 [StateError]，而加载路径的 catch 会吞掉它，导致后面的
+  /// 偏好一起停在默认值（曾漏过「恢复上次页面」）。
+  static const List<SettingsKey<Object?>> settingsKeys = [
+    kShellNavLayout,
+    // 旧版三键只读兜底：升级后首次启动仍能恢复导航定制，下次编辑写新键。
+    kShellNavOrder,
+    kShellNavHidden,
+    kShellHomeDestination,
+    // 进入播放页的歌词偏好与导航布局同属壳层导航偏好，共用一次重载。
+    kShellNowPlayingLyricsOnEnter,
+    kShellRestoreLastDestination,
+  ];
 
   List<ShellDestination> _order = List<ShellDestination>.of(defaultOrder);
   final Set<ShellDestination> _hidden = _hiddenOf(kShellNavHidden.defaultValue);

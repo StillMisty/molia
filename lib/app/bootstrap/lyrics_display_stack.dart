@@ -82,15 +82,9 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   late final NavProvider navProvider;
   final navSettings = catalog.settings.mount(
     SettingsModule(
-      keys: [
-        kShellNavLayout,
-        // 旧键只读兜底：升级后首次启动仍能恢复导航定制，下次编辑写新键。
-        kShellNavOrder,
-        kShellNavHidden,
-        kShellHomeDestination,
-        // 进入播放页的歌词偏好与导航布局同属壳层导航偏好，共用一次重载。
-        kShellNowPlayingLyricsOnEnter,
-      ],
+      // 键表由 provider 声明：读写的每个登记键都在作用域内，避免漏挂载
+      // 后在启动加载时被作用域拦下（偏好会静默回默认）。
+      keys: NavProvider.settingsKeys,
       reload: () => navProvider.reloadFromPreferences(),
     ),
   );
