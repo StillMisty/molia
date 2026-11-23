@@ -189,10 +189,10 @@ packages:
     dependency: transitive
     description:
       name: cnativeapi
-      sha256: "510107ee007a7b4a01aa1eaec3ed097007d65760be6b272f093c4ca34a0d12ff"
+      sha256: "49662734cdf3dd1707b1ee35102ac1754e0ab3d450a2d30b066730f219dacc86"
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.1"
+    version: "0.6.2"
   code_assets:
     dependency: transitive
     description:
@@ -776,18 +776,18 @@ packages:
     dependency: "direct main"
     description:
       name: nativeapi
-      sha256: c0c566cf6788a6b6a32ce2666f02364b7fb50133f07a744bc1e793b5b8bb2c78
+      sha256: "339b7a91a27ce5c33659cab92cf8e76736142985433652f91a63cc5348135bfb"
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.1"
+    version: "0.6.2"
   nativeapi_flutter:
     dependency: "direct main"
     description:
       name: nativeapi_flutter
-      sha256: "3bb647f299932a4a19aa066051aabc6872f6876fa50c38a0ef132da414e9db26"
+      sha256: b0507253748ba9690a295bc162208a91d348809185409e5aee7b09e77ab5d8a3
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.1"
+    version: "0.6.2"
   nested:
     dependency: transitive
     description:
@@ -1197,10 +1197,10 @@ packages:
     dependency: "direct main"
     description:
       name: sqlite3
-      sha256: "8765980411f9b6733534efe9d014fad0750fa649590598772c04692deb34886b"
+      sha256: "1ae2e821614e7b69628ecb64273e8bc5401b14ab166ee7ea0035c35bb136cbd7"
       url: "https://pub.dev"
     source: hosted
-    version: "3.9.1"
+    version: "3.9.2"
   sqlparser:
     dependency: transitive
     description:
@@ -1277,10 +1277,10 @@ packages:
     dependency: "direct main"
     description:
       name: tray_manager
-      sha256: "7618880ee07c93dc46b1c21288018d9b76f9b2b3b340e9f298ffc17d494fbcc8"
+      sha256: "3a6ceacfdbe35e42049bb34334f30d73e5f1e73f5f04495b299a8c10b6ec5217"
       url: "https://pub.dev"
     source: hosted
-    version: "0.9.0"
+    version: "0.9.1"
   typed_data:
     dependency: transitive
     description:
