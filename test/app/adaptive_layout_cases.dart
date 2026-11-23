@@ -1,6 +1,8 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:molia/app/bootstrap/runtime_providers.dart';
 import 'package:molia/app/desktop/now_playing_bar.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/settings_page.dart';
@@ -370,12 +372,17 @@ void main() {
   group('设置两列', () {
     late ThemeProvider theme;
     late PlaybackProvider playback;
+    late ProviderContainer themeContainer;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
       final registry = testSettingsRegistry();
       attachStaticSettingsForTest(registry);
-      theme = ThemeProvider(settings: registry);
+      themeContainer = ProviderContainer(
+        overrides: [settingsRegistryProvider.overrideWithValue(registry)],
+      );
+      addTearDown(themeContainer.dispose);
+      theme = themeContainer.read(themeProvider.notifier);
       await theme.preferencesReady;
       playback = buildTestPlaybackProvider(
         settings: registry,
@@ -385,7 +392,6 @@ void main() {
     });
 
     tearDown(() {
-      theme.dispose();
       playback.dispose();
     });
 
@@ -401,33 +407,35 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
       await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            coverStoreProvider(),
-            ChangeNotifierProvider<ThemeProvider>.value(value: theme),
-            ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ],
-          child: M3EMaterialApp(
-            data: M3EThemeData.fromMaterial(ThemeData.light()),
-            theme: ThemeData.light(),
-            locale: const Locale('zh'),
-            localizationsDelegates: const [
-              AppLocalizations.delegate,
-              ...GlobalMaterialLocalizations.delegates,
+        UncontrolledProviderScope(
+          container: themeContainer,
+          child: MultiProvider(
+            providers: [
+              coverStoreProvider(),
+              ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
             ],
-            supportedLocales: const [Locale('zh')],
-            home: Scaffold(
-              body: localWidth == null
-                  ? const SettingsPage()
-                  : Center(
-                      child: SizedBox(
-                        width: localWidth,
-                        height: 900,
-                        child: AdaptiveLayoutScope.local(
-                          child: const SettingsPage(),
+            child: M3EMaterialApp(
+              data: M3EThemeData.fromMaterial(ThemeData.light()),
+              theme: ThemeData.light(),
+              locale: const Locale('zh'),
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                ...GlobalMaterialLocalizations.delegates,
+              ],
+              supportedLocales: const [Locale('zh')],
+              home: Scaffold(
+                body: localWidth == null
+                    ? const SettingsPage()
+                    : Center(
+                        child: SizedBox(
+                          width: localWidth,
+                          height: 900,
+                          child: AdaptiveLayoutScope.local(
+                            child: const SettingsPage(),
+                          ),
                         ),
                       ),
-                    ),
+              ),
             ),
           ),
         ),

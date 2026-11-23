@@ -1,6 +1,6 @@
 part of 'app_shell.dart';
 
-class MyThemedApp extends StatefulWidget {
+class MyThemedApp extends ConsumerStatefulWidget {
   const MyThemedApp({
     super.key,
     this.onUserInteraction,
@@ -18,10 +18,10 @@ class MyThemedApp extends StatefulWidget {
   final OnboardingStore? onboardingStore;
 
   @override
-  State<MyThemedApp> createState() => _MyThemedAppState();
+  ConsumerState<MyThemedApp> createState() => _MyThemedAppState();
 }
 
-class _MyThemedAppState extends State<MyThemedApp> {
+class _MyThemedAppState extends ConsumerState<MyThemedApp> {
   /// 「首次连通」通知订阅：与在哪个页面无关，双方各自弹一次底栏提示。
   StreamSubscription<SyncPeerState>? _peerConnected;
 
@@ -220,7 +220,7 @@ class _MyThemedAppState extends State<MyThemedApp> {
     // 装饰动画不应继续按显示刷新率出帧：TickerMode 只静音 ticker，不清缓存、
     // 不改播放语义。托盘隐藏仍由 TrayDormantGate 卸载，二者互不替代。
     return TrayDormantGate(
-      color: context.read<ThemeProvider>().colorScheme.surface,
+      color: ref.read(themeProvider).colorScheme.surface,
       childBuilder: (context) =>
           AppPresenceTickerMode(child: _buildApp(context)),
     );
@@ -239,121 +239,112 @@ class _MyThemedAppState extends State<MyThemedApp> {
       builder: (lightDynamic, darkDynamic) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          context.read<ThemeProvider>().updateMonetSchemes(
-            lightDynamic,
-            darkDynamic,
-          );
+          ref
+              .read(themeProvider.notifier)
+              .updateMonetSchemes(lightDynamic, darkDynamic);
         });
         return ValueListenableBuilder<Locale?>(
           valueListenable: LanguageService.localeNotifier,
           builder: (context, locale, _) {
             // 品牌默认名统一 Molia（仍走 l10n：各语言同值，保留将来本地化的入口）。
             _syncLocalizedBranding(locale);
-            return Selector<
-              ThemeProvider,
-              ({ColorScheme scheme, String? fontFamily})
-            >(
-              selector: (context, provider) => (
-                scheme: provider.colorScheme,
-                fontFamily: provider.appFontFamily,
-              ),
-              // 方案色变化（切歌取色/莫奈/种子色/亮度）经 AnimatedSchemeBuilder
-              // 平滑过渡，避免整站颜色闪变；只插值 ColorScheme，material_ui 与
-              // M3E 两套主题都由同一插值结果重建，保证过渡期一致。
-              // 字体族变化不参与插值，由同一 Selector 直接触发两套主题重建。
-              builder: (context, themeState, _) => AnimatedSchemeBuilder(
-                scheme: themeState.scheme,
-                builder: (context, animatedScheme) {
-                  final systemUiOverlayStyle = buildSystemUiOverlayStyle(
-                    animatedScheme,
-                  );
-                  final themedData = buildAppThemeData(
-                    animatedScheme,
-                    systemUiOverlayStyle: systemUiOverlayStyle,
-                    fontFamily: themeState.fontFamily,
-                    // 未自定义「应用字体」时使用启动时解析的系统 UI 字体
-                    // （Windows 读 MessageFont；其它平台为 null）。
-                    platformDefaultFontFamily:
-                        SystemFontsService.platformDefaultFamily,
-                    platformDefaultFontFallbacks:
-                        SystemFontsService.platformDefaultFontFallbacks,
-                  );
+            final themeState = ref.watch(themeProvider);
+            // 方案色变化（切歌取色/莫奈/种子色/亮度）经 AnimatedSchemeBuilder
+            // 平滑过渡，避免整站颜色闪变；只插值 ColorScheme，material_ui 与
+            // M3E 两套主题都由同一插值结果重建，保证过渡期一致。
+            // 字体族变化不参与插值，由同一订阅直接触发两套主题重建。
+            return AnimatedSchemeBuilder(
+              scheme: themeState.colorScheme,
+              builder: (context, animatedScheme) {
+                final systemUiOverlayStyle = buildSystemUiOverlayStyle(
+                  animatedScheme,
+                );
+                final themedData = buildAppThemeData(
+                  animatedScheme,
+                  systemUiOverlayStyle: systemUiOverlayStyle,
+                  fontFamily: themeState.appFontFamily,
+                  // 未自定义「应用字体」时使用启动时解析的系统 UI 字体
+                  // （Windows 读 MessageFont；其它平台为 null）。
+                  platformDefaultFontFamily:
+                      SystemFontsService.platformDefaultFamily,
+                  platformDefaultFontFallbacks:
+                      SystemFontsService.platformDefaultFontFallbacks,
+                );
 
-                  return M3EMaterialApp(
-                    title: AppBrandingService.titleNotifier.value,
-                    scaffoldMessengerKey: scaffoldMessengerKey,
-                    navigatorKey: navigatorKey,
-                    locale: locale,
-                    // material_ui 的 delegates 已合并 Material/Widgets/Cupertino 三套文案
-                    localizationsDelegates: const [
-                      AppLocalizations.delegate,
-                      ...GlobalMaterialLocalizations.delegates,
-                    ],
-                    supportedLocales: LanguageService.supportedLocales,
-                    // material_ui 透传：既有组件通过 Theme.of 读到的外观保持现状。
-                    theme: themedData,
-                    darkTheme: themedData,
-                    // M3E 侧数据：颜色/字体从 themedData 映射（按 ThemeData
-                    // 实例缓存）；字体同时同步到 emphasized 角色，见
-                    // `buildM3EThemeData`。
-                    data: buildM3EThemeData(themedData),
-                    // 方案色过渡已由 AnimatedSchemeBuilder 逐帧插值完成，
-                    // 关掉 MaterialApp 内置主题动画，避免二次缓动造成两套主题不同步。
-                    themeAnimationStyle: AnimationStyle.noAnimation,
-                    // 系统亮度由 ThemeProvider.updateThemeFromSystem 驱动，
-                    // 封面/莫奈取色由 ThemeProvider 内部优先级决定；不启用 M3E
-                    // 自适应与 OS 动态色，避免双主题源互相覆盖。
-                    autoTheming: false,
-                    dynamicColoring: false,
-                    // targetSdk 37（Android 15+ 强制 edge-to-edge）下保持系统栏透明、
-                    // 内容绘制到系统栏下方，与 settings_page.dart 的 edgeToEdge 行为一致。
-                    drawUnderSystemBars: true,
-                    // appBuilder 只做系统栏 AnnotatedRegion：
-                    // M3E 内部已用 M3ETheme 包裹 child，MaterialApp 的 Theme 又
-                    // 位于 builder 之上（见 material_ui app.dart _materialBuilder），
-                    // 此处不重复包 Theme。
-                    appBuilder: (context, child) {
-                      final themedChild = child ?? const SizedBox.shrink();
-                      final baseMediaQuery = MediaQuery.of(context);
-                      final baseScale = baseMediaQuery.textScaler.scale(1.0);
-                      final mediaData = baseMediaQuery.copyWith(
-                        textScaler: TextScaler.linear(baseScale),
-                      );
+                return M3EMaterialApp(
+                  title: AppBrandingService.titleNotifier.value,
+                  scaffoldMessengerKey: scaffoldMessengerKey,
+                  navigatorKey: navigatorKey,
+                  locale: locale,
+                  // material_ui 的 delegates 已合并 Material/Widgets/Cupertino 三套文案
+                  localizationsDelegates: const [
+                    AppLocalizations.delegate,
+                    ...GlobalMaterialLocalizations.delegates,
+                  ],
+                  supportedLocales: LanguageService.supportedLocales,
+                  // material_ui 透传：既有组件通过 Theme.of 读到的外观保持现状。
+                  theme: themedData,
+                  darkTheme: themedData,
+                  // M3E 侧数据：颜色/字体从 themedData 映射（按 ThemeData
+                  // 实例缓存）；字体同时同步到 emphasized 角色，见
+                  // `buildM3EThemeData`。
+                  data: buildM3EThemeData(themedData),
+                  // 方案色过渡已由 AnimatedSchemeBuilder 逐帧插值完成，
+                  // 关掉 MaterialApp 内置主题动画，避免二次缓动造成两套主题不同步。
+                  themeAnimationStyle: AnimationStyle.noAnimation,
+                  // 系统亮度由 ThemeProvider.updateThemeFromSystem 驱动，
+                  // 封面/莫奈取色由 ThemeProvider 内部优先级决定；不启用 M3E
+                  // 自适应与 OS 动态色，避免双主题源互相覆盖。
+                  autoTheming: false,
+                  dynamicColoring: false,
+                  // targetSdk 37（Android 15+ 强制 edge-to-edge）下保持系统栏透明、
+                  // 内容绘制到系统栏下方，与 settings_page.dart 的 edgeToEdge 行为一致。
+                  drawUnderSystemBars: true,
+                  // appBuilder 只做系统栏 AnnotatedRegion：
+                  // M3E 内部已用 M3ETheme 包裹 child，MaterialApp 的 Theme 又
+                  // 位于 builder 之上（见 material_ui app.dart _materialBuilder），
+                  // 此处不重复包 Theme。
+                  appBuilder: (context, child) {
+                    final themedChild = child ?? const SizedBox.shrink();
+                    final baseMediaQuery = MediaQuery.of(context);
+                    final baseScale = baseMediaQuery.textScaler.scale(1.0);
+                    final mediaData = baseMediaQuery.copyWith(
+                      textScaler: TextScaler.linear(baseScale),
+                    );
 
-                      return AnnotatedRegion<SystemUiOverlayStyle>(
-                        value: systemUiOverlayStyle,
-                        child: MediaQuery(
-                          data: mediaData,
-                          // 视口粗档：`layoutType` / `horizontalPadding` /
-                          // `isLargeScreen` 只在这里按档位订阅，桌面拖拽窗口时
-                          // 不再逐像素重建页面（见 `widgets/responsive.dart`）。
-                          child: ViewportClassScope.host(
-                            // 用户交互（含弹层 / 菜单，都在 Navigator 之内）→
-                            // 同步调度器续期「最近交互」窗口；只观察不拦截。
-                            child: Listener(
-                              behavior: HitTestBehavior.translucent,
-                              onPointerDown: (_) =>
-                                  widget.onUserInteraction?.call(),
-                              child: themedChild,
-                            ),
+                    return AnnotatedRegion<SystemUiOverlayStyle>(
+                      value: systemUiOverlayStyle,
+                      child: MediaQuery(
+                        data: mediaData,
+                        // 视口粗档：`layoutType` / `horizontalPadding` /
+                        // `isLargeScreen` 只在这里按档位订阅，桌面拖拽窗口时
+                        // 不再逐像素重建页面（见 `widgets/responsive.dart`）。
+                        child: ViewportClassScope.host(
+                          // 用户交互（含弹层 / 菜单，都在 Navigator 之内）→
+                          // 同步调度器续期「最近交互」窗口；只观察不拦截。
+                          child: Listener(
+                            behavior: HitTestBehavior.translucent,
+                            onPointerDown: (_) =>
+                                widget.onUserInteraction?.call(),
+                            child: themedChild,
                           ),
                         ),
-                      );
-                    },
-                    // home 是 Navigator 的初始路由，不走 M3EPageRoute：
-                    // 显式包一层路由级 M3E 主题，页面才不依赖 App 级
-                    // DefaultTextStyle（预测返回退场 + 主题重建的断言见
-                    // lib/widgets/m3e_page_route.dart）。
-                    home: M3ERouteTheme(
-                      builder: (_) => MyApp(
-                        key: appRootKey,
-                        showOnboarding: widget.showOnboarding,
-                        onboardingStore: widget.onboardingStore,
                       ),
+                    );
+                  },
+                  // home 是 Navigator 的初始路由，不走 M3EPageRoute：
+                  // 显式包一层路由级 M3E 主题，页面才不依赖 App 级
+                  // DefaultTextStyle（预测返回退场 + 主题重建的断言见
+                  // lib/widgets/m3e_page_route.dart）。
+                  home: M3ERouteTheme(
+                    builder: (_) => MyApp(
+                      key: appRootKey,
+                      showOnboarding: widget.showOnboarding,
+                      onboardingStore: widget.onboardingStore,
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
             );
           },
         );

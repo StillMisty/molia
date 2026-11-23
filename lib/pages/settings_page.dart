@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -51,17 +52,17 @@ const double kSettingsSheetDesktopWidth = 880;
 /// 只负责内容；弹层宿主、内层 Navigator 与预测返回归属在
 /// `widgets/settings/settings_sheet.dart`。独立挂载（测试等）时照常渲染，
 /// 子页经 `openSettingsSubPage` push 到最近的 Navigator。
-class SettingsPage extends StatefulWidget {
+class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key, this.scrollController});
 
   /// 弹层滚动控制器（独立挂载时为 null，走默认行为）。
   final ScrollController? scrollController;
 
   @override
-  State<SettingsPage> createState() => _SettingsPageState();
+  ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage>
+class _SettingsPageState extends ConsumerState<SettingsPage>
     with WidgetsBindingObserver {
   @override
   void initState() {
@@ -166,123 +167,95 @@ class _SettingsPageState extends State<SettingsPage>
   /// 应用字体与默认封面是低频个性化项，收进「高级设置」；本卡只留每天
   /// 会改的外观开关。
   Widget _appearanceSection(BuildContext context, AppLocalizations l10n) {
+    final theme = ref.watch(themeProvider);
+    final themeMode = theme.themeMode;
+    final baseColorSource = theme.baseColorSource;
+    final systemColorSource = theme.systemBaseColorSource;
+    final pureBlackEnabled = theme.pureBlackEnabled;
+    final seedColor = theme.seedColor;
     return SettingsSectionCard(
       title: l10n.settingsAppearanceTitle,
       children: [
-        Selector<
-          ThemeProvider,
-          ({
-            ThemeMode mode,
-            ColorBaseSource base,
-            SystemBaseColorSource systemColorSource,
-            bool pureBlack,
-            Color seed,
-          })
-        >(
-          selector: (context, provider) => (
-            mode: provider.themeMode,
-            base: provider.baseColorSource,
-            systemColorSource: provider.systemBaseColorSource,
-            pureBlack: provider.pureBlackEnabled,
-            seed: provider.seedColor,
-          ),
-          builder: (context, appearance, _) {
-            final (
-              mode: themeMode,
-              base: baseColorSource,
-              systemColorSource: systemColorSource,
-              pureBlack: pureBlackEnabled,
-              seed: seedColor,
-            ) = appearance;
-            // 同一个 Selector 产出的多行：行距由 SettingsRows 统一给。
-            return SettingsRows(
-              children: [
-                SettingsChoiceRow<ThemeMode>(
-                  key: const Key('settingsThemeModeItem'),
-                  icon: Icons.brightness_6_rounded,
-                  title: l10n.settingsThemeMode,
-                  value: themeMode,
-                  options: [
-                    (ThemeMode.system, l10n.themeModeSystem),
-                    (ThemeMode.light, l10n.themeModeLight),
-                    (ThemeMode.dark, l10n.themeModeDark),
-                  ],
-                  onChanged: (mode) {
-                    // 传平台亮度：system 模式下立即按当前系统亮度生效。
-                    context.read<ThemeProvider>().setThemeMode(
+        SettingsRows(
+          children: [
+            SettingsChoiceRow<ThemeMode>(
+              key: const Key('settingsThemeModeItem'),
+              icon: Icons.brightness_6_rounded,
+              title: l10n.settingsThemeMode,
+              value: themeMode,
+              options: [
+                (ThemeMode.system, l10n.themeModeSystem),
+                (ThemeMode.light, l10n.themeModeLight),
+                (ThemeMode.dark, l10n.themeModeDark),
+              ],
+              onChanged: (mode) {
+                // 传平台亮度：system 模式下立即按当前系统亮度生效。
+                ref
+                    .read(themeProvider.notifier)
+                    .setThemeMode(
                       mode,
                       platformBrightness: MediaQuery.platformBrightnessOf(
                         context,
                       ),
                     );
-                  },
-                ),
-                // 基础配色（单选）：壁纸 / 自定义；封面取色见「封面」分区。
-                SettingsChoiceRow<ColorBaseSource>(
-                  key: const Key('settingsBaseColorItem'),
-                  icon: Icons.palette_rounded,
-                  title: l10n.settingsBaseColor,
-                  subtitle: _baseColorSubtitle(
-                    l10n,
-                    baseColorSource,
-                    systemColorSource: systemColorSource,
-                    seedColor: seedColor,
-                  ),
-                  value: baseColorSource,
-                  options: [
-                    (
-                      ColorBaseSource.wallpaper,
-                      l10n.settingsBaseColorWallpaper,
-                    ),
-                    (ColorBaseSource.custom, l10n.settingsBaseColorCustom),
-                  ],
-                  // 壁纸图 / 强调色都不可用时壁纸项禁用
-                  //（仍可显示为选中态，配色回退种子色）。
-                  optionEnabled: (source) =>
-                      source != ColorBaseSource.wallpaper ||
-                      systemColorSource != SystemBaseColorSource.unavailable,
-                  onChanged: (source) =>
-                      context.read<ThemeProvider>().setBaseColorSource(source),
-                ),
-                // 自定义色仅作基础配色时显示，避免与「壁纸」并存产生歧义。
-                SettingsReveal(
-                  visible: baseColorSource == ColorBaseSource.custom,
-                  child: SettingsColorValueTile(
-                    key: const Key('settingsSeedColorItem'),
-                    icon: Icons.color_lens_rounded,
-                    title: l10n.settingsSeedColor,
-                    colorArgb: seedColor.toARGB32(),
-                    onTap: () => _pickSeedColor(context),
-                  ),
-                ),
-                SettingsSwitchTile(
-                  switchKey: const Key('settingsPureBlackSwitch'),
-                  icon: Icons.dark_mode_rounded,
-                  title: l10n.settingsPureBlack,
-                  subtitle: l10n.settingsPureBlackSubtitle,
-                  value: pureBlackEnabled,
-                  onChanged: (value) =>
-                      context.read<ThemeProvider>().setPureBlackEnabled(value),
-                ),
-                // 封面：播放时跟随封面取色。
-                Selector<ThemeProvider, bool>(
-                  selector: (context, provider) =>
-                      provider.followArtworkEnabled,
-                  builder: (context, followArtworkEnabled, _) =>
-                      SettingsSwitchTile(
-                        switchKey: const Key('settingsFollowArtworkSwitch'),
-                        icon: Icons.album_rounded,
-                        title: l10n.settingsFollowArtwork,
-                        subtitle: l10n.settingsFollowArtworkSubtitle,
-                        value: followArtworkEnabled,
-                        onChanged: (value) => context
-                            .read<ThemeProvider>()
-                            .setFollowArtworkEnabled(value),
-                      ),
-                ),
+              },
+            ),
+            // 基础配色（单选）：壁纸 / 自定义；封面取色见「封面」分区。
+            SettingsChoiceRow<ColorBaseSource>(
+              key: const Key('settingsBaseColorItem'),
+              icon: Icons.palette_rounded,
+              title: l10n.settingsBaseColor,
+              subtitle: _baseColorSubtitle(
+                l10n,
+                baseColorSource,
+                systemColorSource: systemColorSource,
+                seedColor: seedColor,
+              ),
+              value: baseColorSource,
+              options: [
+                (ColorBaseSource.wallpaper, l10n.settingsBaseColorWallpaper),
+                (ColorBaseSource.custom, l10n.settingsBaseColorCustom),
               ],
-            );
-          },
+              // 壁纸图 / 强调色都不可用时壁纸项禁用
+              //（仍可显示为选中态，配色回退种子色）。
+              optionEnabled: (source) =>
+                  source != ColorBaseSource.wallpaper ||
+                  systemColorSource != SystemBaseColorSource.unavailable,
+              onChanged: (source) =>
+                  ref.read(themeProvider.notifier).setBaseColorSource(source),
+            ),
+            // 自定义色仅作基础配色时显示，避免与「壁纸」并存产生歧义。
+            SettingsReveal(
+              visible: baseColorSource == ColorBaseSource.custom,
+              child: SettingsColorValueTile(
+                key: const Key('settingsSeedColorItem'),
+                icon: Icons.color_lens_rounded,
+                title: l10n.settingsSeedColor,
+                colorArgb: seedColor.toARGB32(),
+                onTap: () => _pickSeedColor(context),
+              ),
+            ),
+            SettingsSwitchTile(
+              switchKey: const Key('settingsPureBlackSwitch'),
+              icon: Icons.dark_mode_rounded,
+              title: l10n.settingsPureBlack,
+              subtitle: l10n.settingsPureBlackSubtitle,
+              value: pureBlackEnabled,
+              onChanged: (value) =>
+                  ref.read(themeProvider.notifier).setPureBlackEnabled(value),
+            ),
+            // 封面：播放时跟随封面取色。
+            SettingsSwitchTile(
+              switchKey: const Key('settingsFollowArtworkSwitch'),
+              icon: Icons.album_rounded,
+              title: l10n.settingsFollowArtwork,
+              subtitle: l10n.settingsFollowArtworkSubtitle,
+              value: theme.followArtworkEnabled,
+              onChanged: (value) => ref
+                  .read(themeProvider.notifier)
+                  .setFollowArtworkEnabled(value),
+            ),
+          ],
         ),
       ],
     );
@@ -537,12 +510,12 @@ class _SettingsPageState extends State<SettingsPage>
   /// 自定义色是「基础配色」的一种；封面覆盖开启时，播放有封面的歌曲
   /// 期间会被封面取色盖过（设置项文案已说明）。
   Future<void> _pickSeedColor(BuildContext context) async {
-    final themeProvider = context.read<ThemeProvider>();
+    final theme = ref.read(themeProvider);
     final picked = await showAppColorPicker(
       context,
-      initialColor: themeProvider.seedColor.toARGB32(),
+      initialColor: theme.seedColor.toARGB32(),
     );
     if (picked == null) return;
-    await themeProvider.setSeedColor(Color(picked));
+    await ref.read(themeProvider.notifier).setSeedColor(Color(picked));
   }
 }

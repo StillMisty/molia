@@ -6,6 +6,8 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'app_dependencies.dart';
 import 'ai_stack.dart';
 import 'desktop_stack.dart';
@@ -17,6 +19,7 @@ import 'startup_trace.dart';
 Future<FeatureStacks> buildFeatureStacks({
   required PlatformBootstrap platform,
   required CoreStacks core,
+  required ProviderContainer container,
 }) async {
   final catalog = core.catalog;
   final local = core.local;
@@ -59,6 +62,7 @@ Future<FeatureStacks> buildFeatureStacks({
     audioHandler: playback.audioHandler,
     powerPolicy: platform.powerPolicy,
     customCovers: local.customCovers,
+    container: container,
   );
   final desktop = await desktopFuture;
   final display = await displayFuture;

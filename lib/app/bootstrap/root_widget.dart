@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
 import '../app_shell.dart';
@@ -24,30 +25,33 @@ Widget buildRootWidget({
   final features = dependencies.features;
   final aux = dependencies.aux;
 
-  return MultiProvider(
-    providers: buildAppProviders(
-      catalog: core.catalog,
-      local: core.local,
-      library: core.library,
-      playback: core.playback,
-      scrobble: core.scrobble,
-      libraryProvider: core.libraryProvider,
-      channelSelection: core.channelSelection,
-      searchProvider: core.searchProvider,
-      desktop: features.desktop,
-      ai: features.ai,
-      lyrics: features.lyrics,
-      display: features.display,
-      sync: aux.sync,
-      update: aux.update,
-      diagnosticsService: platform.diagnostics.service,
-      diagnosticsExporter: aux.diagnosticsExporter,
-      notifications: platform.notifications,
-    ),
-    child: MyThemedApp(
-      // 用户交互 → 同步调度器续期活跃窗口（最近交互判定）。
-      onUserInteraction: aux.sync.provider.notifyInteraction,
-      showOnboarding: !onboardingCompleted,
+  return UncontrolledProviderScope(
+    container: dependencies.container,
+    child: MultiProvider(
+      providers: buildAppProviders(
+        catalog: core.catalog,
+        local: core.local,
+        library: core.library,
+        playback: core.playback,
+        scrobble: core.scrobble,
+        libraryProvider: core.libraryProvider,
+        channelSelection: core.channelSelection,
+        searchProvider: core.searchProvider,
+        desktop: features.desktop,
+        ai: features.ai,
+        lyrics: features.lyrics,
+        display: features.display,
+        sync: aux.sync,
+        update: aux.update,
+        diagnosticsService: platform.diagnostics.service,
+        diagnosticsExporter: aux.diagnosticsExporter,
+        notifications: platform.notifications,
+      ),
+      child: MyThemedApp(
+        // 用户交互 → 同步调度器续期活跃窗口（最近交互判定）。
+        onUserInteraction: aux.sync.provider.notifyInteraction,
+        showOnboarding: !onboardingCompleted,
+      ),
     ),
   );
 }

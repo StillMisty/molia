@@ -64,6 +64,8 @@ dependencies:
   meta: ^1.19.0
   win32: ^6.4.0
   posix: ^6.5.4
+  flutter_riverpod: ^3.5.0
+  riverpod_annotation: ^4.0.8
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -79,6 +81,7 @@ dev_dependencies:
   jnigen: ^1.1.0
   ffigen: ^23.0.0
   pigeon: ^30.0.4
+  riverpod_generator: ^4.0.8
 flutter:
   generate: true
   uses-material-design: true

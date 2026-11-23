@@ -1,4 +1,6 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/app/bootstrap/runtime_providers.dart';
 import 'package:molia/domain/models/app_release.dart';
 import 'package:molia/providers/collection_mode.dart';
 import 'package:molia/providers/theme_provider.dart';
@@ -145,20 +147,29 @@ void main() {
   });
 
   test('全局字体：写 app_font_family，null 回到系统默认并删除键', () async {
-    final registry = testSettingsRegistry();
-    final theme = ThemeProvider(settings: registry);
-    addTearDown(theme.dispose);
+    ProviderContainer createContainer() {
+      final container = ProviderContainer(
+        overrides: [
+          settingsRegistryProvider.overrideWithValue(testSettingsRegistry()),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    final container = createContainer();
+    final theme = container.read(themeProvider.notifier);
     await theme.preferencesReady;
-    expect(theme.appFontFamily, isNull);
+    expect(container.read(themeProvider).appFontFamily, isNull);
 
     await theme.setAppFontFamily('Inter');
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('app_font_family'), 'Inter');
 
-    final reloaded = ThemeProvider(settings: registry);
-    addTearDown(reloaded.dispose);
+    final reloadedContainer = createContainer();
+    final reloaded = reloadedContainer.read(themeProvider.notifier);
     await reloaded.preferencesReady;
-    expect(reloaded.appFontFamily, 'Inter');
+    expect(reloadedContainer.read(themeProvider).appFontFamily, 'Inter');
 
     await reloaded.setAppFontFamily(null);
     expect(prefs.containsKey('app_font_family'), isFalse);

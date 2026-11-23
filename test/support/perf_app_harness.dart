@@ -6,9 +6,11 @@
 /// 真实启动 / DB 开销由 `tool/agent/startup.sh` 与真实应用单独测。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/app_shell.dart';
+import 'package:molia/app/bootstrap/runtime_providers.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/library_write_engine.dart'
@@ -125,8 +127,13 @@ Future<FakePlaybackFacade> pumpPerfApp(
   EscapeClaims.reset();
   BackClaims.reset();
 
-  final theme = ThemeProvider(settings: testSettingsRegistry());
-  addTearDown(theme.dispose);
+  final themeContainer = ProviderContainer(
+    overrides: [
+      settingsRegistryProvider.overrideWithValue(testSettingsRegistry()),
+    ],
+  );
+  addTearDown(themeContainer.dispose);
+  final theme = themeContainer.read(themeProvider.notifier);
   await theme.preferencesReady;
   final nav = NavProvider(settings: testSettingsRegistry());
   addTearDown(nav.dispose);
@@ -251,43 +258,45 @@ Future<FakePlaybackFacade> pumpPerfApp(
   });
 
   await tester.pumpWidget(
-    MultiProvider(
-      providers: [
-        coverStoreProvider(),
-        ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-        ChangeNotifierProvider<LibraryProvider>.value(value: library),
-        ChangeNotifierProvider<SourcesProvider>.value(value: sources),
-        ChangeNotifierProvider<ChannelSelection>.value(value: selection),
-        ChangeNotifierProvider<DiscoverProvider>.value(value: discover),
-        ChangeNotifierProvider<SearchProvider>.value(value: search),
-        ChangeNotifierProvider<LyricsProvider>.value(value: lyrics),
-        ChangeNotifierProvider<LyricsDisplaySettings>.value(
-          value: lyricsDisplay,
-        ),
-        ChangeNotifierProvider<NavProvider>.value(value: nav),
-        ChangeNotifierProvider<ThemeProvider>.value(value: theme),
-        ...realLibraryProviders,
-        ...extraProviders,
-      ],
-      child: (wrap ?? (child) => child)(
-        MaterialApp(
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            ...GlobalMaterialLocalizations.delegates,
-          ],
-          supportedLocales: const [Locale('zh')],
-          // 系统「减弱动效」：部分用例验证 spatial 导航动效的直达终态。
-          builder: disableAnimations
-              ? (context, child) => MediaQuery(
-                  data: MediaQuery.of(context)
-                      .copyWith(disableAnimations: true),
-                  child: child!,
-                )
-              : null,
-          home: MyApp(
-            desktopShell: desktopShell,
-            showOnboarding: showOnboarding,
+    UncontrolledProviderScope(
+      container: themeContainer,
+      child: MultiProvider(
+        providers: [
+          coverStoreProvider(),
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          ChangeNotifierProvider<LibraryProvider>.value(value: library),
+          ChangeNotifierProvider<SourcesProvider>.value(value: sources),
+          ChangeNotifierProvider<ChannelSelection>.value(value: selection),
+          ChangeNotifierProvider<DiscoverProvider>.value(value: discover),
+          ChangeNotifierProvider<SearchProvider>.value(value: search),
+          ChangeNotifierProvider<LyricsProvider>.value(value: lyrics),
+          ChangeNotifierProvider<LyricsDisplaySettings>.value(
+            value: lyricsDisplay,
+          ),
+          ChangeNotifierProvider<NavProvider>.value(value: nav),
+          ...realLibraryProviders,
+          ...extraProviders,
+        ],
+        child: (wrap ?? (child) => child)(
+          MaterialApp(
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+            ],
+            supportedLocales: const [Locale('zh')],
+            // 系统「减弱动效」：部分用例验证 spatial 导航动效的直达终态。
+            builder: disableAnimations
+                ? (context, child) => MediaQuery(
+                    data: MediaQuery.of(context)
+                        .copyWith(disableAnimations: true),
+                    child: child!,
+                  )
+                : null,
+            home: MyApp(
+              desktopShell: desktopShell,
+              showOnboarding: showOnboarding,
+            ),
           ),
         ),
       ),

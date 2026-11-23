@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -24,20 +25,20 @@ import 'lyric_color_row.dart';
 /// 颜色解析与悬浮窗下发同源：先按「取色来源」解析出方案（应用主题 /
 /// 当前曲目封面），再用 [resolveLyricColor] 得到角色色或自定义色；
 /// 主题 / 封面变化时本页与悬浮窗一起刷新。
-class DesktopLyricsSettingsPage extends StatelessWidget {
+class DesktopLyricsSettingsPage extends ConsumerWidget {
   const DesktopLyricsSettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final settings = context.watch<LyricsDisplaySettings>();
-    final themeProvider = context.watch<ThemeProvider>();
+    final theme = ref.watch(themeProvider);
     final display = context.watch<LyricsDisplayProvider>();
     final capability = display.capabilityOf(LyricsOutputIds.desktop);
     final scheme = resolveSurfaceScheme(
       settings.desktopSchemeSource,
-      appScheme: themeProvider.colorScheme,
-      artworkScheme: themeProvider.artworkColorScheme,
+      appScheme: theme.colorScheme,
+      artworkScheme: theme.artworkColorScheme,
     );
 
     return SettingsSubPage(

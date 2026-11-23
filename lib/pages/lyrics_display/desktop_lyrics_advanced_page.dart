@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -13,18 +14,18 @@ import 'lyric_color_row.dart';
 ///
 /// 主页面只留每天会改的开关、字号、透明度、宽度与播放/未播放颜色；
 /// 这里放「有就行、很少改」的行为项，避免主页面堆到二十多行。
-class DesktopLyricsAdvancedPage extends StatelessWidget {
+class DesktopLyricsAdvancedPage extends ConsumerWidget {
   const DesktopLyricsAdvancedPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final settings = context.watch<LyricsDisplaySettings>();
-    final themeProvider = context.watch<ThemeProvider>();
+    final theme = ref.watch(themeProvider);
     final scheme = resolveSurfaceScheme(
       settings.desktopSchemeSource,
-      appScheme: themeProvider.colorScheme,
-      artworkScheme: themeProvider.artworkColorScheme,
+      appScheme: theme.colorScheme,
+      artworkScheme: theme.artworkColorScheme,
     );
     return SettingsSubPage(
       title: l10n.lyricsDesktopAdvancedTitle,

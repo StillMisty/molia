@@ -39,7 +39,10 @@
 
 1. `lib/domain/**` 禁止 Flutter/provider/HTTP/其它 lib 层；
 2. `lib/data/**`、`lib/sources/**`、`lib/playback/**` 禁止 providers/pages/widgets/main；
-3. `lib/providers/**` 禁止 import `lib/main.dart`；
+3. `lib/providers/**` 禁止 import `lib/main.dart`；UI 状态按 ADR-0041 用
+   Riverpod `Notifier` / `AsyncNotifier`（`@Riverpod` 代码生成），服务用函数式
+   `Provider` 注入；迁移期 `UncontrolledProviderScope` 内仍挂未迁移的
+   `MultiProvider`，但同一状态不得双写；
 4. `lib/main.dart` 是唯一 composition root，不允许被其它 lib 文件 import；
    它只做 `WidgetsFlutterBinding.ensureInitialized()` + `runMoliaApp()`（行数由
    `module_layout_test.dart` 守卫）。启动顺序集中在

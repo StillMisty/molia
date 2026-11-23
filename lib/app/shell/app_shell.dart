@@ -15,6 +15,7 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, visibleForTesting;
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
@@ -79,7 +80,7 @@ part 'shell_progress.dart';
 part 'player_flight.dart';
 part 'themed_app.dart';
 
-class MyApp extends StatefulWidget {
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({
     super.key,
     this.desktopShell,
@@ -101,10 +102,10 @@ class MyApp extends StatefulWidget {
   final OnboardingStore? onboardingStore;
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  ConsumerState<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp>
+class _MyAppState extends ConsumerState<MyApp>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   /// 顶栏 ↔ 播放页共享元素飞行控制器。
   final PlayerMorphController _morph = PlayerMorphController();
@@ -256,7 +257,9 @@ class _MyAppState extends State<MyApp>
     );
     _morph.addListener(_syncBarReveal);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ThemeProvider>().updateThemeFromSystem(context);
+      ref
+          .read(themeProvider.notifier)
+          .applyPlatformBrightness(MediaQuery.platformBrightnessOf(context));
     });
   }
 
@@ -321,13 +324,17 @@ class _MyAppState extends State<MyApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      context.read<ThemeProvider>().updateThemeFromSystem(context);
+      ref
+          .read(themeProvider.notifier)
+          .applyPlatformBrightness(MediaQuery.platformBrightnessOf(context));
     }
   }
 
   @override
   void didChangePlatformBrightness() {
-    context.read<ThemeProvider>().updateThemeFromSystem(context);
+    ref
+        .read(themeProvider.notifier)
+        .applyPlatformBrightness(MediaQuery.platformBrightnessOf(context));
   }
 
   /// 目的地被点击（底栏与导航轨共用）：

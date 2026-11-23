@@ -11,6 +11,7 @@
 | 开发 / 编译 / 发布顺序与门禁（偏离登记） | `docs/dev_workflow.md` | 流程入口；命令细节以脚本用法为准；secrets 与产物见下 |
 | 本地开发环境、模拟器、seed、集成测试入口 | `docs/dev_environment.md` | 工具版本仍回 `AGENTS.md` |
 | 架构与分层（as-built） | `docs/architecture.md` | 分层约束由 `test/architecture/` 强制执行；验证命令不在此复列 |
+| 状态管理（Riverpod / Notifier / 组合根容器） | `docs/adr/0041-riverpod-state-management.md` | provider 代码生成、服务用函数式 Provider、迁移批次与双栈禁令 |
 | 模块布局 / 文件体积守卫 | `docs/adr/0034-module-layout-and-file-size-guardrails.md` | domain/models 唯一模型位置、lib/utils 纯工具、800 行棘轮、pages/widgets 禁止 data import |
 | 平台音频会话 / Android 混播焦点 | `docs/adr/0035-platform-audio-session-lifecycle.md` | 唯一激活 / 释放所有者、20 秒暂停宽限、iOS 启动释放、duck 音量 |
 | 桌面输出丢失 / Windows 身份 / macOS 播放菜单 / Linux 桌面入口 | `docs/adr/0036-desktop-media-integration.md` | 一个端口、只暂停消失的旧输出、三端检测与平台通道、刻意不声明文件关联 |

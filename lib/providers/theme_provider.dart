@@ -1,13 +1,19 @@
 import 'dart:async';
 
-import 'package:material_ui/material_ui.dart';
 import 'package:logging/logging.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../app/bootstrap/runtime_providers.dart';
 import '../data/settings/device_settings.dart';
 import '../data/settings/device_settings_keys.dart';
 import '../data/settings/settings_access.dart';
+import '../data/settings/settings_key.dart';
 import '../data/settings/settings_keys.dart';
+import '../data/settings/settings_module.dart';
 import '../theme/scheme_builder.dart';
+
+part 'theme_provider.g.dart';
 
 final logger = Logger('molia.theme_provider');
 
@@ -23,6 +29,55 @@ enum SystemBaseColorSource {
 
   /// 壁纸图与强调色都不可用：配色回退自定义种子色。
   unavailable,
+}
+
+/// 主题对 UI 暴露的不可变快照。
+///
+/// 与旧 `ThemeProvider` 的公开读接口一一对应；宿主注入的壁纸 / 莫奈 seed
+/// 只影响派生结果，不单独暴露。
+@immutable
+class ThemeState {
+  const ThemeState({
+    required this.colorScheme,
+    required this.themeMode,
+    required this.baseColorSource,
+    required this.followArtworkEnabled,
+    required this.pureBlackEnabled,
+    required this.seedColor,
+    required this.appFontFamily,
+    required this.systemBaseColorSource,
+    required this.artworkColorScheme,
+  });
+
+  /// 当前生效方案（封面 seed > 壁纸 / 强调色 > 自定义 seed，再叠加纯黑）。
+  final ColorScheme colorScheme;
+
+  final ThemeMode themeMode;
+
+  /// 基础配色来源（壁纸 / 自定义）。
+  final ColorBaseSource baseColorSource;
+
+  /// 播放有封面时是否用封面取色覆盖基础配色。
+  final bool followArtworkEnabled;
+
+  final bool pureBlackEnabled;
+
+  final Color seedColor;
+
+  /// 全局应用字体族名；null 表示系统默认。
+  final String? appFontFamily;
+
+  /// 「壁纸」档当前实际生效的来源（三态：壁纸图 / 强调色 / 都不可用）。
+  final SystemBaseColorSource systemBaseColorSource;
+
+  /// 当前曲目封面的取色方案；无封面取色结果时为 null。
+  ///
+  /// 消费面（桌面歌词 / 海报）选「跟随封面」时用；亮度跟随当前应用方案。
+  final ColorScheme? artworkColorScheme;
+
+  /// 「壁纸」档是否可用（壁纸图 seed 或系统强调色任一存在）。
+  bool get systemColorAvailable =>
+      systemBaseColorSource != SystemBaseColorSource.unavailable;
 }
 
 /// 应用主题唯一来源：主题模式 + 系统亮度 + 基础配色 + 封面覆盖 + 纯黑。
@@ -48,10 +103,18 @@ enum SystemBaseColorSource {
 ///   （默认开启）；
 /// - `pure_black_enabled`：深色模式是否使用纯黑表面（默认关闭）；
 /// - `seed_color`：自定义种子色（ARGB int）；
-/// - `app_font_family`：全局应用字体族名（null = 系统默认）。
-///
-/// 缺键时把新键的默认值物化一次，之后启动都走「已有值」的读取路径。
-class ThemeProvider extends ChangeNotifier {
+/// - `app_font_family`：全局应用字体族名（null = 系统默认），设备本地。
+@Riverpod(keepAlive: true, name: 'themeProvider')
+class ThemeProvider extends _$ThemeProvider {
+  /// 本模块声明的设置键（组合根把它挂进同步作用域）。
+  static const List<SettingsKey<Object?>> settingsKeys = [
+    kThemeMode,
+    kColorBase,
+    kFollowArtworkEnabled,
+    kPureBlackEnabled,
+    kSeedColor,
+  ];
+
   ColorScheme _colorScheme = buildColorScheme(
     Color(kSeedColor.defaultValue),
     Brightness.light,
@@ -59,9 +122,6 @@ class ThemeProvider extends ChangeNotifier {
 
   ThemeMode _themeMode = _themeModeOf(kThemeMode.defaultValue);
 
-  /// 基础配色默认壁纸：桌面用真实壁纸图 seed（[updateSystemWallpaperSeed]）、
-  /// 平台强调色（[updateMonetSchemes]）兜底；两者都没有时
-  /// [_schemeForBrightness] 自然回退自定义种子色。
   ColorBaseSource _baseColorSource = _colorBaseOf(kColorBase.defaultValue);
   bool _followArtworkEnabled = kFollowArtworkEnabled.defaultValue;
   bool _pureBlackEnabled = kPureBlackEnabled.defaultValue;
@@ -84,38 +144,43 @@ class ThemeProvider extends ChangeNotifier {
   /// （即使当前未跟随封面，也保留以便桌面歌词 / 海报按需解析）。
   Color? _artworkSeed;
 
-  late final Future<void> _preferencesReady;
+  late final SettingsAccess _settings;
+  late final DeviceSettings _deviceSettings;
+  Future<void> _preferencesReady = Future.value();
+  final _ChangeSignal _changes = _ChangeSignal();
 
-  /// [deviceSettings] 仅测试注入字体存储；生产懒取 SharedPreferences。
-  ThemeProvider({required this._settings, DeviceSettings? deviceSettings})
-    : _deviceSettings = deviceSettings ?? DeviceSettings() {
+  /// 跨出 Riverpod 边界的变化信号（桌面歌词输出等仍以 Listenable 订阅）。
+  ///
+  /// 新代码优先 `ref.watch(themeProvider)`；本 getter 只给无法拿 Ref 的
+  /// 适配层使用，值仍从 [ThemeState] 读取。
+  Listenable get changes => _changes;
+
+  @override
+  ThemeState build() {
+    _settings = ref
+        .watch(settingsRegistryProvider)
+        .mount(
+          SettingsModule(keys: settingsKeys, reload: reloadFromPreferences),
+        );
+    _deviceSettings = DeviceSettings();
+    ref.onDispose(_changes.dispose);
     _preferencesReady = _loadPreferences();
+    return _snapshot();
   }
 
-  final SettingsAccess _settings;
-  final DeviceSettings _deviceSettings;
+  ThemeState _snapshot() => ThemeState(
+    colorScheme: _colorScheme,
+    themeMode: _themeMode,
+    baseColorSource: _baseColorSource,
+    followArtworkEnabled: _followArtworkEnabled,
+    pureBlackEnabled: _pureBlackEnabled,
+    seedColor: _seedColor,
+    appFontFamily: _appFontFamily,
+    systemBaseColorSource: _systemBaseColorSource,
+    artworkColorScheme: _artworkColorScheme,
+  );
 
-  ColorScheme get colorScheme => _colorScheme;
-
-  ThemeMode get themeMode => _themeMode;
-
-  /// 基础配色来源（壁纸 / 自定义）。
-  ColorBaseSource get baseColorSource => _baseColorSource;
-
-  /// 播放有封面时是否用封面取色覆盖基础配色。
-  bool get followArtworkEnabled => _followArtworkEnabled;
-
-  bool get pureBlackEnabled => _pureBlackEnabled;
-
-  /// 「壁纸」档是否可用（壁纸图 seed 或系统强调色任一存在）。
-  ///
-  /// 桌面壁纸图优先，强调色是桌面（拿不到壁纸）/ 移动端（Android 12+ 莫奈）
-  /// 的兜底；两者都不可用时配色回退自定义种子色。
-  bool get systemColorAvailable =>
-      systemBaseColorSource != SystemBaseColorSource.unavailable;
-
-  /// 「壁纸」档当前实际生效的来源（三态：壁纸图 / 强调色 / 都不可用）。
-  SystemBaseColorSource get systemBaseColorSource {
+  SystemBaseColorSource get _systemBaseColorSource {
     if (_wallpaperLightSeed != null || _wallpaperDarkSeed != null) {
       return SystemBaseColorSource.wallpaper;
     }
@@ -125,18 +190,15 @@ class ThemeProvider extends ChangeNotifier {
     return SystemBaseColorSource.unavailable;
   }
 
-  Color get seedColor => _seedColor;
-
-  /// 全局应用字体族名；null 表示系统默认。
-  String? get appFontFamily => _appFontFamily;
-
-  /// 当前曲目封面的取色方案；无封面取色结果时为 null。
-  ///
-  /// 消费面（桌面歌词 / 海报）选「跟随封面」时用；亮度跟随当前应用方案。
-  ColorScheme? get artworkColorScheme {
+  ColorScheme? get _artworkColorScheme {
     final seed = _artworkSeed;
     if (seed == null) return null;
     return buildColorScheme(seed, _colorScheme.brightness);
+  }
+
+  void _emit() {
+    state = _snapshot();
+    _changes.notify();
   }
 
   /// 持久化偏好加载完成（测试等待启动态就绪）。
@@ -144,13 +206,6 @@ class ThemeProvider extends ChangeNotifier {
 
   /// 重新读取持久化偏好（跨设备同步应用远端设置后由组合根调用）。
   Future<void> reloadFromPreferences() => _loadPreferences();
-
-  /// 宿主触发的亮度刷新（启动 / 生命周期恢复 / 系统亮度变化）。
-  ///
-  /// `themeMode` 非 system 时用强制亮度覆盖平台亮度。
-  void updateThemeFromSystem(BuildContext context) {
-    applyPlatformBrightness(MediaQuery.platformBrightnessOf(context));
-  }
 
   /// 平台亮度入口（无 context）：`runApp` 前的首帧亮度与 AppShell 的回填
   /// 共用同一条解析路径，系统深色模式下首帧即深色方案。
@@ -280,7 +335,7 @@ class ThemeProvider extends ChangeNotifier {
   Future<void> setAppFontFamily(String? family) async {
     if (_appFontFamily == family) return;
     _appFontFamily = family;
-    notifyListeners();
+    _emit();
     await _persist(() async {
       if (family == null) {
         await _deviceSettings.remove(kAppFontFamilyKey);
@@ -342,7 +397,7 @@ class ThemeProvider extends ChangeNotifier {
     final changed = _colorScheme != newScheme;
     if (!changed && !forceNotify) return;
     _colorScheme = newScheme;
-    notifyListeners();
+    _emit();
   }
 
   Future<void> _loadPreferences() async {
@@ -382,4 +437,9 @@ class ThemeProvider extends ChangeNotifier {
       logger.severe('保存主题偏好失败: $e');
     }
   }
+}
+
+/// 只暴露通知动作的 ChangeNotifier：主题状态本身走 Riverpod。
+final class _ChangeSignal extends ChangeNotifier {
+  void notify() => notifyListeners();
 }

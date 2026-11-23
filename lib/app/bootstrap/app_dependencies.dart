@@ -7,6 +7,8 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../playback/playback_power_policy.dart';
 import '../../providers/channel_selection.dart';
 import '../../providers/library_provider.dart';
@@ -82,10 +84,15 @@ class AppDependencies {
     required this.core,
     required this.features,
     required this.aux,
+    required this.container,
   });
 
   final PlatformBootstrap platform;
   final CoreStacks core;
   final FeatureStacks features;
   final AuxStacks aux;
+
+  /// Riverpod 根容器：启动阶段创建，`runApp` 时用
+  /// `UncontrolledProviderScope` 挂到树上（组合根只允许这一个容器）。
+  final ProviderContainer container;
 }

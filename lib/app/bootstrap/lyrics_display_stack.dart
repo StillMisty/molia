@@ -9,6 +9,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/lyrics_display_provider.dart';
 import '../../providers/lyrics_provider.dart';
@@ -59,25 +60,13 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   required LocalAudioHandler? audioHandler,
   required PlaybackPowerPolicy powerPolicy,
   required CustomCoverStore customCovers,
+  required ProviderContainer container,
 }) async {
   final covers = customCovers.resolution;
-  // 主题实例提前创建：封面覆盖 / 桌面歌词「跟随主题」「跟随封面」的颜色
-  // 都从 ThemeProvider 取（取色链路在下方接线）。作用域 = 主题自己的 5 个键，
-  // 一次挂载同时绑定「远端应用后整表重读」。
-  late final ThemeProvider themeProvider;
-  final themeSettings = catalog.settings.mount(
-    SettingsModule(
-      keys: [
-        kThemeMode,
-        kColorBase,
-        kFollowArtworkEnabled,
-        kPureBlackEnabled,
-        kSeedColor,
-      ],
-      reload: () => themeProvider.reloadFromPreferences(),
-    ),
-  );
-  themeProvider = ThemeProvider(settings: themeSettings);
+  // 主题 provider 由 Riverpod 容器持有：作用域 = 主题自己的 5 个键，挂载
+  // 与「远端应用后整表重读」都在 provider 内完成。这里只取实例做首帧预解析
+  // 与取色接线（容器在 runApp 后继续为 UI 提供同一实例）。
+  final theme = container.read(themeProvider.notifier);
   // 导航偏好提前创建：跨设备同步应用远端设置后需要定向重载。
   late final NavProvider navProvider;
   final navSettings = catalog.settings.mount(
@@ -97,8 +86,8 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   );
   final artworkThemeSync = ArtworkThemeSync(
     load: artworkPaletteService.load,
-    onPalette: (palette) => themeProvider.applyArtworkSeed(palette.seed),
-    onCleared: themeProvider.clearArtworkSeed,
+    onPalette: (palette) => theme.applyArtworkSeed(palette.seed),
+    onCleared: theme.clearArtworkSeed,
     // 移动端退后台且没有桌面歌词：取色没有消费面，先记 URL，回前台再取。
     mobilePowerPolicy: powerPolicy,
   );
@@ -135,11 +124,12 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
     settings: lyricsDisplaySettings,
     outputs: [
       DesktopLyricsOutput(
-        colorScheme: () => themeProvider.colorScheme,
-        artworkColorScheme: () => themeProvider.artworkColorScheme,
+        colorScheme: () => container.read(themeProvider).colorScheme,
+        artworkColorScheme: () =>
+            container.read(themeProvider).artworkColorScheme,
         // 悬浮窗文本跟随「应用字体」：字体变化同样经 themeProvider 通知
         // （LyricsDisplayProvider 的 themeListenable）重下发配置。
-        appFontFamily: () => themeProvider.appFontFamily,
+        appFontFamily: () => container.read(themeProvider).appFontFamily,
       ),
       MediaLyricOutput(
         supported: () => audioHandler != null,
@@ -153,7 +143,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
     mediaSessionInitFailed:
         isSystemMediaSessionSupported && audioHandler == null,
     audioRoute: audioRouteMonitor,
-    themeListenable: themeProvider,
+    themeListenable: theme.changes,
     onPlaybackCommand: (command) {
       switch (command) {
         case LyricsPlaybackCommand.playPause:
@@ -218,12 +208,12 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   // 并行等待——启动首页必须在首帧前就绪，否则会先亮默认页再跳。
   final prefsWatch = Stopwatch()..start();
   await (
-    themeProvider.preferencesReady,
+    theme.preferencesReady,
     playback.preferencesReady,
     navProvider.preferencesReady,
   ).wait;
   markStartupStep('sub.theme/nav/playback.prefs', prefsWatch);
-  themeProvider.applyPlatformBrightness(
+  theme.applyPlatformBrightness(
     WidgetsBinding.instance.platformDispatcher.platformBrightness,
   );
   // 先查封面：命中持久 seed 时只读 prefs、不解码图片，是首帧最便宜的一档。
@@ -231,13 +221,13 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   // 自定义档，也不必再解析壁纸，把桌面壁纸取色整段移出启动路径。
   final coverWatch = Stopwatch()..start();
   ArtworkPalette? startupPalette;
-  if (themeProvider.followArtworkEnabled) {
+  if (container.read(themeProvider).followArtworkEnabled) {
     startupPalette = await artworkPaletteService.loadCachedTrack(
       playback.snapshot.current,
       covers: covers,
     );
     if (startupPalette != null) {
-      themeProvider.applyArtworkSeed(startupPalette.seed);
+      theme.applyArtworkSeed(startupPalette.seed);
     }
   }
   markStartupStep('sub.startupCover', coverWatch);
@@ -258,14 +248,15 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
       SystemWallpaperSource(),
       artworkPaletteService,
     );
-    if (themeProvider.baseColorSource == ColorBaseSource.wallpaper) {
+    if (container.read(themeProvider).baseColorSource ==
+        ColorBaseSource.wallpaper) {
       final seeds = await wallpaperSeeds;
-      themeProvider.updateSystemWallpaperSeed(seeds.$1, seeds.$2);
+      theme.updateSystemWallpaperSeed(seeds.$1, seeds.$2);
       markStartupStep('sub.startupWallpaper', wallpaperWatch);
     } else {
       unawaited(
         wallpaperSeeds.then((seeds) {
-          themeProvider.updateSystemWallpaperSeed(seeds.$1, seeds.$2);
+          theme.updateSystemWallpaperSeed(seeds.$1, seeds.$2);
           markStartupStep('sub.startupWallpaper', wallpaperWatch);
         }),
       );
@@ -273,7 +264,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   }
 
   return (
-    themeProvider: themeProvider,
+    themeProvider: theme,
     navProvider: navProvider,
     artworkPaletteService: artworkPaletteService,
     lyricsDisplaySettings: lyricsDisplaySettings,
