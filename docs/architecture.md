@@ -2080,7 +2080,8 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   协议本身由 `test/collection_test.dart` 直接覆盖
   （含微任务重置时机）。
 - 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；
-  唯一例外 `library_music_outlined`（资料库未选中半对；音符图标已改用 `MoliaMark` 组件）。
+  唯一例外 `library_music_outlined` / `music_note_outlined`（资料库与音符的未选中
+  半对：没有圆角空心字形）。
   `test/architecture/architecture_guards_test.dart` 扫描强制。**同一按钮的状态图标切换**统一走
   `lib/widgets/icon_swap.dart::IconSwap`（150ms emphasized 交叉淡入 + 0.85→1 轻微缩放、
   减弱动效跳变），不要在调用点裸写 `AnimatedSwitcher`；底部导航 `icon↔selectedIcon`
