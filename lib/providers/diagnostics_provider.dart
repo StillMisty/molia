@@ -54,12 +54,14 @@ class DiagnosticsProvider extends ChangeNotifier {
       tempDirectory: tempDirectory,
       writeTempFile: writeTempFile,
       deleteTempFile: deleteTempFile,
+      isDisposed: () => _disposed,
     );
     _logs = DiagnosticsLogController(
       state: logsState,
       saveAs: saveAs,
       reader: logReader,
       now: now,
+      isDisposed: () => _disposed,
     );
     _subscription = service.changes.listen((_) => _refresh());
     _refresh();

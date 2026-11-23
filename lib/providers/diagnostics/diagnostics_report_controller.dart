@@ -35,6 +35,7 @@ class DiagnosticsReportController {
     this.tempDirectory,
     this.writeTempFile,
     this.deleteTempFile,
+    this.isDisposed,
   });
 
   final DiagnosticsBundleBuilder builder;
@@ -45,6 +46,9 @@ class DiagnosticsReportController {
   final Future<Directory> Function()? tempDirectory;
   final DiagnosticsTempFileWriter? writeTempFile;
   final Future<void> Function(String path)? deleteTempFile;
+
+  /// provider 释放后异步动作不再写已释放的 notifier。
+  final bool Function()? isDisposed;
 
   Future<String> buildText({
     double? screenWidth,
@@ -215,6 +219,7 @@ class DiagnosticsReportController {
   }
 
   void _setStage(DiagnosticsReportStage stage) {
+    if (isDisposed?.call() ?? false) return;
     if (state.value.stage == stage) return;
     state.value = DiagnosticsReportState(stage: stage);
   }

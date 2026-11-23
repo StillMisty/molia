@@ -255,6 +255,47 @@ void main() {
     expect(provider.logsState.value.entries, hasLength(2));
   });
 
+  test('日志读取途中 dispose provider 不写已释放状态', () async {
+    final service = DiagnosticsService(
+      failures: FailureRingBuffer(),
+      metrics: ResolveMetrics(),
+    );
+    final reader = _GatedLogReader();
+    final provider = DiagnosticsProvider(
+      service: service,
+      builder: _RecordingBuilder(),
+      saveAs: FakeSaveAs(),
+      logReader: reader,
+      copyText: (_) async {},
+    );
+    final loading = provider.loadLogs();
+    await reader.started.future;
+    provider.dispose();
+    reader.release.complete();
+    await expectLater(loading, completes);
+    await service.dispose();
+  });
+
+  test('报告构建途中 dispose provider 不写已释放状态', () async {
+    final service = DiagnosticsService(
+      failures: FailureRingBuffer(),
+      metrics: ResolveMetrics(),
+    );
+    final builder = _GatedBuilder();
+    final provider = DiagnosticsProvider(
+      service: service,
+      builder: builder,
+      saveAs: FakeSaveAs(),
+      copyText: (_) async {},
+    );
+    final copying = provider.copyReport();
+    await builder.started.future;
+    provider.dispose();
+    builder.release.complete();
+    await expectLater(copying, completes);
+    await service.dispose();
+  });
+
   test('重启音源引擎转发到注入动作', () async {
     var calls = 0;
     await buildProvider(
@@ -369,4 +410,54 @@ class _SkippedCheck implements DiagnosticCheck {
       ),
     );
   }
+}
+
+class _GatedLogReader extends LogTailReader {
+  _GatedLogReader()
+    : super(directory: () async => Directory('/tmp/molia-gated-logs'));
+
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<List<DiagnosticLogEntry>> read() async {
+    if (!started.isCompleted) started.complete();
+    await release.future;
+    return const [];
+  }
+}
+
+class _GatedBuilder implements DiagnosticsBundleBuilder {
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  Future<void> _wait() async {
+    if (!started.isCompleted) started.complete();
+    await release.future;
+  }
+
+  @override
+  Future<Uint8List> buildBytes({
+    double? screenWidth,
+    double? screenHeight,
+    double? devicePixelRatio,
+    int maxBytes = defaultDiagnosticsBundleMaxBytes,
+  }) async {
+    await _wait();
+    return Uint8List.fromList(utf8.encode('diagnostics bytes'));
+  }
+
+  @override
+  Future<String> buildText({
+    double? screenWidth,
+    double? screenHeight,
+    double? devicePixelRatio,
+    int maxBytes = defaultDiagnosticsBundleMaxBytes,
+  }) async {
+    await _wait();
+    return 'diagnostics text';
+  }
+
+  @override
+  String suggestedFileName([DateTime? at]) => 'molia_diagnostics_test.txt';
 }

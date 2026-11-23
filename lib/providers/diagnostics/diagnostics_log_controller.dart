@@ -17,12 +17,14 @@ class DiagnosticsLogController {
     required this.saveAs,
     this.reader,
     DateTime Function()? now,
+    this.isDisposed,
   }) : _now = now ?? DateTime.now;
 
   final ValueNotifier<DiagnosticsLogsState> state;
   final SaveAs saveAs;
   final LogTailReader? reader;
   final DateTime Function() _now;
+  final bool Function()? isDisposed;
   bool _reading = false;
 
   /// 打开日志子页时读取一次；已加载 / 正在加载时不重复读盘。
@@ -120,5 +122,8 @@ class DiagnosticsLogController {
     }
   }
 
-  void _setState(DiagnosticsLogsState next) => state.value = next;
+  void _setState(DiagnosticsLogsState next) {
+    if (isDisposed?.call() ?? false) return;
+    state.value = next;
+  }
 }
