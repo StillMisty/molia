@@ -173,9 +173,9 @@
 
 ## 后续
 
-- 核心、五域探针、页面与日志子页已落地；provider 可按纯投影 / 报告控制面继续拆
-  文件，但 `summary` / `checkResults` / `issueGroups` / `session` / `appInfo` /
-  `reportState` / `logsState` / `metrics` 这组读口保持不变。
+- 核心、五域探针、页面、日志子页与 provider 拆分已落地；provider 已按纯投影 /
+  报告 / 日志控制面拆分，`summary` / `checkResults` / `issueGroups` / `session` /
+  `appInfo` / `reportState` / `logsState` / `metrics` 这组读口保持不变。
 - 同步更新 `GLOSSARY.md` 与 `docs/architecture.md` 的相关条目；`docs/pitfalls.md`
   里指向旧分区名的观测入口在改名时改成模块说法。
 - 若将来要把自检做成后台周期任务、加入自动修复或上传通道，需要新的 ADR 与真实
