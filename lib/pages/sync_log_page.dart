@@ -1,13 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/device_sync.dart';
 import '../domain/models/sync_entry.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/sync_provider.dart';
+import '../providers/app_providers.dart';
 import '../providers/sync_ui_state.dart';
 import '../theme/app_semantic_colors.dart';
 import '../utils/sync_format.dart';
@@ -21,13 +21,13 @@ import 'sync_labels.dart';
 ///
 /// 观测面细节都在这里（首屏只留「最近一轮结论 + 时间」一句话）；失败行可
 /// 点开看下一步动作，未知原因也能拿到重试出口。
-class SyncLogPage extends StatelessWidget {
+class SyncLogPage extends ConsumerWidget {
   const SyncLogPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = context.watch<SyncProvider>();
+    final provider = ref.watch(syncProvider);
     final state = provider.state;
     final entries = state.log;
     return SettingsSubPage(

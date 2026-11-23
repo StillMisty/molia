@@ -1,13 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../domain/models/app_release.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/update_provider.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
@@ -23,14 +24,14 @@ final DateFormat _checkedAtDateFormat = DateFormat('yyyy-MM-dd HH:mm');
 /// 从设置首屏「通用与数据」进入（入口副标题显示当前版本或可更新版本）。
 /// 平台差异（Android 系统安装器 / 桌面替换重启 / iOS 不支持）
 /// 全部由 [UpdateProvider] 与安装策略层消化，这里只按状态渲染。
-class UpdateSettingsPage extends StatelessWidget {
+class UpdateSettingsPage extends ConsumerWidget {
   const UpdateSettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     // 测试等场景可能不提供 provider：显示空页而不是崩溃（入口行同样隐藏）。
-    final provider = context.watch<UpdateProvider?>();
+    final UpdateProvider? provider = ref.watch(maybeUpdateProvider);
 
     return SettingsSubPage.body(
       title: l10n.settingsUpdateTitle,

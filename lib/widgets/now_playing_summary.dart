@@ -18,13 +18,12 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
-import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/library_provider.dart';
+import '../providers/app_providers.dart';
 import '../providers/playback_provider.dart';
 import '../services/app_branding_service.dart';
 import '../services/haptics.dart';
@@ -49,7 +48,7 @@ String? nowPlayingCoverUrl(BuildContext context, PlaybackProvider provider) =>
 /// 隐藏语义与共享飞行绑定：播放页激活或飞行期间封面淡出，但两件事不能
 /// 混在一次时长里——飞行落位帧必须与副本移除同帧亮出（亮出 0ms），收起
 /// 方向才走 short3（150ms）淡出，否则结束/开始两帧会看到重影或跳变。
-class NowPlayingCover extends StatelessWidget {
+class NowPlayingCover extends ConsumerWidget {
   /// 跟随当前曲目（顶栏 / 桌面底栏的封面位）。
   const NowPlayingCover.current({
     super.key,
@@ -77,9 +76,9 @@ class NowPlayingCover extends StatelessWidget {
   static const Duration _hideDuration = M3EMotion.short3;
 
   @override
-  Widget build(BuildContext context) {
-    final track = context.select<PlaybackProvider, Track?>(
-      (provider) => provider.snapshot.current,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final track = ref.watch(
+      playbackProvider.select((provider) => provider.snapshot.current),
     );
     return AnimatedOpacity(
       // 落位方向必须同步亮出（与飞行副本移除同帧）；收起方向才做淡出。
@@ -139,7 +138,7 @@ class NowPlayingAppTitle extends StatelessWidget {
 ///
 /// 两态都只占一行、统一省略号截断：宿主给的是固定高度槽位，换行会把进度
 /// 排或歌词区挤出可视区。
-class NowPlayingTrackText extends StatelessWidget {
+class NowPlayingTrackText extends ConsumerWidget {
   /// 迷你位（顶栏 / 桌面底栏）。
   const NowPlayingTrackText.bar({super.key})
     : _bar = true,
@@ -167,17 +166,17 @@ class NowPlayingTrackText extends StatelessWidget {
   final bool stacked;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (!_bar) return _buildPageText(context);
 
     // 曲目身份（`TrackId.uri`）与标题 / 作者一起取：同一首的进度刷新、
     // 封面飞行只更新内容不重播过渡，换曲才换 `value`。
-    final info = context.select<PlaybackProvider, (String?, String?, String?)>((
-      provider,
-    ) {
-      final track = provider.snapshot.current;
-      return (track?.id.uri, track?.title, track?.artistLabel);
-    });
+    final info = ref.watch(
+      playbackProvider.select((provider) {
+        final track = provider.snapshot.current;
+        return (track?.id.uri, track?.title, track?.artistLabel);
+      }),
+    );
     final (id, name, artists) = info;
     // 走 fade-through（顺序交接）：顶栏槽窄、新旧标题长度不同却完全重合，
     // 同进度交叉会让两串字在整段过渡里叠在一起。两种过渡都只做透明度，
@@ -296,9 +295,9 @@ class NowPlayingTrackText extends StatelessWidget {
 /// 36/40，版式差异不属于契约。
 ///
 /// 必须是独立组件而不是宿主内联方法：播放页在 `LayoutBuilder` 里构建进度排，
-/// `context.select` 只能发生在组件自身 build 中（State.context 在布局阶段
-/// 使用会被 provider 断言拦截）。
-class NowPlayingFavoriteButton extends StatelessWidget {
+/// `ref.watch` 只能发生在组件自身 build 中（State 里在布局阶段读取会被
+/// provider 断言拦截）。
+class NowPlayingFavoriteButton extends ConsumerWidget {
   const NowPlayingFavoriteButton({
     super.key,
     this.size = M3EIconButtonSize.sm,
@@ -311,21 +310,24 @@ class NowPlayingFavoriteButton extends StatelessWidget {
   final Size? visualSize;
 
   @override
-  Widget build(BuildContext context) {
-    final library = context.read<LibraryProvider?>();
-    final track = context.select<PlaybackProvider, Track?>(
-      (provider) => provider.snapshot.current,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final track = ref.watch(
+      playbackProvider.select((provider) => provider.snapshot.current),
     );
-    if (library == null || track == null) return const SizedBox.shrink();
+    if (track == null) return const SizedBox.shrink();
 
     final l10n =
         AppLocalizations.of(context) ??
         lookupAppLocalizations(const Locale('zh'));
     // 只订阅「当前曲目是否已收藏」：顶栏 / 底栏 / 播放页三处常驻，整份
     // LibraryProvider 的加载态与列表通知不该让心形按钮跟着重建。
-    final favorite = context.select<LibraryProvider?, bool>(
-      (provider) =>
-          provider?.isFavorite(track.id.sourceKey, track.id.id) ?? false,
+    final library = ref.watch(maybeLibraryProvider);
+    if (library == null) return const SizedBox.shrink();
+    final favorite = ref.watch(
+      maybeLibraryProvider.select(
+        (provider) =>
+            provider?.isFavorite(track.id.sourceKey, track.id.id) ?? false,
+      ),
     );
     final heart = FavoriteHeart(favorite: favorite);
     return M3EIconButton(

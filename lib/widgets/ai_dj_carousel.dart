@@ -24,15 +24,15 @@ library;
 import 'dart:async';
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/ai_dj_page.dart';
 import '../providers/ai_dj_provider.dart';
-import '../providers/playback_provider.dart';
+import '../providers/app_providers.dart';
 import '../services/ai/ai_generation_executor.dart';
 import '../theme/m3e_context.dart';
 import 'responsive.dart';
@@ -44,7 +44,7 @@ import 'playing_indicator.dart';
 import 'skeleton.dart';
 import 'track_artwork.dart';
 
-class AiDjCarousel extends StatefulWidget {
+class AiDjCarousel extends ConsumerStatefulWidget {
   const AiDjCarousel({super.key});
 
   /// 封面解码上界（逻辑像素）：卡片宽度随槽位伸缩，给 256 留足放大余量，
@@ -57,7 +57,7 @@ class AiDjCarousel extends StatefulWidget {
       (coverDecodeExtent * MediaQuery.devicePixelRatioOf(context)).round();
 
   @override
-  State<AiDjCarousel> createState() => _AiDjCarouselState();
+  ConsumerState<AiDjCarousel> createState() => _AiDjCarouselState();
 }
 
 /// 推荐卡歌名行：当前播放卡在歌名前内联三柱均衡器。
@@ -105,7 +105,7 @@ class AiDjCarouselTitle extends StatelessWidget {
   }
 }
 
-class _AiDjCarouselState extends State<AiDjCarousel> {
+class _AiDjCarouselState extends ConsumerState<AiDjCarousel> {
   /// 骨架卡/占位卡宽度（真实卡片宽度由 M3ECarousel 布局决定）。
   static const double _placeholderWidth = 132;
 
@@ -148,7 +148,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.read<AiDjProvider?>();
+    final provider = ref.read(maybeAiDjProvider);
     if (provider == null) return const SizedBox.shrink();
     return ListenableBuilder(
       listenable: provider,
@@ -380,13 +380,14 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
     final desktop = isDesktopPlatform();
     // 只订阅「当前曲目 + 播放态」，不做逐卡 select：切歌 / 暂停时整条卡片流
     // 重建一次，非当前卡仍走同一份静态封面，不会各自挂 ticker。
-    final nowPlaying = context
-        .select<PlaybackProvider?, ({String? uri, bool isPlaying})>(
-          (playback) => (
-            uri: playback?.snapshot.current?.id.uri,
-            isPlaying: playback?.snapshot.isPlaying ?? false,
-          ),
-        );
+    final nowPlaying = ref.watch(
+      playbackProvider.select(
+        (playback) => (
+          uri: playback.snapshot.current?.id.uri,
+          isPlaying: playback.snapshot.isPlaying,
+        ),
+      ),
+    );
     final items = <M3ECarouselItem>[];
     for (var i = 0; i < batch.items.length; i++) {
       final item = batch.items[i];

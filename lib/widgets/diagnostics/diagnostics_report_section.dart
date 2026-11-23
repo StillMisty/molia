@@ -1,9 +1,10 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/diagnostics.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/diagnostics_provider.dart';
 import '../../services/diagnostics/diagnostics_bundle.dart';
 import '../../services/notification_service.dart';
@@ -13,7 +14,7 @@ import '../settings/settings_tiles.dart';
 import 'diagnostics_labels.dart';
 
 /// 报告与日志分区：预览 / 复制 / 保存 / 分享 + 日志入口。
-class DiagnosticsReportSection extends StatelessWidget {
+class DiagnosticsReportSection extends ConsumerWidget {
   const DiagnosticsReportSection({
     super.key,
     required this.provider,
@@ -36,7 +37,7 @@ class DiagnosticsReportSection extends StatelessWidget {
   final VoidCallback onRevealLogs;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     return ValueListenableBuilder<DiagnosticsReportState>(
       valueListenable: provider.reportState,
@@ -288,7 +289,11 @@ Future<void> _copy(
   Size size,
   double dpr,
 ) async {
-  final notifications = context.read<NotificationService?>();
+  // 弹层内的按钮回调只有 dialog context：从最近的 ProviderScope 取容器。
+  final NotificationService? notifications = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(notificationServiceProvider);
   final ok = await provider.copyReport(
     screenWidth: size.width,
     screenHeight: size.height,
@@ -307,7 +312,11 @@ Future<void> _save(
   Size size,
   double dpr,
 ) async {
-  final notifications = context.read<NotificationService?>();
+  // 弹层内的按钮回调只有 dialog context：从最近的 ProviderScope 取容器。
+  final NotificationService? notifications = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(notificationServiceProvider);
   final result = await provider.saveReport(
     dialogTitle: l10n.diagnosticsExportAction,
     screenWidth: size.width,
@@ -333,7 +342,11 @@ Future<void> _share(
   Size size,
   double dpr,
 ) async {
-  final notifications = context.read<NotificationService?>();
+  // 弹层内的按钮回调只有 dialog context：从最近的 ProviderScope 取容器。
+  final NotificationService? notifications = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(notificationServiceProvider);
   final result = await provider.shareReport(
     screenWidth: size.width,
     screenHeight: size.height,

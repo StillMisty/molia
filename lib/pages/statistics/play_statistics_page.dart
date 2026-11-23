@@ -17,15 +17,14 @@ library;
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/play_statistics.dart';
 import '../../l10n/app_localizations.dart';
-import '../../providers/library_provider.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/play_statistics_provider.dart';
-import '../../providers/playback_provider.dart';
 import '../../services/listening_stats_poster_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/play_statistics_service.dart';
@@ -53,17 +52,17 @@ String playStatisticsPosterFileName(DateTime? now, PlayStatisticsRange range) {
   return '${parts.join('_')}.png';
 }
 
-class PlayStatisticsPage extends StatefulWidget {
+class PlayStatisticsPage extends ConsumerStatefulWidget {
   const PlayStatisticsPage({super.key, this.sharePoster});
 
   /// 分享通道；null 时用 [SharePlus.instance]。仅测试注入。
   final PosterFileShare? sharePoster;
 
   @override
-  State<PlayStatisticsPage> createState() => _PlayStatisticsPageState();
+  ConsumerState<PlayStatisticsPage> createState() => _PlayStatisticsPageState();
 }
 
-class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
+class _PlayStatisticsPageState extends ConsumerState<PlayStatisticsPage> {
   late final PlayStatisticsProvider _provider;
 
   /// 日历热力图选中的一天（弹层打开期间保持放大 + 描边）。
@@ -75,7 +74,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   @override
   void initState() {
     super.initState();
-    _provider = context.read<PlayStatisticsProvider>();
+    _provider = ref.read(playStatisticsPageProvider);
     // provider 可能在本帧才被懒创建：加载会立即 notify，必须等首帧结束再写，
     // 否则会在 Provider 挂载期间触发重建断言（与年度报告页同一约定）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -115,7 +114,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
           onSelected: (value) {
             switch (value) {
               case 'export':
-                unawaited(exportPlayStatistics(context, _provider));
+                unawaited(exportPlayStatistics(ref, context, _provider));
               case 'clear':
                 unawaited(_confirmClear());
             }
@@ -135,8 +134,9 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
           ],
         ),
       ],
-      body: Consumer<PlayStatisticsProvider>(
-        builder: (context, provider, _) {
+      body: Consumer(
+        builder: (context, ref, _) {
+          final provider = ref.watch(playStatisticsPageProvider);
           // 首帧 provider 还没开始加载（加载在 post-frame 里启动）：先显示
           // 加载态。否则会用空快照先建一遍日历（80 周 × 7 = 560 个格子），
           // 数据回来后再整页重建一次——开页实测白付一帧 20ms+ 和同帧 GC。
@@ -168,7 +168,9 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       ],
       onChanged: (range) => unawaited(provider.setRange(range)),
     );
-    final statistics = context.watch<PlayStatisticsService?>();
+    final PlayStatisticsService? statistics = ref.watch(
+      playStatisticsServiceProvider,
+    );
     final topTracks = view.snapshot.topTracks;
     final topArtists = view.snapshot.topArtists;
     final sections = <Widget>[
@@ -223,7 +225,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
         StatisticsMetricsSection(
           l10n: l10n,
           snapshot: view.snapshot,
-          sourceName: (sourceKey) => statisticsSourceName(context, sourceKey),
+          sourceName: (sourceKey) => statisticsSourceName(ref, sourceKey),
           wide: isWide,
         ),
         const SizedBox(height: 24),
@@ -343,8 +345,8 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   ) async {
     if (entries.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
-    final library = context.read<LibraryProvider>();
-    final playback = context.read<PlaybackProvider>();
+    final library = ref.read(libraryProvider);
+    final playback = ref.read(playbackProvider);
     final tracks = [
       for (final entry in entries)
         library.sourceTrackFromRaw(
@@ -367,8 +369,8 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   Future<void> _playDayEvents(List<PlayEvent> events, int index) async {
     if (events.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
-    final library = context.read<LibraryProvider>();
-    final playback = context.read<PlaybackProvider>();
+    final library = ref.read(libraryProvider);
+    final playback = ref.read(playbackProvider);
     final tracks = [
       for (final event in events)
         library.sourceTrackFromRaw(
@@ -442,7 +444,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       l10n: l10n,
       view: view,
       narrowWeekdays: MaterialLocalizations.of(context).narrowWeekdays,
-      sourceName: (sourceKey) => statisticsSourceName(context, sourceKey),
+      sourceName: (sourceKey) => statisticsSourceName(ref, sourceKey),
     );
     final style = await resolvePosterRenderStyle(context);
     if (!mounted) return null;
@@ -479,7 +481,9 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
     await _provider.clearAll();
     if (!mounted) return;
     setState(() => _selectedDay = null);

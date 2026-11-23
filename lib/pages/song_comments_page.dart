@@ -6,13 +6,14 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/comment.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/comments_provider.dart';
 import '../widgets/responsive.dart';
 import '../widgets/comment_list_view.dart';
@@ -31,7 +32,7 @@ Future<void> showSongCommentsPage(
 }
 
 @visibleForTesting
-class SongCommentsPage extends StatefulWidget {
+class SongCommentsPage extends ConsumerStatefulWidget {
   const SongCommentsPage({
     super.key,
     required this.track,
@@ -45,13 +46,13 @@ class SongCommentsPage extends StatefulWidget {
   final bool embedded;
 
   @override
-  State<SongCommentsPage> createState() => _SongCommentsPageState();
+  ConsumerState<SongCommentsPage> createState() => _SongCommentsPageState();
 }
 
-class _SongCommentsPageState extends State<SongCommentsPage> {
+class _SongCommentsPageState extends ConsumerState<SongCommentsPage> {
   static const List<CommentKind> _tabs = [CommentKind.hot, CommentKind.latest];
 
-  late final CommentsProvider _provider = context.read<CommentsProvider>();
+  late final CommentsProvider _provider = ref.read(commentsProvider)!;
 
   late CommentKind _kind = CommentKind.hot;
 
@@ -88,7 +89,8 @@ class _SongCommentsPageState extends State<SongCommentsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = context.watch<CommentsProvider>();
+    final provider = ref.watch(commentsProvider);
+    if (provider == null) return const SizedBox.shrink();
     final selectedIndex = _tabs.indexOf(_kind);
 
     final body = Column(

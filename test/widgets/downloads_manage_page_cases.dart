@@ -8,10 +8,10 @@ import 'package:molia/pages/downloads_manage_page.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/download/download_manager.dart';
 import 'package:molia/services/download/download_queue.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
+import '../support/provider_test_scope.dart';
 
 Track _track(int index) => Track(
   id: TrackId('wy', '$index'),
@@ -135,13 +135,12 @@ Future<void> _pumpPage(WidgetTester tester, DownloadManager downloads) async {
   final playback = buildTestPlaybackProvider(facade: FakePlaybackFacade());
   addTearDown(playback.dispose);
   await playback.preferencesReady;
+  final scope = ProviderTestScope();
+  scope.put<DownloadManager>(downloads);
+  scope.put<PlaybackProvider>(playback);
   await tester.pumpWidget(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider<DownloadManager>.value(value: downloads),
-        ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-      ],
-      child: M3EMaterialApp(
+    scope.wrap(
+      M3EMaterialApp(
         data: M3EThemeData.fromMaterial(ThemeData.light()),
         theme: ThemeData.light(),
         locale: const Locale('zh'),

@@ -19,11 +19,11 @@ import 'package:molia/widgets/adaptive_layout.dart';
 import 'package:molia/widgets/channel_search_bar.dart';
 import 'package:molia/widgets/library_channel_selector.dart';
 import 'package:molia/widgets/shell_reselect.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 class _FakeDiscoverSource extends DiscoverSource {
@@ -180,19 +180,16 @@ void main() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
     });
+    final scope = ProviderTestScope();
+    scope.put<SourcesProvider>(sourcesOverride ?? sources);
+    scope.put<DiscoverProvider>(discover);
+    scope.put<ChannelSelection>(selection);
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryProvider>(library);
+    scope.put<SearchProvider>(search);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<SourcesProvider>.value(
-            value: sourcesOverride ?? sources,
-          ),
-          ChangeNotifierProvider<DiscoverProvider>.value(value: discover),
-          ChangeNotifierProvider<ChannelSelection>.value(value: selection),
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<LibraryProvider>.value(value: library),
-          ChangeNotifierProvider<SearchProvider>.value(value: search),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),

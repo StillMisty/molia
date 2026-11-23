@@ -1,9 +1,9 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../pages/artist_page.dart';
+import '../providers/app_providers.dart';
 import '../providers/search_assist_controller.dart';
-import '../providers/search_provider.dart';
 import 'search_results_view.dart';
 
 /// 搜索结果区（资料库页宿主）：只接线导航与 provider，呈现全部在
@@ -17,7 +17,7 @@ import 'search_results_view.dart';
 /// 与 `TrackMenuTile` 同一份动作域：触摸端行尾 ⋮、桌面端行表面右键），
 /// 歌手类型用 `ArtistRow`（点击进歌手页）；分段按渠道能力位显隐（脚本源
 /// 只有单曲）。
-class SearchSection extends StatelessWidget {
+class SearchSection extends ConsumerWidget {
   const SearchSection({super.key, this.controller, this.assist});
 
   /// 结果列表滚动控制器（宿主页面注入：重复点击底栏资料库时回顶）；
@@ -28,8 +28,8 @@ class SearchSection extends StatelessWidget {
   final SearchAssistController? assist;
 
   @override
-  Widget build(BuildContext context) {
-    final search = context.read<SearchProvider>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final search = ref.read(searchProvider);
     return SearchResultsView(
       variant: SearchResultsVariant.page,
       session: search.session,

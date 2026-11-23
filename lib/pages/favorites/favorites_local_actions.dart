@@ -272,10 +272,11 @@ Future<void> refreshFavoritesLocalMetadata({
 Future<void> locateFavoritesLocalFile({
   required AppLocalizations l10n,
   required DownloadedTrack record,
-  required DownloadManager manager,
+  required DownloadManager? manager,
   required NotificationService? notifications,
   required bool Function() isActive,
 }) async {
+  if (manager == null) return;
   String? path;
   try {
     final files = await FilePicker.pickFiles(type: FileType.audio);

@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/l10n/app_localizations.dart';
@@ -10,6 +9,7 @@ import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/lyrics_poster_preview_page.dart';
 
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 void main() {
@@ -21,13 +21,12 @@ void main() {
   });
 
   testWidgets('海报预览直接渲染位图，不再走 PNG 字节中转', (tester) async {
+    final scope = ProviderTestScope();
+    scope.put<CustomCoverStore>(CustomCoverStore());
+    scope.put<NotificationService>(NotificationService());
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          Provider<CustomCoverStore>.value(value: CustomCoverStore()),
-          Provider<NotificationService>.value(value: NotificationService()),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),

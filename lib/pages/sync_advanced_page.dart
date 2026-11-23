@@ -1,10 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/device_sync.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/sync_provider.dart';
 import '../providers/sync_ui_state.dart';
 import '../services/local_endpoints_service.dart';
@@ -19,14 +20,14 @@ import 'sync_peer_dialogs.dart';
 /// 这些是排障与手工接入才用得到的底层信息，放在子页——首屏只留用户
 /// 真正要做的事：传输方式、配对与设备（见 `sync_settings_page.dart` 的信息
 /// 架构说明）。
-class SyncAdvancedPage extends StatefulWidget {
+class SyncAdvancedPage extends ConsumerStatefulWidget {
   const SyncAdvancedPage({super.key});
 
   @override
-  State<SyncAdvancedPage> createState() => _SyncAdvancedPageState();
+  ConsumerState<SyncAdvancedPage> createState() => _SyncAdvancedPageState();
 }
 
-class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
+class _SyncAdvancedPageState extends ConsumerState<SyncAdvancedPage> {
   late Future<List<LocalEndpoint>> _endpoints;
   Object? _endpointsSignature;
 
@@ -34,30 +35,33 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
   void initState() {
     super.initState();
     // 进入页 = 本机地址缓存的真实失效点：网络切换后重进即可看到新地址。
-    context.read<SyncProvider>().commands.endpoints.refresh();
+    final provider = ref.read(syncProvider);
+    provider.commands.endpoints.refresh();
+    _loadEndpoints(provider.state);
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final state = context.watch<SyncProvider>().state;
+  /// 传输开关 / 端口变化时重建地址清单；签名不变就复用上一次的 future。
+  void _loadEndpoints(SyncUiState state) {
+    _endpointsSignature = _signatureOf(state);
+    _endpoints = ref.read(syncProvider).commands.endpoints.list();
+  }
+
+  static Object _signatureOf(SyncUiState state) {
     final ports = state.lanDiscoveryPorts;
-    final signature = Object.hash(
+    return Object.hash(
       state.enabledTransports.contains(SyncTransportId.lan),
       ports.v4,
       ports.v6,
       state.lanHttpPort,
     );
-    if (_endpointsSignature == signature) return;
-    _endpointsSignature = signature;
-    _endpoints = context.read<SyncProvider>().commands.endpoints.list();
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = context.watch<SyncProvider>();
+    final provider = ref.watch(syncProvider);
     final state = provider.state;
+    if (_endpointsSignature != _signatureOf(state)) _loadEndpoints(state);
     return SettingsSubPage.body(
       title: l10n.syncAdvancedTitle,
       body: FutureBuilder<List<LocalEndpoint>>(

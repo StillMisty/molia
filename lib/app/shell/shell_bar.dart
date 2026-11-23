@@ -5,7 +5,7 @@ part of 'app_shell.dart';
 /// 点击整条头部：不在播放页 → 进入并展开；已在播放页收起态 → 就地展开
 /// （共享封面飞行由壳层统一发起）。播放页展开（或飞行中）时交叉淡出为
 /// 应用图标 + 自定义应用名，不响应点击。
-class _ShellBarHeader extends StatelessWidget {
+class _ShellBarHeader extends ConsumerWidget {
   const _ShellBarHeader({
     super.key,
     required this.morph,
@@ -23,13 +23,15 @@ class _ShellBarHeader extends StatelessWidget {
   final VoidCallback onOpenPlayer;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // 无曲目标题时信息区本来就回退应用名，不做入场动画（避免同文案
     // 位移淡入与标题淡出叠影）。
-    final hasTrackTitle = context.select<PlaybackProvider, bool>((provider) {
-      final track = provider.snapshot.current;
-      return track != null && track.title.isNotEmpty;
-    });
+    final hasTrackTitle = ref.watch(
+      playbackProvider.select((provider) {
+        final track = provider.snapshot.current;
+        return track != null && track.title.isNotEmpty;
+      }),
+    );
     return AnimatedBuilder(
       animation: morph,
       builder: (context, _) {

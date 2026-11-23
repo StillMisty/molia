@@ -1,10 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
+import '../../../providers/app_providers.dart';
 import '../../../services/haptics.dart';
 import '../../../services/notification_service.dart';
 import '../../../utils/color_hex.dart';
@@ -15,7 +16,7 @@ import 'settings_tiles_support.dart';
 ///
 /// [trailing] 追加在复制按钮之前的附属动作（如地址行的展开 / 详情入口）。
 /// 整行不可点时传 [enabled] = false（只读信息行用 `SettingsInfoTile`）。
-class SettingsCopyTile extends StatelessWidget {
+class SettingsCopyTile extends ConsumerWidget {
   const SettingsCopyTile({
     super.key,
     required this.icon,
@@ -40,13 +41,15 @@ class SettingsCopyTile extends StatelessWidget {
   final Widget? trailing;
   final bool enabled;
 
-  void _copy(BuildContext context) {
+  void _copy(BuildContext context, WidgetRef ref) {
     HapticsService.lightImpact();
     Clipboard.setData(ClipboardData(text: copyText));
     // 统一走全局提示出口：M3ESnackbar 挂在根 Overlay 上，关闭设置弹层不会
     // 把提示一起带走；观感也与全应用一致（局部 ScaffoldMessenger 会换成
     // 另一套 SnackBar）。
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
     if (notifications != null) {
       notifications.showSuccessSnackBar(copiedMessage);
       return;
@@ -56,13 +59,13 @@ class SettingsCopyTile extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SettingsTileRow(
       icon: icon,
       title: title,
       subtitle: subtitle,
       enabled: enabled,
-      onPressed: enabled ? () => _copy(context) : null,
+      onPressed: enabled ? () => _copy(context, ref) : null,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -74,7 +77,7 @@ class SettingsCopyTile extends StatelessWidget {
             icon: const Icon(Icons.content_copy_rounded),
             variant: M3EIconButtonVariant.tonal,
             semanticLabel: copiedMessage,
-            onPressed: enabled ? () => _copy(context) : null,
+            onPressed: enabled ? () => _copy(context, ref) : null,
           ),
         ],
       ),

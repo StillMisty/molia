@@ -1,11 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/playback_provider.dart';
 import '../services/haptics.dart';
 import 'responsive.dart';
@@ -18,17 +19,17 @@ import 'simple_modal_body.dart';
 /// 选择即切换本次播放音质（重新取链、保持进度与播放态）；恢复态没有真实
 /// 播放，入口本身不开放，这里再兜底一次。
 Future<void> showTrackQualitySheet(
-  BuildContext context, {
+  WidgetRef ref, {
   required Track track,
   required String currentQuality,
 }) {
-  final playback = context.read<PlaybackProvider>();
+  final playback = ref.read(playbackProvider);
   if (playback.hasRestoredSession) return Future.value();
   final options = sortedQualityOptions(track.qualities);
   if (options.isEmpty) return Future.value();
-  final l10n = AppLocalizations.of(context)!;
+  final l10n = AppLocalizations.of(ref.context)!;
   return ResponsiveNavigation.showSimpleModal<void>(
-    context: context,
+    context: ref.context,
     title: l10n.trackInfoQualityAvailable,
     child: _TrackQualitySheet(
       track: track,
@@ -40,7 +41,7 @@ Future<void> showTrackQualitySheet(
   );
 }
 
-class _TrackQualitySheet extends StatelessWidget {
+class _TrackQualitySheet extends ConsumerWidget {
   const _TrackQualitySheet({
     required this.track,
     required this.playback,
@@ -56,7 +57,7 @@ class _TrackQualitySheet extends StatelessWidget {
   final AppLocalizations l10n;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return SimpleModalBody(
       header: DetailPageTrackHeader(
         track: track,

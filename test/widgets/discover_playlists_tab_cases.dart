@@ -8,10 +8,10 @@ import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/discover_playlists_tab.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/cover_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/fake_discover_api.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
@@ -64,12 +64,11 @@ void main() {
   });
 
   Widget host() {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider<DiscoverProvider>.value(value: discover),
-        coverStoreProvider(),
-      ],
-      child: M3EMaterialApp(
+    final scope = ProviderTestScope();
+    scope.put<DiscoverProvider>(discover);
+    putCoverStore(scope);
+    return scope.wrap(
+      M3EMaterialApp(
         data: M3EThemeData.fromMaterial(ThemeData.light()),
         theme: ThemeData.light(),
         locale: const Locale('zh'),

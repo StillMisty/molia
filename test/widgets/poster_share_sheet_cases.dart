@@ -9,10 +9,10 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/save_as.dart';
 import 'package:molia/widgets/poster_share_sheet.dart';
-import 'package:provider/provider.dart';
 
 import '../support/fake_save_as.dart';
 import '../support/notification_recorder.dart';
+import '../support/provider_test_scope.dart';
 
 /// 1×1 透明 PNG：只用于让 `Image.memory` 有合法字节。
 final Uint8List _png = base64Decode(
@@ -25,6 +25,9 @@ Widget _host(
   SaveAs? saveAs,
   NotificationService? notifications,
 }) {
+  final scope = ProviderTestScope();
+  if (saveAs != null) scope.put<SaveAs>(saveAs);
+  if (notifications != null) scope.put<NotificationService>(notifications);
   return M3EMaterialApp(
     locale: const Locale('zh'),
     localizationsDelegates: const [
@@ -34,13 +37,7 @@ Widget _host(
     supportedLocales: const [Locale('zh')],
     data: M3EThemeData.fromMaterial(ThemeData.light()),
     theme: ThemeData.light(),
-    home: MultiProvider(
-      providers: [
-        Provider<SaveAs?>.value(value: saveAs),
-        Provider<NotificationService?>.value(value: notifications),
-      ],
-      child: Scaffold(body: child),
-    ),
+    home: scope.wrap(Scaffold(body: child)),
   );
 }
 

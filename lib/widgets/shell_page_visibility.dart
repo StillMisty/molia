@@ -8,8 +8,8 @@ import 'package:flutter/widgets.dart';
 ///
 /// ```dart
 /// final provider = ShellPageVisibility.maybeVisibleOf(context) ?? true
-///     ? context.watch<LibraryProvider>()
-///     : context.read<LibraryProvider>();
+///     ? ref.watch(libraryProvider)
+///     : ref.read(libraryProvider);
 /// ```
 ///
 /// - 可见：正常 `watch`（依赖随重建重新登记）；

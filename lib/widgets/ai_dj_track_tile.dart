@@ -1,13 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/ai_dj.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/library_provider.dart';
+import '../providers/app_providers.dart';
 import '../theme/m3e_context.dart';
 import 'responsive.dart';
 import 'card_list_surface.dart';
@@ -26,7 +26,7 @@ import 'track_artwork.dart';
 /// ⋮，行表面右键在落点弹同一份菜单（[rowActionsAtPointer]）。
 /// 收藏收进菜单（与 `TrackMenuTile` 同一契约）：收藏态用「实心 ♥ +
 /// 取消收藏」图标 + 文案表达。
-class AiDjTrackTile extends StatelessWidget {
+class AiDjTrackTile extends ConsumerWidget {
   const AiDjTrackTile({
     super.key,
     required this.index,
@@ -78,7 +78,7 @@ class AiDjTrackTile extends StatelessWidget {
   final bool replacing;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final track = item.track;
@@ -89,6 +89,7 @@ class AiDjTrackTile extends StatelessWidget {
         ? (isPlaying ? l10n?.nowPlayingSection : l10n?.nowPlayingPaused)
         : null;
     final actions = _aiDjActionMenu(
+      ref,
       context,
       item: item,
       canReplace: canReplace,
@@ -216,9 +217,9 @@ class AiDjTrackTile extends StatelessWidget {
 /// AI 推荐行的动作定义（触摸端 ⋮ 与桌面右键共用同一份）。
 ///
 /// 为什么是函数而不是包装组件：动作的呈现面分平台（触摸端常显 ⋮ / 桌面
-/// 右键落点），动作与回调必须两种入口共用一份。[LibraryProvider] 缺失时
-/// 返回空列表（不提供收藏动作，调用方也不渲染入口）。
+/// 右键落点），动作与回调必须两种入口共用一份。
 List<RowAction> _aiDjActionMenu(
+  WidgetRef ref,
   BuildContext context, {
   required ResolvedRecommendation item,
   required bool canReplace,
@@ -229,11 +230,8 @@ List<RowAction> _aiDjActionMenu(
   final l10n = AppLocalizations.of(context)!;
   // 订阅收窄到「收藏版本」：菜单只显示收藏开关态，历史写入（每首歌一次）
   // 不应让全部行的菜单重建；Provider 实例用 read 取。
-  context.select<LibraryProvider?, int>(
-    (provider) => provider?.favoritesRevision ?? -1,
-  );
-  final library = context.read<LibraryProvider?>();
-  if (library == null) return const [];
+  ref.watch(libraryProvider.select((provider) => provider.favoritesRevision));
+  final library = ref.read(libraryProvider);
   final Track track = item.track;
   final heart = FavoriteHeart(
     favorite: library.isFavorite(track.id.sourceKey, track.id.id),

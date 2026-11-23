@@ -4,13 +4,14 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/play_statistics.dart';
 import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/play_statistics_provider.dart';
 import '../../services/notification_service.dart';
 import '../../services/play_statistics_export.dart';
@@ -22,7 +23,7 @@ import '../../widgets/labels/save_as_label.dart';
 import '../../widgets/track_row.dart';
 
 /// Top 曲目：行内展示次数 + 时长，点按从该首起播。
-class StatisticsTopTracksSection extends StatelessWidget {
+class StatisticsTopTracksSection extends ConsumerWidget {
   const StatisticsTopTracksSection({
     super.key,
     required this.l10n,
@@ -35,7 +36,7 @@ class StatisticsTopTracksSection extends StatelessWidget {
   final ValueChanged<int> onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -64,7 +65,7 @@ class StatisticsTopTracksSection extends StatelessWidget {
 }
 
 /// Top 歌手（拆分后的艺人）：名次徽标 + 播放次数。
-class StatisticsTopArtistsSection extends StatelessWidget {
+class StatisticsTopArtistsSection extends ConsumerWidget {
   const StatisticsTopArtistsSection({
     super.key,
     required this.l10n,
@@ -75,7 +76,7 @@ class StatisticsTopArtistsSection extends StatelessWidget {
   final List<PlayStatArtistEntry> artists;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (artists.isEmpty) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     return Column(
@@ -120,13 +121,13 @@ class StatisticsTopArtistsSection extends StatelessWidget {
 }
 
 /// 名次徽标：前三名用不规则形状，其后用等宽数字。
-class StatisticsRankBadge extends StatelessWidget {
+class StatisticsRankBadge extends ConsumerWidget {
   const StatisticsRankBadge({super.key, required this.index});
 
   final int index;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     if (index >= 3) {
       return SizedBox(
@@ -164,12 +165,15 @@ class StatisticsRankBadge extends StatelessWidget {
 
 /// 导出 JSON（页面 ⋮ 里的入口）：面向 AI 消费，写入 exports 目录。
 Future<void> exportPlayStatistics(
+  WidgetRef ref,
   BuildContext context,
   PlayStatisticsProvider provider,
 ) async {
   final l10n = AppLocalizations.of(context)!;
-  final notifications = context.read<NotificationService?>();
-  final saveAs = context.read<SaveAs?>();
+  final NotificationService? notifications = ref.read(
+    notificationServiceProvider,
+  );
+  final SaveAs? saveAs = ref.read(saveAsProvider);
   try {
     if (saveAs == null) throw StateError('SaveAs 未装配');
     final export = await provider.buildExportJson();

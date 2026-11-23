@@ -11,16 +11,17 @@ import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/pages/play_statistics_page.dart';
 import 'package:molia/pages/statistics/play_statistics_page.dart'
     show playStatisticsPosterFileName;
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/play_statistics_provider.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/save_as.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_save_as.dart';
 import '../support/memory_database.dart';
 import '../support/notification_recorder.dart';
 import '../support/sync_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 void main() {
@@ -92,23 +93,28 @@ void main() {
     PlayStatisticsProvider? withProvider,
   }) async {
     final active = withProvider ?? provider;
+    final scope = ProviderTestScope(
+      overrides: [
+        playStatisticsPageProvider.overrideWith(
+          () =>
+              LazyListenableNotifier<PlayStatisticsProvider>.withValue(active),
+        ),
+      ],
+    );
+    scope.put<SaveAs>(saveAs);
+    scope.put<NotificationService>(notifications);
     await tester.pumpWidget(
-      M3EMaterialApp(
-        locale: const Locale('zh'),
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          ...GlobalMaterialLocalizations.delegates,
-        ],
-        supportedLocales: const [Locale('zh')],
-        data: M3EThemeData.fromMaterial(ThemeData.light()),
-        theme: ThemeData.light(),
-        home: MultiProvider(
-          providers: [
-            ChangeNotifierProvider<PlayStatisticsProvider>.value(value: active),
-            Provider<SaveAs>.value(value: saveAs),
-            Provider<NotificationService?>.value(value: notifications),
+      scope.wrap(
+        M3EMaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
           ],
-          child: PlayStatisticsPage(
+          supportedLocales: const [Locale('zh')],
+          data: M3EThemeData.fromMaterial(ThemeData.light()),
+          theme: ThemeData.light(),
+          home: PlayStatisticsPage(
             sharePoster: (path, text) async {
               sharedPaths.add(path);
               sharedTexts.add(text);

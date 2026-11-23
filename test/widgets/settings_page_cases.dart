@@ -1,12 +1,9 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:molia/app/bootstrap/runtime_providers.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/domain/models/play_mode.dart';
 import 'package:molia/l10n/app_localizations.dart';
@@ -22,6 +19,7 @@ import 'package:molia/widgets/settings/settings_tiles.dart';
 import '../support/cover_test_support.dart';
 import '../support/fakes.dart';
 import '../support/memory_database.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 import '../support/sync_test_support.dart';
 
@@ -29,7 +27,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late ThemeProvider theme;
-  late ProviderContainer themeContainer;
+  late ProviderTestScope scope;
   late PlaybackProvider playback;
   late NavProvider nav;
   late TraySettings tray;
@@ -40,11 +38,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final registry = testSettingsRegistry();
     attachStaticSettingsForTest(registry);
-    themeContainer = ProviderContainer(
-      overrides: [settingsRegistryProvider.overrideWithValue(registry)],
-    );
-    addTearDown(themeContainer.dispose);
-    theme = themeContainer.read(themeProvider.notifier);
+    scope = ProviderTestScope(registry: registry);
+    theme = scope.theme;
     await theme.preferencesReady;
     playback = buildTestPlaybackProvider(
       settings: registry,
@@ -66,6 +61,12 @@ void main() {
         statisticsSync: testStatisticsSyncStore(() => db),
       ),
     );
+    scope.put<PlaybackProvider>(playback);
+    scope.put<NavProvider>(nav);
+    scope.put<TraySettings>(tray);
+    scope.put<LibraryAddSettings>(libraryAdd);
+    scope.put<PlayStatisticsService>(statistics);
+    putCoverStore(scope);
   });
 
   tearDown(() {
@@ -82,28 +83,17 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: themeContainer,
-        child: MultiProvider(
-          providers: [
-            coverStoreProvider(),
-            ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-            ChangeNotifierProvider<NavProvider>.value(value: nav),
-            ChangeNotifierProvider<TraySettings>.value(value: tray),
-            ChangeNotifierProvider<LibraryAddSettings>.value(value: libraryAdd),
-            Provider<PlayStatisticsService>.value(value: statistics),
+      scope.wrap(
+        M3EMaterialApp(
+          data: M3EThemeData.fromMaterial(ThemeData.light()),
+          theme: ThemeData.light(),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
           ],
-          child: M3EMaterialApp(
-            data: M3EThemeData.fromMaterial(ThemeData.light()),
-            theme: ThemeData.light(),
-            locale: const Locale('zh'),
-            localizationsDelegates: const [
-              AppLocalizations.delegate,
-              ...GlobalMaterialLocalizations.delegates,
-            ],
-            supportedLocales: const [Locale('zh')],
-            home: const Scaffold(body: SettingsPage()),
-          ),
+          supportedLocales: const [Locale('zh')],
+          home: const Scaffold(body: SettingsPage()),
         ),
       ),
     );

@@ -1,7 +1,8 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../services/lyrics_display/lyrics_display_settings.dart';
 import '../../widgets/settings/settings_subpage.dart';
 import '../../widgets/settings/settings_tiles.dart';
@@ -12,13 +13,13 @@ import 'lyrics_settings_common.dart';
 /// 首屏只留两个总开关（在「歌词与输出」页），这里才出现目标 / 格式 /
 /// 翻译 / 暂停行为 / 更新间隔。两组共用同一媒体元数据输出，选项构造集中在
 /// [lyricsMetadataTargetOptions] 等处，避免两页口径漂移。
-class SystemMediaLyricsAdvancedPage extends StatelessWidget {
+class SystemMediaLyricsAdvancedPage extends ConsumerWidget {
   const SystemMediaLyricsAdvancedPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final settings = context.watch<LyricsDisplaySettings>();
+    final settings = ref.watch(lyricsDisplaySettingsProvider);
     return SettingsSubPage(
       title: l10n.lyricsSystemMediaAdvancedTitle,
       children: [

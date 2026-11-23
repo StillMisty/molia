@@ -6,33 +6,33 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/scrobble.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../services/scrobble/scrobble_service.dart';
 import '../theme/m3e_context.dart';
-import '../widgets/empty_state.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
-class ListeningSyncPage extends StatefulWidget {
+class ListeningSyncPage extends ConsumerStatefulWidget {
   const ListeningSyncPage({super.key});
 
   @override
-  State<ListeningSyncPage> createState() => _ListeningSyncPageState();
+  ConsumerState<ListeningSyncPage> createState() => _ListeningSyncPageState();
 }
 
-class _ListeningSyncPageState extends State<ListeningSyncPage> {
+class _ListeningSyncPageState extends ConsumerState<ListeningSyncPage> {
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     // 凭据在本机凭据库：首帧后已读；本页打开时再补一次（幂等）。
-    unawaited(context.read<ScrobbleService?>()?.init());
+    unawaited(ref.read(scrobbleServiceProvider).init());
   }
 
   /// 服务名的唯一来源：设置行、同意书、断开确认与 Last.fm 对话框共用。
@@ -44,17 +44,12 @@ class _ListeningSyncPageState extends State<ListeningSyncPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final service = context.watch<ScrobbleService?>();
+    final service = ref.watch(scrobbleServiceProvider);
     if (l10n == null) return const SizedBox.shrink();
-    final children = service == null
-        ? [
-            EmptyState(
-              icon: Icons.cloud_off_rounded,
-              message: l10n.listeningSyncUnavailable,
-            ),
-          ]
-        : _sections(context, l10n, service);
-    return SettingsSubPage(title: l10n.listeningSyncTitle, children: children);
+    return SettingsSubPage(
+      title: l10n.listeningSyncTitle,
+      children: _sections(context, l10n, service),
+    );
   }
 
   List<Widget> _sections(

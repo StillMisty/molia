@@ -4,11 +4,12 @@ import 'package:flutter/foundation.dart';
 
 import 'package:android_file_picker/android_file_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../services/local/local_library_service.dart';
 import '../services/local/music_folders.dart';
 import '../services/notification_service.dart';
@@ -19,13 +20,13 @@ import '../widgets/settings/settings_tiles.dart';
 /// 音乐文件夹：添加 / 移除 / 手动扫描 / 进度与摘要（设备本地配置）。
 ///
 /// 入口在「数据与存储 › 下载设置」；iOS 不展示（没有目录访问）。
-class MusicFoldersPage extends StatelessWidget {
+class MusicFoldersPage extends ConsumerWidget {
   const MusicFoldersPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final service = context.watch<LocalLibraryService?>();
+    final LocalLibraryService? service = ref.watch(localLibraryServiceProvider);
     return SettingsSubPage(
       title: l10n.musicFoldersTitle,
       children: [
@@ -39,7 +40,7 @@ class MusicFoldersPage extends StatelessWidget {
               subtitle: l10n.musicFoldersSubtitle,
               onTap: service == null
                   ? null
-                  : () => _addFolder(context, l10n, service),
+                  : () => _addFolder(ref, l10n, service),
             ),
             for (final folder
                 in service?.folders.folders ?? const <MusicFolder>[])
@@ -74,11 +75,13 @@ class MusicFoldersPage extends StatelessWidget {
   }
 
   Future<void> _addFolder(
-    BuildContext context,
+    WidgetRef ref,
     AppLocalizations l10n,
     LocalLibraryService service,
   ) async {
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
     Uri? picked;
     try {
       picked = await FilePicker.pickDirectory(

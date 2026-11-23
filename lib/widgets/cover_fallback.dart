@@ -5,9 +5,9 @@
 library;
 
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../providers/playback_provider.dart';
+import '../providers/app_providers.dart';
 import '../services/covers/cover_resolution.dart';
 import 'playback_cover_decode.dart';
 import 'app_network_image.dart';
@@ -96,9 +96,10 @@ Widget _buildDefaultArtwork(
   required double iconSize,
 }) {
   final defaultCoverUrl = covers.defaultCoverUrl;
-  final lastPlayedImageUrl = context
-      .read<PlaybackProvider?>()
-      ?.lastPlayedImageUrl;
+  final lastPlayedImageUrl = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(maybePlaybackProvider)?.lastPlayedImageUrl;
   final fallback = lastPlayedImageUrl != null
       ? AppNetworkImage(
           key: key ?? const ValueKey('last_played_image'),

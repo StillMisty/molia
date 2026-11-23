@@ -7,9 +7,11 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
+import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/app_shell.dart';
+import 'package:molia/app/bootstrap/app_runtime.dart';
 import 'package:molia/app/bootstrap/runtime_providers.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/library_repository.dart';
@@ -22,6 +24,7 @@ import 'package:molia/domain/models/library_browse.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/channel_selection.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
@@ -34,6 +37,7 @@ import 'package:molia/providers/search_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/back_claims.dart';
+import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/services/download/download_records.dart';
 import 'package:molia/services/escape_claims.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
@@ -41,14 +45,11 @@ import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/shortcut_bindings.dart';
 import 'package:molia/services/shortcut_settings.dart';
 import 'package:molia/sources/source_manager.dart';
-import 'package:provider/provider.dart';
-import 'package:provider/single_child_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fake_library_repository.dart';
 import 'fake_music_source.dart';
 import 'fakes.dart';
-import 'cover_test_support.dart';
 import 'memory_database.dart';
 import 'settings_test_support.dart';
 import 'sync_test_support.dart';
@@ -105,7 +106,7 @@ Future<FakePlaybackFacade> pumpPerfApp(
   bool waitForHome = true,
   PerfRealLibrary? realLibrary,
   bool disableAnimations = false,
-  List<SingleChildWidget> extraProviders = const [],
+  void Function(AppRuntime runtime)? configureRuntime,
 
   /// 在 MaterialApp 外再包一层（UI 预览用 RepaintBoundary 截图）；null = 原样。
   Widget Function(Widget child)? wrap,
@@ -127,14 +128,6 @@ Future<FakePlaybackFacade> pumpPerfApp(
   EscapeClaims.reset();
   BackClaims.reset();
 
-  final themeContainer = ProviderContainer(
-    overrides: [
-      settingsRegistryProvider.overrideWithValue(testSettingsRegistry()),
-    ],
-  );
-  addTearDown(themeContainer.dispose);
-  final theme = themeContainer.read(themeProvider.notifier);
-  await theme.preferencesReady;
   final nav = NavProvider(settings: testSettingsRegistry());
   addTearDown(nav.dispose);
   await nav.preferencesReady;
@@ -172,9 +165,9 @@ Future<FakePlaybackFacade> pumpPerfApp(
   addTearDown(library.dispose);
 
   // 真实内存库只在显式请求时装配：默认装配仍是 fake 仓库，时序不受影响。
-  final realLibraryProviders = <SingleChildWidget>[];
+  final realLibraryOverrides = <Override>[];
   if (realLibrary != null) {
-    realLibraryProviders.addAll(
+    realLibraryOverrides.addAll(
       await _installRealLibrary(realLibrary, playback),
     );
   }
@@ -257,46 +250,51 @@ Future<FakePlaybackFacade> pumpPerfApp(
     tester.view.resetDevicePixelRatio();
   });
 
+  final runtime = AppRuntime()
+    ..put<PlaybackProvider>(playback)
+    ..put<LibraryProvider>(library)
+    ..put<SourcesProvider>(sources)
+    ..put<ChannelSelection>(selection)
+    ..put<DiscoverProvider>(discover)
+    ..put<SearchProvider>(search)
+    ..put<LyricsProvider>(lyrics)
+    ..put<LyricsDisplaySettings>(lyricsDisplay)
+    ..put<NavProvider>(nav)
+    ..put<CustomCoverStore>(CustomCoverStore());
+  configureRuntime?.call(runtime);
+  final container = ProviderContainer(
+    overrides: [
+      appRuntimeProvider.overrideWithValue(runtime),
+      settingsRegistryProvider.overrideWithValue(testSettingsRegistry()),
+      ...realLibraryOverrides,
+    ],
+  );
+  addTearDown(container.dispose);
+  final theme = container.read(themeProvider.notifier);
+  await theme.preferencesReady;
+
   await tester.pumpWidget(
     UncontrolledProviderScope(
-      container: themeContainer,
-      child: MultiProvider(
-        providers: [
-          coverStoreProvider(),
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<LibraryProvider>.value(value: library),
-          ChangeNotifierProvider<SourcesProvider>.value(value: sources),
-          ChangeNotifierProvider<ChannelSelection>.value(value: selection),
-          ChangeNotifierProvider<DiscoverProvider>.value(value: discover),
-          ChangeNotifierProvider<SearchProvider>.value(value: search),
-          ChangeNotifierProvider<LyricsProvider>.value(value: lyrics),
-          ChangeNotifierProvider<LyricsDisplaySettings>.value(
-            value: lyricsDisplay,
-          ),
-          ChangeNotifierProvider<NavProvider>.value(value: nav),
-          ...realLibraryProviders,
-          ...extraProviders,
-        ],
-        child: (wrap ?? (child) => child)(
-          MaterialApp(
-            locale: const Locale('zh'),
-            localizationsDelegates: const [
-              AppLocalizations.delegate,
-              ...GlobalMaterialLocalizations.delegates,
-            ],
-            supportedLocales: const [Locale('zh')],
-            // 系统「减弱动效」：部分用例验证 spatial 导航动效的直达终态。
-            builder: disableAnimations
-                ? (context, child) => MediaQuery(
-                    data: MediaQuery.of(context)
-                        .copyWith(disableAnimations: true),
-                    child: child!,
-                  )
-                : null,
-            home: MyApp(
-              desktopShell: desktopShell,
-              showOnboarding: showOnboarding,
-            ),
+      container: container,
+      child: (wrap ?? (child) => child)(
+        MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          // 系统「减弱动效」：部分用例验证 spatial 导航动效的直达终态。
+          builder: disableAnimations
+              ? (context, child) => MediaQuery(
+                  data: MediaQuery.of(context)
+                      .copyWith(disableAnimations: true),
+                  child: child!,
+                )
+              : null,
+          home: MyApp(
+            desktopShell: desktopShell,
+            showOnboarding: showOnboarding,
           ),
         ),
       ),
@@ -318,7 +316,7 @@ Future<FakePlaybackFacade> pumpPerfApp(
 /// provider 只通过 [SingleChildWidget] 列表挂进树；页面正在用的
 /// FakeLibraryRepository 与 LibraryProvider 不受影响——本场景测的是「真实库
 /// 触发 → LocalLibraryProvider 重建 / 发布 → 页面 notify」的帧成本。
-Future<List<SingleChildWidget>> _installRealLibrary(
+Future<List<Override>> _installRealLibrary(
   PerfRealLibrary handle,
   PlaybackProvider playback,
 ) async {
@@ -396,11 +394,16 @@ Future<List<SingleChildWidget>> _installRealLibrary(
     .._statisticsRepository = statisticsRepository
     .._statisticsProvider = statisticsProvider;
 
+  final stats = statisticsProvider;
   return [
-    ChangeNotifierProvider<LocalLibraryProvider>.value(value: localLibrary),
-    if (statisticsProvider != null)
-      ChangeNotifierProvider<PlayStatisticsProvider>.value(
-        value: statisticsProvider,
+    localLibraryProvider.overrideWith(
+      () => LazyNullableListenableNotifier<LocalLibraryProvider>.withValue(
+        localLibrary,
+      ),
+    ),
+    if (stats != null)
+      playStatisticsPageProvider.overrideWith(
+        () => LazyListenableNotifier<PlayStatisticsProvider>.withValue(stats),
       ),
   ];
 }

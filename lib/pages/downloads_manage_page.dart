@@ -10,18 +10,18 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
-import 'package:provider/provider.dart';
 
 import '../domain/models/library.dart';
 import '../domain/models/smart_lists.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/library_collection_request.dart';
 import '../providers/library_provider.dart';
-import '../providers/playback_provider.dart';
 import '../services/download/download_requests.dart';
 import '../services/download/download_maintenance.dart';
 import '../services/download/download_records.dart';
@@ -41,14 +41,15 @@ import '../widgets/settings/settings_tiles.dart';
 /// 等待任务列表最多展示多少行，其余折叠成「还有 N 首等待中」。
 const int _maxQueuedRows = 20;
 
-class DownloadsManagePage extends StatefulWidget {
+class DownloadsManagePage extends ConsumerStatefulWidget {
   const DownloadsManagePage({super.key});
 
   @override
-  State<DownloadsManagePage> createState() => _DownloadsManagePageState();
+  ConsumerState<DownloadsManagePage> createState() =>
+      _DownloadsManagePageState();
 }
 
-class _DownloadsManagePageState extends State<DownloadsManagePage> {
+class _DownloadsManagePageState extends ConsumerState<DownloadsManagePage> {
   /// 维护动作（清扫 / 补发布 / 孤儿删除）单独占用，不影响下载操作。
   bool _busy = false;
 
@@ -63,7 +64,9 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final maintenance = context.read<DownloadMaintenance?>();
+    final DownloadMaintenance? maintenance = ref.read(
+      downloadMaintenanceProvider,
+    );
     if (!identical(maintenance, _rootMaintenance)) {
       _rootMaintenance = maintenance;
       _rootPath = maintenance?.rootPath() ?? Future<String?>.value();
@@ -73,10 +76,12 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final downloads = context.watch<DownloadManager?>();
-    final maintenance = context.read<DownloadMaintenance?>();
-    final queueLength = context.select<PlaybackProvider, int>(
-      (provider) => provider.snapshot.queue.length,
+    final DownloadManager? downloads = ref.watch(downloadManagerProvider);
+    final DownloadMaintenance? maintenance = ref.read(
+      downloadMaintenanceProvider,
+    );
+    final queueLength = ref.watch(
+      playbackProvider.select((provider) => provider.snapshot.queue.length),
     );
 
     return SettingsSubPage(
@@ -137,10 +142,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                   downloads == null || !downloads.supported || queueLength == 0
                   ? null
                   : () {
-                      final queue = context
-                          .read<PlaybackProvider>()
-                          .snapshot
-                          .queue;
+                      final queue = ref.read(playbackProvider).snapshot.queue;
                       unawaited(_batchDownload(queue));
                     },
             ),
@@ -187,9 +189,11 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                     : () => unawaited(_publishPublic(maintenance)),
               ),
             // 缺文件：只显示数量 + 检查入口（不恢复完整已完成列表）。
-            Builder(
-              builder: (context) {
-                final records = context.watch<DownloadRecords?>();
+            Consumer(
+              builder: (context, ref, _) {
+                final DownloadRecords? records = ref.watch(
+                  downloadRecordsProvider,
+                );
                 final missing = records == null
                     ? 0
                     : records.downloads
@@ -202,7 +206,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                   subtitle: l10n.missingFilesCount(missing),
                   onTap: _busy || records == null
                       ? null
-                      : () => unawaited(_checkMissingFiles(context, l10n)),
+                      : () => unawaited(_checkMissingFiles(l10n)),
                 );
               },
             ),
@@ -409,7 +413,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   /// 下载服务唯一实现，页面不再先算一遍候选。
   Future<void> _batchDownload(List<Track> queue) async {
     final l10n = AppLocalizations.of(context)!;
-    final requests = context.read<DownloadRequests?>();
+    final DownloadRequests? requests = ref.read(downloadRequestsProvider);
     if (requests == null) return;
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
     try {
@@ -437,8 +441,8 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   /// 选择歌单 → 批量下载（跳过已下载与本地曲目）。
   Future<void> _pickPlaylist() async {
     final l10n = AppLocalizations.of(context)!;
-    final library = context.read<LibraryProvider?>();
-    final downloads = context.read<DownloadManager?>();
+    final LibraryProvider? library = ref.read(libraryProvider);
+    final DownloadManager? downloads = ref.read(downloadManagerProvider);
     if (library == null || downloads == null) return;
     final playlists = library.playlists;
     if (playlists.isEmpty) {
@@ -568,13 +572,14 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   }
 
   /// 手动检查一次文件，并在提示里给出结果；缺失明细在收藏 › 文件不见。
-  Future<void> _checkMissingFiles(
-    BuildContext context,
-    AppLocalizations l10n,
-  ) async {
-    final service = context.read<LocalLibraryService?>();
-    final notifications = context.read<NotificationService?>();
-    final request = context.read<LibraryCollectionRequest?>();
+  Future<void> _checkMissingFiles(AppLocalizations l10n) async {
+    final LocalLibraryService? service = ref.read(localLibraryServiceProvider);
+    final NotificationService? notifications = ref.read(
+      maybeNotificationServiceProvider,
+    );
+    final LibraryCollectionRequest? request = ref.read(
+      libraryCollectionRequestProvider,
+    );
     if (service == null) return;
     final result = await service.checkFiles();
     if (!mounted) return;
@@ -666,7 +671,9 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   }
 
   void _showMessage(String message) {
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      maybeNotificationServiceProvider,
+    );
     if (notifications != null) {
       notifications.showSnackBar(message);
     } else {

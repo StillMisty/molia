@@ -7,16 +7,13 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
-import '../domain/models/source.dart';
 import '../domain/models/track.dart';
-import '../domain/ports/source_registry.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/comments_provider.dart';
-import '../providers/playback_provider.dart';
+import '../providers/app_providers.dart';
 import '../services/download/download_requests.dart';
 import 'labels/download_failure_label.dart';
 import 'download_data_saver_guard.dart';
@@ -30,19 +27,28 @@ AppLocalizations _l10n(BuildContext context) =>
 ///
 /// [includeAddToQueue] 只在队列行传 false：队列里「把已在队列的歌再加入
 /// 队列」没有意义，而且队列行的动作已经由队列编辑命令承担。
+///
+/// [ref] 由已迁移到 Riverpod 的调用方传入（真正订阅 provider 变化）；
+/// 只拿得到 `BuildContext` 的旧调用方按当前值构造一次菜单。
 List<RowAction> trackCommonActions(
   BuildContext context,
   Track track, {
   bool includeAddToQueue = true,
+  WidgetRef? ref,
 }) {
   final l10n = _l10n(context);
+  final container = ProviderScope.containerOf(context, listen: false);
   final actions = <RowAction>[];
 
   if (includeAddToQueue) {
     // 无当前曲目 = 没有队列可加入（产品约定：入口直接隐藏）。
-    final canEnqueue = context.select<PlaybackProvider?, bool>(
-      (provider) => provider?.hasTrack ?? false,
-    );
+    final canEnqueue = ref != null
+        ? ref.watch(
+            maybePlaybackProvider.select(
+              (provider) => provider?.hasTrack ?? false,
+            ),
+          )
+        : container.read(maybePlaybackProvider)?.hasTrack ?? false;
     if (canEnqueue) {
       actions.add(
         RowAction(
@@ -56,9 +62,15 @@ List<RowAction> trackCommonActions(
 
   // 入口可见性也由请求层给出：本地 / 已下载 / 进行中统一隐藏，UI 不再
   // 分别读 supported / DownloadRecords / DownloadTask。
-  final canDownload = context.select<DownloadRequests?, bool>(
-    (requests) => requests?.statusOf(track) == DownloadIntentStatus.ready,
-  );
+  final canDownload = ref != null
+      ? ref.watch(
+          downloadRequestsProvider.select(
+            (requests) =>
+                requests?.statusOf(track) == DownloadIntentStatus.ready,
+          ),
+        )
+      : container.read(downloadRequestsProvider)?.statusOf(track) ==
+            DownloadIntentStatus.ready;
   if (canDownload) {
     actions.add(
       RowAction(
@@ -69,12 +81,23 @@ List<RowAction> trackCommonActions(
     );
   }
 
-  final capabilities = context.select<SourceRegistry?, SourceCapabilities?>(
-    (registry) => registry?.byKey(track.id.sourceKey)?.capabilities,
-  );
-  final supportsComments = context.select<CommentsProvider?, bool>(
-    (comments) => comments?.supports(track) ?? false,
-  );
+  final capabilities = ref != null
+      ? ref.watch(
+          sourceRegistryProvider.select(
+            (registry) => registry?.byKey(track.id.sourceKey)?.capabilities,
+          ),
+        )
+      : container
+            .read(sourceRegistryProvider)
+            ?.byKey(track.id.sourceKey)
+            ?.capabilities;
+  final supportsComments = ref != null
+      ? ref.watch(
+          commentsProvider.select(
+            (comments) => comments?.supports(track) ?? false,
+          ),
+        )
+      : container.read(commentsProvider)?.supports(track) ?? false;
   if (supportsComments) {
     actions.add(
       RowAction(
@@ -128,7 +151,10 @@ List<RowAction> mergeRowActions(
 
 /// 加入队列：只在已有当前曲目时可达（入口已按能力位隐藏）。
 Future<void> _enqueueTrack(BuildContext context, Track track) async {
-  final playback = context.read<PlaybackProvider?>();
+  final playback = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(maybePlaybackProvider);
   if (playback == null || !playback.hasTrack) return;
   final l10n = _l10n(context);
   try {
@@ -149,7 +175,10 @@ Future<void> _enqueueTrack(BuildContext context, Track track) async {
 /// 补提示。终态由请求层给出；活动任务只提示「正在下载」不等待，保持入口
 /// 原来的非阻塞语义。
 Future<void> _downloadTrack(BuildContext context, Track track) async {
-  final requests = context.read<DownloadRequests?>();
+  final requests = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(downloadRequestsProvider);
   if (requests == null) return;
   final l10n = _l10n(context);
   if (!await confirmDownloadOnDataSaver(context)) return;

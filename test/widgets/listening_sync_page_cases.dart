@@ -10,9 +10,9 @@ import 'package:molia/services/scrobble/lastfm_sink.dart';
 import 'package:molia/services/scrobble/scrobble_outbox.dart';
 import 'package:molia/services/scrobble/scrobble_preferences.dart';
 import 'package:molia/services/scrobble/scrobble_service.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 class _FakeSink implements ScrobbleSink, ScrobbleCredentialSink {
@@ -62,10 +62,10 @@ void main() {
   tearDown(() => service.dispose());
 
   Future<void> pumpPage(WidgetTester tester) async {
+    final scope = ProviderTestScope()..put<ScrobbleService>(service);
     await tester.pumpWidget(
-      ChangeNotifierProvider<ScrobbleService>.value(
-        value: service,
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),

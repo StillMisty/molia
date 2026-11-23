@@ -1,9 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../services/lyrics_display/lyrics_display_settings.dart';
 import '../../widgets/settings/settings_tiles.dart';
 
@@ -12,16 +13,16 @@ import '../../widgets/settings/settings_tiles.dart';
 /// 这些策略由 `LyricsDisplayProvider` 在 Dart 侧统一应用，改一次对桌面
 /// 悬浮窗、通知栏·锁屏与蓝牙全部生效。只在「歌词与输出」页出现一份，
 /// 桌面歌词页不再重复铺同一组行。
-class LyricsSharedDisplaySection extends StatelessWidget {
+class LyricsSharedDisplaySection extends ConsumerWidget {
   const LyricsSharedDisplaySection({super.key, this.title});
 
   /// 分组标题；缺省不显示（由页面标题承担语义时）。
   final String? title;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final settings = context.watch<LyricsDisplaySettings>();
+    final settings = ref.watch(lyricsDisplaySettingsProvider);
     return SettingsSectionCard(
       title: title,
       children: [

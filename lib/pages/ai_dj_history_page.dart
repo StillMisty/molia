@@ -7,27 +7,28 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
+import '../providers/app_providers.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
 import '../widgets/ai_dj_shared.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/settings/settings_tiles.dart';
 
-class AiDjHistoryPage extends StatefulWidget {
+class AiDjHistoryPage extends ConsumerStatefulWidget {
   const AiDjHistoryPage({super.key});
 
   @override
-  State<AiDjHistoryPage> createState() => _AiDjHistoryPageState();
+  ConsumerState<AiDjHistoryPage> createState() => _AiDjHistoryPageState();
 }
 
-class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
+class _AiDjHistoryPageState extends ConsumerState<AiDjHistoryPage> {
   final Set<String> _expanded = {};
   final Set<String> _loading = {};
   final Set<String> _failed = {};
@@ -134,7 +135,9 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
   }
 
   void _notify(String message) {
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
     if (notifications == null) {
       M3ESnackbar.show(context, message: message);
     } else {
@@ -145,7 +148,7 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = context.watch<AiDjProvider>();
+    final provider = ref.watch(aiDjProvider);
     final entries = provider.historyEntries;
     return Scaffold(
       appBar: M3EAppBar.top(

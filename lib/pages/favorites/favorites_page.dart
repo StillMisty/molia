@@ -2,14 +2,15 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/library.dart';
 import '../../domain/models/smart_lists.dart';
 import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/collection_actions.dart';
 import '../../providers/collection_io_commands.dart';
 import '../../providers/collection_presenter.dart';
@@ -17,24 +18,14 @@ import '../../providers/collection_session.dart';
 import '../../providers/discover_provider.dart';
 import '../../providers/favorites_view_model.dart';
 import '../../providers/library_collections.dart';
-import '../../providers/library_collection_request.dart';
 import '../../providers/library_outcome.dart';
 import '../../providers/library_provider.dart';
-import '../../providers/local_library_provider.dart';
-import '../../providers/lyrics_provider.dart';
-import '../../providers/playback_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../services/back_claims.dart';
-import '../../services/cache_service.dart';
-import '../../services/download/download_manager.dart';
 import '../../services/download/download_requests.dart';
-import '../../services/download/download_records.dart';
 import '../../services/escape_claims.dart';
 import '../../services/haptics.dart';
-import '../../services/local_cache_index_store.dart';
-import '../../services/notification_service.dart';
 import '../../services/save_as.dart';
-import '../../services/track_local_data_service.dart';
 import '../../theme/motion_policy.dart';
 import '../../widgets/responsive.dart';
 import '../../widgets/collection_handoff.dart';
@@ -66,7 +57,7 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 页面只保留控件（滚动 / 焦点控制器）、[ListenableBuilder] 与 UI 回调；
 /// 合集会话、设备服务订阅、智能列表展开、定位与弹层条目都在
 /// [FavoritesViewModel]。
-class FavoritesPage extends StatefulWidget {
+class FavoritesPage extends ConsumerStatefulWidget {
   const FavoritesPage({
     super.key,
     this.shuffleRandom,
@@ -88,10 +79,10 @@ class FavoritesPage extends StatefulWidget {
   final ShellLongPressSignal? locatePlaying;
 
   @override
-  State<FavoritesPage> createState() => _FavoritesPageState();
+  ConsumerState<FavoritesPage> createState() => _FavoritesPageState();
 }
 
-class _FavoritesPageState extends State<FavoritesPage> {
+class _FavoritesPageState extends ConsumerState<FavoritesPage> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
 
@@ -154,11 +145,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _vm.attachServices(
-      cacheService: context.read<CacheService?>(),
-      localDataService: context.read<TrackLocalDataService?>(),
-      collectionRequest: context.read<LibraryCollectionRequest?>(),
-      downloadRecords: context.read<DownloadRecords?>(),
-      cacheIndex: context.read<LocalCacheIndexStore?>(),
+      cacheService: ref.read(cacheServiceProvider),
+      localDataService: ref.read(trackLocalDataServiceProvider),
+      collectionRequest: ref.read(libraryCollectionRequestProvider),
+      downloadRecords: ref.read(downloadRecordsProvider),
+      cacheIndex: ref.read(localCacheIndexProvider),
     );
     // 重新可见 = 重新进入本页：刷新历史顺序（provider 通知自带重建）。
     _vm.setPageVisible(ShellPageVisibility.maybeVisibleOf(context) ?? true);
@@ -227,7 +218,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     l10n: l10n,
     result: _vm.resolveLocate(
       rows: rows,
-      trackId: context.read<PlaybackProvider?>()?.currentTrackId,
+      trackId: ref.read(playbackProvider).currentTrackId,
     ),
     controller: _scrollControllerForKey(view.collectionKey),
     surface: surface,
@@ -279,13 +270,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   /// 本页动作的统一入口：端口按此刻 context 组装，命令 / 结果都在模块内。
   CollectionActions get _actions => CollectionActions(
-    library: LibraryProviderCollectionActions(context.read<LibraryProvider>()),
+    library: LibraryProviderCollectionActions(ref.read(libraryProvider)),
     handoff: TrackHandoffCollectionHandoff(
       context,
       random: widget.shuffleRandom,
     ),
     localData: ProviderCollectionLocalData(
-      downloads: context.read<DownloadManager?>(),
+      downloads: ref.read(downloadManagerProvider),
       localData: _vm.localDataService,
     ),
   );
@@ -297,6 +288,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     SyncProvider? sync,
     SaveAs? saveAs,
   }) => buildFavoritesIoCommands(
+    ref,
     context,
     discover: discover,
     requests: requests,
@@ -320,7 +312,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   Future<void> _importCollection() => importFavoritesCollection(
     context: context,
     l10n: _l10n(context),
-    discover: context.read<DiscoverProvider?>(),
+    discover: ref.read(discoverProvider),
     isActive: () => mounted,
     selectCollection: _selectCollection,
     ioCommands: _ioCommands,
@@ -335,12 +327,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   /// 选中行里「现在就能下载」的曲目（本地 / 已下载 / 进行中都不算）。
   List<Track> _selectedDownloadableTracks(CollectionView view) {
-    final requests = context.read<DownloadRequests?>();
+    final DownloadRequests? requests = ref.read(downloadRequestsProvider);
     if (requests == null) return const [];
     return favoritesDownloadableTracks(
       view: view,
       selectedRows: _vm.selectedRows(view),
-      provider: context.read<LibraryProvider>(),
+      provider: ref.read(libraryProvider),
       requests: requests,
     );
   }
@@ -350,8 +342,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
     // 可见性门控：本页在壳层中常驻挂载，隐藏时放弃 provider 订阅，
     // 否则每次播放历史写入（每首歌一次）都会让整页 build 并重跑过滤 / 排序。
     final provider = ShellPageVisibility.maybeVisibleOf(context) ?? true
-        ? context.watch<LibraryProvider>()
-        : context.read<LibraryProvider>();
+        ? ref.watch(libraryProvider)
+        : ref.read(libraryProvider);
     return ListenableBuilder(
       listenable: _vm,
       builder: (context, _) => _buildPage(context, provider),
@@ -363,10 +355,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final playlists = provider.playlists;
     final favoritesId = LibraryCollections.favoritesPlaylistId(playlists);
 
-    final smartRows = context
-        .select<LocalLibraryProvider?, Map<String, List<CollectionRow>>>(
-          (provider) => provider?.smartRows ?? const {},
-        );
+    final smartRows = ref.watch(
+      localLibraryProvider.select(
+        (provider) =>
+            provider?.smartRows ?? const <String, List<CollectionRow>>{},
+      ),
+    );
     // 会话是 build 里唯一的「状态机」：身份解析、ensure 加载、恢复校准、
     // 加载组合、选择失效与滚动键激活都在 sync 内完成，页面只消费结果。
     final sessionView = _vm.sync(
@@ -449,21 +443,25 @@ class _FavoritesPageState extends State<FavoritesPage> {
       onEnterReorder: _enterReorder,
       onSortChanged: _vm.setSort,
       onToggleMostPlayedMetric: (byTime) {
-        context.read<LocalLibraryProvider?>()?.setMostPlayedMetric(
-          byTime ? SmartListMetric.playCount : SmartListMetric.listeningTime,
-        );
+        ref
+            .read(localLibraryProvider)
+            ?.setMostPlayedMetric(
+              byTime
+                  ? SmartListMetric.playCount
+                  : SmartListMetric.listeningTime,
+            );
       },
       onImportLocal: () => unawaited(importLocalAudioFilesFlow(context)),
       onCheckLocalCache: () {
-        final index = context.read<LocalCacheIndexStore?>();
-        final cache = context.read<CacheService?>();
+        final index = ref.read(localCacheIndexProvider);
+        final cache = ref.read(cacheServiceProvider);
         unawaited(
           checkFavoritesLocalCache(
             context: context,
             l10n: l10n,
             index: index,
             cache: cache,
-            library: context.read<LibraryProvider>(),
+            library: ref.read(libraryProvider),
             isActive: () => mounted,
           ),
         );
@@ -475,7 +473,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
             context: context,
             playlist: playlist,
             playlists: playlists,
-            provider: context.read<LibraryProvider>(),
+            provider: ref.read(libraryProvider),
             isActive: () => mounted,
             onSaved: () => setState(() {}),
           ),
@@ -487,7 +485,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           changeFavoritesPlaylistCover(
             context: context,
             playlist: playlist,
-            provider: context.read<LibraryProvider>(),
+            provider: ref.read(libraryProvider),
             isActive: () => mounted,
           ),
         );
@@ -496,6 +494,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         if (playlist == null) return;
         unawaited(
           exportFavoritesPlaylist(
+            ref: ref,
             context: context,
             l10n: l10n,
             playlist: playlist,
@@ -506,14 +505,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
         );
       },
       onDownloadPlaylist: (view) {
-        final activeRequests = context.read<DownloadRequests?>();
+        final DownloadRequests? activeRequests = ref.read(
+          downloadRequestsProvider,
+        );
         if (activeRequests == null) return;
         unawaited(
           downloadFavoritesPlaylist(
             context: context,
             l10n: l10n,
             view: view,
-            provider: context.read<LibraryProvider>(),
+            provider: ref.read(libraryProvider),
             ioCommands: () => _ioCommands(requests: activeRequests),
             isActive: () => mounted,
           ),
@@ -562,7 +563,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           view: view,
           session: _vm.session,
           actions: _actions,
-          notification: context.read<NotificationService?>(),
+          notification: ref.read(notificationServiceProvider),
           isActive: () => mounted,
         ),
       ),
@@ -575,14 +576,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
         ),
       ),
       onDownloadSelected: () async {
-        final requests = context.read<DownloadRequests?>();
+        final DownloadRequests? requests = ref.read(downloadRequestsProvider);
         if (requests == null) return;
         await downloadFavoritesSelection(
           context: context,
           l10n: l10n,
           view: view,
           selectedRows: _vm.selectedRows(view),
-          provider: context.read<LibraryProvider>(),
+          provider: ref.read(libraryProvider),
           requests: requests,
           session: _vm.session,
           ioCommands: () => _ioCommands(requests: requests),
@@ -600,6 +601,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
             context,
             buildFavoritesHeaderData(
               context: context,
+              ref: ref,
               l10n: l10n,
               viewModel: _vm,
               searchController: _searchController,
@@ -653,21 +655,23 @@ class _FavoritesPageState extends State<FavoritesPage> {
                     FavoritesCollectionSurface.libraryBrowse =>
                       buildFavoritesBrowseTab(
                         context,
+                        ref,
                         FavoritesBrowseData(
                           l10n: l10n,
                           query: _searchController.text,
                           groupsCache: _browseGroups,
                           shuffleRandom: widget.shuffleRandom,
                           actions: _actions,
-                          downloadRecords: context.read<DownloadRecords?>(),
-                          lyrics: context.read<LyricsProvider>(),
-                          library: context.read<LibraryProvider>(),
+                          downloadRecords: ref.read(downloadRecordsProvider),
+                          lyrics: ref.read(lyricsProvider),
+                          library: ref.read(libraryProvider),
                           isActive: () => mounted,
                         ),
                       ),
                     FavoritesCollectionSurface.body =>
                       buildFavoritesCollectionTab(
                         context,
+                        ref,
                         l10n: l10n,
                         viewModel: _vm,
                         view: staleView ?? view,
@@ -720,6 +724,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     int selected,
   ) async {
     final outcome = await openFavoritesCollectionPicker(
+      ref: ref,
       context: context,
       l10n: l10n,
       frame: frame,

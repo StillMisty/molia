@@ -2,10 +2,11 @@ import 'dart:async';
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models/source.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/lyrics_source_search_session.dart';
 import '../services/lyrics/lyrics_source_strategy.dart';
@@ -27,7 +28,7 @@ export '../providers/lyrics_source_search_session.dart'
 /// `Navigator.pop(LyricsSearchSelection)` 返回给宿主页的调用方。
 /// 搜索 / 竞态 / 写缓存在 [LyricsSourceSearchSession]，本文件只负责渲染、
 /// 焦点、提示与导航。PageView 切走会销毁离屏页，因此保持存活以保住结果。
-class LyricsSourceSearchView extends StatefulWidget {
+class LyricsSourceSearchView extends ConsumerStatefulWidget {
   final String initialTrackTitle;
   final String initialArtistName;
 
@@ -74,10 +75,11 @@ class LyricsSourceSearchView extends StatefulWidget {
   });
 
   @override
-  State<LyricsSourceSearchView> createState() => _LyricsSourceSearchViewState();
+  ConsumerState<LyricsSourceSearchView> createState() =>
+      _LyricsSourceSearchViewState();
 }
 
-class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
+class _LyricsSourceSearchViewState extends ConsumerState<LyricsSourceSearchView>
     with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -92,10 +94,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
   @override
   void initState() {
     super.initState();
-    _notificationService = Provider.of<NotificationService>(
-      context,
-      listen: false,
-    );
+    _notificationService = ref.read(notificationServiceProvider);
 
     // 来源取自注册表（缺省时）；B 站等只有手动换源的来源也在其中
     // （是否可用在搜索时判定）。顺序由 channelOrder 决定。

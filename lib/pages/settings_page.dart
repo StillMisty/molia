@@ -1,23 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../domain/models/play_mode.dart';
-import '../providers/lyrics_display_provider.dart';
-import '../providers/nav_provider.dart';
-import '../providers/playback_provider.dart';
-import '../providers/sources_provider.dart';
-import '../providers/sync_provider.dart';
+import '../providers/app_providers.dart';
 import '../providers/theme_provider.dart';
-import '../providers/update_provider.dart';
-import '../services/audio_focus_settings.dart';
-import '../services/data_saver_service.dart';
-import '../services/library/library_add_settings.dart';
-import '../services/play_statistics_service.dart';
-import '../services/scrobble/scrobble_service.dart';
-import '../services/source_swap/source_swap_settings.dart';
-import '../services/window/tray_settings.dart';
 import '../theme/m3e_context.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/color_hex.dart';
@@ -71,7 +58,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         // 首屏直达的桌面歌词入口按能力显隐：打开设置时先复查一次。
-        context.read<LyricsDisplayProvider?>()?.refreshCapabilities();
+        ref.read(maybeLyricsDisplayProvider)?.refreshCapabilities();
       }
     });
   }
@@ -86,7 +73,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
       // 从系统「显示在其他应用上层」授权页返回：复查桌面歌词能力。
-      context.read<LyricsDisplayProvider?>()?.refreshCapabilities();
+      ref.read(maybeLyricsDisplayProvider)?.refreshCapabilities();
     }
   }
 
@@ -99,18 +86,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     // - 只决定「有没有」的服务 → read：挂载关系由组合根在启动时固定，不值得
     //   为同步进度之类的通知重建九张卡。
     final availability = SettingsSectionAvailability(
-      dataSaver: context.watch<DataSaverService?>(),
-      sourceSwap: context.watch<SourceSwapSettings?>(),
-      audioFocus: context.watch<AudioFocusSettings?>(),
-      lyricsDisplay: context.watch<LyricsDisplayProvider?>(),
-      nav: context.watch<NavProvider?>(),
-      tray: context.watch<TraySettings?>(),
-      update: context.watch<UpdateProvider?>(),
-      sources: context.read<SourcesProvider?>(),
-      scrobble: context.read<ScrobbleService?>(),
-      libraryAdd: context.read<LibraryAddSettings?>(),
-      statistics: context.read<PlayStatisticsService?>(),
-      sync: context.read<SyncProvider?>(),
+      dataSaver: ref.watch(maybeDataSaverServiceProvider),
+      sourceSwap: ref.watch(maybeSourceSwapSettingsProvider),
+      audioFocus: ref.watch(maybeAudioFocusSettingsProvider),
+      lyricsDisplay: ref.watch(maybeLyricsDisplayProvider),
+      nav: ref.watch(maybeNavProvider),
+      tray: ref.watch(maybeTraySettingsProvider),
+      update: ref.watch(maybeUpdateProvider),
+      sources: ref.read(maybeSourcesProvider),
+      scrobble: ref.read(maybeScrobbleServiceProvider),
+      libraryAdd: ref.read(maybeLibraryAddSettingsProvider),
+      statistics: ref.read(playStatisticsServiceProvider),
+      sync: ref.read(maybeSyncProvider),
     );
     // 两列流式需要比单列舒适行宽（`maxWidth`）更宽的画布：上限取设置弹层
     // 宽度，两列各占约半宽；单列沿用 `maxWidth` 不变。判据只由宽度档位
@@ -273,50 +260,65 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     return SettingsSectionCard(
       title: l10n.settingsPlaybackTitle,
       children: [
-        Selector<PlaybackProvider, PlayMode>(
-          selector: (context, provider) => provider.defaultPlayMode,
-          builder: (context, defaultPlayMode, _) => SettingsChoiceRow<PlayMode>(
-            key: const Key('settingsDefaultPlayModeItem'),
-            icon: Icons.play_circle_outline_rounded,
-            title: l10n.settingsDefaultPlayMode,
-            // 「默认」= 新播放会话的初始模式，不打断当前播放。
-            subtitle: l10n.settingsDefaultPlayModeSubtitle,
-            value: defaultPlayMode,
-            options: [
-              (PlayMode.listLoop, l10n.playModeListLoop),
-              (PlayMode.sequential, l10n.playModeSequential),
-              (PlayMode.singleRepeat, l10n.playModeSingleRepeat),
-              (PlayMode.shuffle, l10n.playModeShuffle),
-            ],
-            onChanged: (mode) =>
-                context.read<PlaybackProvider>().setDefaultPlayMode(mode),
-          ),
+        Consumer(
+          builder: (context, ref, _) {
+            final defaultPlayMode = ref.watch(
+              playbackProvider.select((provider) => provider.defaultPlayMode),
+            );
+            return SettingsChoiceRow<PlayMode>(
+              key: const Key('settingsDefaultPlayModeItem'),
+              icon: Icons.play_circle_outline_rounded,
+              title: l10n.settingsDefaultPlayMode,
+              // 「默认」= 新播放会话的初始模式，不打断当前播放。
+              subtitle: l10n.settingsDefaultPlayModeSubtitle,
+              value: defaultPlayMode,
+              options: [
+                (PlayMode.listLoop, l10n.playModeListLoop),
+                (PlayMode.sequential, l10n.playModeSequential),
+                (PlayMode.singleRepeat, l10n.playModeSingleRepeat),
+                (PlayMode.shuffle, l10n.playModeShuffle),
+              ],
+              onChanged: (mode) =>
+                  ref.read(playbackProvider).setDefaultPlayMode(mode),
+            );
+          },
         ),
-        Selector<PlaybackProvider, bool>(
-          selector: (context, provider) => provider.restoreSessionEnabled,
-          builder: (context, restoreSession, _) => SettingsSwitchTile(
-            switchKey: const Key('settingsRestoreSessionSwitch'),
-            icon: Icons.restore_rounded,
-            title: l10n.settingsRestoreSessionTitle,
-            subtitle: l10n.settingsRestoreSessionSubtitle,
-            value: restoreSession,
-            onChanged: (value) => context
-                .read<PlaybackProvider>()
-                .setRestoreSessionEnabled(value),
-          ),
+        Consumer(
+          builder: (context, ref, _) {
+            final restoreSession = ref.watch(
+              playbackProvider.select(
+                (provider) => provider.restoreSessionEnabled,
+              ),
+            );
+            return SettingsSwitchTile(
+              switchKey: const Key('settingsRestoreSessionSwitch'),
+              icon: Icons.restore_rounded,
+              title: l10n.settingsRestoreSessionTitle,
+              subtitle: l10n.settingsRestoreSessionSubtitle,
+              value: restoreSession,
+              onChanged: (value) =>
+                  ref.read(playbackProvider).setRestoreSessionEnabled(value),
+            );
+          },
         ),
         // 其他应用播放声音时是否继续播放：桌面没有音频焦点实现，不显示。
         if (availability.audioFocusRowVisible)
-          Selector<AudioFocusSettings, bool>(
-            selector: (context, settings) => settings.playWithOtherApps,
-            builder: (context, playWithOtherApps, _) => SettingsSwitchTile(
-              switchKey: const Key('settingsPlayWithOtherAppsSwitch'),
-              icon: Icons.multitrack_audio_rounded,
-              title: l10n.settingsPlayWithOtherApps,
-              subtitle: l10n.settingsPlayWithOtherAppsSubtitle,
-              value: playWithOtherApps,
-              onChanged: availability.audioFocus!.setPlayWithOtherApps,
-            ),
+          Consumer(
+            builder: (context, ref, _) {
+              final playWithOtherApps = ref.watch(
+                maybeAudioFocusSettingsProvider.select(
+                  (settings) => settings?.playWithOtherApps ?? false,
+                ),
+              );
+              return SettingsSwitchTile(
+                switchKey: const Key('settingsPlayWithOtherAppsSwitch'),
+                icon: Icons.multitrack_audio_rounded,
+                title: l10n.settingsPlayWithOtherApps,
+                subtitle: l10n.settingsPlayWithOtherAppsSubtitle,
+                value: playWithOtherApps,
+                onChanged: availability.audioFocus!.setPlayWithOtherApps,
+              );
+            },
           ),
       ],
     );
@@ -406,36 +408,46 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
         ),
         // 音源默认音质：设置页唯一入口。
         if (sources != null)
-          Selector<SourcesProvider, String>(
-            selector: (context, provider) => provider.preferredQuality,
-            builder: (context, quality, _) => SettingsDropdownRow<String>(
-              key: const Key('settingsDefaultQualityItem'),
-              icon: Icons.high_quality_rounded,
-              title: l10n.sourcesDefaultQuality,
-              subtitle: l10n.sourcesQualityHint,
-              // 音质标签都是短词（无损 / 320K / Hi-Res）：字段从 112 起按最长
-              // 选项自适应加宽（「Hi-Res」不被折行），把其余宽度让给标题与说明。
-              fieldWidth: 112,
-              value: quality,
-              options: [
-                for (final option in sources.qualityOptions)
-                  (option.value, sourceQualityLabel(l10n, option.value)),
-              ],
-              onChanged: sources.setPreferredQuality,
-            ),
+          Consumer(
+            builder: (context, ref, _) {
+              final quality = ref.watch(
+                sourcesProvider.select((provider) => provider.preferredQuality),
+              );
+              return SettingsDropdownRow<String>(
+                key: const Key('settingsDefaultQualityItem'),
+                icon: Icons.high_quality_rounded,
+                title: l10n.sourcesDefaultQuality,
+                subtitle: l10n.sourcesQualityHint,
+                // 音质标签都是短词（无损 / 320K / Hi-Res）：字段从 112 起按最长
+                // 选项自适应加宽（「Hi-Res」不被折行），把其余宽度让给标题与说明。
+                fieldWidth: 112,
+                value: quality,
+                options: [
+                  for (final option in sources.qualityOptions)
+                    (option.value, sourceQualityLabel(l10n, option.value)),
+                ],
+                onChanged: sources.setPreferredQuality,
+              );
+            },
           ),
         // 自动换源：播放失败后的跨源找回（手动换源不受此开关控制）。
         if (sourceSwapSettings != null)
-          Selector<SourceSwapSettings, bool>(
-            selector: (context, settings) => settings.autoEnabled,
-            builder: (context, autoEnabled, _) => SettingsSwitchTile(
-              switchKey: const Key('settingsAutoSourceSwapSwitch'),
-              icon: Icons.swap_horiz_rounded,
-              title: l10n.settingsAutoSourceSwap,
-              subtitle: l10n.settingsAutoSourceSwapSubtitle,
-              value: autoEnabled,
-              onChanged: (value) => sourceSwapSettings.setAutoEnabled(value),
-            ),
+          Consumer(
+            builder: (context, ref, _) {
+              final autoEnabled = ref.watch(
+                maybeSourceSwapSettingsProvider.select(
+                  (settings) => settings?.autoEnabled ?? false,
+                ),
+              );
+              return SettingsSwitchTile(
+                switchKey: const Key('settingsAutoSourceSwapSwitch'),
+                icon: Icons.swap_horiz_rounded,
+                title: l10n.settingsAutoSourceSwap,
+                subtitle: l10n.settingsAutoSourceSwapSubtitle,
+                value: autoEnabled,
+                onChanged: (value) => sourceSwapSettings.setAutoEnabled(value),
+              );
+            },
           ),
         // 省流模式：开关行排在在线服务入口之前，开启时才展开跟随子项
         //（音质上限 / 封面省流）；副标题保留当前网络状态，让「仅移动数据

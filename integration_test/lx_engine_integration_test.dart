@@ -10,10 +10,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:provider/provider.dart';
 import 'package:molia/services/memory/app_memory_manager.dart';
 import 'package:molia/pages/sources_page.dart';
 import 'package:molia/providers/sources_provider.dart';
+
+import '../test/support/provider_test_scope.dart';
+
 import 'package:molia/data/downloads/downloads_publisher.dart';
 import 'package:molia/services/app_presence.dart';
 import 'package:molia/services/window/app_tray.dart';
@@ -189,17 +191,12 @@ void main() {
     // isolate 卡死时整轮集成测试会永久等待；进程最终由 tearDownAll 强退。
     addTearDown(manager.dispose);
 
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<SourceManager>.value(value: manager),
-          ChangeNotifierProvider<SourcesProvider>(
-            create: (_) => SourcesProvider(manager),
-          ),
-        ],
-        child: const MaterialApp(home: SourcesPage()),
-      ),
-    );
+    final sources = SourcesProvider(manager);
+    addTearDown(sources.dispose);
+    final scope = ProviderTestScope();
+    scope.put<SourceManager>(manager);
+    scope.put<SourcesProvider>(sources);
+    await tester.pumpWidget(scope.wrap(const MaterialApp(home: SourcesPage())));
     await settle(tester);
 
     expect(find.text('音源管理'), findsOneWidget);

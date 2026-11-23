@@ -14,17 +14,17 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../services/covers/cover_image_codec.dart';
 import '../services/covers/cover_resolution.dart';
 import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
-import '../services/notification_service.dart';
 import 'responsive.dart';
 import 'cover_viewer.dart';
 import 'simple_modal_body.dart';
@@ -73,7 +73,7 @@ Future<void> showCoverPickerSheet(
 }
 
 /// 封面选择弹层内容（公开以便独立测试；生产经 [showCoverPickerSheet]）。
-class CoverPickerSheet extends StatefulWidget {
+class CoverPickerSheet extends ConsumerStatefulWidget {
   const CoverPickerSheet({
     super.key,
     this.trackId,
@@ -99,10 +99,10 @@ class CoverPickerSheet extends StatefulWidget {
   final Future<void> Function(bool hasCover)? onPlaylistCoverChanged;
 
   @override
-  State<CoverPickerSheet> createState() => _CoverPickerSheetState();
+  ConsumerState<CoverPickerSheet> createState() => _CoverPickerSheetState();
 }
 
-class _CoverPickerSheetState extends State<CoverPickerSheet> {
+class _CoverPickerSheetState extends ConsumerState<CoverPickerSheet> {
   bool _busy = false;
 
   AppLocalizations _l10n(BuildContext context) =>
@@ -209,7 +209,7 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
 
   void _showMessage(String message) {
     if (!mounted) return;
-    context.read<NotificationService?>()?.showSnackBar(message);
+    ref.read(notificationServiceProvider).showSnackBar(message);
   }
 
   @override

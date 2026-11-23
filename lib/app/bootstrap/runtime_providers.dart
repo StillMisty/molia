@@ -8,8 +8,17 @@ library;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../data/settings/settings_registry.dart';
+import 'app_runtime.dart';
 
 part 'runtime_providers.g.dart';
+
+/// 组合根在启动阶段填写的可变依赖表（见 [AppRuntime]）。
+///
+/// 生产由 `app_bootstrap.dart` override；测试直接 override 为只填了 fake
+/// 的 `AppRuntime`。迁移批次推进时，具体依赖会逐步改为独立 provider。
+@Riverpod(keepAlive: true, name: 'appRuntimeProvider')
+AppRuntime appRuntime(Ref ref) =>
+    throw StateError('appRuntimeProvider 必须由组合根（ProviderScope override）注入');
 
 /// 全应用唯一的设置注册表。
 ///

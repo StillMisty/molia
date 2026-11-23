@@ -27,9 +27,9 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:logging/logging.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../providers/playback_provider.dart';
+import '../../providers/app_providers.dart';
 import '../../services/escape_claims.dart';
 import '../../services/key_claims.dart';
 import '../../services/shortcut_settings.dart';
@@ -39,7 +39,7 @@ import '../../services/shortcuts.dart';
 final _logger = Logger('molia.desktop_shortcuts');
 
 /// 软件内快捷键挂载点：包住桌面骨架整棵树，在顶层拦截按键。
-class DesktopShortcuts extends StatefulWidget {
+class DesktopShortcuts extends ConsumerStatefulWidget {
   const DesktopShortcuts({
     super.key,
     required this.onFocusSearch,
@@ -61,10 +61,10 @@ class DesktopShortcuts extends StatefulWidget {
   final Widget child;
 
   @override
-  State<DesktopShortcuts> createState() => _DesktopShortcutsState();
+  ConsumerState<DesktopShortcuts> createState() => _DesktopShortcutsState();
 }
 
-class _DesktopShortcutsState extends State<DesktopShortcuts> {
+class _DesktopShortcutsState extends ConsumerState<DesktopShortcuts> {
   /// 处理器当前是否已挂到 [HardwareKeyboard]（跟随软件内总开关）。
   bool _registered = false;
 
@@ -151,7 +151,7 @@ class _DesktopShortcutsState extends State<DesktopShortcuts> {
   /// provider / 执行器自身兜底，这里只保证不把 Future 丢成未处理错误。
   void _execute(ShortcutCommand command) {
     final actions = ShortcutActions(
-      playback: context.read<PlaybackProvider>(),
+      playback: ref.read(playbackProvider),
       onFocusSearch: widget.onFocusSearch,
       onSelectDestinationIndex: widget.onSelectDestinationIndex,
       onCloseQueuePanel: widget.onCloseQueuePanel,

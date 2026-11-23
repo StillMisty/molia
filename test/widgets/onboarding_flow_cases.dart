@@ -10,10 +10,10 @@ import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/services/data_saver_service.dart';
 import 'package:molia/services/onboarding_store.dart';
 import 'package:molia/sources/source_manager.dart' hide SourceKind;
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/perf_app_harness.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 class _FakeSources extends SourcesProvider {
@@ -102,13 +102,12 @@ void main() {
   }) async {
     tester.platformDispatcher.textScaleFactorTestValue = textScale;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final scope = ProviderTestScope();
+    scope.put<SourcesProvider>(sources);
+    scope.put<DataSaverService>(dataSaver);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<SourcesProvider>.value(value: sources),
-          ChangeNotifierProvider<DataSaverService>.value(value: dataSaver),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),

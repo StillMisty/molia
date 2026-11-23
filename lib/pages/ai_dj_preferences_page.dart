@@ -7,13 +7,14 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
+import '../providers/app_providers.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
 import '../widgets/ai_dj_feedback_dialog.dart';
@@ -22,14 +23,15 @@ import '../widgets/ai_dj_shared.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
-class AiDjPreferencesPage extends StatefulWidget {
+class AiDjPreferencesPage extends ConsumerStatefulWidget {
   const AiDjPreferencesPage({super.key});
 
   @override
-  State<AiDjPreferencesPage> createState() => _AiDjPreferencesPageState();
+  ConsumerState<AiDjPreferencesPage> createState() =>
+      _AiDjPreferencesPageState();
 }
 
-class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
+class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
   /// 补充要求的防抖窗口：输入停顿后再落盘，避免逐字写偏好。
   static const Duration _extraSaveDelay = Duration(milliseconds: 400);
 
@@ -40,7 +42,7 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
   @override
   void initState() {
     super.initState();
-    _provider = context.read<AiDjProvider>();
+    _provider = ref.read(aiDjProvider);
     // 直接打开偏好页时也补齐配置读取（幂等；首帧后已读过一次）。
     unawaited(_provider.init());
     _extraController = TextEditingController(
@@ -109,7 +111,9 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
   }
 
   void _notify(String message) {
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
     if (notifications == null) {
       M3ESnackbar.show(context, message: message);
     } else {
@@ -120,7 +124,7 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = context.watch<AiDjProvider>();
+    final provider = ref.watch(aiDjProvider);
     final prefs = provider.preferences;
     return SettingsSubPage(
       title: l10n.aiDjPreferencesTitle,

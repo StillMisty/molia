@@ -1,8 +1,8 @@
-import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/lyrics_display/lyrics_display_settings.dart';
 import '../../theme/scheme_builder.dart';
@@ -20,7 +20,7 @@ class DesktopLyricsAdvancedPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final settings = context.watch<LyricsDisplaySettings>();
+    final settings = ref.watch(lyricsDisplaySettingsProvider);
     final theme = ref.watch(themeProvider);
     final scheme = resolveSurfaceScheme(
       settings.desktopSchemeSource,

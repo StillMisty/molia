@@ -8,6 +8,61 @@ part of 'runtime_providers.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
+/// 组合根在启动阶段填写的可变依赖表（见 [AppRuntime]）。
+///
+/// 生产由 `app_bootstrap.dart` override；测试直接 override 为只填了 fake
+/// 的 `AppRuntime`。迁移批次推进时，具体依赖会逐步改为独立 provider。
+
+@ProviderFor(appRuntime)
+final appRuntimeProvider = AppRuntimeProvider._();
+
+/// 组合根在启动阶段填写的可变依赖表（见 [AppRuntime]）。
+///
+/// 生产由 `app_bootstrap.dart` override；测试直接 override 为只填了 fake
+/// 的 `AppRuntime`。迁移批次推进时，具体依赖会逐步改为独立 provider。
+
+final class AppRuntimeProvider
+    extends $FunctionalProvider<AppRuntime, AppRuntime, AppRuntime>
+    with $Provider<AppRuntime> {
+  /// 组合根在启动阶段填写的可变依赖表（见 [AppRuntime]）。
+  ///
+  /// 生产由 `app_bootstrap.dart` override；测试直接 override 为只填了 fake
+  /// 的 `AppRuntime`。迁移批次推进时，具体依赖会逐步改为独立 provider。
+  AppRuntimeProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'appRuntimeProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$appRuntimeHash();
+
+  @$internal
+  @override
+  $ProviderElement<AppRuntime> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  AppRuntime create(Ref ref) {
+    return appRuntime(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(AppRuntime value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<AppRuntime>(value),
+    );
+  }
+}
+
+String _$appRuntimeHash() => r'6623a3f9cae2b18d59d371f2ecc9d41e18f6ba27';
+
 /// 全应用唯一的设置注册表。
 ///
 /// 生产由组合根 override；测试按需 override 为 `testSettingsRegistry()`。

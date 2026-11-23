@@ -9,10 +9,10 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/discover_leaderboards_tab.dart';
 import 'package:molia/widgets/discover_playlists_tab.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/cover_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/fake_discover_api.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
@@ -70,14 +70,13 @@ void main() {
   });
 
   Widget host(Widget home) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider<DiscoverProvider>.value(value: discover),
-        // 曲目行里的 TrackArtwork 从 Provider 取封面存储（组合根接线）；
-        // widget 测试也要补上，否则加载完成后行构建直接抛 Provider 缺失。
-        coverStoreProvider(),
-      ],
-      child: M3EMaterialApp(
+    final scope = ProviderTestScope();
+    scope.put<DiscoverProvider>(discover);
+    // 曲目行里的 TrackArtwork 从容器取封面存储（组合根接线）；
+    // widget 测试也要补上，否则加载完成后行构建直接抛 provider 缺失。
+    putCoverStore(scope);
+    return scope.wrap(
+      M3EMaterialApp(
         data: M3EThemeData.fromMaterial(ThemeData.light()),
         theme: ThemeData.light(),
         locale: const Locale('zh'),

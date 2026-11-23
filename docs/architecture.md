@@ -41,8 +41,8 @@
 2. `lib/data/**`、`lib/sources/**`、`lib/playback/**` 禁止 providers/pages/widgets/main；
 3. `lib/providers/**` 禁止 import `lib/main.dart`；UI 状态按 ADR-0041 用
    Riverpod `Notifier` / `AsyncNotifier`（`@Riverpod` 代码生成），服务用函数式
-   `Provider` 注入；迁移期 `UncontrolledProviderScope` 内仍挂未迁移的
-   `MultiProvider`，但同一状态不得双写；
+   `Provider` 注入；启动期实例统一经 `AppRuntime` 登记，UI 只通过 `ref` 读取，
+   不再使用 `package:provider`；
 4. `lib/main.dart` 是唯一 composition root，不允许被其它 lib 文件 import；
    它只做 `WidgetsFlutterBinding.ensureInitialized()` + `runMoliaApp()`（行数由
    `module_layout_test.dart` 守卫）。启动顺序集中在
@@ -50,9 +50,9 @@
    → 读引导标记 → runApp → 首帧回调；各阶段拆在 `platform_bootstrap.dart` 与
    `build_core_stacks.dart` / `build_feature_stacks.dart` /
    `build_aux_stacks.dart`（依赖进、装好的子系统出），观察者 / 生命周期 /
-   内存 / 托盘接在 `lib/app/bootstrap/wiring/**`，Provider 树与根 widget 在
-   `provider_tree.dart` / `root_widget.dart`；初始化顺序与前向引用关在 builder
-   内，main() 不再持有子系统细节；应用壳的对外入口是
+   内存 / 托盘接在 `lib/app/bootstrap/wiring/**`，Riverpod 容器与根 widget 在
+   `app_bootstrap.dart` / `runtime_wiring.dart` / `root_widget.dart`；初始化
+   顺序与前向引用关在 builder 内，main() 不再持有子系统细节；应用壳的对外入口是
    `lib/app/app_shell.dart`（barrel：MyApp / MyThemedApp / 全局 key 等公开
    类型），实现按职责拆在 `lib/app/shell/`（app_shell / shell_presentation /
    shell_bar / shell_page_layer / shell_progress / pairing_queue /

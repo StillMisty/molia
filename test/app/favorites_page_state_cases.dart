@@ -8,10 +8,10 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/favorites/favorites_page.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/cover_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
 
@@ -95,14 +95,13 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final scope = ProviderTestScope();
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryProvider>(library);
+    putCoverStore(scope);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          coverStoreProvider(),
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<LibraryProvider>.value(value: library),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),

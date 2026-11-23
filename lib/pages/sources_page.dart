@@ -3,9 +3,9 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'any_listen_page.dart';
@@ -13,6 +13,7 @@ import '../domain/models/bili_account.dart';
 import '../domain/models/source.dart' show SourceDescriptor, SourceKind;
 import '../domain/models/source_script.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/sources_provider.dart';
 import '../services/bili_account_service.dart';
 import '../theme/app_semantic_colors.dart';
@@ -35,14 +36,14 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 渠道排序复用 [SettingsReorderableRows] 的拖拽手柄模式。
 /// 分层：只依赖 [SourcesProvider] / 平台账号服务与 domain 模型，
 /// 不直接 import `lib/sources/**`（R5）。
-class SourcesPage extends StatefulWidget {
+class SourcesPage extends ConsumerStatefulWidget {
   const SourcesPage({super.key});
 
   @override
-  State<SourcesPage> createState() => _SourcesPageState();
+  ConsumerState<SourcesPage> createState() => _SourcesPageState();
 }
 
-class _SourcesPageState extends State<SourcesPage> {
+class _SourcesPageState extends ConsumerState<SourcesPage> {
   /// 正在执行在线更新的脚本 id（同一时间只允许一个，按钮显示 loading）。
   String? _updatingScriptId;
 
@@ -66,15 +67,18 @@ class _SourcesPageState extends State<SourcesPage> {
             Navigator.of(context).push(
               M3EPageRoute<void>(
                 builder: (_) =>
-                    AnyListenPage(provider: context.read<SourcesProvider>()),
+                    AnyListenPage(provider: ref.read(sourcesProvider)),
               ),
             );
           },
         ),
       ],
-      body: Consumer<SourcesProvider>(
-        builder: (context, provider, _) {
-          final biliAccount = context.watch<BiliAccountService?>();
+      body: Consumer(
+        builder: (context, ref, _) {
+          final provider = ref.watch(sourcesProvider);
+          final BiliAccountService? biliAccount = ref.watch(
+            biliAccountProvider,
+          );
           if (!provider.initialized) {
             return const Center(child: M3ELoadingIndicator());
           }

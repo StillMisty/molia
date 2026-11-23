@@ -6,10 +6,10 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/settings/playback_details_section.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 void main() {
@@ -36,13 +36,12 @@ void main() {
   });
 
   Future<void> pumpSection(WidgetTester tester) async {
+    final scope = ProviderTestScope();
+    scope.put<PlaybackProvider>(playback);
+    scope.put<NavProvider>(nav);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<NavProvider>.value(value: nav),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),

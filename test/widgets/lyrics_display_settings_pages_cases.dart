@@ -1,11 +1,8 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:molia/app/bootstrap/runtime_providers.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/lyrics_display/desktop_lyrics_settings_page.dart';
 import 'package:molia/pages/lyrics_display/lyrics_content_settings_page.dart';
@@ -14,6 +11,7 @@ import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_display/lyrics_output.dart';
 
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 void main() {
@@ -21,17 +19,15 @@ void main() {
 
   late LyricsDisplaySettings settings;
   late ThemeProvider theme;
-  late ProviderContainer themeContainer;
+  late ProviderTestScope scope;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     final registry = testSettingsRegistry();
     settings = LyricsDisplaySettings(settings: registry);
-    themeContainer = ProviderContainer(
-      overrides: [settingsRegistryProvider.overrideWithValue(registry)],
-    );
-    addTearDown(themeContainer.dispose);
-    theme = themeContainer.read(themeProvider.notifier);
+    scope = ProviderTestScope(registry: registry);
+    scope.put<LyricsDisplaySettings>(settings);
+    theme = scope.theme;
     await theme.preferencesReady;
   });
 
@@ -48,27 +44,19 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    scope.put<LyricsDisplayProvider>(display);
     await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: themeContainer,
-        child: MultiProvider(
-          providers: [
-            ChangeNotifierProvider<LyricsDisplaySettings>.value(
-              value: settings,
-            ),
-            ChangeNotifierProvider<LyricsDisplayProvider>.value(value: display),
+      scope.wrap(
+        M3EMaterialApp(
+          data: M3EThemeData.fromMaterial(ThemeData.light()),
+          theme: ThemeData.light(),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
           ],
-          child: M3EMaterialApp(
-            data: M3EThemeData.fromMaterial(ThemeData.light()),
-            theme: ThemeData.light(),
-            locale: const Locale('zh'),
-            localizationsDelegates: const [
-              AppLocalizations.delegate,
-              ...GlobalMaterialLocalizations.delegates,
-            ],
-            supportedLocales: const [Locale('zh')],
-            home: page,
-          ),
+          supportedLocales: const [Locale('zh')],
+          home: page,
         ),
       ),
     );

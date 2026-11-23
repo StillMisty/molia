@@ -10,10 +10,10 @@ import 'package:flutter/services.dart'
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/app_localizations.dart';
-import '../providers/playback_provider.dart';
+import '../providers/app_providers.dart';
 import '../services/escape_claims.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
@@ -23,7 +23,7 @@ import 'icon_swap.dart';
 ///
 /// 图标按钮与面板两个锚点 key 由宿主给出：底栏与播放页各有自己的稳定 Key
 /// （测试定位入口与焦点包含判定）。
-class VolumeControl extends StatefulWidget {
+class VolumeControl extends ConsumerStatefulWidget {
   const VolumeControl({super.key, this.buttonKey, this.panelKey});
 
   /// 图标按钮的稳定 Key（宿主 / 测试定位入口）。
@@ -33,10 +33,10 @@ class VolumeControl extends StatefulWidget {
   final Key? panelKey;
 
   @override
-  State<VolumeControl> createState() => _VolumeControlState();
+  ConsumerState<VolumeControl> createState() => _VolumeControlState();
 }
 
-class _VolumeControlState extends State<VolumeControl>
+class _VolumeControlState extends ConsumerState<VolumeControl>
     with SingleTickerProviderStateMixin {
   final OverlayPortalController _controller = OverlayPortalController();
 
@@ -108,8 +108,8 @@ class _VolumeControlState extends State<VolumeControl>
 
   @override
   Widget build(BuildContext context) {
-    final (muted, volume) = context.select<PlaybackProvider, (bool, double)>(
-      (provider) => (provider.muted, provider.volume),
+    final (muted, volume) = ref.watch(
+      playbackProvider.select((provider) => (provider.muted, provider.volume)),
     );
     final l10n = AppLocalizations.of(context)!;
     final bool off = muted || volume == 0;
@@ -195,7 +195,7 @@ class _VolumeControlState extends State<VolumeControl>
 /// Tab 移出弹层子树后按键不再冒泡到这里，而登记仍让壳层让位，Esc 会被完全
 /// 吞掉。焦点由滑杆的 autofocus 领取 —— 面板一出现，左右方向键 / Home / End
 /// 就能调音量，不用先 Tab 一次。
-class _VolumePanel extends StatefulWidget {
+class _VolumePanel extends ConsumerStatefulWidget {
   const _VolumePanel({super.key, required this.width, required this.onClose});
 
   /// 面板宽度（窄窗时由宿主收窄，滑杆是弹性项）。
@@ -204,10 +204,10 @@ class _VolumePanel extends StatefulWidget {
   final VoidCallback onClose;
 
   @override
-  State<_VolumePanel> createState() => _VolumePanelState();
+  ConsumerState<_VolumePanel> createState() => _VolumePanelState();
 }
 
-class _VolumePanelState extends State<_VolumePanel> {
+class _VolumePanelState extends ConsumerState<_VolumePanel> {
   /// 登记判定：本组件存在 = 面板可见（随 Overlay 挂载 / 卸载）。
   late final bool Function() _escapeClaim = _claimEscape;
 
@@ -239,8 +239,8 @@ class _VolumePanelState extends State<_VolumePanel> {
 
   @override
   Widget build(BuildContext context) {
-    final (muted, volume) = context.select<PlaybackProvider, (bool, double)>(
-      (provider) => (provider.muted, provider.volume),
+    final (muted, volume) = ref.watch(
+      playbackProvider.select((provider) => (provider.muted, provider.volume)),
     );
     final l10n = AppLocalizations.of(context)!;
     final scheme = Theme.of(context).colorScheme;
@@ -273,7 +273,7 @@ class _VolumePanelState extends State<_VolumePanel> {
                     muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
                   ),
                 ),
-                onPressed: () => context.read<PlaybackProvider>().toggleMute(),
+                onPressed: () => ref.read(playbackProvider).toggleMute(),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -287,7 +287,7 @@ class _VolumePanelState extends State<_VolumePanel> {
                   // 读数与滑杆同一格式化口径：朗读「音量 60%」而不是 0.6。
                   semanticFormatterCallback: (_) => percent,
                   onChanged: (value) =>
-                      context.read<PlaybackProvider>().setVolume(value),
+                      ref.read(playbackProvider).setVolume(value),
                 ),
               ),
               const SizedBox(width: 8),

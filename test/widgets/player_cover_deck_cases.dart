@@ -3,13 +3,15 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/widgets/player_cover_deck.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
+import '../support/provider_test_scope.dart';
 
 /// 只替换索引查询与 revision 的封面存储：换图用例不碰真实文件 I/O。
 class _RevisionCoverStore extends CustomCoverStore {
@@ -58,12 +60,11 @@ Widget _host({
   required Widget Function(Track? displayTrack) buildDeck,
   bool tickerEnabled = true,
 }) {
-  return MultiProvider(
-    providers: [
-      Provider<CustomCoverStore>.value(value: covers),
-      ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-    ],
-    child: M3EMaterialApp(
+  final scope = ProviderTestScope();
+  scope.put<PlaybackProvider>(playback);
+  scope.put<CustomCoverStore>(covers);
+  return scope.wrap(
+    M3EMaterialApp(
       data: M3EThemeData.fromMaterial(ThemeData.light()),
       theme: ThemeData.light(),
       home: Scaffold(
@@ -73,9 +74,9 @@ Widget _host({
             child: SizedBox(
               width: 360,
               height: 420,
-              child: Consumer<PlaybackProvider>(
-                builder: (context, playback, _) =>
-                    buildDeck(playback.snapshot.current),
+              child: Consumer(
+                builder: (context, ref, _) =>
+                    buildDeck(ref.watch(playbackProvider).snapshot.current),
               ),
             ),
           ),

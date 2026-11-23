@@ -6,14 +6,14 @@
 /// 先到达的远端封面。封面文件支持静态图与 GIF / WebP 动图。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/library.dart';
-import '../services/covers/custom_cover_store.dart';
+import '../providers/app_providers.dart';
 import 'app_network_image.dart';
 
-class PlaylistCover extends StatelessWidget {
+class PlaylistCover extends ConsumerWidget {
   const PlaylistCover({
     super.key,
     required this.playlist,
@@ -33,10 +33,10 @@ class PlaylistCover extends StatelessWidget {
   final Widget? fallback;
 
   @override
-  Widget build(BuildContext context) {
-    final store = context.watch<CustomCoverStore?>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final store = ref.watch(customCoverStoreProvider);
     final key = playlist.effectiveCoverKey;
-    if (store == null || key == null) return _fallback(context);
+    if (key == null) return _fallback(context);
     return ValueListenableBuilder<int>(
       valueListenable: store.revision,
       builder: (context, _, _) {

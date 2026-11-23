@@ -1,21 +1,17 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/download.dart';
 import '../domain/models/track.dart';
-import '../domain/ports/source_registry.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/source_swap_page.dart';
 import '../pages/track_local_data_page.dart';
-import '../providers/comments_provider.dart';
-import '../providers/lyrics_provider.dart';
-import '../providers/playback_provider.dart';
+import '../providers/app_providers.dart';
 import '../providers/sleep_timer.dart';
 import '../providers/sources_provider.dart';
-import '../providers/track_info_controller.dart';
 import 'labels/lyrics_provider_label.dart';
 import 'labels/source_label.dart';
 import 'labels/source_quality_label.dart';
@@ -43,7 +39,7 @@ import 'track_share_sheet.dart';
 /// - 来源行合并「渠道 + 曲目 ID」，点击进分享 / 复制弹层；歌词来源只读；
 /// - 「本地数据」页里缓存与下载是**两套东西**：清缓存永不触碰 `downloads/`，
 ///   已缓存可「转存」成持久下载（不触网）。
-class TrackInfoView extends StatelessWidget {
+class TrackInfoView extends ConsumerWidget {
   const TrackInfoView({
     super.key,
     required this.controller,
@@ -57,32 +53,36 @@ class TrackInfoView extends StatelessWidget {
   final double topPadding;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     // 本地数据 / 省流 / 切歌订阅都在控制器内；页面只读不可变状态。
-    final info = context.watch<TrackInfoController>();
+    final info = ref.watch(trackInfoControllerProvider);
     // 订阅音质偏好（音源页）：「本次播放音质」是偏好、省流与恢复态的
     // 派生值，改完设置要立即刷新，不等下一次播放通知。
-    final sources = context.watch<SourcesProvider?>();
-    final (track, qualityType) = context
-        .select<PlaybackProvider, (Track?, String)>(
-          (provider) =>
-              (provider.snapshot.current, provider.currentQualityType),
-        );
+    final sources = ref.watch(sourcesProvider);
+    final (track, qualityType) = ref.watch(
+      playbackProvider.select(
+        (provider) => (provider.snapshot.current, provider.currentQualityType),
+      ),
+    );
     // 恢复态（冷启动未起播）没有真实播放，音质行只读；手动切换覆盖省流
     // 上限时不再显示「省流模式」后缀。
-    final restored = context.select<PlaybackProvider, bool>(
-      (provider) => provider.hasRestoredSession,
+    final restored = ref.watch(
+      playbackProvider.select((provider) => provider.hasRestoredSession),
     );
-    final qualityOverridden = context.select<PlaybackProvider, bool>(
-      (provider) => provider.isCurrentQualityOverridden,
+    final qualityOverridden = ref.watch(
+      playbackProvider.select(
+        (provider) => provider.isCurrentQualityOverridden,
+      ),
     );
-    final commentsSupported = context.select<CommentsProvider?, bool>(
-      (provider) =>
-          track == null ? false : (provider?.supports(track) ?? false),
+    final commentsSupported = ref.watch(
+      commentsProvider.select(
+        (provider) =>
+            track == null ? false : provider?.supports(track) ?? false,
+      ),
     );
     // 专辑行：映射层派生了专辑 id 且渠道能力位为真时可点（否则保持只读信息行）。
-    final sourceRegistry = context.watch<SourceRegistry?>();
+    final sourceRegistry = ref.watch(sourceRegistryProvider);
     final albumSupported =
         track != null &&
         track.platformAlbumId != null &&
@@ -95,10 +95,12 @@ class TrackInfoView extends StatelessWidget {
         platformArtistOf(track) != null &&
         (sourceRegistry?.byKey(track.id.sourceKey)?.capabilities.artist ??
             false);
-    final lyricsProviderName = context.select<LyricsProvider, String?>(
-      (provider) => track != null && provider.state.trackId == track.id.uri
-          ? provider.state.providerName
-          : null,
+    final lyricsProviderName = ref.watch(
+      lyricsProvider.select(
+        (provider) => track != null && provider.state.trackId == track.id.uri
+            ? provider.state.providerName
+            : null,
+      ),
     );
     final hasQualities =
         track?.qualities.any((quality) => quality.type.isNotEmpty) ?? false;
@@ -139,7 +141,7 @@ class TrackInfoView extends StatelessWidget {
                 ),
               // 定时关闭：与曲目无关的播放控制（队列播完后仍可取消）。
               ValueListenableBuilder<SleepTimerState>(
-                valueListenable: context.read<PlaybackProvider>().sleepTimer,
+                valueListenable: ref.read(playbackProvider).sleepTimer,
                 builder: (context, timerState, _) => SettingsNavTile(
                   key: const Key('trackInfoSleepTimerItem'),
                   icon: Icons.bedtime_rounded,
@@ -158,7 +160,7 @@ class TrackInfoView extends StatelessWidget {
                   subtitle: l10n.trackActionSwapSubtitle,
                   onTap: () => unawaited(
                     openTrackSourceSwap(
-                      context,
+                      ref,
                       track: track,
                       initialTab: SourceSwapTab.audio,
                     ),
@@ -259,7 +261,7 @@ class TrackInfoView extends StatelessWidget {
                         : null,
                     onTap: () => unawaited(
                       showTrackQualitySheet(
-                        context,
+                        ref,
                         track: track,
                         currentQuality: qualityType,
                       ),
@@ -312,7 +314,7 @@ class TrackInfoView extends StatelessWidget {
                       ? l10n.trackInfoLyricsSourceNone
                       : lyricsProviderLabel(
                           l10n,
-                          sources?.channels ?? const [],
+                          sources.channels,
                           lyricsProviderName,
                         ),
                 ),

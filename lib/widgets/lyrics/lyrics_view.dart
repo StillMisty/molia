@@ -3,20 +3,18 @@ import 'dart:async';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:motor/motor.dart';
-import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../domain/models/track.dart';
 import '../../domain/models/lyric_line.dart';
 import '../../domain/models/play_mode.dart';
 import '../../pages/source_swap_page.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/lyrics_provider.dart';
-import '../../providers/playback_provider.dart';
 import '../../services/haptics.dart';
 import '../../services/lyrics_display/lyric_timing_policy.dart';
-import '../../services/lyrics_display/lyrics_display_settings.dart';
-import '../../services/notification_service.dart';
 import '../../theme/motion_policy.dart';
 import '../responsive.dart';
 import '../lyrics_display_settings_action.dart';
@@ -31,7 +29,7 @@ import 'lyrics_controls.dart';
 import 'lyrics_line_tile.dart';
 import 'lyrics_scroll.dart';
 
-class LyricsWidget extends StatefulWidget {
+class LyricsWidget extends ConsumerStatefulWidget {
   const LyricsWidget({
     super.key,
     this.quickActionsEnabled = true,
@@ -47,10 +45,10 @@ class LyricsWidget extends StatefulWidget {
   final ScrollController? controller;
 
   @override
-  State<LyricsWidget> createState() => _LyricsWidgetState();
+  ConsumerState<LyricsWidget> createState() => _LyricsWidgetState();
 }
 
-class _LyricsWidgetState extends State<LyricsWidget>
+class _LyricsWidgetState extends ConsumerState<LyricsWidget>
     with
         AutomaticKeepAliveClientMixin<LyricsWidget>,
         SingleTickerProviderStateMixin
@@ -134,7 +132,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final provider = Provider.of<LyricsProvider>(context, listen: false);
+    final provider = ref.read(lyricsProvider);
     if (identical(provider, _lyricsProvider)) return;
     _lyricsProvider?.removeListener(_onLyricsProviderChanged);
     _lyricsProvider = provider;
@@ -256,10 +254,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
   Widget build(BuildContext context) {
     super.build(context);
     final l10n = AppLocalizations.of(context)!;
-    final playbackProvider = Provider.of<PlaybackProvider>(
-      context,
-      listen: false,
-    );
+    final playback = ref.read(playbackProvider);
 
     // 可见性门控：隐藏页（壳层不在前台，或播放页停在队列 / 信息 tab）不再
     // 订阅进度、不自动滚动、不跑快捷操作弹簧。nearest scope 已把「壳层可见
@@ -275,11 +270,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     // 曲目变化走低频快照 Selector；行高亮订阅 position 独立通道，
     // 仅在行号变化时重建（PositionLineIndexBuilder 内部缓存行号）。
-    return Selector<PlaybackProvider, String?>(
-      selector: (_, provider) => provider.snapshot.current?.id.uri,
-      builder: (context, currentTrackId, _) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final currentTrackId = ref.watch(
+          playbackProvider.select(
+            (provider) => provider.snapshot.current?.id.uri,
+          ),
+        );
         return PositionLineIndexBuilder(
-          position: playbackProvider.position,
+          position: playback.position,
           enabled: active,
           lineIndexFor: _getCurrentLineIndex,
           builder: (context, currentLineIndex) => _buildLyricsContent(
@@ -309,12 +308,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
 
     // 歌词页扩展行开关：独立于输出侧（桌面 / 通知 / 蓝牙）的翻译·罗马音设置。
-    final lyricsDisplaySettings = context.watch<LyricsDisplaySettings>();
+    final lyricsDisplaySettings = ref.watch(lyricsDisplaySettingsProvider);
 
-    final playbackProvider = Provider.of<PlaybackProvider>(
-      context,
-      listen: false,
-    );
+    final playback = ref.read(playbackProvider);
 
     if (active) {
       // 行号变化（或仍有排队目标）由会话排帧末滚动；门控与重试都在会话里。
@@ -425,15 +421,13 @@ class _LyricsWidgetState extends State<LyricsWidget>
                   showRoma: showRoma,
                   roma: lineRoma,
                   effectDuration: lineEffectDuration,
-                  position: playbackProvider.position,
+                  position: playback.position,
                   onTap: () {
                     HapticsService.lightImpact();
                     if (!mounted) return;
 
                     final tappedTimestamp = _session.lines[index].timestamp;
-                    playbackProvider.seekToPosition(
-                      tappedTimestamp.inMilliseconds,
-                    );
+                    playback.seekToPosition(tappedTimestamp.inMilliseconds);
                     // 复制模式退出 / 暂停中恢复跟随（短抑制）/ 已在跟随，都要
                     // 立即把目标行滚回锚点：seek 后行号可能不变。
                     _viewSession.revealAfterLineTap(index);
@@ -538,25 +532,21 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final bool entered = _viewSession.toggleCopyMode();
     if (!entered) return;
     final l10n = AppLocalizations.of(context)!;
-    Provider.of<NotificationService>(context, listen: false).showSnackBar(
-      l10n.lyricsCopyModeSnackbar,
-      duration: const Duration(seconds: 4),
-    );
+    ref
+        .read(notificationServiceProvider)
+        .showSnackBar(
+          l10n.lyricsCopyModeSnackbar,
+          duration: const Duration(seconds: 4),
+        );
   }
 
   /// 换源页（歌词 / 音频双 tab）：默认落在歌词 tab。
   Future<void> _showSourceSwapPage() async {
     if (!mounted) return;
 
-    final playbackProvider = Provider.of<PlaybackProvider>(
-      context,
-      listen: false,
-    );
-    final currentTrack = playbackProvider.snapshot.current;
-    final notificationService = Provider.of<NotificationService>(
-      context,
-      listen: false,
-    );
+    final playback = ref.read(playbackProvider);
+    final currentTrack = playback.snapshot.current;
+    final notificationService = ref.read(notificationServiceProvider);
     final l10n = AppLocalizations.of(context)!;
 
     if (currentTrack == null) {
@@ -576,11 +566,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final bool wasFollowing = _viewSession.following;
     _viewSession.suspendFollow();
 
-    final lyricsProvider = Provider.of<LyricsProvider>(context, listen: false);
+    final lyrics = ref.read(lyricsProvider);
     final result = await showSourceSwapPage(
       context,
       seed: currentTrack,
-      lyricsProvider: lyricsProvider,
+      lyricsProvider: lyrics,
       initialTab: SourceSwapTab.lyrics,
     );
     if (!mounted) return;
@@ -593,7 +583,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     // 换源页歌词 tab 返回了歌词（页面已通过 LyricsProvider.saveManual
     // 写缓存并更新会话状态；这里只把结果落到本地渲染状态）
     if (selection != null && selection.lyrics.isNotEmpty) {
-      final lyricsState = lyricsProvider.state;
+      final lyricsState = lyrics.state;
       if (lyricsState.trackId != trackId ||
           lyricsState.status != LyricsStatus.ready) {
         return;
@@ -618,15 +608,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
   Future<void> _showLyricsSelectionPage() async {
     if (!mounted) return;
 
-    final playbackProvider = Provider.of<PlaybackProvider>(
-      context,
-      listen: false,
-    );
-    final currentTrack = playbackProvider.snapshot.current;
-    final notificationService = Provider.of<NotificationService>(
-      context,
-      listen: false,
-    );
+    final playback = ref.read(playbackProvider);
+    final currentTrack = playback.snapshot.current;
+    final notificationService = ref.read(notificationServiceProvider);
     final l10n = AppLocalizations.of(context)!;
 
     if (currentTrack == null) {
@@ -643,7 +627,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final artistName = _extractArtistNames(l10n, currentTrack);
     final albumCoverUrl = currentTrack.artwork?.uri.toString();
     // 歌词页展示开关：选择页与海报沿用同一对开关（歌词页看到什么就选什么）。
-    final lyricsDisplaySettings = context.read<LyricsDisplaySettings>();
+    final lyricsDisplaySettings = ref.read(lyricsDisplaySettingsProvider);
 
     // 暂停当前的自动滚动（离页期间不跑滚动工作）。
     final bool wasFollowing = _viewSession.following;
@@ -684,12 +668,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
   // 控制器与 Provider；滚动几何仍由本侧测量（lyrics_scroll_policy）。
 
   @override
-  Duration get position =>
-      Provider.of<PlaybackProvider>(context, listen: false).currentPosition;
+  Duration get position => ref.read(playbackProvider).currentPosition;
 
   @override
-  bool get isPlaying =>
-      Provider.of<PlaybackProvider>(context, listen: false).isPlaying;
+  bool get isPlaying => ref.read(playbackProvider).isPlaying;
 
   @override
   List<LyricLine> get lines => _session.lines;
@@ -698,8 +680,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
   bool get isSynced => _session.isSynced;
 
   @override
-  bool get hasTrack =>
-      Provider.of<PlaybackProvider>(context, listen: false).hasTrack;
+  bool get hasTrack => ref.read(playbackProvider).hasTrack;
 
   @override
   bool get quickActionsEnabled => widget.quickActionsEnabled;
@@ -711,12 +692,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
   bool get canScroll => _scroll.hasClients;
 
   @override
-  PlayMode get currentPlayMode =>
-      Provider.of<PlaybackProvider>(context, listen: false).currentMode;
+  PlayMode get currentPlayMode => ref.read(playbackProvider).currentMode;
 
   @override
   void setPlayMode(PlayMode mode) {
-    Provider.of<PlaybackProvider>(context, listen: false).setPlayMode(mode);
+    ref.read(playbackProvider).setPlayMode(mode);
   }
 
   @override
@@ -733,10 +713,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   @override
   void jumpTowardLine(int currentLineIndex) {
-    final durationMs = Provider.of<PlaybackProvider>(
-      context,
-      listen: false,
-    ).snapshot.current?.duration?.inMilliseconds;
+    final durationMs = ref
+        .read(playbackProvider)
+        .snapshot
+        .current
+        ?.duration
+        ?.inMilliseconds;
     _scroll.jumpTowardLine(
       currentLineIndex: currentLineIndex,
       lines: _session.lines,

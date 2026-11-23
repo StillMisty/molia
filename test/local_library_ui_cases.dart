@@ -2,8 +2,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 
-import 'package:provider/provider.dart';
-
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library_browse.dart';
 import 'package:molia/domain/models/smart_lists.dart';
@@ -26,6 +24,7 @@ import 'package:molia/widgets/collection_picker.dart';
 import 'package:molia/widgets/library_browse_view.dart';
 
 import 'support/cover_test_support.dart';
+import 'support/provider_test_scope.dart';
 import 'support/fake_download_storage.dart';
 import 'support/fakes.dart';
 import 'support/memory_database.dart';
@@ -175,15 +174,10 @@ void main() {
     );
     final playback = buildTestPlaybackProvider();
     addTearDown(playback.dispose);
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<DownloadRecords>.value(value: records),
-        ],
-        child: host(const DownloadsManagePage()),
-      ),
-    );
+    final scope = ProviderTestScope();
+    scope.put<PlaybackProvider>(playback);
+    scope.put<DownloadRecords>(records);
+    await tester.pumpWidget(scope.wrap(host(const DownloadsManagePage())));
     await tester.pump();
     expect(find.byKey(const Key('downloadsMissingFilesItem')), findsOneWidget);
     expect(find.text('1 个文件不见'), findsOneWidget);
@@ -378,19 +372,12 @@ void main() {
     );
     final playback = buildTestPlaybackProvider();
     addTearDown(playback.dispose);
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<DownloadRecords>.value(value: records),
-          ChangeNotifierProvider<LocalLibraryService>.value(value: service),
-          ChangeNotifierProvider<LibraryCollectionRequest>.value(
-            value: request,
-          ),
-        ],
-        child: host(const DownloadsManagePage()),
-      ),
-    );
+    final scope = ProviderTestScope();
+    scope.put<PlaybackProvider>(playback);
+    scope.put<DownloadRecords>(records);
+    scope.put<LocalLibraryService>(service);
+    scope.put<LibraryCollectionRequest>(request);
+    await tester.pumpWidget(scope.wrap(host(const DownloadsManagePage())));
     await tester.ensureVisible(
       find.byKey(const Key('downloadsMissingFilesItem')),
     );

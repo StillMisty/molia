@@ -1,13 +1,13 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
-import '../providers/playback_provider.dart';
+import '../providers/app_providers.dart';
 
-/// 播放状态 Provider 选择器集合
+/// 播放状态 provider 选择器集合
 ///
-/// 使用 Selector 替代 Consumer 可以显著减少不必要的 Widget 重建。
+/// 使用 `select` 替代整对象订阅可以显著减少不必要的 Widget 重建。
 
 /// 一行曲目的当前播放状态：[isCurrent] 为「这一行就是当前曲目」，
 /// [isPlaying] 只在 [isCurrent] 为真时有意义。
@@ -15,30 +15,28 @@ typedef CurrentTrackState = ({bool isCurrent, bool isPlaying});
 
 /// 行级订阅当前曲目状态（在该行自己的 build 里调用）。
 ///
-/// 用 `PlaybackProvider?`：组件测试 / 独立预览没有播放栈时按「非当前曲目」
-/// 处理，不抛 ProviderNotFoundException。非当前行在播放 / 暂停切换时返回的
-/// `(false, false)` 不变，因此不会跟着整张列表重建。
-CurrentTrackState selectCurrentTrackState(
-  BuildContext context,
-  TrackId trackId,
-) {
-  return context.select<PlaybackProvider?, CurrentTrackState>((provider) {
-    final current = provider?.snapshot.current;
-    final isCurrent = current?.id == trackId;
-    return (
-      isCurrent: isCurrent,
-      isPlaying: isCurrent && (provider?.snapshot.isPlaying ?? false),
-    );
-  });
+/// 非当前行在播放 / 暂停切换时返回的 `(false, false)` 不变，因此不会跟着
+/// 整张列表重建。
+CurrentTrackState selectCurrentTrackState(WidgetRef ref, TrackId trackId) {
+  return ref.watch(
+    maybePlaybackProvider.select((provider) {
+      final current = provider?.snapshot.current;
+      final isCurrent = current?.id == trackId;
+      return (
+        isCurrent: isCurrent,
+        isPlaying: isCurrent && (provider?.snapshot.isPlaying ?? false),
+      );
+    }),
+  );
 }
 
 /// 选择进度条所需的数据
 ///
 /// 进度走 provider 的独立 [PlaybackProvider.position] 通道
 /// （`ValueListenableBuilder`），低频状态（时长/播放中/有无曲目）走
-/// [Selector]（record `==` 可靠）。进度 tick 只重建 builder 自身，
-/// 不触发整 Provider 通知。
-class ProgressBarSelector extends StatelessWidget {
+/// `select`（record `==` 可靠）。进度 tick 只重建 builder 自身，
+/// 不触发整 provider 通知。
+class ProgressBarSelector extends ConsumerWidget {
   final Widget Function(
     BuildContext context,
     Duration position,
@@ -51,27 +49,23 @@ class ProgressBarSelector extends StatelessWidget {
   const ProgressBarSelector({super.key, required this.builder, this.child});
 
   @override
-  Widget build(BuildContext context) {
-    final position = context.read<PlaybackProvider>().position;
-    return Selector<
-      PlaybackProvider,
-      ({int duration, bool isPlaying, bool hasTrack})
-    >(
-      selector: (_, provider) => (
-        duration: provider.hasTrack
-            ? provider.snapshot.duration.inMilliseconds
-            : 1,
-        isPlaying: provider.isPlaying,
-        hasTrack: provider.hasTrack,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final position = ref.read(playbackProvider).position;
+    final state = ref.watch(
+      playbackProvider.select(
+        (provider) => (
+          duration: provider.hasTrack
+              ? provider.snapshot.duration.inMilliseconds
+              : 1,
+          isPlaying: provider.isPlaying,
+          hasTrack: provider.hasTrack,
+        ),
       ),
-      builder: (context, state, child) {
-        return ValueListenableBuilder<Duration>(
-          valueListenable: position,
-          builder: (context, position, _) =>
-              builder(context, position, state, child),
-          child: child,
-        );
-      },
+    );
+    return ValueListenableBuilder<Duration>(
+      valueListenable: position,
+      builder: (context, position, _) =>
+          builder(context, position, state, child),
       child: child,
     );
   }

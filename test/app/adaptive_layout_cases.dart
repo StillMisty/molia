@@ -1,8 +1,6 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:molia/app/bootstrap/runtime_providers.dart';
 import 'package:molia/app/desktop/now_playing_bar.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/settings_page.dart';
@@ -14,10 +12,10 @@ import 'package:molia/widgets/now_playing_layout_metrics.dart';
 import 'package:molia/widgets/responsive.dart';
 import 'package:molia/widgets/settings/settings_section_grid.dart';
 import 'package:molia/widgets/track_row.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/cover_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/fakes.dart';
 import '../support/perf_app_harness.dart';
 import '../support/settings_test_support.dart';
@@ -372,23 +370,22 @@ void main() {
   group('设置两列', () {
     late ThemeProvider theme;
     late PlaybackProvider playback;
-    late ProviderContainer themeContainer;
+    late ProviderTestScope scope;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
       final registry = testSettingsRegistry();
       attachStaticSettingsForTest(registry);
-      themeContainer = ProviderContainer(
-        overrides: [settingsRegistryProvider.overrideWithValue(registry)],
-      );
-      addTearDown(themeContainer.dispose);
-      theme = themeContainer.read(themeProvider.notifier);
+      scope = ProviderTestScope(registry: registry);
+      theme = scope.theme;
       await theme.preferencesReady;
       playback = buildTestPlaybackProvider(
         settings: registry,
         facade: FakePlaybackFacade(),
       );
       await playback.preferencesReady;
+      scope.put<PlaybackProvider>(playback);
+      putCoverStore(scope);
     });
 
     tearDown(() {
@@ -407,35 +404,28 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
       await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: themeContainer,
-          child: MultiProvider(
-            providers: [
-              coverStoreProvider(),
-              ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+        scope.wrap(
+          M3EMaterialApp(
+            data: M3EThemeData.fromMaterial(ThemeData.light()),
+            theme: ThemeData.light(),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
             ],
-            child: M3EMaterialApp(
-              data: M3EThemeData.fromMaterial(ThemeData.light()),
-              theme: ThemeData.light(),
-              locale: const Locale('zh'),
-              localizationsDelegates: const [
-                AppLocalizations.delegate,
-                ...GlobalMaterialLocalizations.delegates,
-              ],
-              supportedLocales: const [Locale('zh')],
-              home: Scaffold(
-                body: localWidth == null
-                    ? const SettingsPage()
-                    : Center(
-                        child: SizedBox(
-                          width: localWidth,
-                          height: 900,
-                          child: AdaptiveLayoutScope.local(
-                            child: const SettingsPage(),
-                          ),
+            supportedLocales: const [Locale('zh')],
+            home: Scaffold(
+              body: localWidth == null
+                  ? const SettingsPage()
+                  : Center(
+                      child: SizedBox(
+                        width: localWidth,
+                        height: 900,
+                        child: AdaptiveLayoutScope.local(
+                          child: const SettingsPage(),
                         ),
                       ),
-              ),
+                    ),
             ),
           ),
         ),

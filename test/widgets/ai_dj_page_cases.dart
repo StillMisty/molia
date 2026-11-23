@@ -14,11 +14,11 @@ import 'package:molia/services/ai/ai_recommendation_store.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
 import 'package:molia/widgets/ai_dj_track_tile.dart';
 import 'package:molia/widgets/ai_dj_waiting.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/ai_dj_test_support.dart';
 import '../support/cover_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/fake_ai_generator.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
@@ -84,10 +84,11 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final scope = ProviderTestScope();
+    scope.put<AiDjProvider>(provider);
     await tester.pumpWidget(
-      ChangeNotifierProvider<AiDjProvider>.value(
-        value: provider,
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -152,10 +153,11 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final scope = ProviderTestScope();
+    scope.put<AiDjProvider>(provider);
     await tester.pumpWidget(
-      ChangeNotifierProvider<AiDjProvider>.value(
-        value: provider,
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -232,15 +234,14 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    final scope = ProviderTestScope();
+    scope.put<AiDjProvider>(ai);
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryProvider>(library);
+    putCoverStore(scope);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          coverStoreProvider(),
-          ChangeNotifierProvider<AiDjProvider>.value(value: ai),
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<LibraryProvider>.value(value: library),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -355,15 +356,14 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final scope = ProviderTestScope();
+    scope.put<AiDjProvider>(ai);
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryProvider>(library);
+    putCoverStore(scope);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          coverStoreProvider(),
-          ChangeNotifierProvider<AiDjProvider>.value(value: ai),
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<LibraryProvider>.value(value: library),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),

@@ -113,7 +113,7 @@ final class ThemeProviderProvider
   }
 }
 
-String _$themeProviderHash() => r'1421e653a81f43733c666fbc36a615c2874c4dd9';
+String _$themeProviderHash() => r'9d916791cad129a63cf35a47842f80e6488cbbd3';
 
 /// 应用主题唯一来源：主题模式 + 系统亮度 + 基础配色 + 封面覆盖 + 纯黑。
 ///

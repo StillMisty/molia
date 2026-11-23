@@ -2,15 +2,15 @@
 /// （AI 页与发现页错误卡共用，避免两处漂移）。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/failure.dart';
 import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
-import '../services/notification_service.dart';
+import '../providers/app_providers.dart';
 
 /// 首次开启前的隐私确认：未确认则弹窗，确认后落库；返回是否已确认。
 Future<bool> ensureAiDjConsent(
@@ -142,12 +142,11 @@ Future<void> confirmAndClearAiDjMemory(
   if (confirmed != true) return;
   await provider.clearFeedbackMemory();
   if (!context.mounted) return;
-  final notifications = context.read<NotificationService?>();
-  if (notifications == null) {
-    M3ESnackbar.show(context, message: l10n.aiDjMemoryCleared);
-  } else {
-    notifications.showSuccessSnackBar(l10n.aiDjMemoryCleared);
-  }
+  final notifications = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(notificationServiceProvider);
+  notifications.showSuccessSnackBar(l10n.aiDjMemoryCleared);
 }
 
 /// 历史批次来源标签。

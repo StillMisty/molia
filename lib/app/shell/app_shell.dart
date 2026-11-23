@@ -19,9 +19,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/device_sync.dart';
+import '../../domain/models/shell_destination.dart';
 import '../../domain/models/sync_nearby_pairing.dart';
 import '../../domain/models/update_check_notice.dart';
 import '../../l10n/app_localizations.dart';
@@ -33,8 +33,7 @@ import '../../pages/sources_page.dart';
 import '../../pages/sync_nearby_pairing_dialogs.dart';
 import '../../pages/sync_notices.dart';
 import '../../pages/update_settings_page.dart';
-import '../../providers/nav_provider.dart';
-import '../../providers/playback_provider.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/app_branding_service.dart';
@@ -241,7 +240,7 @@ class _MyAppState extends ConsumerState<MyApp>
     // 这里同步读取即可。开启「恢复上次页面」时回到上次停留的一级页，否则
     // 用存储的启动页；记录 / 启动页不可见时都已回退到可见目的地。目的地 /
     // 展开 / 顶栏判定统一交给展示模块。
-    final nav = context.read<NavProvider>();
+    final nav = ref.read(navProvider);
     _presentation = ShellPresentation(
       initialDestination: nav.startupDestination,
       visibleDestinations: nav.visibleDestinations,
@@ -290,7 +289,7 @@ class _MyAppState extends ConsumerState<MyApp>
     // [_selectDestination]；把播放页 morph 状态对齐到新的有效选中项，
     // 避免页面栈已回退、顶栏却仍停留在播放页形态（曲目区/进度条收起）。
     final bool effectiveChanged = _presentation.syncVisibility(
-      context.read<NavProvider>().visibleDestinations,
+      ref.read(navProvider).visibleDestinations,
     );
     if (!effectiveChanged) return;
     _completeMorph();
@@ -371,7 +370,7 @@ class _MyAppState extends ConsumerState<MyApp>
   /// 由 [_selectDestination] 给，已经在本页时由这里补上。
   void _onFavoritesLongPress() {
     const favorites = ShellDestination.favorites;
-    if (!context.read<NavProvider>().isVisible(favorites)) return;
+    if (!ref.read(navProvider).isVisible(favorites)) return;
     if (_presentation.effectiveDestination != favorites) {
       _selectDestination(favorites);
     } else {
@@ -381,7 +380,7 @@ class _MyAppState extends ConsumerState<MyApp>
   }
 
   void _selectDestination(ShellDestination destination) {
-    final nav = context.read<NavProvider>();
+    final nav = ref.read(navProvider);
     // 同一帧里可见集合可能刚变（导航偏好重载 / 同步应用）：先同步再判定，
     // 否则会拿旧可见集合切到一个已经隐藏的目的地。
     _presentation.syncVisibility(nav.visibleDestinations);
@@ -542,7 +541,7 @@ class _MyAppState extends ConsumerState<MyApp>
   /// 已选中项不触发重复点击语义（回顶 / 折叠播放器）：快捷键是「切页」，
   /// 不是「再点一次」。
   void _selectVisibleDestinationAt(int index) {
-    final visible = context.read<NavProvider>().visibleDestinations;
+    final visible = ref.read(navProvider).visibleDestinations;
     if (index < 0 || index >= visible.length) return;
     _selectDestination(visible[index]);
   }
@@ -585,7 +584,7 @@ class _MyAppState extends ConsumerState<MyApp>
     final l10n = AppLocalizations.of(context)!;
     // 订阅导航偏好：可见集合变化要重建；渲染列表从展示模块取，与
     // selectedIndex 同一权威（didChangeDependencies 已同步）。
-    context.watch<NavProvider>();
+    ref.watch(navProvider);
     final visibleDestinations = _presentation.visibleDestinations;
     // 选中项被隐藏时回退到第一个可见目的地（重新显示后自动恢复）；
     // chrome、页面栈与点击判定共用同一 resolver。

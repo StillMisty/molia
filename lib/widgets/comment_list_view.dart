@@ -8,10 +8,11 @@ import 'dart:async';
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models/comment.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/comments_provider.dart';
 import '../theme/m3e_context.dart';
 import 'comment_avatar.dart';
@@ -35,7 +36,7 @@ String commentTimeLabel(AppLocalizations l10n, DateTime time) {
 }
 
 /// 单类评论列表（分页加载 + 刷新 + 空/错误态）。
-class CommentListView extends StatelessWidget {
+class CommentListView extends ConsumerWidget {
   const CommentListView({super.key, required this.kind});
 
   final CommentKind kind;
@@ -44,8 +45,9 @@ class CommentListView extends StatelessWidget {
   static const int maxInlineReplies = 3;
 
   @override
-  Widget build(BuildContext context) {
-    final provider = context.watch<CommentsProvider>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final provider = ref.watch(commentsProvider);
+    if (provider == null) return const SizedBox.shrink();
     final state = provider.stateOf(kind);
     if (!provider.isSupported) {
       return DetailPageEmpty(

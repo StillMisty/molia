@@ -6,13 +6,13 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/domain/models/diagnostics.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/diagnostics_page.dart';
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/diagnostics_provider.dart';
 import 'package:molia/services/diagnostics/diagnostics_bundle.dart';
 import 'package:molia/services/diagnostics/diagnostics_export.dart';
@@ -26,6 +26,7 @@ import 'package:molia/widgets/diagnostics/diagnostics_check_detail.dart';
 
 import '../support/fake_save_as.dart';
 import '../support/notification_recorder.dart';
+import '../support/provider_test_scope.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -236,15 +237,19 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<DiagnosticsProvider>.value(
-            value: harness.provider,
+    final scope = ProviderTestScope(
+      overrides: [
+        diagnosticsPageProvider.overrideWith(
+          () => LazyListenableNotifier<DiagnosticsProvider>.withValue(
+            harness.provider,
           ),
-          Provider<NotificationService>.value(value: harness.notifications),
-        ],
-        child: M3EMaterialApp(
+        ),
+      ],
+    );
+    scope.put<NotificationService>(harness.notifications);
+    await tester.pumpWidget(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -439,15 +444,19 @@ Future<void> _pumpPage(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  await tester.pumpWidget(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider<DiagnosticsProvider>.value(
-          value: harness.provider,
+  final scope = ProviderTestScope(
+    overrides: [
+      diagnosticsPageProvider.overrideWith(
+        () => LazyListenableNotifier<DiagnosticsProvider>.withValue(
+          harness.provider,
         ),
-        Provider<NotificationService>.value(value: harness.notifications),
-      ],
-      child: M3EMaterialApp(
+      ),
+    ],
+  );
+  scope.put<NotificationService>(harness.notifications);
+  await tester.pumpWidget(
+    scope.wrap(
+      M3EMaterialApp(
         data: M3EThemeData.fromMaterial(ThemeData.light()),
         theme: ThemeData.light(),
         locale: const Locale('zh'),

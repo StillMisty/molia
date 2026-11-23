@@ -116,7 +116,7 @@ Future<CoreStacks> buildCoreStacks({
     playbackProvider: playback.playbackProvider,
   );
   // 当前渠道与搜索 provider 由组合根创建：托盘期缓存释放回调注册在同一个
-  // 实例上，挂树仍是同一份（见 `provider_tree.dart`）。
+  // 实例上，随后登记进 Riverpod 容器（见 `runtime_wiring.dart`）。
   final channelSearch = buildChannelSearchRuntime(
     catalog: catalog,
     playback: playback,

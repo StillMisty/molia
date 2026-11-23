@@ -6,17 +6,20 @@
 /// 入口共用同一套弹层与 pop 目标。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
-import '../services/data_saver_service.dart';
+import '../providers/app_providers.dart';
 
 /// 省流生效时弹确认：继续或未生效返回 true，取消返回 false。
 Future<bool> confirmDownloadOnDataSaver(BuildContext context) async {
-  final dataSaver = context.read<DataSaverService?>();
-  if (!(dataSaver?.active ?? false)) return true;
+  final dataSaver = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(dataSaverServiceProvider);
+  if (!dataSaver.active) return true;
   final l10n = AppLocalizations.of(context)!;
   final navigator = Navigator.of(context, rootNavigator: true);
   final confirmed = await M3EDialog.show<bool>(

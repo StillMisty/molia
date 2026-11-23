@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/domain/models/library.dart';
@@ -24,6 +23,7 @@ import 'package:molia/widgets/playlist_sheets.dart';
 import 'package:molia/widgets/queue.dart';
 
 import '../support/fakes.dart';
+import '../support/provider_test_scope.dart';
 
 Widget host(
   Widget child, {
@@ -42,23 +42,11 @@ Widget host(
     supportedLocales: const [Locale('zh')],
     home: Scaffold(body: child),
   );
-  Widget wrapped = app;
-  if (covers != null) {
-    wrapped = Provider<CustomCoverStore>.value(value: covers, child: wrapped);
-  }
-  if (library != null) {
-    wrapped = ChangeNotifierProvider<LibraryProvider>.value(
-      value: library,
-      child: wrapped,
-    );
-  }
-  if (playback != null) {
-    wrapped = ChangeNotifierProvider<PlaybackProvider>.value(
-      value: playback,
-      child: wrapped,
-    );
-  }
-  return wrapped;
+  final scope = ProviderTestScope();
+  if (covers != null) scope.put<CustomCoverStore>(covers);
+  if (library != null) scope.put<LibraryProvider>(library);
+  if (playback != null) scope.put<PlaybackProvider>(playback);
+  return scope.wrap(app);
 }
 
 PlaylistInfo playlist(int id, String name, {String folder = ''}) =>

@@ -7,20 +7,20 @@ library;
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/library_browse.dart';
 import '../../domain/models/smart_lists.dart';
 import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/collection_actions.dart';
 import '../../providers/collection_mode.dart';
 import '../../providers/collection_presenter.dart';
 import '../../providers/favorites_view_model.dart';
 import '../../providers/library_provider.dart';
-import '../../providers/local_library_provider.dart';
 import '../../providers/lyrics_provider.dart';
 import '../../services/download/download_records.dart';
 import '../../theme/m3e_context.dart';
@@ -411,15 +411,21 @@ class FavoritesBrowseData {
 }
 
 /// 曲库浏览分支（含搜索词与缓存索引状态的接线）。
-Widget buildFavoritesBrowseTab(BuildContext context, FavoritesBrowseData data) {
+Widget buildFavoritesBrowseTab(
+  BuildContext context,
+  WidgetRef ref,
+  FavoritesBrowseData data,
+) {
   final l10n = data.l10n;
   return buildFavoritesLibraryBrowse(
     context,
+    ref,
     l10n: l10n,
     query: data.query,
     groupsCache: data.groupsCache,
     onPlay: (group, tracks, {bool shuffle = false}) =>
         playFavoritesBrowseTracks(
+          ref: ref,
           context: context,
           tracks: tracks,
           contextName: group.subtitle.isEmpty
@@ -429,6 +435,7 @@ Widget buildFavoritesBrowseTab(BuildContext context, FavoritesBrowseData data) {
           shuffle: shuffle,
         ),
     onPlayTrack: (track) => playFavoritesBrowseTracks(
+      ref: ref,
       context: context,
       tracks: [track],
       contextName: track.title,
@@ -442,12 +449,14 @@ Widget buildFavoritesBrowseTab(BuildContext context, FavoritesBrowseData data) {
       ]);
     },
     onRefreshLocal: (track) => refreshFavoritesBrowseLocal(
+      ref: ref,
       context: context,
       l10n: l10n,
       record: findFavoritesLocalRecord(data.downloadRecords, track),
       isActive: data.isActive,
     ),
     onSwap: (track) => swapFavoritesBrowseTrack(
+      ref: ref,
       context: context,
       track: track,
       lyrics: data.lyrics,
@@ -464,7 +473,8 @@ Widget buildFavoritesBrowseTab(BuildContext context, FavoritesBrowseData data) {
 /// 模式 / 索引订阅是本分支自己的 UI 依赖（只在浏览曲库时建立），因此留在
 /// 这里而不是让整个收藏页常驻订阅。
 Widget buildFavoritesLibraryBrowse(
-  BuildContext context, {
+  BuildContext context,
+  WidgetRef ref, {
   required AppLocalizations l10n,
   required String query,
   required FavoritesBrowseGroupsCache groupsCache,
@@ -482,10 +492,9 @@ Widget buildFavoritesLibraryBrowse(
   required bool Function(BrowseTrack track) isFavorite,
   required bool Function(BrowseTrack track) canRefreshLocal,
 }) {
-  final mode =
-      context.watch<CollectionModeStore?>()?.mode ?? CollectionMode.albums;
-  final index = context.select<LocalLibraryProvider?, LibraryBrowseIndex?>(
-    (provider) => provider?.snapshot?.index,
+  final mode = ref.watch(collectionModeProvider).mode;
+  final index = ref.watch(
+    localLibraryProvider.select((provider) => provider?.snapshot?.index),
   );
   if (index == null) {
     return const Center(child: M3ELoadingIndicator());
@@ -509,7 +518,7 @@ Widget buildFavoritesLibraryBrowse(
         child: CollectionModeSwitch(
           mode: mode,
           onChanged: (next) {
-            unawaited(context.read<CollectionModeStore?>()?.setMode(next));
+            unawaited(ref.read(collectionModeProvider).setMode(next));
           },
         ),
       ),
@@ -543,7 +552,8 @@ Widget buildFavoritesLibraryBrowse(
 /// 页面只给 ViewModel、当前合集与滚动控制器；行回调与定位结果都从这里
 /// 组装，避免页面为了一个 `buildFavoritesCollectionBody` 再铺三十行。
 Widget buildFavoritesCollectionTab(
-  BuildContext context, {
+  BuildContext context,
+  WidgetRef ref, {
   required AppLocalizations l10n,
   required FavoritesViewModel viewModel,
   required CollectionView view,
@@ -612,6 +622,7 @@ Widget buildFavoritesCollectionTab(
     ),
     rowActionsFor: (rowContext, row) => buildFavoritesRowActions(
       context: rowContext,
+      ref: ref,
       l10n: l10n,
       session: viewModel.session,
       view: view,

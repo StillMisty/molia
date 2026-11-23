@@ -40,17 +40,15 @@ import 'dart:math' as math;
 
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../pages/artist_page.dart';
-import '../providers/channel_selection.dart';
-import '../providers/discover_provider.dart';
+import '../providers/app_providers.dart';
 import '../providers/search_assist_controller.dart';
 import '../providers/search_provider.dart';
-import '../providers/sources_provider.dart';
 import '../services/escape_claims.dart';
 import '../services/key_claims.dart';
 import '../theme/m3e_context.dart';
@@ -93,7 +91,7 @@ typedef _ArtistRequest = ({
 
 /// 壳层搜索遮罩宿主：静止位置占位盒 + 自建搜索视图（打开入口见
 /// [GlobalSearchController.focus]）。
-class GlobalSearchOverlay extends StatefulWidget {
+class GlobalSearchOverlay extends ConsumerStatefulWidget {
   const GlobalSearchOverlay({
     super.key,
     required this.onViewAllResults,
@@ -124,7 +122,8 @@ class GlobalSearchOverlay extends StatefulWidget {
   static const Key transitionKey = Key('globalSearchTransition');
 
   @override
-  State<GlobalSearchOverlay> createState() => _GlobalSearchOverlayState();
+  ConsumerState<GlobalSearchOverlay> createState() =>
+      _GlobalSearchOverlayState();
 }
 
 /// 全局搜索的壳层入口：把「打开 / 聚焦搜索」暴露给壳层（Ctrl+F / 品牌区）。
@@ -152,7 +151,7 @@ class GlobalSearchController {
   void dispose() => open.dispose();
 }
 
-class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
+class _GlobalSearchOverlayState extends ConsumerState<GlobalSearchOverlay> {
   /// 遮罩打开：Esc / 导航键占用登记的判据。
   bool _isOpen = false;
 
@@ -313,7 +312,7 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
 ///
 /// 直接订阅 [SearchProvider]：关键词、类型分段、结果与失败态都在 provider 里，
 /// 面板只做展示；输入框在首帧 autofocus（打开即能打字，不丢按键）。
-class _GlobalSearchView extends StatefulWidget {
+class _GlobalSearchView extends ConsumerStatefulWidget {
   const _GlobalSearchView({
     super.key,
     required this.restingRect,
@@ -327,10 +326,10 @@ class _GlobalSearchView extends StatefulWidget {
   final VoidCallback onViewAllResults;
 
   @override
-  State<_GlobalSearchView> createState() => _GlobalSearchViewState();
+  ConsumerState<_GlobalSearchView> createState() => _GlobalSearchViewState();
 }
 
-class _GlobalSearchViewState extends State<_GlobalSearchView> {
+class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
   /// 遮罩与结果行共用的控制器（本视图独占；绑定器负责与会话双向同步）。
   final TextEditingController _field = TextEditingController();
   final FocusNode _focusNode = FocusNode(debugLabel: 'globalSearchField');
@@ -352,7 +351,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   @override
   void initState() {
     super.initState();
-    _search = context.read<SearchProvider>();
+    _search = ref.read(searchProvider);
     _session = _search.session;
     // 会话是搜索状态的唯一源：遮罩打开时用绑定器种上当前关键词，
     // 之后资料库改词 / 清空也会立即反映到输入框（不再逐帧补同步）。
@@ -360,7 +359,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     _assist = SearchAssistController(
       search: _search,
       hotKeywords: () =>
-          context.read<DiscoverProvider?>()?.hotSearches ?? const [],
+          ref.read(maybeDiscoverProvider)?.hotSearches ?? const <String>[],
     );
     _search.addListener(_onSearchChanged);
     _session.preview.addListener(_onPreviewChanged);
@@ -399,7 +398,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
 
   /// 渠道选择：发现内容与搜索一起切，然后把焦点还给输入框。
   void _selectChannel(String key) {
-    context.read<ChannelSelection>().select(key);
+    ref.read(channelSelectionProvider).select(key);
     final textLength = _field.text.length;
     final selection = _field.selection;
     final wasSelectAll =
@@ -582,8 +581,8 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    final sources = context.watch<SourcesProvider>();
-    final selection = context.watch<ChannelSelection>();
+    final sources = ref.watch(sourcesProvider);
+    final selection = ref.watch(channelSelectionProvider);
     final enabledChannels = [
       for (final channel in sources.channels)
         if (channel.enabled) channel,

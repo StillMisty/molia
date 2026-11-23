@@ -15,9 +15,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/theme_provider.dart';
 import '../providers/update_provider.dart';
 import '../services/app_branding_service.dart';
@@ -48,7 +48,7 @@ class SettingsAdvancedPage extends ConsumerWidget {
         const SizedBox(height: kSettingsSectionSpacing),
         const PlaybackDetailsSection(),
         const SizedBox(height: kSettingsSectionSpacing),
-        _librarySection(context, l10n),
+        _librarySection(context, ref, l10n),
         const SizedBox(height: kSettingsSectionSpacing),
         _generalSection(context, l10n),
         if (isDesktopPlatform()) ...[
@@ -56,9 +56,9 @@ class SettingsAdvancedPage extends ConsumerWidget {
           _desktopSection(l10n),
         ],
         const SizedBox(height: kSettingsSectionSpacing),
-        _onlineSection(context, l10n),
+        _onlineSection(context, ref, l10n),
         const SizedBox(height: kSettingsSectionSpacing),
-        _updateSection(context, l10n),
+        _updateSection(context, ref, l10n),
       ],
     );
   }
@@ -119,30 +119,37 @@ class SettingsAdvancedPage extends ConsumerWidget {
     );
   }
 
-  Widget _librarySection(BuildContext context, AppLocalizations l10n) {
-    final settings = context.watch<LibraryAddSettings?>();
+  Widget _librarySection(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+  ) {
+    final LibraryAddSettings? settings = ref.watch(libraryAddSettingsProvider);
     if (settings == null) return const SizedBox.shrink();
     return SettingsSectionCard(
       title: l10n.settingsAdvancedLibraryAddTitle,
       children: [
-        Selector<LibraryAddSettings, LibraryAddPosition>(
-          selector: (context, value) => value.position,
-          builder: (context, position, _) =>
-              SettingsChoiceRow<LibraryAddPosition>(
-                key: const Key('settingsLibraryAddPositionItem'),
-                icon: Icons.playlist_add_rounded,
-                title: l10n.settingsLibraryAddPosition,
-                subtitle: l10n.settingsLibraryAddPositionSubtitle,
-                value: position,
-                options: [
-                  (LibraryAddPosition.top, l10n.settingsLibraryAddPositionTop),
-                  (
-                    LibraryAddPosition.bottom,
-                    l10n.settingsLibraryAddPositionBottom,
-                  ),
-                ],
-                onChanged: settings.setPosition,
-              ),
+        Consumer(
+          builder: (context, ref, _) {
+            final position = ref.watch(
+              libraryAddSettingsProvider.select((value) => value.position),
+            );
+            return SettingsChoiceRow<LibraryAddPosition>(
+              key: const Key('settingsLibraryAddPositionItem'),
+              icon: Icons.playlist_add_rounded,
+              title: l10n.settingsLibraryAddPosition,
+              subtitle: l10n.settingsLibraryAddPositionSubtitle,
+              value: position,
+              options: [
+                (LibraryAddPosition.top, l10n.settingsLibraryAddPositionTop),
+                (
+                  LibraryAddPosition.bottom,
+                  l10n.settingsLibraryAddPositionBottom,
+                ),
+              ],
+              onChanged: settings.setPosition,
+            );
+          },
         ),
       ],
     );
@@ -196,8 +203,14 @@ class SettingsAdvancedPage extends ConsumerWidget {
     );
   }
 
-  Widget _onlineSection(BuildContext context, AppLocalizations l10n) {
-    final dataSaver = context.watch<DataSaverService?>();
+  Widget _onlineSection(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+  ) {
+    final DataSaverService? dataSaver = ref.watch(
+      maybeDataSaverServiceProvider,
+    );
     if (dataSaver == null) return const SizedBox.shrink();
     return SettingsSectionCard(
       title: l10n.settingsAdvancedDataSaverTitle,
@@ -218,8 +231,12 @@ class SettingsAdvancedPage extends ConsumerWidget {
     );
   }
 
-  Widget _updateSection(BuildContext context, AppLocalizations l10n) {
-    final provider = context.watch<UpdateProvider?>();
+  Widget _updateSection(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+  ) {
+    final UpdateProvider? provider = ref.watch(maybeUpdateProvider);
     if (provider == null) return const SizedBox.shrink();
     return SettingsSectionCard(
       title: l10n.settingsAdvancedUpdateSourceTitle,

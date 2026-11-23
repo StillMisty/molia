@@ -1,12 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../services/global_hotkeys.dart';
-import '../services/notification_service.dart';
 import '../services/shortcut_bindings.dart';
 import '../services/shortcut_settings.dart';
 import '../services/shortcuts.dart';
@@ -25,20 +25,20 @@ import '../widgets/settings/shortcut_recorder_tile.dart';
 /// （[ShortcutBindingResult]）；本页只做文案映射：缺修饰键 / 平台不支持走
 /// Snackbar，同组冲突走「确认后互换两者绑定」的引导弹层
 /// （[showShortcutSwapDialog]）。
-class ShortcutSettingsPage extends StatefulWidget {
+class ShortcutSettingsPage extends ConsumerStatefulWidget {
   const ShortcutSettingsPage({super.key});
 
   @override
-  State<ShortcutSettingsPage> createState() => _ShortcutSettingsPageState();
+  ConsumerState<ShortcutSettingsPage> createState() =>
+      _ShortcutSettingsPageState();
 }
 
-class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
+class _ShortcutSettingsPageState extends ConsumerState<ShortcutSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // provider 缺省（独立挂载的测试）时回退单例：生产里两者是同一实例。
-    final settings =
-        context.watch<ShortcutSettings?>() ?? ShortcutSettings.instance;
+    // 兼容层 provider 与单例是同一实例（组合根只登记一次）。
+    final settings = ref.watch(shortcutSettingsProvider);
     return SettingsSubPage(
       title: l10n.settingsShortcutsTitle,
       children: [
@@ -197,13 +197,13 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
     switch (reason) {
       case ShortcutBindingRejection.unsupportedKey:
         // 平台只接受字母 / 数字 / F1–F12 / 空格（系统 API 限制）。
-        context.read<NotificationService?>()?.showSnackBar(
-          l10n.shortcutsGlobalUnsupportedKey,
-        );
+        ref
+            .read(notificationServiceProvider)
+            .showSnackBar(l10n.shortcutsGlobalUnsupportedKey);
       case ShortcutBindingRejection.missingModifier:
-        context.read<NotificationService?>()?.showSnackBar(
-          l10n.shortcutsGlobalNeedsModifier,
-        );
+        ref
+            .read(notificationServiceProvider)
+            .showSnackBar(l10n.shortcutsGlobalNeedsModifier);
       case ShortcutBindingRejection.unknownAction:
         return;
     }
@@ -232,20 +232,22 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
         ? settings.inAppBindings
         : settings.globalBindings;
     if (bindings.conflictWith(target, exclude: command) != other) {
-      context.read<NotificationService?>()?.showSnackBar(
-        l10n.shortcutsConflict(_actionLabel(l10n, other)),
-      );
+      ref
+          .read(notificationServiceProvider)
+          .showSnackBar(l10n.shortcutsConflict(_actionLabel(l10n, other)));
       return;
     }
     final swapped = await settings.swapBindings(scope, command, other);
     if (!mounted) return;
-    context.read<NotificationService?>()?.showSnackBar(
-      swapped
-          ? l10n.shortcutsSwapDone(_actionLabel(l10n, other))
-          // 互换本不应失败（冲突方必属同组）；真失败时退回冲突提示，
-          // 至少让用户知道绑定没有变化。
-          : l10n.shortcutsConflict(_actionLabel(l10n, other)),
-    );
+    ref
+        .read(notificationServiceProvider)
+        .showSnackBar(
+          swapped
+              ? l10n.shortcutsSwapDone(_actionLabel(l10n, other))
+              // 互换本不应失败（冲突方必属同组）；真失败时退回冲突提示，
+              // 至少让用户知道绑定没有变化。
+              : l10n.shortcutsConflict(_actionLabel(l10n, other)),
+        );
   }
 }
 

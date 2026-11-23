@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../../providers/lyrics_display_provider.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/lyrics_display/lyric_color_resolver.dart';
 import '../../services/lyrics_display/lyrics_display_settings.dart';
@@ -31,9 +30,9 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final settings = context.watch<LyricsDisplaySettings>();
+    final settings = ref.watch(lyricsDisplaySettingsProvider);
     final theme = ref.watch(themeProvider);
-    final display = context.watch<LyricsDisplayProvider>();
+    final display = ref.watch(lyricsDisplayProvider);
     final capability = display.capabilityOf(LyricsOutputIds.desktop);
     final scheme = resolveSurfaceScheme(
       settings.desktopSchemeSource,

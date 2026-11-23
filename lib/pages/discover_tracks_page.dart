@@ -1,12 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/discover.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/discover_provider.dart';
+import '../providers/app_providers.dart';
 import '../providers/paged_list_controller.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/detail_page/detail_cover_header.dart';
@@ -33,7 +33,7 @@ typedef DiscoverTracksLoader = Future<DiscoverDetail> Function(int page);
 /// 自动停止，失败保留底部重试按钮（不自动重试）。
 ///
 /// [loader] 由入口注入（榜单曲目或歌单详情），页面自管加载态与错误态。
-class DiscoverTracksPage extends StatefulWidget {
+class DiscoverTracksPage extends ConsumerStatefulWidget {
   final String title;
 
   /// 打开时已知的封面（歌单卡片点击进入时避免头部闪烁）。
@@ -64,10 +64,10 @@ class DiscoverTracksPage extends StatefulWidget {
   });
 
   @override
-  State<DiscoverTracksPage> createState() => _DiscoverTracksPageState();
+  ConsumerState<DiscoverTracksPage> createState() => _DiscoverTracksPageState();
 }
 
-class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
+class _DiscoverTracksPageState extends ConsumerState<DiscoverTracksPage> {
   /// 分页集合：首屏 / 加载更多 / 失败 / 在途守卫 / 跨页去重 / 页实体都在
   /// 控制器内。
   late final PagedTrackCollection<DiscoverDetail, DiscoverTrack> _collection;
@@ -122,7 +122,7 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
     unawaited(
       _handoff.play(
         context,
-        context.read<DiscoverProvider>().domainTracksOf(tracks),
+        ref.read(discoverProvider).domainTracksOf(tracks),
         startIndex: index,
         contextName: _collection.entity?.info.name,
         fallbackContextName: widget.title,
@@ -137,7 +137,7 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
     if (tracks.isEmpty) return Future.value();
     return _handoff.play(
       context,
-      context.read<DiscoverProvider>().domainTracksOf(tracks),
+      ref.read(discoverProvider).domainTracksOf(tracks),
       shuffle: true,
       contextName: _collection.entity?.info.name,
       fallbackContextName: widget.title,
@@ -155,8 +155,8 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
       return;
     }
     try {
-      final result = await context
-          .read<DiscoverProvider>()
+      final result = await ref
+          .read(discoverProvider)
           .importDetailToLibrary(
             DiscoverDetail(
               info: detail.info,

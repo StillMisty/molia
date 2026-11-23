@@ -1,13 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/source.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/playback_provider.dart';
+import '../providers/app_providers.dart';
 import '../providers/source_swap_provider.dart';
 import 'labels/lyrics_provider_label.dart';
 import 'detail_page/detail_page_chrome.dart';
@@ -26,16 +26,16 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 页面用 PageView 承载 tab：不 keep-alive 时切到歌词会把本视图 dispose，
 /// 音频会话随即被 clear，切回来得从头搜。
 @visibleForTesting
-class SourceSwapView extends StatefulWidget {
+class SourceSwapView extends ConsumerStatefulWidget {
   const SourceSwapView({super.key, required this.request});
 
   final SourceSwapRequest request;
 
   @override
-  State<SourceSwapView> createState() => _SourceSwapViewState();
+  ConsumerState<SourceSwapView> createState() => _SourceSwapViewState();
 }
 
-class _SourceSwapViewState extends State<SourceSwapView>
+class _SourceSwapViewState extends ConsumerState<SourceSwapView>
     with AutomaticKeepAliveClientMixin {
   /// 「全部」模式每个来源最多预览的候选数；完整结果需选中该来源 chip。
   static const int _allModePreviewLimit = 3;
@@ -56,7 +56,7 @@ class _SourceSwapViewState extends State<SourceSwapView>
   @override
   void initState() {
     super.initState();
-    _provider = context.read<SourceSwapProvider>();
+    _provider = ref.read(sourceSwapProvider)!;
     _searchController = TextEditingController();
     // begin 会同步通知监听者；放到微任务里，避开本组件的首次 build。
     scheduleMicrotask(() {
@@ -89,7 +89,7 @@ class _SourceSwapViewState extends State<SourceSwapView>
   Widget build(BuildContext context) {
     super.build(context);
     final l10n = _l10n(context);
-    final provider = context.watch<SourceSwapProvider>();
+    final provider = ref.watch(sourceSwapProvider)!;
     final sources = provider.searchableSources;
     final failedNames = provider.failedSourceNames;
     final hasKeyword = provider.keyword.isNotEmpty;
@@ -289,11 +289,13 @@ class _SourceSwapViewState extends State<SourceSwapView>
     if (_isApplying) return;
     _provider.select(track);
     unawaited(
-      context.read<PlaybackProvider>().playDomainTracks(
-        [track],
-        0,
-        contextName: _l10n(context).sourceSwapPreviewContext,
-      ),
+      ref
+          .read(playbackProvider)
+          .playDomainTracks(
+            [track],
+            0,
+            contextName: _l10n(context).sourceSwapPreviewContext,
+          ),
     );
   }
 

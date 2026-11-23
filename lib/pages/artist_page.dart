@@ -9,15 +9,16 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/artist.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/artist_repository.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/artist_view_model.dart';
 import '../providers/paged_list_controller.dart';
 import '../widgets/responsive.dart';
@@ -37,8 +38,11 @@ Future<void> showArtistPage(
   String artistId, {
   String? fallbackName,
 }) {
-  final repository = context.read<ArtistRepository?>();
-  if (repository == null) return Future.value();
+  // 调用方仍按 BuildContext 打开本页（入口批量迁移中），从当前作用域取容器读取。
+  final repository = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(artistRepositoryProvider);
   return ResponsiveNavigation.showSecondaryPage<void>(
     context: context,
     title: _l10n(context).trackInfoArtist,

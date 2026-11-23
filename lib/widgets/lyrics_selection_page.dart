@@ -4,24 +4,23 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../domain/models/lyric_line.dart';
 import '../domain/models/poster_lyric_line.dart';
-import '../providers/playback_provider.dart';
+import '../providers/app_providers.dart';
 import '../services/covers/cover_resolution.dart';
 import '../services/haptics.dart';
 import '../services/lyrics_display/lyric_timing_policy.dart';
-import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
 import 'responsive.dart';
 import 'lyrics_poster_preview_page.dart';
 import 'playback_selectors.dart';
 import 'track_artwork.dart';
 
-class LyricsSelectionPage extends StatefulWidget {
+class LyricsSelectionPage extends ConsumerStatefulWidget {
   // 共享歌词模型（不可变）：选中态由页面自身的下标集合维护。
   final List<LyricLine> lyrics;
   final String trackTitle;
@@ -63,10 +62,11 @@ class LyricsSelectionPage extends StatefulWidget {
   });
 
   @override
-  State<LyricsSelectionPage> createState() => _LyricsSelectionPageState();
+  ConsumerState<LyricsSelectionPage> createState() =>
+      _LyricsSelectionPageState();
 }
 
-class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
+class _LyricsSelectionPageState extends ConsumerState<LyricsSelectionPage> {
   late final List<LyricLine> _lyricLines;
   final bool _isLoading = false;
 
@@ -92,10 +92,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
 
   Future<void> _copyAllOriginalLyrics() async {
     final l10n = AppLocalizations.of(context)!;
-    final notificationService = Provider.of<NotificationService>(
-      context,
-      listen: false,
-    );
+    final notificationService = ref.read(notificationServiceProvider);
 
     final text = _lyricLines.map((line) => line.text).join('\n');
     await Clipboard.setData(ClipboardData(text: text));
@@ -220,10 +217,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
     final l10n = AppLocalizations.of(context)!;
     final selectedLyrics = _getSelectedLyrics();
     if (selectedLyrics.isEmpty) {
-      Provider.of<NotificationService>(
-        context,
-        listen: false,
-      ).showSnackBar(l10n.noLyricsSelected);
+      ref.read(notificationServiceProvider).showSnackBar(l10n.noLyricsSelected);
       return;
     }
 
@@ -233,10 +227,9 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
     await Clipboard.setData(ClipboardData(text: text));
 
     if (mounted) {
-      Provider.of<NotificationService>(
-        context,
-        listen: false,
-      ).showSnackBar(l10n.selectedLyricsCopied(selectedLyrics.length));
+      ref
+          .read(notificationServiceProvider)
+          .showSnackBar(l10n.selectedLyricsCopied(selectedLyrics.length));
     }
   }
 
@@ -253,19 +246,13 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
     final l10n = AppLocalizations.of(context)!;
     final selectedLyrics = _getSelectedLyrics();
     if (selectedLyrics.isEmpty) {
-      Provider.of<NotificationService>(
-        context,
-        listen: false,
-      ).showSnackBar(l10n.noLyricsSelected);
+      ref.read(notificationServiceProvider).showSnackBar(l10n.noLyricsSelected);
       return;
     }
 
     final posterLyricLines = _getPosterLyricLines();
     if (posterLyricLines.isEmpty) {
-      Provider.of<NotificationService>(
-        context,
-        listen: false,
-      ).showSnackBar(l10n.noLyricsSelected);
+      ref.read(notificationServiceProvider).showSnackBar(l10n.noLyricsSelected);
       return;
     }
 
@@ -290,15 +277,12 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
 
     final detailLayout = context.layoutType(ResponsivePageType.detail);
 
-    final playbackProvider = Provider.of<PlaybackProvider>(
-      context,
-      listen: false,
-    );
+    final playback = ref.read(playbackProvider);
 
     // 进度订阅走 position 独立通道：仅当高亮行号变化时重建，
     // 避免每次进度 tick 整页重建。
     final pageBody = PositionLineIndexBuilder(
-      position: playbackProvider.position,
+      position: playback.position,
       lineIndexFor: _getCurrentLineIndex,
       builder: (context, currentLineIndex) {
         return Column(

@@ -21,10 +21,10 @@ import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/sources/source_manager.dart' hide SourceKind;
 import 'package:molia/widgets/channel_search_bar.dart';
 import 'package:molia/widgets/global_search_overlay.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 /// 只实现搜索所需表面的假音源。
@@ -205,15 +205,14 @@ void main() {
     addTearDown(controller.dispose);
     var viewAllCalls = 0;
 
+    final scope = ProviderTestScope();
+    scope.put<SearchProvider>(search);
+    scope.put<SourcesProvider>(sources);
+    scope.put<ChannelSelection>(selection);
+    scope.put<ArtistRepository>(_FakeArtistRepository());
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<SearchProvider>.value(value: search),
-          ChangeNotifierProvider<SourcesProvider>.value(value: sources),
-          ChangeNotifierProvider<ChannelSelection>.value(value: selection),
-          Provider<ArtistRepository>.value(value: _FakeArtistRepository()),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),

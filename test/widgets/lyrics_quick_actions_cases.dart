@@ -9,10 +9,10 @@ import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/widgets/lyrics.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/cover_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/fakes.dart';
 import '../support/settings_test_support.dart';
 
@@ -121,15 +121,14 @@ void main() {
         lyrics.dispose();
       });
 
+      final scope = ProviderTestScope();
+      scope.put<PlaybackProvider>(playback);
+      scope.put<LyricsProvider>(lyrics);
+      scope.put<LyricsDisplaySettings>(display);
+      putCoverStore(scope);
       await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            coverStoreProvider(),
-            ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-            ChangeNotifierProvider<LyricsProvider>.value(value: lyrics),
-            ChangeNotifierProvider<LyricsDisplaySettings>.value(value: display),
-          ],
-          child: M3EMaterialApp(
+        scope.wrap(
+          M3EMaterialApp(
             data: M3EThemeData.fromMaterial(ThemeData.light()),
             theme: ThemeData.light(),
             locale: const Locale('zh'),

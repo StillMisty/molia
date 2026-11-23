@@ -1,12 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/library_provider.dart';
+import '../providers/app_providers.dart';
 import 'responsive.dart';
 import 'favorite_action.dart';
 import 'row_actions.dart';
@@ -32,21 +32,30 @@ List<RowAction> trackRowActionMenu(
   required VoidCallback onToggleFavorite,
   required VoidCallback onAddToPlaylist,
   bool includeAddToQueue = true,
+  WidgetRef? ref,
 }) {
   final l10n = _l10n(context);
   final heart = FavoriteHeart(favorite: favorite);
-  return mergeRowActions([
-    RowAction(
-      icon: heart.icon,
-      label: heart.label(l10n),
-      onPressed: onToggleFavorite,
+  return mergeRowActions(
+    [
+      RowAction(
+        icon: heart.icon,
+        label: heart.label(l10n),
+        onPressed: onToggleFavorite,
+      ),
+      RowAction(
+        icon: Icons.playlist_add_rounded,
+        label: l10n.addToPlaylist,
+        onPressed: onAddToPlaylist,
+      ),
+    ],
+    trackCommonActions(
+      context,
+      track,
+      includeAddToQueue: includeAddToQueue,
+      ref: ref,
     ),
-    RowAction(
-      icon: Icons.playlist_add_rounded,
-      label: l10n.addToPlaylist,
-      onPressed: onAddToPlaylist,
-    ),
-  ], trackCommonActions(context, track, includeAddToQueue: includeAddToQueue));
+  );
 }
 
 /// 单曲交接句柄（模块无状态；这里只用到「加入列表」意图）。
@@ -61,16 +70,24 @@ List<RowAction> trackRowActionMenuForTrack(
   BuildContext context,
   Track track, {
   bool includeAddToQueue = true,
+  WidgetRef? ref,
 }) {
-  final favorite = context.select<LibraryProvider?, bool>(
-    (provider) =>
-        provider?.isFavorite(track.id.sourceKey, track.id.id) ?? false,
-  );
+  final favorite = ref != null
+      ? ref.watch(
+          libraryProvider.select(
+            (provider) => provider.isFavorite(track.id.sourceKey, track.id.id),
+          ),
+        )
+      : ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(libraryProvider).isFavorite(track.id.sourceKey, track.id.id);
   return trackRowActionMenu(
     context,
     track: track,
     favorite: favorite,
     includeAddToQueue: includeAddToQueue,
+    ref: ref,
     // 菜单行：成功也确认一句（动作藏在弹层里，弹层关闭后需要回执）。
     onToggleFavorite: () => unawaited(toggleLibraryFavorite(context, track)),
     // 领域曲目加入列表：与收藏页 / 发现页共用统一目标选择与反馈流程。
@@ -92,7 +109,7 @@ List<RowAction> trackRowActionMenuForTrack(
 /// - 行内容走 [TrackRowModel]（时长由 [TrackRow] 统一格式化）。
 ///
 /// 动作定义见 [trackRowActionMenu]。
-class TrackMenuTile extends StatelessWidget {
+class TrackMenuTile extends ConsumerWidget {
   const TrackMenuTile({
     super.key,
     required this.track,
@@ -131,13 +148,14 @@ class TrackMenuTile extends StatelessWidget {
   final VoidCallback onAddToPlaylist;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final actions = trackRowActionMenu(
       context,
       track: track,
       favorite: favorite,
       onToggleFavorite: onToggleFavorite,
       onAddToPlaylist: onAddToPlaylist,
+      ref: ref,
     );
     return TrackRow(
       model: row,

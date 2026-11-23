@@ -1,11 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/device_sync.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/sync_provider.dart';
+import '../providers/app_providers.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
@@ -14,7 +14,7 @@ import '../widgets/settings/settings_tiles.dart';
 /// 首屏只留「全部类别 / 已关闭 N 项」结论，逐类别取舍放这里（类别是
 /// 「同步什么」的细节，不是首屏决策）。类别行只保留标题和开关：关闭后果
 /// 在卡片 footer 说明一次，避免八行重复同一句副标题把列表撑长。
-class SyncContentPage extends StatelessWidget {
+class SyncContentPage extends ConsumerWidget {
   const SyncContentPage({super.key});
 
   /// 展示顺序：媒体内容在前，设置与记录居中，凭证靠后；自定义封面体积大，
@@ -58,9 +58,9 @@ class SyncContentPage extends StatelessWidget {
       l10n.syncCategoryCredentials;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = context.watch<SyncProvider>();
+    final provider = ref.watch(syncProvider);
     final state = provider.state;
     final commands = provider.commands;
     return SettingsSubPage(

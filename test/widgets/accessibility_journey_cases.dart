@@ -21,10 +21,10 @@ import 'package:molia/widgets/queue.dart';
 import 'package:molia/widgets/row_actions.dart';
 import 'package:molia/widgets/seek_bar.dart';
 import 'package:molia/widgets/seek_preview.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/cover_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/fake_library_repository.dart';
 import '../support/perf_app_harness.dart';
 import '../support/fakes.dart';
@@ -300,15 +300,12 @@ void main() {
         ),
       );
       final semantics = tester.ensureSemantics();
+      final scope = ProviderTestScope();
+      scope.put<PlaybackProvider>(playback);
+      scope.put<LibraryProvider>(library);
+      putCoverStore(scope);
       await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            coverStoreProvider(),
-            ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-            ChangeNotifierProvider<LibraryProvider>.value(value: library),
-          ],
-          child: _app(QueueDisplay(controller: controller)),
-        ),
+        scope.wrap(_app(QueueDisplay(controller: controller))),
       );
       await tester.pump();
 
@@ -377,17 +374,12 @@ void main() {
         lyrics.dispose();
       });
       final semantics = tester.ensureSemantics();
-      await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            coverStoreProvider(),
-            ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-            ChangeNotifierProvider<LyricsProvider>.value(value: lyrics),
-            ChangeNotifierProvider<LyricsDisplaySettings>.value(value: display),
-          ],
-          child: _app(const LyricsWidget()),
-        ),
-      );
+      final scope = ProviderTestScope();
+      scope.put<PlaybackProvider>(playback);
+      scope.put<LyricsProvider>(lyrics);
+      scope.put<LyricsDisplaySettings>(display);
+      putCoverStore(scope);
+      await tester.pumpWidget(scope.wrap(_app(const LyricsWidget())));
       await tester.pump(const Duration(milliseconds: 200));
 
       final current = tester.getSemantics(find.bySemanticsLabel('第二行'));

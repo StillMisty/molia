@@ -1,11 +1,11 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/discover.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/discover_tracks_page.dart';
-import '../providers/discover_provider.dart';
+import '../providers/app_providers.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import 'app_network_image.dart';
@@ -29,7 +29,7 @@ String _leaderboardCoverTag(DiscoverLeaderboard board) =>
 /// 反而多一步；磁贴网格交给 sliver 懒构建，手机 2 列、宽屏按内容宽加列
 /// （全宽最多 6 列），没有展开 / 收起入口。磁贴不伪造排名数字：左侧 56dp
 /// 榜单封面（平台轻量接口优先，失败用首曲封面 / 平台色占位）+ 榜单名。
-class DiscoverLeaderboardsTab extends StatefulWidget {
+class DiscoverLeaderboardsTab extends ConsumerStatefulWidget {
   const DiscoverLeaderboardsTab({super.key, this.controller});
 
   /// 内容滚动控制器（宿主页面注入：重复点击底栏资料库时回顶）；
@@ -37,11 +37,12 @@ class DiscoverLeaderboardsTab extends StatefulWidget {
   final ScrollController? controller;
 
   @override
-  State<DiscoverLeaderboardsTab> createState() =>
+  ConsumerState<DiscoverLeaderboardsTab> createState() =>
       _DiscoverLeaderboardsTabState();
 }
 
-class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
+class _DiscoverLeaderboardsTabState
+    extends ConsumerState<DiscoverLeaderboardsTab>
     with AutomaticKeepAliveClientMixin {
   /// 自带控制器：宿主未注入时使用（随 State 释放）。
   ScrollController? _ownedController;
@@ -60,7 +61,7 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
 
   void _openBoard(DiscoverLeaderboard board) {
     HapticsService.lightImpact();
-    final provider = context.read<DiscoverProvider>();
+    final provider = ref.read(discoverProvider);
     final cachedCover = provider.leaderboardCoverOf(board);
     Navigator.of(context).push(
       M3EPageRoute<void>(
@@ -94,8 +95,8 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
     super.build(context);
     // 可见性门控：隐藏的常驻 tab 不订阅（见 ShellPageVisibility）。
     final provider = ShellPageVisibility.maybeVisibleOf(context) ?? true
-        ? context.watch<DiscoverProvider>()
-        : context.read<DiscoverProvider>();
+        ? ref.watch(discoverProvider)
+        : ref.read(discoverProvider);
     // 渠道无发现能力时资料页会隐藏本 tab，这里兜底（切换渠道的瞬间）。
     if (!provider.hasDiscoverSource || !provider.supportsLeaderboards) {
       return const SizedBox.shrink();
@@ -202,24 +203,22 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
 ///
 /// 只在磁贴进入 SliverGrid 可见区时发起请求（每个 State 一个 future），
 /// 结果由 `DiscoverProvider` 按 board.id 缓存；同一榜单详情页复用缓存。
-class _LeaderboardCover extends StatefulWidget {
+class _LeaderboardCover extends ConsumerStatefulWidget {
   const _LeaderboardCover({super.key, required this.board});
 
   final DiscoverLeaderboard board;
 
   @override
-  State<_LeaderboardCover> createState() => _LeaderboardCoverState();
+  ConsumerState<_LeaderboardCover> createState() => _LeaderboardCoverState();
 }
 
-class _LeaderboardCoverState extends State<_LeaderboardCover> {
+class _LeaderboardCoverState extends ConsumerState<_LeaderboardCover> {
   late final Future<String?> _cover;
 
   @override
   void initState() {
     super.initState();
-    _cover = context.read<DiscoverProvider>().loadLeaderboardCover(
-      widget.board,
-    );
+    _cover = ref.read(discoverProvider).loadLeaderboardCover(widget.board);
   }
 
   @override

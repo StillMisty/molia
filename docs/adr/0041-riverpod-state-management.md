@@ -1,6 +1,6 @@
 # ADR-0041：状态管理迁移到 Riverpod
 
-- 状态：已采纳（分阶段实施中）
+- 状态：已采纳（已实施）
 - 日期：2026-11-23
 - 相关：`lib/app/bootstrap/`、`lib/providers/`、`lib/app/bootstrap/runtime_providers.dart`、
   `pubspec.yaml`、`docs/architecture.md` §1、`test/architecture/layering_test.dart`
@@ -71,23 +71,33 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 
 按依赖方向自下而上，每批保持 `flutter analyze` 与相关测试通过后再进入下一批：
 
-1. ✅ 基础设施：依赖、`ProviderScope`、`settingsRegistryProvider`、ADR。
+1. ✅ 基础设施：依赖、唯一 `ProviderContainer`、`AppRuntime` 登记表、
+   `settingsRegistryProvider`、ADR。
 2. ✅ 主题：`ThemeProvider` → `Notifier<ThemeState>`，主题作用域挂载进入 `build()`；
    主壳 / 设置 / 歌词显示页 / 启动接线与测试同步迁移。
-3. 全局偏好：导航、渠道、主题外的设置 store（音源偏好、下载设置、托盘、快捷键、
-   歌词显示配置、省流、音频焦点、加入收藏位置、换源开关）。
-4. 搜索 / 发现 / 音源 / 评论。
-5. 资料库 / 本地曲库 / 统计 / 年度报告。
-6. 播放（`PlaybackProvider`、进度通道、睡眠定时、播放观察者）。
-7. 歌词 / AI 推歌。
-8. 下载 / 本地数据 / 同步 / 更新 / 诊断。
-9. 移除 `provider` 依赖、`provider_tree.dart` 与架构守卫里的 `package:provider/`
-   例外，更新 `docs/architecture.md`。
+3. ✅ 全局偏好、搜索 / 发现 / 音源 / 评论、资料库 / 统计 / 年度报告、播放 / 歌词 /
+   AI 推歌、下载 / 本地数据 / 同步 / 更新 / 诊断：全部消费点改为 `ref`。
+4. ✅ 移除 `provider` 依赖、`provider_tree.dart` 与 `MultiProvider`；测试统一改用
+   `ProviderTestScope`（`ProviderContainer` + `AppRuntime`）。
+5. ✅ 架构守卫：domain / data 禁止 import `package:provider/` 与 Riverpod。
+
+### 实施说明（迁移完成时的实际形态）
+
+- 启动期仍由 `app_bootstrap.dart` 按序构造服务；`runtime_wiring.dart` 把实例登记进
+  `AppRuntime`，provider 只负责暴露与懒构造派生状态。这样保留了启动顺序的既有语义，
+  也避免了 4000 行 boot 代码一次性重写带来的回归。
+- 仍以 `ChangeNotifier` 实现的业务对象由 `LegacyListenableNotifier` /
+  `LazyListenableNotifier` 适配：对外是 Riverpod `Notifier`，通知语义与旧
+  `MultiProvider` 一致。后续新增状态必须直接写 `Notifier` / `AsyncNotifier`；
+  存量业务对象可按模块继续内聚（去掉内部 `ChangeNotifier`），不影响 UI 契约。
+- 可空依赖（`SaveAs` / `NotificationService` / `BiliAccountService` /
+  `PlaybackProvider` 的查询路径）保留 `maybeXxxProvider`，避免把“未接线”从可表达
+  状态变成启动期异常。
 
 ## 后果
 
 - provider 图显式可测；页面级状态可自动释放；测试不再依赖 `ChangeNotifier` 生命周期。
-- 迁移期存在两套容器，必须在每个批次内完成“provider + 全部消费方 + 测试”的闭环，
-  不允许长期留下只迁移一半的 provider。
-- 启动阶段仍有显式 `.read(...)` 接线；这部分随批次 3–8 逐步内聚到 provider 的
-  `build()`，最终组合根只保留平台装配与容器创建。
+- 容器只有一个：`app_bootstrap.dart` 创建、`UncontrolledProviderScope` 挂树；
+  测试通过 `ProviderTestScope` 用同一套 `AppRuntime` 注入 fake。
+- 启动阶段仍保留显式装配与登记；这是有意的边界（平台通道、顺序副作用），
+  不属于 UI 状态层。

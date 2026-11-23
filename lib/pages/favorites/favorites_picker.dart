@@ -4,13 +4,14 @@
 /// 弹层本身（[showCollectionPicker]）不认识收藏页，这里只做编排与结果回传。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/library.dart';
 import '../../domain/models/library_browse.dart';
 import '../../domain/models/playlist_folders.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/collection_presenter.dart';
 import '../../providers/collection_session.dart';
 import '../../providers/favorites_view_model.dart';
@@ -111,6 +112,7 @@ Future<CollectionPickerOutcome?> showFavoritesCollectionPicker({
 
 /// 读取当前 context 的 provider 快照并打开合集弹层（页面只关心结果）。
 Future<CollectionPickerOutcome?> openFavoritesCollectionPicker({
+  required WidgetRef ref,
   required BuildContext context,
   required AppLocalizations l10n,
   required CollectionFrame frame,
@@ -121,9 +123,9 @@ Future<CollectionPickerOutcome?> openFavoritesCollectionPicker({
   required void Function(List<String> keys) onOrderChanged,
   required bool Function() isActive,
 }) {
-  final provider = context.read<LibraryProvider>();
-  final records = context.read<DownloadRecords?>();
-  final localLibrary = context.read<LocalLibraryProvider?>();
+  final provider = ref.read(libraryProvider);
+  final DownloadRecords? records = ref.read(downloadRecordsProvider);
+  final LocalLibraryProvider? localLibrary = ref.read(localLibraryProvider);
   return showFavoritesCollectionPicker(
     context: context,
     l10n: l10n,

@@ -19,10 +19,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart' show DragStartBehavior;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/track.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/covers/cover_resolution.dart';
 import '../../services/haptics.dart';
@@ -39,7 +40,7 @@ import 'deck_models.dart';
 /// 播放器只提供布局尺寸（[artDimension]/[stackDimension]/[stackHeight]）、
 /// 共享飞行锚点（[morph]）与切歌联动回调（[onTrackSwapped]）；封面 URL、
 /// 占位、拖动、切歌、对账都归本模块。
-class PlayerCoverDeck extends StatefulWidget {
+class PlayerCoverDeck extends ConsumerStatefulWidget {
   /// 封面区横向手势宿主 key：拖动期间 element 必须稳定（识别器不被
   /// dispose），同时供测试精确定位这一层手势。
   static const Key swipeHostKey = ValueKey('artworkSwipeHost');
@@ -103,10 +104,10 @@ class PlayerCoverDeck extends StatefulWidget {
   final void Function(bool duringDrag)? onTrackSwapped;
 
   @override
-  State<PlayerCoverDeck> createState() => _PlayerCoverDeckState();
+  ConsumerState<PlayerCoverDeck> createState() => _PlayerCoverDeckState();
 }
 
-class _PlayerCoverDeckState extends State<PlayerCoverDeck>
+class _PlayerCoverDeckState extends ConsumerState<PlayerCoverDeck>
     with TickerProviderStateMixin {
   /// 切歌会话 + 全部动画控制器与视觉状态。
   late final DeckController _controller;
@@ -182,11 +183,11 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
   /// 订阅（或换绑）播放 Provider，并在换绑后同步一次会话身份。
   ///
-  /// `context.read` 不建立依赖：本模块不因每次通知整树重建，只在检测到曲目
+  /// `ref.read` 不建立依赖：本模块不因每次通知整树重建，只在检测到曲目
   /// 变化时 setState。provider 被替换时必须重新订阅，否则会话会停留在旧
   /// provider 的曲目上。
   void _bindPlaybackIfNeeded() {
-    final playback = context.read<PlaybackProvider>();
+    final playback = ref.read(playbackProvider);
     if (identical(playback, _playback)) return;
     _playback?.removeListener(_handlePlaybackChanged);
     _playback = playback;
@@ -282,7 +283,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
   @override
   Widget build(BuildContext context) {
-    final playback = context.read<PlaybackProvider>();
+    final playback = ref.read(playbackProvider);
     // 切歌检测与空闲缓存刷新都在播放快照监听里（微任务）完成：build 期间
     // 零写入，这里只渲染当前会话/稳态画面。
     return _buildArtworkStack(context, playback);
@@ -293,10 +294,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 拖动期间中心卡会因 `interactive` 换型重建，手势挂在卡上会被 dispose
   /// （表现为滑到一半冻住、松手无反应）。宿主 element 稳定，控制器逐帧
   /// 重建只影响子树。
-  Widget _buildArtworkStack(
-    BuildContext context,
-    PlaybackProvider playbackProvider,
-  ) {
+  Widget _buildArtworkStack(BuildContext context, PlaybackProvider playback) {
     // 飞行期间整层退出 hit test（中心点击/横滑/按压都冻结）。已按下的指针
     // 不会被 IgnorePointer 自动取消，隐藏翻转到 true 时由
     // [_controller.abortGestureForFlight] 主动收尾，避免拖动状态卡死。
@@ -334,13 +332,13 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   final bool deckFrozen = _pageCoverHidden;
                   return DeckArtworkStack(
                     frame: _controller.artworkFrame(
-                      snapshot: playbackProvider.snapshot,
+                      snapshot: playback.snapshot,
                       displayTrack: widget.displayTrack,
                       sideReveal: sideReveal,
                       pageCoverHidden: _pageCoverHidden,
                       morphCoverKey: widget.morph?.pageCoverKey,
                     ),
-                    playback: playbackProvider,
+                    playback: playback,
                     realCoverUrlOf: _realCoverUrlOf,
                     defaultCoverUrl: _coverResolver.defaultCoverUrl,
                     centerScaleAnimation: _controller.centerScaleAnimation,
@@ -351,20 +349,20 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                     onPressEnd: _controller.pressEnd,
                     onTapCenter: () {
                       HapticsService.lightImpact();
-                      playbackProvider.togglePlayPause();
+                      playback.togglePlayPause();
                     },
                     // 左槽点击 = 上一首：只要展示了身份就可点；飞行期间
                     // 禁用点击（副本/锚点交接期间不接受切歌）。
-                    onTapPrevious: !deckFrozen && playbackProvider.hasTrack
+                    onTapPrevious: !deckFrozen && playback.hasTrack
                         ? () {
                             HapticsService.lightImpact();
-                            playbackProvider.skipToPrevious();
+                            playback.skipToPrevious();
                           }
                         : null,
-                    onTapNext: !deckFrozen && playbackProvider.hasTrack
+                    onTapNext: !deckFrozen && playback.hasTrack
                         ? () {
                             HapticsService.lightImpact();
-                            playbackProvider.skipToNext();
+                            playback.skipToNext();
                           }
                         : null,
                   );

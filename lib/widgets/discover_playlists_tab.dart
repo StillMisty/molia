@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/discover.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/discover_tracks_page.dart';
+import '../providers/app_providers.dart';
 import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../services/haptics.dart';
@@ -34,7 +35,7 @@ String _playlistCoverTag(String channelKey, String playlistId) =>
     'discover-playlist-cover:$channelKey:$playlistId';
 
 /// 资料页「歌单」tab：平台选择 + 歌单搜索 / 标签筛选 / 歌单列表（分页）。
-class DiscoverPlaylistsTab extends StatefulWidget {
+class DiscoverPlaylistsTab extends ConsumerStatefulWidget {
   const DiscoverPlaylistsTab({super.key, this.controller});
 
   /// 歌单列表滚动控制器（宿主页面注入：重复点击底栏资料库时回顶）；
@@ -42,10 +43,11 @@ class DiscoverPlaylistsTab extends StatefulWidget {
   final ScrollController? controller;
 
   @override
-  State<DiscoverPlaylistsTab> createState() => _DiscoverPlaylistsTabState();
+  ConsumerState<DiscoverPlaylistsTab> createState() =>
+      _DiscoverPlaylistsTabState();
 }
 
-class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
+class _DiscoverPlaylistsTabState extends ConsumerState<DiscoverPlaylistsTab>
     with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -133,7 +135,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
 
   /// 触底自动加载：统一由 [PagedListAutoLoad] 驱动（失败后不自动重试，
   /// 保留页脚「重试」兜底）。
-  DiscoverProvider get _provider => context.read<DiscoverProvider>();
+  DiscoverProvider get _provider => ref.read(discoverProvider);
 
   void _ensureSourceLoaded() {
     if (!mounted) return;
@@ -342,8 +344,8 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     super.build(context);
     // 可见性门控：隐藏的常驻 tab 不订阅（见 ShellPageVisibility）。
     final provider = ShellPageVisibility.maybeVisibleOf(context) ?? true
-        ? context.watch<DiscoverProvider>()
-        : context.read<DiscoverProvider>();
+        ? ref.watch(discoverProvider)
+        : ref.read(discoverProvider);
     // 渠道无发现能力时资料页会隐藏本 tab，这里兜底（切换渠道的瞬间）。
     if (!provider.hasDiscoverSource || !provider.supportsPlaylists) {
       return const SizedBox.shrink();

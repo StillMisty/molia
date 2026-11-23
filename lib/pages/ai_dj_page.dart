@@ -12,9 +12,9 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/ai_dj.dart';
 import '../domain/models/failure.dart';
@@ -22,7 +22,7 @@ import '../l10n/app_localizations.dart';
 import '../pages/ai_dj_history_page.dart';
 import '../pages/ai_dj_preferences_page.dart';
 import '../providers/ai_dj_provider.dart';
-import '../providers/playback_provider.dart';
+import '../providers/app_providers.dart';
 import '../services/ai/ai_generation_executor.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
@@ -35,14 +35,14 @@ import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 import '../widgets/track_row.dart';
 
-class AiDjPage extends StatefulWidget {
+class AiDjPage extends ConsumerStatefulWidget {
   const AiDjPage({super.key});
 
   @override
-  State<AiDjPage> createState() => _AiDjPageState();
+  ConsumerState<AiDjPage> createState() => _AiDjPageState();
 }
 
-class _AiDjPageState extends State<AiDjPage> {
+class _AiDjPageState extends ConsumerState<AiDjPage> {
   /// 分区间距（分区标题之间）。
   static const double _sectionGap = 24;
 
@@ -63,7 +63,7 @@ class _AiDjPageState extends State<AiDjPage> {
   @override
   void initState() {
     super.initState();
-    _provider = context.read<AiDjProvider>();
+    _provider = ref.read(aiDjProvider);
     // 配置在本机凭据库：首帧后已读；本页打开时再补一次（幂等）。
     unawaited(_provider.init());
     final config = _provider.config;
@@ -143,19 +143,22 @@ class _AiDjPageState extends State<AiDjPage> {
           onPressed: () => _openPage(const AiDjHistoryPage()),
         ),
       ],
-      body: Consumer<AiDjProvider>(
-        builder: (context, provider, _) => ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-          children: [
-            _statusSection(l10n, provider),
-            if (provider.enabled) ...[
-              _preferencesSection(l10n, provider),
-              ..._recommendationsSection(context, l10n, provider),
-              ..._sendingSection(l10n, provider),
+      body: Consumer(
+        builder: (context, ref, _) {
+          final provider = ref.watch(aiDjProvider);
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [
+              _statusSection(l10n, provider),
+              if (provider.enabled) ...[
+                _preferencesSection(l10n, provider),
+                ..._recommendationsSection(context, l10n, provider),
+                ..._sendingSection(l10n, provider),
+              ],
+              ..._configSection(l10n, provider),
             ],
-            ..._configSection(l10n, provider),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -362,13 +365,14 @@ class _AiDjPageState extends State<AiDjPage> {
     final scheme = theme.colorScheme;
     final batch = provider.recommendations;
     final items = batch?.items ?? const <ResolvedRecommendation>[];
-    final nowPlaying = context
-        .select<PlaybackProvider, ({String? uri, bool isPlaying})>(
-          (playback) => (
-            uri: playback.snapshot.current?.id.uri,
-            isPlaying: playback.snapshot.isPlaying,
-          ),
-        );
+    final nowPlaying = ref.watch(
+      playbackProvider.select(
+        (playback) => (
+          uri: playback.snapshot.current?.id.uri,
+          isPlaying: playback.snapshot.isPlaying,
+        ),
+      ),
+    );
     // 播放类动作只挡队列操作；显式生成进行中旧列表仍可播放 / 入队。
     final queueBusy = provider.queueBusy;
     final canReplace = !provider.isBusy && !provider.hasReplacing;
@@ -898,7 +902,9 @@ class _AiDjPageState extends State<AiDjPage> {
   }
 
   void _notify(String message, {bool error = false}) {
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
     if (notifications == null) {
       M3ESnackbar.show(context, message: message);
       return;
@@ -915,14 +921,14 @@ class _AiDjPageState extends State<AiDjPage> {
 ///
 /// 只保留一件「正在生成」的说明：不再叠 spinner、阶段步进、等待秒数与
 /// 骨架行。静默自动补歌永远不实例化本组件（provider 不设置 progress）。
-class _GenerationStrip extends StatelessWidget {
+class _GenerationStrip extends ConsumerWidget {
   const _GenerationStrip({required this.progress, required this.onCancel});
 
   final AiDjProgress progress;
   final VoidCallback onCancel;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final title = aiDjPhaseText(l10n, progress);
     return Padding(

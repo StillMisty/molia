@@ -11,13 +11,13 @@ import 'package:molia/providers/ai_dj_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/services/ai/ai_recommendation_store.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/ai_dj_test_support.dart';
 import '../support/fake_ai_generator.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 Track _track(int index) => Track(
@@ -89,10 +89,10 @@ Future<_HistoryHarness> _pumpHistory(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
+  final scope = ProviderTestScope()..put<AiDjProvider>(ai);
   await tester.pumpWidget(
-    ChangeNotifierProvider<AiDjProvider>.value(
-      value: ai,
-      child: M3EMaterialApp(
+    scope.wrap(
+      M3EMaterialApp(
         data: M3EThemeData.fromMaterial(ThemeData.light()),
         theme: ThemeData.light(),
         locale: const Locale('zh'),
@@ -204,10 +204,10 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final scope = ProviderTestScope()..put<AiDjProvider>(ai);
     await tester.pumpWidget(
-      ChangeNotifierProvider<AiDjProvider>.value(
-        value: ai,
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),

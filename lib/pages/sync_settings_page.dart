@@ -1,13 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/device_sync.dart';
 import '../domain/models/sync_nearby_pairing.dart';
 import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/nearby_scan_session.dart';
 import '../providers/sync_nearby_availability.dart';
 import '../providers/sync_peer_view.dart';
@@ -43,14 +44,14 @@ import 'sync_peer_dialogs.dart';
 /// 信任模型：口令即信任根，持有口令的设备完全互信（ADR-0003）。同步何时跑
 /// 由调度器声明式决定，页面不提供「立即同步」这类手动主操作。配对只有一条
 /// 路径：附近设备走 `MSP/1` 发现 + 6 位确认码，点击即发起。
-class SyncSettingsPage extends StatefulWidget {
+class SyncSettingsPage extends ConsumerStatefulWidget {
   const SyncSettingsPage({super.key});
 
   @override
-  State<SyncSettingsPage> createState() => _SyncSettingsPageState();
+  ConsumerState<SyncSettingsPage> createState() => _SyncSettingsPageState();
 }
 
-class _SyncSettingsPageState extends State<SyncSettingsPage> {
+class _SyncSettingsPageState extends ConsumerState<SyncSettingsPage> {
   /// 附近设备扫描会话：首帧启动 / 可用性变化 / 授权后补扫 / 1.8 秒结算与
   /// 离开页面停扫都由它拥有；页面只读状态并转发「重新查找」。
   late final NearbyScanSession _nearbyScan;
@@ -64,7 +65,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     super.initState();
     // 进入设置页 = 本机地址缓存的真实失效点：网络切换后重进即可看到新地址
     // （附近设备探测与手动地址兜底也走这份缓存）。
-    final provider = context.read<SyncProvider>();
+    final provider = ref.read(syncProvider);
     _nearbyScan = NearbyScanSession(port: SyncProviderNearbyScanPort(provider));
     _relativeTimeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
@@ -80,15 +81,6 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // provider 通知会触发 didChangeDependencies：扫描节拍由会话按可用性 /
-    // 局域网运行状态的差异决定，页面不再自己持有定时器与基线字段。
-    context.watch<SyncProvider>();
-    _nearbyScan.sync();
-  }
-
-  @override
   void dispose() {
     _nearbyScan.dispose();
     _relativeTimeTimer?.cancel();
@@ -99,7 +91,10 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = context.watch<SyncProvider>();
+    final provider = ref.watch(syncProvider);
+    // provider 通知会重建本页：扫描节拍由会话按可用性 / 局域网运行状态的差异
+    // 决定，页面不再自己持有定时器与基线字段。
+    _nearbyScan.sync();
     final state = provider.state;
     final commands = provider.commands;
     return SettingsSubPage(

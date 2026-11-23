@@ -9,11 +9,12 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../services/cache_service.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_settings.dart';
@@ -34,14 +35,15 @@ bool get _isAndroid => defaultTargetPlatform == TargetPlatform.android;
 
 bool get _isIos => defaultTargetPlatform == TargetPlatform.iOS;
 
-class DownloadsAndCachePage extends StatefulWidget {
+class DownloadsAndCachePage extends ConsumerStatefulWidget {
   const DownloadsAndCachePage({super.key});
 
   @override
-  State<DownloadsAndCachePage> createState() => _DownloadsAndCachePageState();
+  ConsumerState<DownloadsAndCachePage> createState() =>
+      _DownloadsAndCachePageState();
 }
 
-class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
+class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
   // 自定义输入范围：0 恒表示「不限制 / 永不过期」（CacheService 语义），
   // 其余值限制在合理区间，防止误输入导致缓存失控。
   static const int _audioMaxMinMb = 16;
@@ -62,7 +64,7 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
   int _artworkStaleDays = CacheService.defaultArtworkStaleDays;
   bool _busy = false;
 
-  CacheService? get _service => context.read<CacheService?>();
+  CacheService? get _service => ref.read(cacheServiceProvider);
 
   @override
   void initState() {
@@ -191,7 +193,9 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
 
   void _notifyCleared() {
     final l10n = AppLocalizations.of(context)!;
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
     if (notifications != null) {
       notifications.showSuccessSnackBar(l10n.cacheCleared);
     } else {
@@ -202,8 +206,8 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final settings = context.watch<DownloadSettings?>();
-    final downloads = context.watch<DownloadManager?>();
+    final DownloadSettings? settings = ref.watch(downloadSettingsProvider);
+    final DownloadManager? downloads = ref.watch(downloadManagerProvider);
     final cacheAvailable = _service != null;
     return SettingsSubPage(
       title: l10n.settingsDownloadsAndCacheTitle,
@@ -501,8 +505,10 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
     DownloadSettings settings,
   ) async {
     final l10n = AppLocalizations.of(context)!;
-    final notifications = context.read<NotificationService?>();
-    final saveAs = context.read<SaveAs?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
+    final SaveAs? saveAs = ref.read(saveAsProvider);
     String? picked;
     try {
       // 保存目录只在桌面可改，pickDirectory() 给的是 file:// URI，
