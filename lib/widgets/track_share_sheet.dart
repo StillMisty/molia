@@ -51,7 +51,7 @@ class _TrackShareSheet extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final notifications = ref.read(notificationServiceProvider);
     final records = ref.read(downloadRecordsControllerProvider);
-    final requests = ref.read(downloadRequestsProvider);
+    final requests = ref.read(downloadRequestsControllerProvider);
     final pageUrl = track.platformPageUrl;
     final record = records.recordForTrack(track);
     final trackIdLabel = track.id.uri.isEmpty

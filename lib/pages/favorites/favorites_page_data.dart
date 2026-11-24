@@ -120,7 +120,9 @@ FavoritesHeaderData buildFavoritesHeaderData({
           ),
         )
       : false;
-  final DownloadRequests? requests = ref.read(downloadRequestsProvider);
+  final DownloadRequests? requests = ref.read(
+    downloadRequestsControllerProvider,
+  );
   return FavoritesHeaderData(
     l10n: l10n,
     view: view,

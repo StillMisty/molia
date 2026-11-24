@@ -7,6 +7,7 @@ import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/providers/snapshot_source.dart';
 import 'package:molia/services/download/download_manager.dart';
 import 'package:molia/services/download/download_queue.dart';
 import 'package:molia/services/download/download_records.dart';
@@ -46,7 +47,6 @@ void main() {
 
   tearDown(() {
     requests.dispose();
-    downloads.dispose();
     records.dispose();
   });
 
@@ -370,14 +370,23 @@ class _FakeDownloadManager extends DownloadManager {
   @override
   Future<void> init() async {}
 
-  final ChangeNotifier _taskChanges = ChangeNotifier();
+  final SnapshotSignal _changes = SnapshotSignal();
 
   @override
-  Listenable get taskChanges => _taskChanges;
+  Listenable get changes => _changes;
 
   @override
   DownloadTaskGroups get taskGroups =>
       (running: const [], queued: const [], failed: const []);
+
+  @override
+  DownloadManagerState get state => DownloadManagerState(
+    supported: supported,
+    publisherSupported: publisherSupported,
+    notificationsSupported: notificationsSupported,
+    initialized: initialized,
+    taskGroups: taskGroups,
+  );
 
   DownloadTask? activeTask;
 
@@ -486,10 +495,4 @@ class _FakeDownloadManager extends DownloadManager {
 
   @override
   Future<Uri?> localUriFor(Track track, {String? quality}) async => null;
-
-  @override
-  void dispose() {
-    _taskChanges.dispose();
-    super.dispose();
-  }
 }

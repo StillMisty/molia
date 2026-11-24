@@ -6,6 +6,7 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/downloads_manage_page.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/providers/snapshot_source.dart';
 import 'package:molia/services/download/download_manager.dart';
 import 'package:molia/services/download/download_queue.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,7 +34,7 @@ class _FakeDownloads extends DownloadManager {
 
   final List<DownloadTask> queued;
   final List<Track> cancelled = [];
-  final ChangeNotifier _changes = ChangeNotifier();
+  final SnapshotSignal _changes = SnapshotSignal();
 
   @override
   bool get supported => true;
@@ -54,11 +55,20 @@ class _FakeDownloads extends DownloadManager {
   Future<void> init() async {}
 
   @override
-  Listenable get taskChanges => _changes;
+  Listenable get changes => _changes;
 
   @override
   DownloadTaskGroups get taskGroups =>
       (running: const [], queued: List.unmodifiable(queued), failed: const []);
+
+  @override
+  DownloadManagerState get state => DownloadManagerState(
+    supported: supported,
+    publisherSupported: publisherSupported,
+    notificationsSupported: notificationsSupported,
+    initialized: initialized,
+    taskGroups: taskGroups,
+  );
 
   @override
   DownloadTask? taskForTrack(Track track) => null;
@@ -73,7 +83,7 @@ class _FakeDownloads extends DownloadManager {
   void cancelTrack(Track track) {
     cancelled.add(track);
     queued.removeWhere((task) => task.track.id == track.id);
-    _changes.notifyListeners();
+    _changes.notify();
   }
 
   @override
@@ -162,7 +172,6 @@ void main() {
   testWidgets('等待中的任务可以行内取消，点击后从队列移除', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final downloads = _FakeDownloads([_queuedTask(1)]);
-    addTearDown(downloads.dispose);
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -190,7 +199,6 @@ void main() {
     final downloads = _FakeDownloads([
       for (var i = 0; i < 21; i++) _queuedTask(i),
     ]);
-    addTearDown(downloads.dispose);
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);

@@ -62,15 +62,15 @@ List<RowAction> trackCommonActions(
 
   // 入口可见性也由请求层给出：本地 / 已下载 / 进行中统一隐藏，UI 不再
   // 分别读 supported / DownloadRecords / DownloadTask。
-  final canDownload = ref != null
-      ? ref.watch(
-          downloadRequestsProvider.select(
-            (requests) =>
-                requests?.statusOf(track) == DownloadIntentStatus.ready,
-          ),
-        )
-      : container.read(downloadRequestsProvider)?.statusOf(track) ==
-            DownloadIntentStatus.ready;
+  //
+  // 修订号只是失效信号：记录 / 任务结构变化时重建入口，资格判定从控制器
+  // 即时计算（ADR-0041「快照只放低频状态」）。
+  final DownloadRequests? requests = ref != null
+      ? (ref.watch(downloadRequestsProvider) != null
+            ? ref.read(downloadRequestsControllerProvider)
+            : null)
+      : container.read(downloadRequestsControllerProvider);
+  final canDownload = requests?.statusOf(track) == DownloadIntentStatus.ready;
   if (canDownload) {
     actions.add(
       RowAction(
@@ -172,7 +172,7 @@ Future<void> _downloadTrack(BuildContext context, Track track) async {
   final requests = ProviderScope.containerOf(
     context,
     listen: false,
-  ).read(downloadRequestsProvider);
+  ).read(downloadRequestsControllerProvider);
   if (requests == null) return;
   final l10n = _l10n(context);
   if (!await confirmDownloadOnDataSaver(context)) return;

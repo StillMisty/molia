@@ -272,7 +272,7 @@ void main() {
     final future = service.download(track);
     final task = await waitForRunningTask(service, track);
     final progressSeen = Completer<DownloadProgress>();
-    task.addListener(() {
+    task.progressListenable.addListener(() {
       final progress = task.progress;
       if (progress.receivedBytes >= 64 * 1024 && !progressSeen.isCompleted) {
         progressSeen.complete(progress);
@@ -312,7 +312,7 @@ void main() {
     final future = service.download(track);
     final task = await waitForRunningTask(service, track);
     final notified = <int>[];
-    task.addListener(() {
+    task.progressListenable.addListener(() {
       // 收尾时的状态通知不算进度（终态由 status 单独表达）。
       if (task.status == DownloadTaskStatus.running) {
         notified.add(task.progress.receivedBytes);
@@ -350,7 +350,7 @@ void main() {
     final future = service.download(track);
     final task = await waitForRunningTask(service, track);
     final notified = <int>[];
-    task.addListener(() {
+    task.progressListenable.addListener(() {
       if (task.status == DownloadTaskStatus.running) {
         notified.add(task.progress.receivedBytes);
       }
@@ -1660,10 +1660,10 @@ void main() {
         }
       }
 
-      task.addListener(listener);
+      task.progressListenable.addListener(listener);
       listener();
       await reached.future;
-      task.removeListener(listener);
+      task.progressListenable.removeListener(listener);
     }
 
     /// 等分片被写流消费：UI 进度另有 100ms 时间节流，不能用它判断处理进度。

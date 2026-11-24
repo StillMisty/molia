@@ -207,7 +207,7 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final DownloadSettings? settings = ref.watch(downloadSettingsProvider);
-    final DownloadManager? downloads = ref.watch(downloadManagerProvider);
+    final DownloadManagerState? downloads = ref.watch(downloadManagerProvider);
     final cacheAvailable = _service != null;
     return SettingsSubPage(
       title: l10n.settingsDownloadsAndCacheTitle,
@@ -239,7 +239,7 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
     BuildContext context,
     AppLocalizations l10n,
     DownloadSettings settings,
-    DownloadManager? downloads,
+    DownloadManagerState? downloads,
   ) {
     return SettingsSectionCard(
       title: l10n.downloadSettingsTitle,

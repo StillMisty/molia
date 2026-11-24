@@ -21,12 +21,13 @@ AppLocalizations _l10n(BuildContext context) =>
 Future<void> importLocalAudioFilesFlow(BuildContext context) async {
   final l10n = _l10n(context);
   // 与 lxmc_import 同一约定：调用处只传 context，从最近的 ProviderScope 取容器。
-  final DownloadManager? downloads = ProviderScope.containerOf(
-    context,
-    listen: false,
-  ).read(downloadManagerProvider);
+  final container = ProviderScope.containerOf(context, listen: false);
+  final DownloadManagerState? state = container.read(downloadManagerProvider);
+  final DownloadManager? downloads = container.read(
+    downloadManagerControllerProvider,
+  );
   final messengerContext = context;
-  if (downloads == null || !downloads.supported) return;
+  if (downloads == null || !(state?.supported ?? false)) return;
 
   final List<PlatformFile> files;
   try {

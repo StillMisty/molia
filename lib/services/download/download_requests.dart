@@ -17,6 +17,7 @@ import 'package:flutter/foundation.dart';
 import '../../domain/models/download.dart';
 import '../../domain/models/failure.dart';
 import '../../domain/models/track.dart';
+import '../../providers/snapshot_source.dart';
 import 'download_manager.dart';
 import 'download_queue.dart';
 import 'download_records.dart';
@@ -142,21 +143,46 @@ final class DownloadBatchStart {
   final int failed;
 }
 
+/// 请求入口对 UI 暴露的不可变快照：只有一个失效修订号。
+///
+/// 入口资格（[DownloadRequests.statusOf]）按曲目即时计算，不预先展开到快照里：
+/// UI 订阅修订号触发重算，判定本身仍从控制器取实例（ADR-0041「快照只放列表 /
+/// 计数 / 状态与开关」）。
+@immutable
+class DownloadRequestsState {
+  const DownloadRequestsState({required this.revision});
+
+  final int revision;
+}
+
 /// 下载请求入口（Provider 注册；UI 只依赖本类，不直接读记录 / 任务做资格
 /// 判断，也不自己等待任务完成）。
-class DownloadRequests extends ChangeNotifier {
+class DownloadRequests implements SnapshotSource<DownloadRequestsState> {
   DownloadRequests({required this._downloads, required this._records}) {
-    _downloads.addListener(_forward);
-    _downloads.taskChanges.addListener(_forward);
-    _records.changes.addListener(_forward);
+    _downloads.changes.addListener(_bump);
+    _records.changes.addListener(_bump);
   }
 
   final DownloadManager _downloads;
   final DownloadRecords _records;
 
-  /// 记录 / 能力位 / 任务结构变化都会影响入口可见性：统一转成一次通知，
-  /// 页面用 `select` 订阅一个同步状态即可，不需要分别监听三个源。
-  late final VoidCallback _forward = notifyListeners;
+  final SnapshotSignal _changes = SnapshotSignal();
+  int _revision = 0;
+  bool _disposed = false;
+
+  @override
+  DownloadRequestsState get state => DownloadRequestsState(revision: _revision);
+
+  @override
+  Listenable get changes => _changes;
+
+  /// 记录 / 能力位 / 任务结构变化都会影响入口可见性：统一转成一次修订。
+  /// 页面订阅修订号即可，不需要分别监听三个源。
+  void _bump() {
+    if (_disposed) return;
+    _revision++;
+    _changes.notify();
+  }
 
   /// 入口可见性快照；与 [requestAudio] 共用 [downloadIntentStatusOf]。
   DownloadIntentStatus statusOf(Track track) => downloadIntentStatusOf(
@@ -290,11 +316,9 @@ class DownloadRequests extends ChangeNotifier {
     return null;
   }
 
-  @override
   void dispose() {
-    _downloads.removeListener(_forward);
-    _downloads.taskChanges.removeListener(_forward);
-    _records.changes.removeListener(_forward);
-    super.dispose();
+    _disposed = true;
+    _downloads.changes.removeListener(_bump);
+    _records.changes.removeListener(_bump);
   }
 }

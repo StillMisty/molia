@@ -339,9 +339,17 @@ final downloadRecordsControllerProvider = Provider<DownloadRecords>(
 final localCacheIndexProvider = Provider<LocalCacheIndexStore?>(
   (ref) => ref.read(appRuntimeProvider).maybe<LocalCacheIndexStore>(),
 );
-final downloadManagerProvider = Provider<DownloadManager?>(
-  (ref) => ref.read(appRuntimeProvider).maybe<DownloadManager>(),
-);
+final downloadManagerProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<DownloadManager, DownloadManagerState>,
+      DownloadManagerState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<DownloadManager>(),
+      ),
+    );
+final downloadManagerControllerProvider =
+    maybeSnapshotController<DownloadManager>();
 
 final downloadSettingsProvider = Provider<DownloadSettings?>(
   (ref) => ref.read(appRuntimeProvider).maybe<DownloadSettings>(),
@@ -511,18 +519,15 @@ final libraryCollectionRequestProvider =
 
 final downloadRequestsProvider =
     NotifierProvider<
-      LazyNullableListenableNotifier<DownloadRequests>,
-      DownloadRequests?
+      NullableSnapshotNotifier<DownloadRequests, DownloadRequestsState>,
+      DownloadRequestsState?
     >(
-      () => LazyNullableListenableNotifier((ref) {
-        final downloads = ref.read(appRuntimeProvider).maybe<DownloadService>();
-        if (downloads == null) return null;
-        return DownloadRequests(
-          downloads: downloads,
-          records: ref.read(downloadRecordsControllerProvider),
-        );
-      }),
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<DownloadRequests>(),
+      ),
     );
+final downloadRequestsControllerProvider =
+    maybeSnapshotController<DownloadRequests>();
 
 final discoverSourcesProvider = Provider<Map<String, DiscoverSource>>(
   (ref) => BuiltinDiscover.sources,

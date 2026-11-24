@@ -79,7 +79,7 @@ void main() {
     late DownloadTask second;
     late Future<void> secondDone;
     var reentered = false;
-    first.addListener(() {
+    first.changes.addListener(() {
       if (first.status == DownloadTaskStatus.completed && !reentered) {
         reentered = true;
         second = audio('1');
@@ -273,8 +273,8 @@ void main() {
     final task = audio('1');
     var queueNotifications = 0;
     var taskNotifications = 0;
-    queue.addListener(() => queueNotifications++);
-    task.addListener(() => taskNotifications++);
+    queue.changes.addListener(() => queueNotifications++);
+    task.progressListenable.addListener(() => taskNotifications++);
 
     final future = queue.enqueue(task);
     await flush();
@@ -353,7 +353,7 @@ void main() {
     final gate = Completer<void>();
     final queue = DownloadQueue((task) => gate.future);
     var notifications = 0;
-    queue.addListener(() => notifications++);
+    queue.changes.addListener(() => notifications++);
     final task = audio('1');
     final future = queue.enqueue(task);
     final expectation = expectLater(
