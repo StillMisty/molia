@@ -137,12 +137,15 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 `SyncControlPlane`（`SyncControlPlaneState`：身份 / 开关 / 名册 / 日志 / 口令）、
 `FavoriteFact`（`FavoriteFactState`：键 / 行 / 计数 / 版本）、
 `PlaybackPowerPolicy`（前台 / 桌面歌词 / 歌词输出）、
-`CastSessionController`（`CastSessionSnapshot`）。
+`CastSessionController`（`CastSessionSnapshot`）、`DownloadRecords`（记录列表 /
+版本戳 / 能力位）、`DownloadQueue`（三组任务）、`DownloadManager`（能力位 /
+就绪态 / 任务结构）、`DownloadSettings`、`LocalLibraryService`（文件夹列表 / 扫描态）。
 
 `SyncEngine` / `SyncControlPlane` / `FavoriteFact` / `PlaybackPowerPolicy` /
 `CastSessionController` 没有独立 Riverpod provider：它们分别是 `SyncProvider`、
 `LibraryProvider` 的内部事实或只在服务内部订阅，对外仍经所属门面；`changes`
-是唯一订阅面。
+是唯一订阅面。进度类高频数据不进快照：`DownloadTask.progressListenable`、
+`LocalLibraryService.progressListenable`。
 
 ### 设置与偏好（第六批）
 
@@ -162,10 +165,8 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 - `SourcePreferences` → `SourcePreferencesState`；`SourceManager` 订阅
   `preferences.changes` 转发自己的通知。
 
-仍以 `ChangeNotifier` 实现、经 `LegacyListenableNotifier` 暴露的类有两类：
-启动期服务（`SourceManager`、`DownloadService`、数据层 store…）与体量较大的
-页面状态（`SyncProvider` 等）。它们与启动顺序 / 服务生命周期强耦合，内部快照化
-按模块继续推进；UI 契约已经统一为 `ref`，后续替换不改变页面代码。
+仍未迁移：`SyncProvider`、`SourcesProvider`、`SourceManager`、
+`LocalPlaybackService`、页面级视图模型与 widget 内部会话（见后续批次）。
 
 ### 搜索 / 渠道 / 扇出（第三批）
 

@@ -530,7 +530,7 @@ CollectionRowActionWiring _favoritesActionWiring({
         ? () => locateFavoritesLocalFile(
             l10n: l10n,
             record: localRecord!,
-            manager: ref.read(downloadManagerProvider),
+            manager: ref.read(downloadManagerControllerProvider),
             notifications: ref.read(notificationServiceProvider),
             isActive: isActive,
           )
@@ -540,7 +540,7 @@ CollectionRowActionWiring _favoritesActionWiring({
         : () => refreshFavoritesLocalMetadata(
             l10n: l10n,
             record: localRecord,
-            manager: ref.read(downloadManagerProvider),
+            manager: ref.read(downloadManagerControllerProvider),
             notifications: ref.read(notificationServiceProvider),
             isActive: isActive,
           ),
@@ -572,7 +572,7 @@ CollectionIoCommands buildFavoritesIoCommands(
   SaveAs? saveAs,
 }) {
   final provider = ref.read(libraryControllerProvider);
-  final DownloadRecords? records = ref.read(downloadRecordsProvider);
+  final DownloadRecords? records = ref.read(downloadRecordsControllerProvider);
   const files = FilePickerCollectionPlaylistFiles();
   return CollectionIoCommands(
     filePicker: files,
@@ -580,7 +580,7 @@ CollectionIoCommands buildFavoritesIoCommands(
     importService: PlaylistImportService(
       localImporter: DownloadRecordsPlaylistLocalImporter(
         records,
-        ref.read(downloadManagerProvider),
+        ref.read(downloadManagerControllerProvider),
       ),
       resolver: LibraryPlaylistKeyResolver(provider, records),
     ),
@@ -650,7 +650,7 @@ Future<void> refreshFavoritesBrowseLocal({
   required bool Function() isActive,
 }) async {
   if (record == null) return;
-  final DownloadManager? manager = ref.read(downloadManagerProvider);
+  final DownloadManager? manager = ref.read(downloadManagerControllerProvider);
   final NotificationService? notifications = ref.read(
     notificationServiceProvider,
   );

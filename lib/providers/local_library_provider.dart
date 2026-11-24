@@ -91,7 +91,7 @@ class LocalLibraryProvider extends _$LocalLibraryProvider {
   @override
   LocalLibraryState build() {
     repository = ref.read(appRuntimeProvider).maybe<LibraryRepository>();
-    downloads = ref.read(downloadRecordsProvider);
+    downloads = ref.read(downloadRecordsControllerProvider);
     library = ref.read(localLibraryLibraryProvider);
     statistics = ref.read(appRuntimeProvider).maybe<PlayStatisticsRepository>();
     debounce = ref.watch(localLibraryDebounceProvider);
@@ -107,7 +107,7 @@ class LocalLibraryProvider extends _$LocalLibraryProvider {
       repo.changes.listen(_onLibraryChange),
       stats.changes.listen((_) => schedule(browse: false, stats: true)),
     ];
-    dl.addListener(_onDownloadsChanged);
+    dl.changes.addListener(_onDownloadsChanged);
     lib.changes.addListener(_onLibraryProviderChanged);
     ref.onDispose(() {
       _disposed = true;
@@ -115,7 +115,7 @@ class LocalLibraryProvider extends _$LocalLibraryProvider {
       for (final subscription in _subscriptions) {
         unawaited(subscription.cancel());
       }
-      dl.removeListener(_onDownloadsChanged);
+      dl.changes.removeListener(_onDownloadsChanged);
       lib.changes.removeListener(_onLibraryProviderChanged);
     });
     schedule();

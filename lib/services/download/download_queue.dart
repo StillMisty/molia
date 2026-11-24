@@ -19,6 +19,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../domain/models/failure.dart';
 import '../../domain/models/track.dart';
+import '../../providers/snapshot_source.dart';
 
 /// 下载任务种类：完整音频 / 单独歌词 / 单独封面。
 enum DownloadTaskKind { audio, lyrics, cover }
@@ -61,11 +62,33 @@ class DownloadProgress {
   String toString() => 'DownloadProgress($receivedBytes/$totalBytes)';
 }
 
+/// 一条任务对 UI 暴露的不可变快照：状态与失败原因。
+///
+/// 已下载字节 / 总大小是高频进度，走 [DownloadTask.progressListenable]，
+/// 不进入快照；管理页只在行内订阅自己的进度。
+@immutable
+class DownloadTaskState {
+  const DownloadTaskState({required this.status, required this.failure});
+
+  final DownloadTaskStatus status;
+
+  /// 失败原因（仅失败态非空）。
+  final SourceFailure? failure;
+
+  /// 排队中或进行中（失败 / 完成 / 取消都不算）。
+  bool get isActive =>
+      status == DownloadTaskStatus.queued ||
+      status == DownloadTaskStatus.running;
+}
+
 /// 一条下载任务（可监听：进度 / 状态 / 失败原因都在这里，队列不转发进度）。
 ///
 /// 任务对象由 [DownloadService] 创建、[DownloadQueue] 驱动；UI 只读状态，
 /// 更新方法仅下载编排使用。
-class DownloadTask extends ChangeNotifier {
+///
+/// 两条通道分开：[changes] 只发状态切换（低频，供快照 / 结构变化的行），
+/// [progressListenable] 发字节进度（100ms 合并，只重建订阅它的那一行）。
+class DownloadTask implements SnapshotSource<DownloadTaskState> {
   DownloadTask({
     required this.track,
     required this.kind,
@@ -111,17 +134,21 @@ class DownloadTask extends ChangeNotifier {
   Completer<void> _completion = Completer<void>();
   bool _disposed = false;
 
-  @override
-  void notifyListeners() {
-    if (_disposed) return;
-    super.notifyListeners();
-  }
+  final SnapshotSignal _changes = SnapshotSignal();
+
+  /// 高频进度通道（值相等不通知）；终态由 [changes] 单独表达。
+  final ValueNotifier<DownloadProgress> _progressNotifier =
+      ValueNotifier<DownloadProgress>(const DownloadProgress(receivedBytes: 0));
 
   @override
-  void dispose() {
-    _disposed = true;
-    super.dispose();
-  }
+  DownloadTaskState get state =>
+      DownloadTaskState(status: _status, failure: _failure);
+
+  @override
+  Listenable get changes => _changes;
+
+  /// 进度订阅面：只有任务行订阅它，不会让队列 / 管理面快照跟着 tick。
+  ValueListenable<DownloadProgress> get progressListenable => _progressNotifier;
 
   DownloadTaskStatus get status => _status;
 
@@ -134,6 +161,18 @@ class DownloadTask extends ChangeNotifier {
       _status == DownloadTaskStatus.queued ||
       _status == DownloadTaskStatus.running;
 
+  void _notify() {
+    if (_disposed) return;
+    _changes.notify();
+  }
+
+  /// 释放进度通道；队列替换 / 销毁任务时调用（重复调用幂等）。
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _progressNotifier.dispose();
+  }
+
   /// 任务完成 / 失败 / 取消时完成；失败与取消以错误完成。
   Future<void> get done => _completion.future;
 
@@ -141,14 +180,14 @@ class DownloadTask extends ChangeNotifier {
   void markRunning() {
     if (_status != DownloadTaskStatus.queued) return;
     _status = DownloadTaskStatus.running;
-    notifyListeners();
+    _notify();
   }
 
   /// 任务成功（队列调用）。
   void markCompleted() {
     if (!isActive) return;
     _status = DownloadTaskStatus.completed;
-    notifyListeners();
+    _notify();
     if (!_completion.isCompleted) _completion.complete();
   }
 
@@ -157,7 +196,7 @@ class DownloadTask extends ChangeNotifier {
     if (!isActive) return;
     _failure = failure;
     _status = DownloadTaskStatus.failed;
-    notifyListeners();
+    _notify();
     if (!_completion.isCompleted) _completion.completeError(failure);
   }
 
@@ -165,7 +204,7 @@ class DownloadTask extends ChangeNotifier {
   void markCancelled() {
     if (!isActive) return;
     _status = DownloadTaskStatus.cancelled;
-    notifyListeners();
+    _notify();
     if (!_completion.isCompleted) {
       _completion.completeError(_cancelledFailure);
     }
@@ -177,7 +216,7 @@ class DownloadTask extends ChangeNotifier {
     int? totalBytes, {
     required int nowMs,
   }) {
-    if (_status != DownloadTaskStatus.running) return;
+    if (_disposed || _status != DownloadTaskStatus.running) return;
     final complete =
         totalBytes != null && totalBytes > 0 && receivedBytes >= totalBytes;
     final last = _lastProgressNotifiedAt;
@@ -191,7 +230,7 @@ class DownloadTask extends ChangeNotifier {
     if (_progress == next) return;
     _lastProgressNotifiedAt = nowMs;
     _progress = next;
-    notifyListeners();
+    _progressNotifier.value = next;
   }
 
   /// 重试前复位（队列内部使用；失败任务重新排队时复用同一对象）。
@@ -201,6 +240,7 @@ class DownloadTask extends ChangeNotifier {
     _failure = null;
     _lastProgressNotifiedAt = null;
     _completion = Completer<void>();
+    if (!_disposed) _progressNotifier.value = _progress;
   }
 
   static const SourceFailure _cancelledFailure = SourceFailure(
@@ -220,11 +260,38 @@ typedef DownloadTaskGroups = ({
   List<DownloadTask> failed,
 });
 
+/// 队列结构对 UI 暴露的不可变快照：三组任务引用。
+///
+/// 只有增删 / 状态切换会换快照；任务进度走各自的 [DownloadTask.progressListenable]。
+@immutable
+class DownloadQueueState {
+  const DownloadQueueState({
+    required this.running,
+    required this.queued,
+    required this.failed,
+  });
+
+  final List<DownloadTask> running;
+  final List<DownloadTask> queued;
+  final List<DownloadTask> failed;
+
+  /// 运行中 + 排队中 + 失败任务（running 在前，其次按入队顺序）。
+  List<DownloadTask> get tasks =>
+      List<DownloadTask>.unmodifiable([...running, ...queued, ...failed]);
+
+  bool get isEmpty => running.isEmpty && queued.isEmpty && failed.isEmpty;
+
+  /// 活跃 + 失败任务数。
+  int get length => running.length + queued.length + failed.length;
+}
+
 /// 严格串行 FIFO 下载队列（单 worker；不持久化，重启即清空）。
-class DownloadQueue extends ChangeNotifier {
+class DownloadQueue implements SnapshotSource<DownloadQueueState> {
   DownloadQueue(this._runner);
 
   final DownloadTaskRunner _runner;
+
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 活跃 + 失败任务（键 → 任务，保持入队顺序）：完成 / 取消立即移除，
   /// 失败音频保留供重试。一个 map 同时承担去重、查找与状态分组的数据源。
@@ -236,8 +303,21 @@ class DownloadQueue extends ChangeNotifier {
   bool _workerScheduled = false;
   bool _disposed = false;
 
+  @override
+  DownloadQueueState get state {
+    final groups = taskGroups;
+    return DownloadQueueState(
+      running: groups.running,
+      queued: groups.queued,
+      failed: groups.failed,
+    );
+  }
+
+  @override
+  Listenable get changes => _changes;
+
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) _changes.notify();
   }
 
   /// 按状态分组（running → queued → failed，组内保持入队顺序）。
@@ -369,7 +449,6 @@ class DownloadQueue extends ChangeNotifier {
     }
   }
 
-  @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
@@ -382,6 +461,5 @@ class DownloadQueue extends ChangeNotifier {
     }
     _tasks.clear();
     _pending.clear();
-    super.dispose();
   }
 }

@@ -23,7 +23,7 @@ const List<String> kFilenameTemplatePlaceholders = [
   '{album}',
 ];
 
-/// 下载设置的不可变快照（UI 经 `downloadSettingsProvider` 读）。
+/// 下载设置对 UI 暴露的不可变快照（字段名沿用旧 getter）。
 @immutable
 class DownloadSettingsState {
   const DownloadSettingsState({
@@ -52,7 +52,9 @@ class DownloadSettingsState {
 
 /// 下载设置：读写设备本地设置，变更即时生效（服务每次下载读取）。
 ///
-/// 状态是只读快照 [state]，订阅面是 [changes]（ADR-0041「启动期状态对象」）。
+/// 状态是只读快照 [state]，订阅面是 [changes]：设置页经
+/// `downloadSettingsProvider` 读快照重建开关，写入命令从控制器取实例
+/// （ADR-0041「启动期状态对象：快照 + 控制器」）。
 class DownloadSettings implements SnapshotSource<DownloadSettingsState> {
   /// [settings] 仅测试注入；生产构造自己的设备本地入口。
   DownloadSettings({DeviceSettings? settings})

@@ -103,7 +103,9 @@ class _TrackLocalDataPageState extends ConsumerState<TrackLocalDataPage> {
       trackLocalDataServiceProvider,
     );
     final cacheService = ref.read(cacheServiceProvider);
-    final DownloadRecords? records = ref.read(downloadRecordsProvider);
+    final DownloadRecords? records = ref.read(
+      downloadRecordsControllerProvider,
+    );
     if (_controller == null ||
         !identical(_service, service) ||
         !identical(_cacheService, cacheService) ||
@@ -121,16 +123,18 @@ class _TrackLocalDataPageState extends ConsumerState<TrackLocalDataPage> {
     // 页面始终绑定一首曲目：构造后立即加载（控制器内部单飞 / 去重）。
     _controller!.setTrack(widget.track);
 
-    final DownloadManager? downloads = ref.read(downloadManagerProvider);
+    final DownloadManager? downloads = ref.read(
+      downloadManagerControllerProvider,
+    );
     if (!identical(_downloads, downloads)) {
-      if (_listening) _downloads?.taskChanges.removeListener(_onTasksChanged);
+      if (_listening) _downloads?.changes.removeListener(_onTasksChanged);
       _downloads = downloads;
       _task = null;
-      if (_listening) downloads?.taskChanges.addListener(_onTasksChanged);
+      if (_listening) downloads?.changes.addListener(_onTasksChanged);
     }
     if (!_listening) {
       _listening = true;
-      _downloads?.taskChanges.addListener(_onTasksChanged);
+      _downloads?.changes.addListener(_onTasksChanged);
     }
     _syncTask();
   }
@@ -148,7 +152,7 @@ class _TrackLocalDataPageState extends ConsumerState<TrackLocalDataPage> {
   @override
   void dispose() {
     if (_listening) {
-      _downloads?.taskChanges.removeListener(_onTasksChanged);
+      _downloads?.changes.removeListener(_onTasksChanged);
     }
     _controller?.dispose();
     super.dispose();
@@ -189,7 +193,9 @@ class _TrackLocalDataPageState extends ConsumerState<TrackLocalDataPage> {
   /// 在排队 / 下载期间仍可操作。省流生效时先确认；已有活动任务只提示一句，
   /// 不在这里等它（与入口原来的非阻塞语义一致）。
   Future<void> _downloadAudio() async {
-    final DownloadRequests? requests = ref.read(downloadRequestsProvider);
+    final DownloadRequests? requests = ref.read(
+      downloadRequestsControllerProvider,
+    );
     if (requests == null) return;
     final l10n = AppLocalizations.of(context)!;
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
@@ -206,7 +212,9 @@ class _TrackLocalDataPageState extends ConsumerState<TrackLocalDataPage> {
 
   /// 单独下载 / 转存歌词或封面（缓存优先，同样不触网），终态与音频同一套。
   Future<void> _downloadPart({required bool lyrics}) async {
-    final DownloadRequests? requests = ref.read(downloadRequestsProvider);
+    final DownloadRequests? requests = ref.read(
+      downloadRequestsControllerProvider,
+    );
     if (requests == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
@@ -441,10 +449,13 @@ class _TrackLocalDataPageState extends ConsumerState<TrackLocalDataPage> {
       );
     }
     return ListenableBuilder(
-      listenable: task,
-      builder: (context, _) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _buildAudioSection(l10n, data, _task, audioEnabled),
+      listenable: task.changes,
+      builder: (context, _) => ListenableBuilder(
+        listenable: task.progressListenable,
+        builder: (context, _) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: _buildAudioSection(l10n, data, _task, audioEnabled),
+        ),
       ),
     );
   }

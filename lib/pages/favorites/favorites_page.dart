@@ -150,7 +150,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
       cacheService: ref.read(cacheServiceProvider),
       localDataService: ref.read(trackLocalDataServiceProvider),
       collectionRequest: ref.read(libraryCollectionRequestProvider),
-      downloadRecords: ref.read(downloadRecordsProvider),
+      downloadRecords: ref.read(downloadRecordsControllerProvider),
       cacheIndex: ref.read(localCacheIndexControllerProvider),
     );
     // 重新可见 = 重新进入本页：刷新历史顺序（provider 通知自带重建）。
@@ -280,7 +280,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
       random: widget.shuffleRandom,
     ),
     localData: ProviderCollectionLocalData(
-      downloads: ref.read(downloadManagerProvider),
+      downloads: ref.read(downloadManagerControllerProvider),
       localData: _vm.localDataService,
     ),
   );
@@ -331,7 +331,9 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
 
   /// 选中行里「现在就能下载」的曲目（本地 / 已下载 / 进行中都不算）。
   List<Track> _selectedDownloadableTracks(CollectionView view) {
-    final DownloadRequests? requests = ref.read(downloadRequestsProvider);
+    final DownloadRequests? requests = ref.read(
+      downloadRequestsControllerProvider,
+    );
     if (requests == null) return const [];
     return favoritesDownloadableTracks(
       view: view,
@@ -510,7 +512,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
       },
       onDownloadPlaylist: (view) {
         final DownloadRequests? activeRequests = ref.read(
-          downloadRequestsProvider,
+          downloadRequestsControllerProvider,
         );
         if (activeRequests == null) return;
         unawaited(
@@ -580,7 +582,9 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
         ),
       ),
       onDownloadSelected: () async {
-        final DownloadRequests? requests = ref.read(downloadRequestsProvider);
+        final DownloadRequests? requests = ref.read(
+          downloadRequestsControllerProvider,
+        );
         if (requests == null) return;
         await downloadFavoritesSelection(
           context: context,
@@ -666,7 +670,9 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
                           groupsCache: _browseGroups,
                           shuffleRandom: widget.shuffleRandom,
                           actions: _actions,
-                          downloadRecords: ref.read(downloadRecordsProvider),
+                          downloadRecords: ref.read(
+                            downloadRecordsControllerProvider,
+                          ),
                           lyrics: ref.read(lyricsProvider.notifier),
                           library: library,
                           isActive: () => mounted,

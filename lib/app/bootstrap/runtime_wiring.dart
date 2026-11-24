@@ -29,6 +29,7 @@ import '../../services/diagnostics/diagnostics_service.dart';
 import '../../services/download/download_maintenance.dart';
 import '../../services/download/download_manager.dart';
 import '../../services/download/download_records.dart';
+import '../../services/download/download_requests.dart';
 import '../../services/download/download_service.dart';
 import '../../services/download/download_settings.dart';
 import '../../services/local/local_library_service.dart';
@@ -71,6 +72,13 @@ void wireCoreRuntime(AppRuntime runtime, CoreStacks core) {
   runtime.put<DownloadManager>(local.downloadService);
   runtime.put<DownloadMaintenance>(local.downloadService);
   runtime.put<DownloadRecords>(local.downloadService.records);
+  // 请求面是记录 + 队列的纯门面：构造一次进登记表，provider 只镜像它的修订。
+  runtime.put<DownloadRequests>(
+    DownloadRequests(
+      downloads: local.downloadService,
+      records: local.downloadService.records,
+    ),
+  );
   runtime.put<LocalLibraryService>(local.localLibrary);
   runtime.put<LocalMetadataService>(local.localMetadata);
   runtime.put<LocalCacheIndexStore>(local.localCacheIndex);

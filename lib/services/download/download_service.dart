@@ -72,6 +72,7 @@ import '../../domain/models/download.dart';
 import '../../domain/models/failure.dart';
 import '../../domain/models/lyrics_result.dart';
 import '../../domain/models/track.dart';
+import '../../providers/snapshot_source.dart';
 import '../../services/cache_service.dart';
 import '../../sources/source_track.dart' show pickQualityFor;
 import '../artwork/artwork_cache.dart';
@@ -102,7 +103,7 @@ typedef DownloadLyricsResolver = Future<DownloadLyrics?> Function(Track track);
 /// 下载时封面 URL 解析（组合根注入：`SourceManager.fetchPic` 适配）。
 typedef DownloadArtworkResolver = Future<String?> Function(Track track);
 
-/// 本地下载服务（`ChangeNotifier`：UI 用 `Selector` 订阅状态）。
+/// 本地下载服务（管理面快照 + 控制器：UI 只 watch 快照 / 从控制器发命令）。
 class DownloadService extends DownloadManager
     implements DownloadMaintenance, LocalScanTarget {
   DownloadService({
@@ -138,7 +139,8 @@ class DownloadService extends DownloadManager
          settings: settings,
          clock: clock,
        ) {
-    _recordStore.records.addListener(_forwardRecords);
+    _recordStore.records.changes.addListener(_forwardRecords);
+    _queue.changes.addListener(_forwardRecords);
   }
 
   final CatalogService _catalog;
@@ -185,9 +187,8 @@ class DownloadService extends DownloadManager
   /// 不感知下载队列与文件布局。
   final DownloadRecordStore _recordStore;
 
-  /// 记录通知转发：管理面监听者（能力位 / 就绪态）可只依赖
-  /// [DownloadManager]；记录消费者直接监听 [records]。
-  late final VoidCallback _forwardRecords = notifyListeners;
+  /// 记录 / 队列通知转发：管理面快照（能力位 / 就绪态 / 任务结构）只在这里更新。
+  late final VoidCallback _forwardRecords = _changes.notify;
 
   /// 下载记录只读入口（组合根挂 Provider；测试直接读）。
   DownloadRecords get records => _recordStore.records;
@@ -208,14 +209,12 @@ class DownloadService extends DownloadManager
   /// 延迟初始化：runner 是实例方法，构造器初始化列表里拿不到 `this`。
   late final DownloadQueue _queue = DownloadQueue(_runTask);
 
-  /// dispose 后不再通知（运行中的 runner 可能晚于 service 销毁）。
+  /// dispose 幂等标记（运行中的 runner 可能晚于 service 销毁）。
   bool _disposed = false;
+  final SnapshotSignal _changes = SnapshotSignal();
 
   @override
-  void notifyListeners() {
-    if (_disposed) return;
-    super.notifyListeners();
-  }
+  Listenable get changes => _changes;
 
   /// 记录加载只做一次（幂等）；首帧后的启动尾巴与按需调用共用同一 Future。
   Future<void>? _initFuture;
@@ -237,9 +236,8 @@ class DownloadService extends DownloadManager
   @override
   bool get initialized => _recordStore.records.initialized;
 
-  /// 任务结构变化（增删 / 状态切换）：页面任务区只监听这里。
   @override
-  Listenable get taskChanges => _queue;
+  DownloadManagerState get state => DownloadManagerState.of(this);
 
   /// 按状态分组的音频任务（运行在前），管理页不再逐条过滤三遍。
   @override
@@ -1535,7 +1533,6 @@ class DownloadService extends DownloadManager
     };
   }
 
-  @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
@@ -1543,10 +1540,10 @@ class DownloadService extends DownloadManager
       token.cancel();
     }
     _tokens.clear();
+    _queue.changes.removeListener(_forwardRecords);
     _queue.dispose();
-    _recordStore.records.removeListener(_forwardRecords);
+    _recordStore.records.changes.removeListener(_forwardRecords);
     _recordStore.records.dispose();
-    super.dispose();
   }
 }
 

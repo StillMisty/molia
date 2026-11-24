@@ -209,7 +209,7 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
     final DownloadSettingsState? settings = ref.watch(
       maybeDownloadSettingsProvider,
     );
-    final DownloadManager? downloads = ref.watch(downloadManagerProvider);
+    final DownloadManagerState? downloads = ref.watch(downloadManagerProvider);
     final cacheAvailable = _service != null;
     return SettingsSubPage(
       title: l10n.settingsDownloadsAndCacheTitle,
@@ -241,8 +241,11 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
     BuildContext context,
     AppLocalizations l10n,
     DownloadSettingsState settings,
-    DownloadManager? downloads,
+    DownloadManagerState? downloads,
   ) {
+    final DownloadSettings? controller = ref.read(
+      downloadSettingsControllerProvider,
+    );
     return SettingsSectionCard(
       title: l10n.downloadSettingsTitle,
       children: [
@@ -276,9 +279,7 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
             subtitle: l10n.downloadPublishToPublicDirSubtitle,
             value: settings.publishToPublicDir,
             onChanged: (value) => unawaited(
-              ref
-                  .read(downloadSettingsControllerProvider)
-                  ?.setPublishToPublicDir(value),
+              controller?.setPublishToPublicDir(value) ?? Future<void>.value(),
             ),
           ),
         // 文件名模板 / 标签写入 / 下载通知：与保存位置同属「下载」域，低频
@@ -298,7 +299,7 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
           subtitle: l10n.downloadEmbedTagsSubtitle,
           value: settings.embedTags,
           onChanged: (value) => unawaited(
-            ref.read(downloadSettingsControllerProvider)?.setEmbedTags(value),
+            controller?.setEmbedTags(value) ?? Future<void>.value(),
           ),
         ),
         // 下载通知只在 Android 有语义（前台服务 + 通知栏进度）。
@@ -311,9 +312,7 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
             value: settings.notifications,
             onChanged: (value) {
               unawaited(
-                ref
-                    .read(downloadSettingsControllerProvider)
-                    ?.setNotifications(value),
+                controller?.setNotifications(value) ?? Future<void>.value(),
               );
               if (value) unawaited(NotificationPermission.ensureRequested());
             },

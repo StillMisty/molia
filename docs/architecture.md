@@ -138,7 +138,8 @@
   `music_folder_watcher.dart`（防抖事件只当触发器，可定位路径只 stat 该路径，溢出回退整树；
   只对桌面路径根生效）、`missing_file_probe.dart`（空闲批量探测存在 / 大小，写 `missingAt` /
   `mtimeMs`；容器不可读时不标缺失）、`local_library_service.dart`（配置 + 扫描 + 监听 +
-  探测的编排与平台开关）、`local_write_gate.dart`（扫描导入 / 手动导入 / 探测共用一条串行
+  探测的编排与平台开关；文件夹列表 / `scanning` 等低频状态走 `localLibraryServiceProvider`
+  快照，扫描进度只走 `progressListenable`，不进快照）、`local_write_gate.dart`（扫描导入 / 手动导入 / 探测共用一条串行
   写队列）。树实现：桌面 `data/files/music_folder_tree_io.dart`（`dart:io`，保留深度 /
   符号链接 / 隐藏文件 / 排序规则），Android `data/saf/*`（`SafBridge` 端口：Pigeon
   channel 主路径、旧 `top.stillmisty.molia/saf` 通道回退；树枚举 + stat +
@@ -1153,6 +1154,10 @@
 取图 / 缓存 / 设置与省流上限；任务队列、命名 / 放置、任务产物、记录装配、记录写入、文件维护、提交
 日志与通知 presenter 是独立 module（见下）：
 
+- **状态面**：记录 / 队列 / 命令面 / 请求 / 设置都是「快照 + `changes`」形态
+  （ADR-0041）：UI watch 快照（记录列表、任务结构、能力位、设置开关），命令与
+  即时资格判定从 `*ControllerProvider` 取实例；已下载字节 / 速度走
+  `DownloadTask.progressListenable`（100ms 合并），不进入任何快照。
 - **下载请求**：`lib/services/download/download_requests.dart` 的
   `DownloadRequests` 是「能不能下 + 开始下 + 结果怎么回执」的唯一入口
   （`completed` / `failed` / `cancelled` / `alreadyDownloaded` / `active` /

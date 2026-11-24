@@ -189,9 +189,9 @@ class FavoritesViewModel extends ChangeNotifier {
       _onCollectionRequest();
     }
     if (!identical(downloadRecords, _downloadRecords)) {
-      _downloadRecords?.removeListener(_onServiceChanged);
+      _downloadRecords?.changes.removeListener(_onServiceChanged);
       _downloadRecords = downloadRecords;
-      downloadRecords?.addListener(_onServiceChanged);
+      downloadRecords?.changes.addListener(_onServiceChanged);
     }
     if (!identical(cacheIndex, _cacheIndex)) {
       _cacheIndex?.changes.removeListener(_onServiceChanged);
@@ -539,7 +539,7 @@ class FavoritesViewModel extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _cacheService?.revision.removeListener(_onServiceChanged);
-    _downloadRecords?.removeListener(_onServiceChanged);
+    _downloadRecords?.changes.removeListener(_onServiceChanged);
     _cacheIndex?.changes.removeListener(_onServiceChanged);
     _collectionRequest?.removeListener(_onCollectionRequest);
     _folderCollapse
