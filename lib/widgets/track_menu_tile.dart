@@ -102,7 +102,7 @@ List<RowAction> trackRowActionMenuForTrack(
 ///
 /// 收藏域（歌手页 / 专辑页）经 [FavoriteTrackTile] 适配层使用；发现详情页
 /// 直接使用。菜单 = 「收藏 / 加入列表」+ 公共动作（加入队列 / 下载 / 评论 /
-/// 专辑 / 歌手，见 [trackCommonActions]）——各入口的语义本来就相同，
+/// 专辑 / 歌手 / 分享，见 [trackCommonActions]）——各入口的语义本来就相同，
 /// 差异只在领域对象上，因此收藏态与写入流程都由调用方注入：
 /// - 收藏态用 `select` 订阅后传入（组件不认具体 provider，避免把
 ///   DiscoverProvider / LibraryProvider 焊进共享件，也避免整表重建）；
@@ -122,7 +122,7 @@ class TrackMenuTile extends ConsumerWidget {
     required this.onAddToPlaylist,
   });
 
-  /// 领域曲目：公共动作（加入队列 / 下载 / 评论 / 专辑 / 歌手）的能力位
+  /// 领域曲目：公共动作（加入队列 / 下载 / 评论 / 专辑 / 歌手 / 分享）的能力位
   /// 与目标都从这里取；行数据 [row] 只负责展示。
   final Track track;
 

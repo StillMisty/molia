@@ -8,6 +8,8 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/favorites/favorites_page.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/notification_service.dart';
+import 'package:molia/widgets/row_actions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/cover_test_support.dart';
@@ -98,6 +100,8 @@ void main() {
     final scope = ProviderTestScope();
     scope.put<PlaybackProvider>(playback);
     scope.put<LibraryProvider>(library);
+    // 行菜单的分享弹层会读提示服务（`_require`），不注册会直接抛错。
+    scope.put<NotificationService>(NotificationService());
     putCoverStore(scope);
     await tester.pumpWidget(
       scope.wrap(
@@ -174,5 +178,19 @@ void main() {
     expect(find.text(l10n.selectionCountSelected(120)), findsOneWidget);
     expect(find.byKey(const Key('collectionSelectionCount')), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('收藏行 ⋮ 菜单可分享：打开分享弹层', (tester) async {
+    await pumpPage(tester);
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+
+    await tester.tap(find.byType(RowActionMenuButton).first);
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.shareAction), findsOneWidget);
+
+    await tester.tap(find.text(l10n.shareAction));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.trackInfoTrackId), findsOneWidget);
+    expect(find.text(l10n.sharePlatformPage), findsOneWidget);
   });
 }

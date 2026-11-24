@@ -2142,7 +2142,7 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   （`showTrackActionsMenuAtPointer`：零尺寸锚点 + root overlay 坐标换算，贴边由
   M3E placer 夹取）；条目一律「leading 图标 + 文案」，收藏这类开关态用图标 +
   文案表达（选中即关菜单，不留勾选态）。动作定义（收藏 / 加入列表 + 公共动作
-  加入队列 / 下载 / 评论 / 专辑 / 歌手 + 队列编辑）见
+  加入队列 / 下载 / 评论 / 专辑 / 歌手 / 分享 + 队列编辑）见
   `lib/widgets/track_menu_tile.dart` 与 `lib/widgets/track_row_actions.dart`：
   公共动作按能力位过滤（下载只在可用且未下载 / 无进行中任务时出现），
   菜单顺序统一、移除 / 删除类固定最后。收藏域的行适配（歌手页 / 专辑页）走

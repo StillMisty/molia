@@ -1,5 +1,6 @@
-/// 来源行弹层：曲目身份相关的复制 / 分享动作。
+/// 曲目分享弹层：曲目身份相关的复制 / 分享动作。
 ///
+/// 入口是歌曲信息页的「来源」行与曲目行操作菜单（⋮ / 桌面右键）。
 /// 四项动作（按可得性显隐 / 禁用）：
 /// - 复制曲目 ID（`{sourceKey}:{id}`）；
 /// - 分享平台页面（内置平台（六个音乐平台 + B 站）可构造 URL，脚本源 / 本地曲目没有）；
@@ -28,11 +29,18 @@ import 'detail_page/detail_page_chrome.dart';
 import 'download_data_saver_guard.dart';
 import 'simple_modal_body.dart';
 
-/// 打开来源行弹层（歌曲信息页「来源」行唯一入口）。
-Future<void> showTrackShareSheet(BuildContext context, {required Track track}) {
+/// 打开分享弹层。
+///
+/// [title] 省略时沿用「来源」（歌曲信息页入口）；曲目行菜单传「分享」，
+/// 让弹层标题与用户点按的入口一致。
+Future<void> showTrackShareSheet(
+  BuildContext context, {
+  required Track track,
+  String? title,
+}) {
   return ResponsiveNavigation.showSimpleModal<void>(
     context: context,
-    title: AppLocalizations.of(context)!.trackInfoSource,
+    title: title ?? AppLocalizations.of(context)!.trackInfoSource,
     child: _TrackShareSheet(track: track, pageContext: context),
   );
 }

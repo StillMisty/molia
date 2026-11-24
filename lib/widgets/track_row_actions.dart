@@ -1,4 +1,4 @@
-/// 曲目公共动作扩展器：加入队列 / 下载 / 评论 / 专辑 / 歌手。
+/// 曲目公共动作扩展器：加入队列 / 下载 / 评论 / 专辑 / 歌手 / 分享。
 ///
 /// 所有曲目菜单（搜索结果、发现详情、专辑 / 歌手、收藏合集、队列）都从这里
 /// 追加同一组动作，避免「某个入口少一条评论 / 专辑」的漂移。动作只在能力位
@@ -19,6 +19,7 @@ import 'labels/download_failure_label.dart';
 import 'download_data_saver_guard.dart';
 import 'row_actions.dart';
 import 'track_actions.dart';
+import 'track_share_sheet.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
@@ -119,6 +120,17 @@ List<RowAction> trackCommonActions(
       ),
     );
   }
+  // 分享始终可用：弹层内部按曲目身份给平台页 / 文件入口；脚本源与本地
+  // 曲目也能复制 ID 或分享已下载文件（没有的条目在弹层里禁用）。
+  actions.add(
+    RowAction(
+      icon: Icons.ios_share_rounded,
+      label: l10n.shareAction,
+      onPressed: () => unawaited(
+        showTrackShareSheet(context, track: track, title: l10n.shareAction),
+      ),
+    ),
+  );
   return actions;
 }
 
