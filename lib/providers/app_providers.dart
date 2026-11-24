@@ -278,9 +278,21 @@ final syncProvider =
       () => LegacyListenableNotifier((ref) => _require<SyncProvider>(ref)),
     );
 final updateProvider =
-    NotifierProvider<LegacyListenableNotifier<UpdateProvider>, UpdateProvider>(
-      () => LegacyListenableNotifier((ref) => _require<UpdateProvider>(ref)),
+    NotifierProvider<
+      SnapshotNotifier<UpdateProvider, UpdateState>,
+      UpdateState
+    >(() => SnapshotNotifier((ref) => _require<UpdateProvider>(ref)));
+final maybeUpdateProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<UpdateProvider, UpdateState>,
+      UpdateState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<UpdateProvider>(),
+      ),
     );
+final updateControllerProvider = snapshotController<UpdateProvider>();
+final maybeUpdateControllerProvider = maybeSnapshotController<UpdateProvider>();
 final sourceSwapSettingsProvider =
     NotifierProvider<
       LegacyListenableNotifier<SourceSwapSettings>,
@@ -396,7 +408,6 @@ final maybeLyricsDisplayProvider =
         (ref) => ref.read(appRuntimeProvider).maybe<LyricsDisplayProvider>(),
       ),
     );
-final maybeUpdateProvider = _maybeListenable<UpdateProvider>();
 final maybeScrobbleServiceProvider = _maybeListenable<ScrobbleService>();
 final maybeLibraryAddSettingsProvider = _maybeListenable<LibraryAddSettings>();
 final maybeSyncProvider = _maybeListenable<SyncProvider>();

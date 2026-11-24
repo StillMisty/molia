@@ -59,7 +59,7 @@ UpdateStack buildUpdateStack({
       lastCheckedAt: () => updateProvider.lastCheckedAt,
       checkApp: updateProvider.checkForAutoPrompt,
       checkSources: checkSourceUpdates,
-      settingsListenable: updateProvider,
+      settingsListenable: updateProvider.changes,
     ),
   );
 

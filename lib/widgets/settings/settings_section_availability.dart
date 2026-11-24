@@ -77,8 +77,8 @@ class SettingsSectionAvailability {
   /// 托盘偏好（与平台能力同时具备才显示托盘 / 窗口行）。
   final TraySettings? tray;
 
-  /// 更新编排（缺省时隐藏更新入口）。
-  final UpdateProvider? update;
+  /// 更新编排的快照（缺省时隐藏更新入口）。
+  final UpdateState? update;
 
   /// 导航偏好（缺省时隐藏启动页与底部导航行）。
   final NavProvider? nav;

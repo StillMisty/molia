@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/models/app_release.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/services/window/tray_settings.dart';
@@ -198,12 +199,33 @@ SettingsSectionAvailability _allAvailable({
     statistics: _FakePlayStatisticsService(),
     sync: _FakeSyncProvider(),
     tray: ProviderTestScope().container.read(traySettingsProvider.notifier),
-    update: _FakeUpdateProvider(),
+    update: _updateState,
     nav: ProviderTestScope().container.read(navProvider.notifier),
     platform: platform,
     traySupported: traySupported,
   );
 }
+
+const _updateState = UpdateState(
+  status: UpdateStatus.idle,
+  release: null,
+  releaseAsset: null,
+  installResult: null,
+  installResultVersion: null,
+  failure: null,
+  lastCheckedAt: null,
+  checkOnStartup: false,
+  checkDaily: false,
+  anyAutoCheckEnabled: false,
+  channel: UpdateChannel.stable,
+  manifestUrlOverride: '',
+  downloadPrefix: '',
+  platform: null,
+  currentVersionLabel: '0.0.0+0',
+  updateAvailable: false,
+  supportsInAppInstall: false,
+  hasDownloadedPackage: false,
+);
 
 /// 探针只关心是否存在；重服务的成员用 noSuchMethod 兜底，避免为一次
 /// 「在不在树上」搭真实引擎。
@@ -224,10 +246,6 @@ class _FakeSourcesProvider extends ChangeNotifier
 class _FakeScrobbleService extends ChangeNotifier
     with _PresenceOnly
     implements ScrobbleService {}
-
-class _FakeUpdateProvider extends ChangeNotifier
-    with _PresenceOnly
-    implements UpdateProvider {}
 
 class _FakePlayStatisticsService
     with _PresenceOnly
