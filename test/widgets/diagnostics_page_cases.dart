@@ -12,7 +12,6 @@ import 'package:molia/domain/models/diagnostics.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/diagnostics_page.dart';
-import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/diagnostics_provider.dart';
 import 'package:molia/services/diagnostics/diagnostics_bundle.dart';
 import 'package:molia/services/diagnostics/diagnostics_export.dart';
@@ -237,15 +236,8 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final scope = ProviderTestScope(
-      overrides: [
-        diagnosticsPageProvider.overrideWith(
-          () => LazyListenableNotifier<DiagnosticsProvider>.withValue(
-            harness.provider,
-          ),
-        ),
-      ],
-    );
+    final scope = ProviderTestScope();
+    scope.put<DiagnosticsProvider>(harness.provider);
     scope.put<NotificationService>(harness.notifications);
     await tester.pumpWidget(
       scope.wrap(
@@ -444,15 +436,8 @@ Future<void> _pumpPage(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final scope = ProviderTestScope(
-    overrides: [
-      diagnosticsPageProvider.overrideWith(
-        () => LazyListenableNotifier<DiagnosticsProvider>.withValue(
-          harness.provider,
-        ),
-      ),
-    ],
-  );
+  final scope = ProviderTestScope();
+  scope.put<DiagnosticsProvider>(harness.provider);
   scope.put<NotificationService>(harness.notifications);
   await tester.pumpWidget(
     scope.wrap(

@@ -17,7 +17,6 @@ import 'package:molia/services/diagnostics/diagnostics_service.dart';
 import 'package:molia/services/diagnostics/failure_ring_buffer.dart';
 import 'package:molia/services/diagnostics/log_tail_reader.dart';
 import 'package:molia/services/diagnostics/resolve_metrics.dart';
-import 'package:molia/providers/app_providers.dart';
 import 'package:molia/services/notification_service.dart';
 
 import '../support/fake_save_as.dart';
@@ -140,15 +139,8 @@ Future<void> _pumpLogPage(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final scope = ProviderTestScope(
-    overrides: [
-      diagnosticsPageProvider.overrideWith(
-        () => LazyListenableNotifier<DiagnosticsProvider>.withValue(
-          harness.provider,
-        ),
-      ),
-    ],
-  );
+  final scope = ProviderTestScope();
+  scope.put<DiagnosticsProvider>(harness.provider);
   scope.put<NotificationService>(harness.notifications);
   await tester.pumpWidget(
     scope.wrap(

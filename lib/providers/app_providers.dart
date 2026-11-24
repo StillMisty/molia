@@ -242,12 +242,10 @@ final channelSelectionControllerProvider =
     snapshotController<ChannelSelection>();
 final diagnosticsProvider =
     NotifierProvider<
-      LegacyListenableNotifier<DiagnosticsProvider>,
-      DiagnosticsProvider
-    >(
-      () =>
-          LegacyListenableNotifier((ref) => _require<DiagnosticsProvider>(ref)),
-    );
+      SnapshotNotifier<DiagnosticsProvider, DiagnosticsState>,
+      DiagnosticsState
+    >(() => SnapshotNotifier((ref) => _require<DiagnosticsProvider>(ref)));
+final diagnosticsControllerProvider = snapshotController<DiagnosticsProvider>();
 final aiDjProvider =
     NotifierProvider<SnapshotNotifier<AiDjProvider, AiDjState>, AiDjState>(
       () => SnapshotNotifier((ref) => _require<AiDjProvider>(ref)),
@@ -550,25 +548,34 @@ final sourcesProvider =
       ),
     );
 
+/// 诊断页控制器的懒构造：已登记（测试 / 宿主）优先复用，否则创建并释放。
+final diagnosticsPageControllerProvider = Provider<DiagnosticsProvider>((ref) {
+  final existing = ref.read(appRuntimeProvider).maybe<DiagnosticsProvider>();
+  if (existing != null) return existing;
+  final service = ref.read(diagnosticsServiceProvider);
+  final exporter = ref.read(diagnosticsExporterProvider);
+  final provider = DiagnosticsProvider(
+    service: service,
+    builder: exporter,
+    saveAs: ref.read(saveAsProvider),
+    appInfo: exporter.appInfo.load,
+    restartEngine: () => ref.read(sourceManagerProvider).retryEngine(),
+    logReader: LogTailReader(
+      directory: service.logSink?.directory ?? () async => null,
+    ),
+  );
+  ref.onDispose(provider.dispose);
+  return provider;
+});
+
 final diagnosticsPageProvider =
     NotifierProvider<
-      LazyListenableNotifier<DiagnosticsProvider>,
-      DiagnosticsProvider
+      SnapshotNotifier<DiagnosticsProvider, DiagnosticsState>,
+      DiagnosticsState
     >(
-      () => LazyListenableNotifier((ref) {
-        final service = ref.read(diagnosticsServiceProvider);
-        final exporter = ref.read(diagnosticsExporterProvider);
-        return DiagnosticsProvider(
-          service: service,
-          builder: exporter,
-          saveAs: ref.read(saveAsProvider),
-          appInfo: exporter.appInfo.load,
-          restartEngine: () => ref.read(sourceManagerProvider).retryEngine(),
-          logReader: LogTailReader(
-            directory: service.logSink?.directory ?? () async => null,
-          ),
-        );
-      }),
+      () => SnapshotNotifier(
+        (ref) => ref.watch(diagnosticsPageControllerProvider),
+      ),
     );
 
 final trackLocalDataServiceProvider = Provider<TrackLocalDataService?>((ref) {
