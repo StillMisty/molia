@@ -1806,7 +1806,7 @@ void main() {
       final (:service, :player) = await start();
       service.setFadeDuration(const Duration(milliseconds: 100));
       var notifications = 0;
-      service.addListener(() => notifications++);
+      service.changes.addListener(() => notifications++);
       player.volumeCalls.clear();
 
       await service.pause();
@@ -1872,6 +1872,34 @@ void main() {
     completers[2].complete(false);
     await pumpEventQueue();
     expect(completedTracks, [trackIdOf('test', 0), trackIdOf('test', 1)]);
+  });
+
+  test('快照：低频播放事实同源，高频进度不进快照也不额外通知', () async {
+    final (:service, :player) = await start(trackCount: 2);
+    var notifications = 0;
+    service.changes.addListener(() => notifications++);
+
+    final initial = service.state;
+    expect(initial.hasTrack, isTrue);
+    expect(initial.queueTracks.length, 2);
+    expect(initial.currentIndex, 0);
+    expect(initial.currentSourceTrack?.id, service.currentSourceTrack?.id);
+    expect(initial.isPlaying, isTrue);
+    expect(initial.isLoading, isFalse);
+    expect(initial.mode, PlayMode.listLoop);
+    expect(initial.duration, const Duration(seconds: 30));
+
+    // 低频状态变化：快照同源更新，且只通知一次。
+    await service.setMode(PlayMode.shuffle);
+    expect(service.state.mode, PlayMode.shuffle);
+    expect(notifications, 1);
+
+    // 位置 tick 只走原有独立通道（400ms 节流），不因为快照化提高频率。
+    player.emitPosition(const Duration(seconds: 5));
+    await pumpEventQueue();
+    expect(service.position, const Duration(seconds: 5));
+    expect(service.state.duration, initial.duration);
+    expect(notifications, 1, reason: '位置推进不立刻发快照');
   });
 
   group('音频缓存单写者约束（#60）', () {

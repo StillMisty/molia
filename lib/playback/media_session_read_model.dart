@@ -100,11 +100,12 @@ class LocalPlaybackMediaSessionReadModel implements MediaSessionReadModel {
     _toggleFavorite = toggle;
   }
 
-  // 通知直接转发服务：读取面只做投影，不额外维护一份状态机。
+  // 通知直接转发服务的变更信号：读取面只做投影，不额外维护一份状态机。
   @override
-  void addListener(VoidCallback listener) => _service.addListener(listener);
+  void addListener(VoidCallback listener) =>
+      _service.changes.addListener(listener);
 
   @override
   void removeListener(VoidCallback listener) =>
-      _service.removeListener(listener);
+      _service.changes.removeListener(listener);
 }
