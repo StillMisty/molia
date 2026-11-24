@@ -39,10 +39,17 @@
 
 1. `lib/domain/**` 禁止 Flutter/provider/HTTP/其它 lib 层；
 2. `lib/data/**`、`lib/sources/**`、`lib/playback/**` 禁止 providers/pages/widgets/main；
-3. `lib/providers/**` 禁止 import `lib/main.dart`；UI 状态按 ADR-0041 用
-   Riverpod `Notifier` / `AsyncNotifier`（`@Riverpod` 代码生成），服务用函数式
-   `Provider` 注入；启动期实例统一经 `AppRuntime` 登记，UI 只通过 `ref` 读取，
-   不再使用 `package:provider`；
+3. `lib/providers/**` 禁止 import `lib/main.dart`；状态按 ADR-0041：
+   - 容器持有的 UI 状态写 Riverpod `Notifier` / `AsyncNotifier`
+     （`@Riverpod` 代码生成）；
+   - 启动期 / 页面内部对象实现 `SnapshotSource<State>`（不可变 `state` +
+     `changes` 信号，契约在 `lib/utils/snapshot_source.dart`）：UI 经
+     `SnapshotNotifier` 读快照、经 `snapshotController` 发命令，页面内部会话用
+     `ListenableBuilder(listenable: obj.changes)`；
+   - `lib/**` 不再声明 `ChangeNotifier` 状态类，由
+     `test/architecture/snapshot_state_cases.dart` 守卫；
+   - 纯服务仍用函数式 `Provider` 注入；启动期实例统一经 `AppRuntime` 登记，
+     UI 只通过 `ref` 读取，不再使用 `package:provider`；
 4. `lib/main.dart` 是唯一 composition root，不允许被其它 lib 文件 import；
    它只做 `WidgetsFlutterBinding.ensureInitialized()` + `runMoliaApp()`（行数由
    `module_layout_test.dart` 守卫）。启动顺序集中在

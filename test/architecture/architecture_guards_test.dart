@@ -10,6 +10,7 @@ import 'prefs_usage_cases.dart' as architecture_prefs_usage;
 import 'settings_keys_cases.dart' as architecture_settings_keys;
 import 'settings_registry_usage_cases.dart'
     as architecture_settings_registry_usage;
+import 'snapshot_state_cases.dart' as architecture_snapshot_state;
 import 'shape_usage_cases.dart' as architecture_shape_usage;
 import 'tooltip_usage_cases.dart' as architecture_tooltip_usage;
 import 'tray_import_cases.dart' as architecture_tray_import;
@@ -24,6 +25,7 @@ void main() {
   group('prefs usage', architecture_prefs_usage.main);
   group('settings keys', architecture_settings_keys.main);
   group('settings registry usage', architecture_settings_registry_usage.main);
+  group('snapshot state', architecture_snapshot_state.main);
   group('shape usage', architecture_shape_usage.main);
   group('tooltip usage', architecture_tooltip_usage.main);
   group('tray import', architecture_tray_import.main);
