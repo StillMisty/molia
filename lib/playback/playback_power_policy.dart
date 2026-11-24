@@ -12,17 +12,70 @@
 ///   下一首直链仍预热，但音频字节预取只在应用前台进行（后台听歌时不再为了
 ///   「下一首秒开」提前占满网络与磁盘）。
 ///
-/// 只在值变化时通知；桌面端不接生命周期，默认一直前台。
+/// 形态是「不可变快照 + 通知信号」（ADR-0041「启动期状态对象」）：[state]
+/// 是纯状态快照，[changes] 替代 `ChangeNotifier` 的订阅面。只在值变化时
+/// 通知；桌面端不接生命周期，默认一直前台。
 library;
 
 import 'package:flutter/foundation.dart';
 
-class PlaybackPowerPolicy extends ChangeNotifier {
+import '../utils/snapshot_source.dart';
+
+/// 功耗策略的不可变快照；派生判据（采样档位 / 预取门控）从同一组布尔值
+/// 计算，避免订阅方各自拼条件。
+@immutable
+class PlaybackPowerPolicyState {
+  const PlaybackPowerPolicyState({
+    required this.isForeground,
+    required this.desktopLyricsActive,
+    required this.lyricsOutputActive,
+  });
+
+  /// 应用是否在前台。
+  final bool isForeground;
+
+  /// 桌面歌词悬浮窗是否**可能**在展示。
+  final bool desktopLyricsActive;
+
+  /// 是否存在任一歌词输出（桌面悬浮窗 / 通知锁屏 / 蓝牙）。
+  final bool lyricsOutputActive;
+
+  /// 是否需要高频（约 5Hz）位置采样：前台或桌面歌词可能展示。
+  bool get keepHighFrequencyPosition => isForeground || desktopLyricsActive;
+
+  /// 是否允许预取封面：封面只在应用内界面展示。
+  bool get canPreloadCovers => isForeground;
+
+  /// 是否允许提取封面配色：后台只有桌面歌词可能用到（「跟随封面」配色）。
+  bool get canExtractArtworkPalette => isForeground || desktopLyricsActive;
+
+  /// 后台是否需要为歌词输出取词。
+  bool get shouldLoadLyrics =>
+      isForeground || desktopLyricsActive || lyricsOutputActive;
+
+  /// 是否允许把下一首音频字节预取到缓存。
+  bool get canPredownloadNextTrackBytes => isForeground;
+}
+
+class PlaybackPowerPolicy implements SnapshotSource<PlaybackPowerPolicyState> {
   PlaybackPowerPolicy({this._foreground = true});
 
   bool _foreground;
   bool _desktopLyricsActive = false;
   bool _lyricsOutputActive = false;
+  bool _disposed = false;
+
+  final SnapshotSignal _changes = SnapshotSignal();
+
+  @override
+  PlaybackPowerPolicyState get state => PlaybackPowerPolicyState(
+    isForeground: _foreground,
+    desktopLyricsActive: _desktopLyricsActive,
+    lyricsOutputActive: _lyricsOutputActive,
+  );
+
+  @override
+  Listenable get changes => _changes;
 
   /// 应用是否在前台（Android / iOS 由生命周期事件维护；桌面恒为 true）。
   bool get isForeground => _foreground;
@@ -71,19 +124,27 @@ class PlaybackPowerPolicy extends ChangeNotifier {
   void setDesktopLyricsActive(bool value) {
     if (_desktopLyricsActive == value) return;
     _desktopLyricsActive = value;
-    notifyListeners();
+    _notify();
   }
 
   /// 任一歌词输出开关变化时同步（幂等）。
   void setLyricsOutputActive(bool value) {
     if (_lyricsOutputActive == value) return;
     _lyricsOutputActive = value;
-    notifyListeners();
+    _notify();
   }
 
   void _setForeground(bool value) {
     if (_foreground == value) return;
     _foreground = value;
-    notifyListeners();
+    _notify();
+  }
+
+  void _notify() {
+    if (!_disposed) _changes.notify();
+  }
+
+  void dispose() {
+    _disposed = true;
   }
 }

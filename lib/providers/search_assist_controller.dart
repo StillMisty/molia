@@ -10,7 +10,7 @@ import 'package:flutter/foundation.dart';
 import '../domain/models/catalog.dart' show SearchKind;
 import '../domain/search/search_assist.dart';
 import 'search_provider.dart';
-import 'snapshot_source.dart';
+import '../utils/snapshot_source.dart';
 
 /// 搜索辅助块的一次投影。
 @immutable

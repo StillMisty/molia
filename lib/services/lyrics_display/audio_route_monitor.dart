@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../providers/snapshot_source.dart';
+import '../../utils/snapshot_source.dart';
 import 'lyrics_channel.dart';
 
 /// A2DP（蓝牙音频）连接状态：蓝牙歌词的门控信号。

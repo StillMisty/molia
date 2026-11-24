@@ -34,7 +34,7 @@ import '../sources/source_manager.dart';
 import '../sources/source_track.dart';
 import '../utils/notify_throttler.dart';
 import 'sleep_timer.dart';
-import 'snapshot_source.dart';
+import '../utils/snapshot_source.dart';
 
 final _logger = Logger('molia.playback_provider');
 

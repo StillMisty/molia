@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../domain/models/library.dart';
 import '../../domain/ports/library_store.dart';
+import '../../utils/snapshot_source.dart';
 
 /// 读取期间到达的单曲切换：只保留每个 key 的最终状态。
 ///
@@ -20,8 +21,46 @@ import '../../domain/ports/library_store.dart';
 /// 少一首（键已收藏、列表里却没有）。同一 key 后到的取消会丢弃行。
 typedef _PendingFavorite = ({bool favorite, PlaylistTrack? track});
 
+/// 收藏事实的不可变快照（键 / 行 / 计数 / 版本同源）。
+///
+/// `keys` 与 `rows` 都是只读视图：`LibraryProvider` 用 [keys] 组装资料库
+/// 快照，用 [rows] 做收藏列表投影；版本戳让按版本号失效的读取方（行快照、
+/// 资料库缓存）拿到同一轮事实。
+@immutable
+class FavoriteFactState {
+  const FavoriteFactState({
+    required this.keys,
+    required this.rows,
+    required this.count,
+    required this.revision,
+    required this.rowsVersion,
+  });
+
+  /// 收藏键（`sourceKey:songId`）。
+  final Set<String> keys;
+
+  /// 收藏列表行；null = 尚未完整读取。
+  final List<PlaylistTrack>? rows;
+
+  /// 收藏列表展示计数。
+  final int count;
+
+  /// 收藏事实版本（键集合真正变化或整表校准开始时递增）。
+  final int revision;
+
+  /// 行快照版本；行读取开始时捕获，[FavoriteFact.adoptRows] 落地时带回。
+  final int rowsVersion;
+
+  /// 是否已收藏（键口径为 `sourceKey:songId`）。
+  bool contains(String sourceKey, String songId) =>
+      keys.contains(FavoriteFact._keyOf(sourceKey, songId));
+}
+
 /// 收藏事实。
-class FavoriteFact extends ChangeNotifier {
+///
+/// 形态是「不可变快照 + 通知信号」（ADR-0041「启动期状态对象」）：[state]
+/// 给 `LibraryProvider` / UI 投影读，[changes] 替代 `ChangeNotifier` 的订阅面。
+class FavoriteFact implements SnapshotSource<FavoriteFactState> {
   factory FavoriteFact({
     required LibraryStore repository,
 
@@ -68,7 +107,22 @@ class FavoriteFact extends ChangeNotifier {
 
   final Map<String, _PendingFavorite> _pending = <String, _PendingFavorite>{};
 
+  final SnapshotSignal _changes = SnapshotSignal();
+
   bool _disposed = false;
+
+  @override
+  Listenable get changes => _changes;
+
+  /// 当前事实的不可变快照；`keys` / `rows` 是只读视图。
+  @override
+  FavoriteFactState get state => FavoriteFactState(
+    keys: keys,
+    rows: _rows == null ? null : List<PlaylistTrack>.unmodifiable(_rows!),
+    count: _count,
+    revision: _revision,
+    rowsVersion: _rowsVersion,
+  );
 
   /// 收藏事实版本（键集合真正变化或整表校准开始时递增）。
   int get revision => _revision;
@@ -445,14 +499,12 @@ class FavoriteFact extends ChangeNotifier {
 
   /// dispose 后不再向已销毁的监听器发通知（写入 / 读取可能跨销毁边界完成）。
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) _changes.notify();
   }
 
-  @override
   void dispose() {
     _disposed = true;
     _pending.clear();
-    super.dispose();
   }
 }
 

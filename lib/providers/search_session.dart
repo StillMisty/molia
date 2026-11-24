@@ -12,7 +12,7 @@ import 'channel_selection.dart';
 import 'paged_list_controller.dart';
 import 'search_results.dart';
 import 'search_row.dart';
-import 'snapshot_source.dart';
+import '../utils/snapshot_source.dart';
 
 /// 单源取页：来源 key + 本轮关键词 + 页码（三种搜索类型共用）。
 typedef SearchPageFetcher<T> = Future<PagedResult<T>> Function(
