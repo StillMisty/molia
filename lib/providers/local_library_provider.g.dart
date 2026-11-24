@@ -175,7 +175,7 @@ final class LocalLibraryProviderProvider
 }
 
 String _$localLibraryProviderHash() =>
-    r'd5816e81ba782e095e9d20b1ff0df7ee7f4bdc94';
+    r'b66f13d8892f731b1849c2caf7065168b19d5641';
 
 abstract class _$LocalLibraryProvider extends $Notifier<LocalLibraryState> {
   LocalLibraryState build();

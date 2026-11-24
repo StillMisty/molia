@@ -124,7 +124,7 @@ class _SourceSwapPageState extends ConsumerState<SourceSwapPage> {
     // 只读一次：来源标签 / 渠道顺序不随搜索通知变化，页面不应因 provider
     // 通知整页重建。标签只用可搜索描述符；停用 / 非搜索脚本不在其中，
     // 标签回退源 key。
-    final swapProvider = ref.read(sourceSwapProvider)!;
+    final swapProvider = ref.read(sourceSwapProvider.notifier);
     final sourceDescriptors = swapProvider.searchableSources;
     // 歌词来源跟随渠道停用：取「已启用渠道」而不是「可搜索渠道」，
     // 六个音乐平台没有 LX 脚本时仍能用歌词来源。

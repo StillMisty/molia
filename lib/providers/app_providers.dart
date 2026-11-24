@@ -30,7 +30,6 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
-import 'package:molia/providers/source_swap_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/sync_provider.dart';
 import 'package:molia/providers/update_provider.dart';
@@ -482,30 +481,6 @@ final sourcesProvider =
       () => LazyListenableNotifier(
         (ref) => SourcesProvider(ref.read(sourceManagerProvider)),
       ),
-    );
-
-final sourceSwapProvider =
-    NotifierProvider<
-      LazyNullableListenableNotifier<SourceSwapProvider>,
-      SourceSwapProvider?
-    >(
-      () => LazyNullableListenableNotifier((ref) {
-        final catalog = ref.read(appRuntimeProvider).maybe<CatalogService>();
-        final registry = ref.read(appRuntimeProvider).maybe<SourceRegistry>();
-        final planner = ref.read(appRuntimeProvider).maybe<SwapQueryPlanner>();
-        if (catalog == null || registry == null || planner == null) return null;
-        return SourceSwapProvider(
-          catalogService: catalog,
-          sourceRegistry: registry,
-          swapQueryPlanner: planner,
-          libraryProvider: ref.read(libraryProvider),
-          playbackProvider: ref.read(playbackProvider),
-          onTrackSwapped: ref
-              .read(appRuntimeProvider)
-              .require<CustomCoverStore>()
-              .carryOver,
-        );
-      }),
     );
 
 final discoverProvider =

@@ -56,7 +56,7 @@ class _SourceSwapViewState extends ConsumerState<SourceSwapView>
   @override
   void initState() {
     super.initState();
-    _provider = ref.read(sourceSwapProvider)!;
+    _provider = ref.read(sourceSwapProvider.notifier);
     _searchController = TextEditingController();
     // begin 会同步通知监听者；放到微任务里，避开本组件的首次 build。
     scheduleMicrotask(() {
@@ -89,7 +89,8 @@ class _SourceSwapViewState extends ConsumerState<SourceSwapView>
   Widget build(BuildContext context) {
     super.build(context);
     final l10n = _l10n(context);
-    final provider = ref.watch(sourceSwapProvider)!;
+    ref.watch(sourceSwapProvider);
+    final provider = _provider;
     final sources = provider.searchableSources;
     final failedNames = provider.failedSourceNames;
     final hasKeyword = provider.keyword.isNotEmpty;

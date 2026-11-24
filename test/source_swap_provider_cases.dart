@@ -6,6 +6,7 @@ import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/domain/ports/source_registry.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/source_swap_provider.dart';
@@ -15,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
+import 'support/provider_test_scope.dart';
 
 /// 换源状态机：并行分组检索 / 失败隔离 / 库内原位替换 / 队列跟随。
 void main() {
@@ -39,6 +41,7 @@ void main() {
   late FakeMusicSource kg;
   late FakeMusicSource tx;
   late Map<String, FakeMusicSource> sources;
+  ProviderTestScope? lastScope;
 
   setUp(() {
     repository = FakeLibraryRepository();
@@ -61,14 +64,18 @@ void main() {
 
   SourceSwapProvider buildProvider({SourceSwapTrackHook? onTrackSwapped}) {
     final registry = FakeSourceRegistry(sources);
-    return SourceSwapProvider(
-      catalogService: CatalogService(registry: registry),
-      sourceRegistry: registry,
-      swapQueryPlanner: SwapQueryPlanner(registry: registry),
-      libraryProvider: library,
-      playbackProvider: playback,
-      onTrackSwapped: onTrackSwapped,
+    final scope = ProviderTestScope(
+      overrides: [
+        sourceSwapTrackHookProvider.overrideWithValue(onTrackSwapped),
+      ],
     );
+    scope.put<CatalogService>(CatalogService(registry: registry));
+    scope.put<SourceRegistry>(registry);
+    scope.put<SwapQueryPlanner>(SwapQueryPlanner(registry: registry));
+    scope.put<LibraryProvider>(library);
+    scope.put<PlaybackProvider>(playback);
+    lastScope = scope;
+    return scope.container.read(sourceSwapProvider.notifier);
   }
 
   test('begin：全部可搜索音源并行检索（含种子源）；空结果 / 失败隔离', () async {
@@ -76,7 +83,6 @@ void main() {
     kg.items = [track('kg', '100'), track('kg', '101')];
     tx.fail = true;
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     await provider.begin(
       SourceSwapRequest(
@@ -102,7 +108,6 @@ void main() {
     sources['wy'] = wy;
     kg.items = [track('kg', '100')];
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     await provider.begin(
       SourceSwapRequest(
@@ -124,7 +129,6 @@ void main() {
     bili.items = [seed, track('bili', 'BV2')];
     kg.items = [track('kg', '100')];
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     await provider.begin(
       SourceSwapRequest(seed: seed, placement: SourceSwapPlacement.queue),
@@ -146,7 +150,6 @@ void main() {
     final bili = FakeMusicSource('bili')..items = [track('bili', 'BV1')];
     sources['bili'] = bili;
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     await provider.begin(
       SourceSwapRequest(
@@ -162,7 +165,6 @@ void main() {
   test('begin：没有任何可搜索音源 → noSources，不发起搜索', () async {
     sources.clear();
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     await provider.begin(
       SourceSwapRequest(
@@ -179,7 +181,6 @@ void main() {
     tx.fail = true;
     tx.items = [track('tx', '200')];
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     await provider.begin(
       SourceSwapRequest(
@@ -201,7 +202,6 @@ void main() {
   test('retryFailed：失败源已从注册表移除时清空失败集并通知 UI', () async {
     kg.fail = true;
     final provider = buildProvider();
-    addTearDown(provider.dispose);
     await provider.begin(
       SourceSwapRequest(
         seed: track('wy', '1'),
@@ -212,7 +212,7 @@ void main() {
 
     sources.remove('kg');
     var notifications = 0;
-    provider.addListener(() => notifications++);
+    lastScope!.container.listen(sourceSwapProvider, (_, _) => notifications++);
     await provider.retryFailed();
 
     expect(provider.failedSourceKeys, isEmpty);
@@ -221,7 +221,6 @@ void main() {
 
   test('search：没有会话时不启动搜索', () async {
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     await provider.search('Title Artist');
 
@@ -234,7 +233,6 @@ void main() {
     kg.fail = true;
     tx.fail = true;
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     await provider.begin(
       SourceSwapRequest(
@@ -255,7 +253,6 @@ void main() {
     kg.items = [track('kg', '100')];
     tx.items = [track('tx', '200')];
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     await provider.begin(
       SourceSwapRequest(
@@ -276,7 +273,6 @@ void main() {
     kg.items = [track('kg', '100')];
     tx.items = [track('tx', '200')];
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     await provider.begin(
       SourceSwapRequest(
@@ -301,7 +297,6 @@ void main() {
   test('search：当前筛选源不可搜索时回到全部；空串清空会话', () async {
     kg.items = [track('kg', '100')];
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     await provider.begin(
       SourceSwapRequest(
@@ -331,7 +326,6 @@ void main() {
     kg.onSearch = (_) => kgGate.future;
     tx.onSearch = (_) => txGate.future;
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     final pending = provider.begin(
       SourceSwapRequest(
@@ -355,7 +349,6 @@ void main() {
 
   test('searchableSources / orderedChannelKeys：分别给可搜索源与全部渠道顺序', () {
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     expect(provider.searchableSources.map((item) => item.key), ['kg', 'tx']);
     expect(provider.orderedChannelKeys, ['kg', 'tx']);
@@ -387,7 +380,6 @@ void main() {
 
     kg.items = [track('kg', '100', title: 'Title（新源）')];
     final provider = buildProvider();
-    addTearDown(provider.dispose);
     await provider.begin(
       SourceSwapRequest(
         seed: seed,
@@ -434,7 +426,6 @@ void main() {
 
     kg.items = [track('kg', '100', title: 'Title（新源）')];
     final provider = buildProvider();
-    addTearDown(provider.dispose);
     await provider.begin(
       SourceSwapRequest(
         seed: seed,
@@ -478,7 +469,6 @@ void main() {
 
     kg.items = [track('kg', '100')];
     final provider = buildProvider();
-    addTearDown(provider.dispose);
     await provider.begin(
       SourceSwapRequest(
         seed: seed,
@@ -518,7 +508,6 @@ void main() {
 
     kg.items = [track('kg', '100')];
     final provider = buildProvider();
-    addTearDown(provider.dispose);
     await provider.begin(
       SourceSwapRequest(
         seed: track('wy', '1'),
@@ -550,7 +539,6 @@ void main() {
 
     kg.items = [track('kg', '100')];
     final provider = buildProvider();
-    addTearDown(provider.dispose);
     await provider.begin(
       SourceSwapRequest(
         seed: track('wy', '1'),
@@ -582,7 +570,6 @@ void main() {
 
     kg.items = [track('kg', '100')];
     final provider = buildProvider();
-    addTearDown(provider.dispose);
     await provider.begin(
       SourceSwapRequest(seed: seed, placement: SourceSwapPlacement.queue),
     );
@@ -639,7 +626,6 @@ void main() {
         swapped.add((oldTrack.id.uri, newTrack.id.uri));
       },
     );
-    addTearDown(provider.dispose);
     await provider.begin(
       SourceSwapRequest(seed: seed, placement: SourceSwapPlacement.queue),
     );
@@ -689,7 +675,6 @@ void main() {
         swapped.add((oldTrack.id.uri, newTrack.id.uri));
       },
     );
-    addTearDown(provider.dispose);
 
     await provider.begin(
       SourceSwapRequest(
@@ -721,7 +706,6 @@ void main() {
     final playlistId = await repository.createPlaylist('L');
     kg.items = [track('kg', '100')];
     final provider = buildProvider();
-    addTearDown(provider.dispose);
     await provider.begin(
       SourceSwapRequest(
         seed: track('wy', '1'),
@@ -743,7 +727,6 @@ void main() {
       return SearchResult(items: [track('kg', '100')]);
     };
     final provider = buildProvider();
-    addTearDown(provider.dispose);
 
     final pending = provider.begin(
       SourceSwapRequest(
