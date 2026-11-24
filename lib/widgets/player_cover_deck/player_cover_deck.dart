@@ -145,7 +145,7 @@ class _PlayerCoverDeckState extends ConsumerState<PlayerCoverDeck>
       displayTrackOf: () => widget.displayTrack,
       artDimensionOf: () => widget.artDimension,
       isLargeScreenOf: () => widget.isLargeScreen,
-      isPlayingOf: () => _playback?.isPlaying ?? false,
+      isPlayingOf: () => _playback?.snapshot.isPlaying ?? false,
       isMounted: () => mounted,
       gesturesBlockedOf: () => widget.morph?.pageHeaderHidden ?? false,
       onTrackSwapped: (duringDrag) => widget.onTrackSwapped?.call(duringDrag),
@@ -187,11 +187,11 @@ class _PlayerCoverDeckState extends ConsumerState<PlayerCoverDeck>
   /// 变化时 setState。provider 被替换时必须重新订阅，否则会话会停留在旧
   /// provider 的曲目上。
   void _bindPlaybackIfNeeded() {
-    final playback = ref.read(playbackProvider);
+    final playback = ref.read(playbackControllerProvider);
     if (identical(playback, _playback)) return;
-    _playback?.removeListener(_handlePlaybackChanged);
+    _playback?.changes.removeListener(_handlePlaybackChanged);
     _playback = playback;
-    playback.addListener(_handlePlaybackChanged);
+    playback.changes.addListener(_handlePlaybackChanged);
     _controller.attachPlayback(
       snapshot: playback.snapshot,
       displayTrack: widget.displayTrack,
@@ -255,7 +255,7 @@ class _PlayerCoverDeckState extends ConsumerState<PlayerCoverDeck>
       _controller.ingestPlayback(
         snapshot: playback.snapshot,
         displayTrack: widget.displayTrack,
-        isPlaying: playback.isPlaying,
+        isPlaying: playback.snapshot.isPlaying,
       );
     });
   }
@@ -274,7 +274,7 @@ class _PlayerCoverDeckState extends ConsumerState<PlayerCoverDeck>
 
   @override
   void dispose() {
-    _playback?.removeListener(_handlePlaybackChanged);
+    _playback?.changes.removeListener(_handlePlaybackChanged);
     _removeCoverListener?.call();
     widget.morph?.removeListener(_onMorphChanged);
     _controller.dispose();
@@ -283,7 +283,7 @@ class _PlayerCoverDeckState extends ConsumerState<PlayerCoverDeck>
 
   @override
   Widget build(BuildContext context) {
-    final playback = ref.read(playbackProvider);
+    final playback = ref.read(playbackControllerProvider);
     // 切歌检测与空闲缓存刷新都在播放快照监听里（微任务）完成：build 期间
     // 零写入，这里只渲染当前会话/稳态画面。
     return _buildArtworkStack(context, playback);
@@ -338,7 +338,6 @@ class _PlayerCoverDeckState extends ConsumerState<PlayerCoverDeck>
                       pageCoverHidden: _pageCoverHidden,
                       morphCoverKey: widget.morph?.pageCoverKey,
                     ),
-                    playback: playback,
                     realCoverUrlOf: _realCoverUrlOf,
                     defaultCoverUrl: _coverResolver.defaultCoverUrl,
                     centerScaleAnimation: _controller.centerScaleAnimation,
@@ -353,13 +352,14 @@ class _PlayerCoverDeckState extends ConsumerState<PlayerCoverDeck>
                     },
                     // 左槽点击 = 上一首：只要展示了身份就可点；飞行期间
                     // 禁用点击（副本/锚点交接期间不接受切歌）。
-                    onTapPrevious: !deckFrozen && playback.hasTrack
+                    onTapPrevious:
+                        !deckFrozen && playback.snapshot.current != null
                         ? () {
                             HapticsService.lightImpact();
                             playback.skipToPrevious();
                           }
                         : null,
-                    onTapNext: !deckFrozen && playback.hasTrack
+                    onTapNext: !deckFrozen && playback.snapshot.current != null
                         ? () {
                             HapticsService.lightImpact();
                             playback.skipToNext();

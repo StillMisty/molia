@@ -121,7 +121,7 @@ class QueueDisplay extends ConsumerWidget {
             playbackProvider.select((provider) => provider.snapshot.current),
           )
         : null;
-    final playback = ref.read(playbackProvider);
+    final playback = ref.read(playbackControllerProvider);
 
     return Scrollbar(
       controller: controller,

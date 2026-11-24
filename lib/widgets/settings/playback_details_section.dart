@@ -42,7 +42,7 @@ class PlaybackDetailsSection extends ConsumerWidget {
               (PlaybackFadePreset.ms300, l10n.settingsFade300),
             ],
             onChanged: (value) =>
-                ref.read(playbackProvider).setFadePreset(value),
+                ref.read(playbackControllerProvider).setFadePreset(value),
           );
         },
       ),
@@ -57,8 +57,9 @@ class PlaybackDetailsSection extends ConsumerWidget {
             title: l10n.settingsSmartShuffleTitle,
             subtitle: l10n.settingsSmartShuffleSubtitle,
             value: enabled,
-            onChanged: (value) =>
-                ref.read(playbackProvider).setSmartShuffleEnabled(value),
+            onChanged: (value) => ref
+                .read(playbackControllerProvider)
+                .setSmartShuffleEnabled(value),
           );
         },
       ),

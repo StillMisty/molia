@@ -81,7 +81,7 @@ class PlaybackPlayPauseButton extends ConsumerWidget {
       semanticLabel: isPlaying ? l10n.pause : l10n.play,
       onPressed: () {
         HapticsService.lightImpact();
-        ref.read(playbackProvider).togglePlayPause();
+        ref.read(playbackControllerProvider).togglePlayPause();
       },
       variant: variant,
       size: size,
@@ -114,7 +114,7 @@ class PlaybackPreviousButton extends ConsumerWidget {
       semanticLabel: _l10n(context).previousTrackTooltip,
       onPressed: () {
         HapticsService.lightImpact();
-        ref.read(playbackProvider).skipToPrevious();
+        ref.read(playbackControllerProvider).skipToPrevious();
       },
       variant: variant,
       size: size,
@@ -147,7 +147,7 @@ class PlaybackNextButton extends ConsumerWidget {
       semanticLabel: _l10n(context).nextTrackTooltip,
       onPressed: () {
         HapticsService.lightImpact();
-        ref.read(playbackProvider).skipToNext();
+        ref.read(playbackControllerProvider).skipToNext();
       },
       variant: variant,
       size: size,
@@ -189,7 +189,7 @@ class PlaybackModeButton extends ConsumerWidget {
       semanticLabel: mode.transportLabel(_l10n(context)),
       onPressed: () {
         HapticsService.lightImpact();
-        ref.read(playbackProvider).togglePlayMode();
+        ref.read(playbackControllerProvider).togglePlayMode();
       },
     );
   }
@@ -226,10 +226,10 @@ class _PlaybackSeekBarState extends ConsumerState<PlaybackSeekBar> {
   @override
   void initState() {
     super.initState();
-    _playback = ref.read(playbackProvider);
+    _playback = ref.read(playbackControllerProvider);
     _seekPreview = SeekPreviewController(
       position: _playback.position,
-      trackChanges: _playback,
+      trackChanges: _playback.changes,
       currentTrackId: () => _playback.snapshot.current?.id,
       seek: _playback.seekToPosition,
     );

@@ -193,6 +193,8 @@ class _PlayerState extends ConsumerState<Player> with TickerProviderStateMixin {
       playbackProvider.select((provider) => provider.snapshot.current),
     );
 
+    // 只读一次快照（不订阅整棵播放器）：标题块的 lastPlayed* 兜底值随
+    // 曲目变化刷新，音量拖动等通知不应重建整页。
     final playback = ref.read(playbackProvider);
 
     // 展示曲目沿用上一次非空曲目：换歌瞬间快照可能短暂为空，直接回退到
@@ -244,7 +246,7 @@ class _PlayerState extends ConsumerState<Player> with TickerProviderStateMixin {
   /// [_smallScreenDeckMetrics]）。
   Widget _buildSmallScreenPlayerLayout(
     Track? displayTrack,
-    PlaybackProvider playback, {
+    PlaybackState playback, {
     PlayerMorphController? morph,
   }) {
     return LayoutBuilder(
@@ -302,7 +304,7 @@ class _PlayerState extends ConsumerState<Player> with TickerProviderStateMixin {
   /// 比外层预算小一截、容器底部多出等量空白。
   Widget _buildExpandableSmallScreenLayout(
     Track? displayTrack,
-    PlaybackProvider playback,
+    PlaybackState playback,
     Animation<double> expand,
   ) {
     return LayoutBuilder(
@@ -424,7 +426,7 @@ class _PlayerState extends ConsumerState<Player> with TickerProviderStateMixin {
   Widget _buildTrackInfo(
     BuildContext context,
     Track? displayTrack,
-    PlaybackProvider playback,
+    PlaybackState playback,
   ) {
     return AnimatedBuilder(
       animation: _trackEntrance,
@@ -449,7 +451,7 @@ class _PlayerState extends ConsumerState<Player> with TickerProviderStateMixin {
   Widget _buildTrackInfoText(
     BuildContext context,
     Track? displayTrack,
-    PlaybackProvider playback,
+    PlaybackState playback,
   ) {
     final header =
         displayTrack?.title ??
@@ -478,7 +480,7 @@ class _PlayerState extends ConsumerState<Player> with TickerProviderStateMixin {
   /// 封面按两轴可用空间自适应。
   Widget _buildLargeScreenPlayerLayout(
     Track? displayTrack,
-    PlaybackProvider playback,
+    PlaybackState playback,
   ) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {

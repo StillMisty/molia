@@ -85,7 +85,8 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
   @override
   void initState() {
     super.initState();
-    final duration = ref.read(playbackProvider).sleepTimer.value.duration;
+    final timer = ref.read(playbackControllerProvider).sleepTimer;
+    final duration = timer.value.duration;
     _minutes = duration == null
         ? kSleepTimerDefaultMinutes
         : snapSleepTimerMinutes(duration.inMinutes.toDouble());
@@ -106,7 +107,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final timer = ref.read(playbackProvider).sleepTimer;
+    final timer = ref.read(playbackControllerProvider).sleepTimer;
 
     return SimpleModalBody(
       // 移动端弹层叠在应用底栏之上，视口会比内容高度短一点；底部留一档避免

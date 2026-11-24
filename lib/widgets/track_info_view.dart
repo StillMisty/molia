@@ -144,7 +144,9 @@ class TrackInfoView extends ConsumerWidget {
                 ),
               // 定时关闭：与曲目无关的播放控制（队列播完后仍可取消）。
               ValueListenableBuilder<SleepTimerState>(
-                valueListenable: ref.read(playbackProvider).sleepTimer,
+                valueListenable: ref
+                    .read(playbackControllerProvider)
+                    .sleepTimer,
                 builder: (context, timerState, _) => SettingsNavTile(
                   key: const Key('trackInfoSleepTimerItem'),
                   icon: Icons.bedtime_rounded,

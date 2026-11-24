@@ -156,7 +156,8 @@
   旧的 `LocalPlaybackBackend` + `DefaultPlaybackFacade` 两层纯转发与
   `BackendSnapshot` 双形状已删除。
   `PlaybackProvider` 对外只暴露领域 `PlaybackSnapshot` + position 通道，两者都读
-  `PlaybackSessionCoordinator`（`lib/playback/`）的展示投影：真实播放取 facade，
+  `PlaybackSessionCoordinator`（`lib/playback/`）的展示投影（UI 经 Riverpod 读不可变
+  `PlaybackState` 快照、命令走 `playbackControllerProvider`，见 ADR-0041）：真实播放取 facade，
   冷启动恢复态取协调者构造的恢复快照（`isPlaying=false`）/ 保存进度。
   协调者另持有只反映真实播放的 live 投影（`liveSnapshot` / `liveSnapshotChannel` /
   `livePosition`，恢复态下为空）：UI 读展示面，定时关闭 / 失败恢复 / 默认播放模式
@@ -1823,7 +1824,7 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   否则按启动页（设置 › 通用 › 启动时打开，默认播放页；存储首页被隐藏时按
   导航顺序兜底且**不改写存储**，避免同步回环）。上次页面记录在设备本地
   （`shell_last_destination_v1`），不随同步带到其它设备。
-  应用内音量（`PlaybackProvider.volume/muted`，设备本地持久化、落盘防抖 400ms）
+  应用内音量（`PlaybackState.volume/muted`，经 `PlaybackProvider` 命令改；设备本地持久化、落盘防抖 400ms）
   经 `PlaybackFacade.setVolume` 落到 just_audio（桌面 media_kit 同一播放器）。
   播放手感（`lib/services/playback_feel_store.dart` 单键 JSON，设备本地）：
   淡入淡出档位（关 / 0.15 / 0.2 / 0.3 秒，默认 0.2）与智能随机开关（默认开）

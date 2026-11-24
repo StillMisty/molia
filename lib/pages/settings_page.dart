@@ -282,7 +282,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                 (PlayMode.shuffle, l10n.playModeShuffle),
               ],
               onChanged: (mode) =>
-                  ref.read(playbackProvider).setDefaultPlayMode(mode),
+                  ref.read(playbackControllerProvider).setDefaultPlayMode(mode),
             );
           },
         ),
@@ -299,8 +299,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               title: l10n.settingsRestoreSessionTitle,
               subtitle: l10n.settingsRestoreSessionSubtitle,
               value: restoreSession,
-              onChanged: (value) =>
-                  ref.read(playbackProvider).setRestoreSessionEnabled(value),
+              onChanged: (value) => ref
+                  .read(playbackControllerProvider)
+                  .setRestoreSessionEnabled(value),
             );
           },
         ),

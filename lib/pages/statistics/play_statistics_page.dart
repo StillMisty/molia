@@ -346,7 +346,7 @@ class _PlayStatisticsPageState extends ConsumerState<PlayStatisticsPage> {
     if (entries.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
     final library = ref.read(libraryProvider);
-    final playback = ref.read(playbackProvider);
+    final playback = ref.read(playbackControllerProvider);
     final tracks = [
       for (final entry in entries)
         library.sourceTrackFromRaw(
@@ -370,7 +370,7 @@ class _PlayStatisticsPageState extends ConsumerState<PlayStatisticsPage> {
     if (events.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
     final library = ref.read(libraryProvider);
-    final playback = ref.read(playbackProvider);
+    final playback = ref.read(playbackControllerProvider);
     final tracks = [
       for (final event in events)
         library.sourceTrackFromRaw(

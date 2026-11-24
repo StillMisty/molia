@@ -152,7 +152,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   // 快照变化时同时补一次当前位置：冷启动恢复 / 暂停中 seek / 切曲可能让
   // 位置值在订阅建立前就位（ValueListenable 不补发），只靠进度通道路由会
   // 停在旧行（桌面歌词表现为冷启动显示第 0 行）。
-  playback.addListener(() {
+  playback.changes.addListener(() {
     lyricsDisplay.syncPlayback(playback.snapshot);
     lyricsDisplay.updatePosition(playback.currentPosition);
   });
@@ -190,7 +190,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
     artworkThemeSync.onArtworkChanged(artwork);
   }
 
-  playback.addListener(syncArtworkPalette);
+  playback.changes.addListener(syncArtworkPalette);
   // 自定义封面替换 / 恢复：当前曲目的主题色立即重算（默认封面不参与）。
   covers.addChangeListener(syncArtworkPalette);
   syncArtworkPalette();

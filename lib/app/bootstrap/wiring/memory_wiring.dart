@@ -85,10 +85,10 @@ void wireTrayTrim({required PlaybackStack playback}) {
   // 工作集，暂停稳定后再归还；播放恢复 / 窗口可见时取消。
   Future<void> releaseIdlePlayer() =>
       playback.localPlaybackService?.releasePlayerForIdle() ?? Future.value();
-  var lastPlaying = playback.playbackProvider.isPlaying;
+  var lastPlaying = playback.playbackProvider.snapshot.isPlaying;
   var lastTrackId = playback.playbackProvider.snapshot.current?.id.uri;
   void syncTrayTrimTimers() {
-    final playing = playback.playbackProvider.isPlaying;
+    final playing = playback.playbackProvider.snapshot.isPlaying;
     final trackId = playback.playbackProvider.snapshot.current?.id.uri;
     final playingChanged = playing != lastPlaying;
     final trackChanged = trackId != lastTrackId;
@@ -108,10 +108,10 @@ void wireTrayTrim({required PlaybackStack playback}) {
     }
   }
 
-  playback.playbackProvider.addListener(syncTrayTrimTimers);
+  playback.playbackProvider.changes.addListener(syncTrayTrimTimers);
   AppPresence.instance.addListener(() {
     if (AppPresence.instance.isTrayHidden) {
-      if (!playback.playbackProvider.isPlaying) {
+      if (!playback.playbackProvider.snapshot.isPlaying) {
         AppMemoryManager.instance.scheduleTrayPausedTrim(
           onIdle: releaseIdlePlayer,
         );

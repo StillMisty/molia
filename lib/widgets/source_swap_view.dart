@@ -291,7 +291,7 @@ class _SourceSwapViewState extends ConsumerState<SourceSwapView>
     _provider.select(track);
     unawaited(
       ref
-          .read(playbackProvider)
+          .read(playbackControllerProvider)
           .playDomainTracks(
             [track],
             0,

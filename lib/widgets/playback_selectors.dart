@@ -50,7 +50,7 @@ class ProgressBarSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final position = ref.read(playbackProvider).position;
+    final position = ref.read(playbackControllerProvider).position;
     final state = ref.watch(
       playbackProvider.select(
         (provider) => (

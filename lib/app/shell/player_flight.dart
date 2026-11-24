@@ -101,7 +101,10 @@ extension _ShellPlayerFlight on _MyAppState {
     _morph.setPageHeaderHidden(true);
     _morphGeometry = geometry;
     _presentation.setFlightInProgress(true);
-    final url = nowPlayingCoverUrl(context, ref.read(playbackProvider));
+    final url = nowPlayingCoverUrl(
+      context,
+      ref.read(playbackControllerProvider),
+    );
     final token = ++_morphToken;
     _morphEntry = OverlayEntry(
       builder: (context) => PlayerMorphFlight(

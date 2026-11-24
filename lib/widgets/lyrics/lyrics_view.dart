@@ -244,7 +244,7 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
     });
     _session = ref.watch(lyricsProvider);
     final l10n = AppLocalizations.of(context)!;
-    final playback = ref.read(playbackProvider);
+    final playback = ref.read(playbackControllerProvider);
 
     // 可见性门控：隐藏页（壳层不在前台，或播放页停在队列 / 信息 tab）不再
     // 订阅进度、不自动滚动、不跑快捷操作弹簧。nearest scope 已把「壳层可见
@@ -300,7 +300,7 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
     // 歌词页扩展行开关：独立于输出侧（桌面 / 通知 / 蓝牙）的翻译·罗马音设置。
     final lyricsDisplaySettings = ref.watch(lyricsDisplaySettingsProvider);
 
-    final playback = ref.read(playbackProvider);
+    final playback = ref.read(playbackControllerProvider);
 
     if (active) {
       // 行号变化（或仍有排队目标）由会话排帧末滚动；门控与重试都在会话里。
@@ -534,7 +534,7 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
   Future<void> _showSourceSwapPage() async {
     if (!mounted) return;
 
-    final playback = ref.read(playbackProvider);
+    final playback = ref.read(playbackControllerProvider);
     final currentTrack = playback.snapshot.current;
     final notificationService = ref.read(notificationServiceProvider);
     final l10n = AppLocalizations.of(context)!;
@@ -598,7 +598,7 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
   Future<void> _showLyricsSelectionPage() async {
     if (!mounted) return;
 
-    final playback = ref.read(playbackProvider);
+    final playback = ref.read(playbackControllerProvider);
     final currentTrack = playback.snapshot.current;
     final notificationService = ref.read(notificationServiceProvider);
     final l10n = AppLocalizations.of(context)!;
@@ -658,10 +658,10 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
   // 控制器与 Provider；滚动几何仍由本侧测量（lyrics_scroll_policy）。
 
   @override
-  Duration get position => ref.read(playbackProvider).currentPosition;
+  Duration get position => ref.read(playbackControllerProvider).currentPosition;
 
   @override
-  bool get isPlaying => ref.read(playbackProvider).isPlaying;
+  bool get isPlaying => ref.read(playbackControllerProvider).snapshot.isPlaying;
 
   @override
   List<LyricLine> get lines => _session.lines;
@@ -670,7 +670,8 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
   bool get isSynced => _session.isSynced;
 
   @override
-  bool get hasTrack => ref.read(playbackProvider).hasTrack;
+  bool get hasTrack =>
+      ref.read(playbackControllerProvider).snapshot.current != null;
 
   @override
   bool get quickActionsEnabled => widget.quickActionsEnabled;
@@ -682,11 +683,12 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
   bool get canScroll => _scroll.hasClients;
 
   @override
-  PlayMode get currentPlayMode => ref.read(playbackProvider).currentMode;
+  PlayMode get currentPlayMode =>
+      ref.read(playbackControllerProvider).snapshot.mode;
 
   @override
   void setPlayMode(PlayMode mode) {
-    ref.read(playbackProvider).setPlayMode(mode);
+    ref.read(playbackControllerProvider).setPlayMode(mode);
   }
 
   @override
@@ -704,7 +706,7 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
   @override
   void jumpTowardLine(int currentLineIndex) {
     final durationMs = ref
-        .read(playbackProvider)
+        .read(playbackControllerProvider)
         .snapshot
         .current
         ?.duration

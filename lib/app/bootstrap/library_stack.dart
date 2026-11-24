@@ -185,7 +185,7 @@ void wirePlayStatistics({
   required PlaybackProvider playback,
   required PlayStatisticsService service,
 }) {
-  playback.addListener(() => service.onSnapshot(playback.snapshot));
+  playback.changes.addListener(() => service.onSnapshot(playback.snapshot));
   playback.position.addListener(
     () => service.onPosition(playback.currentPosition),
   );

@@ -151,7 +151,7 @@ class _DesktopShortcutsState extends ConsumerState<DesktopShortcuts> {
   /// provider / 执行器自身兜底，这里只保证不把 Future 丢成未处理错误。
   void _execute(ShortcutCommand command) {
     final actions = ShortcutActions(
-      playback: ref.read(playbackProvider),
+      playback: ref.read(playbackControllerProvider),
       onFocusSearch: widget.onFocusSearch,
       onSelectDestinationIndex: widget.onSelectDestinationIndex,
       onCloseQueuePanel: widget.onCloseQueuePanel,
