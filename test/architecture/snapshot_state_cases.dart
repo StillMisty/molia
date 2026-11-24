@@ -15,9 +15,8 @@ import 'package:flutter_test/flutter_test.dart';
 ///
 /// 白名单只减不增：这里是迁移收尾阶段的存量清单，清空后不得再新增条目。
 const Set<String> _remainingChangeNotifiers = <String>{
-  // 收尾批次：两个重服务正在快照化，完成后必须清空本清单。
+  // 收尾批次：本地播放服务正在快照化，完成后必须清空本清单。
   'lib/playback/local_playback_service.dart',
-  'lib/sources/source_manager.dart',
 };
 
 void main() {
