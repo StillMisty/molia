@@ -11,6 +11,7 @@ import '../../domain/models/smart_lists.dart';
 import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/app_providers.dart';
+import '../../providers/local_library_provider.dart';
 import '../../providers/lyrics_provider.dart';
 import '../../providers/collection_actions.dart';
 import '../../providers/collection_io_commands.dart';
@@ -357,10 +358,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
     final favoritesId = LibraryCollections.favoritesPlaylistId(playlists);
 
     final smartRows = ref.watch(
-      localLibraryProvider.select(
-        (provider) =>
-            provider?.smartRows ?? const <String, List<CollectionRow>>{},
-      ),
+      localLibraryProvider.select((provider) => provider.smartRows),
     );
     // 会话是 build 里唯一的「状态机」：身份解析、ensure 加载、恢复校准、
     // 加载组合、选择失效与滚动键激活都在 sync 内完成，页面只消费结果。
@@ -445,8 +443,8 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
       onSortChanged: _vm.setSort,
       onToggleMostPlayedMetric: (byTime) {
         ref
-            .read(localLibraryProvider)
-            ?.setMostPlayedMetric(
+            .read(localLibraryProvider.notifier)
+            .setMostPlayedMetric(
               byTime
                   ? SmartListMetric.playCount
                   : SmartListMetric.listeningTime,

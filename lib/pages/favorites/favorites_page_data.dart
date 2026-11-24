@@ -11,6 +11,7 @@ import '../../domain/models/library.dart';
 import '../../domain/models/smart_lists.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/app_providers.dart';
+import '../../providers/local_library_provider.dart';
 import '../../providers/collection_presenter.dart';
 import '../../providers/collection_session.dart';
 import '../../providers/favorites_view_model.dart';
@@ -108,14 +109,14 @@ FavoritesHeaderData buildFavoritesHeaderData({
   }
   final libraryIndex = view.isLibraryBrowse
       ? ref.watch(
-          localLibraryProvider.select((provider) => provider?.snapshot?.index),
+          localLibraryProvider.select((provider) => provider.snapshot?.index),
         )
       : null;
   final byTime = view.isSmartList
       ? ref.watch(
           localLibraryProvider.select(
             (provider) =>
-                provider?.mostPlayedMetric == SmartListMetric.listeningTime,
+                provider.mostPlayedMetric == SmartListMetric.listeningTime,
           ),
         )
       : false;

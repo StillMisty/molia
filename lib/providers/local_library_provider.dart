@@ -9,6 +9,7 @@ import 'dart:async';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../app/perf/data_path_trace.dart';
 import '../data/library/favorite_fact.dart';
@@ -22,7 +23,11 @@ import '../domain/models/smart_lists.dart';
 import '../services/download/download_records.dart';
 import 'collection_presenter.dart';
 import 'library_provider.dart';
+import '../app/bootstrap/runtime_providers.dart';
+import 'app_providers.dart';
 import 'local_songs_collection.dart';
+
+part 'local_library_provider.g.dart';
 
 /// 曲库浏览快照（只含 UI 需要的聚合索引）。
 class LibraryBrowseSnapshot {
@@ -31,44 +36,102 @@ class LibraryBrowseSnapshot {
   final LibraryBrowseIndex index;
 }
 
-class LocalLibraryProvider extends ChangeNotifier {
-  LocalLibraryProvider({
-    required this.repository,
-    required this.downloads,
-    required this.library,
-    required this.statistics,
-    this.debounce = const Duration(milliseconds: 150),
-    this.isolateThreshold = 2000,
-  }) {
-    _subscriptions = [
-      repository.changes.listen(_onLibraryChange),
-      statistics.changes.listen((_) => schedule(browse: false, stats: true)),
-    ];
-    downloads.addListener(_onDownloadsChanged);
-    library.addListener(_onLibraryProviderChanged);
-    schedule();
-  }
+/// 曲库聚合读模型对 UI 暴露的不可变快照。
+@immutable
+class LocalLibraryState {
+  const LocalLibraryState({
+    required this.snapshot,
+    required this.smartRows,
+    required this.mostPlayedMetric,
+  });
 
-  final LibraryRepository repository;
-  final DownloadRecords downloads;
-  final LibraryProvider library;
-  final PlayStatisticsRepository statistics;
-  final Duration debounce;
+  static const LocalLibraryState empty = LocalLibraryState(
+    snapshot: null,
+    smartRows: {},
+    mostPlayedMetric: SmartListMetric.playCount,
+  );
+
+  final LibraryBrowseSnapshot? snapshot;
+  final Map<String, List<CollectionRow>> smartRows;
+  final SmartListMetric mostPlayedMetric;
+
+  LocalLibraryState copyWith({
+    LibraryBrowseSnapshot? snapshot,
+    Map<String, List<CollectionRow>>? smartRows,
+    SmartListMetric? mostPlayedMetric,
+  }) => LocalLibraryState(
+    snapshot: snapshot ?? this.snapshot,
+    smartRows: smartRows ?? this.smartRows,
+    mostPlayedMetric: mostPlayedMetric ?? this.mostPlayedMetric,
+  );
+}
+
+@Riverpod(keepAlive: true, name: 'localLibraryDebounceProvider')
+Duration localLibraryDebounce(Ref ref) => const Duration(milliseconds: 150);
+
+/// 曲库聚合读取的「资料库」输入；测试 / 性能场景可替换为真实内存库。
+@Riverpod(keepAlive: true, name: 'localLibraryLibraryProvider')
+LibraryProvider localLibraryLibrary(Ref ref) => ref.read(libraryProvider);
+
+@Riverpod(keepAlive: true, name: 'localLibraryIsolateThresholdProvider')
+int localLibraryIsolateThreshold(Ref ref) => 2000;
+
+@Riverpod(keepAlive: true, name: 'localLibraryProvider')
+class LocalLibraryProvider extends _$LocalLibraryProvider {
+  LibraryRepository? repository;
+  DownloadRecords? downloads;
+  LibraryProvider? library;
+  PlayStatisticsRepository? statistics;
+  late final Duration debounce;
 
   /// 浏览索引超过该行数时搬到 isolate 构建（测试注入小值）。
-  ///
-  /// 10k 行主线程 decode + 去重 / 分组 / 排序约 70ms，远超单帧 8.33ms 预算；
-  /// 行快照本身是纯数据（raw 原串 / 浅 Map），传输成本低于在主线程解码排序。
-  final int isolateThreshold;
+  late final int isolateThreshold;
+
+  @override
+  LocalLibraryState build() {
+    repository = ref.read(appRuntimeProvider).maybe<LibraryRepository>();
+    downloads = ref.read(downloadRecordsProvider);
+    library = ref.read(localLibraryLibraryProvider);
+    statistics = ref.read(appRuntimeProvider).maybe<PlayStatisticsRepository>();
+    debounce = ref.watch(localLibraryDebounceProvider);
+    isolateThreshold = ref.watch(localLibraryIsolateThresholdProvider);
+    final repo = repository;
+    final stats = statistics;
+    final lib = library;
+    final dl = downloads;
+    if (repo == null || stats == null || lib == null || dl == null) {
+      return LocalLibraryState.empty;
+    }
+    _subscriptions = [
+      repo.changes.listen(_onLibraryChange),
+      stats.changes.listen((_) => schedule(browse: false, stats: true)),
+    ];
+    dl.addListener(_onDownloadsChanged);
+    lib.addListener(_onLibraryProviderChanged);
+    ref.onDispose(() {
+      _disposed = true;
+      _timer?.cancel();
+      for (final subscription in _subscriptions) {
+        unawaited(subscription.cancel());
+      }
+      dl.removeListener(_onDownloadsChanged);
+      lib.removeListener(_onLibraryProviderChanged);
+    });
+    schedule();
+    return LocalLibraryState.empty;
+  }
+
+  LibraryBrowseSnapshot? get snapshot => state.snapshot;
+  Map<String, List<CollectionRow>> get smartRows => state.smartRows;
+  SmartListMetric get mostPlayedMetric => _mostPlayedMetric;
 
   SmartListMetric _mostPlayedMetric = SmartListMetric.playCount;
-
-  SmartListMetric get mostPlayedMetric => _mostPlayedMetric;
 
   /// 「最常播放」指标：设备本地 UI 状态，切换后重建列表。
   void setMostPlayedMetric(SmartListMetric metric) {
     if (_mostPlayedMetric == metric) return;
     _mostPlayedMetric = metric;
+    state = state.copyWith(mostPlayedMetric: metric);
     _rowsDirty = true;
     unawaited(refresh());
   }
@@ -105,16 +168,13 @@ class LocalLibraryProvider extends ChangeNotifier {
 
   List<StreamSubscription<Object?>> _subscriptions = const [];
 
-  LibraryBrowseSnapshot? get snapshot => _snapshot;
-  Map<String, List<CollectionRow>> get smartRows => _smartRows;
-
   /// 按失效范围标记输入并防抖重建；旧快照在完成前保持可见。
   ///
   /// [browse] 是整库浏览索引输入（收藏 + 全部列表 + 下载，需要重读
   /// `playlist_tracks`）；单曲收藏切换走缓存增量，不经过本方法。[stats] 是
   /// 统计榜与已听曲目集合。单条播放历史只影响智能列表行，两者都可以不传。
   void schedule({bool browse = true, bool stats = true}) {
-    if (_disposed) return;
+    if (_disposed || repository == null || statistics == null) return;
     if (browse) {
       _browseDirty = true;
       _browseNeedsFullReload = true;
@@ -192,8 +252,8 @@ class LocalLibraryProvider extends ChangeNotifier {
   /// 补丁会生成新的 `playlists` 列表引用，但 id 集合不变，不应触发整库重读。
   void _onLibraryProviderChanged() {
     if (_disposed) return;
-    final history = library.history;
-    final playlists = library.playlists;
+    final history = library!.history;
+    final playlists = library!.playlists;
     final playlistsChanged = _playlistIdsChanged(playlists, _seenPlaylists);
     final historyChanged = !identical(history, _seenHistory);
     if (!playlistsChanged && !historyChanged) return;
@@ -214,7 +274,7 @@ class LocalLibraryProvider extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
-    if (_disposed) return;
+    if (_disposed || repository == null || statistics == null) return;
     if (_running) {
       _again = true;
       return;
@@ -261,11 +321,11 @@ class LocalLibraryProvider extends ChangeNotifier {
   }
 
   Future<void> _reloadBrowse() async {
-    final browseTracks = await repository.loadBrowseTracks();
+    final browseTracks = await repository!.loadBrowseTracks();
     _browseSource = BrowseSource(
       favorites: browseTracks.favorites,
       playlists: browseTracks.playlists,
-      downloads: downloads.downloads,
+      downloads: downloads!.downloads,
     );
     await _rebuildBrowseFromSource(sourcePath: 'sql');
   }
@@ -316,9 +376,9 @@ class LocalLibraryProvider extends ChangeNotifier {
   Future<void> _reloadStats() async {
     try {
       final (stats, statsByTime, playedKeys) = await (
-        statistics.topTracks(limit: 100),
-        statistics.topTracks(limit: 100, byListening: true),
-        statistics.playedTrackKeys(),
+        statistics!.topTracks(limit: 100),
+        statistics!.topTracks(limit: 100, byListening: true),
+        statistics!.playedTrackKeys(),
       ).wait;
       _stats = stats;
       _statsByTime = statsByTime;
@@ -333,14 +393,16 @@ class LocalLibraryProvider extends ChangeNotifier {
 
   void _publish() {
     final index = _browseIndex;
-    if (_disposed || index == null) return;
+    if (_disposed || index == null || downloads == null || library == null) {
+      return;
+    }
     DataPathTrace.sync(
       'browse.publish',
       () {
-        final downloadList = downloads.downloads;
+        final downloadList = downloads!.downloads;
         final sources = SmartListSources(
           downloads: downloadList,
-          history: library.history,
+          history: library!.history,
           stats: _mostPlayedMetric == SmartListMetric.listeningTime
               ? _statsByTime
               : _stats,
@@ -352,9 +414,13 @@ class LocalLibraryProvider extends ChangeNotifier {
             id: _rowsFor(id, sources, downloadList),
         };
         _snapshot = LibraryBrowseSnapshot(index: index);
-        _seenHistory = library.history;
-        _seenPlaylists = library.playlists;
-        notifyListeners();
+        _seenHistory = library!.history;
+        _seenPlaylists = library!.playlists;
+        state = LocalLibraryState(
+          snapshot: _snapshot,
+          smartRows: _smartRows,
+          mostPlayedMetric: _mostPlayedMetric,
+        );
       },
       fields: () => {
         'smart_rows': _smartRows.values.fold<int>(
@@ -391,17 +457,5 @@ class LocalLibraryProvider extends ChangeNotifier {
           track.toPlaylistTrack(playlistId: 0, addedAt: track.addedAt),
         ),
     ];
-  }
-
-  @override
-  void dispose() {
-    _disposed = true;
-    _timer?.cancel();
-    for (final subscription in _subscriptions) {
-      unawaited(subscription.cancel());
-    }
-    downloads.removeListener(_onDownloadsChanged);
-    library.removeListener(_onLibraryProviderChanged);
-    super.dispose();
   }
 }

@@ -14,6 +14,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/download/download_records.dart';
 
 import 'support/fakes.dart';
+import 'support/provider_test_scope.dart';
 import 'support/memory_database.dart';
 import 'support/sync_test_support.dart';
 
@@ -79,6 +80,23 @@ void main() {
   late LibraryProvider library;
   late LocalLibraryProvider provider;
 
+  LocalLibraryProvider buildLocalLibrary({
+    Duration debounce = const Duration(days: 1),
+    int threshold = 2000,
+  }) {
+    final scope = ProviderTestScope(
+      overrides: [
+        localLibraryDebounceProvider.overrideWithValue(debounce),
+        localLibraryIsolateThresholdProvider.overrideWithValue(threshold),
+      ],
+    );
+    scope.put<LibraryRepository>(repository);
+    scope.put<PlayStatisticsRepository>(statistics);
+    scope.put<DownloadRecords>(downloads);
+    scope.put<LibraryProvider>(library);
+    return scope.container.read(localLibraryProvider.notifier);
+  }
+
   setUp(() async {
     db = openMemoryDatabase();
     repository = _CountingLibraryRepository(databaseProvider: () => db);
@@ -89,18 +107,10 @@ void main() {
       repository: repository,
       playbackProvider: playback,
     );
-    // 防抖设成一天：测试里手动 refresh()，不受构造时的定时器干扰。
-    provider = LocalLibraryProvider(
-      repository: repository,
-      downloads: downloads,
-      library: library,
-      statistics: statistics,
-      debounce: const Duration(days: 1),
-    );
+    provider = buildLocalLibrary();
   });
 
   tearDown(() async {
-    provider.dispose();
     library.dispose();
     playback.dispose();
     await statistics.dispose();
@@ -280,15 +290,7 @@ void main() {
       row(playlistId, '3', title: '三', artist: 'A, C', album: '专辑一'),
     ]);
 
-    final isolated = LocalLibraryProvider(
-      repository: repository,
-      downloads: downloads,
-      library: library,
-      statistics: statistics,
-      debounce: const Duration(days: 1),
-      isolateThreshold: 1,
-    );
-    addTearDown(isolated.dispose);
+    final isolated = buildLocalLibrary(threshold: 1);
     await isolated.refresh();
     expect(isolated.snapshot, isNotNull);
 
@@ -382,15 +384,7 @@ void main() {
     );
     downloads.replaceAll([available, missing]);
 
-    final isolated = LocalLibraryProvider(
-      repository: repository,
-      downloads: downloads,
-      library: library,
-      statistics: statistics,
-      debounce: const Duration(days: 1),
-      isolateThreshold: 1,
-    );
-    addTearDown(isolated.dispose);
+    final isolated = buildLocalLibrary(threshold: 1);
     await isolated.refresh();
 
     final index = isolated.snapshot!.index;

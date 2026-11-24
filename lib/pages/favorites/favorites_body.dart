@@ -15,7 +15,7 @@ import '../../domain/models/library_browse.dart';
 import '../../domain/models/smart_lists.dart';
 import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
-import '../../providers/app_providers.dart';
+import '../../providers/local_library_provider.dart';
 import '../../providers/collection_actions.dart';
 import '../../providers/collection_mode.dart';
 import '../../providers/collection_presenter.dart';
@@ -494,7 +494,7 @@ Widget buildFavoritesLibraryBrowse(
 }) {
   final mode = ref.watch(collectionModeProvider).mode;
   final index = ref.watch(
-    localLibraryProvider.select((provider) => provider?.snapshot?.index),
+    localLibraryProvider.select((provider) => provider.snapshot?.index),
   );
   if (index == null) {
     return const Center(child: M3ELoadingIndicator());

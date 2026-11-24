@@ -265,10 +265,13 @@ Future<FakePlaybackFacade> pumpPerfApp(
   final theme = container.read(themeProvider.notifier);
   await theme.preferencesReady;
   await container.read(navProvider.notifier).preferencesReady;
-  if (realLibrary != null && realLibrary.statisticsDays > 0) {
-    realLibrary._statisticsProvider = container.read(
-      playStatisticsPageProvider.notifier,
-    );
+  if (realLibrary != null) {
+    realLibrary._localLibrary = container.read(localLibraryProvider.notifier);
+    if (realLibrary.statisticsDays > 0) {
+      realLibrary._statisticsProvider = container.read(
+        playStatisticsPageProvider.notifier,
+      );
+    }
   }
 
   await tester.pumpWidget(
@@ -369,27 +372,15 @@ Future<List<Override>> _installRealLibrary(
   );
   addTearDown(realLibrary.dispose);
 
-  final localLibrary = LocalLibraryProvider(
-    repository: repository,
-    downloads: downloads,
-    library: realLibrary,
-    statistics: statisticsRepository,
-  );
-  addTearDown(localLibrary.dispose);
-
   handle
     .._database = db
     .._repository = repository
-    .._localLibrary = localLibrary
     .._statisticsRepository = statisticsRepository;
 
   return [
-    localLibraryProvider.overrideWith(
-      () => LazyNullableListenableNotifier<LocalLibraryProvider>.withValue(
-        localLibrary,
-      ),
-    ),
+    libraryRepositoryProvider.overrideWithValue(repository),
     playStatisticsRepositoryProvider.overrideWithValue(statisticsRepository),
+    localLibraryLibraryProvider.overrideWithValue(realLibrary),
   ];
 }
 

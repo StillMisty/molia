@@ -27,7 +27,6 @@ import 'package:molia/providers/diagnostics_provider.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_collection_request.dart';
 import 'package:molia/providers/library_provider.dart';
-import 'package:molia/providers/local_library_provider.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
@@ -455,33 +454,13 @@ final diagnosticsExporterProvider = Provider<DiagnosticsExporter>(
 // 组合根派生状态：懒构造，等价于旧 `provider_tree.dart` 的 `create:`。
 // ---------------------------------------------------------------------------
 
-final localLibraryProvider =
-    NotifierProvider<
-      LazyNullableListenableNotifier<LocalLibraryProvider>,
-      LocalLibraryProvider?
-    >(
-      () => LazyNullableListenableNotifier((ref) {
-        final repository = ref
-            .read(appRuntimeProvider)
-            .maybe<LibraryRepository>();
-        final statistics = ref
-            .read(appRuntimeProvider)
-            .maybe<PlayStatisticsRepository>();
-        if (repository == null || statistics == null) return null;
-        return LocalLibraryProvider(
-          repository: repository,
-          downloads: ref.read(downloadRecordsProvider),
-          library: ref.read(libraryProvider),
-          statistics: statistics,
-        );
-      }),
-    );
-
 final libraryCollectionRequestProvider =
     NotifierProvider<
-      LazyListenableNotifier<LibraryCollectionRequest>,
-      LibraryCollectionRequest
-    >(() => LazyListenableNotifier((ref) => LibraryCollectionRequest()));
+      LazyNullableListenableNotifier<LibraryCollectionRequest>,
+      LibraryCollectionRequest?
+    >(
+      () => LazyNullableListenableNotifier((ref) => LibraryCollectionRequest()),
+    );
 
 final downloadRequestsProvider =
     NotifierProvider<

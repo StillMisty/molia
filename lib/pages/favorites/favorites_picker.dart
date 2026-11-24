@@ -125,7 +125,7 @@ Future<CollectionPickerOutcome?> openFavoritesCollectionPicker({
 }) {
   final provider = ref.read(libraryProvider);
   final DownloadRecords? records = ref.read(downloadRecordsProvider);
-  final LocalLibraryProvider? localLibrary = ref.read(localLibraryProvider);
+  final LocalLibraryState localLibrary = ref.read(localLibraryProvider);
   return showFavoritesCollectionPicker(
     context: context,
     l10n: l10n,
@@ -136,8 +136,8 @@ Future<CollectionPickerOutcome?> openFavoritesCollectionPicker({
     provider: provider,
     records: records,
     viewModel: viewModel,
-    browseIndex: localLibrary?.snapshot?.index,
-    smartRows: localLibrary?.smartRows ?? const {},
+    browseIndex: localLibrary.snapshot?.index,
+    smartRows: localLibrary.smartRows,
     ensureLocalSongsReady: viewModel.session.ensureLocalSongsReady,
     onOrderChanged: onOrderChanged,
     isActive: isActive,
