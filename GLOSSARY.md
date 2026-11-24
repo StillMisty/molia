@@ -946,9 +946,10 @@
 ## AI 推歌
 
 - **AI DJ mode（AI 推歌模式）** — `lib/providers/ai_dj_provider.dart` 与
-  `lib/providers/ai_dj_history_controller.dart`：`AiDjProvider` 负责对外门面与
-  通知（生成编排在执行器、电台会话在 **AI radio session**、反馈账本在
-  **AI feedback book**，见下条）；
+  `lib/providers/ai_dj_history_controller.dart`：`AiDjProvider` 负责命令编排，
+  `state` 暴露不可变 `AiDjState`（UI 经 `aiDjProvider` 读快照、经
+  `aiDjControllerProvider` 发命令；生成编排在执行器、电台会话在
+  **AI radio session**、反馈账本在 **AI feedback book**，见下条）；
   `AiDjHistoryController` 独占**当前推荐（active batch）**、**历史推荐**及保留策略。
   `enabled` = 功能启用（持久化；退出队列不关功能）；`status` = 电台状态
   （off/preparing/playing/error：播放全部或点某首才接管队列）。只有显式
@@ -978,7 +979,7 @@
   每次从 live 快照派生 `upcoming` / `contains` / `missing` / `queuedAmong`，不持有
   计数器；`queuedCount` = 当前及之后仍在队的 AI 曲目数（页面「队列中还有 {count}
   首推荐」），随播放递减，不是累计加入数。
-- **当前推荐（active batch）** — `AiDjBatch` / `AiDjProvider.recommendations`：
+- **当前推荐（active batch）** — `AiDjBatch` / `AiDjState.recommendations`：
   AI 页与发现页轮播展示的那一批；持久化在推荐历史索引的 `activeBatchId`，
   启动时只加载它（详情懒加载）。换一批后旧 active 留在历史，不丢数据。
 - **历史推荐（recommendation history）** —

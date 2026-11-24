@@ -145,6 +145,9 @@ class AiRadioSession {
 
   AiRadioQueue get _radioQueue => AiRadioQueue.of(_playbackProvider.snapshot);
 
+  /// 播放队列里的曲目 uri（快照携带；判定口径与 [isQueued] 相同）。
+  Set<String> get queuedUris => _radioQueue.queueUriSet;
+
   /// 列表项是否已在播放队列。
   bool isQueued(String uri) => _radioQueue.contains(uri);
 

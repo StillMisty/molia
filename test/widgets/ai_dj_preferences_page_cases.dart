@@ -108,7 +108,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      provider.preferences.sections.contains(AiUpstreamSection.summary),
+      provider.state.preferences.sections.contains(AiUpstreamSection.summary),
       isFalse,
     );
     expect(find.text('已发送 7 项'), findsOneWidget);

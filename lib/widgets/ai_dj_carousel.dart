@@ -1,6 +1,6 @@
 /// 发现页「今日推荐」区：搜索框下方的推荐流。
 ///
-/// - 展示 [AiDjProvider.recommendations]（持久化的今日推荐列表）：封面卡 +
+/// - 展示 [AiDjState.recommendations]（持久化的今日推荐列表）：封面卡 +
 ///   歌名/歌手（用 carousel 原生槽位，保证每张卡都常显，不被槽位裁掉）；
 /// - 浏览：桌面端开 freeScroll 且允许鼠标拖动（跟手拖拽、松手吸附最近的
 ///   卡）；横向滚动视图只吃 dx，纵向滚轮的 dy 到不了它手里，所以在外层
@@ -148,110 +148,104 @@ class _AiDjCarouselState extends ConsumerState<AiDjCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = ref.read(maybeAiDjProvider);
-    if (provider == null) return const SizedBox.shrink();
-    return ListenableBuilder(
-      listenable: provider,
-      builder: (context, _) {
-        // 默认关闭：未启用时发现页完全不出现 AI 相关内容（不额外做引导）。
-        if (!provider.enabled) {
-          _carouselVisible = false;
-          return const SizedBox.shrink();
-        }
-        final l10n = AppLocalizations.of(context)!;
-        final gutter = discoverGutterOf(context);
-        final list = provider.recommendations;
-        final hasCards = list != null && list.items.isNotEmpty;
-        if (hasCards && !_carouselVisible) {
-          // carousel 重建即滚动位置归零；焦点索引不复位会让信息区显示上一轮
-          // 的理由（卡片流本身却停在首卡）。
-          _focalIndex = 0;
-          _wheelDelta = 0;
-        }
-        _carouselVisible = hasCards;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(gutter, 4, 8, 0),
-              child: Row(
+    final state = ref.watch(maybeAiDjProvider);
+    final controller = ref.read(maybeAiDjControllerProvider);
+    if (state == null || controller == null) return const SizedBox.shrink();
+    // 默认关闭：未启用时发现页完全不出现 AI 相关内容（不额外做引导）。
+    if (!state.enabled) {
+      _carouselVisible = false;
+      return const SizedBox.shrink();
+    }
+    final l10n = AppLocalizations.of(context)!;
+    final gutter = discoverGutterOf(context);
+    final list = state.recommendations;
+    final hasCards = list != null && list.items.isNotEmpty;
+    if (hasCards && !_carouselVisible) {
+      // carousel 重建即滚动位置归零；焦点索引不复位会让信息区显示上一轮
+      // 的理由（卡片流本身却停在首卡）。
+      _focalIndex = 0;
+      _wheelDelta = 0;
+    }
+    _carouselVisible = hasCards;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(gutter, 4, 8, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.aiDjTodayTitle,
+                      style: context.typeScale.titleSmall,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _subtitleText(l10n, state),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.typeScale.bodySmall.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              M3EButton.text(
+                key: const Key('aiDjManageButton'),
+                onPressed: () => _openPage(context),
+                child: Text(l10n.aiDjViewAll),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // 已有列表时只留一条细进度条（生成里也照常浏览 / 播放旧卡）；
+        // 列表为空时只显示下方骨架，不再叠加进度条。
+        if (hasCards)
+          ValueListenableBuilder<AiGenerationState>(
+            valueListenable: controller.generationState,
+            builder: (context, generation, _) {
+              final progress = generation.progress;
+              if (progress == null) {
+                return const SizedBox.shrink();
+              }
+              return Column(
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          l10n.aiDjTodayTitle,
-                          style: context.typeScale.titleSmall,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _subtitleText(l10n, provider),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: context.typeScale.bodySmall.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: discoverGutterOf(context),
+                    ),
+                    child: AiDjThinProgress(
+                      value: progress.fraction,
+                      semanticLabel: l10n.aiDjGenerationStatus,
+                      semanticValue: progress.fraction == null
+                          ? null
+                          : '${progress.done}/${progress.total}',
                     ),
                   ),
-                  M3EButton.text(
-                    key: const Key('aiDjManageButton'),
-                    onPressed: () => _openPage(context),
-                    child: Text(l10n.aiDjViewAll),
-                  ),
+                  const SizedBox(height: 6),
                 ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            // 已有列表时只留一条细进度条（生成里也照常浏览 / 播放旧卡）；
-            // 列表为空时只显示下方骨架，不再叠加进度条。
-            if (hasCards)
-              ValueListenableBuilder<AiGenerationState>(
-                valueListenable: provider.generationState,
-                builder: (context, generation, _) {
-                  final progress = generation.progress;
-                  if (progress == null) {
-                    return const SizedBox.shrink();
-                  }
-                  return Column(
-                    children: [
-                      Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: discoverGutterOf(context),
-                        ),
-                        child: AiDjThinProgress(
-                          value: progress.fraction,
-                          semanticLabel: l10n.aiDjGenerationStatus,
-                          semanticValue: progress.fraction == null
-                              ? null
-                              : '${progress.done}/${progress.total}',
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                  );
-                },
-              ),
-            _body(context, l10n, provider),
-            if (hasCards) _reasonPanel(context, list),
-            const SizedBox(height: 8),
-          ],
-        );
-      },
+              );
+            },
+          ),
+        _body(context, l10n, state, controller),
+        if (hasCards) _reasonPanel(context, list),
+        const SizedBox(height: 8),
+      ],
     );
   }
 
   /// 分区副标题：只留播放状态与上次更新。
   ///
   /// 生成进度不在这里重复：进度条 / 骨架已经占住同一件事。
-  String _subtitleText(AppLocalizations l10n, AiDjProvider provider) {
-    final list = provider.recommendations;
+  String _subtitleText(AppLocalizations l10n, AiDjState state) {
+    final list = state.recommendations;
     final parts = <String>[
-      if (provider.status == AiDjStatus.playing) l10n.aiDjStatusPlaying,
+      if (state.status == AiDjStatus.playing) l10n.aiDjStatusPlaying,
       if (list != null)
         l10n.aiDjLastUpdated(aiDjUpdatedText(l10n, list.generatedAt)),
     ];
@@ -262,12 +256,13 @@ class _AiDjCarouselState extends ConsumerState<AiDjCarousel> {
   Widget _body(
     BuildContext context,
     AppLocalizations l10n,
-    AiDjProvider provider,
+    AiDjState state,
+    AiDjProvider controller,
   ) {
-    final list = provider.recommendations;
+    final list = state.recommendations;
     if (list == null || list.items.isEmpty) {
-      if (provider.progress != null) return _skeleton(context);
-      final error = provider.lastError;
+      if (controller.progress != null) return _skeleton(context);
+      final error = state.lastError;
       if (error != null) {
         return _guideCard(
           context,
@@ -276,7 +271,7 @@ class _AiDjCarouselState extends ConsumerState<AiDjCarousel> {
           title: l10n.aiDjBatchFailed,
           subtitle: aiDjFailureText(l10n, error),
           trailingIcon: Icons.refresh_rounded,
-          onTap: () => unawaited(provider.refreshRecommendations()),
+          onTap: () => unawaited(controller.refreshRecommendations()),
         );
       }
       // 空列表：显式生成（不自动消耗 token）。
@@ -286,10 +281,10 @@ class _AiDjCarouselState extends ConsumerState<AiDjCarousel> {
         icon: Icons.auto_awesome_rounded,
         title: l10n.aiDjEmptyList,
         subtitle: l10n.aiDjEmptyListHint,
-        onTap: () => unawaited(provider.refreshRecommendations()),
+        onTap: () => unawaited(controller.refreshRecommendations()),
       );
     }
-    return _carousel(context, l10n, provider, list);
+    return _carousel(context, l10n, list);
   }
 
   Widget _guideCard(
@@ -372,7 +367,6 @@ class _AiDjCarouselState extends ConsumerState<AiDjCarousel> {
   Widget _carousel(
     BuildContext context,
     AppLocalizations l10n,
-    AiDjProvider provider,
     AiDjBatch batch,
   ) {
     final scheme = Theme.of(context).colorScheme;
@@ -421,7 +415,9 @@ class _AiDjCarouselState extends ConsumerState<AiDjCarousel> {
             isPlaying: isPlaying,
           ),
           onTap: () {
-            unawaited(provider.playRecommendation(i));
+            final controller = ref.read(maybeAiDjControllerProvider);
+            if (controller == null) return;
+            unawaited(controller.playRecommendation(i));
             // 点中的卡滚到焦点位：拖动/滚轮之后焦点未必在它身上，
             // 信息区也就跟着焦点落到这首上。
             unawaited(_controller.animateToItem(i));
@@ -443,7 +439,11 @@ class _AiDjCarouselState extends ConsumerState<AiDjCarousel> {
         ),
         // 只留图标：卡片上不再写「换一批」，读屏名靠语义标签。
         semanticLabel: l10n.aiDjRefreshBatch,
-        onTap: () => unawaited(provider.refreshRecommendations()),
+        onTap: () {
+          final controller = ref.read(maybeAiDjControllerProvider);
+          if (controller == null) return;
+          unawaited(controller.refreshRecommendations());
+        },
       ),
     );
     final carousel = M3ECarousel(

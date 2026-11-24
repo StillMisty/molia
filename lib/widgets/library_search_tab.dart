@@ -117,7 +117,7 @@ class _LibrarySearchTabState extends ConsumerState<LibrarySearchTab>
         // AI 推歌开启时，下方空占位让位给推荐流（推荐流自身有引导卡 / 骨架 /
         // 错误卡）；关闭时保留「输入关键词搜索歌曲」占位。
         final aiDjEnabled = ref.watch(
-          maybeAiDjProvider.select((provider) => provider?.enabled ?? false),
+          maybeAiDjProvider.select((state) => state?.enabled ?? false),
         );
         // 短横屏（手机横屏）纵向只够「搜索条 + 结果」：AI 推歌轮播固定
         // 198 高，连头带间距 ~256，塞进来会把搜索页挤爆；此时不渲染轮播，

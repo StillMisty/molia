@@ -5,6 +5,7 @@ import 'package:molia/domain/models/ai_dj.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/ai_dj_provider.dart';
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/ai_radio_session.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
@@ -15,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/fake_ai_generator.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 Track _track(int index, {Duration duration = const Duration(seconds: 100)}) =>
@@ -134,7 +136,7 @@ void main() {
   Future<void> enableWithList({int count = 3}) async {
     await provider.grantConsent();
     await provider.setEnabled(true);
-    expect(provider.recommendations?.items, hasLength(count));
+    expect(provider.state.recommendations?.items, hasLength(count));
   }
 
   /// 让电台进入 playing（起播当前列表）。
@@ -171,27 +173,27 @@ void main() {
   });
 
   test('init 读取配置 / 隐私 / 启用状态与偏好默认值', () async {
-    expect(provider.hasConfig, isTrue);
-    expect(provider.consentGranted, isFalse);
-    expect(provider.enabled, isFalse);
-    expect(provider.preferences.batchSize, 24);
-    expect(provider.preferences.autoFeed, isTrue);
-    expect(provider.historyEntries, isEmpty);
+    expect(provider.state.hasConfig, isTrue);
+    expect(provider.state.consentGranted, isFalse);
+    expect(provider.state.enabled, isFalse);
+    expect(provider.state.preferences.batchSize, 24);
+    expect(provider.state.preferences.autoFeed, isTrue);
+    expect(provider.state.historyEntries, isEmpty);
 
     await provider.grantConsent();
 
-    expect(provider.consentGranted, isTrue);
+    expect(provider.state.consentGranted, isTrue);
   });
 
   test('启用生成当前推荐，但不接管播放；历史含当前批', () async {
     await enableWithList();
 
-    expect(provider.enabled, isTrue);
-    expect(provider.status, AiDjStatus.off, reason: '仅启用，不进电台');
+    expect(provider.state.enabled, isTrue);
+    expect(provider.state.status, AiDjStatus.off, reason: '仅启用，不进电台');
     expect(backend.calls, isEmpty, reason: '不自动播放');
     expect(generator.calls, 1);
-    expect(provider.historyEntries, hasLength(1));
-    expect(provider.historyEntries.single.origin, AiDjOrigin.refresh);
+    expect(provider.state.historyEntries, hasLength(1));
+    expect(provider.state.historyEntries.single.origin, AiDjOrigin.refresh);
 
     await provider.ensureRecommendations();
     expect(generator.calls, 1);
@@ -199,51 +201,51 @@ void main() {
 
   test('连续换两批：旧两批留在历史，active 为最新，旧批可按需加载', () async {
     await enableWithList();
-    final firstId = provider.recommendations!.id;
+    final firstId = provider.state.recommendations!.id;
 
     generator.batchFactory = () => _batch(10, 3);
     await provider.refreshRecommendations();
-    final secondId = provider.recommendations!.id;
+    final secondId = provider.state.recommendations!.id;
 
     generator.batchFactory = () => _batch(20, 3);
     await provider.refreshRecommendations();
-    final thirdId = provider.recommendations!.id;
+    final thirdId = provider.state.recommendations!.id;
 
     expect({firstId, secondId, thirdId}, hasLength(3));
-    expect(provider.historyEntries, hasLength(3));
-    expect(provider.activeBatchId, thirdId);
-    expect(provider.historyEntries.first.id, thirdId);
+    expect(provider.state.historyEntries, hasLength(3));
+    expect(provider.state.activeBatchId, thirdId);
+    expect(provider.state.historyEntries.first.id, thirdId);
     expect(await provider.loadHistoryBatch(firstId), isNotNull);
-    expect(provider.recommendations!.items.first.track.id.id, '20');
+    expect(provider.state.recommendations!.items.first.track.id.id, '20');
   });
 
   test('批次大小：保存后下一次生成 count=48，历史元数据同步', () async {
     await provider.grantConsent();
     await provider.savePreferences(
-      provider.preferences.copyWith(batchSize: 48),
+      provider.state.preferences.copyWith(batchSize: 48),
     );
-    expect(provider.preferences.batchSize, 48);
+    expect(provider.state.preferences.batchSize, 48);
     expect(generator.calls, 0, reason: '保存偏好不自动生成');
 
     generator.batchFactory = () => _batch(0, 48);
     await provider.setEnabled(true);
 
     expect(generator.lastCount, 48);
-    expect(provider.recommendations!.preferences!.batchSize, 48);
-    expect(provider.historyEntries.single.itemCount, 48);
+    expect(provider.state.recommendations!.preferences!.batchSize, 48);
+    expect(provider.state.historyEntries.single.itemCount, 48);
   });
 
   test('偏好保存后不自动生成，active 保持不变', () async {
     await enableWithList();
-    final activeId = provider.activeBatchId;
+    final activeId = provider.state.activeBatchId;
 
     await provider.savePreferences(
-      provider.preferences.copyWith(styles: ['pop'], autoFeed: false),
+      provider.state.preferences.copyWith(styles: ['pop'], autoFeed: false),
     );
 
     expect(generator.calls, 1, reason: '保存不生成');
-    expect(provider.activeBatchId, activeId);
-    expect(provider.preferences.styles, ['pop']);
+    expect(provider.state.activeBatchId, activeId);
+    expect(provider.state.preferences.styles, ['pop']);
   });
 
   test('startRadio：用当前推荐替换队列并从指定首起播', () async {
@@ -254,7 +256,7 @@ void main() {
       _radioSnapshot(current: _track(1), queue: _tracks(0, 3), currentIndex: 1),
     );
 
-    expect(provider.status, AiDjStatus.playing);
+    expect(provider.state.status, AiDjStatus.playing);
     expect(backend.lastRequest?.tracks.map((t) => t.title).toList(), [
       'Song 0',
       'Song 1',
@@ -262,13 +264,13 @@ void main() {
     ]);
     expect(backend.lastRequest?.startIndex, 1);
     expect(backend.lastRequest?.context?.name, kAiDjContextName);
-    expect(provider.queuedCount, 2);
-    expect(provider.recommendations?.items, hasLength(3));
+    expect(provider.state.queuedCount, 2);
+    expect(provider.state.recommendations?.items, hasLength(3));
   });
 
   test('playHistoryBatch：从指定曲目起播，不重排批次也不改 active', () async {
     await enableWithList();
-    final batchId = provider.activeBatchId!;
+    final batchId = provider.state.activeBatchId!;
 
     await provider.playHistoryBatch(batchId, startIndex: 2);
 
@@ -279,8 +281,8 @@ void main() {
       'Song 2',
     ]);
     expect(backend.lastRequest?.startIndex, 2);
-    expect(provider.activeBatchId, batchId);
-    expect(provider.recommendations!.items, hasLength(3));
+    expect(provider.state.activeBatchId, batchId);
+    expect(provider.state.recommendations!.items, hasLength(3));
 
     // 越界起点由接管意图夹取，不抛给播放层。
     await provider.playHistoryBatch(batchId, startIndex: 99);
@@ -289,23 +291,25 @@ void main() {
 
   test('接管意图：起播进入准备态，历史播放保持原状态', () async {
     await enableWithList();
-    final batchId = provider.activeBatchId!;
+    final batchId = provider.state.activeBatchId!;
 
     final radio = <(AiDjStatus, bool)>[];
-    void recordRadio() => radio.add((provider.status, provider.queueBusy));
-    provider.addListener(recordRadio);
+    void recordRadio() =>
+        radio.add((provider.state.status, provider.state.queueBusy));
+    provider.changes.addListener(recordRadio);
     await provider.startRadio();
-    provider.removeListener(recordRadio);
+    provider.changes.removeListener(recordRadio);
 
     // 回到 off 再播历史：历史接管不应经过 preparing。
     await provider.stop();
-    expect(provider.status, AiDjStatus.off);
+    expect(provider.state.status, AiDjStatus.off);
 
     final history = <(AiDjStatus, bool)>[];
-    void recordHistory() => history.add((provider.status, provider.queueBusy));
-    provider.addListener(recordHistory);
+    void recordHistory() =>
+        history.add((provider.state.status, provider.state.queueBusy));
+    provider.changes.addListener(recordHistory);
     await provider.playHistoryBatch(batchId);
-    provider.removeListener(recordHistory);
+    provider.changes.removeListener(recordHistory);
 
     expect(radio, [(AiDjStatus.preparing, true), (AiDjStatus.playing, false)]);
     expect(history, [(AiDjStatus.off, true), (AiDjStatus.playing, false)]);
@@ -369,25 +373,25 @@ void main() {
 
   test('接管失败：起播落 error，历史保留原状态', () async {
     await enableWithList();
-    final batchId = provider.activeBatchId!;
+    final batchId = provider.state.activeBatchId!;
     backend.playError = StateError('boom');
 
     final transition = provider.startRadio();
-    expect(provider.status, AiDjStatus.preparing);
-    expect(provider.queueBusy, isTrue);
+    expect(provider.state.status, AiDjStatus.preparing);
+    expect(provider.state.queueBusy, isTrue);
     await transition;
 
-    expect(provider.status, AiDjStatus.error);
-    expect(provider.queueBusy, isFalse);
-    expect(provider.lastError, isNotNull);
+    expect(provider.state.status, AiDjStatus.error);
+    expect(provider.state.queueBusy, isFalse);
+    expect(provider.state.lastError, isNotNull);
 
     // 历史失败只写 lastError：off 保持不变，互斥位照常释放。
     await provider.stop();
-    expect(provider.status, AiDjStatus.off);
+    expect(provider.state.status, AiDjStatus.off);
     await provider.playHistoryBatch(batchId);
-    expect(provider.status, AiDjStatus.off);
-    expect(provider.queueBusy, isFalse);
-    expect(provider.lastError, isNotNull);
+    expect(provider.state.status, AiDjStatus.off);
+    expect(provider.state.queueBusy, isFalse);
+    expect(provider.state.lastError, isNotNull);
   });
 
   test('enqueueRecommendations：只追加未入队曲目，不重复追加', () async {
@@ -403,7 +407,7 @@ void main() {
     await provider.enqueueRecommendations();
 
     expect(backend.lastEnqueued?.map((t) => t.id.id).toList(), ['1', '2']);
-    expect(provider.queuedCount, 2);
+    expect(provider.state.queuedCount, 2);
 
     backend.lastEnqueued = null;
     await provider.enqueueRecommendations();
@@ -412,7 +416,7 @@ void main() {
 
   test('显式生成中仍可从旧列表起播', () async {
     await enableWithList();
-    final oldId = provider.recommendations!.id;
+    final oldId = provider.state.recommendations!.id;
     final gate = Completer<void>();
     generator
       ..gate = gate
@@ -421,19 +425,23 @@ void main() {
 
     final generating = provider.refreshRecommendations();
     await pumpEventQueue();
-    expect(provider.isBusy, isTrue);
+    expect(provider.state.isBusy, isTrue);
     expect(provider.progress, isNotNull);
 
     await provider.startRadio(fromIndex: 1);
 
     expect(backend.lastRequest?.startIndex, 1);
-    expect(provider.status, AiDjStatus.playing);
-    expect(provider.recommendations!.id, oldId, reason: '新批次完成前 active 不变');
+    expect(provider.state.status, AiDjStatus.playing);
+    expect(
+      provider.state.recommendations!.id,
+      oldId,
+      reason: '新批次完成前 active 不变',
+    );
 
     gate.complete();
     await generating;
-    expect(provider.recommendations!.id, isNot(oldId));
-    expect(provider.status, AiDjStatus.playing, reason: '生成完成不强切正在播放的队列');
+    expect(provider.state.recommendations!.id, isNot(oldId));
+    expect(provider.state.status, AiDjStatus.playing, reason: '生成完成不强切正在播放的队列');
   });
 
   test('显式生成中仍可把旧列表加入队列', () async {
@@ -446,7 +454,7 @@ void main() {
 
     final generating = provider.refreshRecommendations();
     await pumpEventQueue();
-    expect(provider.isBusy, isTrue);
+    expect(provider.state.isBusy, isTrue);
 
     await provider.enqueueRecommendations();
 
@@ -454,15 +462,15 @@ void main() {
 
     gate.complete();
     await generating;
-    expect(provider.isBusy, isFalse);
+    expect(provider.state.isBusy, isFalse);
   });
 
   test('显式生成中仍可播放历史批次', () async {
     await enableWithList();
-    final firstId = provider.recommendations!.id;
+    final firstId = provider.state.recommendations!.id;
     generator.batchFactory = () => _batch(10, 3);
     await provider.refreshRecommendations();
-    expect(provider.recommendations!.id, isNot(firstId));
+    expect(provider.state.recommendations!.id, isNot(firstId));
 
     final gate = Completer<void>();
     generator
@@ -471,13 +479,13 @@ void main() {
       ..batchFactory = () => _batch(20, 3);
     final generating = provider.refreshRecommendations();
     await pumpEventQueue();
-    expect(provider.isBusy, isTrue);
+    expect(provider.state.isBusy, isTrue);
 
     await provider.playHistoryBatch(firstId);
 
     expect(backend.lastRequest?.tracks.first.id.id, '0');
-    expect(provider.activeBatchId, firstId);
-    expect(provider.status, AiDjStatus.playing);
+    expect(provider.state.activeBatchId, firstId);
+    expect(provider.state.status, AiDjStatus.playing);
 
     gate.complete();
     await generating;
@@ -493,8 +501,8 @@ void main() {
         sawVisibleProgress = true;
       }
     });
-    final activeId = provider.activeBatchId;
-    final activeItems = provider.recommendations!.items
+    final activeId = provider.state.activeBatchId;
+    final activeItems = provider.state.recommendations!.items
         .map((item) => item.track.id.id)
         .toList();
 
@@ -511,18 +519,20 @@ void main() {
 
     expect(generator.calls, 2);
     expect(backend.lastEnqueued?.first.id.id, '20');
-    expect(provider.activeBatchId, activeId, reason: '不切换 active');
+    expect(provider.state.activeBatchId, activeId, reason: '不切换 active');
     expect(
-      provider.recommendations!.items.map((item) => item.track.id.id).toList(),
+      provider.state.recommendations!.items
+          .map((item) => item.track.id.id)
+          .toList(),
       activeItems,
     );
-    expect(provider.historyEntries, hasLength(2));
-    expect(provider.historyEntries.first.origin, AiDjOrigin.autoFeed);
+    expect(provider.state.historyEntries, hasLength(2));
+    expect(provider.state.historyEntries.first.origin, AiDjOrigin.autoFeed);
     expect(provider.progress, isNull);
     expect(sawVisibleProgress, isFalse, reason: '静默补歌不发布可见进度');
-    expect(provider.isBusy, isFalse);
-    expect(provider.lastError, isNull);
-    expect(provider.status, AiDjStatus.playing);
+    expect(provider.state.isBusy, isFalse);
+    expect(provider.state.lastError, isNull);
+    expect(provider.state.status, AiDjStatus.playing);
   });
 
   test('静默补歌去重：生成项都已在队时不重复追加，历史仍补齐', () async {
@@ -544,9 +554,9 @@ void main() {
 
     expect(generator.calls, 2);
     expect(backend.lastEnqueued, isNull, reason: '已在队的曲目不再追加');
-    expect(provider.historyEntries, hasLength(2));
-    expect(provider.historyEntries.first.origin, AiDjOrigin.autoFeed);
-    expect(provider.queuedCount, 2, reason: '只算当前之后仍在队的 AI 曲目');
+    expect(provider.state.historyEntries, hasLength(2));
+    expect(provider.state.historyEntries.first.origin, AiDjOrigin.autoFeed);
+    expect(provider.state.queuedCount, 2, reason: '只算当前之后仍在队的 AI 曲目');
   });
 
   test('queuedCount 从 live 快照派生：播放推进后递减', () async {
@@ -561,12 +571,12 @@ void main() {
           currentIndex: index,
         ),
       );
-      expect(provider.queuedCount, 3 - index);
+      expect(provider.state.queuedCount, 3 - index);
     }
-    expect(provider.queuedCount, isZero, reason: '起播的三首都已播过');
+    expect(provider.state.queuedCount, isZero, reason: '起播的三首都已播过');
 
     backend.emit(PlaybackSnapshot.empty);
-    expect(provider.queuedCount, isZero, reason: '播放结束后队列里没有推荐');
+    expect(provider.state.queuedCount, isZero, reason: '播放结束后队列里没有推荐');
   });
 
   test('恢复的 AI 队列自动接管并在冷启动补水；显式 stop 后不再接管', () async {
@@ -586,12 +596,12 @@ void main() {
     await pumpProvider();
     await pumpEventQueue();
 
-    expect(provider.status, AiDjStatus.playing);
+    expect(provider.state.status, AiDjStatus.playing);
     expect(generator.calls, 1, reason: 'init 接管时直接检查低水位');
-    expect(provider.historyEntries.first.origin, AiDjOrigin.autoFeed);
+    expect(provider.state.historyEntries.first.origin, AiDjOrigin.autoFeed);
 
     await provider.stop();
-    expect(provider.status, AiDjStatus.off);
+    expect(provider.state.status, AiDjStatus.off);
     generator.calls = 0;
     provider.onPlaybackChanged();
     await pumpEventQueue();
@@ -613,8 +623,8 @@ void main() {
     );
     await pumpProvider();
 
-    expect(provider.status, AiDjStatus.playing);
-    expect(provider.queuedCount, 20);
+    expect(provider.state.status, AiDjStatus.playing);
+    expect(provider.state.queuedCount, 20);
 
     provider.onPositionChanged();
     backend.emitFrame(
@@ -627,7 +637,7 @@ void main() {
     provider.onPlaybackChanged();
     await pumpEventQueue();
 
-    expect(provider.skippedLabels, contains('Song 0 - Artist'));
+    expect(provider.state.skippedLabels, contains('Song 0 - Artist'));
   });
 
   test('自动补歌关闭 / 非 AI 队列时不触发', () async {
@@ -658,7 +668,7 @@ void main() {
     provider.onPlaybackChanged();
     await pumpEventQueue();
     expect(generator.calls, 1);
-    expect(provider.status, AiDjStatus.off);
+    expect(provider.state.status, AiDjStatus.off);
   });
 
   test('偏好保存关闭自动补歌会取消在途静默任务；重新打开清除停止态', () async {
@@ -680,18 +690,18 @@ void main() {
     expect(generator.calls, 2);
 
     await provider.savePreferences(
-      provider.preferences.copyWith(autoFeed: false),
+      provider.state.preferences.copyWith(autoFeed: false),
     );
     gate.complete();
     await pumpEventQueue();
     expect(backend.lastEnqueued, isNull, reason: '关闭后取消在途静默批次');
-    expect(provider.preferences.autoFeed, isFalse);
+    expect(provider.state.preferences.autoFeed, isFalse);
 
     // 连续失败进入停止态后，用偏好保存重新打开应清除停止态。
     generator.gate = null;
     generator.error = StateError('boom');
     await provider.savePreferences(
-      provider.preferences.copyWith(autoFeed: true),
+      provider.state.preferences.copyWith(autoFeed: true),
     );
     for (var i = 0; i < 3; i++) {
       backend.emitFrame(
@@ -704,18 +714,18 @@ void main() {
       provider.onPlaybackChanged();
       await pumpEventQueue();
     }
-    expect(provider.autoFeedHalted, isTrue);
+    expect(provider.state.autoFeedHalted, isTrue);
 
     await provider.savePreferences(
-      provider.preferences.copyWith(autoFeed: false),
+      provider.state.preferences.copyWith(autoFeed: false),
     );
     await provider.savePreferences(
-      provider.preferences.copyWith(autoFeed: true),
+      provider.state.preferences.copyWith(autoFeed: true),
     );
 
-    expect(provider.autoFeedHalted, isFalse);
-    expect(provider.autoFeedFailures, 0);
-    expect(provider.autoFeedError, isNull);
+    expect(provider.state.autoFeedHalted, isFalse);
+    expect(provider.state.autoFeedFailures, 0);
+    expect(provider.state.autoFeedError, isNull);
   });
 
   test('自动补歌入队后被取消：仍补齐历史 / 队列计数 / 会话跟踪', () async {
@@ -748,19 +758,19 @@ void main() {
     provider.onPlaybackChanged();
     await pumpEventQueue();
     expect(generator.calls, 2);
-    expect(provider.historyEntries, hasLength(1));
+    expect(provider.state.historyEntries, hasLength(1));
 
     // 入队已经发生，但尚未完成；此时显式关闭自动补歌取消静默任务。
     await provider.savePreferences(
-      provider.preferences.copyWith(autoFeed: false),
+      provider.state.preferences.copyWith(autoFeed: false),
     );
     gate.complete();
     await pumpEventQueue();
 
-    expect(provider.historyEntries, hasLength(2));
-    expect(provider.historyEntries.first.origin, AiDjOrigin.autoFeed);
+    expect(provider.state.historyEntries, hasLength(2));
+    expect(provider.state.historyEntries.first.origin, AiDjOrigin.autoFeed);
     expect(
-      provider.queuedCount,
+      provider.state.queuedCount,
       20,
       reason: '只算当前之后仍在队的 AI 曲目：起播的 3 首已播过，不随旧计数漂移',
     );
@@ -775,8 +785,8 @@ void main() {
       rawResponse: 'visible-raw',
     );
     await enableWithList();
-    final sent = provider.lastSentPrompt;
-    final raw = provider.lastRawResponse;
+    final sent = provider.state.lastSentPrompt;
+    final raw = provider.state.lastRawResponse;
     expect(sent, isNotNull);
     expect(raw, 'visible-raw');
 
@@ -798,9 +808,9 @@ void main() {
     provider.onPlaybackChanged();
     await pumpEventQueue();
 
-    expect(provider.historyEntries.first.origin, AiDjOrigin.autoFeed);
-    expect(provider.lastSentPrompt, same(sent));
-    expect(provider.lastRawResponse, raw);
+    expect(provider.state.historyEntries.first.origin, AiDjOrigin.autoFeed);
+    expect(provider.state.lastSentPrompt, same(sent));
+    expect(provider.state.lastRawResponse, raw);
   });
 
   test('自动补歌完成时队列已播完：从新追加的第一首续播', () async {
@@ -835,15 +845,15 @@ void main() {
       backend.calls.any((call) => call.startsWith('playQueueIndex:')),
       isTrue,
     );
-    expect(provider.status, AiDjStatus.playing);
-    expect(provider.activeBatchId, provider.historyEntries.last.id);
+    expect(provider.state.status, AiDjStatus.playing);
+    expect(provider.state.activeBatchId, provider.state.historyEntries.last.id);
     expect(provider.progress, isNull);
   });
 
   test('未解析项重新找一次：不重新生成，合并结果并更新历史计数', () async {
     await enableWithList();
-    final activeId = provider.activeBatchId;
-    expect(provider.recommendations!.unresolved, hasLength(1));
+    final activeId = provider.state.activeBatchId;
+    expect(provider.state.recommendations!.unresolved, hasLength(1));
 
     generator.unresolvedFactory = (batch) => batch.copyWith(
       items: [
@@ -865,22 +875,22 @@ void main() {
 
     expect(generator.unresolvedCalls, 1);
     expect(generator.calls, 1, reason: '不重新调 LLM');
-    expect(provider.activeBatchId, activeId);
-    expect(provider.recommendations!.unresolved, isEmpty);
-    expect(provider.recommendations!.items.last.track.id.id, '77');
-    expect(provider.historyEntries.single.unresolvedCount, 0);
+    expect(provider.state.activeBatchId, activeId);
+    expect(provider.state.recommendations!.unresolved, isEmpty);
+    expect(provider.state.recommendations!.items.last.track.id.id, '77');
+    expect(provider.state.historyEntries.single.unresolvedCount, 0);
     expect(provider.progress, isNull);
   });
 
   test('历史：功能关闭时播放这批按普通队列，不启动自动补歌', () async {
     await enableWithList();
-    final firstId = provider.activeBatchId!;
+    final firstId = provider.state.activeBatchId!;
     await provider.setEnabled(false);
 
     await provider.playHistoryBatch(firstId);
 
-    expect(provider.status, AiDjStatus.off);
-    expect(provider.enabled, isFalse);
+    expect(provider.state.status, AiDjStatus.off);
+    expect(provider.state.enabled, isFalse);
     expect(backend.lastRequest?.context, isNull);
     expect(backend.lastRequest?.tracks, hasLength(3));
   });
@@ -888,7 +898,7 @@ void main() {
   test('自动补歌连续 3 次失败停止，不打断播放、不写主错误', () async {
     await enableWithList();
     await startRadio();
-    final activeId = provider.activeBatchId;
+    final activeId = provider.state.activeBatchId;
     generator.error = StateError('boom');
 
     for (var i = 0; i < 3; i++) {
@@ -903,12 +913,12 @@ void main() {
       await pumpEventQueue();
     }
 
-    expect(provider.autoFeedHalted, isTrue);
-    expect(provider.autoFeedFailures, 3);
-    expect(provider.autoFeedError, isNotNull);
-    expect(provider.lastError, isNull, reason: '静默失败不写显式错误');
-    expect(provider.status, AiDjStatus.playing);
-    expect(provider.activeBatchId, activeId);
+    expect(provider.state.autoFeedHalted, isTrue);
+    expect(provider.state.autoFeedFailures, 3);
+    expect(provider.state.autoFeedError, isNotNull);
+    expect(provider.state.lastError, isNull, reason: '静默失败不写显式错误');
+    expect(provider.state.status, AiDjStatus.playing);
+    expect(provider.state.activeBatchId, activeId);
     expect(backend.lastEnqueued, isNull);
 
     generator.calls = 0;
@@ -948,14 +958,14 @@ void main() {
     gate.complete();
     await pumpEventQueue();
 
-    expect(provider.recommendations!.items.first.track.id.id, '50');
+    expect(provider.state.recommendations!.items.first.track.id.id, '50');
     expect(backend.lastEnqueued, isNull, reason: '被取消的静默批次不追加');
   });
 
   test('手动「补一批到队尾」：追加且写 manualFeed，不切换 active', () async {
     await enableWithList();
     await startRadio();
-    final activeId = provider.activeBatchId;
+    final activeId = provider.state.activeBatchId;
 
     generator.batchFactory = () => _batch(30, 3);
     await provider.feedMore();
@@ -965,10 +975,10 @@ void main() {
       '31',
       '32',
     ]);
-    expect(provider.activeBatchId, activeId);
-    expect(provider.historyEntries.first.origin, AiDjOrigin.manualFeed);
+    expect(provider.state.activeBatchId, activeId);
+    expect(provider.state.historyEntries.first.origin, AiDjOrigin.manualFeed);
     expect(provider.progress, isNull);
-    expect(provider.status, AiDjStatus.playing);
+    expect(provider.state.status, AiDjStatus.playing);
   });
 
   test('换一首：原位替换列表项；已在队列则跟随替换', () async {
@@ -978,7 +988,7 @@ void main() {
     generator.batchFactory = () => _batch(7, 1);
     await provider.replaceRecommendation(0);
 
-    expect(provider.recommendations?.items[0].track.id.id, '7');
+    expect(provider.state.recommendations?.items[0].track.id.id, '7');
     expect(generator.lastCount, 1);
     expect(
       generator.lastExcluded,
@@ -990,18 +1000,18 @@ void main() {
 
   test('不感兴趣跨重启保留；撤销时移除', () async {
     await enableWithList();
-    final uri = provider.recommendations!.items[1].track.id.uri;
+    final uri = provider.state.recommendations!.items[1].track.id.uri;
 
     await provider.markNotInterested(uri);
-    expect(provider.recommendations?.items.map((i) => i.track.id.id).toList(), [
-      '0',
-      '2',
-    ]);
-    expect(provider.rememberedSkippedLabels, contains('Song 1 - Artist'));
+    expect(
+      provider.state.recommendations?.items.map((i) => i.track.id.id).toList(),
+      ['0', '2'],
+    );
+    expect(provider.state.rememberedSkippedLabels, contains('Song 1 - Artist'));
 
     await provider.undoNotInterested(uri);
     expect(
-      provider.rememberedSkippedLabels,
+      provider.state.rememberedSkippedLabels,
       isNot(contains('Song 1 - Artist')),
     );
 
@@ -1009,7 +1019,7 @@ void main() {
     await provider.markNotInterested(uri);
     provider.dispose();
     await pumpProvider();
-    expect(provider.rememberedSkippedLabels, contains('Song 1 - Artist'));
+    expect(provider.state.rememberedSkippedLabels, contains('Song 1 - Artist'));
 
     generator.batchFactory = () => _batch(10, 3);
     await provider.refreshRecommendations();
@@ -1024,13 +1034,13 @@ void main() {
     await provider.previewPrompt();
 
     expect(generator.lastPreviewLiked, contains('Song 0 - Artist'));
-    expect(provider.likedLabels, isEmpty);
-    expect(provider.rememberedLikedLabels, isEmpty);
+    expect(provider.state.likedLabels, isEmpty);
+    expect(provider.state.rememberedLikedLabels, isEmpty);
 
     generator.batchFactory = () => _batch(9, 3);
     await provider.refreshRecommendations();
 
-    expect(provider.rememberedLikedLabels, contains('Song 0 - Artist'));
+    expect(provider.state.rememberedLikedLabels, contains('Song 0 - Artist'));
   });
 
   test('预览的喜欢标签顺序与实际请求一致（长期记忆 + 新收藏）', () async {
@@ -1053,7 +1063,7 @@ void main() {
     await provider.refreshRecommendations();
 
     expect(generator.lastLiked, ['Song 0 - Artist', 'Song 1 - Artist']);
-    expect(provider.lastSentPrompt!.userPrompt, preview!.userPrompt);
+    expect(provider.state.lastSentPrompt!.userPrompt, preview!.userPrompt);
   });
 
   test('上一批与未解析项进入 [本批排除]，预览与实际请求一致', () async {
@@ -1080,72 +1090,72 @@ void main() {
     await provider.refreshRecommendations();
 
     expect(generator.lastLiked, contains('Song 0 - Artist'));
-    expect(provider.rememberedLikedLabels, contains('Song 0 - Artist'));
+    expect(provider.state.rememberedLikedLabels, contains('Song 0 - Artist'));
 
     provider.dispose();
     await pumpProvider();
-    expect(provider.rememberedLikedLabels, contains('Song 0 - Artist'));
+    expect(provider.state.rememberedLikedLabels, contains('Song 0 - Artist'));
   });
 
   test('种子：加入后进入下一批 prompt，成功后消费并持久化', () async {
     await enableWithList();
     await provider.addSeed('晴天 - 周杰伦');
-    expect(provider.seeds, ['晴天 - 周杰伦']);
+    expect(provider.state.seeds, ['晴天 - 周杰伦']);
 
     generator.batchFactory = () => _batch(10, 3);
     await provider.refreshRecommendations();
 
     expect(generator.lastPreferences!.seeds, ['晴天 - 周杰伦']);
-    expect(provider.seeds, isEmpty);
+    expect(provider.state.seeds, isEmpty);
 
     provider.dispose();
     await pumpProvider();
-    expect(provider.seeds, isEmpty);
+    expect(provider.state.seeds, isEmpty);
   });
 
   test('清空 AI 记忆', () async {
     await enableWithList();
-    final uri = provider.recommendations!.items.first.track.id.uri;
+    final uri = provider.state.recommendations!.items.first.track.id.uri;
     await provider.markNotInterested(uri);
     await provider.addSeed('某歌 - 某人');
 
     await provider.clearFeedbackMemory();
 
-    expect(provider.rememberedSkippedLabels, isEmpty);
-    expect(provider.seeds, isEmpty);
-    expect(provider.notInterestedItems, hasLength(1), reason: '已移出列表不回插');
+    expect(provider.state.rememberedSkippedLabels, isEmpty);
+    expect(provider.state.seeds, isEmpty);
+    expect(provider.state.notInterestedItems, hasLength(1), reason: '已移出列表不回插');
   });
 
   test('历史：删除 active 回退最近一批；删除最后一批清空', () async {
     await enableWithList();
     generator.batchFactory = () => _batch(10, 3);
     await provider.refreshRecommendations();
-    final firstId = provider.historyEntries.last.id;
-    final activeId = provider.activeBatchId!;
+    final firstId = provider.state.historyEntries.last.id;
+    final activeId = provider.state.activeBatchId!;
 
     await provider.deleteHistoryBatch(activeId);
 
-    expect(provider.activeBatchId, firstId);
-    expect(provider.historyEntries.map((entry) => entry.id), [firstId]);
+    expect(provider.state.activeBatchId, firstId);
+    expect(provider.state.historyEntries.map((entry) => entry.id), [firstId]);
 
     await provider.deleteHistoryBatch(firstId);
-    expect(provider.recommendations, isNull);
-    expect(provider.historyEntries, isEmpty);
+    expect(provider.state.recommendations, isNull);
+    expect(provider.state.historyEntries, isEmpty);
   });
 
   test('历史：播放这批强制替换队列并切换 active；加入队列不切换', () async {
     await enableWithList();
-    final firstId = provider.activeBatchId!;
+    final firstId = provider.state.activeBatchId!;
     generator.batchFactory = () => _batch(10, 3);
     await provider.refreshRecommendations();
-    final secondId = provider.activeBatchId!;
+    final secondId = provider.state.activeBatchId!;
 
     await provider.enqueueHistoryBatch(firstId);
-    expect(provider.activeBatchId, secondId);
+    expect(provider.state.activeBatchId, secondId);
     expect(backend.lastEnqueued?.first.id.id, '0');
 
     await provider.playHistoryBatch(firstId);
-    expect(provider.activeBatchId, firstId);
+    expect(provider.state.activeBatchId, firstId);
     expect(backend.lastRequest?.tracks.map((t) => t.id.id).toList(), [
       '0',
       '1',
@@ -1155,108 +1165,107 @@ void main() {
 
   test('切换当前批次清空撤销栈：旧批次撤销不会污染新批次', () async {
     await enableWithList();
-    final firstId = provider.activeBatchId!;
+    final firstId = provider.state.activeBatchId!;
     generator.batchFactory = () => _batch(10, 3);
     await provider.refreshRecommendations();
 
-    final staleUri = provider.recommendations!.items.first.track.id.uri;
+    final staleUri = provider.state.recommendations!.items.first.track.id.uri;
     await provider.markNotInterested(staleUri);
-    expect(provider.notInterestedItems, hasLength(1));
+    expect(provider.state.notInterestedItems, hasLength(1));
 
     var staleSeen = false;
     void listener() {
-      if (provider.activeBatchId == firstId &&
-          provider.notInterestedItems.isNotEmpty) {
+      if (provider.state.activeBatchId == firstId &&
+          provider.state.notInterestedItems.isNotEmpty) {
         staleSeen = true;
       }
     }
 
-    provider.addListener(listener);
+    provider.changes.addListener(listener);
     await provider.setActiveBatch(firstId);
-    provider.removeListener(listener);
+    provider.changes.removeListener(listener);
     expect(staleSeen, isFalse);
-    expect(provider.notInterestedItems, isEmpty);
+    expect(provider.state.notInterestedItems, isEmpty);
 
     await provider.undoNotInterested(staleUri);
-    expect(provider.recommendations!.items.map((item) => item.track.id.id), [
-      '0',
-      '1',
-      '2',
-    ]);
+    expect(
+      provider.state.recommendations!.items.map((item) => item.track.id.id),
+      ['0', '1', '2'],
+    );
   });
 
   test('删除 active 清空撤销栈：通知前已移除旧撤销项', () async {
     await enableWithList();
-    final firstId = provider.activeBatchId!;
+    final firstId = provider.state.activeBatchId!;
     generator.batchFactory = () => _batch(10, 3);
     await provider.refreshRecommendations();
-    final secondId = provider.activeBatchId!;
-    final staleUri = provider.recommendations!.items.first.track.id.uri;
+    final secondId = provider.state.activeBatchId!;
+    final staleUri = provider.state.recommendations!.items.first.track.id.uri;
     await provider.markNotInterested(staleUri);
-    expect(provider.notInterestedItems, hasLength(1));
+    expect(provider.state.notInterestedItems, hasLength(1));
 
     var staleSeen = false;
     void listener() {
-      if (provider.activeBatchId == firstId &&
-          provider.notInterestedItems.isNotEmpty) {
+      if (provider.state.activeBatchId == firstId &&
+          provider.state.notInterestedItems.isNotEmpty) {
         staleSeen = true;
       }
     }
 
-    provider.addListener(listener);
+    provider.changes.addListener(listener);
     await provider.deleteHistoryBatch(secondId);
-    provider.removeListener(listener);
+    provider.changes.removeListener(listener);
 
-    expect(provider.activeBatchId, firstId);
-    expect(provider.notInterestedItems, isEmpty);
+    expect(provider.state.activeBatchId, firstId);
+    expect(provider.state.notInterestedItems, isEmpty);
     expect(staleSeen, isFalse);
   });
 
   test('换一批清空撤销栈：通知前已移除旧撤销项', () async {
     await enableWithList();
-    final oldId = provider.activeBatchId!;
-    final staleUri = provider.recommendations!.items.first.track.id.uri;
+    final oldId = provider.state.activeBatchId!;
+    final staleUri = provider.state.recommendations!.items.first.track.id.uri;
     await provider.markNotInterested(staleUri);
-    expect(provider.notInterestedItems, hasLength(1));
+    expect(provider.state.notInterestedItems, hasLength(1));
 
     generator.batchFactory = () => _batch(10, 3);
     var staleSeen = false;
     void listener() {
-      if (provider.activeBatchId != oldId &&
-          provider.notInterestedItems.isNotEmpty) {
+      if (provider.state.activeBatchId != oldId &&
+          provider.state.notInterestedItems.isNotEmpty) {
         staleSeen = true;
       }
     }
 
-    provider.addListener(listener);
+    provider.changes.addListener(listener);
     await provider.refreshRecommendations();
-    provider.removeListener(listener);
+    provider.changes.removeListener(listener);
 
-    expect(provider.notInterestedItems, isEmpty);
+    expect(provider.state.notInterestedItems, isEmpty);
     expect(staleSeen, isFalse);
   });
 
   test('历史：设为当前只切换浏览列表，不动队列', () async {
     await enableWithList();
-    final firstId = provider.activeBatchId!;
+    final firstId = provider.state.activeBatchId!;
     generator.batchFactory = () => _batch(10, 3);
     await provider.refreshRecommendations();
     backend.calls.clear();
 
     await provider.setActiveBatch(firstId);
 
-    expect(provider.activeBatchId, firstId);
+    expect(provider.state.activeBatchId, firstId);
     expect(backend.calls, isEmpty);
   });
 
   test('历史切换只通知一次', () async {
     await enableWithList();
-    final firstId = provider.activeBatchId!;
+    final firstId = provider.state.activeBatchId!;
     generator.batchFactory = () => _batch(10, 3);
     await provider.refreshRecommendations();
 
     var notifications = 0;
-    provider.addListener(() => notifications++);
+    provider.changes.addListener(() => notifications++);
     await provider.setActiveBatch(firstId);
 
     expect(notifications, 1);
@@ -1266,33 +1275,33 @@ void main() {
     provider.dispose();
     await pumpProvider(recommendationStore: _FailingHistoryStore());
     await enableWithList();
-    final activeId = provider.activeBatchId;
+    final activeId = provider.state.activeBatchId;
     var notifications = 0;
-    provider.addListener(() => notifications++);
+    provider.changes.addListener(() => notifications++);
 
     await provider.deleteHistoryBatch(activeId!);
     expect(notifications, 0);
-    expect(provider.activeBatchId, activeId);
-    expect(provider.historyEntries, hasLength(1));
+    expect(provider.state.activeBatchId, activeId);
+    expect(provider.state.historyEntries, hasLength(1));
 
     await provider.clearHistory();
     expect(notifications, 0);
-    expect(provider.activeBatchId, activeId);
-    expect(provider.historyEntries, hasLength(1));
+    expect(provider.state.activeBatchId, activeId);
+    expect(provider.state.historyEntries, hasLength(1));
   });
 
   test('清空历史保留 active', () async {
     await enableWithList();
-    final activeId = provider.activeBatchId!;
+    final activeId = provider.state.activeBatchId!;
     generator.batchFactory = () => _batch(10, 3);
     await provider.refreshRecommendations();
-    final newActiveId = provider.activeBatchId!;
+    final newActiveId = provider.state.activeBatchId!;
 
     await provider.clearHistory();
 
-    expect(provider.activeBatchId, newActiveId);
-    expect(provider.historyEntries, hasLength(1));
-    expect(provider.historyEntries.single.id, newActiveId);
+    expect(provider.state.activeBatchId, newActiveId);
+    expect(provider.state.historyEntries, hasLength(1));
+    expect(provider.state.historyEntries.single.id, newActiveId);
     expect(activeId, isNot(newActiveId));
   });
 
@@ -1322,7 +1331,7 @@ void main() {
     provider.onPlaybackChanged();
     await pumpEventQueue();
 
-    expect(provider.skippedLabels, ['Song 0 - Artist']);
+    expect(provider.state.skippedLabels, ['Song 0 - Artist']);
   });
 
   test('显式生成进度走独立 ValueListenable：分片不触发聚合通知', () async {
@@ -1337,11 +1346,11 @@ void main() {
       if (progress != null) phases.add(progress.phase);
     });
     var notifications = 0;
-    provider.addListener(() => notifications++);
+    provider.changes.addListener(() => notifications++);
 
     final future = provider.refreshRecommendations();
     await pumpEventQueue();
-    expect(provider.isBusy, isTrue);
+    expect(provider.state.isBusy, isTrue);
     expect(notifications, 1, reason: '忙碌位开始只发一次聚合通知');
 
     gate.complete();
@@ -1362,28 +1371,28 @@ void main() {
 
   test('取消显式生成：晚到结果丢弃，不写错误、不动列表', () async {
     await enableWithList();
-    final activeId = provider.activeBatchId;
-    final historyCount = provider.historyEntries.length;
+    final activeId = provider.state.activeBatchId;
+    final historyCount = provider.state.historyEntries.length;
     final gate = Completer<void>();
     generator.gate = gate;
     generator.batchFactory = () => _batch(50, 3);
 
     final future = provider.refreshRecommendations();
     await pumpEventQueue();
-    expect(provider.isBusy, isTrue);
+    expect(provider.state.isBusy, isTrue);
     expect(provider.progress, isNotNull);
 
     provider.cancelGeneration();
-    expect(provider.isBusy, isFalse);
+    expect(provider.state.isBusy, isFalse);
     expect(provider.progress, isNull);
 
     gate.complete();
     await future;
 
-    expect(provider.activeBatchId, activeId);
-    expect(provider.historyEntries, hasLength(historyCount));
-    expect(provider.lastError, isNull);
-    expect(provider.recommendations!.items.first.track.id.id, '0');
+    expect(provider.state.activeBatchId, activeId);
+    expect(provider.state.historyEntries, hasLength(historyCount));
+    expect(provider.state.lastError, isNull);
+    expect(provider.state.recommendations!.items.first.track.id.id, '0');
   });
 
   test('取消重找未解析：晚到结果不覆盖当前批', () async {
@@ -1401,76 +1410,80 @@ void main() {
     gate.complete();
     await future;
 
-    expect(provider.recommendations!.unresolved, hasLength(1));
-    expect(provider.lastError, isNull);
-    expect(provider.isBusy, isFalse);
+    expect(provider.state.recommendations!.unresolved, hasLength(1));
+    expect(provider.state.lastError, isNull);
+    expect(provider.state.isBusy, isFalse);
     expect(provider.progress, isNull);
   });
 
   test('取消显式生成不影响「换一首」', () async {
     await enableWithList();
-    final uri = provider.recommendations!.items.first.track.id.uri;
+    final uri = provider.state.recommendations!.items.first.track.id.uri;
     final gate = Completer<void>();
     generator.gate = gate;
     generator.batchFactory = () => _batch(7, 1);
 
     final future = provider.replaceRecommendation(0);
     await pumpEventQueue();
-    expect(provider.isReplacing(uri), isTrue);
-    expect(provider.isBusy, isFalse, reason: '换一首不占显式忙碌位');
+    expect(provider.state.isReplacing(uri), isTrue);
+    expect(provider.state.isBusy, isFalse, reason: '换一首不占显式忙碌位');
 
     provider.cancelGeneration();
-    expect(provider.isReplacing(uri), isTrue, reason: '换一首本来就不接受取消');
+    expect(provider.state.isReplacing(uri), isTrue, reason: '换一首本来就不接受取消');
 
     gate.complete();
     await future;
 
-    expect(provider.recommendations!.items.first.track.id.id, '7');
-    expect(provider.isReplacing(uri), isFalse);
-    expect(provider.lastError, isNull);
+    expect(provider.state.recommendations!.items.first.track.id.id, '7');
+    expect(provider.state.isReplacing(uri), isFalse);
+    expect(provider.state.lastError, isNull);
   });
 
   test('换一首与显式生成并行：换一首结束不清掉生成忙碌位', () async {
     await enableWithList();
-    final uri = provider.recommendations!.items.first.track.id.uri;
+    final uri = provider.state.recommendations!.items.first.track.id.uri;
     final replaceGate = Completer<void>();
     generator.gate = replaceGate;
     final replaceFuture = provider.replaceRecommendation(0);
     await pumpEventQueue();
-    expect(provider.isReplacing(uri), isTrue);
+    expect(provider.state.isReplacing(uri), isTrue);
 
     final explicitGate = Completer<void>();
     generator.gate = explicitGate;
     final refreshFuture = provider.refreshRecommendations();
     await pumpEventQueue();
-    expect(provider.isBusy, isTrue);
+    expect(provider.state.isBusy, isTrue);
 
     replaceGate.complete();
     await replaceFuture;
-    expect(provider.isReplacing(uri), isFalse);
-    expect(provider.isBusy, isTrue, reason: '显式生成仍在进行');
+    expect(provider.state.isReplacing(uri), isFalse);
+    expect(provider.state.isBusy, isTrue, reason: '显式生成仍在进行');
 
     explicitGate.complete();
     await refreshFuture;
-    expect(provider.isBusy, isFalse);
+    expect(provider.state.isBusy, isFalse);
   });
 
   test('换一首失败：写 lastError，不动列表', () async {
     await enableWithList();
-    final before = provider.recommendations!.items
+    final before = provider.state.recommendations!.items
         .map((item) => item.track.id.id)
         .toList();
     generator.error = StateError('boom');
 
     await provider.replaceRecommendation(0);
 
-    expect(provider.lastError, isNotNull);
+    expect(provider.state.lastError, isNotNull);
     expect(
-      provider.recommendations!.items.map((item) => item.track.id.id).toList(),
+      provider.state.recommendations!.items
+          .map((item) => item.track.id.id)
+          .toList(),
       before,
     );
     expect(
-      provider.isReplacing(provider.recommendations!.items.first.track.id.uri),
+      provider.state.isReplacing(
+        provider.state.recommendations!.items.first.track.id.uri,
+      ),
       isFalse,
     );
   });
@@ -1485,15 +1498,15 @@ void main() {
     provider.cancelGeneration();
     firstGate.complete();
     await first;
-    expect(provider.recommendations, isNull);
+    expect(provider.state.recommendations, isNull);
 
     generator.gate = null;
     generator.batchFactory = () => _batch(10, 3);
     await provider.refreshRecommendations();
 
-    expect(provider.recommendations!.items.first.track.id.id, '10');
-    expect(provider.lastError, isNull);
-    expect(provider.isBusy, isFalse);
+    expect(provider.state.recommendations!.items.first.track.id.id, '10');
+    expect(provider.state.lastError, isNull);
+    expect(provider.state.isBusy, isFalse);
   });
 
   test('生成失败：记录错误且不自动重试', () async {
@@ -1501,8 +1514,8 @@ void main() {
     generator.error = StateError('boom');
     await provider.setEnabled(true);
 
-    expect(provider.recommendations, isNull);
-    expect(provider.lastError, isNotNull);
+    expect(provider.state.recommendations, isNull);
+    expect(provider.state.lastError, isNotNull);
     expect(generator.calls, 1);
 
     await provider.ensureRecommendations();
@@ -1516,43 +1529,45 @@ void main() {
 
     await provider.refreshRecommendations();
 
-    expect(provider.recommendations, isNull);
-    expect(provider.historyEntries, isEmpty);
-    expect(provider.lastError?.l10nKey, 'aiDjNothingResolved');
+    expect(provider.state.recommendations, isNull);
+    expect(provider.state.historyEntries, isEmpty);
+    expect(provider.state.lastError?.l10nKey, 'aiDjNothingResolved');
   });
 
   test('换一首空批次 = 失败：保留原列表并写 lastError', () async {
     await enableWithList();
-    final before = provider.recommendations!.items
+    final before = provider.state.recommendations!.items
         .map((item) => item.track.id.id)
         .toList();
-    final uri = provider.recommendations!.items.first.track.id.uri;
+    final uri = provider.state.recommendations!.items.first.track.id.uri;
     generator.batchFactory = () =>
         AiDjBatch(items: const [], generatedAt: DateTime.now());
 
     await provider.replaceRecommendation(0);
 
-    expect(provider.lastError?.l10nKey, 'aiDjNothingResolved');
+    expect(provider.state.lastError?.l10nKey, 'aiDjNothingResolved');
     expect(
-      provider.recommendations!.items.map((item) => item.track.id.id).toList(),
+      provider.state.recommendations!.items
+          .map((item) => item.track.id.id)
+          .toList(),
       before,
     );
-    expect(provider.isReplacing(uri), isFalse);
+    expect(provider.state.isReplacing(uri), isFalse);
   });
 
   test('启动时恢复持久化的当前推荐与历史（raw 原样）', () async {
     await enableWithList();
-    final activeId = provider.activeBatchId;
+    final activeId = provider.state.activeBatchId;
     generator.batchFactory = () => _batch(10, 3);
     await provider.refreshRecommendations();
 
     provider.dispose();
     await pumpProvider();
 
-    expect(provider.recommendations, isNotNull);
-    expect(provider.recommendations!.id, isNot(activeId));
-    expect(provider.historyEntries, hasLength(2));
-    expect(provider.recommendations!.items.first.track.title, 'Song 10');
+    expect(provider.state.recommendations, isNotNull);
+    expect(provider.state.recommendations!.id, isNot(activeId));
+    expect(provider.state.historyEntries, hasLength(2));
+    expect(provider.state.recommendations!.items.first.track.title, 'Song 10');
   });
 
   test('startRadio 无列表且无配置 → 不播放（保持现状）', () async {
@@ -1563,6 +1578,21 @@ void main() {
     await provider.startRadio();
 
     expect(backend.calls, isEmpty);
-    expect(provider.recommendations, isNull);
+    expect(provider.state.recommendations, isNull);
+  });
+
+  test('快照桥：UI watch 读快照，命令走控制器，通知即时镜像', () async {
+    final scope = ProviderTestScope()..put<AiDjProvider>(provider);
+    // 保持订阅，确认控制器命令后的聚合通知会重建快照。
+    final subscription = scope.container.listen(aiDjProvider, (_, _) {});
+    addTearDown(subscription.close);
+
+    expect(scope.container.read(aiDjProvider).consentGranted, isFalse);
+    expect(scope.container.read(aiDjControllerProvider), same(provider));
+
+    await scope.container.read(aiDjControllerProvider).grantConsent();
+
+    expect(provider.state.consentGranted, isTrue);
+    expect(scope.container.read(aiDjProvider).consentGranted, isTrue);
   });
 }

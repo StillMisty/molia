@@ -229,9 +229,10 @@ final diagnosticsProvider =
           LegacyListenableNotifier((ref) => _require<DiagnosticsProvider>(ref)),
     );
 final aiDjProvider =
-    NotifierProvider<LegacyListenableNotifier<AiDjProvider>, AiDjProvider>(
-      () => LegacyListenableNotifier((ref) => _require<AiDjProvider>(ref)),
+    NotifierProvider<SnapshotNotifier<AiDjProvider, AiDjState>, AiDjState>(
+      () => SnapshotNotifier((ref) => _require<AiDjProvider>(ref)),
     );
+final aiDjControllerProvider = snapshotController<AiDjProvider>();
 final scrobbleServiceProvider =
     NotifierProvider<
       LegacyListenableNotifier<ScrobbleService>,
@@ -354,6 +355,18 @@ _maybeListenable<T extends ChangeNotifier>() =>
       ),
     );
 
+/// 可空快照：发现页轮播在没有 AI 栈（测试 / 独立预览）时整块不渲染。
+final maybeAiDjProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<AiDjProvider, AiDjState>,
+      AiDjState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<AiDjProvider>(),
+      ),
+    );
+final maybeAiDjControllerProvider = maybeSnapshotController<AiDjProvider>();
+
 Provider<T?> _maybeService<T extends Object>() =>
     Provider<T?>((ref) => ref.read(appRuntimeProvider).maybe<T>());
 
@@ -365,7 +378,6 @@ final maybeScrobbleServiceProvider = _maybeListenable<ScrobbleService>();
 final maybeLibraryAddSettingsProvider = _maybeListenable<LibraryAddSettings>();
 final maybeSyncProvider = _maybeListenable<SyncProvider>();
 final maybeSourcesProvider = _maybeListenable<SourcesProvider>();
-final maybeAiDjProvider = _maybeListenable<AiDjProvider>();
 final maybeLibraryProvider = _maybeListenable<LibraryProvider>();
 final maybeSourceManagerProvider = _maybeService<SourceManager>();
 

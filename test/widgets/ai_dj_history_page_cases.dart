@@ -115,7 +115,7 @@ void main() {
   testWidgets('展开后点第 i 首，从第 i 首起播而不是批次第一首', (tester) async {
     final harness = await _pumpHistory(tester);
     final ai = harness.ai;
-    final batchId = ai.activeBatchId!;
+    final batchId = ai.state.activeBatchId!;
 
     await tester.tap(find.byKey(Key('aiDjHistoryExpand_$batchId')));
     await tester.pumpAndSettle();
@@ -130,14 +130,14 @@ void main() {
       ['Song 10', 'Song 11', 'Song 12'],
       reason: '只改起点，批次顺序与整批接管语义不变',
     );
-    expect(ai.activeBatchId, batchId);
+    expect(ai.state.activeBatchId, batchId);
   });
 
   testWidgets('删除整批先确认；取消后批次仍在，确认后移除', (tester) async {
     final harness = await _pumpHistory(tester);
     final ai = harness.ai;
-    final olderId = ai.historyEntries
-        .firstWhere((entry) => entry.id != ai.activeBatchId)
+    final olderId = ai.state.historyEntries
+        .firstWhere((entry) => entry.id != ai.state.activeBatchId)
         .id;
 
     await tester.tap(find.byKey(Key('aiDjHistoryDelete_$olderId')));
@@ -147,14 +147,14 @@ void main() {
 
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
-    expect(ai.historyEntries, hasLength(2), reason: '取消不删除');
+    expect(ai.state.historyEntries, hasLength(2), reason: '取消不删除');
 
     await tester.tap(find.byKey(Key('aiDjHistoryDelete_$olderId')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(Key('aiDjHistoryDeleteConfirm_$olderId')));
     await tester.pumpAndSettle();
 
-    expect(ai.historyEntries, hasLength(1));
+    expect(ai.state.historyEntries, hasLength(1));
     expect(find.byKey(Key('aiDjHistoryEntry_$olderId')), findsNothing);
   });
 

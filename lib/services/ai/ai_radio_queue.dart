@@ -24,6 +24,9 @@ class AiRadioQueue {
   final int currentIndex;
   final Set<String> _queueUriSet;
 
+  /// 队列内全部曲目 uri（只读；快照携带「已在队列」判定用）。
+  Set<String> get queueUriSet => _queueUriSet;
+
   int get queueLength => queueUris.length;
 
   /// 当前曲目之后还剩多少首（低水位判定口径，不含当前）。

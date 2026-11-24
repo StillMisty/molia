@@ -1,63 +1,56 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/ai_dj_provider.dart';
+import '../providers/app_providers.dart';
 import 'responsive.dart';
 import 'ai_dj_shared.dart';
 import 'settings/settings_tiles.dart';
 import 'simple_modal_body.dart';
 
 /// 打开 AI 推荐「发送范围」弹层：八个类别收进一张开关列表。
-Future<void> showAiDjScopeSheet(BuildContext context, AiDjProvider provider) {
+Future<void> showAiDjScopeSheet(BuildContext context) {
   final l10n = AppLocalizations.of(context)!;
   return ResponsiveNavigation.showSimpleModal<void>(
     context: context,
     title: l10n.aiDjPrefsDataScope,
-    child: _AiDjScopeSheet(provider: provider),
+    child: const _AiDjScopeSheet(),
   );
 }
 
-class _AiDjScopeSheet extends StatelessWidget {
-  const _AiDjScopeSheet({required this.provider});
-
-  final AiDjProvider provider;
+class _AiDjScopeSheet extends ConsumerWidget {
+  const _AiDjScopeSheet();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    return ListenableBuilder(
-      listenable: provider,
-      builder: (context, _) {
-        final prefs = provider.preferences;
-        return SimpleModalBody(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          header: Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: SettingsSectionHint(text: l10n.aiDjScopeSheetHint),
-          ),
+    final prefs = ref.watch(aiDjProvider).preferences;
+    return SimpleModalBody(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      header: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: SettingsSectionHint(text: l10n.aiDjScopeSheetHint),
+      ),
+      children: [
+        SettingsSectionCard(
           children: [
-            SettingsSectionCard(
-              children: [
-                for (final section in AiUpstreamSection.values)
-                  SettingsSwitchTile(
-                    key: Key('aiDjPrefScope_${section.storageValue}'),
-                    icon: _scopeIcon(section),
-                    title: aiDjSectionLabel(l10n, section),
-                    subtitle: '',
-                    value: prefs.sections.contains(section),
-                    onChanged: (value) => unawaited(
-                      toggleAiDjScope(context, provider, section, value),
-                    ),
-                  ),
-              ],
-            ),
+            for (final section in AiUpstreamSection.values)
+              SettingsSwitchTile(
+                key: Key('aiDjPrefScope_${section.storageValue}'),
+                icon: _scopeIcon(section),
+                title: aiDjSectionLabel(l10n, section),
+                subtitle: '',
+                value: prefs.sections.contains(section),
+                onChanged: (value) =>
+                    unawaited(toggleAiDjScope(context, ref, section, value)),
+              ),
           ],
-        );
-      },
+        ),
+      ],
     );
   }
 }
@@ -65,16 +58,16 @@ class _AiDjScopeSheet extends StatelessWidget {
 /// 切换一个发送类别：收藏 / 歌单首次开启前要确认隐私影响。
 Future<void> toggleAiDjScope(
   BuildContext context,
-  AiDjProvider provider,
+  WidgetRef ref,
   AiUpstreamSection section,
   bool value,
 ) async {
-  final before = provider.preferences;
+  final before = ref.read(aiDjProvider).preferences;
   if (value && !before.acknowledgedScopes.contains(section)) {
     final agreed = await _confirmScope(context, section);
     if (!agreed || !context.mounted) return;
   }
-  final latest = provider.preferences;
+  final latest = ref.read(aiDjProvider).preferences;
   final sections = Set<AiUpstreamSection>.of(latest.sections);
   final acknowledged = Set<AiUpstreamSection>.of(latest.acknowledgedScopes);
   if (value) {
@@ -83,9 +76,11 @@ Future<void> toggleAiDjScope(
   } else {
     sections.remove(section);
   }
-  await provider.savePreferences(
-    latest.copyWith(sections: sections, acknowledgedScopes: acknowledged),
-  );
+  await ref
+      .read(aiDjControllerProvider)
+      .savePreferences(
+        latest.copyWith(sections: sections, acknowledgedScopes: acknowledged),
+      );
 }
 
 Future<bool> _confirmScope(

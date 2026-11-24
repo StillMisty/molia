@@ -113,7 +113,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
 
-    expect(provider.config?.model, 'model-b');
+    expect(provider.state.config?.model, 'model-b');
   });
 
   testWidgets('配置表单有显式完成按钮，收起前补存未落盘的输入', (tester) async {
@@ -182,7 +182,7 @@ void main() {
     await tester.tap(find.byKey(const Key('aiDjConfigDoneButton')));
     await tester.pumpAndSettle();
 
-    expect(provider.config?.model, 'model-b');
+    expect(provider.state.config?.model, 'model-b');
     expect(find.byKey(const Key('aiDjConfigDoneButton')), findsNothing);
     expect(find.text('https://api.example.com/v1'), findsOneWidget);
   });
@@ -338,7 +338,7 @@ void main() {
     await ai.init();
     await ai.grantConsent();
     await ai.setEnabled(true);
-    expect(ai.recommendations?.items, hasLength(3));
+    expect(ai.state.recommendations?.items, hasLength(3));
     addTearDown(() {
       ai.dispose();
       library.dispose();
@@ -395,7 +395,7 @@ void main() {
     // 生成中点击旧列表仍能起播。
     await tester.tap(find.text('Song 0'));
     await tester.pump();
-    expect(ai.status, AiDjStatus.playing);
+    expect(ai.state.status, AiDjStatus.playing);
     expect(backend.lastRequest?.startIndex, 0);
 
     gate.complete();

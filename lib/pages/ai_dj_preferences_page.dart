@@ -35,18 +35,20 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
   /// 补充要求的防抖窗口：输入停顿后再落盘，避免逐字写偏好。
   static const Duration _extraSaveDelay = Duration(milliseconds: 400);
 
-  late final AiDjProvider _provider;
+  late final AiDjProvider _controller;
+  late AiDjState _state;
   late final TextEditingController _extraController;
   Timer? _extraSaveTimer;
 
   @override
   void initState() {
     super.initState();
-    _provider = ref.read(aiDjProvider);
+    _controller = ref.read(aiDjControllerProvider);
+    _state = ref.read(aiDjProvider);
     // 直接打开偏好页时也补齐配置读取（幂等；首帧后已读过一次）。
-    unawaited(_provider.init());
+    unawaited(_controller.init());
     _extraController = TextEditingController(
-      text: _provider.preferences.extraPrompt,
+      text: _state.preferences.extraPrompt,
     );
   }
 
@@ -56,12 +58,12 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
     // 防抖窗口内退出页面：补写一次，避免最后一段输入丢失。放到帧末，
     // 避免在路由卸载/树重建过程中同步 notify 触发祖先重建。
     final pending = _extraController.text;
-    if (pending != _provider.preferences.extraPrompt) {
-      final provider = _provider;
+    if (pending != _state.preferences.extraPrompt) {
+      final controller = _controller;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(
-          provider.savePreferences(
-            provider.preferences.copyWith(extraPrompt: pending),
+          controller.savePreferences(
+            controller.state.preferences.copyWith(extraPrompt: pending),
           ),
         );
       });
@@ -71,13 +73,15 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
   }
 
   void _update(AiPreferences next) {
-    unawaited(_provider.savePreferences(next));
+    unawaited(_controller.savePreferences(next));
   }
+
+  AiPreferences get _preferences => ref.read(aiDjProvider).preferences;
 
   void _saveExtraSoon(String value) {
     _extraSaveTimer?.cancel();
     _extraSaveTimer = Timer(_extraSaveDelay, () {
-      _update(_provider.preferences.copyWith(extraPrompt: value));
+      _update(_preferences.copyWith(extraPrompt: value));
     });
   }
 
@@ -104,7 +108,7 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
     );
     if (confirmed != true || !mounted) return;
     _extraSaveTimer?.cancel();
-    await _provider.resetPreferences();
+    await _controller.resetPreferences();
     if (!mounted) return;
     _extraController.clear();
     _notify(l10n.aiDjPrefsResetDone);
@@ -124,8 +128,9 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = ref.watch(aiDjProvider);
-    final prefs = provider.preferences;
+    final state = ref.watch(aiDjProvider);
+    _state = state;
+    final prefs = state.preferences;
     return SettingsSubPage(
       title: l10n.aiDjPreferencesTitle,
       safeArea: true,
@@ -140,7 +145,7 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
               subtitle: l10n.aiDjAutoFeedSubtitle,
               value: prefs.autoFeed,
               onChanged: (value) =>
-                  _update(_provider.preferences.copyWith(autoFeed: value)),
+                  _update(_preferences.copyWith(autoFeed: value)),
             ),
             SettingsSwitchTile(
               key: const Key('aiDjPrefOnlyUnheardSwitch'),
@@ -149,7 +154,7 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
               subtitle: l10n.aiDjPrefsOnlyUnheardSubtitle,
               value: prefs.onlyUnheard,
               onChanged: (value) =>
-                  _update(_provider.preferences.copyWith(onlyUnheard: value)),
+                  _update(_preferences.copyWith(onlyUnheard: value)),
             ),
             SettingsDropdownRow<int>(
               key: const Key('aiDjPrefBatchSizeRow'),
@@ -166,7 +171,7 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
                 // 推迟到本帧结束再写偏好。
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (!mounted) return;
-                  _update(_provider.preferences.copyWith(batchSize: value));
+                  _update(_preferences.copyWith(batchSize: value));
                 });
               },
             ),
@@ -180,7 +185,7 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
           labelOf: (value) => aiDjExplorationLabel(l10n, value),
           singleSelect: true,
           onToggle: (value) =>
-              _update(_provider.preferences.copyWith(exploration: value)),
+              _update(_preferences.copyWith(exploration: value)),
         ),
         _sectionTitle(l10n.aiDjPrefsStylesGroup),
         _optionChips(
@@ -188,12 +193,8 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
           selected: prefs.styles.toSet(),
           labelOf: (value) => aiDjStyleLabel(l10n, value),
           onToggle: (value) => _update(
-            _provider.preferences.copyWith(
-              styles: _toggle(
-                _provider.preferences.styles,
-                value,
-                kAiStyleOptions,
-              ),
+            _preferences.copyWith(
+              styles: _toggle(_preferences.styles, value, kAiStyleOptions),
             ),
           ),
         ),
@@ -203,12 +204,8 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
           selected: prefs.scenes.toSet(),
           labelOf: (value) => aiDjSceneLabel(l10n, value),
           onToggle: (value) => _update(
-            _provider.preferences.copyWith(
-              scenes: _toggle(
-                _provider.preferences.scenes,
-                value,
-                kAiSceneOptions,
-              ),
+            _preferences.copyWith(
+              scenes: _toggle(_preferences.scenes, value, kAiSceneOptions),
             ),
           ),
         ),
@@ -218,9 +215,9 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
           selected: prefs.languages.toSet(),
           labelOf: (value) => aiDjLanguageLabel(l10n, value),
           onToggle: (value) => _update(
-            _provider.preferences.copyWith(
+            _preferences.copyWith(
               languages: _toggle(
-                _provider.preferences.languages,
+                _preferences.languages,
                 value,
                 kAiLanguageOptions,
               ),
@@ -233,8 +230,7 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
           selected: {prefs.era},
           labelOf: (value) => aiDjEraLabel(l10n, value),
           singleSelect: true,
-          onToggle: (value) =>
-              _update(_provider.preferences.copyWith(era: value)),
+          onToggle: (value) => _update(_preferences.copyWith(era: value)),
         ),
         _sectionTitle(l10n.aiDjPrefsExtraGroup),
         M3ETextField(
@@ -256,7 +252,7 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
               icon: Icons.share_rounded,
               title: l10n.aiDjPrefsDataScope,
               subtitle: l10n.aiDjScopeSentCount(prefs.sections.length),
-              onTap: () => unawaited(showAiDjScopeSheet(context, _provider)),
+              onTap: () => unawaited(showAiDjScopeSheet(context)),
             ),
           ],
         ),
@@ -267,13 +263,12 @@ class _AiDjPreferencesPageState extends ConsumerState<AiDjPreferencesPage> {
               key: const Key('aiDjPrefFeedbackTile'),
               icon: Icons.feedback_rounded,
               title: l10n.aiDjFeedbackTitle,
-              subtitle: aiDjFeedbackSummary(l10n, _provider),
+              subtitle: aiDjFeedbackSummary(l10n, state),
               onTap: () => unawaited(
                 showAiDjFeedbackDialog(
                   context,
-                  _provider,
                   onClearMemory: () =>
-                      confirmAndClearAiDjMemory(context, _provider),
+                      confirmAndClearAiDjMemory(context, _controller),
                 ),
               ),
             ),
