@@ -105,9 +105,11 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 `LegacyListenableNotifier` / `LazyListenableNotifier` 适配器已随最后一批删除。
 新增状态必须直接写上面两种形态之一。
 
-`extends ValueNotifier<ImmutableValue>` 仍允许：它是带相等去重的窄值通道，承载
-`copyWith` 出来的不可变值（`PagedListState`、`SearchResults`、`FanOutRunState`、
-`AppPresenceState`、`MediaSessionCopy`），不是可变状态袋。
+`extends ValueNotifier<ImmutableValue>` 仍允许：它是标准 `ValueListenable` 窄值
+通道，承载 `copyWith` 出来的不可变值（`PagedListState`、`SearchResults`、
+`FanOutRunState`、`AppPresenceState`、`MediaSessionCopy`），不是可变状态袋。
+重复赋值是否发通知取决于值类型的 `==`：目前只有 `PagedListState` 实现了值相等，
+其余按引用判断，因此不要在依赖「值相同就不通知」的路径上用它们。
 
 **高频通道白名单**（不进快照，保持原有细粒度订阅）：
 
@@ -156,8 +158,10 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 
 **约定**
 
-- 快照由持有方独占：`state` getter 可以复用内部列表引用（不逐次复制），消费方
-  只读、不原地修改；集合在构造时能低成本包装的就用 `unmodifiable`。
+- 快照集合按量级冻结：小集合用 `List/Set/Map.unmodifiable`（复制，与真值彻底
+  解耦）；大集合（资料库历史、分页结果、本地歌曲行、智能列表行）用
+  `dart:collection` 的零拷贝只读视图，并按底层列表身份缓存视图——这样消费方无法
+  原地改写，presenter 的列表身份复用也不被破坏。
 - 可空依赖（`SaveAs` / `NotificationService` / `BiliAccountService` /
   `PlaybackProvider` 的查询路径）保留 `maybeXxxProvider`，未接线返回 `null`
   而不是抛启动期异常。

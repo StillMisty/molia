@@ -13,9 +13,10 @@ import 'package:flutter_test/flutter_test.dart';
 /// 高频通道（播放进度、下载进度、生成进度、歌词逐行、过渡动画）继续用
 /// `ValueListenable` / 原生回调，不在这条守卫的范围内。
 ///
-/// `extends ValueNotifier<ImmutableValue>` 是允许的窄值通道：它自带相等去重，
-/// 承载的是 `copyWith` 出来的不可变值（`PagedListState`、`SearchResults`、
-/// `AppPresenceState`、`MediaSessionCopy` 等），不是可变状态袋。
+/// `extends ValueNotifier<ImmutableValue>` 是允许的窄值通道：承载的是
+/// `copyWith` 出来的不可变值（`PagedListState`、`SearchResults`、
+/// `AppPresenceState`、`MediaSessionCopy` 等），不是可变状态袋；是否靠值相等
+/// 去重取决于该值类型有没有实现 `==`。
 ///
 /// 白名单只减不增：这里是迁移收尾阶段的存量清单，清空后不得再新增条目。
 const Set<String> _remainingChangeNotifiers = <String>{};
