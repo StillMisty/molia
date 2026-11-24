@@ -100,10 +100,14 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
    - 页面 / widget 自己创建并释放的会话不额外加 provider，宿主用
      `ListenableBuilder(listenable: obj.changes)` 读 `obj.state`。
 
-**不再有** `ChangeNotifier` 状态类：`lib/**` 由
+**不再有**自定义 `ChangeNotifier` 状态类：`lib/**` 由
 `test/architecture/snapshot_state_cases.dart` 守卫，白名单为空；迁移期的
 `LegacyListenableNotifier` / `LazyListenableNotifier` 适配器已随最后一批删除。
 新增状态必须直接写上面两种形态之一。
+
+`extends ValueNotifier<ImmutableValue>` 仍允许：它是带相等去重的窄值通道，承载
+`copyWith` 出来的不可变值（`PagedListState`、`SearchResults`、`FanOutRunState`、
+`AppPresenceState`、`MediaSessionCopy`），不是可变状态袋。
 
 **高频通道白名单**（不进快照，保持原有细粒度订阅）：
 
