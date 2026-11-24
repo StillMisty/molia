@@ -38,6 +38,7 @@ class FavoriteFact extends ChangeNotifier {
   final Duration _readTimeout;
 
   final Set<String> _keys = <String>{};
+  Set<String>? _keysSnapshot;
   List<PlaylistTrack>? _rows;
   int _count = 0;
   int _revision = 0;
@@ -203,6 +204,7 @@ class FavoriteFact extends ChangeNotifier {
   void invalidate() {
     _keysLoaded = false;
     _keysAuthoritative = false;
+    _keysSnapshot = null;
     _keysGeneration++;
     _rowsVersion++;
     _rows = null;
@@ -297,6 +299,7 @@ class FavoriteFact extends ChangeNotifier {
     _keys
       ..clear()
       ..addAll(fresh);
+    _keysSnapshot = null;
     _keysLoaded = true;
     _keysAuthoritative = true;
   }
@@ -389,6 +392,7 @@ class FavoriteFact extends ChangeNotifier {
     }
 
     if (addedCount > 0 || removedCount > 0) {
+      _keysSnapshot = null;
       _revision++;
       changed = true;
     }
@@ -433,6 +437,11 @@ class FavoriteFact extends ChangeNotifier {
 
   /// 收藏键口径（与仓库 `(sourceKey, songId)` 唯一约束一致）。
   static String _keyOf(String sourceKey, String songId) => '$sourceKey:$songId';
+
+  /// 收藏键的不可变快照（`sourceKey:songId`）。
+  ///
+  /// 缓存到下一次键变化：UI 每次通知都重建资料库快照，不必重新拷贝整表。
+  Set<String> get keys => _keysSnapshot ??= Set<String>.unmodifiable(_keys);
 
   /// dispose 后不再向已销毁的监听器发通知（写入 / 读取可能跨销毁边界完成）。
   void _notify() {

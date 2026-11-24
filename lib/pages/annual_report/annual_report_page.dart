@@ -274,7 +274,7 @@ class _AnnualReportPageState extends ConsumerState<AnnualReportPage> {
   Future<void> _playTopTracks(AnnualReport report, int index) async {
     if (report.topTracks.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
-    final library = ref.read(libraryProvider);
+    final library = ref.read(libraryControllerProvider);
     final playback = ref.read(playbackProvider);
     final tracks = [
       for (final entry in report.topTracks)
@@ -304,7 +304,7 @@ class _AnnualReportPageState extends ConsumerState<AnnualReportPage> {
     );
     final name = l10n.annualReportPlaylistName(report.year);
     try {
-      final library = ref.read(libraryProvider);
+      final library = ref.read(libraryControllerProvider);
       final result = await library.importTracksAsPlaylist(
         name: name,
         tracks: buildAnnualPlaylistTracks(

@@ -29,9 +29,63 @@ import '../sources/source_track.dart';
 import 'library_outcome.dart';
 import 'library_read_projection.dart';
 import 'playback_provider.dart';
+import 'snapshot_source.dart';
 
 /// 资料库整表读取的意图：静默校准保持当前数据可见，显式读取可以翻 loading。
 typedef _LoadMode = LibraryReadIntent;
+
+/// 资料库对 UI 暴露的不可变快照。
+///
+/// 字段名沿用旧 `LibraryProvider` 的公开 getter：页面只 `ref.watch` 这里的值，
+/// 命令（收藏 / 列表 CRUD / 加载）仍落在 [LibraryProvider] 上，经
+/// `libraryControllerProvider` 取实例（ADR-0041「启动期状态对象：快照 + 控制器」）。
+///
+/// 列表 / 历史只在真值变化时换新引用；[favoriteKeys] 由收藏事实缓存，
+/// 因此每次通知重建快照不会重新拷贝整表收藏键。
+@immutable
+class LibraryState {
+  const LibraryState({
+    required this.history,
+    required this.playlists,
+    required this.historyState,
+    required this.playlistsState,
+    required this.favoritesRevision,
+    required this.playlistsRevision,
+    required this.favoriteKeys,
+  });
+
+  /// 播放历史（最近播放倒序；浏览期间由会话控制冻结顺序）。
+  final List<PlayHistoryEntry> history;
+
+  /// 全部列表行（含默认收藏的内部保留行）。
+  final List<PlaylistInfo> playlists;
+
+  /// 历史 / 列表的读取阶段（含失败与重试）。
+  final LibraryReadState historyState;
+  final LibraryReadState playlistsState;
+
+  /// 收藏状态版本（单调递增）。
+  final int favoritesRevision;
+
+  /// 列表集合 / 计数版本。
+  final int playlistsRevision;
+
+  /// 收藏键快照（`sourceKey:songId` 口径）。
+  final Set<String> favoriteKeys;
+
+  /// 自建列表（不含默认收藏的内部保留行）。
+  List<PlaylistInfo> get customPlaylists => [
+    for (final playlist in playlists)
+      if (!playlist.isFavorites) playlist,
+  ];
+
+  bool get isHistoryLoading => historyState.isLoading;
+  bool get isPlaylistsLoading => playlistsState.isLoading;
+
+  /// 是否已收藏（键口径与仓库 `(sourceKey, songId)` 唯一约束一致）。
+  bool isFavorite(String sourceKey, String songId) =>
+      favoriteKeys.contains('$sourceKey:$songId');
+}
 
 /// 列表曲目读取视图：页面只读读取阶段，不探测缓存内部。
 class PlaylistTracksView {
@@ -48,7 +102,7 @@ class PlaylistTracksView {
   bool get ready => state.isReady;
 }
 
-class LibraryProvider extends ChangeNotifier {
+class LibraryProvider implements SnapshotSource<LibraryState> {
   LibraryProvider({
     required this._repository,
     required PlaybackProvider playbackProvider,
@@ -99,6 +153,7 @@ class LibraryProvider extends ChangeNotifier {
   final PlaybackProvider _playback;
   StreamSubscription<void>? _subscription;
   final Duration _readTimeout;
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 列表曲目浏览缓存最多保留的列表数。
   ///
@@ -132,6 +187,20 @@ class LibraryProvider extends ChangeNotifier {
   bool _disposed = false;
   bool _favoriteNotifyScheduled = false;
   Future<void>? _pendingReload;
+
+  @override
+  Listenable get changes => _changes;
+
+  @override
+  LibraryState get state => LibraryState(
+    history: _historyRead.value,
+    playlists: _playlistsRead.value,
+    historyState: _historyRead.state,
+    playlistsState: _playlistsRead.state,
+    favoritesRevision: _favorites.revision,
+    playlistsRevision: _playlistsRevision,
+    favoriteKeys: _favorites.keys,
+  );
 
   /// 收藏状态版本（单调递增）：收藏相关订阅方（收藏按钮 / 发现页）据此做
   /// O(1) 的失效判定，不必对每次历史写入都重建。
@@ -1361,10 +1430,10 @@ class LibraryProvider extends ChangeNotifier {
 
   /// dispose 后不再向已销毁的监听器发通知（仓库变更流是异步的，存在竞态）。
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) _changes.notify();
   }
 
-  @override
+  /// 释放内部订阅与读投影；组合根持有实例直到进程退出，测试按需调用。
   void dispose() {
     _disposed = true;
     _historyRead.dispose();
@@ -1377,6 +1446,5 @@ class LibraryProvider extends ChangeNotifier {
     }
     _playlistTracksReads.clear();
     _subscription?.cancel();
-    super.dispose();
   }
 }

@@ -387,7 +387,7 @@ Future<void> playFavoritesBrowseTracks({
   int startIndex = 0,
 }) async {
   if (tracks.isEmpty) return;
-  final library = ref.read(libraryProvider);
+  final library = ref.read(libraryControllerProvider);
   final handoff = TrackHandoffCollectionHandoff(context, random: random);
   await handoff.play(
     [
@@ -426,7 +426,7 @@ Future<void> swapFavoritesBrowseTrack({
   required BrowseTrack track,
   required LyricsProvider lyrics,
 }) async {
-  final library = ref.read(libraryProvider);
+  final library = ref.read(libraryControllerProvider);
   await showSourceSwapPage(
     context,
     seed: library.trackFromPlaylistTrack(track.toPlaylistTrack(addedAt: 0)),
@@ -552,7 +552,7 @@ CollectionRowActionWiring _favoritesActionWiring({
 
 /// 合集行 → 领域曲目（公共动作的能力位 / 平台 id 需要领域形状）。
 Track _favoritesDomainTrack(WidgetRef ref, CollectionRow row) {
-  final library = ref.read(libraryProvider);
+  final library = ref.read(libraryControllerProvider);
   return switch (row) {
     TrackCollectionRow(:final track) => library.trackFromPlaylistTrack(track),
     HistoryCollectionRow(:final entry) => library.trackFromHistoryEntry(entry),
@@ -571,7 +571,7 @@ CollectionIoCommands buildFavoritesIoCommands(
   SyncProvider? sync,
   SaveAs? saveAs,
 }) {
-  final provider = ref.read(libraryProvider);
+  final provider = ref.read(libraryControllerProvider);
   final DownloadRecords? records = ref.read(downloadRecordsProvider);
   const files = FilePickerCollectionPlaylistFiles();
   return CollectionIoCommands(

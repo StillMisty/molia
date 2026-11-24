@@ -345,7 +345,7 @@ class _PlayStatisticsPageState extends ConsumerState<PlayStatisticsPage> {
   ) async {
     if (entries.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
-    final library = ref.read(libraryProvider);
+    final library = ref.read(libraryControllerProvider);
     final playback = ref.read(playbackProvider);
     final tracks = [
       for (final entry in entries)
@@ -369,7 +369,7 @@ class _PlayStatisticsPageState extends ConsumerState<PlayStatisticsPage> {
   Future<void> _playDayEvents(List<PlayEvent> events, int index) async {
     if (events.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
-    final library = ref.read(libraryProvider);
+    final library = ref.read(libraryControllerProvider);
     final playback = ref.read(playbackProvider);
     final tracks = [
       for (final event in events)

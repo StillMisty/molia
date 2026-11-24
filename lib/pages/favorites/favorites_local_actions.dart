@@ -304,7 +304,7 @@ Future<void> checkFavoritesLocalCache({
   required AppLocalizations l10n,
   required LocalCacheIndexStore? index,
   required CacheService? cache,
-  required LibraryProvider library,
+  required LibraryState library,
   required bool Function() isActive,
 }) async {
   if (index == null || cache == null) return;

@@ -94,12 +94,17 @@ void main() {
     // 首屏自己的 skeleton → 正文交叉淡化先跑完，避免把离场层误判成本次回归。
     await tester.pumpAndSettle();
 
-    final library = ProviderScope.containerOf(
+    final container = ProviderScope.containerOf(
       tester.element(find.text('Performance Track 0')),
-    ).read(libraryProvider);
+    );
+    final library = container.read(libraryProvider);
+    final controller = container.read(libraryControllerProvider);
     final favorites = library.playlists.singleWhere((p) => p.isFavorites);
 
-    await library.setPlaylistCoverKey(favorites.id, 'playlist:__favorites__');
+    await controller.setPlaylistCoverKey(
+      favorites.id,
+      'playlist:__favorites__',
+    );
     // 只推进一帧：旧实现会在这里清掉曲目读投影并渲染整页 loading。
     await tester.pump();
 

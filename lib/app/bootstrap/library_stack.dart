@@ -216,7 +216,7 @@ void wireNotificationFavorite({
     },
   );
   // 收藏变化只影响通知动作的图标：handler 自己现查当前曲目，这里只负责叫醒它。
-  libraryProvider.addListener(handler.refreshFavoriteState);
+  libraryProvider.changes.addListener(handler.refreshFavoriteState);
 }
 
 /// 首帧后的资料库启动尾巴：补入全库最大戳种子 + 统计收尾/裁剪。

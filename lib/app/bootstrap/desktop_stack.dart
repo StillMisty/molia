@@ -282,7 +282,7 @@ Future<DesktopStack> buildDesktopStack({
   }
 
   playback.addListener(syncTray);
-  libraryProvider.addListener(syncTray);
+  libraryProvider.changes.addListener(syncTray);
   AppBrandingService.titleNotifier.addListener(syncTray);
   LanguageService.localeNotifier.addListener(syncTray);
   // 窗口隐藏 / 最小化到托盘也是「离开」动作：提交一次会话进度（与退出共用

@@ -106,11 +106,11 @@ class DiscoverProvider extends _$DiscoverProvider {
     _lastFavoritesRevision = library.favoritesRevision;
     _lastPlaylistsRevision = library.playlistsRevision;
     selection.addListener(_onChannelSelectionChanged);
-    library.addListener(_onLibraryChanged);
+    library.changes.addListener(_onLibraryChanged);
     ref.onDispose(() {
       _disposed = true;
       selection.removeListener(_onChannelSelectionChanged);
-      library.removeListener(_onLibraryChanged);
+      library.changes.removeListener(_onLibraryChanged);
     });
     return _snapshot();
   }
