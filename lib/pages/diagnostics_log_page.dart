@@ -37,7 +37,9 @@ class _DiagnosticsLogPageState extends ConsumerState<DiagnosticsLogPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(ref.read(diagnosticsPageProvider).loadLogs());
+      if (mounted) {
+        unawaited(ref.read(diagnosticsPageControllerProvider).loadLogs());
+      }
     });
   }
 
@@ -50,7 +52,7 @@ class _DiagnosticsLogPageState extends ConsumerState<DiagnosticsLogPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = ref.read(diagnosticsPageProvider);
+    final provider = ref.read(diagnosticsPageControllerProvider);
     return ValueListenableBuilder<DiagnosticsLogsState>(
       valueListenable: provider.logsState,
       builder: (context, logs, _) {

@@ -53,7 +53,7 @@ class _MyThemedAppState extends ConsumerState<MyThemedApp> {
     AppBrandingService.load();
     // 震动反馈开关（设备本地偏好）：载入后全应用触感立即按它判定。
     HapticsService.load();
-    final sync = ref.read(syncProvider);
+    final sync = ref.read(syncControllerProvider);
     _sync = sync;
     _peerConnected = sync.state.peerConnectedNotices.listen(_onPeerConnected);
     _incomingPairing = sync.state.incomingPairingRequests.listen(

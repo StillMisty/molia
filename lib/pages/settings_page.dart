@@ -96,11 +96,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       nav: ref.read(navProvider.notifier),
       tray: ref.read(traySettingsProvider.notifier),
       update: ref.watch(maybeUpdateProvider),
-      sources: ref.read(maybeSourcesProvider),
+      sources: ref.read(maybeSourcesControllerProvider),
       scrobble: ref.read(maybeScrobbleControllerProvider),
       libraryAdd: ref.read(maybeLibraryAddSettingsProvider),
       statistics: ref.read(playStatisticsServiceProvider),
-      sync: ref.read(maybeSyncProvider),
+      sync: ref.read(maybeSyncControllerProvider),
     );
     // 两列流式需要比单列舒适行宽（`maxWidth`）更宽的画布：上限取设置弹层
     // 宽度，两列各占约半宽；单列沿用 `maxWidth` 不变。判据只由宽度档位
@@ -415,7 +415,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           Consumer(
             builder: (context, ref, _) {
               final quality = ref.watch(
-                sourcesProvider.select((provider) => provider.preferredQuality),
+                sourcesProvider.select((state) => state.preferredQuality),
               );
               return SettingsDropdownRow<String>(
                 key: const Key('settingsDefaultQualityItem'),

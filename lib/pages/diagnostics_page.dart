@@ -42,14 +42,14 @@ class _DiagnosticsPageState extends ConsumerState<DiagnosticsPage> {
     super.initState();
     // 包信息是轻量平台元数据，不联网、不扫盘；只读一次。
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.read(diagnosticsPageProvider).ensureAppInfo();
+      if (mounted) ref.read(diagnosticsPageControllerProvider).ensureAppInfo();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = ref.read(diagnosticsPageProvider);
+    final provider = ref.read(diagnosticsPageControllerProvider);
     return SettingsSubPage(
       title: l10n.diagnosticsTitle,
       actions: [

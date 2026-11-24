@@ -230,8 +230,9 @@ class SettingsAdvancedPage extends ConsumerWidget {
     WidgetRef ref,
     AppLocalizations l10n,
   ) {
-    final UpdateProvider? provider = ref.watch(maybeUpdateProvider);
-    if (provider == null) return const SizedBox.shrink();
+    final UpdateState? state = ref.watch(maybeUpdateProvider);
+    final UpdateProvider? controller = ref.read(maybeUpdateControllerProvider);
+    if (state == null || controller == null) return const SizedBox.shrink();
     return SettingsSectionCard(
       title: l10n.settingsAdvancedUpdateSourceTitle,
       children: [
@@ -239,30 +240,30 @@ class SettingsAdvancedPage extends ConsumerWidget {
           key: const Key('settingsUpdateManifestItem'),
           icon: Icons.link_rounded,
           title: l10n.updateManifestOverrideTitle,
-          subtitle: provider.manifestUrlOverride.isEmpty
+          subtitle: state.manifestUrlOverride.isEmpty
               ? l10n.updateManifestOverrideDefault
-              : provider.manifestUrlOverride,
+              : state.manifestUrlOverride,
           onTap: () => _editText(
             context,
             title: l10n.updateManifestOverrideTitle,
             hint: l10n.updateManifestOverrideHint,
-            initial: provider.manifestUrlOverride,
-            onSave: provider.setManifestUrlOverride,
+            initial: state.manifestUrlOverride,
+            onSave: controller.setManifestUrlOverride,
           ),
         ),
         SettingsNavTile(
           key: const Key('settingsUpdateMirrorItem'),
           icon: Icons.cloud_download_rounded,
           title: l10n.updateDownloadPrefixTitle,
-          subtitle: provider.downloadPrefix.isEmpty
+          subtitle: state.downloadPrefix.isEmpty
               ? l10n.updateDownloadPrefixDefault
-              : provider.downloadPrefix,
+              : state.downloadPrefix,
           onTap: () => _editText(
             context,
             title: l10n.updateDownloadPrefixTitle,
             hint: l10n.updateDownloadPrefixHint,
-            initial: provider.downloadPrefix,
-            onSave: provider.setDownloadPrefix,
+            initial: state.downloadPrefix,
+            onSave: controller.setDownloadPrefix,
           ),
         ),
       ],

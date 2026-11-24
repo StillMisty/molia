@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/models/app_release.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/services/window/tray_settings.dart';
@@ -15,6 +16,7 @@ import 'package:molia/services/scrobble/scrobble_service.dart';
 import 'package:molia/services/source_swap/source_swap_settings.dart';
 import 'package:molia/widgets/settings/settings_section_availability.dart';
 
+import '../support/fake_sources_backend.dart';
 import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
@@ -196,19 +198,40 @@ SettingsSectionAvailability _allAvailable({
     ),
     sourceSwap: const SourceSwapSettingsState(autoEnabled: true),
     audioFocus: AudioFocusSettings(settings: testSettingsRegistry()),
-    sources: _FakeSourcesProvider(),
+    sources: SourcesProvider(FakeSourcesBackend()),
     lyricsDisplay: LyricsDisplayState(capabilities: lyricsCapabilities),
     scrobble: _FakeScrobbleService(),
     libraryAdd: const LibraryAddSettingsState(LibraryAddPosition.top),
     statistics: _FakePlayStatisticsService(),
     sync: _FakeSyncProvider(),
     tray: ProviderTestScope().container.read(traySettingsProvider.notifier),
-    update: _FakeUpdateProvider(),
+    update: _updateState,
     nav: ProviderTestScope().container.read(navProvider.notifier),
     platform: platform,
     traySupported: traySupported,
   );
 }
+
+const _updateState = UpdateState(
+  status: UpdateStatus.idle,
+  release: null,
+  releaseAsset: null,
+  installResult: null,
+  installResultVersion: null,
+  failure: null,
+  lastCheckedAt: null,
+  checkOnStartup: false,
+  checkDaily: false,
+  anyAutoCheckEnabled: false,
+  channel: UpdateChannel.stable,
+  manifestUrlOverride: '',
+  downloadPrefix: '',
+  platform: null,
+  currentVersionLabel: '0.0.0+0',
+  updateAvailable: false,
+  supportsInAppInstall: false,
+  hasDownloadedPackage: false,
+);
 
 /// 探针只关心是否存在；重服务的成员用 noSuchMethod 兜底，避免为一次
 /// 「在不在树上」搭真实引擎。
@@ -222,17 +245,9 @@ class _FakeSyncProvider extends ChangeNotifier
     with _PresenceOnly
     implements SyncProvider {}
 
-class _FakeSourcesProvider extends ChangeNotifier
-    with _PresenceOnly
-    implements SourcesProvider {}
-
 class _FakeScrobbleService extends ChangeNotifier
     with _PresenceOnly
     implements ScrobbleService {}
-
-class _FakeUpdateProvider extends ChangeNotifier
-    with _PresenceOnly
-    implements UpdateProvider {}
 
 class _FakePlayStatisticsService
     with _PresenceOnly

@@ -32,6 +32,7 @@ import 'package:molia/providers/play_statistics_provider.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
+import 'package:molia/providers/sources_backend.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/back_claims.dart';
@@ -167,7 +168,7 @@ Future<FakePlaybackFacade> pumpPerfApp(
   }
 
   final sourceManager = SourceManager(settings: testSettingsRegistry());
-  final sources = SourcesProvider(sourceManager);
+  final sources = SourcesProvider(SourceManagerBackend(sourceManager));
   addTearDown(() {
     sources.dispose();
     sourceManager.dispose();

@@ -185,9 +185,14 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 - 消费方改为 watch 快照 + read 控制器：`library_search_tab`、`search_section`、
   `global_search_overlay`、`search_results_view`（后者只接收不可变投影，分页 /
   重试命令仍经会话）。
-- 仍未快照化：`SourcesProvider`（音源管理门面，字段多、页面按对象读取，单独
-  一批）；`PlaybackProvider` / `LibraryProvider` / `AiDjProvider` 等按上文说明
-  继续推进。
+- 后续批次已把播放 / 资料库 / 同步 / 更新 / 诊断 / 音源管理门面与收藏会话
+  按同一形态落地：`SyncProvider` → `SyncUiState`、`UpdateProvider` →
+  `UpdateState`、`DiagnosticsProvider` → `DiagnosticsState`、
+  `SourcesProvider` → `SourcesState`（底层改经可注入的 `SourcesBackend`，
+  测试用假注册表）；页面级 `CollectionSession` /
+  `LyricsSourceSearchSession` / `LibraryCollectionRequest` 也改为
+  `SnapshotSource` + `changes`，`LyricsSourceSearchSession` 的
+  `ListenableBuilder` / `addListener` 消费面随之改为 `changes`。
 
 ## 后果
 

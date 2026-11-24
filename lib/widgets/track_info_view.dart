@@ -378,7 +378,7 @@ class TrackInfoView extends ConsumerWidget {
   /// 来源行副标题：`渠道名 · {sourceKey}:{id}`（渠道查不到时回退 key）。
   String _sourceSubtitle(
     AppLocalizations l10n,
-    SourcesProvider? sources,
+    SourcesState? sources,
     Track track,
   ) {
     final key = track.id.sourceKey;

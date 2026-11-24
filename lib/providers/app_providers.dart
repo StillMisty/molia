@@ -32,8 +32,10 @@ import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/snapshot_source.dart';
 import 'package:molia/providers/search_provider.dart';
+import 'package:molia/providers/sources_backend.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/sync_provider.dart';
+import 'package:molia/providers/sync_ui_state.dart';
 import 'package:molia/providers/update_provider.dart';
 import 'package:molia/services/ai/ai_recommendation_service.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
@@ -96,95 +98,6 @@ class LegacyListenableNotifier<T extends Listenable> extends Notifier<T> {
   bool updateShouldNotify(T previous, T next) => true;
 }
 
-/// 懒构造的启动期状态对象（等价于旧 `provider_tree.dart` 的 `create:`）。
-///
-/// 与 [LegacyListenableNotifier] 的区别：对象由 provider 自己创建并在销毁时
-/// dispose，而不是从 [AppRuntime] 取已存在的实例。
-class LazyListenableNotifier<T extends ChangeNotifier> extends Notifier<T> {
-  LazyListenableNotifier(this._create)
-    : _preferRuntime = true,
-      _ownsValue = true;
-
-  /// 测试专用：接管一个已构造的实例（容器不负责 dispose）。
-  LazyListenableNotifier.withValue(T value)
-    : _create = ((Ref _) => value),
-      _preferRuntime = false,
-      _ownsValue = false;
-
-  final T Function(Ref ref) _create;
-
-  /// 测试 / 宿主已把派生实例登记进 [AppRuntime] 时优先复用，
-  /// 避免再构造第二份状态（页面与测试句柄必须操作同一实例）。
-  final bool _preferRuntime;
-  bool _ownsValue;
-  late T _value;
-
-  @override
-  T build() {
-    final existing = _preferRuntime
-        ? ref.read(appRuntimeProvider).maybe<T>()
-        : null;
-    final value = existing ?? _create(ref);
-    _ownsValue = _ownsValue && existing == null;
-    _value = value;
-    value.addListener(_onChanged);
-    ref.onDispose(() {
-      value.removeListener(_onChanged);
-      if (_ownsValue) value.dispose();
-    });
-    return value;
-  }
-
-  void _onChanged() => state = _value;
-
-  @override
-  bool updateShouldNotify(T previous, T next) => true;
-}
-
-/// 可空变体：依赖未登记（测试 / 独立预览）时返回 null，不抛启动期异常。
-class LazyNullableListenableNotifier<T extends ChangeNotifier>
-    extends Notifier<T?> {
-  LazyNullableListenableNotifier(this._create)
-    : _preferRuntime = true,
-      _ownsValue = true;
-
-  /// 测试专用：接管一个已构造的实例（容器不负责 dispose）。
-  LazyNullableListenableNotifier.withValue(T value)
-    : _create = ((Ref _) => value),
-      _preferRuntime = false,
-      _ownsValue = false;
-
-  final T? Function(Ref ref) _create;
-
-  /// 同 [LazyListenableNotifier]：测试已登记的实例优先复用。
-  final bool _preferRuntime;
-  bool _ownsValue;
-  T? _value;
-
-  @override
-  T? build() {
-    final existing = _preferRuntime
-        ? ref.read(appRuntimeProvider).maybe<T>()
-        : null;
-    final value = existing ?? _create(ref);
-    _ownsValue = _ownsValue && existing == null;
-    _value = value;
-    if (value != null) {
-      value.addListener(_onChanged);
-      ref.onDispose(() {
-        value.removeListener(_onChanged);
-        if (_ownsValue) value.dispose();
-      });
-    }
-    return value;
-  }
-
-  void _onChanged() => state = _value;
-
-  @override
-  bool updateShouldNotify(T? previous, T? next) => true;
-}
-
 T _require<T>(Ref ref) => ref.watch(appRuntimeProvider).require<T>();
 
 // ---------------------------------------------------------------------------
@@ -241,12 +154,10 @@ final channelSelectionControllerProvider =
     snapshotController<ChannelSelection>();
 final diagnosticsProvider =
     NotifierProvider<
-      LegacyListenableNotifier<DiagnosticsProvider>,
-      DiagnosticsProvider
-    >(
-      () =>
-          LegacyListenableNotifier((ref) => _require<DiagnosticsProvider>(ref)),
-    );
+      SnapshotNotifier<DiagnosticsProvider, DiagnosticsState>,
+      DiagnosticsState
+    >(() => SnapshotNotifier((ref) => _require<DiagnosticsProvider>(ref)));
+final diagnosticsControllerProvider = snapshotController<DiagnosticsProvider>();
 final aiDjProvider =
     NotifierProvider<SnapshotNotifier<AiDjProvider, AiDjState>, AiDjState>(
       () => SnapshotNotifier((ref) => _require<AiDjProvider>(ref)),
@@ -286,13 +197,36 @@ final lyricsDisplaySettingsControllerProvider =
     maybeSnapshotController<LyricsDisplaySettings>();
 
 final syncProvider =
-    NotifierProvider<LegacyListenableNotifier<SyncProvider>, SyncProvider>(
-      () => LegacyListenableNotifier((ref) => _require<SyncProvider>(ref)),
+    NotifierProvider<SnapshotNotifier<SyncProvider, SyncUiState>, SyncUiState>(
+      () => SnapshotNotifier((ref) => _require<SyncProvider>(ref)),
     );
+final maybeSyncProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<SyncProvider, SyncUiState>,
+      SyncUiState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<SyncProvider>(),
+      ),
+    );
+final syncControllerProvider = snapshotController<SyncProvider>();
+final maybeSyncControllerProvider = maybeSnapshotController<SyncProvider>();
 final updateProvider =
-    NotifierProvider<LegacyListenableNotifier<UpdateProvider>, UpdateProvider>(
-      () => LegacyListenableNotifier((ref) => _require<UpdateProvider>(ref)),
+    NotifierProvider<
+      SnapshotNotifier<UpdateProvider, UpdateState>,
+      UpdateState
+    >(() => SnapshotNotifier((ref) => _require<UpdateProvider>(ref)));
+final maybeUpdateProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<UpdateProvider, UpdateState>,
+      UpdateState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<UpdateProvider>(),
+      ),
     );
+final updateControllerProvider = snapshotController<UpdateProvider>();
+final maybeUpdateControllerProvider = maybeSnapshotController<UpdateProvider>();
 final sourceSwapSettingsProvider =
     NotifierProvider<
       SnapshotNotifier<SourceSwapSettings, SourceSwapSettingsState>,
@@ -451,14 +385,6 @@ final sourceManagerProvider =
 // 可空别名：设置页等“可选入口”消费方使用，未接线时返回 null。
 // ---------------------------------------------------------------------------
 
-NotifierProvider<LazyNullableListenableNotifier<T>, T?>
-_maybeListenable<T extends ChangeNotifier>() =>
-    NotifierProvider<LazyNullableListenableNotifier<T>, T?>(
-      () => LazyNullableListenableNotifier(
-        (ref) => ref.read(appRuntimeProvider).maybe<T>(),
-      ),
-    );
-
 /// 可空快照：发现页轮播在没有 AI 栈（测试 / 独立预览）时整块不渲染。
 final maybeAiDjProvider =
     NotifierProvider<
@@ -483,9 +409,17 @@ final maybeLyricsDisplayProvider =
         (ref) => ref.read(appRuntimeProvider).maybe<LyricsDisplayProvider>(),
       ),
     );
-final maybeUpdateProvider = _maybeListenable<UpdateProvider>();
-final maybeSyncProvider = _maybeListenable<SyncProvider>();
-final maybeSourcesProvider = _maybeListenable<SourcesProvider>();
+final maybeSourcesProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<SourcesProvider, SourcesState>,
+      SourcesState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<SourcesProvider>(),
+      ),
+    );
+final maybeSourcesControllerProvider =
+    maybeSnapshotController<SourcesProvider>();
 final maybeSourceManagerProvider = _maybeService<SourceManager>();
 
 // ---------------------------------------------------------------------------
@@ -576,12 +510,24 @@ final diagnosticsExporterProvider = Provider<DiagnosticsExporter>(
 // 组合根派生状态：懒构造，等价于旧 `provider_tree.dart` 的 `create:`。
 // ---------------------------------------------------------------------------
 
+/// 跨页收藏请求的控制器：已登记（测试 / 宿主）优先复用。
+final libraryCollectionRequestControllerProvider =
+    Provider<LibraryCollectionRequest>((ref) {
+      final existing = ref
+          .read(appRuntimeProvider)
+          .maybe<LibraryCollectionRequest>();
+      if (existing != null) return existing;
+      return LibraryCollectionRequest();
+    });
+
 final libraryCollectionRequestProvider =
     NotifierProvider<
-      LazyNullableListenableNotifier<LibraryCollectionRequest>,
-      LibraryCollectionRequest?
+      SnapshotNotifier<LibraryCollectionRequest, LibraryCollectionRequestState>,
+      LibraryCollectionRequestState
     >(
-      () => LazyNullableListenableNotifier((ref) => LibraryCollectionRequest()),
+      () => SnapshotNotifier(
+        (ref) => ref.watch(libraryCollectionRequestControllerProvider),
+      ),
     );
 
 final downloadRequestsProvider =
@@ -603,32 +549,51 @@ final discoverBuiltinTransportProvider = Provider<BuiltinTransport>(
   (ref) => BuiltinTransport(),
 );
 
+/// 音源管理控制器的懒构造：已登记（测试 / 宿主）优先复用，否则创建并释放。
+final sourcesControllerProvider = Provider<SourcesProvider>((ref) {
+  final existing = ref.read(appRuntimeProvider).maybe<SourcesProvider>();
+  if (existing != null) return existing;
+  final provider = SourcesProvider(
+    SourceManagerBackend(ref.read(sourceManagerProvider)),
+  );
+  ref.onDispose(provider.dispose);
+  return provider;
+});
+
 final sourcesProvider =
-    NotifierProvider<LazyListenableNotifier<SourcesProvider>, SourcesProvider>(
-      () => LazyListenableNotifier(
-        (ref) => SourcesProvider(ref.read(sourceManagerProvider)),
-      ),
-    );
+    NotifierProvider<
+      SnapshotNotifier<SourcesProvider, SourcesState>,
+      SourcesState
+    >(() => SnapshotNotifier((ref) => ref.watch(sourcesControllerProvider)));
+
+/// 诊断页控制器的懒构造：已登记（测试 / 宿主）优先复用，否则创建并释放。
+final diagnosticsPageControllerProvider = Provider<DiagnosticsProvider>((ref) {
+  final existing = ref.read(appRuntimeProvider).maybe<DiagnosticsProvider>();
+  if (existing != null) return existing;
+  final service = ref.read(diagnosticsServiceProvider);
+  final exporter = ref.read(diagnosticsExporterProvider);
+  final provider = DiagnosticsProvider(
+    service: service,
+    builder: exporter,
+    saveAs: ref.read(saveAsProvider),
+    appInfo: exporter.appInfo.load,
+    restartEngine: () => ref.read(sourceManagerProvider).retryEngine(),
+    logReader: LogTailReader(
+      directory: service.logSink?.directory ?? () async => null,
+    ),
+  );
+  ref.onDispose(provider.dispose);
+  return provider;
+});
 
 final diagnosticsPageProvider =
     NotifierProvider<
-      LazyListenableNotifier<DiagnosticsProvider>,
-      DiagnosticsProvider
+      SnapshotNotifier<DiagnosticsProvider, DiagnosticsState>,
+      DiagnosticsState
     >(
-      () => LazyListenableNotifier((ref) {
-        final service = ref.read(diagnosticsServiceProvider);
-        final exporter = ref.read(diagnosticsExporterProvider);
-        return DiagnosticsProvider(
-          service: service,
-          builder: exporter,
-          saveAs: ref.read(saveAsProvider),
-          appInfo: exporter.appInfo.load,
-          restartEngine: () => ref.read(sourceManagerProvider).retryEngine(),
-          logReader: LogTailReader(
-            directory: service.logSink?.directory ?? () async => null,
-          ),
-        );
-      }),
+      () => SnapshotNotifier(
+        (ref) => ref.watch(diagnosticsPageControllerProvider),
+      ),
     );
 
 final trackLocalDataServiceProvider = Provider<TrackLocalDataService?>((ref) {

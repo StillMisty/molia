@@ -589,14 +589,14 @@ class _DownloadsManagePageState extends ConsumerState<DownloadsManagePage> {
     final NotificationService? notifications = ref.read(
       maybeNotificationServiceProvider,
     );
-    final LibraryCollectionRequest? request = ref.read(
-      libraryCollectionRequestProvider,
+    final LibraryCollectionRequest request = ref.read(
+      libraryCollectionRequestControllerProvider,
     );
     if (service == null) return;
     final result = await service.checkFiles();
     if (!mounted) return;
     // 请求收藏页切到「文件不见」，用户关掉设置后即可看到明细。
-    request?.requestSmartList(SmartListIds.missingFiles);
+    request.requestSmartList(SmartListIds.missingFiles);
     notifications?.showSnackBar(l10n.missingFilesCount(result.changed));
   }
 

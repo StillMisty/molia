@@ -149,7 +149,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
     _vm.attachServices(
       cacheService: ref.read(cacheServiceProvider),
       localDataService: ref.read(trackLocalDataServiceProvider),
-      collectionRequest: ref.read(libraryCollectionRequestProvider),
+      collectionRequest: ref.read(libraryCollectionRequestControllerProvider),
       downloadRecords: ref.read(downloadRecordsControllerProvider),
       cacheIndex: ref.read(localCacheIndexControllerProvider),
     );
