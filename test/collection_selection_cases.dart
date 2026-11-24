@@ -10,8 +10,6 @@ void main() {
     selection = CollectionSelection();
   });
 
-  tearDown(() => selection.dispose());
-
   List<String> visible([List<String>? keys]) =>
       keys ?? const ['a', 'b', 'c', 'd', 'e'];
 
@@ -25,7 +23,7 @@ void main() {
       ),
       isTrue,
     );
-    expect(selection.selectedKeys, {'b'});
+    expect(selection.state.selectedKeys, {'b'});
 
     // Shift 到 d：区间 [b,d]。
     expect(
@@ -37,7 +35,7 @@ void main() {
       ),
       isTrue,
     );
-    expect(selection.selectedKeys, {'b', 'c', 'd'});
+    expect(selection.state.selectedKeys, {'b', 'c', 'd'});
 
     // 连续 Shift 到 c：锚点仍是 b，区间缩回 [b,c]。
     expect(
@@ -49,7 +47,7 @@ void main() {
       ),
       isTrue,
     );
-    expect(selection.selectedKeys, {'b', 'c'});
+    expect(selection.state.selectedKeys, {'b', 'c'});
 
     // 普通点击移动锚点到 e（返回 false = 未接管）；Shift 到 b → [b,e]。
     expect(
@@ -70,7 +68,7 @@ void main() {
       ),
       isTrue,
     );
-    expect(selection.selectedKeys, {'b', 'c', 'd', 'e'});
+    expect(selection.state.selectedKeys, {'b', 'c', 'd', 'e'});
   });
 
   test('Shift 反向区间与锚点已不在可见行时退化为单选', () {
@@ -84,7 +82,7 @@ void main() {
       ),
       isTrue,
     );
-    expect(selection.selectedKeys, {'d'});
+    expect(selection.state.selectedKeys, {'d'});
 
     // 锚点 d，Shift 到 b：反向区间 [b,d]。
     expect(
@@ -96,7 +94,7 @@ void main() {
       ),
       isTrue,
     );
-    expect(selection.selectedKeys, {'b', 'c', 'd'});
+    expect(selection.state.selectedKeys, {'b', 'c', 'd'});
 
     // 锚点 d 已不在可见行（列表变短到 a/b）：退化为单选当前行。
     expect(
@@ -108,36 +106,36 @@ void main() {
       ),
       isTrue,
     );
-    expect(selection.selectedKeys, {'a'});
+    expect(selection.state.selectedKeys, {'a'});
   });
 
   test('范围选择：锚点到目标的闭区间，锚点随终点移动', () {
     selection.select('b');
-    expect(selection.anchorKey, 'b');
+    expect(selection.state.anchorKey, 'b');
 
     selection.selectRangeTo('d', visible());
-    expect(selection.selectedKeys, {'b', 'c', 'd'});
-    expect(selection.anchorKey, 'd');
+    expect(selection.state.selectedKeys, {'b', 'c', 'd'});
+    expect(selection.state.anchorKey, 'd');
 
     // 连续范围选择从新锚点起算，并替换上一段区间。
     selection.selectRangeTo('a', visible());
-    expect(selection.selectedKeys, {'a', 'b', 'c', 'd'});
-    expect(selection.anchorKey, 'a');
+    expect(selection.state.selectedKeys, {'a', 'b', 'c', 'd'});
+    expect(selection.state.anchorKey, 'a');
   });
 
   test('范围选择：锚点 / 目标不在可见行时保持原选择', () {
     selection.select('b');
     selection.selectRangeTo('c', visible(['a', 'c']));
-    expect(selection.selectedKeys, {'b'}, reason: '锚点 b 已不可见');
-    expect(selection.anchorKey, 'b');
+    expect(selection.state.selectedKeys, {'b'}, reason: '锚点 b 已不可见');
+    expect(selection.state.anchorKey, 'b');
 
     selection.selectRangeTo('x', visible());
-    expect(selection.selectedKeys, {'b'}, reason: '目标行不存在');
-    expect(selection.anchorKey, 'b');
+    expect(selection.state.selectedKeys, {'b'}, reason: '目标行不存在');
+    expect(selection.state.anchorKey, 'b');
 
     selection.clearAnchor();
     selection.selectRangeTo('e', visible());
-    expect(selection.selectedKeys, {'b'}, reason: '没有锚点');
+    expect(selection.state.selectedKeys, {'b'}, reason: '没有锚点');
   });
 
   test('全选三态与 selectAll', () {
@@ -145,8 +143,8 @@ void main() {
     selection.select('a');
     expect(selection.allSelectedFor(visible()), isNull);
     selection.selectAll(visible());
-    expect(selection.selectedKeys, {'a', 'b', 'c', 'd', 'e'});
-    expect(selection.selectedCount, 5);
+    expect(selection.state.selectedKeys, {'a', 'b', 'c', 'd', 'e'});
+    expect(selection.state.selectedCount, 5);
     expect(selection.allSelectedFor(visible()), isTrue);
     expect(selection.allSelectedFor(const <String>[]), isFalse);
   });
@@ -174,7 +172,7 @@ void main() {
 
     // 历史前插新行：a / b 仍指向原来那两行，新行不会被误选。
     selection.retainKeys(['new', 'a', 'b']);
-    expect(selection.selectedKeys, {'a', 'b'});
+    expect(selection.state.selectedKeys, {'a', 'b'});
     expect(selection.selectedFrom(['new', 'a', 'b'], keyOf: (row) => row), [
       'a',
       'b',
@@ -182,8 +180,8 @@ void main() {
 
     // 删除 b：选择集收缩到仍存在的行。
     selection.retainKeys(['new', 'a']);
-    expect(selection.selectedKeys, {'a'});
-    expect(selection.selectedCount, 1);
+    expect(selection.state.selectedKeys, {'a'});
+    expect(selection.state.selectedCount, 1);
   });
 
   test('clear 清空选择与锚点；clearAnchor 只失效锚点', () {
@@ -203,11 +201,11 @@ void main() {
       ctrl: false,
       shift: true,
     );
-    expect(selection.selectedKeys, {'a'});
+    expect(selection.state.selectedKeys, {'a'});
 
     selection.clear();
-    expect(selection.isSelecting, isFalse);
-    expect(selection.selectedCount, 0);
+    expect(selection.state.isSelecting, isFalse);
+    expect(selection.state.selectedCount, 0);
     // 锚点也清了：Shift 从当前行起算。
     selection.applyModifiers(
       'c',
@@ -215,6 +213,6 @@ void main() {
       ctrl: false,
       shift: true,
     );
-    expect(selection.selectedKeys, {'c'});
+    expect(selection.state.selectedKeys, {'c'});
   });
 }

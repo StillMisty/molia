@@ -250,7 +250,7 @@ void main() {
       expect(session.selectedRows(view.view).map((row) => row.key), [
         'h:wy:b',
       ], reason: '选择跟行身份，不跟下标');
-      expect(session.selection.selectedCount, 1);
+      expect(session.selection.state.selectedCount, 1);
     });
 
     test('范围选择：长按起点落锚，目标行选中闭区间', () async {
@@ -273,7 +273,7 @@ void main() {
         'wy:c',
         'wy:d',
       ]);
-      expect(session.selection.anchorKey, 'wy:d');
+      expect(session.selection.state.anchorKey, 'wy:d');
     });
 
     test('收藏视图不受历史写入影响：视图原样复用，选择保持', () async {
@@ -317,17 +317,17 @@ void main() {
 
       session.sync(inputFor(library));
       session.selection.selectAll(['wy:a', 'wy:b']);
-      expect(session.selection.selectedCount, 2);
+      expect(session.selection.state.selectedCount, 2);
 
       library.tracks[1] = [track('a')];
       var view = session.sync(inputFor(library));
-      expect(session.selection.selectedCount, 1);
+      expect(session.selection.state.selectedCount, 1);
       expect(session.selectedRows(view.view).single.key, 'wy:a');
 
       // 搜索过滤掉唯一选中行：视图落定时选择集为空。
       view = session.sync(inputFor(library, query: 'nothing'));
       expect(view.view.visibleCount, 0);
-      expect(session.selection.isSelecting, isFalse);
+      expect(session.selection.state.isSelecting, isFalse);
     });
 
     test('Ctrl / Shift 语义走会话，返回是否接管点播', () async {
@@ -343,14 +343,14 @@ void main() {
       final view = session.sync(inputFor(library)).view;
 
       expect(session.handleRowTap('wy:b', view, ctrl: true), isTrue);
-      expect(session.selection.selectedKeys, {'wy:b'});
+      expect(session.selection.state.selectedKeys, {'wy:b'});
 
       expect(session.handleRowTap('wy:c', view, shift: true), isTrue);
-      expect(session.selection.selectedKeys, {'wy:b', 'wy:c'});
+      expect(session.selection.state.selectedKeys, {'wy:b', 'wy:c'});
 
       // 已有多选下普通点击 = 切换，不点播。
       expect(session.handleRowTap('wy:a', view), isTrue);
-      expect(session.selection.selectedKeys, {'wy:b', 'wy:c', 'wy:a'});
+      expect(session.selection.state.selectedKeys, {'wy:b', 'wy:c', 'wy:a'});
 
       // 非选择模式普通点击 = 交给页面点播。
       session.selection.clear();
@@ -410,7 +410,7 @@ void main() {
         ctrl: false,
         shift: true,
       );
-      expect(session.selection.selectedKeys, {'b', 'c'});
+      expect(session.selection.state.selectedKeys, {'b', 'c'});
 
       session.setSort(CollectionTrackSort.artist);
       session.selection.applyModifiers(
@@ -419,7 +419,7 @@ void main() {
         ctrl: false,
         shift: true,
       );
-      expect(session.selection.selectedKeys, {'a'}, reason: '锚点已失效');
+      expect(session.selection.state.selectedKeys, {'a'}, reason: '锚点已失效');
     });
 
     test('切换合集退出搜索 / 调整顺序并清空多选', () async {
@@ -786,7 +786,7 @@ void main() {
       });
       expect(failed.isFailure, isTrue);
       expect(received, ['wy:a', 'wy:b']);
-      expect(session.selection.selectedCount, 2, reason: '写失败不能清选择');
+      expect(session.selection.state.selectedCount, 2, reason: '写失败不能清选择');
 
       final applied = await session.applySelection(
         view,
@@ -794,7 +794,7 @@ void main() {
       );
       expect(applied.isSuccess, isTrue);
       expect(applied.changed, 2);
-      expect(session.selection.isSelecting, isFalse);
+      expect(session.selection.state.isSelecting, isFalse);
     });
 
     test('空选择不触发写入', () async {

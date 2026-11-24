@@ -124,15 +124,15 @@ class _ShellBarProgress extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final duration = effectDurationOf(context, M3EMotion.short3);
-    return AnimatedBuilder(
-      animation: morph,
+    return ListenableBuilder(
+      listenable: morph.changes,
       builder: (context, _) => AnimatedOpacity(
         duration: duration,
         // 收起（进播放页）加速让位，恢复时减速落定：与顶栏文本同一节奏。
-        curve: morph.barHeaderHidden
+        curve: morph.state.barHeaderHidden
             ? M3EMotion.emphasizedAccelerate
             : M3EMotion.emphasizedDecelerate,
-        opacity: morph.barHeaderHidden ? 0 : 1,
+        opacity: morph.state.barHeaderHidden ? 0 : 1,
         child: ProgressBarSelector(
           builder: (context, position, state, child) {
             if (!state.hasTrack) {

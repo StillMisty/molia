@@ -1,6 +1,34 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show Listenable, immutable;
+
+import 'snapshot_source.dart';
+
+/// 合集多选状态的不可变快照。
+///
+/// [selectedKeys] 是只读副本；选择语义（区间 / 锚点 / 三态）在
+/// [CollectionSelection]。
+@immutable
+class CollectionSelectionState {
+  const CollectionSelectionState({
+    required this.selectedKeys,
+    required this.anchorKey,
+  });
+
+  /// 当前选中的行 key（只读副本）。
+  final Set<String> selectedKeys;
+
+  /// 当前区间锚点（Shift 点击 / 长按端点起算的行 key）。
+  final String? anchorKey;
+
+  /// 是否处于选择模式（有任一选中行）。
+  bool get isSelecting => selectedKeys.isNotEmpty;
+
+  /// 选中行数。
+  int get selectedCount => selectedKeys.length;
+
+  bool isSelected(String key) => selectedKeys.contains(key);
+}
 
 /// 合集多选状态机（收藏 / 播放历史 / 本地歌曲共用）。
 ///
@@ -19,25 +47,25 @@ import 'package:flutter/foundation.dart';
 /// - 搜索 / 排序 / 换合集等重排可见顺序的操作让锚点失效（[clearAnchor]）。
 ///
 /// 宿主只负责「何时调用」与点播分支；选择语义都在这里。
-class CollectionSelection extends ChangeNotifier {
+///
+/// 状态形态（ADR-0041「启动期状态对象：快照 + 控制器」）：可变字段只留在
+/// 内部，[state] 暴露不可变快照，[changes] 是唯一通知面。本模块在
+/// `lib/utils/`，只依赖 [SnapshotSource] 契约，不 import providers / widgets。
+class CollectionSelection implements SnapshotSource<CollectionSelectionState> {
   final Set<String> _selected = <String>{};
   String? _anchor;
+  final SnapshotSignal _changes = SnapshotSignal();
 
-  /// 当前选中的行 key（只读视图）。
-  Set<String> get selectedKeys => Set<String>.unmodifiable(_selected);
+  @override
+  CollectionSelectionState get state => CollectionSelectionState(
+    selectedKeys: Set<String>.unmodifiable(_selected),
+    anchorKey: _anchor,
+  );
 
-  /// 当前区间锚点（Shift 点击 / 长按端点起算的行 key）。
-  ///
-  /// 锚点只在可见行集合里有效：搜索 / 排序 / 换合集后由宿主清掉
-  /// （[clearAnchor]），下一次 Shift 或长按端点从当前行重新起算。
-  String? get anchorKey => _anchor;
+  @override
+  Listenable get changes => _changes;
 
-  /// 是否处于选择模式（有任一选中行）。
-  bool get isSelecting => _selected.isNotEmpty;
-
-  /// 选中行数。
-  int get selectedCount => _selected.length;
-
+  /// 某一行是否选中（行渲染热路径，直接读内部集合）。
   bool isSelected(String key) => _selected.contains(key);
 
   /// 全选三态：可见行全选 true / 可见行都没选 false / 部分选中 null。
@@ -55,13 +83,13 @@ class CollectionSelection extends ChangeNotifier {
   /// 选中 [key] 并把锚点移到这里（长按进入多选 = 范围选择的起点）。
   void select(String key) {
     _anchor = key;
-    if (_selected.add(key)) notifyListeners();
+    if (_selected.add(key)) _changes.notify();
   }
 
   /// 切换 [key] 的选中态。
   void toggle(String key) {
     if (!_selected.remove(key)) _selected.add(key);
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 全选 [visibleKeys]。
@@ -70,7 +98,7 @@ class CollectionSelection extends ChangeNotifier {
     for (final key in visibleKeys) {
       changed = _selected.add(key) || changed;
     }
-    if (changed) notifyListeners();
+    if (changed) _changes.notify();
   }
 
   /// 桌面修饰键手势：返回 true = 已被修饰键语义接管（调用方不再处理点击）。
@@ -98,7 +126,7 @@ class CollectionSelection extends ChangeNotifier {
       for (var i = start; i <= end; i++) {
         _selected.add(visibleKeys[i]);
       }
-      notifyListeners();
+      _changes.notify();
       return true;
     }
     _anchor = key;
@@ -129,7 +157,7 @@ class CollectionSelection extends ChangeNotifier {
       _selected.add(visibleKeys[i]);
     }
     _anchor = key;
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 按可见顺序提取选中行；不可见的选中 key 忽略。
@@ -165,7 +193,7 @@ class CollectionSelection extends ChangeNotifier {
     if (_selected.isEmpty && _anchor == null) return;
     _selected.clear();
     _anchor = null;
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 只让锚点失效（可见顺序变化但选择保留）。

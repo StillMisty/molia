@@ -139,8 +139,8 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
     _listController.addListener(_vm.saveFromScroll);
     _historyScrollController.addListener(_vm.saveFromScroll);
     _localSongsScrollController.addListener(_vm.saveFromScroll);
-    widget.reselect?.addListener(_handleReselect);
-    widget.locatePlaying?.addListener(_handleLocatePlaying);
+    widget.reselect?.changes.addListener(_handleReselect);
+    widget.locatePlaying?.changes.addListener(_handleLocatePlaying);
   }
 
   @override
@@ -161,12 +161,12 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
   void didUpdateWidget(covariant FavoritesPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.reselect != widget.reselect) {
-      oldWidget.reselect?.removeListener(_handleReselect);
-      widget.reselect?.addListener(_handleReselect);
+      oldWidget.reselect?.changes.removeListener(_handleReselect);
+      widget.reselect?.changes.addListener(_handleReselect);
     }
     if (oldWidget.locatePlaying != widget.locatePlaying) {
-      oldWidget.locatePlaying?.removeListener(_handleLocatePlaying);
-      widget.locatePlaying?.addListener(_handleLocatePlaying);
+      oldWidget.locatePlaying?.changes.removeListener(_handleLocatePlaying);
+      widget.locatePlaying?.changes.addListener(_handleLocatePlaying);
     }
   }
 
@@ -177,8 +177,8 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
     EscapeClaims.remove(_escapeClaim);
     BackClaims.remove(_backClaim);
     HardwareKeyboard.instance.removeHandler(_keyHandler);
-    widget.reselect?.removeListener(_handleReselect);
-    widget.locatePlaying?.removeListener(_handleLocatePlaying);
+    widget.reselect?.changes.removeListener(_handleReselect);
+    widget.locatePlaying?.changes.removeListener(_handleLocatePlaying);
     _searchController.dispose();
     _searchFocus.dispose();
     _vm.dispose();

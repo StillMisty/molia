@@ -380,7 +380,6 @@ void main() {
       final searchSources = _searchSources();
       addTearDown(searchSources.dispose);
       final reselect = ShellReselectSignal();
-      addTearDown(reselect.dispose);
       await pump(
         tester,
         900,
@@ -401,7 +400,6 @@ void main() {
 
     testWidgets('重复点击资料库：没有搜索 tab 时保持原语义（不聚焦）', (tester) async {
       final reselect = ShellReselectSignal();
-      addTearDown(reselect.dispose);
       await pump(tester, 900, reselect: reselect);
 
       // 当前渠道不可搜索：搜索 tab 隐藏，仍停在浏览 tab。

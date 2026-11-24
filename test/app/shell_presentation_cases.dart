@@ -24,16 +24,16 @@ void main() {
   group('目的地解析', () {
     test('选中项被隐藏时回退首个可见项，恢复后回到原选中项', () {
       final presentation = build(selected: favorites);
-      expect(presentation.effectiveDestination, favorites);
-      expect(presentation.selectedIndex, 1);
+      expect(presentation.state.effectiveDestination, favorites);
+      expect(presentation.state.selectedIndex, 1);
 
       // 隐藏收藏（同步应用远端导航设置）：有效项回退到首个可见项，
       // 存储的选中项不能被改写——否则恢复后回不来。
       expect(presentation.syncVisibility([nowPlaying, library]), isTrue);
-      expect(presentation.effectiveDestination, nowPlaying);
-      expect(presentation.selectedDestination, favorites);
-      expect(presentation.previousDestination, favorites);
-      expect(presentation.selectedIndex, 0);
+      expect(presentation.state.effectiveDestination, nowPlaying);
+      expect(presentation.state.selectedDestination, favorites);
+      expect(presentation.state.previousDestination, favorites);
+      expect(presentation.state.selectedIndex, 0);
 
       // 同一份可见集合重复同步不算变化（不触发壳层的 morph 对齐）。
       expect(presentation.syncVisibility([nowPlaying, library]), isFalse);
@@ -43,38 +43,33 @@ void main() {
         presentation.syncVisibility([nowPlaying, favorites, library]),
         isTrue,
       );
-      expect(presentation.effectiveDestination, favorites);
-      expect(presentation.selectedIndex, 1);
-
-      presentation.dispose();
+      expect(presentation.state.effectiveDestination, favorites);
+      expect(presentation.state.selectedIndex, 1);
     });
 
     test('切页只接受可见且不同的目的地，并记录上一页', () {
       final presentation = build(selected: favorites);
       expect(presentation.select(library), isTrue);
-      expect(presentation.effectiveDestination, library);
-      expect(presentation.previousDestination, favorites);
+      expect(presentation.state.effectiveDestination, library);
+      expect(presentation.state.previousDestination, favorites);
 
       // 重复选中当前页不是切页（壳层据此走重复点击 / 展开语义）。
       expect(presentation.select(library), isFalse);
-      expect(presentation.previousDestination, favorites);
+      expect(presentation.state.previousDestination, favorites);
 
       presentation.syncVisibility([nowPlaying, favorites]);
-      expect(presentation.effectiveDestination, nowPlaying);
+      expect(presentation.state.effectiveDestination, nowPlaying);
       // 隐藏目的地不参与导航，也不能改写上一页。
       expect(presentation.select(library), isFalse);
-      expect(presentation.previousDestination, favorites);
-      expect(presentation.isVisible(library), isFalse);
-
-      presentation.dispose();
+      expect(presentation.state.previousDestination, favorites);
+      expect(presentation.state.isVisible(library), isFalse);
     });
 
     test('空可见集合按存储选中项兜底', () {
       final presentation = build(selected: favorites);
       presentation.syncVisibility(const []);
-      expect(presentation.effectiveDestination, favorites);
-      expect(presentation.selectedIndex, -1);
-      presentation.dispose();
+      expect(presentation.state.effectiveDestination, favorites);
+      expect(presentation.state.selectedIndex, -1);
     });
   });
 
@@ -154,11 +149,10 @@ void main() {
           ..setMiniCapable(testCase.miniCapable)
           ..setExpanded(testCase.expanded);
         expect(
-          presentation.showsPlayerBar,
+          presentation.state.showsPlayerBar,
           testCase.showsPlayerBar,
           reason: testCase.name,
         );
-        presentation.dispose();
       }
     });
   });
@@ -167,16 +161,21 @@ void main() {
     test('播放页 + 可收起 + 无飞行才接受请求', () {
       final presentation = build(selected: nowPlaying);
       presentation.setMiniCapable(true);
-      expect(presentation.expansionVerdict, ShellExpansionVerdict.accepted);
+      expect(
+        presentation.state.expansionVerdict,
+        ShellExpansionVerdict.accepted,
+      );
 
       presentation.setFlightInProgress(true);
       expect(
-        presentation.expansionVerdict,
+        presentation.state.expansionVerdict,
         ShellExpansionVerdict.flightInProgress,
       );
       presentation.setFlightInProgress(false);
-      expect(presentation.expansionVerdict, ShellExpansionVerdict.accepted);
-      presentation.dispose();
+      expect(
+        presentation.state.expansionVerdict,
+        ShellExpansionVerdict.accepted,
+      );
     });
 
     test('不在播放页优先于布局能力与飞行', () {
@@ -185,25 +184,23 @@ void main() {
         ..setMiniCapable(true)
         ..setFlightInProgress(true);
       expect(
-        presentation.expansionVerdict,
+        presentation.state.expansionVerdict,
         ShellExpansionVerdict.notOnPlayerPage,
       );
-      presentation.dispose();
     });
 
     test('没有收起态时拒绝（桌面 / 宽版式）', () {
       final presentation = build(selected: nowPlaying);
       expect(
-        presentation.expansionVerdict,
+        presentation.state.expansionVerdict,
         ShellExpansionVerdict.layoutCannotCollapse,
       );
-      presentation.dispose();
     });
 
     test('只有展开态 / 布局能力变化才通知，飞行守卫不触发重建', () {
       final presentation = build(selected: nowPlaying);
       var notifications = 0;
-      presentation.addListener(() => notifications++);
+      presentation.changes.addListener(() => notifications++);
 
       presentation.setExpanded(true);
       presentation.setExpanded(true);
@@ -213,7 +210,6 @@ void main() {
       presentation.setFlightInProgress(true);
       presentation.setFlightInProgress(false);
       expect(notifications, 2, reason: '飞行守卫不参与渲染，不应 setState');
-      presentation.dispose();
     });
   });
 
@@ -224,32 +220,28 @@ void main() {
       normal
         ..setMiniCapable(true)
         ..setExpanded(true);
-      expect(normal.interceptsBack, isFalse);
+      expect(normal.state.interceptsBack, isFalse);
       expect(normal.handleBack(pageClaimsBack: false), ShellBackIntent.exit);
 
       // 其它一级页即使残留展开态（异常顺序）也不拦：平级页返回即退出。
       final otherPage = build(selected: favorites);
       otherPage.setExpanded(true);
-      expect(otherPage.interceptsBack, isFalse);
+      expect(otherPage.state.interceptsBack, isFalse);
       expect(otherPage.handleBack(pageClaimsBack: false), ShellBackIntent.exit);
 
       // 桌面 / 宽版式没有歌词整页状态：残留的未展开态不能吞掉返回。
       final noCollapse = build(selected: nowPlaying);
-      expect(noCollapse.interceptsBack, isFalse);
+      expect(noCollapse.state.interceptsBack, isFalse);
       expect(
         noCollapse.handleBack(pageClaimsBack: false),
         ShellBackIntent.exit,
       );
-
-      noCollapse.dispose();
-      otherPage.dispose();
-      normal.dispose();
     });
 
     test('歌词整页先恢复完整播放页，页面级占用优先', () {
       final presentation = build(selected: nowPlaying);
       presentation.setMiniCapable(true);
-      expect(presentation.interceptsBack, isTrue);
+      expect(presentation.state.interceptsBack, isTrue);
       expect(
         presentation.handleBack(pageClaimsBack: false),
         ShellBackIntent.restorePlayer,
@@ -260,7 +252,6 @@ void main() {
         presentation.handleBack(pageClaimsBack: true),
         ShellBackIntent.exit,
       );
-      presentation.dispose();
     });
   });
 

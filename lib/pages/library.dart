@@ -80,20 +80,22 @@ class _LibraryState extends ConsumerState<Library> {
   @override
   void initState() {
     super.initState();
-    widget.reselect?.addListener(_handleReselect);
-    widget.showSearchRequest?.addListener(_handleShowSearchRequest);
+    widget.reselect?.changes.addListener(_handleReselect);
+    widget.showSearchRequest?.changes.addListener(_handleShowSearchRequest);
   }
 
   @override
   void didUpdateWidget(covariant Library oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.reselect != widget.reselect) {
-      oldWidget.reselect?.removeListener(_handleReselect);
-      widget.reselect?.addListener(_handleReselect);
+      oldWidget.reselect?.changes.removeListener(_handleReselect);
+      widget.reselect?.changes.addListener(_handleReselect);
     }
     if (oldWidget.showSearchRequest != widget.showSearchRequest) {
-      oldWidget.showSearchRequest?.removeListener(_handleShowSearchRequest);
-      widget.showSearchRequest?.addListener(_handleShowSearchRequest);
+      oldWidget.showSearchRequest?.changes.removeListener(
+        _handleShowSearchRequest,
+      );
+      widget.showSearchRequest?.changes.addListener(_handleShowSearchRequest);
     }
   }
 
@@ -107,8 +109,8 @@ class _LibraryState extends ConsumerState<Library> {
 
   @override
   void dispose() {
-    widget.reselect?.removeListener(_handleReselect);
-    widget.showSearchRequest?.removeListener(_handleShowSearchRequest);
+    widget.reselect?.changes.removeListener(_handleReselect);
+    widget.showSearchRequest?.changes.removeListener(_handleShowSearchRequest);
     _searchResultsController.dispose();
     _leaderboardsController.dispose();
     _playlistsController.dispose();

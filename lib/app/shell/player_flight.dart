@@ -32,7 +32,8 @@ extension _ShellPlayerFlight on _MyAppState {
     _morph.setPageDeckReveal(0);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_presentation.effectiveDestination != ShellDestination.nowPlaying) {
+      if (_presentation.state.effectiveDestination !=
+          ShellDestination.nowPlaying) {
         // 一帧之内又离开了播放页：这次进入被撤销，两端状态按「不在播放页」
         // 对齐（两端真身都可见、侧槽落位）。
         _alignMorphEnds(onPlayerPage: false);
@@ -74,7 +75,8 @@ extension _ShellPlayerFlight on _MyAppState {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (destinationChanged &&
-          _presentation.effectiveDestination == ShellDestination.nowPlaying) {
+          _presentation.state.effectiveDestination ==
+              ShellDestination.nowPlaying) {
         // 一帧之内又回到播放页：这次离开被撤销，状态按「在播放页」对齐
         // （顶栏封面仍收起，与启动就落在播放页时同一口径）。
         _alignMorphEnds(onPlayerPage: true);

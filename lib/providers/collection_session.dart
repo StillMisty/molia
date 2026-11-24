@@ -374,7 +374,7 @@ class CollectionSession implements SnapshotSource<CollectionSessionState> {
          loadCachedAudioTrackIds:
              loadCachedAudioTrackIds ?? _noCachedAudioTracks,
        ) {
-    _selection.addListener(_forwardChange);
+    _selection.changes.addListener(_forwardChange);
     _localSongs.changes.addListener(_forwardChange);
   }
 
@@ -426,8 +426,8 @@ class CollectionSession implements SnapshotSource<CollectionSessionState> {
   CollectionSelection get selection => _selection;
 
   int get selectedId => _selectedId;
-  bool get selecting => _selection.isSelecting;
-  int get selectedCount => _selection.selectedCount;
+  bool get selecting => _selection.state.isSelecting;
+  int get selectedCount => _selection.state.selectedCount;
   bool get searching => _searching;
   bool get reordering => _reordering;
   CollectionTrackSort get sort => _sort;
@@ -436,14 +436,14 @@ class CollectionSession implements SnapshotSource<CollectionSessionState> {
   @override
   CollectionSessionState get state => CollectionSessionState(
     selectedId: _selectedId,
-    selecting: _selection.isSelecting,
-    selectedCount: _selection.selectedCount,
+    selecting: _selection.state.isSelecting,
+    selectedCount: _selection.state.selectedCount,
     searching: _searching,
     reordering: _reordering,
     sort: _sort,
     collectionOrder: List.unmodifiable(_collectionOrder),
     localSongsCount: _localSongs.count,
-    selectionAnchorKey: _selection.anchorKey,
+    selectionAnchorKey: _selection.state.anchorKey,
   );
 
   @override
@@ -464,7 +464,7 @@ class CollectionSession implements SnapshotSource<CollectionSessionState> {
       .selectRangeTo(key, [for (final row in view.visibleRows) row.key]);
 
   /// 当前范围锚点；长按第二段手势只在有锚点时解释为区间。
-  String? get selectionAnchorKey => _selection.anchorKey;
+  String? get selectionAnchorKey => _selection.state.anchorKey;
 
   /// 某一行是否选中（行渲染读取，生产代码不直接碰选择状态机）。
   bool isSelected(String key) => _selection.isSelected(key);
@@ -770,7 +770,7 @@ class CollectionSession implements SnapshotSource<CollectionSessionState> {
     )) {
       return true;
     }
-    if (_selection.isSelecting) {
+    if (_selection.state.isSelecting) {
       _selection.toggle(key);
       return true;
     }
@@ -894,9 +894,8 @@ class CollectionSession implements SnapshotSource<CollectionSessionState> {
 
   void dispose() {
     _disposed = true;
-    _selection.removeListener(_forwardChange);
+    _selection.changes.removeListener(_forwardChange);
     _localSongs.changes.removeListener(_forwardChange);
-    _selection.dispose();
     _localSongs.dispose();
   }
 }
