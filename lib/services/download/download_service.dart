@@ -138,7 +138,7 @@ class DownloadService extends DownloadManager
          settings: settings,
          clock: clock,
        ) {
-    _recordStore.records.addListener(_forwardRecords);
+    _recordStore.records.changes.addListener(_forwardRecords);
   }
 
   final CatalogService _catalog;
@@ -1544,7 +1544,7 @@ class DownloadService extends DownloadManager
     }
     _tokens.clear();
     _queue.dispose();
-    _recordStore.records.removeListener(_forwardRecords);
+    _recordStore.records.changes.removeListener(_forwardRecords);
     _recordStore.records.dispose();
     super.dispose();
   }

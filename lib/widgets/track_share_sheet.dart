@@ -50,7 +50,7 @@ class _TrackShareSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final notifications = ref.read(notificationServiceProvider);
-    final records = ref.read(downloadRecordsProvider);
+    final records = ref.read(downloadRecordsControllerProvider);
     final requests = ref.read(downloadRequestsProvider);
     final pageUrl = track.platformPageUrl;
     final record = records.recordForTrack(track);

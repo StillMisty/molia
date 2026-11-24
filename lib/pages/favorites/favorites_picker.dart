@@ -124,7 +124,7 @@ Future<CollectionPickerOutcome?> openFavoritesCollectionPicker({
 }) {
   final library = ref.read(libraryProvider);
   final provider = ref.read(libraryControllerProvider);
-  final DownloadRecords? records = ref.read(downloadRecordsProvider);
+  final DownloadRecords? records = ref.read(downloadRecordsControllerProvider);
   final LocalLibraryState localLibrary = ref.read(localLibraryProvider);
   return showFavoritesCollectionPicker(
     context: context,

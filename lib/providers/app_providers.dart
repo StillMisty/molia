@@ -315,17 +315,27 @@ final maybeAudioFocusSettingsProvider =
     );
 final audioFocusSettingsControllerProvider =
     maybeSnapshotController<AudioFocusSettings>();
+
+/// 下载记录实例：未登记（设置页 / 单页预览）时给一个「不支持」的空实例，
+/// 入口按隐藏处理；回退实例由容器持有并在销毁时释放。
+final _downloadRecordsSourceProvider = Provider<DownloadRecords>((ref) {
+  final registered = ref.read(appRuntimeProvider).maybe<DownloadRecords>();
+  if (registered != null) return registered;
+  final fallback = DownloadRecords(initialized: true, supported: false);
+  ref.onDispose(fallback.dispose);
+  return fallback;
+});
 final downloadRecordsProvider =
     NotifierProvider<
-      LegacyListenableNotifier<DownloadRecords>,
-      DownloadRecords
+      SnapshotNotifier<DownloadRecords, DownloadRecordsState>,
+      DownloadRecordsState
     >(
-      () => LegacyListenableNotifier(
-        (ref) =>
-            ref.read(appRuntimeProvider).maybe<DownloadRecords>() ??
-            DownloadRecords(initialized: true, supported: false),
-      ),
+      () =>
+          SnapshotNotifier((ref) => ref.watch(_downloadRecordsSourceProvider)),
     );
+final downloadRecordsControllerProvider = Provider<DownloadRecords>(
+  (ref) => ref.watch(_downloadRecordsSourceProvider),
+);
 final localCacheIndexProvider = Provider<LocalCacheIndexStore?>(
   (ref) => ref.read(appRuntimeProvider).maybe<LocalCacheIndexStore>(),
 );
@@ -509,7 +519,7 @@ final downloadRequestsProvider =
         if (downloads == null) return null;
         return DownloadRequests(
           downloads: downloads,
-          records: ref.read(downloadRecordsProvider),
+          records: ref.read(downloadRecordsControllerProvider),
         );
       }),
     );
@@ -556,6 +566,6 @@ final trackLocalDataServiceProvider = Provider<TrackLocalDataService?>((ref) {
     cacheService: ref.read(cacheServiceProvider),
     artworkCache: ArtworkCache.instance,
     catalogService: catalog,
-    downloadRecords: ref.read(downloadRecordsProvider),
+    downloadRecords: ref.read(downloadRecordsControllerProvider),
   );
 });

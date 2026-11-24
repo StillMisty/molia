@@ -50,7 +50,7 @@ class TrackInfoController extends _$TrackInfoController {
     _localData = TrackLocalDataController(
       service: _localDataService,
       cacheService: ref.read(cacheServiceProvider),
-      downloadRecords: ref.read(downloadRecordsProvider),
+      downloadRecords: ref.read(downloadRecordsControllerProvider),
     );
     _dataSaver?.addListener(_syncAvailability);
     _playback.changes.addListener(_syncTrack);

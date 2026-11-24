@@ -148,7 +148,7 @@ class DownloadRequests extends ChangeNotifier {
   DownloadRequests({required this._downloads, required this._records}) {
     _downloads.addListener(_forward);
     _downloads.taskChanges.addListener(_forward);
-    _records.addListener(_forward);
+    _records.changes.addListener(_forward);
   }
 
   final DownloadManager _downloads;
@@ -294,7 +294,7 @@ class DownloadRequests extends ChangeNotifier {
   void dispose() {
     _downloads.removeListener(_forward);
     _downloads.taskChanges.removeListener(_forward);
-    _records.removeListener(_forward);
+    _records.changes.removeListener(_forward);
     super.dispose();
   }
 }

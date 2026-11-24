@@ -11,6 +11,37 @@ import 'package:flutter/foundation.dart';
 import '../../domain/models/download.dart';
 import '../../data/local_identity.dart';
 import '../../domain/models/track.dart';
+import '../../providers/snapshot_source.dart';
+
+/// 下载记录对 UI 暴露的不可变快照。
+///
+/// 只放低频数据：整表记录、版本戳与能力位。查询单条记录（`recordFor*`）需要
+/// 记录表本身，走 `DownloadRecords` 实例（`downloadRecordsControllerProvider`）；
+/// 进度属于 `DownloadTask`，永远不会进入本快照。
+@immutable
+class DownloadRecordsState {
+  const DownloadRecordsState({
+    required this.downloads,
+    required this.revision,
+    required this.supported,
+    required this.initialized,
+  });
+
+  /// 全部下载（下载时间倒序，不可变列表）。
+  final List<DownloadedTrack> downloads;
+
+  /// 记录 / 初始化 / 能力位变化计数。
+  final int revision;
+
+  /// 下载目录是否可用。
+  final bool supported;
+
+  /// 记录是否已加载。
+  final bool initialized;
+
+  /// 文件不见的条数（管理页只展示数量）。
+  int get missingCount => downloads.where((record) => record.isMissing).length;
+}
 
 /// 下载记录的只读视图 + 下载服务专用的写入面。
 ///
@@ -18,7 +49,10 @@ import '../../domain/models/track.dart';
 /// [downloads]、[recordFor] 与 [recordForTrack]；写入方法只由
 /// `DownloadService` 调用——记录必须与 drift 持久化、下载提交日志保持同一
 /// 写入顺序，页面不得自行改表。
-class DownloadRecords extends ChangeNotifier {
+///
+/// 通知面是 [changes]：UI 经 `downloadRecordsProvider` 读快照，
+/// 需要即时判定「某曲有没有记录」的调用方从控制器取实例。
+class DownloadRecords implements SnapshotSource<DownloadRecordsState> {
   DownloadRecords({
     Iterable<DownloadedTrack> records = const <DownloadedTrack>[],
     bool initialized = false,
@@ -27,6 +61,8 @@ class DownloadRecords extends ChangeNotifier {
     _initialized = initialized;
     _supported = supported;
   }
+
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 记录表（键 = 原音源曲目键 `sourceKey:songId`）。
   final Map<String, DownloadedTrack> _records;
@@ -49,6 +85,14 @@ class DownloadRecords extends ChangeNotifier {
   /// 记录 / 初始化 / 能力位变化计数：读取方只把它当作「是否需要重算」的
   /// 失效信号，不参与展示。
   int get revision => _revision;
+
+  @override
+  DownloadRecordsState get state => DownloadRecordsState(
+    downloads: downloads,
+    revision: _revision,
+    supported: _supported,
+    initialized: _initialized,
+  );
 
   /// 全部下载（下载时间倒序；缓存不可变列表，记录变更时失效）。
   List<DownloadedTrack> get downloads {
@@ -143,14 +187,14 @@ class DownloadRecords extends ChangeNotifier {
   /// revision 与通知同源：任何真实变化只递增 / 通知一次。
   void _bump() {
     _revision++;
-    if (!_disposed) notifyListeners();
+    if (!_disposed) _changes.notify();
   }
 
   @override
+  Listenable get changes => _changes;
+
+  /// 释放后晚到的写入仍记账但不通知（运行中的 service 可能晚于记录模块销毁）。
   void dispose() {
-    // 运行中的 service 可能在记录模块销毁后晚到一次写入：忽略通知，避免
-    // ChangeNotifier 的 dispose 后通知断言。
     _disposed = true;
-    super.dispose();
   }
 }

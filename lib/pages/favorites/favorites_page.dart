@@ -150,7 +150,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
       cacheService: ref.read(cacheServiceProvider),
       localDataService: ref.read(trackLocalDataServiceProvider),
       collectionRequest: ref.read(libraryCollectionRequestProvider),
-      downloadRecords: ref.read(downloadRecordsProvider),
+      downloadRecords: ref.read(downloadRecordsControllerProvider),
       cacheIndex: ref.read(localCacheIndexProvider),
     );
     // 重新可见 = 重新进入本页：刷新历史顺序（provider 通知自带重建）。
@@ -666,7 +666,9 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
                           groupsCache: _browseGroups,
                           shuffleRandom: widget.shuffleRandom,
                           actions: _actions,
-                          downloadRecords: ref.read(downloadRecordsProvider),
+                          downloadRecords: ref.read(
+                            downloadRecordsControllerProvider,
+                          ),
                           lyrics: ref.read(lyricsProvider.notifier),
                           library: library,
                           isActive: () => mounted,

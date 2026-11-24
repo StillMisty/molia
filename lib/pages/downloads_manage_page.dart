@@ -191,20 +191,15 @@ class _DownloadsManagePageState extends ConsumerState<DownloadsManagePage> {
             // 缺文件：只显示数量 + 检查入口（不恢复完整已完成列表）。
             Consumer(
               builder: (context, ref, _) {
-                final DownloadRecords? records = ref.watch(
+                final DownloadRecordsState records = ref.watch(
                   downloadRecordsProvider,
                 );
-                final missing = records == null
-                    ? 0
-                    : records.downloads
-                          .where((record) => record.isMissing)
-                          .length;
                 return SettingsNavTile(
                   key: const Key('downloadsMissingFilesItem'),
                   icon: Icons.report_gmailerrorred_rounded,
                   title: l10n.localFileCheckFiles,
-                  subtitle: l10n.missingFilesCount(missing),
-                  onTap: _busy || records == null
+                  subtitle: l10n.missingFilesCount(records.missingCount),
+                  onTap: _busy
                       ? null
                       : () => unawaited(_checkMissingFiles(l10n)),
                 );

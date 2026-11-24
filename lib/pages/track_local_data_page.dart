@@ -103,7 +103,9 @@ class _TrackLocalDataPageState extends ConsumerState<TrackLocalDataPage> {
       trackLocalDataServiceProvider,
     );
     final cacheService = ref.read(cacheServiceProvider);
-    final DownloadRecords? records = ref.read(downloadRecordsProvider);
+    final DownloadRecords? records = ref.read(
+      downloadRecordsControllerProvider,
+    );
     if (_controller == null ||
         !identical(_service, service) ||
         !identical(_cacheService, cacheService) ||

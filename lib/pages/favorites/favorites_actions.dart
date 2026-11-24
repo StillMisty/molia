@@ -572,7 +572,7 @@ CollectionIoCommands buildFavoritesIoCommands(
   SaveAs? saveAs,
 }) {
   final provider = ref.read(libraryControllerProvider);
-  final DownloadRecords? records = ref.read(downloadRecordsProvider);
+  final DownloadRecords? records = ref.read(downloadRecordsControllerProvider);
   const files = FilePickerCollectionPlaylistFiles();
   return CollectionIoCommands(
     filePicker: files,
