@@ -220,7 +220,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
     l10n: l10n,
     result: _vm.resolveLocate(
       rows: rows,
-      trackId: ref.read(playbackProvider).currentTrackId,
+      trackId: ref.read(playbackControllerProvider).snapshot.current?.id,
     ),
     controller: _scrollControllerForKey(view.collectionKey),
     surface: surface,
