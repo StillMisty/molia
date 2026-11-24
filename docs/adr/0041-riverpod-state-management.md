@@ -139,12 +139,16 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 `PlaybackPowerPolicy`（前台 / 桌面歌词 / 歌词输出）、
 `CastSessionController`（`CastSessionSnapshot`）、`DownloadRecords`（记录列表 /
 版本戳 / 能力位）、`DownloadQueue`（三组任务）、`DownloadManager`（能力位 /
-就绪态 / 任务结构）、`DownloadSettings`、`LocalLibraryService`（文件夹列表 / 扫描态）。
+就绪态 / 任务结构）、`DownloadSettings`、`LocalLibraryService`（文件夹列表 / 扫描态）、
+`LocalPlaybackService`（`LocalPlaybackServiceState`：队列 / 当前曲目 / 播放态 /
+装载态 / 模式 / 上下文 / 错误 / 时长 / 本次音质；播放进度仍走 `PlaybackEngine`
+的独立 `position` 通道，不进快照）。
 
 `SyncEngine` / `SyncControlPlane` / `FavoriteFact` / `PlaybackPowerPolicy` /
-`CastSessionController` 没有独立 Riverpod provider：它们分别是 `SyncProvider`、
-`LibraryProvider` 的内部事实或只在服务内部订阅，对外仍经所属门面；`changes`
-是唯一订阅面。进度类高频数据不进快照：`DownloadTask.progressListenable`、
+`LocalPlaybackService` / `CastSessionController` 没有独立 Riverpod provider：
+它们分别是 `SyncProvider`、`LibraryProvider` 的内部事实或只在服务内部订阅，
+对外仍经所属门面（`LocalPlaybackService` 经 `PlaybackEngine` 投影成领域快照）；
+`changes` 是唯一订阅面。进度类高频数据不进快照：`DownloadTask.progressListenable`、
 `LocalLibraryService.progressListenable`。
 
 ### 设置与偏好（第六批）
@@ -166,7 +170,7 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
   `preferences.changes` 转发自己的通知。
 
 仍未迁移：`SyncProvider`、`SourcesProvider`、`SourceManager`、
-`LocalPlaybackService`、页面级视图模型与 widget 内部会话（见后续批次）。
+页面级视图模型与 widget 内部会话（见后续批次）。
 
 ### 搜索 / 渠道 / 扇出（第三批）
 
