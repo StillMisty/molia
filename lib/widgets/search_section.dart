@@ -10,7 +10,7 @@ import 'search_results_view.dart';
 /// [SearchResultsView]。
 ///
 /// 分段 / 失败 / 空态 / 行映射由统一搜索结果面负责；本宿主只保留：
-/// - 「点击行 → 搜索结果整体进队列」的播放语义（[SearchProvider.playItem]）；
+/// - 「点击行 → 搜索结果整体进队列」的播放语义（`SearchProvider.playItem`）；
 /// - 歌手导航（歌手行与行内歌手链接 → 歌手页）。
 ///
 /// 结果行是收藏页同形的 `TrackRow`（点击播放；操作菜单收藏 / 加入列表，
@@ -29,14 +29,17 @@ class SearchSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final search = ref.read(searchProvider);
+    final search = ref.watch(searchProvider);
+    final session = ref.read(searchControllerProvider).session;
     return SearchResultsView(
       variant: SearchResultsVariant.page,
-      session: search.session,
+      session: session,
+      projection: search.projection,
+      highlightedKey: search.previewHighlightedKey,
       controller: controller,
       correction: assist?.value.correction,
       onCorrectionTap: assist?.acceptCorrection,
-      onPlay: search.playItem,
+      onPlay: ref.read(searchControllerProvider).playItem,
       onOpenArtist: (sourceKey, artistId, {fallbackName}) => showArtistPage(
         context,
         sourceKey,

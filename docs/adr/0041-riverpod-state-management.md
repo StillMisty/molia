@@ -136,6 +136,27 @@ store…）与体量较大的页面状态（`PlaybackProvider` 等）。它们�
 服务生命周期强耦合，内部快照化按模块继续推进；UI 契约已经统一为 `ref`，
 后续替换不改变页面代码。
 
+### 搜索 / 渠道 / 扇出（第三批）
+
+- `ChannelSelection` → `ChannelSelectionState`（当前 key + 可用渠道顺序），
+  `SearchProvider` → `SearchState`（关键词 / 类型 / 结果 / 投影 / 预览高亮）。
+  两者仍是组合根按启动顺序构造的实例：Riverpod 侧
+  `channelSelectionProvider` / `searchProvider` 只镜像快照，命令经
+  `channelSelectionControllerProvider` / `searchControllerProvider`。
+- `SearchSession` / `SearchPreviewSession` / `FanOutSearchSession` 不再是
+  `ChangeNotifier`：可变状态留在会话内部，`changes` 是唯一订阅面。
+  `SearchProvider` 把同一轮事件循环内的会话 / 预览通知合并成**一次**快照更新；
+  查询防抖、结果批量更新节拍与输入框（`TextEditingController`）持有高频值的
+  分工都不变。
+- `SearchAssistController` 改用 `Listenable` 信号（`changes`），宿主仍用
+  `ListenableBuilder` / `addListener` 消费。
+- 消费方改为 watch 快照 + read 控制器：`library_search_tab`、`search_section`、
+  `global_search_overlay`、`search_results_view`（后者只接收不可变投影，分页 /
+  重试命令仍经会话）。
+- 仍未快照化：`SourcesProvider`（音源管理门面，字段多、页面按对象读取，单独
+  一批）；`PlaybackProvider` / `LibraryProvider` / `AiDjProvider` 等按上文说明
+  继续推进。
+
 ## 后果
 
 - provider 图显式可测；页面级状态可自动释放；测试不再依赖 `ChangeNotifier` 生命周期。

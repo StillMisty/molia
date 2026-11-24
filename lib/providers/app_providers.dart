@@ -224,14 +224,18 @@ final libraryControllerProvider = snapshotController<LibraryProvider>();
 final maybeLibraryControllerProvider =
     maybeSnapshotController<LibraryProvider>();
 final searchProvider =
-    NotifierProvider<LegacyListenableNotifier<SearchProvider>, SearchProvider>(
-      () => LegacyListenableNotifier((ref) => _require<SearchProvider>(ref)),
-    );
+    NotifierProvider<
+      SnapshotNotifier<SearchProvider, SearchState>,
+      SearchState
+    >(() => SnapshotNotifier((ref) => _require<SearchProvider>(ref)));
+final searchControllerProvider = snapshotController<SearchProvider>();
 final channelSelectionProvider =
     NotifierProvider<
-      LegacyListenableNotifier<ChannelSelection>,
-      ChannelSelection
-    >(() => LegacyListenableNotifier((ref) => _require<ChannelSelection>(ref)));
+      SnapshotNotifier<ChannelSelection, ChannelSelectionState>,
+      ChannelSelectionState
+    >(() => SnapshotNotifier((ref) => _require<ChannelSelection>(ref)));
+final channelSelectionControllerProvider =
+    snapshotController<ChannelSelection>();
 final diagnosticsProvider =
     NotifierProvider<
       LegacyListenableNotifier<DiagnosticsProvider>,

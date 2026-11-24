@@ -14,7 +14,7 @@ class SearchInputBinding {
   SearchInputBinding({required this.session, required this.controller}) {
     _syncController();
     controller.addListener(_onControllerChanged);
-    session.addListener(_onSessionChanged);
+    session.changes.addListener(_onSessionChanged);
   }
 
   final SearchSession session;
@@ -49,6 +49,6 @@ class SearchInputBinding {
 
   void dispose() {
     controller.removeListener(_onControllerChanged);
-    session.removeListener(_onSessionChanged);
+    session.changes.removeListener(_onSessionChanged);
   }
 }

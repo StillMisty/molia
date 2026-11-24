@@ -169,13 +169,12 @@ class SourceSwapProvider extends _$SourceSwapProvider {
       _searchSession = FanOutSearchSession<Track>(sources: () => const []);
       return _snapshot();
     }
-    _searchSession = FanOutSearchSession<Track>(sources: _buildSearchSources)
-      ..addListener(_notifyListeners);
+    _searchSession = FanOutSearchSession<Track>(sources: _buildSearchSources);
+    _searchSession.changes.addListener(_notifyListeners);
     ref.onDispose(() {
       _disposed = true;
-      _searchSession
-        ..removeListener(_notifyListeners)
-        ..dispose();
+      _searchSession.changes.removeListener(_notifyListeners);
+      _searchSession.dispose();
     });
     return _snapshot();
   }

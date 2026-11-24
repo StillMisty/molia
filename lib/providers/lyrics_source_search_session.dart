@@ -173,7 +173,8 @@ class LyricsSourceSearchSession extends ChangeNotifier {
             sourceKeyOf: (result) => result.provider.name,
           ),
       ],
-    )..addListener(_notifyListeners);
+    );
+    _searchSession.changes.addListener(_notifyListeners);
   }
 
   /// 按渠道管理的顺序重排来源。
@@ -724,9 +725,8 @@ class LyricsSourceSearchSession extends ChangeNotifier {
     _disposed = true;
     _invalidatePreview();
     _previewCache.clear();
-    _searchSession
-      ..removeListener(_notifyListeners)
-      ..dispose();
+    _searchSession.changes.removeListener(_notifyListeners);
+    _searchSession.dispose();
     super.dispose();
   }
 }

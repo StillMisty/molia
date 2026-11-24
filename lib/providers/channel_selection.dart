@@ -4,6 +4,25 @@ import 'package:flutter/foundation.dart';
 
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
+import 'snapshot_source.dart';
+
+/// 渠道选择对 UI 暴露的不可变快照。
+@immutable
+class ChannelSelectionState {
+  const ChannelSelectionState({required this.key, required this.validKeys});
+
+  /// 当前渠道 key（`''` 只可能出现在没有默认 key 的测试装配里）。
+  final String key;
+
+  /// 最近一次求值的可用渠道 key（渠道管理顺序）。
+  ///
+  /// 空集合表示「有效集合还没准备好」（音源未初始化 / 脚本激活中）；
+  /// 回退规则仍由 [ChannelSelection.ensureValid] 唯一实现。
+  final List<String> validKeys;
+
+  /// 当前 key 是否仍落在可用集合内。
+  bool get isValid => key.isNotEmpty && validKeys.contains(key);
+}
 
 /// 全局当前渠道的唯一持有者（发现内容与搜索共用）。
 ///
@@ -20,7 +39,12 @@ import '../data/settings/settings_keys.dart';
 /// **不自动订阅音源状态**：资料页在渠道缺失且音源就绪后触发 [ensureValid]，
 /// 搜索侧保持失效 key、只清空结果——两种处理都留在页面。模块只提供规则，
 /// 触发时机仍留给页面。
-class ChannelSelection extends ChangeNotifier {
+///
+/// 状态形态（ADR-0041「启动期状态对象：快照 + 控制器」）：可变字段只留在
+/// 内部，[state] 暴露不可变快照，[changes] 是变更信号；Riverpod 侧由
+/// `channelSelectionProvider` 镜像快照、`channelSelectionControllerProvider`
+/// 提供命令。
+class ChannelSelection implements SnapshotSource<ChannelSelectionState> {
   ChannelSelection({
     SettingsAccess? settings,
     required List<String> Function() validKeys,
@@ -47,6 +71,7 @@ class ChannelSelection extends ChangeNotifier {
   final SettingsAccess? _settings;
   final List<String> Function() _validKeys;
   final String Function() _defaultKey;
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 显式初始值（测试 / 恢复）优先于异步读盘。
   bool _explicitInitialKey = false;
@@ -61,6 +86,13 @@ class ChannelSelection extends ChangeNotifier {
   /// 当前渠道 key（`''` 只可能出现在没有默认 key 的测试装配里）。
   String get key => _key;
 
+  @override
+  ChannelSelectionState get state =>
+      ChannelSelectionState(key: _key, validKeys: _validKeys());
+
+  @override
+  Listenable get changes => _changes;
+
   /// 切换渠道：空白或同值忽略；先通知（UI 立即响应），再异步落盘。
   ///
   /// 写失败静默：渠道偏好是可重建的 UI 状态，不值得为一次 prefs 写入失败
@@ -70,7 +102,7 @@ class ChannelSelection extends ChangeNotifier {
     if (normalized.isEmpty || normalized == _key) return;
     _generation++;
     _key = normalized;
-    notifyListeners();
+    _changes.notify();
     final settings = _settings;
     if (settings == null) return;
     unawaited(
@@ -107,7 +139,7 @@ class ChannelSelection extends ChangeNotifier {
         return;
       }
       _key = value;
-      notifyListeners();
+      _changes.notify();
       // 读回的值可能已被停用 / 删除：不在这里自动纠偏，由资料页在音源就绪后
       // 触发 [ensureValid]。
     } catch (_) {
@@ -115,11 +147,9 @@ class ChannelSelection extends ChangeNotifier {
     }
   }
 
-  @override
+  /// 释放：让在途读盘的结果在返回时失效，之后不再发变更信号。
   void dispose() {
     _disposed = true;
-    // 让在途读盘的结果在返回时失效，dispose 后不再 notifyListeners。
     _generation++;
-    super.dispose();
   }
 }

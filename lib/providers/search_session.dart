@@ -12,6 +12,7 @@ import 'channel_selection.dart';
 import 'paged_list_controller.dart';
 import 'search_results.dart';
 import 'search_row.dart';
+import 'snapshot_source.dart';
 
 /// 单源取页：来源 key + 本轮关键词 + 页码（三种搜索类型共用）。
 typedef SearchPageFetcher<T> = Future<PagedResult<T>> Function(
@@ -65,19 +66,25 @@ class SearchPreview {
 /// 遮罩预览会话：预览排序、「用户是否移动过高亮」与高亮失效回落的唯一实现。
 ///
 /// 输入是当前 kind 的结果快照与关键词，输出是渲染 / 键盘共用的 [value]。
-/// 不依赖 widget：不挂遮罩也能直接测排序与高亮移动。
-class SearchPreviewSession extends ChangeNotifier {
+/// 不依赖 widget：不挂遮罩也能直接测排序与高亮移动。变更经 [changes] 发出，
+/// [SearchSession] 与 Riverpod 快照都订阅同一条信号。
+class SearchPreviewSession {
   SearchPreviewSession({this.maxItems = defaultMaxItems});
 
   /// 遮罩就地预览的最大行数：更长的列表交给「查看全部结果」后的资料库。
   static const int defaultMaxItems = 8;
 
   final int maxItems;
+  final SnapshotSignal _changes = SnapshotSignal();
 
   SearchPreview _value = SearchPreview.empty;
   String _query = '';
   String? _highlightedKey;
   bool _userMovedHighlight = false;
+  bool _disposed = false;
+
+  /// 预览 / 高亮变更信号。
+  Listenable get changes => _changes;
 
   SearchPreview get value => _value;
 
@@ -114,7 +121,7 @@ class SearchPreviewSession extends ChangeNotifier {
     final highlightChanged = nextKey != _highlightedKey;
     _highlightedKey = nextKey;
 
-    if (previewChanged || highlightChanged) notifyListeners();
+    if (previewChanged || highlightChanged) _notify();
   }
 
   /// ↑↓ / PageUp / PageDown：跨来源分组连续移动（组标题不在条目列表里）。
@@ -128,7 +135,17 @@ class SearchPreviewSession extends ChangeNotifier {
     final key = items[next].key;
     if (key == _highlightedKey) return;
     _highlightedKey = key;
-    notifyListeners();
+    _notify();
+  }
+
+  void _notify() {
+    if (_disposed) return;
+    _changes.notify();
+  }
+
+  /// 释放：之后的更新不再发信号（宿主 / 会话仍可读最后一份快照）。
+  void dispose() {
+    _disposed = true;
   }
 
   SearchPreview _project({
@@ -239,7 +256,10 @@ class SearchProjection {
 ///
 /// 结果分页 / 失败 / 跨页去重仍由 [SearchResultsController] 持有；本类不复制
 /// 分页状态机，只负责多类型之间的调度与查询代际对齐。
-class SearchSession extends ChangeNotifier {
+///
+/// 状态形态：可变字段只留在内部，[projection] 是 UI 读取的不可变投影，
+/// [changes] 是变更信号（[SearchProvider] 把它合并成一次 Riverpod 快照更新）。
+class SearchSession implements SnapshotSource<SearchProjection> {
   SearchSession({
     required ChannelSelection selection,
     SourceRegistry? sourceRegistry,
@@ -286,7 +306,7 @@ class SearchSession extends ChangeNotifier {
 
     // 渠道变化可能来自任意入口（资料页 / Ctrl+F / 失效回退），统一在这里
     // 清空旧结果并按当前关键词重搜。
-    _selection.addListener(_onChannelChanged);
+    _selection.changes.addListener(_onChannelChanged);
     _registrySubscription = _sourceRegistry?.changes.listen(
       (_) => _onSourcesChanged(),
     );
@@ -317,6 +337,9 @@ class SearchSession extends ChangeNotifier {
 
   /// 遮罩预览与高亮；页面版式不消费，但同一份投影归会话所有。
   final SearchPreviewSession preview = SearchPreviewSession();
+
+  /// 搜索状态变更信号（关键词 / 类型 / 结果 / 渠道反应）。
+  final SnapshotSignal _changes = SnapshotSignal();
 
   Timer? _debounceTimer;
 
@@ -412,6 +435,12 @@ class SearchSession extends ChangeNotifier {
     activeSourceName: activeSource?.displayName,
     artistLinksEnabled: activeSource?.capabilities.artist ?? false,
   );
+
+  @override
+  SearchProjection get state => projection;
+
+  @override
+  Listenable get changes => _changes;
 
   /// 当前类型加载下一页；「加载中 / 已到底 / 跨页去重」守卫由
   /// [PagedListController] 持有。
@@ -569,6 +598,9 @@ class SearchSession extends ChangeNotifier {
   SearchResultsController<Object> get _current => _controls[_kind]!;
 
   /// 发布会话状态前先刷新预览：预览顺序 / 高亮与结果永远同一拍。
+  ///
+  /// 预览自身的变更也会经 `preview.changes` 单独发出（高亮移动只走那条），
+  /// 因此订阅方需要把两条信号合并成一次快照更新。
   void _notify() {
     if (_disposed) return;
     preview.update(
@@ -577,7 +609,7 @@ class SearchSession extends ChangeNotifier {
       sourceKey: activeSourceKey,
       query: _query,
     );
-    notifyListeners();
+    _changes.notify();
   }
 
   SearchResultsController<R> _buildController<R>({
@@ -614,17 +646,15 @@ class SearchSession extends ChangeNotifier {
     _notify();
   }
 
-  @override
   void dispose() {
     _disposed = true;
     _debounceTimer?.cancel();
-    _selection.removeListener(_onChannelChanged);
+    _selection.changes.removeListener(_onChannelChanged);
     _registrySubscription?.cancel();
     for (final control in _controls.values) {
       control.removeListener(_onSearchChanged);
       control.dispose();
     }
     preview.dispose();
-    super.dispose();
   }
 }
