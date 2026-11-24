@@ -99,18 +99,19 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   // 最多多付一次 5Hz 采样，换授权后歌词 / 颜色不必等下一次切换）。
   // 监听设置在 init 之后挂：设置页开关、跨设备同步应用远端配置都会通知。
   void syncDesktopLyricsActive() {
+    final state = lyricsDisplaySettings.state;
     powerPolicy.setDesktopLyricsActive(
-      LyricsChannel.isSupportedPlatform && lyricsDisplaySettings.desktopEnabled,
+      LyricsChannel.isSupportedPlatform && state.desktopEnabled,
     );
     powerPolicy.setLyricsOutputActive(
-      lyricsDisplaySettings.desktopEnabled ||
-          lyricsDisplaySettings.notificationEnabled ||
-          lyricsDisplaySettings.bluetoothEnabled,
+      state.desktopEnabled ||
+          state.notificationEnabled ||
+          state.bluetoothEnabled,
     );
   }
 
   syncDesktopLyricsActive();
-  lyricsDisplaySettings.addListener(syncDesktopLyricsActive);
+  lyricsDisplaySettings.changes.addListener(syncDesktopLyricsActive);
   final audioRouteMonitor = AudioRouteMonitor();
   unawaited(audioRouteMonitor.init());
   final lyricsDisplay = LyricsDisplayProvider(
@@ -128,7 +129,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
         supported: () => audioHandler != null,
         applyOverride: (override) =>
             audioHandler?.setLyricMetadataOverride(override),
-        a2dpConnected: () => audioRouteMonitor.connected,
+        a2dpConnected: () => audioRouteMonitor.state,
       ),
     ],
     // 平台支持媒体会话但初始化失败（initSystemMediaSession 返回 null）：

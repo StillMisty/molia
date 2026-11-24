@@ -9,7 +9,8 @@ import 'lyrics_display_settings.dart' show UnsyncedBehavior;
 /// 时间戳切行时，高亮要等唱到该行之后才开始变化。统一提前 200ms：行首时
 /// 过渡已走完大半；逐字渐染的采样间补间（慢一拍）也抵消到视听同步范围内。
 ///
-/// 只作用于应用内歌词页 / 选择页；输出侧仍用 `LyricsDisplaySettings.offsetMs`。
+/// 只作用于应用内歌词页 / 选择页；输出侧仍用
+/// `LyricsDisplaySettingsState.offsetMs`。
 /// 行号查表与 `KaraokeLyricText(lead:)` 必须引用同一常量，否则词高亮与
 /// 行高亮会在时间戳附近错开一行。
 const Duration kLyricDisplayLead = Duration(milliseconds: 200);

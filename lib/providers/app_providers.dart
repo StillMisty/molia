@@ -240,22 +240,18 @@ final scrobbleServiceProvider =
 
 final lyricsDisplayProvider =
     NotifierProvider<
-      LegacyListenableNotifier<LyricsDisplayProvider>,
-      LyricsDisplayProvider
-    >(
-      () => LegacyListenableNotifier(
-        (ref) => _require<LyricsDisplayProvider>(ref),
-      ),
-    );
+      SnapshotNotifier<LyricsDisplayProvider, LyricsDisplayState>,
+      LyricsDisplayState
+    >(() => SnapshotNotifier((ref) => _require<LyricsDisplayProvider>(ref)));
+final lyricsDisplayControllerProvider =
+    maybeSnapshotController<LyricsDisplayProvider>();
 final lyricsDisplaySettingsProvider =
     NotifierProvider<
-      LegacyListenableNotifier<LyricsDisplaySettings>,
-      LyricsDisplaySettings
-    >(
-      () => LegacyListenableNotifier(
-        (ref) => _require<LyricsDisplaySettings>(ref),
-      ),
-    );
+      SnapshotNotifier<LyricsDisplaySettings, LyricsDisplaySettingsState>,
+      LyricsDisplaySettingsState
+    >(() => SnapshotNotifier((ref) => _require<LyricsDisplaySettings>(ref)));
+final lyricsDisplaySettingsControllerProvider =
+    maybeSnapshotController<LyricsDisplaySettings>();
 
 final syncProvider =
     NotifierProvider<LegacyListenableNotifier<SyncProvider>, SyncProvider>(
@@ -359,7 +355,15 @@ Provider<T?> _maybeService<T extends Object>() =>
 
 final maybeDataSaverServiceProvider = _maybeListenable<DataSaverService>();
 final maybeSourceSwapSettingsProvider = _maybeListenable<SourceSwapSettings>();
-final maybeLyricsDisplayProvider = _maybeListenable<LyricsDisplayProvider>();
+final maybeLyricsDisplayProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<LyricsDisplayProvider, LyricsDisplayState>,
+      LyricsDisplayState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<LyricsDisplayProvider>(),
+      ),
+    );
 final maybeUpdateProvider = _maybeListenable<UpdateProvider>();
 final maybeScrobbleServiceProvider = _maybeListenable<ScrobbleService>();
 final maybeLibraryAddSettingsProvider = _maybeListenable<LibraryAddSettings>();

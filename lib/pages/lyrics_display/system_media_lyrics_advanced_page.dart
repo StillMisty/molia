@@ -20,6 +20,7 @@ class SystemMediaLyricsAdvancedPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final settings = ref.watch(lyricsDisplaySettingsProvider);
+    final controller = ref.read(lyricsDisplaySettingsControllerProvider);
     return SettingsSubPage(
       title: l10n.lyricsSystemMediaAdvancedTitle,
       children: [
@@ -31,28 +32,30 @@ class SystemMediaLyricsAdvancedPage extends ConsumerWidget {
               title: l10n.lyricsMetadataTarget,
               value: settings.notificationTarget,
               options: lyricsMetadataTargetOptions(l10n),
-              onChanged: settings.setNotificationTarget,
+              onChanged: (value) => controller?.setNotificationTarget(value),
             ),
             SettingsChoiceRow<LyricsMetadataFormat>(
               icon: Icons.format_quote_rounded,
               title: l10n.lyricsMetadataFormat,
               value: settings.notificationFormat,
               options: lyricsMetadataFormatOptions(l10n),
-              onChanged: settings.setNotificationFormat,
+              onChanged: (value) => controller?.setNotificationFormat(value),
             ),
             SettingsSwitchTile(
               icon: Icons.translate_rounded,
               title: l10n.lyricsMetadataIncludeTranslation,
               subtitle: '',
               value: settings.notificationIncludeTranslation,
-              onChanged: settings.setNotificationIncludeTranslation,
+              onChanged: (value) =>
+                  controller?.setNotificationIncludeTranslation(value),
             ),
             SettingsChoiceRow<LyricsPauseBehavior>(
               icon: Icons.pause_rounded,
               title: l10n.lyricsMetadataPauseBehavior,
               value: settings.notificationPauseBehavior,
               options: lyricsPauseBehaviorOptions(l10n),
-              onChanged: settings.setNotificationPauseBehavior,
+              onChanged: (value) =>
+                  controller?.setNotificationPauseBehavior(value),
             ),
           ],
         ),
@@ -65,21 +68,22 @@ class SystemMediaLyricsAdvancedPage extends ConsumerWidget {
               title: l10n.lyricsMetadataTarget,
               value: settings.bluetoothTarget,
               options: lyricsMetadataTargetOptions(l10n),
-              onChanged: settings.setBluetoothTarget,
+              onChanged: (value) => controller?.setBluetoothTarget(value),
             ),
             SettingsChoiceRow<LyricsMetadataFormat>(
               icon: Icons.format_quote_rounded,
               title: l10n.lyricsMetadataFormat,
               value: settings.bluetoothFormat,
               options: lyricsMetadataFormatOptions(l10n),
-              onChanged: settings.setBluetoothFormat,
+              onChanged: (value) => controller?.setBluetoothFormat(value),
             ),
             SettingsSwitchTile(
               icon: Icons.translate_rounded,
               title: l10n.lyricsMetadataIncludeTranslation,
               subtitle: '',
               value: settings.bluetoothIncludeTranslation,
-              onChanged: settings.setBluetoothIncludeTranslation,
+              onChanged: (value) =>
+                  controller?.setBluetoothIncludeTranslation(value),
             ),
             SettingsChoiceRow<int>(
               icon: Icons.timer_rounded,
@@ -90,14 +94,16 @@ class SystemMediaLyricsAdvancedPage extends ConsumerWidget {
                 (1000, l10n.lyricsBluetoothInterval1s),
                 (2000, l10n.lyricsBluetoothInterval2s),
               ],
-              onChanged: settings.setBluetoothUpdateIntervalMs,
+              onChanged: (value) =>
+                  controller?.setBluetoothUpdateIntervalMs(value),
             ),
             SettingsChoiceRow<LyricsPauseBehavior>(
               icon: Icons.pause_rounded,
               title: l10n.lyricsMetadataPauseBehavior,
               value: settings.bluetoothPauseBehavior,
               options: lyricsPauseBehaviorOptions(l10n),
-              onChanged: settings.setBluetoothPauseBehavior,
+              onChanged: (value) =>
+                  controller?.setBluetoothPauseBehavior(value),
             ),
           ],
         ),

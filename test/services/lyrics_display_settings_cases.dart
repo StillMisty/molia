@@ -18,29 +18,32 @@ void main() {
 
   test('默认值：三个输出默认全关，共享开关默认合理', () {
     final s = LyricsDisplaySettings(settings: testSettingsRegistry());
-    expect(s.desktopEnabled, isFalse);
-    expect(s.notificationEnabled, isFalse);
-    expect(s.bluetoothEnabled, isFalse);
-    expect(s.translationEnabled, isTrue);
-    expect(s.romaEnabled, isFalse);
-    expect(s.pageTranslationEnabled, isTrue);
-    expect(s.pageRomaEnabled, isFalse);
-    expect(s.offsetMs, 0);
+    expect(s.state.desktopEnabled, isFalse);
+    expect(s.state.notificationEnabled, isFalse);
+    expect(s.state.bluetoothEnabled, isFalse);
+    expect(s.state.translationEnabled, isTrue);
+    expect(s.state.romaEnabled, isFalse);
+    expect(s.state.pageTranslationEnabled, isTrue);
+    expect(s.state.pageRomaEnabled, isFalse);
+    expect(s.state.offsetMs, 0);
     // 默认只显示当前行（单行）。
-    expect(s.desktopMaxLines, 1);
-    expect(s.desktopFontSize, 22);
+    expect(s.state.desktopMaxLines, 1);
+    expect(s.state.desktopFontSize, 22);
     // 默认暂停即整窗隐藏（恢复播放再显示）。
-    expect(s.desktopHideOnPause, isTrue);
+    expect(s.state.desktopHideOnPause, isTrue);
     // 默认跟随演唱（长行横向滚动的历史行为）。
-    expect(s.desktopScrollMode, DesktopScrollMode.followSinging);
+    expect(s.state.desktopScrollMode, DesktopScrollMode.followSinging);
     // 默认直接跟随应用主题角色：当前行主色 / 其余行次要文本色 / 描边表面色。
-    expect(s.desktopPlayedColorSource, LyricColorSource.primary);
-    expect(s.desktopUnplayedColorSource, LyricColorSource.onSurfaceVariant);
-    expect(s.desktopShadowColorSource, LyricColorSource.surface);
-    expect(s.notificationTarget, LyricsMetadataTarget.artist);
-    expect(s.bluetoothTarget, LyricsMetadataTarget.artist);
-    expect(s.bluetoothOnlyWhenA2dp, isTrue);
-    expect(s.desktopControls.values.every((v) => v), isTrue);
+    expect(s.state.desktopPlayedColorSource, LyricColorSource.primary);
+    expect(
+      s.state.desktopUnplayedColorSource,
+      LyricColorSource.onSurfaceVariant,
+    );
+    expect(s.state.desktopShadowColorSource, LyricColorSource.surface);
+    expect(s.state.notificationTarget, LyricsMetadataTarget.artist);
+    expect(s.state.bluetoothTarget, LyricsMetadataTarget.artist);
+    expect(s.state.bluetoothOnlyWhenA2dp, isTrue);
+    expect(s.state.desktopControls.values.every((v) => v), isTrue);
   });
 
   test('toJson → init 往返保持全部配置', () async {
@@ -92,47 +95,50 @@ void main() {
     final restored = LyricsDisplaySettings(settings: testSettingsRegistry());
     await restored.init();
 
-    expect(restored.offsetMs, -150);
-    expect(restored.translationEnabled, isFalse);
-    expect(restored.romaEnabled, isTrue);
-    expect(restored.unsyncedBehavior, UnsyncedBehavior.firstLine);
-    expect(restored.pageTranslationEnabled, isFalse);
-    expect(restored.pageRomaEnabled, isTrue);
-    expect(restored.desktopEnabled, isTrue);
-    expect(restored.desktopFontSize, 31);
-    expect(restored.desktopOpacity, 0.5);
-    expect(restored.desktopPlayedColor, 0xFF00FF00);
-    expect(restored.desktopShadowColor, 0xFF123456);
-    expect(restored.desktopPlayedColorSource, LyricColorSource.primary);
+    expect(restored.state.offsetMs, -150);
+    expect(restored.state.translationEnabled, isFalse);
+    expect(restored.state.romaEnabled, isTrue);
+    expect(restored.state.unsyncedBehavior, UnsyncedBehavior.firstLine);
+    expect(restored.state.pageTranslationEnabled, isFalse);
+    expect(restored.state.pageRomaEnabled, isTrue);
+    expect(restored.state.desktopEnabled, isTrue);
+    expect(restored.state.desktopFontSize, 31);
+    expect(restored.state.desktopOpacity, 0.5);
+    expect(restored.state.desktopPlayedColor, 0xFF00FF00);
+    expect(restored.state.desktopShadowColor, 0xFF123456);
+    expect(restored.state.desktopPlayedColorSource, LyricColorSource.primary);
     expect(
-      restored.desktopUnplayedColorSource,
+      restored.state.desktopUnplayedColorSource,
       LyricColorSource.onSurfaceVariant,
     );
-    expect(restored.desktopShadowColorSource, LyricColorSource.tertiary);
-    expect(restored.desktopSchemeSource, SurfaceColorSource.artwork);
-    expect(restored.desktopWidthPercent, 80);
-    expect(restored.desktopMaxLines, 4);
-    expect(restored.desktopTextAlignX, DesktopTextAlignX.left);
-    expect(restored.desktopLock, isTrue);
-    expect(restored.desktopFreezeOnScreenOff, isFalse);
-    expect(restored.desktopHideOnPause, isFalse);
-    expect(restored.desktopPauseBehavior, LyricsPauseBehavior.clear);
-    expect(restored.desktopNoLyricsBehavior, DesktopNoLyricsBehavior.hide);
-    expect(restored.desktopShowToggleAnimation, isFalse);
-    expect(restored.desktopScrollMode, DesktopScrollMode.constant);
-    expect(restored.desktopControls[DesktopControlKeys.next], isFalse);
-    expect(restored.notificationEnabled, isTrue);
-    expect(restored.notificationTarget, LyricsMetadataTarget.artist);
-    expect(restored.notificationFormat, LyricsMetadataFormat.titleLyric);
-    expect(restored.notificationIncludeTranslation, isFalse);
-    expect(restored.notificationPauseBehavior, LyricsPauseBehavior.keep);
-    expect(restored.bluetoothEnabled, isTrue);
-    expect(restored.bluetoothOnlyWhenA2dp, isFalse);
-    expect(restored.bluetoothTarget, LyricsMetadataTarget.title);
-    expect(restored.bluetoothFormat, LyricsMetadataFormat.lyricTitle);
-    expect(restored.bluetoothIncludeTranslation, isTrue);
-    expect(restored.bluetoothUpdateIntervalMs, 1000);
-    expect(restored.bluetoothPauseBehavior, LyricsPauseBehavior.keep);
+    expect(restored.state.desktopShadowColorSource, LyricColorSource.tertiary);
+    expect(restored.state.desktopSchemeSource, SurfaceColorSource.artwork);
+    expect(restored.state.desktopWidthPercent, 80);
+    expect(restored.state.desktopMaxLines, 4);
+    expect(restored.state.desktopTextAlignX, DesktopTextAlignX.left);
+    expect(restored.state.desktopLock, isTrue);
+    expect(restored.state.desktopFreezeOnScreenOff, isFalse);
+    expect(restored.state.desktopHideOnPause, isFalse);
+    expect(restored.state.desktopPauseBehavior, LyricsPauseBehavior.clear);
+    expect(
+      restored.state.desktopNoLyricsBehavior,
+      DesktopNoLyricsBehavior.hide,
+    );
+    expect(restored.state.desktopShowToggleAnimation, isFalse);
+    expect(restored.state.desktopScrollMode, DesktopScrollMode.constant);
+    expect(restored.state.desktopControls[DesktopControlKeys.next], isFalse);
+    expect(restored.state.notificationEnabled, isTrue);
+    expect(restored.state.notificationTarget, LyricsMetadataTarget.artist);
+    expect(restored.state.notificationFormat, LyricsMetadataFormat.titleLyric);
+    expect(restored.state.notificationIncludeTranslation, isFalse);
+    expect(restored.state.notificationPauseBehavior, LyricsPauseBehavior.keep);
+    expect(restored.state.bluetoothEnabled, isTrue);
+    expect(restored.state.bluetoothOnlyWhenA2dp, isFalse);
+    expect(restored.state.bluetoothTarget, LyricsMetadataTarget.title);
+    expect(restored.state.bluetoothFormat, LyricsMetadataFormat.lyricTitle);
+    expect(restored.state.bluetoothIncludeTranslation, isTrue);
+    expect(restored.state.bluetoothUpdateIntervalMs, 1000);
+    expect(restored.state.bluetoothPauseBehavior, LyricsPauseBehavior.keep);
   });
 
   test('缺键 / 非法值回落默认值（版本向前兼容）', () async {
@@ -146,23 +152,32 @@ void main() {
     });
     final s = LyricsDisplaySettings(settings: testSettingsRegistry());
     await s.init();
-    expect(s.offsetMs, 100);
-    expect(s.unsyncedBehavior, LyricsDisplaySettings.defaultUnsyncedBehavior);
-    expect(s.desktopMaxLines, LyricsDisplaySettings.maxLinesRange.last);
-    expect(s.desktopEnabled, isFalse);
+    expect(s.state.offsetMs, 100);
+    expect(
+      s.state.unsyncedBehavior,
+      LyricsDisplaySettings.defaultUnsyncedBehavior,
+    );
+    expect(s.state.desktopMaxLines, LyricsDisplaySettings.maxLinesRange.last);
+    expect(s.state.desktopEnabled, isFalse);
     // 旧数据没有 page.* 键：歌词页开关回落默认。
     expect(
-      s.pageTranslationEnabled,
+      s.state.pageTranslationEnabled,
       LyricsDisplaySettings.defaultPageTranslationEnabled,
     );
-    expect(s.pageRomaEnabled, LyricsDisplaySettings.defaultPageRomaEnabled);
+    expect(
+      s.state.pageRomaEnabled,
+      LyricsDisplaySettings.defaultPageRomaEnabled,
+    );
     // 旧数据没有 desktop.hideOnPause：回落默认（暂停即整窗隐藏）。
     expect(
-      s.desktopHideOnPause,
+      s.state.desktopHideOnPause,
       LyricsDisplaySettings.defaultDesktopHideOnPause,
     );
     // 旧数据没有 desktop.scrollMode：回落默认（跟随演唱）。
-    expect(s.desktopScrollMode, LyricsDisplaySettings.defaultDesktopScrollMode);
+    expect(
+      s.state.desktopScrollMode,
+      LyricsDisplaySettings.defaultDesktopScrollMode,
+    );
   });
 
   test('歌词页开关与输出侧开关相互独立', () async {
@@ -177,28 +192,28 @@ void main() {
     });
     final s = LyricsDisplaySettings(settings: testSettingsRegistry());
     await s.init();
-    expect(s.translationEnabled, isFalse);
-    expect(s.romaEnabled, isTrue);
-    expect(s.pageTranslationEnabled, isTrue);
-    expect(s.pageRomaEnabled, isFalse);
+    expect(s.state.translationEnabled, isFalse);
+    expect(s.state.romaEnabled, isTrue);
+    expect(s.state.pageTranslationEnabled, isTrue);
+    expect(s.state.pageRomaEnabled, isFalse);
 
     await s.setPageTranslationEnabled(false);
-    expect(s.translationEnabled, isFalse);
+    expect(s.state.translationEnabled, isFalse);
     await s.setPageRomaEnabled(true);
-    expect(s.romaEnabled, isTrue);
+    expect(s.state.romaEnabled, isTrue);
   });
 
   test('范围夹取', () async {
     final s = LyricsDisplaySettings(settings: testSettingsRegistry());
     await s.setOffsetMs(9999);
-    expect(s.offsetMs, LyricsDisplaySettings.offsetRange.last);
+    expect(s.state.offsetMs, LyricsDisplaySettings.offsetRange.last);
     await s.setDesktopFontSize(1);
-    expect(s.desktopFontSize, LyricsDisplaySettings.fontSizeRange.first);
+    expect(s.state.desktopFontSize, LyricsDisplaySettings.fontSizeRange.first);
     await s.setDesktopOpacity(0.01);
-    expect(s.desktopOpacity, LyricsDisplaySettings.opacityRange.first);
+    expect(s.state.desktopOpacity, LyricsDisplaySettings.opacityRange.first);
     await s.setBluetoothUpdateIntervalMs(123);
     expect(
-      s.bluetoothUpdateIntervalMs,
+      s.state.bluetoothUpdateIntervalMs,
       LyricsDisplaySettings.defaultBluetoothUpdateIntervalMs,
     );
   });
@@ -215,7 +230,7 @@ void main() {
       await s.setDesktopWidthPercent(70, persist: false);
 
       expect(access.writes, isEmpty, reason: '防抖窗口内不落盘');
-      expect(s.offsetMs, 150);
+      expect(s.state.offsetMs, 150);
 
       await s.flushPersistence();
 

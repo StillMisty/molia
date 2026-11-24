@@ -57,7 +57,7 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
       StreamController<LyricsOutputCapability>.broadcast();
 
   StreamSubscription<LyricsChannelEvent>? _eventSub;
-  LyricsDisplaySettings? _settings;
+  LyricsDisplaySettingsState? _settings;
   LyricsOutputCapability _capability = LyricsOutputCapability.unsupported;
 
   /// 原生窗口的已知事实（只在 reconcile 内改写，且与通道调用同序）。
@@ -167,7 +167,7 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
   }
 
   @override
-  Future<void> start(LyricsDisplaySettings settings) async {
+  Future<void> start(LyricsDisplaySettingsState settings) async {
     _settings = settings;
     if (!_supported || _stopped) return;
     // 设置 / 主题变化都可能伴随权限变化（例如刚从系统设置页返回）：
@@ -176,7 +176,7 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
   }
 
   /// 当前是否应显示悬浮窗：配置开启 + 权限就绪 + 不在「暂停隐藏」态。
-  bool _canShow(LyricsDisplaySettings s) =>
+  bool _canShow(LyricsDisplaySettingsState s) =>
       s.desktopEnabled &&
       _capability == LyricsOutputCapability.ready &&
       !(s.desktopHideOnPause && !_playing);
@@ -293,7 +293,7 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
   }
 
   /// 当前投送是否应清空内容（而不是显示一行文本）。
-  bool _isBlank(LyricsPresentation p, LyricsDisplaySettings s) {
+  bool _isBlank(LyricsPresentation p, LyricsDisplaySettingsState s) {
     // 无歌词且设置为隐藏：主行清空。
     if (!p.hasLyrics) {
       return s.desktopNoLyricsBehavior == DesktopNoLyricsBehavior.hide;
@@ -312,7 +312,7 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
     if (!_capabilityChanges.isClosed) _capabilityChanges.add(next);
   }
 
-  Map<String, Object?> _configOf(LyricsDisplaySettings s) {
+  Map<String, Object?> _configOf(LyricsDisplaySettingsState s) {
     final scheme = _resolveScheme(s);
     return {
       'fontSize': s.desktopFontSize,
@@ -371,7 +371,7 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
 
   /// 「跟随主题角色」所用方案：按设置来源解析，封面缺失回退应用主题；
   /// 应用主题不可用（无宿主注入）时返回 null，颜色行只允许自定义色。
-  ColorScheme? _resolveScheme(LyricsDisplaySettings s) {
+  ColorScheme? _resolveScheme(LyricsDisplaySettingsState s) {
     final appScheme = _colorScheme?.call();
     if (appScheme == null) return null;
     return resolveSurfaceScheme(
@@ -386,7 +386,7 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
 
   Map<String, Object?> _presentationMap(
     LyricsPresentation p,
-    LyricsDisplaySettings s,
+    LyricsDisplaySettingsState s,
   ) {
     var line = p.line;
     // 无歌词回退 / 暂停回退（歌名 / 清空）下主行已不是歌词行：翻译与罗马音

@@ -176,8 +176,8 @@ void main() {
       LyricsPlaybackCommand.previous,
       LyricsPlaybackCommand.next,
     ]);
-    expect(settings.desktopLock, isTrue);
-    expect(settings.desktopEnabled, isFalse);
+    expect(settings.state.desktopLock, isTrue);
+    expect(settings.state.desktopEnabled, isFalse);
     provider.dispose();
     await output.controller.close();
   });
@@ -332,7 +332,7 @@ class _FakeOutput implements LyricsOutput {
   bool stopped = false;
 
   @override
-  Future<void> start(LyricsDisplaySettings settings) async => starts++;
+  Future<void> start(LyricsDisplaySettingsState settings) async => starts++;
 
   @override
   Future<void> apply(LyricsPresentation presentation) async =>

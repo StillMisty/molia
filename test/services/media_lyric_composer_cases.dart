@@ -56,7 +56,7 @@ void main() {
     final s = await settings(notification: true);
     final override = composer.compose(
       presentation: presentation(),
-      settings: s,
+      settings: s.state,
       a2dpConnected: false,
     );
     expect(override, isNotNull);
@@ -74,7 +74,7 @@ void main() {
     );
     final override = composer.compose(
       presentation: presentation(extended: ['翻译']),
-      settings: withTranslation,
+      settings: withTranslation.state,
       a2dpConnected: false,
     );
     expect(override!.displaySubtitle, '歌词行 / 翻译');
@@ -85,7 +85,7 @@ void main() {
     );
     final plain = composer.compose(
       presentation: presentation(extended: ['翻译']),
-      settings: withoutTranslation,
+      settings: withoutTranslation.state,
       a2dpConnected: false,
     );
     expect(plain!.displaySubtitle, '歌词行');
@@ -101,7 +101,7 @@ void main() {
       composer
           .compose(
             presentation: presentation(),
-            settings: lyricTitle,
+            settings: lyricTitle.state,
             a2dpConnected: false,
           )!
           .displaySubtitle,
@@ -117,7 +117,7 @@ void main() {
       composer
           .compose(
             presentation: presentation(),
-            settings: titleLyric,
+            settings: titleLyric.state,
             a2dpConnected: false,
           )!
           .displaySubtitle,
@@ -130,7 +130,7 @@ void main() {
     expect(
       composer.compose(
         presentation: presentation(),
-        settings: s,
+        settings: s.state,
         a2dpConnected: false,
       ),
       isNull,
@@ -139,7 +139,7 @@ void main() {
       composer
           .compose(
             presentation: presentation(),
-            settings: s,
+            settings: s.state,
             a2dpConnected: true,
           )!
           .artist,
@@ -153,7 +153,7 @@ void main() {
       composer
           .compose(
             presentation: presentation(),
-            settings: s,
+            settings: s.state,
             a2dpConnected: false,
           )!
           .artist,
@@ -172,7 +172,7 @@ void main() {
     );
     final override = composer.compose(
       presentation: presentation(),
-      settings: s,
+      settings: s.state,
       a2dpConnected: false,
     );
     expect(override!.artist, '歌词行 · 歌名');
@@ -188,7 +188,7 @@ void main() {
       composer
           .compose(
             presentation: presentation(isPlaying: false),
-            settings: keep,
+            settings: keep.state,
             a2dpConnected: false,
           )!
           .displaySubtitle,
@@ -203,7 +203,7 @@ void main() {
       composer
           .compose(
             presentation: presentation(isPlaying: false),
-            settings: showTitle,
+            settings: showTitle.state,
             a2dpConnected: false,
           )!
           .displaySubtitle,
@@ -218,7 +218,7 @@ void main() {
     expect(
       composer.compose(
         presentation: presentation(isPlaying: false),
-        settings: clear,
+        settings: clear.state,
         a2dpConnected: false,
       ),
       isNull,
@@ -230,7 +230,7 @@ void main() {
     expect(
       composer.compose(
         presentation: presentation(hasLyrics: false),
-        settings: s,
+        settings: s.state,
         a2dpConnected: false,
       ),
       isNull,
@@ -238,7 +238,7 @@ void main() {
     expect(
       composer.compose(
         presentation: presentation(line: ''),
-        settings: s,
+        settings: s.state,
         a2dpConnected: false,
       ),
       isNull,
