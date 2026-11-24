@@ -104,7 +104,9 @@ class DeckArtworkFrame {
 
   final Track? displayTrack;
   final PlaybackSnapshot snapshot;
-  final CoverSwapSession session;
+
+  /// 拍下这一帧时的切歌会话快照（渲染层不再回头摸会话）。
+  final CoverSwapSnapshot session;
 
   /// 当前布局的封面边长（侧槽尺寸 / 位移由它派生）。
   final double artDimension;

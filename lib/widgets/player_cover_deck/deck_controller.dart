@@ -104,7 +104,7 @@ class DeckController implements CoverSwapHost {
       initialDisplayTrack: initialDisplayTrack,
     );
     _coverStackAnimation = Listenable.merge([
-      _session,
+      _session.changes,
       _coverController,
       _sourceNeighborFade,
       _reconcileCorrection,
@@ -287,10 +287,10 @@ class DeckController implements CoverSwapHost {
     if (!trackChanged) {
       _visuals.refreshIdleVisuals(
         snapshot,
-        previous: _session.previous,
-        animatedTrackId: _session.animatedTrackId,
-        sessionVisible: _session.visible,
-        sessionIdle: _session.phase == CoverSwapPhase.idle,
+        previous: _session.state.previous,
+        animatedTrackId: _session.state.animatedTrackId,
+        sessionVisible: _session.state.visible,
+        sessionIdle: _session.state.phase == CoverSwapPhase.idle,
         progressAnimating: _coverController.isAnimating,
       );
     }
@@ -301,11 +301,11 @@ class DeckController implements CoverSwapHost {
 
   /// 中心封面同 id、封面 URL 变化（音源补图）：以约 250ms 交叉淡化换图。
   void syncCenterArtwork(Track? track) =>
-      _visuals.syncCenterArtwork(track, visible: _session.visible);
+      _visuals.syncCenterArtwork(track, visible: _session.state.visible);
 
   /// 播放态中心封面缩放同步：播放 → 1.0、暂停 → 0.98。
   void _syncPlayState(bool playing) {
-    if (!_session.visible) {
+    if (!_session.state.visible) {
       // 不可见：直接落位（ticker 被静音，启动动画会冻结、回来再播）。
       _playStateController.value = playing ? 1.0 : 0.0;
       return;
@@ -352,7 +352,7 @@ class DeckController implements CoverSwapHost {
   void releasePreview({double progressVelocity = 0}) {
     // 松手回弹：当前封面从下面回到中心，必须压在回退中的目标封面之上。
     _outgoingCoverOnTop = true;
-    if (!_session.visible) {
+    if (!_session.state.visible) {
       // 不可见：直接回位（ticker 被静音，弹簧会冻结在半途）。
       _coverController.value = 0;
       _session.returnCompleted();
@@ -380,8 +380,8 @@ class DeckController implements CoverSwapHost {
     // 次序不变量：这里必须读「本次迁移前」的会话身份（旧中心 / 旧滑出）。
     // 会话在 startSettle 返回后才改写 _to/_from/phase，捕获逻辑依赖该顺序，
     // 不要在调用前重置会话或移动这段读取。
-    final Track? previousCenter = _session.to;
-    final Track? previousOutgoing = _session.from;
+    final Track? previousCenter = _session.state.to;
+    final Track? previousOutgoing = _session.state.from;
     final bool targetIsOldOutgoing =
         previousOutgoing != null &&
         trackKeyOf(nextTrack) == trackKeyOf(previousOutgoing);
@@ -389,8 +389,8 @@ class DeckController implements CoverSwapHost {
     // 新中心必须从 A 的捕获视觉起，不能再用全局 p 的中途位置）。
     final bool canContinue =
         midFlight &&
-        _session.phase == CoverSwapPhase.settling &&
-        direction == _session.direction &&
+        _session.state.phase == CoverSwapPhase.settling &&
+        direction == _session.state.direction &&
         p0 < _takeoverMaxProgress &&
         previousCenter != null &&
         !targetIsOldOutgoing;
@@ -398,14 +398,14 @@ class DeckController implements CoverSwapHost {
     // p=0 起跑，但两端起点视觉来自接管瞬间，不再「落位后重播」。
     final bool canRestart =
         midFlight &&
-        _session.phase == CoverSwapPhase.settling &&
+        _session.state.phase == CoverSwapPhase.settling &&
         previousCenter != null &&
         !canContinue;
     if (canContinue) {
       _handoffs.captureContinuous(
         progress: p0,
         direction: direction,
-        sessionDirection: _session.direction,
+        sessionDirection: _session.state.direction,
         centerTrack: previousCenter,
         oldOutgoing: previousOutgoing,
         nextTrack: nextTrack,
@@ -415,7 +415,7 @@ class DeckController implements CoverSwapHost {
       _handoffs.captureRestart(
         progress: p0,
         direction: direction,
-        oldDirection: _session.direction,
+        oldDirection: _session.state.direction,
         centerTrack: previousCenter,
         oldOutgoing: previousOutgoing,
         nextTrack: nextTrack,
@@ -472,10 +472,10 @@ class DeckController implements CoverSwapHost {
     // 就是同一身份，直接从预览透明度接管，不再重放 180ms 淡入；身份不一致
     // 或不可预测（随机轮末等）时保留原有淡入兜底。
     final snapshot = snapshotOf();
-    final previewNeighbor = _session.previewSourceNeighbor;
+    final previewNeighbor = _session.state.previewSourceNeighbor;
     final actualSource = snapshot == null
         ? null
-        : (_session.direction == 1 ? snapshot.next : snapshot.previous);
+        : (_session.state.direction == 1 ? snapshot.next : snapshot.previous);
     final bool continuous =
         previewNeighbor != null &&
         actualSource != null &&
@@ -516,7 +516,10 @@ class DeckController implements CoverSwapHost {
   void adoptSteadySlots() {
     final snapshot = snapshotOf();
     if (snapshot == null) return;
-    _visuals.adoptSteadySlots(previous: _session.previous, next: snapshot.next);
+    _visuals.adoptSteadySlots(
+      previous: _session.state.previous,
+      next: snapshot.next,
+    );
   }
 
   @override
@@ -587,7 +590,7 @@ class DeckController implements CoverSwapHost {
   /// 已建立的指针路由不会自动发 cancel；不主动收尾会让 dragActive 卡住。
   void abortGestureForFlight() {
     pressEnd();
-    if (_session.dragActive) {
+    if (_session.state.dragActive) {
       _session.dragCancel();
       _resetDragTracking();
     }
@@ -631,7 +634,9 @@ class DeckController implements CoverSwapHost {
   }
 
   void handleHorizontalDragUpdate(DragUpdateDetails details) {
-    if (!_session.dragActive || _dragStartX == null || _dragStartY == null) {
+    if (!_session.state.dragActive ||
+        _dragStartX == null ||
+        _dragStartY == null) {
       return;
     }
 
@@ -670,11 +675,11 @@ class DeckController implements CoverSwapHost {
   /// 松手：达标且存在预览目标则提交切歌；未达标/边界回弹。
   void handleHorizontalDragEnd(DragEndDetails details) {
     // 本次手势已被忽略（提交等待期间的拖动）。
-    if (!_session.dragActive) return;
+    if (!_session.state.dragActive) return;
     final velocity = details.velocity.pixelsPerSecond.dx;
     final dx = _dragDx;
     final confirmed = _isHorizontalDragConfirmed;
-    final wasPreviewing = _session.previewActive;
+    final wasPreviewing = _session.state.previewActive;
     _session.dragEnd();
     _resetDragTracking();
     if (!confirmed) return;
@@ -718,7 +723,7 @@ class DeckController implements CoverSwapHost {
     required bool pageCoverHidden,
     required Key? morphCoverKey,
   }) {
-    final session = _session;
+    final session = _session.state;
     final correcting = session.phase == CoverSwapPhase.correcting;
     // 预览视觉（拖动跟手 / 提交等待 / 回退中）都由会话目标驱动：
     // 回退中若换回当前曲目，目标槽位会在回弹半途闪成当前封面。
@@ -774,7 +779,6 @@ class DeckController implements CoverSwapHost {
 
   void dispose() {
     disarmTimeout();
-    _session.dispose();
     _visuals.dispose();
     _reconcileCorrection.removeStatusListener(_handleCorrectionStatus);
     _reconcileCorrection.dispose();

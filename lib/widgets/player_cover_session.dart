@@ -11,15 +11,16 @@
 /// （再下一首 / 再上一首）也在 [CoverSwapSession.dragUpdate] 里固定，渲染侧
 /// 只从这里读身份，不重读会随提交翻页的 `next` / `previous`。
 ///
-/// 只在离散迁移时 [CoverSwapSession.notifyListeners]（build 读取阶段与身份）；
+/// 只在离散迁移时发 [CoverSwapSession.changes]（build 读取阶段与身份）；
 /// 拖动跟手的逐帧进度不进会话——它由宿主控制器持有并自行通知。
 library;
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show Listenable, immutable;
 
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../domain/models/play_mode.dart';
+import '../utils/snapshot_source.dart';
 import 'cover_appearance.dart';
 import 'player_cover_swap.dart';
 
@@ -111,8 +112,76 @@ abstract interface class CoverSwapHost {
   void disarmTimeout();
 }
 
+/// 切歌会话对渲染层暴露的不可变快照。
+///
+/// 字段沿用旧 [CoverSwapSession] 的公开 getter；拖动跟手的逐帧进度仍由宿主
+/// 控制器持有（不进快照）。
+@immutable
+class CoverSwapSnapshot {
+  const CoverSwapSnapshot({
+    required this.phase,
+    required this.direction,
+    required this.from,
+    required this.to,
+    required this.previewSourceNeighbor,
+    required this.oldNeighbor,
+    required this.previous,
+    required this.animatedTrackId,
+    required this.visible,
+    required this.dragActive,
+  });
+
+  /// 切歌机械当前所处阶段。
+  final CoverSwapPhase phase;
+
+  /// 动画方向：1 = 向前（向左滑出），-1 = 向后。
+  final int direction;
+
+  /// 滑出的旧当前封面（拖动/切歌动画期间参与渲染）。
+  final Track? from;
+
+  /// 会话目标：拖动/提交时为预览曲目；即时切歌时为进场曲目。
+  final Track? to;
+
+  /// 预览目标落到源侧后，源槽位应提前展示的身份。
+  final Track? previewSourceNeighbor;
+
+  /// 方向反转时让位的旧邻位（从另一侧淡出）。
+  final Track? oldNeighbor;
+
+  /// 左槽「上一首」身份。
+  final Track? previous;
+
+  /// 已进入动画身份的展示曲目 id（切歌检测基准）。
+  final String? animatedTrackId;
+
+  /// 页面可见性（TickerMode）。
+  final bool visible;
+
+  /// 手指是否仍在屏上。
+  final bool dragActive;
+
+  /// 中心位是否由会话目标驱动：拖动跟手或提交等待。
+  bool get previewActive =>
+      phase == CoverSwapPhase.preview || phase == CoverSwapPhase.committed;
+
+  /// 预览视觉是否仍在演出：拖动跟手、提交等待与回退中。
+  ///
+  /// 回退期间中心位仍是预览目标（[to] 保留到回退完成）：一松手就换回当前
+  /// 曲目会让目标槽位在回弹半途闪成当前封面。
+  bool get showingPreviewTarget =>
+      previewActive || phase == CoverSwapPhase.returning;
+
+  /// 是否已提交切歌、等待后端对账。
+  bool get awaitingReconcile => phase == CoverSwapPhase.committed;
+}
+
 /// 一次切歌（拖动/即时）的会话状态机。
-class CoverSwapSession extends ChangeNotifier {
+///
+/// 状态形态（ADR-0041「启动期状态对象：快照 + 控制器」）：可变字段只留在
+/// 内部，[state] 暴露不可变快照，[changes] 是唯一通知面。拖动跟手的逐帧
+/// 进度不进快照（由宿主控制器持有并自行通知）。
+class CoverSwapSession implements SnapshotSource<CoverSwapSnapshot> {
   CoverSwapSession({required this._host});
 
   /// 提交等待的兜底时限：取链失败等情况下不能永远停在邻位预览。
@@ -182,37 +251,24 @@ class CoverSwapSession extends ChangeNotifier {
   /// 方向判定「变化前」当前曲目的队列下标（-1 = 未知）。
   int _hintIndex = -1;
 
-  // 只读视图（build 与手势门控读取）
+  final SnapshotSignal _changes = SnapshotSignal();
 
-  CoverSwapPhase get phase => _phase;
-  int get direction => _direction;
-  Track? get from => _from;
-  Track? get to => _to;
+  @override
+  CoverSwapSnapshot get state => CoverSwapSnapshot(
+    phase: _phase,
+    direction: _direction,
+    from: _from,
+    to: _to,
+    previewSourceNeighbor: _previewSourceNeighbor,
+    oldNeighbor: _oldNeighbor,
+    previous: _previous,
+    animatedTrackId: _animatedTrackId,
+    visible: _visible,
+    dragActive: _dragActive,
+  );
 
-  /// 预览目标之后的源侧身份：前进 = 再下一首，后退 = 再上一首。
-  ///
-  /// 只在拖动预览 / 提交等待 / 回弹期间有意义（对账收尾后由宿主清空/忽略）。
-  Track? get previewSourceNeighbor => _previewSourceNeighbor;
-
-  Track? get oldNeighbor => _oldNeighbor;
-  Track? get previous => _previous;
-  String? get animatedTrackId => _animatedTrackId;
-  bool get visible => _visible;
-  bool get dragActive => _dragActive;
-
-  /// 中心位是否由会话目标驱动：拖动跟手或提交等待。
-  bool get previewActive =>
-      _phase == CoverSwapPhase.preview || _phase == CoverSwapPhase.committed;
-
-  /// 预览视觉是否仍在演出：拖动跟手、提交等待与回退中。
-  ///
-  /// 回退期间中心位仍是预览目标（[to] 保留到 [returnCompleted]）：一松手就
-  /// 换回当前曲目会让目标槽位在回弹半途闪成当前封面。
-  bool get showingPreviewTarget =>
-      previewActive || _phase == CoverSwapPhase.returning;
-
-  /// 是否已提交切歌、等待后端对账。
-  bool get awaitingReconcile => _phase == CoverSwapPhase.committed;
+  @override
+  Listenable get changes => _changes;
 
   /// 页面可见性（TickerMode）翻转：任一方向都立即落位到稳态。
   ///
@@ -224,7 +280,7 @@ class CoverSwapSession extends ChangeNotifier {
     if (value == _visible) return;
     _visible = value;
     _abandon();
-    notifyListeners();
+    _changes.notify();
     _host.hardReset();
     _host.adoptSteadySlots();
   }
@@ -276,7 +332,9 @@ class CoverSwapSession extends ChangeNotifier {
   /// 一次拖动只对应一次切歌；校正期间放行会把中心从中间态跳回旧预览目标
   /// （校正被弃）。返回本次手势是否被会话接受。
   bool dragStart() {
-    if (awaitingReconcile || _phase == CoverSwapPhase.correcting) return false;
+    if (state.awaitingReconcile || _phase == CoverSwapPhase.correcting) {
+      return false;
+    }
     _dragActive = true;
     return true;
   }
@@ -304,7 +362,7 @@ class CoverSwapSession extends ChangeNotifier {
     }
 
     bool changed = false;
-    if (!previewActive) {
+    if (!state.previewActive) {
       _phase = CoverSwapPhase.preview;
       changed = true;
     }
@@ -324,7 +382,7 @@ class CoverSwapSession extends ChangeNotifier {
       _previewSourceNeighbor = neighbor;
       changed = true;
     }
-    if (changed) notifyListeners();
+    if (changed) _changes.notify();
     _host.previewProgress(progress);
   }
 
@@ -338,7 +396,7 @@ class CoverSwapSession extends ChangeNotifier {
   void dragCancel() {
     if (!_dragActive) return;
     _dragActive = false;
-    if (!awaitingReconcile) releasePreview();
+    if (!state.awaitingReconcile) releasePreview();
   }
 
   /// 松手达标：提交切歌，从当前进度续走落位并请求后端切歌。
@@ -346,9 +404,9 @@ class CoverSwapSession extends ChangeNotifier {
   /// 进入「已提交等待对账」后预览保持，直到曲目真正切换（取链可能需要几百
   /// 毫秒）——否则动画跑完会先回落成旧封面、再跳成新封面，看起来像卡住。
   void commit({required double progressVelocity}) {
-    if (!previewActive || _to == null) return;
+    if (!state.previewActive || _to == null) return;
     _phase = CoverSwapPhase.committed;
-    notifyListeners();
+    _changes.notify();
     _host.land(progressVelocity: progressVelocity);
     _host.armTimeout(commitTimeout);
     _host.requestSkip(_direction);
@@ -359,9 +417,9 @@ class CoverSwapSession extends ChangeNotifier {
   /// 只切阶段、保留预览目标：视觉由宿主控制器反向播完，落位后宿主回调
   /// [returnCompleted] 才真正撤下（见 [CoverSwapPhase.returning]）。
   void releasePreview({double progressVelocity = 0}) {
-    if (!previewActive) return;
+    if (!state.previewActive) return;
     _phase = CoverSwapPhase.returning;
-    notifyListeners();
+    _changes.notify();
     _host.disarmTimeout();
     _host.releasePreview(progressVelocity: progressVelocity);
   }
@@ -376,13 +434,13 @@ class CoverSwapSession extends ChangeNotifier {
     _to = null;
     _from = null;
     _previewSourceNeighbor = null;
-    notifyListeners();
+    _changes.notify();
     _host.adoptSteadySlots();
   }
 
   /// 提交兜底超时（宿主计时器回调）：撤下预览回弹。
   void timeoutFired() {
-    if (!awaitingReconcile) return;
+    if (!state.awaitingReconcile) return;
     releasePreview();
   }
 
@@ -393,7 +451,7 @@ class CoverSwapSession extends ChangeNotifier {
       _phase = CoverSwapPhase.idle;
       _to = null;
       _previewSourceNeighbor = null;
-      notifyListeners();
+      _changes.notify();
       _host.adoptSteadySlots();
       return;
     }
@@ -418,7 +476,7 @@ class CoverSwapSession extends ChangeNotifier {
     _to = null;
     _from = null;
     _previewSourceNeighbor = null;
-    notifyListeners();
+    _changes.notify();
     _host.adoptSteadySlots();
   }
 
@@ -436,14 +494,14 @@ class CoverSwapSession extends ChangeNotifier {
       // 页面不可见：切歌不播动画，直接落位（ticker 被 TickerMode 静音，冻结的
       // 中间进度会在回到播放页时重播、并把飞行锚点带偏）；父级联动照发。
       _abandon(adoptTrack: track);
-      notifyListeners();
+      _changes.notify();
       _host.hardReset(adoptTrack: track);
       _host.adoptSteadySlots();
       _host.notifySwapped(false);
       return;
     }
 
-    if (awaitingReconcile) {
+    if (state.awaitingReconcile) {
       _host.disarmTimeout();
       if (_to?.id.uri == id) {
         _settleCommit(snapshot);
@@ -473,7 +531,7 @@ class CoverSwapSession extends ChangeNotifier {
     );
     // 拖动预览进行中时，阶段与预览目标归拖动会话（切歌只更新身份供拖动继续
     // 驱动）；其余情况进入即时切歌的「完成中」。
-    final bool duringDrag = previewActive;
+    final bool duringDrag = state.previewActive;
     final int nextDirection = resolved == coverSwapBackward ? -1 : 1;
     if (!duringDrag) {
       _correctionDeferred = false;
@@ -494,7 +552,7 @@ class CoverSwapSession extends ChangeNotifier {
     // 走默认封面/中性回退，否则目标图未预热时旧封面会从下面透出来。
     _host.disarmTimeout();
     if (duringDrag) _host.settleDuringDrag();
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 拖动提交对账匹配：无缝落位到目标曲目。
@@ -504,7 +562,7 @@ class CoverSwapSession extends ChangeNotifier {
     _previous = snapshot.previous;
     // 对账后新快照即下一次切歌的「变化前」基准。
     _cacheDirectionHints(snapshot);
-    notifyListeners();
+    _changes.notify();
     // 槽位身份已由切歌窗口演到位：接管对齐，空闲期不补淡换。
     _host.adoptSteadySlots();
     // 宿主在这一次同步调用里读取预览源侧身份，判断能否连续接管；
@@ -522,7 +580,7 @@ class CoverSwapSession extends ChangeNotifier {
     _previewSourceNeighbor = null;
     // 对账后新快照即下一次切歌的「变化前」基准。
     _cacheDirectionHints(snapshot);
-    notifyListeners();
+    _changes.notify();
     // 槽位身份按新快照稳态接管，空闲期不把校正前的身份当成淡出起点。
     _host.adoptSteadySlots();
     _host.crossfadeCorrection();
@@ -554,14 +612,14 @@ class CoverSwapSession extends ChangeNotifier {
   void _refreshIdleCache() {
     final snapshot = _snapshot;
     if (snapshot == null) return;
-    if (_host.progressAnimating || previewActive) return;
+    if (_host.progressAnimating || state.previewActive) return;
     final Track? previous = snapshot.previous;
     final bool previousChanged = previous?.id != _previous?.id;
     _lastNext = snapshot.next;
     _previous = previous;
     if (_phase == CoverSwapPhase.idle) _from = null;
     _cacheDirectionHints(snapshot);
-    if (previousChanged) notifyListeners();
+    if (previousChanged) _changes.notify();
   }
 
   /// 缓存「变化前」的方向判定提示（空闲缓存刷新与每次切歌解析后调用）。
