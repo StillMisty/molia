@@ -61,6 +61,13 @@ class _DiscoverPlaylistsTabState extends ConsumerState<DiscoverPlaylistsTab>
   List<DiscoverTag> _hotTags = const [];
   List<DiscoverTagCategory> _tagCategories = const [];
 
+  /// 标签请求是否在途：数据到达前用同高骨架撑住标签行，避免歌单区下跳。
+  bool _tagsLoading = false;
+
+  /// 标签请求代际：切渠道后丢弃在途的旧响应，也不让旧响应提前结束
+  /// 新渠道的加载态。
+  int _tagRequestId = 0;
+
   String _selectedTag = '';
   String _query = '';
   late final PagedListController<DiscoverPlaylist> _paged;
@@ -154,15 +161,20 @@ class _DiscoverPlaylistsTabState extends ConsumerState<DiscoverPlaylistsTab>
   }
 
   Future<void> _loadTags() async {
+    final requestId = ++_tagRequestId;
+    if (mounted) setState(() => _tagsLoading = true);
     try {
       final result = await _provider.loadTags();
-      if (!mounted) return;
+      if (!mounted || requestId != _tagRequestId) return;
       setState(() {
         _hotTags = result.hotTags;
         _tagCategories = result.categories;
+        _tagsLoading = false;
       });
     } catch (_) {
       // 标签失败不阻塞「全部」歌单浏览；用户可重试或直接搜索。
+      if (!mounted || requestId != _tagRequestId) return;
+      setState(() => _tagsLoading = false);
     }
   }
 
@@ -433,7 +445,13 @@ class _DiscoverPlaylistsTabState extends ConsumerState<DiscoverPlaylistsTab>
                                 ),
                               ),
                               const SizedBox(height: discoverSectionGap),
-                              _buildTagRow(l10n, gutter),
+                              _buildTagRow(
+                                l10n,
+                                gutter,
+                                pending:
+                                    _tagsLoading ||
+                                    _loadedSourceKey != provider.channelKey,
+                              ),
                               const SizedBox(height: discoverSectionGap),
                             ],
                           ),
@@ -466,11 +484,18 @@ class _DiscoverPlaylistsTabState extends ConsumerState<DiscoverPlaylistsTab>
   /// 空筛选时 chip 显示「标签」；选中后换成标签名并带 X，点 X 一键清空、
   /// 点 chip 本体打开分类弹层换标签。热门里跳过已选中的标签，避免同屏出现
   /// 两个选中态。没有任何可选标签时整行隐藏：搜索栏已承载「打开歌单」，
-  /// 留一个只能弹出「全部」的入口没有意义。
-  Widget _buildTagRow(AppLocalizations l10n, double gutter) {
+  /// 留一个只能弹出「全部」的入口没有意义；[pending] 为真时先用同高骨架
+  /// 占位，等标签返回再换真实 chip 行。
+  Widget _buildTagRow(
+    AppLocalizations l10n,
+    double gutter, {
+    required bool pending,
+  }) {
     final hasCategories = _tagCategories.any((c) => c.tags.isNotEmpty);
     if (_selectedTag.isEmpty && _hotTags.isEmpty && !hasCategories) {
-      return const SizedBox.shrink();
+      return pending
+          ? _buildTagSkeleton(l10n, gutter)
+          : const SizedBox.shrink();
     }
     final selectedName = _selectedTagName;
     return Padding(
@@ -507,6 +532,45 @@ class _DiscoverPlaylistsTabState extends ConsumerState<DiscoverPlaylistsTab>
                     ),
                   ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 标签加载中的占位行：与真实 chip 行同高、同间距、同 gutter。
+  ///
+  /// 标签数据到达前整行高度为 0，插入 32dp 的 chip 行会把歌单区向下推一截；
+  /// 骨架用主题里的 chip 高度 / 圆角占住同一位置，首屏与切渠道时版式不动。
+  Widget _buildTagSkeleton(AppLocalizations l10n, double gutter) {
+    final chipTheme = M3ETheme.of(context).chipTheme;
+    // 宽度只是「长短不一的 chip」示意：真实标签在数据到达前不可知。
+    const widths = <double>[72, 56, 72, 48, 64];
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: gutter),
+      child: Semantics(
+        container: true,
+        label: l10n.loading,
+        child: ExcludeSemantics(
+          child: SkeletonPulse(
+            child: SingleChildScrollView(
+              key: const Key('discoverTagSkeleton'),
+              scrollDirection: Axis.horizontal,
+              // 占位不需要滚动：窄屏裁掉尾部即可，不能换成换行（会改变行高）。
+              physics: const NeverScrollableScrollPhysics(),
+              child: Row(
+                children: [
+                  for (var i = 0; i < widths.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    SkeletonBlock(
+                      width: widths[i],
+                      height: chipTheme.height,
+                      radius: chipTheme.cornerRadius,
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -608,7 +672,10 @@ class _DiscoverPlaylistsTabState extends ConsumerState<DiscoverPlaylistsTab>
     required String channelKey,
   }) {
     final items = state.items;
-    if (state.isLoading && items.isEmpty) {
+    // page == 0 且未失败 = 本代际还没成功加载过（首帧 / 刚 reset）：
+    // 此时也按加载中出骨架，避免首帧先闪「暂无内容」再切骨架。
+    final awaitingFirstPage = state.page == 0 && !state.failed;
+    if (items.isEmpty && (state.isLoading || awaitingFirstPage)) {
       return _buildPlaylistSkeletonSlivers(l10n, contentWidth, gutter: gutter);
     }
     if (state.failed) {

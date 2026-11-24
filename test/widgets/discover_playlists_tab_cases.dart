@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -161,6 +163,49 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('discoverTagFilter')), findsNothing);
+  });
+
+  testWidgets('标签加载中用同高骨架占位，数据到达不推动歌单区', (tester) async {
+    final gate = Completer<DiscoverTags>();
+    source.tagsGate = gate;
+    await tester.pumpWidget(host());
+    await tester.pump();
+
+    final skeleton = find.byKey(const Key('discoverTagSkeleton'));
+    expect(skeleton, findsOneWidget);
+    final skeletonHeight = tester.getSize(skeleton).height;
+    final skeletonTop = tester.getTopLeft(skeleton).dy;
+
+    gate.complete(
+      const DiscoverTags(
+        hotTags: [DiscoverTag(id: '华语', name: '华语')],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(skeleton, findsNothing);
+    final chip = find.byKey(const Key('discoverTagFilter'));
+    expect(chip, findsOneWidget);
+    expect(tester.getSize(chip).height, skeletonHeight);
+    expect(tester.getTopLeft(chip).dy, skeletonTop);
+  });
+
+  testWidgets('首帧不闪空态：还没开始加载也先给歌单骨架', (tester) async {
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+    await tester.pumpWidget(host());
+
+    expect(find.text(l10n.discoverNoContent), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget.key == const Key('discoverPlaylistSkeleton') ||
+            widget.key == const Key('discoverPlaylistSkeletonList'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.pumpAndSettle();
+    expect(find.text('测试歌单'), findsOneWidget);
   });
 
   testWidgets('全部 / 全部标签合并为一个标签 chip', (tester) async {

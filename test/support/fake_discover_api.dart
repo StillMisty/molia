@@ -101,9 +101,14 @@ class FakeDiscoverSource implements DiscoverSource {
   /// 标签覆盖：为空时用默认的单热门 + 单分类（空分类等用例按需替换）。
   DiscoverTags? tagsOverride;
 
+  /// 标签请求闸门：非空时等闸门完成再返回（加载中骨架用例）。
+  Completer<DiscoverTags>? tagsGate;
+
   @override
-  Future<DiscoverTags> tags(BuiltinTransport http) {
+  Future<DiscoverTags> tags(BuiltinTransport http) async {
     tagCalls++;
+    final gate = tagsGate;
+    if (gate != null) return _guard(await gate.future);
     final override = tagsOverride;
     if (override != null) return _guard(override);
     return _guard(
