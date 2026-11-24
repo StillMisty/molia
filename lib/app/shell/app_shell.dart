@@ -244,17 +244,17 @@ class _MyAppState extends ConsumerState<MyApp>
     _presentation = ShellPresentation(
       initialDestination: nav.startupDestination,
       visibleDestinations: nav.visibleDestinations,
-    )..addListener(_onPresentationChanged);
+    )..changes.addListener(_onPresentationChanged);
     // 顶栏 / 底栏的曲目信息区必须与「手动进入播放页」后的状态一致（播放页
     // 激活即收起封面）：否则恢复会话后顶栏会重复显示曲目封面/进度。
     _morph.setBarHeaderHidden(
-      _presentation.effectiveDestination == ShellDestination.nowPlaying,
+      _presentation.state.effectiveDestination == ShellDestination.nowPlaying,
     );
     _barReveal = _BarHeaderReveal(
       vsync: this,
-      revealed: !_morph.barHeaderHidden,
+      revealed: !_morph.state.barHeaderHidden,
     );
-    _morph.addListener(_syncBarReveal);
+    _morph.changes.addListener(_syncBarReveal);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref
           .read(themeProvider.notifier)
@@ -264,7 +264,8 @@ class _MyAppState extends ConsumerState<MyApp>
 
   /// 顶栏曲目信息区跟随 [PlayerMorphController.barHeaderHidden]（飞行起止
   /// 时也由它统一翻转，避免两处各判一次）。
-  void _syncBarReveal() => _barReveal.setRevealed(!_morph.barHeaderHidden);
+  void _syncBarReveal() =>
+      _barReveal.setRevealed(!_morph.state.barHeaderHidden);
 
   /// 壳层重建转发：`player_flight.dart` 的 extension 不能直接调用
   /// protected 的 `setState`（Dart 限制），留一个私有转发。
@@ -277,8 +278,8 @@ class _MyAppState extends ConsumerState<MyApp>
   void _onPresentationChanged() {
     if (!mounted) return;
     _rebuildShell();
-    if (!_presentation.flightInProgress) {
-      _morph.setBarHeaderHidden(!_presentation.showsPlayerBar);
+    if (!_presentation.state.flightInProgress) {
+      _morph.setBarHeaderHidden(!_presentation.state.showsPlayerBar);
     }
   }
 
@@ -294,7 +295,7 @@ class _MyAppState extends ConsumerState<MyApp>
     if (!effectiveChanged) return;
     _completeMorph();
     _morph.setPageHeaderHidden(false);
-    _morph.setBarHeaderHidden(!_presentation.showsPlayerBar);
+    _morph.setBarHeaderHidden(!_presentation.state.showsPlayerBar);
   }
 
   @override
@@ -303,20 +304,14 @@ class _MyAppState extends ConsumerState<MyApp>
     _morphAnimation.removeListener(_onMorphTick);
     _morphAnimation.dispose();
     _tabTransition.dispose();
-    _morph.removeListener(_syncBarReveal);
+    _morph.changes.removeListener(_syncBarReveal);
     _barReveal.dispose();
     _morphEntry?.remove();
     _morphEntry = null;
     _morph.dispose();
-    _presentation.removeListener(_onPresentationChanged);
-    _presentation.dispose();
+    _presentation.changes.removeListener(_onPresentationChanged);
     _nowPlaying.dispose();
     _globalSearch.dispose();
-    for (final signal in _reselect.values) {
-      signal.dispose();
-    }
-    _locatePlaying.dispose();
-    _showSearchRequest.dispose();
     super.dispose();
   }
 
@@ -344,16 +339,17 @@ class _MyAppState extends ConsumerState<MyApp>
   /// 进入播放页的飞行期间忽略重复点击：此刻切换会与飞行副本抢封面，
   /// 等飞行落定（~0.4s）再切换。
   void _onDestinationSelected(ShellDestination destination) {
-    if (destination != _presentation.effectiveDestination) {
+    if (destination != _presentation.state.effectiveDestination) {
       _selectDestination(destination);
       return;
     }
     if (destination == ShellDestination.nowPlaying) {
-      if (_presentation.expansionVerdict != ShellExpansionVerdict.accepted) {
+      if (_presentation.state.expansionVerdict !=
+          ShellExpansionVerdict.accepted) {
         return;
       }
       HapticsService.lightImpact();
-      _requestPlayerExpansion(!_presentation.expanded);
+      _requestPlayerExpansion(!_presentation.state.expanded);
       return;
     }
     // 重复点击是一次真实的点按（列表回顶是肉眼可见的动作），给一次轻震：
@@ -371,7 +367,7 @@ class _MyAppState extends ConsumerState<MyApp>
   void _onFavoritesLongPress() {
     const favorites = ShellDestination.favorites;
     if (!ref.read(navProvider).isVisible(favorites)) return;
-    if (_presentation.effectiveDestination != favorites) {
+    if (_presentation.state.effectiveDestination != favorites) {
       _selectDestination(favorites);
     } else {
       HapticsService.lightImpact();
@@ -386,9 +382,9 @@ class _MyAppState extends ConsumerState<MyApp>
     _presentation.syncVisibility(nav.visibleDestinations);
     // 隐藏目的地不参与导航（与 chrome / 页面栈同一可见集合）：否则 raw
     // 选中项会再次与有效选中项分叉，页面栈回退到另一个可见项。
-    if (!_presentation.isVisible(destination)) return;
+    if (!_presentation.state.isVisible(destination)) return;
     // 过渡的起点必须是当前真正显示的页，而不是被隐藏的 raw 选中项。
-    final current = _presentation.effectiveDestination;
+    final current = _presentation.state.effectiveDestination;
     if (destination == current) return;
     if (!_presentation.select(destination)) return;
     HapticsService.lightImpact();
@@ -426,7 +422,7 @@ class _MyAppState extends ConsumerState<MyApp>
       // 宽版式 / 桌面两栏没有收起态、expanded 恒为 false，但播放页是完整
       // 可见的，离开时同样要从页内封面飞回顶栏（否则共享飞行直接消失）。
       // 只有窄版式且已收起（高度 0）才没有可起飞的页内封面。
-      if (!_presentation.miniCapable || _presentation.expanded) {
+      if (!_presentation.state.miniCapable || _presentation.state.expanded) {
         _startMorphBackToBar();
       } else {
         _alignMorphEnds(onPlayerPage: false);
@@ -460,7 +456,8 @@ class _MyAppState extends ConsumerState<MyApp>
   /// 看不到页内 tab，命令按目的地生效 —— 在播放页里把队列视图收成默认页
   /// （停在其它栏时同样回默认页，等于「回默认页」）；其它目的地 no-op。
   void _closeQueuePanel() {
-    if (_presentation.effectiveDestination != ShellDestination.nowPlaying) {
+    if (_presentation.state.effectiveDestination !=
+        ShellDestination.nowPlaying) {
       return;
     }
     _nowPlaying.showLyricsTab();
@@ -474,10 +471,11 @@ class _MyAppState extends ConsumerState<MyApp>
   /// 不新增第二套动画系统。守卫（页面 / 布局能力 / 飞行）由
   /// [ShellPresentation.expansionVerdict] 裁决。
   void _requestPlayerExpansion(bool expand) {
-    if (_presentation.expansionVerdict != ShellExpansionVerdict.accepted) {
+    if (_presentation.state.expansionVerdict !=
+        ShellExpansionVerdict.accepted) {
       return;
     }
-    final bool wasExpanded = _presentation.expanded;
+    final bool wasExpanded = _presentation.state.expanded;
     if (expand) {
       if (wasExpanded) {
         _nowPlaying.expand();
@@ -509,11 +507,12 @@ class _MyAppState extends ConsumerState<MyApp>
   /// 顶栏曲目区点击：不在播放页走目的地切换（含歌词偏好 + 展开 + 飞行），
   /// 已在播放页收起态则就地展开。
   void _openPlayerFromBar() {
-    if (_presentation.effectiveDestination != ShellDestination.nowPlaying) {
+    if (_presentation.state.effectiveDestination !=
+        ShellDestination.nowPlaying) {
       _selectDestination(ShellDestination.nowPlaying);
       return;
     }
-    if (_presentation.expanded) return;
+    if (_presentation.state.expanded) return;
     _requestPlayerExpansion(true);
   }
 
@@ -550,7 +549,7 @@ class _MyAppState extends ConsumerState<MyApp>
 
   /// 页面分层：选中页在最上层淡入，上一页快速淡出（fade-through）。
   Widget _buildPageStack() {
-    final selectedDestination = _presentation.effectiveDestination;
+    final selectedDestination = _presentation.state.effectiveDestination;
     final ordered = <ShellDestination>[
       for (final destination in ShellDestination.values)
         if (destination != selectedDestination) destination,
@@ -563,7 +562,7 @@ class _MyAppState extends ConsumerState<MyApp>
             key: ValueKey(destination),
             selected: destination == selectedDestination,
             outgoing:
-                destination == _presentation.previousDestination &&
+                destination == _presentation.state.previousDestination &&
                 destination != selectedDestination,
             animation: _tabTransition,
             child: _pages[destination]!,
@@ -587,11 +586,11 @@ class _MyAppState extends ConsumerState<MyApp>
     // 订阅导航偏好：可见集合变化要重建；渲染列表从展示模块取，与
     // selectedIndex 同一权威（didChangeDependencies 已同步）。
     ref.watch(navProvider);
-    final visibleDestinations = _presentation.visibleDestinations;
+    final visibleDestinations = _presentation.state.visibleDestinations;
     // 选中项被隐藏时回退到第一个可见目的地（重新显示后自动恢复）；
     // chrome、页面栈与点击判定共用同一 resolver。
-    final selectedDestination = _presentation.effectiveDestination;
-    final selectedIndex = _presentation.selectedIndex;
+    final selectedDestination = _presentation.state.effectiveDestination;
+    final selectedIndex = _presentation.state.selectedIndex;
 
     // 导航 / 顶栏 spec：两套骨架共用一份（目的地映射 / 标签 / 设置按钮 /
     // 窗口控件 / 拖动区），骨架各自适配渲染（见 shell_chrome.dart）。
@@ -642,7 +641,7 @@ class _MyAppState extends ConsumerState<MyApp>
     // 顶栏由 ShellChrome 统一构造（标题 / 动作 / 拖动区装配在 ShellAppBar）：
     // 整条顶栏是窗口拖动区（隐藏标题栏后唯一的拖动入口），高度 = 56 工具行
     // + 10 进度条槽，非桌面平台 WindowDragArea 是纯透传。
-    final bool showPlayerBar = _presentation.showsPlayerBar;
+    final bool showPlayerBar = _presentation.state.showsPlayerBar;
     final appBar = chrome.appBar(
       context: context,
       title: WindowDoubleTapMaximize(

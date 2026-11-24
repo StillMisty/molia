@@ -9,18 +9,26 @@
 /// 页面绕一圈回来。
 library;
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show Listenable;
+
+import '../utils/snapshot_source.dart';
 
 /// 一次「重复点击已选中目的地」的请求通道。
 ///
-/// 用一次性通知而不是可观察状态：订阅方只做动作、不读值。
+/// 用一次性通知而不是可观察状态：订阅方只做动作、不读值。因此本类不实现
+/// `SnapshotSource`（没有快照），订阅面只有 [changes]。
 ///
 /// 触感归属：重复点击的轻震由壳层统一给出（见 `app_shell.dart`
 /// `_onDestinationSelected`），页面侧对这些请求的响应**不再自带触感** ——
 /// 一次点击只震一次；页面自己的其它入口（列表项点按等）仍各自负反馈。
-class ShellReselectSignal extends ChangeNotifier {
+class ShellReselectSignal {
+  final SnapshotSignal _changes = SnapshotSignal();
+
+  /// 变更信号；订阅方只响应动作，不读状态。
+  Listenable get changes => _changes;
+
   /// 触发一次重复点击（订阅方自行决定响应；无可响应时保持空操作）。
-  void trigger() => notifyListeners();
+  void trigger() => _changes.notify();
 }
 
 /// 一次「长按壳层目的地」的请求通道。
@@ -30,7 +38,12 @@ class ShellReselectSignal extends ChangeNotifier {
 ///
 /// 触感归属：已在本页时由壳层长按处理器给一次轻震；从别的目的地过来时由
 /// 切页路径（`_selectDestination`）给，页面侧不再自带触感。
-class ShellLongPressSignal extends ChangeNotifier {
+class ShellLongPressSignal {
+  final SnapshotSignal _changes = SnapshotSignal();
+
+  /// 变更信号；订阅方只响应动作，不读状态。
+  Listenable get changes => _changes;
+
   /// 触发一次长按意图（订阅方自行决定响应；无可响应时保持空操作）。
-  void trigger() => notifyListeners();
+  void trigger() => _changes.notify();
 }

@@ -8,9 +8,10 @@
 /// `CoverFlight` / `CoverFlightLayer`）——本文件只负责锚点捕获与飞行生命周期。
 library;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, immutable;
 import 'package:material_ui/material_ui.dart';
 
+import '../utils/snapshot_source.dart';
 import 'cover_appearance.dart';
 
 /// 封面外观与飞行副本定义在 `cover_appearance.dart`；这里再导出给顶栏 /
@@ -41,8 +42,30 @@ Rect? anchorRectOf(GlobalKey key) {
   );
 }
 
+/// 共享封面飞行的不可变快照：两端真身的隐藏状态。
+///
+/// 侧邻位展开进度（[PlayerMorphController.pageDeckReveal]）是逐帧驱动 deck
+/// 的高频通道，刻意不放进快照。
+@immutable
+class PlayerMorphState {
+  const PlayerMorphState({
+    required this.barHeaderHidden,
+    required this.pageHeaderHidden,
+  });
+
+  /// 顶栏封面/歌名/进度是否隐藏（播放页激活或飞行中）。
+  final bool barHeaderHidden;
+
+  /// 播放页封面是否隐藏（飞行中，由飞行副本承接）。
+  final bool pageHeaderHidden;
+}
+
 /// 顶栏 ↔ 播放页共享元素飞行控制器。
-class PlayerMorphController extends ChangeNotifier {
+///
+/// 状态形态（ADR-0041「启动期状态对象：快照 + 控制器」）：隐藏状态在
+/// [state] 快照里、[changes] 是唯一通知面；侧邻位展开进度仍是独立的
+/// `ValueListenable`（逐帧、只驱动 deck 子树，不进快照）。
+class PlayerMorphController implements SnapshotSource<PlayerMorphState> {
   /// 顶栏封面锚点。
   final GlobalKey barCoverKey = GlobalKey(debugLabel: 'morphBarCover');
 
@@ -52,12 +75,16 @@ class PlayerMorphController extends ChangeNotifier {
   bool _barHeaderHidden = false;
   bool _pageHeaderHidden = false;
   final ValueNotifier<double> _pageDeckReveal = ValueNotifier<double>(1);
+  final SnapshotSignal _changes = SnapshotSignal();
 
-  /// 顶栏封面/歌名/进度是否隐藏（播放页激活或飞行中）。
-  bool get barHeaderHidden => _barHeaderHidden;
+  @override
+  PlayerMorphState get state => PlayerMorphState(
+    barHeaderHidden: _barHeaderHidden,
+    pageHeaderHidden: _pageHeaderHidden,
+  );
 
-  /// 播放页封面是否隐藏（飞行中，由飞行副本承接）。
-  bool get pageHeaderHidden => _pageHeaderHidden;
+  @override
+  Listenable get changes => _changes;
 
   /// 播放页左右邻位槽的展开进度：0 = 收回中心、1 = 稳态侧槽。
   ///
@@ -67,8 +94,8 @@ class PlayerMorphController extends ChangeNotifier {
 
   /// 设置侧邻位展开进度（壳层飞行 tick / 起止路径调用）。
   ///
-  /// 不走 [notifyListeners]：那是隐藏状态（整树重建）的通道；值监听只让
-  /// deck 的 Stack 子树逐帧重建。
+  /// 不走 [changes]：那是隐藏状态（整树重建）的通道；值监听只让 deck 的
+  /// Stack 子树逐帧重建。
   void setPageDeckReveal(double value) {
     final double clamped = value.clamp(0.0, 1.0);
     if (_pageDeckReveal.value == clamped) return;
@@ -94,13 +121,13 @@ class PlayerMorphController extends ChangeNotifier {
   void setBarHeaderHidden(bool value) {
     if (_barHeaderHidden == value) return;
     _barHeaderHidden = value;
-    notifyListeners();
+    _changes.notify();
   }
 
   void setPageHeaderHidden(bool value) {
     if (_pageHeaderHidden == value) return;
     _pageHeaderHidden = value;
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 读取锚点当前屏幕矩形（含祖先变换）；元素未挂载/未布局时返回 null。
@@ -118,10 +145,8 @@ class PlayerMorphController extends ChangeNotifier {
     );
   }
 
-  @override
   void dispose() {
     _pageDeckReveal.dispose();
-    super.dispose();
   }
 }
 

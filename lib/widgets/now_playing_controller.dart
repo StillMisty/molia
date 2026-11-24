@@ -8,7 +8,10 @@
 /// 负责。
 library;
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart'
+    show Listenable, ValueNotifier, immutable;
+
+import '../utils/snapshot_source.dart';
 
 /// 播放页内容页序：队列 / 歌词 / 歌曲信息。
 ///
@@ -18,6 +21,25 @@ const int nowPlayingQueueTabIndex = 0;
 const int nowPlayingLyricsTabIndex = 1;
 const int nowPlayingInfoTabIndex = 2;
 
+/// 播放页外部请求的不可变快照。
+@immutable
+class NowPlayingControllerState {
+  const NowPlayingControllerState({
+    required this.requestedTab,
+    required this.tabRequestVersion,
+    required this.requestedExpansion,
+  });
+
+  /// 最近一次被请求的页（[nowPlayingQueueTabIndex] 等）；从未请求时为 null。
+  final int? requestedTab;
+
+  /// tab 请求版本：每次 show*Tab 自增。
+  final int tabRequestVersion;
+
+  /// 待消费的展开 / 收起意图；null = 没有请求。
+  final bool? requestedExpansion;
+}
+
 /// 播放页的外部请求通道（壳 → 播放页）。
 ///
 /// 由组合根创建并注入 `NowPlaying`；调用方只发请求，不读界面状态。
@@ -25,32 +47,33 @@ const int nowPlayingInfoTabIndex = 2;
 /// `lib/app/shell/shell_presentation.dart::ShellPresentation` 持有；页面通过
 /// `NowPlaying.onExpansionChanged` / `onMiniCapableChanged` 回写该模块。
 ///
-/// 壳层仍需 [activeTab]：桌面 Esc 要先判断播放页右栏是否停在队列。
-class NowPlayingController extends ChangeNotifier {
+/// 壳层仍需 activeTab：桌面 Esc 要先判断播放页右栏是否停在队列。
+///
+/// 状态形态（ADR-0041「启动期状态对象：快照 + 控制器」）：请求意图在
+/// [state] 快照里，[changes] 是唯一通知面；页面 tab 落点仍是独立
+/// `ValueNotifier`（细粒度通道，不进快照）。
+class NowPlayingController
+    implements SnapshotSource<NowPlayingControllerState> {
   int? _requestedTab;
   int _tabRequestVersion = 0;
-
-  /// 待消费的展开 / 收起意图；null = 没有请求。
   bool? _requestedExpansion;
+
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 播放页当前内容 tab（桌面右栏 / 移动 PageView 落定后的值）。
   final ValueNotifier<int> activeTab = ValueNotifier<int>(
     nowPlayingLyricsTabIndex,
   );
 
-  /// 最近一次被请求的页（[nowPlayingQueueTabIndex] 等）；从未请求时为 null。
-  int? get requestedTab => _requestedTab;
+  @override
+  NowPlayingControllerState get state => NowPlayingControllerState(
+    requestedTab: _requestedTab,
+    tabRequestVersion: _tabRequestVersion,
+    requestedExpansion: _requestedExpansion,
+  );
 
-  /// tab 请求版本：每次 [showQueueTab] / [showLyricsTab] / [showInfoTab] 自增。
-  ///
-  /// 展开 / 收起请求与 tab 请求共用同一个 [ChangeNotifier]：页面按这个版本
-  /// 判断「这次通知到底有没有新的 tab 请求」，避免收起播放器时重放上一次 tab。
-  int get tabRequestVersion => _tabRequestVersion;
-
-  /// 待消费的展开 / 收起意图；null = 没有请求。
-  ///
-  /// 意图而不是状态：页面可能尚未挂载完，重复请求不叠加。
-  bool? get requestedExpansion => _requestedExpansion;
+  @override
+  Listenable get changes => _changes;
 
   /// 请求切到队列页。
   void showQueueTab() => _request(nowPlayingQueueTabIndex);
@@ -81,19 +104,17 @@ class NowPlayingController extends ChangeNotifier {
     // 再发一次没有新信息，页面按第一次的请求执行。
     if (_requestedExpansion == value) return;
     _requestedExpansion = value;
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 请求是动作不是状态：重复请求同一页也要通知，订阅方自行决定是否已到位。
   void _request(int index) {
     _requestedTab = index;
     _tabRequestVersion++;
-    notifyListeners();
+    _changes.notify();
   }
 
-  @override
   void dispose() {
     activeTab.dispose();
-    super.dispose();
   }
 }

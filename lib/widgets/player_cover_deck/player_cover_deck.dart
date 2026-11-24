@@ -128,7 +128,7 @@ class _PlayerCoverDeckState extends ConsumerState<PlayerCoverDeck>
   /// 页中心封面是否隐藏：顶栏 ⇄ 播放页飞行期间，真身由飞行副本承接。
   /// 直接乘进中心层的同一条 Opacity（不嵌套第二层，否则「最近透明度」观测
   /// 会失真，也会多一次合成）。
-  bool get _pageCoverHidden => widget.morph?.pageHeaderHidden ?? false;
+  bool get _pageCoverHidden => widget.morph?.state.pageHeaderHidden ?? false;
 
   /// 快照通知已排入微任务（同一批通知只对账一次）。
   bool _trackSyncScheduled = false;
@@ -147,13 +147,13 @@ class _PlayerCoverDeckState extends ConsumerState<PlayerCoverDeck>
       isLargeScreenOf: () => widget.isLargeScreen,
       isPlayingOf: () => _playback?.snapshot.isPlaying ?? false,
       isMounted: () => mounted,
-      gesturesBlockedOf: () => widget.morph?.pageHeaderHidden ?? false,
+      gesturesBlockedOf: () => widget.morph?.state.pageHeaderHidden ?? false,
       onTrackSwapped: (duringDrag) => widget.onTrackSwapped?.call(duringDrag),
       onSkipRequested: _requestSkip,
       onVisualsChanged: _onDeckVisualsChanged,
     );
     // 顶栏⇄播放页飞行期间中心封面隐藏，必须监听 morph 控制器重建真身。
-    widget.morph?.addListener(_onMorphChanged);
+    widget.morph?.changes.addListener(_onMorphChanged);
   }
 
   @override
@@ -171,8 +171,8 @@ class _PlayerCoverDeckState extends ConsumerState<PlayerCoverDeck>
   void didUpdateWidget(covariant PlayerCoverDeck oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.morph != widget.morph) {
-      oldWidget.morph?.removeListener(_onMorphChanged);
-      widget.morph?.addListener(_onMorphChanged);
+      oldWidget.morph?.changes.removeListener(_onMorphChanged);
+      widget.morph?.changes.addListener(_onMorphChanged);
     }
     // provider 可能被替换：父级重建时重新检查订阅（此时 widget.displayTrack
     // 已来自新快照）。
@@ -276,7 +276,7 @@ class _PlayerCoverDeckState extends ConsumerState<PlayerCoverDeck>
   void dispose() {
     _playback?.changes.removeListener(_handlePlaybackChanged);
     _removeCoverListener?.call();
-    widget.morph?.removeListener(_onMorphChanged);
+    widget.morph?.changes.removeListener(_onMorphChanged);
     _controller.dispose();
     super.dispose();
   }

@@ -189,10 +189,10 @@ class _TrackSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: morph,
+    return ListenableBuilder(
+      listenable: morph.changes,
       builder: (context, _) {
-        final showTrack = !morph.barHeaderHidden;
+        final showTrack = !morph.state.barHeaderHidden;
         return NowPlayingSummary(
           onTap: onOpenPlayer,
           cover: SizedBox(
