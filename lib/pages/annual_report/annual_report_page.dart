@@ -275,7 +275,7 @@ class _AnnualReportPageState extends ConsumerState<AnnualReportPage> {
     if (report.topTracks.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
     final library = ref.read(libraryControllerProvider);
-    final playback = ref.read(playbackProvider);
+    final playback = ref.read(playbackControllerProvider);
     final tracks = [
       for (final entry in report.topTracks)
         library.sourceTrackFromRaw(

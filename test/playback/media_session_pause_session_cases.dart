@@ -280,7 +280,7 @@ void main() {
     // 系统控制路径：通知 / 锁屏 / 耳机键的暂停走会话命令面。
     await harness.handler.pause();
     expect(harness.service.toggleCalls, 1);
-    expect(harness.provider.isPlaying, isFalse);
+    expect(harness.provider.state.isPlaying, isFalse);
     expect(
       harness.store.fullSaves,
       savesBeforePause + 1,
@@ -300,17 +300,17 @@ void main() {
     final coldStart = buildTestPlaybackProvider();
     addTearDown(coldStart.dispose);
     await coldStart.preferencesReady;
-    expect(coldStart.hasRestoredSession, isTrue);
-    expect(coldStart.hasTrack, isTrue);
+    expect(coldStart.state.hasRestoredSession, isTrue);
+    expect(coldStart.state.hasTrack, isTrue);
     expect(coldStart.snapshot.current?.title, 'Title b');
     expect(coldStart.snapshot.queue.map((track) => track.id.id), [
       'a',
       'b',
       'c',
     ]);
-    expect(coldStart.currentMode, PlayMode.shuffle);
+    expect(coldStart.state.currentMode, PlayMode.shuffle);
     expect(coldStart.currentPosition, const Duration(seconds: 6));
-    expect(coldStart.isPlaying, isFalse, reason: '恢复态不自动起播');
+    expect(coldStart.state.isPlaying, isFalse, reason: '恢复态不自动起播');
   });
 
   test('系统控制停止：先落盘再停（队列被清空后冷启动仍可恢复）', () async {
@@ -338,7 +338,7 @@ void main() {
     expect(harness.store.clears, 0, reason: '系统停止保留可恢复会话');
     // 停止后服务队列已清空（快照取不到会话）：恢复只能靠停止前的落盘。
     expect(harness.service.hasTrack, isFalse);
-    expect(harness.provider.hasTrack, isFalse);
+    expect(harness.provider.state.hasTrack, isFalse);
 
     final stored = await PlaybackSessionStore().load();
     expect(stored, isNotNull);
@@ -349,7 +349,7 @@ void main() {
     final coldStart = buildTestPlaybackProvider();
     addTearDown(coldStart.dispose);
     await coldStart.preferencesReady;
-    expect(coldStart.hasRestoredSession, isTrue);
+    expect(coldStart.state.hasRestoredSession, isTrue);
     expect(coldStart.snapshot.current?.id, const TrackId('fake', 'a'));
     expect(coldStart.currentPosition, const Duration(seconds: 20));
   });
@@ -376,7 +376,7 @@ void main() {
     );
     // App 内 UI 读的是同一份快照：通知改模式，界面同步跟随。
     expect(
-      harness.provider.currentMode,
+      harness.provider.state.currentMode,
       PlayMode.singleRepeat,
       reason: '顺序 → 单曲（与 PlaybackProvider.togglePlayMode 同一顺序）',
     );

@@ -273,7 +273,8 @@ class _VolumePanelState extends ConsumerState<_VolumePanel> {
                     muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
                   ),
                 ),
-                onPressed: () => ref.read(playbackProvider).toggleMute(),
+                onPressed: () =>
+                    ref.read(playbackControllerProvider).toggleMute(),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -287,7 +288,7 @@ class _VolumePanelState extends ConsumerState<_VolumePanel> {
                   // 读数与滑杆同一格式化口径：朗读「音量 60%」而不是 0.6。
                   semanticFormatterCallback: (_) => percent,
                   onChanged: (value) =>
-                      ref.read(playbackProvider).setVolume(value),
+                      ref.read(playbackControllerProvider).setVolume(value),
                 ),
               ),
               const SizedBox(width: 8),

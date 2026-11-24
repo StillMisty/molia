@@ -148,8 +148,8 @@ Future<void> _enqueueTrack(BuildContext context, Track track) async {
   final playback = ProviderScope.containerOf(
     context,
     listen: false,
-  ).read(maybePlaybackProvider);
-  if (playback == null || !playback.hasTrack) return;
+  ).read(maybePlaybackControllerProvider);
+  if (playback == null || playback.snapshot.current == null) return;
   final l10n = _l10n(context);
   try {
     await playback.enqueueDomainTracks([track]);

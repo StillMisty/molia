@@ -35,8 +35,8 @@ void main() {
 
   test('默认满音量、未静音；启动把有效音量下发一次', () async {
     final harness = build();
-    expect(harness.provider.volume, 1.0);
-    expect(harness.provider.muted, isFalse);
+    expect(harness.provider.state.volume, 1.0);
+    expect(harness.provider.state.muted, isFalse);
 
     await harness.provider.preferencesReady;
     expect(harness.backend.volumes, [1.0], reason: '后端构造默认 1.0，启动加载后仍要显式下发一次');
@@ -133,11 +133,11 @@ void main() {
     await harness.provider.preferencesReady;
 
     var notifies = 0;
-    harness.provider.addListener(() => notifies++);
+    harness.provider.changes.addListener(() => notifies++);
     await harness.provider.setVolume(0.4);
 
-    expect(harness.provider.volume, 0.4);
-    expect(harness.provider.muted, isFalse);
+    expect(harness.provider.state.volume, 0.4);
+    expect(harness.provider.state.muted, isFalse);
     expect(harness.backend.volumes.last, 0.4);
     expect(notifies, 1);
   });
@@ -148,18 +148,18 @@ void main() {
     await harness.provider.setVolume(0.4);
 
     await harness.provider.toggleMute();
-    expect(harness.provider.muted, isTrue);
-    expect(harness.provider.volume, 0.4, reason: '静音不改音量值');
+    expect(harness.provider.state.muted, isTrue);
+    expect(harness.provider.state.volume, 0.4, reason: '静音不改音量值');
     expect(harness.backend.volumes.last, 0.0);
 
     // 静音期间改音量：只更新值，不解除静音，有效音量仍为 0。
     await harness.provider.setVolume(0.7);
-    expect(harness.provider.muted, isTrue);
-    expect(harness.provider.volume, 0.7);
+    expect(harness.provider.state.muted, isTrue);
+    expect(harness.provider.state.volume, 0.7);
     expect(harness.backend.volumes.last, 0.0);
 
     await harness.provider.toggleMute();
-    expect(harness.provider.muted, isFalse);
+    expect(harness.provider.state.muted, isFalse);
     expect(harness.backend.volumes.last, 0.7);
   });
 
@@ -168,12 +168,12 @@ void main() {
     await harness.provider.preferencesReady;
 
     await harness.provider.adjustVolume(-0.05);
-    expect(harness.provider.volume, closeTo(0.95, 1e-9));
+    expect(harness.provider.state.volume, closeTo(0.95, 1e-9));
     expect(harness.backend.volumes.last, closeTo(0.95, 1e-9));
 
     await harness.provider.setVolume(0.02);
     await harness.provider.adjustVolume(-0.05);
-    expect(harness.provider.volume, 0.0, reason: '下限 clamp');
+    expect(harness.provider.state.volume, 0.0, reason: '下限 clamp');
     expect(harness.backend.volumes.last, 0.0);
 
     final dispatched = harness.backend.volumes.length;
@@ -186,7 +186,7 @@ void main() {
 
     await harness.provider.setVolume(0.98);
     await harness.provider.adjustVolume(0.05);
-    expect(harness.provider.volume, 1.0, reason: '上限 clamp');
+    expect(harness.provider.state.volume, 1.0, reason: '上限 clamp');
     expect(harness.backend.volumes.last, 1.0);
   });
 
@@ -195,12 +195,12 @@ void main() {
     await harness.provider.preferencesReady;
     await harness.provider.setVolume(0.4);
     await harness.provider.toggleMute();
-    expect(harness.provider.muted, isTrue);
+    expect(harness.provider.state.muted, isTrue);
     expect(harness.backend.volumes.last, 0.0);
 
     await harness.provider.adjustVolume(-0.05);
-    expect(harness.provider.muted, isFalse, reason: '用户调音量即期望听见声音');
-    expect(harness.provider.volume, closeTo(0.35, 1e-9));
+    expect(harness.provider.state.muted, isFalse, reason: '用户调音量即期望听见声音');
+    expect(harness.provider.state.volume, closeTo(0.35, 1e-9));
     expect(harness.backend.volumes.last, closeTo(0.35, 1e-9));
   });
 
@@ -223,7 +223,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 60));
     final afterDebounce = build();
     await afterDebounce.provider.preferencesReady;
-    expect(afterDebounce.provider.volume, closeTo(0.9, 1e-9));
+    expect(afterDebounce.provider.state.volume, closeTo(0.9, 1e-9));
   });
 
   test('持久化往返：音量与静音在重建 provider 后恢复并下发', () async {
@@ -235,8 +235,8 @@ void main() {
     final second = build();
     await second.provider.preferencesReady;
 
-    expect(second.provider.volume, closeTo(0.4, 1e-9));
-    expect(second.provider.muted, isTrue);
+    expect(second.provider.state.volume, closeTo(0.4, 1e-9));
+    expect(second.provider.state.muted, isTrue);
     expect(second.backend.volumes, [0.0], reason: '恢复的静音态启动即压到 0');
   });
 
@@ -257,7 +257,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 60));
     final afterDrag = build();
     await afterDrag.provider.preferencesReady;
-    expect(afterDrag.provider.volume, closeTo(0.4, 1e-9));
+    expect(afterDrag.provider.state.volume, closeTo(0.4, 1e-9));
   });
 
   test('越界值收进 0..1', () async {
@@ -265,10 +265,10 @@ void main() {
     await harness.provider.preferencesReady;
 
     await harness.provider.setVolume(2);
-    expect(harness.provider.volume, 1.0);
+    expect(harness.provider.state.volume, 1.0);
 
     await harness.provider.setVolume(-1);
-    expect(harness.provider.volume, 0.0);
+    expect(harness.provider.state.volume, 0.0);
     expect(harness.backend.volumes.last, 0.0);
   });
 
@@ -284,7 +284,7 @@ void main() {
 
     await provider.setVolume(0.4);
 
-    expect(provider.volume, 0.4);
+    expect(provider.state.volume, 0.4);
     expect(snapshotNotifies, 0, reason: '音量不属于播放快照');
   });
 }

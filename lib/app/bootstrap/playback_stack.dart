@@ -203,7 +203,7 @@ Future<PlaybackStack> buildPlaybackStack({
     // 恢复态的洗牌与真实播放同一套证据 / 开关（provider 已构造完成，
     // load() 的异步读取发生在其后，读到的是加载后的设置）。
     recentTrackIds: recentTracks.recentTrackIds,
-    smartShuffleEnabled: () => playbackProvider.smartShuffleEnabled,
+    smartShuffleEnabled: () => playbackProvider.state.smartShuffleEnabled,
   );
   playbackProvider = PlaybackProvider(
     settings: playbackSettings,

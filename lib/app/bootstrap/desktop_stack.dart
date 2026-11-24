@@ -281,7 +281,7 @@ Future<DesktopStack> buildDesktopStack({
     );
   }
 
-  playback.addListener(syncTray);
+  playback.changes.addListener(syncTray);
   libraryProvider.changes.addListener(syncTray);
   AppBrandingService.titleNotifier.addListener(syncTray);
   LanguageService.localeNotifier.addListener(syncTray);

@@ -92,7 +92,7 @@ final class TrackHandoff {
     final playback = ProviderScope.containerOf(
       context,
       listen: false,
-    ).read(playbackProvider);
+    ).read(playbackControllerProvider);
     final name = resolveTrackListName(
       name: contextName,
       fallbackName: fallbackContextName,

@@ -79,7 +79,7 @@ void wireNextTrackLyricsPreload({
     unawaited(lyricsProvider.preload(next));
   }
 
-  playback.addListener(syncNextTrackLyricsPreload);
+  playback.changes.addListener(syncNextTrackLyricsPreload);
   powerPolicy?.addListener(syncNextTrackLyricsPreload);
   syncNextTrackLyricsPreload();
 }
@@ -102,7 +102,7 @@ void wireLyricsSession({
     unawaited(lyricsProvider.ensureForTrack(playback.snapshot.current));
   }
 
-  playback.addListener(syncCurrentTrack);
+  playback.changes.addListener(syncCurrentTrack);
   powerPolicy?.addListener(syncCurrentTrack);
   syncCurrentTrack();
 }

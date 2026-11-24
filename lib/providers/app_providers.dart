@@ -193,18 +193,21 @@ T _require<T>(Ref ref) => ref.watch(appRuntimeProvider).require<T>();
 
 final playbackProvider =
     NotifierProvider<
-      LegacyListenableNotifier<PlaybackProvider>,
-      PlaybackProvider
-    >(() => LegacyListenableNotifier((ref) => _require<PlaybackProvider>(ref)));
+      SnapshotNotifier<PlaybackProvider, PlaybackState>,
+      PlaybackState
+    >(() => SnapshotNotifier((ref) => _require<PlaybackProvider>(ref)));
 final maybePlaybackProvider =
     NotifierProvider<
-      LazyNullableListenableNotifier<PlaybackProvider>,
-      PlaybackProvider?
+      NullableSnapshotNotifier<PlaybackProvider, PlaybackState>,
+      PlaybackState?
     >(
-      () => LazyNullableListenableNotifier(
+      () => NullableSnapshotNotifier(
         (ref) => ref.read(appRuntimeProvider).maybe<PlaybackProvider>(),
       ),
     );
+final playbackControllerProvider = snapshotController<PlaybackProvider>();
+final maybePlaybackControllerProvider =
+    maybeSnapshotController<PlaybackProvider>();
 
 final libraryProvider =
     NotifierProvider<

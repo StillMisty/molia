@@ -23,8 +23,8 @@ Future<void> showTrackQualitySheet(
   required Track track,
   required String currentQuality,
 }) {
-  final playback = ref.read(playbackProvider);
-  if (playback.hasRestoredSession) return Future.value();
+  final playback = ref.read(playbackControllerProvider);
+  if (playback.state.hasRestoredSession) return Future.value();
   final options = sortedQualityOptions(track.qualities);
   if (options.isEmpty) return Future.value();
   final l10n = AppLocalizations.of(ref.context)!;

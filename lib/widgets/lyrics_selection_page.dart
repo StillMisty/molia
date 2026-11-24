@@ -277,7 +277,7 @@ class _LyricsSelectionPageState extends ConsumerState<LyricsSelectionPage> {
 
     final detailLayout = context.layoutType(ResponsivePageType.detail);
 
-    final playback = ref.read(playbackProvider);
+    final playback = ref.read(playbackControllerProvider);
 
     // 进度订阅走 position 独立通道：仅当高亮行号变化时重建，
     // 避免每次进度 tick 整页重建。

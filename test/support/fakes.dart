@@ -473,7 +473,7 @@ PlaybackProvider buildTestPlaybackProvider({
     observer: observer,
     recentTrackIds: recentTrackIds,
     smartShuffleEnabled:
-        smartShuffleEnabled ?? () => provider.smartShuffleEnabled,
+        smartShuffleEnabled ?? () => provider.state.smartShuffleEnabled,
   );
   provider = PlaybackProvider(
     facade: playbackFacade,

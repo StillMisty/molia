@@ -9,7 +9,6 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_ui/material_ui.dart';
 
 import '../../domain/models/track.dart';
-import '../../providers/playback_provider.dart';
 import '../playback_cover_decode.dart';
 import '../app_network_image.dart';
 import '../cover_appearance.dart';
@@ -27,7 +26,6 @@ class DeckArtworkStack extends StatelessWidget {
   const DeckArtworkStack({
     super.key,
     required this.frame,
-    required this.playback,
     required this.realCoverUrlOf,
     required this.defaultCoverUrl,
     required this.centerScaleAnimation,
@@ -41,7 +39,6 @@ class DeckArtworkStack extends StatelessWidget {
   });
 
   final DeckArtworkFrame frame;
-  final PlaybackProvider playback;
 
   /// 真实封面 URL（自定义 / 原始；默认封面只做展示兜底）。
   final String? Function(Track?) realCoverUrlOf;
