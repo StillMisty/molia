@@ -63,11 +63,11 @@ void main() {
     // 宽屏四段放得下：仍是分段（窄屏才会降级为下拉，见下一条用例）。
     await tester.tap(find.text('0.15 秒'));
     await tester.pumpAndSettle();
-    expect(playback.fadePreset, PlaybackFadePreset.ms150);
+    expect(playback.state.fadePreset, PlaybackFadePreset.ms150);
 
     await tester.tap(find.byKey(const Key('settingsSmartShuffleSwitch')));
     await tester.pumpAndSettle();
-    expect(playback.smartShuffleEnabled, isFalse);
+    expect(playback.state.smartShuffleEnabled, isFalse);
 
     await tester.tap(
       find.byKey(const Key('settingsReturnToPlayerLyricsSwitch')),

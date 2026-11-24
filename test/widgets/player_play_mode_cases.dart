@@ -99,7 +99,7 @@ void main() {
     await tester.pumpWidget(host(const Player()));
     await tester.pump();
 
-    expect(playback.currentMode, PlayMode.listLoop);
+    expect(playback.state.currentMode, PlayMode.listLoop);
     expect(find.bySemanticsLabel(l10n.playModeListLoop), findsOneWidget);
 
     const expected = [
@@ -111,7 +111,7 @@ void main() {
     for (final (mode, icon) in expected) {
       await tester.tap(find.byType(PlaybackModeButton));
       await tester.pumpAndSettle();
-      expect(playback.currentMode, mode);
+      expect(playback.state.currentMode, mode);
       expect(find.byIcon(icon), findsOneWidget, reason: '$mode 的图标');
       expect(
         find.bySemanticsLabel(switch (mode) {

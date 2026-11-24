@@ -38,7 +38,7 @@ void main() {
         addTearDown(provider.dispose);
 
         var notifies = 0;
-        provider.addListener(() => notifies++);
+        provider.changes.addListener(() => notifies++);
 
         final track = _track('a');
         PlaybackSnapshot snapshotAt({bool isPlaying = true}) =>

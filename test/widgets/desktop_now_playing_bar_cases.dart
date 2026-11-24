@@ -79,7 +79,7 @@ void main() {
       find.descendant(of: bar, matching: find.byType(PlaybackModeButton)),
     );
     await tester.pumpAndSettle();
-    expect(playback.currentMode, PlayMode.sequential);
+    expect(playback.state.currentMode, PlayMode.sequential);
     expect(
       find.descendant(of: bar, matching: find.byType(VolumeControl)),
       findsOneWidget,

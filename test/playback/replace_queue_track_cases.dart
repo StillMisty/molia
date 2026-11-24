@@ -99,7 +99,7 @@ void main() {
     final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
-    expect(provider.hasRestoredSession, isTrue);
+    expect(provider.state.hasRestoredSession, isTrue);
 
     final replacement = track('a', sourceKey: 'kg');
     final hit = await provider.replaceQueueTrack(old, replacement);
@@ -135,7 +135,7 @@ void main() {
     );
     addTearDown(provider.dispose);
     await provider.preferencesReady;
-    expect(provider.hasRestoredSession, isTrue);
+    expect(provider.state.hasRestoredSession, isTrue);
 
     // 交接窗口：facade 已有队列但还没有当前曲目，恢复态仍然保留。
     backend.emit(PlaybackSnapshot(queue: [old, other], currentIndex: -1));
