@@ -193,9 +193,9 @@ class _PlayerState extends ConsumerState<Player> with TickerProviderStateMixin {
       playbackProvider.select((provider) => provider.snapshot.current),
     );
 
-    // 只读一次快照（不订阅整棵播放器）：标题块的 lastPlayed* 兜底值随
-    // 曲目变化刷新，音量拖动等通知不应重建整页。
-    final playback = ref.read(playbackProvider);
+    // 只读一次控制器快照（不订阅整棵播放器）：标题块的 lastPlayed* 兜底值
+    // 要取现场值，音量拖动等通知不应重建整页。
+    final playback = ref.read(playbackControllerProvider).state;
 
     // 展示曲目沿用上一次非空曲目：换歌瞬间快照可能短暂为空，直接回退到
     // 「无曲目播放页」会让封面 / 标题闪一帧。

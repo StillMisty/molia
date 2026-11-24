@@ -146,7 +146,10 @@ class _DownloadsManagePageState extends ConsumerState<DownloadsManagePage> {
                   downloads == null || !downloads.supported || queueLength == 0
                   ? null
                   : () {
-                      final queue = ref.read(playbackProvider).snapshot.queue;
+                      final queue = ref
+                          .read(playbackControllerProvider)
+                          .snapshot
+                          .queue;
                       unawaited(_batchDownload(queue));
                     },
             ),
