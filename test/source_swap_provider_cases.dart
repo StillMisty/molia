@@ -98,6 +98,23 @@ void main() {
     expect(provider.activeSourceKey, isEmpty, reason: '默认全部来源');
     expect(provider.activeItems.map((t) => t.id.uri), ['kg:100', 'kg:101']);
     expect(provider.failedSourceKeys, {'tx'});
+    await Future<void>.delayed(Duration.zero);
+    final snapshot = provider.state;
+    expect(
+      () => snapshot.groups.add(snapshot.groups.first),
+      throwsUnsupportedError,
+      reason: '快照分组是只读副本',
+    );
+    expect(
+      () => snapshot.activeItems.clear(),
+      throwsUnsupportedError,
+      reason: '快照候选列表是只读副本',
+    );
+    expect(
+      () => snapshot.failedSourceKeys.clear(),
+      throwsUnsupportedError,
+      reason: '快照失败集合是只读副本',
+    );
     expect(kg.lastQuery?.keyword, 'Title Artist');
     expect(sources['wy']!.searchCalls, 1, reason: '种子源保留并参与搜索');
   });

@@ -130,6 +130,13 @@ void main() {
     expect(statistics.playedKeysCalls, 1);
     expect(provider.snapshot, isNotNull);
     expect(provider.smartRows.keys, containsAll(SmartListIds.all));
+    final state = provider.state;
+    expect(() => state.smartRows.clear(), throwsUnsupportedError);
+    expect(
+      () => state.smartRows[SmartListIds.recentlyPlayed]!.clear(),
+      throwsUnsupportedError,
+      reason: '行列表是零拷贝只读视图，不能反向污染智能列表',
+    );
   });
 
   test('单条播放历史只重建智能列表：不重读整库、不重读统计', () async {

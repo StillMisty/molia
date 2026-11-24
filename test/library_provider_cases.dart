@@ -291,6 +291,19 @@ void main() {
     expect(provider.history.single.songId, '1');
   });
 
+  test('历史快照是只读视图：不能反向修改缓存', () async {
+    await repository.addHistoryEntry(entry('1', playedAt: 1));
+    await provider.refreshHistory(force: true);
+
+    final snapshot = provider.state;
+    expect(
+      () => snapshot.history.add(snapshot.history.single),
+      throwsUnsupportedError,
+      reason: '大列表用零拷贝只读视图，快照与缓存解耦',
+    );
+    expect(provider.history, hasLength(1));
+  });
+
   test('历史重播不即时重排：停留期间顺序冻结，重进时才按最近播放刷新', () async {
     await repository.addHistoryEntry(entry('1', playedAt: 1));
     await repository.addHistoryEntry(entry('2', playedAt: 2));

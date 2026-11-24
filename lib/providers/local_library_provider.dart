@@ -6,6 +6,7 @@
 library;
 
 import 'dart:async';
+import 'dart:collection';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
@@ -410,10 +411,11 @@ class LocalLibraryProvider extends _$LocalLibraryProvider {
           browse: index,
           playedKeys: _playedKeys,
         );
-        _smartRows = <String, List<CollectionRow>>{
+        // 智能列表可达数百行：行列表用零拷贝只读视图，映射本身很小则复制。
+        _smartRows = Map.unmodifiable({
           for (final id in SmartListIds.all)
-            id: _rowsFor(id, sources, downloadList),
-        };
+            id: UnmodifiableListView(_rowsFor(id, sources, downloadList)),
+        });
         _snapshot = LibraryBrowseSnapshot(index: index);
         _seenHistory = library!.history;
         _seenPlaylists = library!.playlists;

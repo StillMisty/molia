@@ -169,6 +169,13 @@ class LibraryProvider implements SnapshotSource<LibraryState> {
   _historyRead;
   late final ReadReconciliation<List<PlaylistInfo>, Never> _playlistsRead;
 
+  /// 读投影的只读视图缓存：历史最多 500 行，不逐次复制；缓存到下次真值
+  /// 换引用为止，保持合集 presenter 用来复用视图的列表身份稳定。
+  List<PlayHistoryEntry>? _historyViewSource;
+  List<PlayHistoryEntry> _historyView = const [];
+  List<PlaylistInfo>? _playlistsViewSource;
+  List<PlaylistInfo> _playlistsView = const [];
+
   /// 收藏事实（键 / 顺序行 / 计数 / 版本的唯一持有者）。
   late final FavoriteFact _favorites;
 
@@ -193,8 +200,8 @@ class LibraryProvider implements SnapshotSource<LibraryState> {
 
   @override
   LibraryState get state => LibraryState(
-    history: _historyRead.value,
-    playlists: _playlistsRead.value,
+    history: history,
+    playlists: playlists,
     historyState: _historyRead.state,
     playlistsState: _playlistsRead.state,
     favoritesRevision: _favorites.revision,
@@ -210,8 +217,25 @@ class LibraryProvider implements SnapshotSource<LibraryState> {
   int _playlistsRevision = 0;
   int get playlistsRevision => _playlistsRevision;
 
-  List<PlayHistoryEntry> get history => _historyRead.value;
-  List<PlaylistInfo> get playlists => _playlistsRead.value;
+  /// 播放历史（大集合：只读视图复用底层列表，避免每次通知复制整表）。
+  List<PlayHistoryEntry> get history {
+    final value = _historyRead.value;
+    if (!identical(value, _historyViewSource)) {
+      _historyViewSource = value;
+      _historyView = UnmodifiableListView(value);
+    }
+    return _historyView;
+  }
+
+  /// 列表清单（与 [history] 同口径的只读视图）。
+  List<PlaylistInfo> get playlists {
+    final value = _playlistsRead.value;
+    if (!identical(value, _playlistsViewSource)) {
+      _playlistsViewSource = value;
+      _playlistsView = UnmodifiableListView(value);
+    }
+    return _playlistsView;
+  }
 
   /// 自建列表（不含默认收藏的内部保留行）。
   List<PlaylistInfo> get customPlaylists => [

@@ -219,6 +219,13 @@ void main() {
   test('loadHotSearches：成功后缓存；失败静默为空', () async {
     await discover.loadHotSearches();
     expect(discover.hotSearches, ['晴天', '夜曲']);
+    final snapshot = discover.state;
+    expect(snapshot.hotSearches, ['晴天', '夜曲']);
+    expect(
+      () => snapshot.hotSearches.add('多余'),
+      throwsUnsupportedError,
+      reason: '快照不能反向修改内部热搜缓存',
+    );
     await discover.loadHotSearches();
     expect(source.hotSearchCalls, 1); // 幂等，不重复请求
 

@@ -117,16 +117,17 @@ class DiscoverProvider extends _$DiscoverProvider {
 
   DiscoverState _snapshot() => DiscoverState(
     channelKey: _selection!.key,
-    sourceKeys: sourceKeys,
+    sourceKeys: List.unmodifiable(sourceKeys),
     hasDiscoverSource: hasDiscoverSource,
     supportsLeaderboards: supportsLeaderboards,
     supportsPlaylists: supportsPlaylists,
     supportsPlaylistSearch: supportsPlaylistSearch,
     supportsHotSearch: supportsHotSearch,
-    leaderboards: leaderboards,
-    hotSearches: hotSearches,
+    leaderboards: List.unmodifiable(leaderboards),
+    // 热搜词来自内部按渠道缓存的可变列表：复制一次，快照不能反向污染缓存。
+    hotSearches: List.unmodifiable(hotSearches),
     hotSearchLoading: _hotSearchLoading,
-    playlists: _library?.customPlaylists ?? const [],
+    playlists: List.unmodifiable(_library?.customPlaylists ?? const []),
   );
 
   void _emit() {
