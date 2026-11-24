@@ -449,7 +449,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                 title: l10n.settingsAutoSourceSwap,
                 subtitle: l10n.settingsAutoSourceSwapSubtitle,
                 value: autoEnabled,
-                onChanged: (value) => sourceSwapSettings.setAutoEnabled(value),
+                onChanged: (value) => ref
+                    .read(sourceSwapSettingsControllerProvider)
+                    ?.setAutoEnabled(value),
               );
             },
           ),
@@ -468,7 +470,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               onCellular: dataSaver.onCellular,
             ),
             value: dataSaver.enabled,
-            onChanged: (value) => dataSaver.setEnabled(value),
+            onChanged: (value) =>
+                ref.read(dataSaverServiceControllerProvider)?.setEnabled(value),
           ),
           SettingsReveal(
             visible: dataSaver.enabled,
@@ -478,7 +481,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               title: l10n.settingsDataSaverCovers,
               subtitle: l10n.settingsDataSaverCoversSubtitle,
               value: dataSaver.coversSaverEnabled,
-              onChanged: (value) => dataSaver.setCoversSaverEnabled(value),
+              onChanged: (value) => ref
+                  .read(dataSaverServiceControllerProvider)
+                  ?.setCoversSaverEnabled(value),
             ),
           ),
         ],

@@ -68,7 +68,6 @@ void main() {
   });
 
   tearDown(() {
-    libraryAdd.dispose();
     playback.dispose();
   });
 

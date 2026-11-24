@@ -18,7 +18,6 @@ void main() {
 
   SourcePreferences module({SettingsRegistry? settings}) {
     final preferences = SourcePreferences(settings ?? testSettingsRegistry());
-    addTearDown(preferences.dispose);
     return preferences;
   }
 
@@ -30,7 +29,7 @@ void main() {
     });
     final preferences = module();
     var notifications = 0;
-    preferences.addListener(() => notifications++);
+    preferences.changes.addListener(() => notifications++);
 
     await preferences.load();
     expect(preferences.preferredQuality, 'flac');
@@ -71,7 +70,7 @@ void main() {
   test('setPreferredQuality：合法值生效并持久化；非法值忽略且不通知', () async {
     final preferences = module();
     var notifications = 0;
-    preferences.addListener(() => notifications++);
+    preferences.changes.addListener(() => notifications++);
 
     await preferences.setPreferredQuality('flac');
     expect(preferences.preferredQuality, 'flac');
@@ -87,7 +86,7 @@ void main() {
   test('setSourceOrder：去重 + 忽略空串并持久化；顺序相同不重复通知', () async {
     final preferences = module();
     var notifications = 0;
-    preferences.addListener(() => notifications++);
+    preferences.changes.addListener(() => notifications++);
 
     await preferences.setSourceOrder(['tx', 'kw', 'tx', '']);
     expect(preferences.sourceOrder, ['tx', 'kw']);
@@ -102,7 +101,7 @@ void main() {
   test('setChannelEnabled：停用 / 启用往返并持久化；无变化 / 空 key 不通知', () async {
     final preferences = module();
     var notifications = 0;
-    preferences.addListener(() => notifications++);
+    preferences.changes.addListener(() => notifications++);
 
     await preferences.setChannelEnabled('mg', false);
     expect(preferences.disabledChannels, {'mg'});
@@ -125,7 +124,7 @@ void main() {
   test('resetChannelOrder：清空并删除持久化键；本就为空不通知', () async {
     final preferences = module();
     var notifications = 0;
-    preferences.addListener(() => notifications++);
+    preferences.changes.addListener(() => notifications++);
 
     await preferences.resetChannelOrder();
     expect(notifications, 0, reason: '空顺序表无需重置');
@@ -150,7 +149,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
     var notifications = 0;
-    preferences.addListener(() => notifications++);
+    preferences.changes.addListener(() => notifications++);
 
     await preferences.reload();
     expect(preferences.preferredQuality, '320k');
@@ -194,7 +193,7 @@ void main() {
   test('写失败吞错：内存状态生效、不打断交互', () async {
     final preferences = module(settings: _ThrowingSettingsRegistry());
     var notifications = 0;
-    preferences.addListener(() => notifications++);
+    preferences.changes.addListener(() => notifications++);
 
     await preferences.setPreferredQuality('flac');
     expect(preferences.preferredQuality, 'flac');

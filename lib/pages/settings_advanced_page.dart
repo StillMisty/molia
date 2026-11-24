@@ -124,32 +124,26 @@ class SettingsAdvancedPage extends ConsumerWidget {
     WidgetRef ref,
     AppLocalizations l10n,
   ) {
-    final LibraryAddSettings? settings = ref.watch(libraryAddSettingsProvider);
+    final LibraryAddSettingsState? settings = ref.watch(
+      maybeLibraryAddSettingsProvider,
+    );
     if (settings == null) return const SizedBox.shrink();
     return SettingsSectionCard(
       title: l10n.settingsAdvancedLibraryAddTitle,
       children: [
-        Consumer(
-          builder: (context, ref, _) {
-            final position = ref.watch(
-              libraryAddSettingsProvider.select((value) => value.position),
-            );
-            return SettingsChoiceRow<LibraryAddPosition>(
-              key: const Key('settingsLibraryAddPositionItem'),
-              icon: Icons.playlist_add_rounded,
-              title: l10n.settingsLibraryAddPosition,
-              subtitle: l10n.settingsLibraryAddPositionSubtitle,
-              value: position,
-              options: [
-                (LibraryAddPosition.top, l10n.settingsLibraryAddPositionTop),
-                (
-                  LibraryAddPosition.bottom,
-                  l10n.settingsLibraryAddPositionBottom,
-                ),
-              ],
-              onChanged: settings.setPosition,
-            );
-          },
+        SettingsChoiceRow<LibraryAddPosition>(
+          key: const Key('settingsLibraryAddPositionItem'),
+          icon: Icons.playlist_add_rounded,
+          title: l10n.settingsLibraryAddPosition,
+          subtitle: l10n.settingsLibraryAddPositionSubtitle,
+          value: settings.position,
+          options: [
+            (LibraryAddPosition.top, l10n.settingsLibraryAddPositionTop),
+            (LibraryAddPosition.bottom, l10n.settingsLibraryAddPositionBottom),
+          ],
+          onChanged: (value) => ref
+              .read(libraryAddSettingsControllerProvider)
+              ?.setPosition(value),
         ),
       ],
     );
@@ -208,9 +202,7 @@ class SettingsAdvancedPage extends ConsumerWidget {
     WidgetRef ref,
     AppLocalizations l10n,
   ) {
-    final DataSaverService? dataSaver = ref.watch(
-      maybeDataSaverServiceProvider,
-    );
+    final DataSaverState? dataSaver = ref.watch(maybeDataSaverServiceProvider);
     if (dataSaver == null) return const SizedBox.shrink();
     return SettingsSectionCard(
       title: l10n.settingsAdvancedDataSaverTitle,
@@ -225,7 +217,9 @@ class SettingsAdvancedPage extends ConsumerWidget {
             for (final option in DataSaverService.qualityOptions)
               (option, sourceQualityLabel(l10n, option)),
           ],
-          onChanged: (value) => dataSaver.setQualityCap(value),
+          onChanged: (value) => ref
+              .read(dataSaverServiceControllerProvider)
+              ?.setQualityCap(value),
         ),
       ],
     );

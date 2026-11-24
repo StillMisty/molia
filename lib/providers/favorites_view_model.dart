@@ -101,7 +101,7 @@ class FavoritesViewModel extends ChangeNotifier {
       persist: _session.persistScrollOffsets,
     );
     _session.addListener(_forwardChange);
-    _folderCollapse.addListener(_forwardChange);
+    _folderCollapse.changes.addListener(_forwardChange);
     unawaited(_session.start());
     unawaited(_folderCollapse.load());
   }
@@ -194,9 +194,9 @@ class FavoritesViewModel extends ChangeNotifier {
       downloadRecords?.addListener(_onServiceChanged);
     }
     if (!identical(cacheIndex, _cacheIndex)) {
-      _cacheIndex?.removeListener(_onServiceChanged);
+      _cacheIndex?.changes.removeListener(_onServiceChanged);
       _cacheIndex = cacheIndex;
-      cacheIndex?.addListener(_onServiceChanged);
+      cacheIndex?.changes.addListener(_onServiceChanged);
     }
   }
 
@@ -540,10 +540,10 @@ class FavoritesViewModel extends ChangeNotifier {
     _disposed = true;
     _cacheService?.revision.removeListener(_onServiceChanged);
     _downloadRecords?.removeListener(_onServiceChanged);
-    _cacheIndex?.removeListener(_onServiceChanged);
+    _cacheIndex?.changes.removeListener(_onServiceChanged);
     _collectionRequest?.removeListener(_onCollectionRequest);
     _folderCollapse
-      ..removeListener(_forwardChange)
+      ..changes.removeListener(_forwardChange)
       ..dispose();
     _session.removeListener(_forwardChange);
     _bookkeeping.dispose();

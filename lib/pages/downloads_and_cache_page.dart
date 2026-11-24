@@ -206,7 +206,9 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final DownloadSettings? settings = ref.watch(downloadSettingsProvider);
+    final DownloadSettingsState? settings = ref.watch(
+      maybeDownloadSettingsProvider,
+    );
     final DownloadManager? downloads = ref.watch(downloadManagerProvider);
     final cacheAvailable = _service != null;
     return SettingsSubPage(
@@ -238,7 +240,7 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
   Widget _downloadSection(
     BuildContext context,
     AppLocalizations l10n,
-    DownloadSettings settings,
+    DownloadSettingsState settings,
     DownloadManager? downloads,
   ) {
     return SettingsSectionCard(
@@ -258,7 +260,7 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
           },
           value: _saveLocationLabel(l10n, settings),
           onTap: _supportsCustomSaveDir
-              ? () => unawaited(_pickDirectory(context, settings))
+              ? () => unawaited(_pickDirectory(context))
               : () => M3ESnackbar.show(
                   context,
                   message: _fixedLocationHint(l10n, settings),
@@ -273,8 +275,11 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
             title: l10n.downloadPublishToPublicDir,
             subtitle: l10n.downloadPublishToPublicDirSubtitle,
             value: settings.publishToPublicDir,
-            onChanged: (value) =>
-                unawaited(settings.setPublishToPublicDir(value)),
+            onChanged: (value) => unawaited(
+              ref
+                  .read(downloadSettingsControllerProvider)
+                  ?.setPublishToPublicDir(value),
+            ),
           ),
         // 文件名模板 / 标签写入 / 下载通知：与保存位置同属「下载」域，低频
         // 但改的时候一定是在这张卡里找，不再拆去高级设置。
@@ -292,7 +297,9 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
           title: l10n.downloadEmbedTags,
           subtitle: l10n.downloadEmbedTagsSubtitle,
           value: settings.embedTags,
-          onChanged: (value) => unawaited(settings.setEmbedTags(value)),
+          onChanged: (value) => unawaited(
+            ref.read(downloadSettingsControllerProvider)?.setEmbedTags(value),
+          ),
         ),
         // 下载通知只在 Android 有语义（前台服务 + 通知栏进度）。
         if (downloads?.notificationsSupported ?? false)
@@ -303,7 +310,11 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
             subtitle: l10n.downloadNotificationsSubtitle,
             value: settings.notifications,
             onChanged: (value) {
-              unawaited(settings.setNotifications(value));
+              unawaited(
+                ref
+                    .read(downloadSettingsControllerProvider)
+                    ?.setNotifications(value),
+              );
               if (value) unawaited(NotificationPermission.ensureRequested());
             },
           ),
@@ -481,7 +492,10 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
   }
 
   /// 保存位置的显示值：桌面显示自定义路径 / 默认；移动端说明实际落点。
-  String _saveLocationLabel(AppLocalizations l10n, DownloadSettings settings) {
+  String _saveLocationLabel(
+    AppLocalizations l10n,
+    DownloadSettingsState settings,
+  ) {
     if (_isAndroid) return l10n.downloadSaveLocationAndroid;
     if (_isIos) return l10n.downloadSaveLocationIos;
     return settings.saveDir.isEmpty
@@ -489,7 +503,10 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
         : settings.saveDir;
   }
 
-  String _fixedLocationHint(AppLocalizations l10n, DownloadSettings settings) {
+  String _fixedLocationHint(
+    AppLocalizations l10n,
+    DownloadSettingsState settings,
+  ) {
     if (_isAndroid) {
       return settings.publishToPublicDir
           ? l10n.downloadSaveLocationFixedHintAndroid
@@ -500,10 +517,7 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
   }
 
   /// 选择保存目录（桌面）；选择器默认打开另存目录。
-  Future<void> _pickDirectory(
-    BuildContext context,
-    DownloadSettings settings,
-  ) async {
+  Future<void> _pickDirectory(BuildContext context) async {
     final l10n = AppLocalizations.of(context)!;
     final NotificationService? notifications = ref.read(
       notificationServiceProvider,
@@ -522,7 +536,7 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
       picked = null;
     }
     if (picked == null || picked.isEmpty) return;
-    await settings.setSaveDir(picked);
+    await ref.read(downloadSettingsControllerProvider)?.setSaveDir(picked);
     notifications?.showSnackBar(l10n.save);
   }
 
@@ -555,7 +569,7 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
   /// 编辑文件名模板：实时预览 + 恢复默认。
   Future<void> _editTemplate(
     BuildContext context,
-    DownloadSettings settings,
+    DownloadSettingsState settings,
   ) async {
     final l10n = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: settings.filenameTemplate);
@@ -623,7 +637,9 @@ class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
     );
     controller.dispose();
     if (result == null) return;
-    await settings.setFilenameTemplate(result);
+    await ref
+        .read(downloadSettingsControllerProvider)
+        ?.setFilenameTemplate(result);
   }
 
   String _formatSize(int bytes) {

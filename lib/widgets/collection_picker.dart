@@ -208,13 +208,13 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
   @override
   void initState() {
     super.initState();
-    _collapse.addListener(_onCollapseChanged);
+    _collapse.changes.addListener(_onCollapseChanged);
     if (_ownsCollapse) unawaited(_collapse.load());
   }
 
   @override
   void dispose() {
-    _collapse.removeListener(_onCollapseChanged);
+    _collapse.changes.removeListener(_onCollapseChanged);
     if (_ownsCollapse) _collapse.dispose();
     super.dispose();
   }

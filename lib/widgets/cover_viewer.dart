@@ -232,8 +232,8 @@ class _CoverViewerPageState extends ConsumerState<CoverViewerPage> {
     final l10n = _l10n(context);
     final saveAs = ref.read(saveAsProvider);
     final notifications = ref.read(notificationServiceProvider);
-    final dataSaver = ref.read(dataSaverServiceProvider);
-    if (_isNetworkUrl(widget.coverUrl) && dataSaver.active) {
+    final dataSaver = ref.read(dataSaverServiceControllerProvider);
+    if (_isNetworkUrl(widget.coverUrl) && (dataSaver?.active ?? false)) {
       final confirmed = await M3EDialog.show<bool>(
         context,
         dialog: M3EDialog(

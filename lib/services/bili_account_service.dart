@@ -21,8 +21,38 @@ import '../sources/builtin/bili_client.dart';
 import '../sources/builtin/bili_login.dart';
 import '../sources/builtin/bili_session.dart';
 import '../sources/builtin/builtin_transport.dart';
+import '../utils/snapshot_source.dart';
 
-class BiliAccountService extends ChangeNotifier {
+/// B 站账号登录态的不可变快照（UI 经 `biliAccountProvider` 读）。
+///
+/// 只含展示面字段：Cookie 留在 [BiliSession]，不进快照、不写日志。
+@immutable
+class BiliAccountState {
+  const BiliAccountState({
+    required this.status,
+    required this.isLoggedIn,
+    required this.account,
+    required this.sessionExpired,
+    required this.lastLoginPersisted,
+  });
+
+  /// 登录态。
+  final BiliAccountStatus status;
+
+  /// 会话是否登录（与实例上的 `isLoggedIn` 同义）。
+  final bool isLoggedIn;
+
+  /// 账号资料（未登录 / 未拉取时为 null）。
+  final BiliAccount? account;
+
+  /// 资料校验发现登录已失效。
+  final bool sessionExpired;
+
+  /// 最近一次扫码登录是否成功写入设置存储。
+  final bool lastLoginPersisted;
+}
+
+class BiliAccountService implements SnapshotSource<BiliAccountState> {
   BiliAccountService({
     required this._settings,
     BuiltinTransport? builtinTransport,
@@ -44,6 +74,9 @@ class BiliAccountService extends ChangeNotifier {
   final SettingsAccess _settings;
   late final BiliQrLogin _login;
   final Logger _logger = Logger('molia.bili_account');
+
+  /// 变更信号（替代 `ChangeNotifier.notifyListeners` 的订阅面）。
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 凭据 / 账号资料 / 过期标记的唯一状态源：服务自身不持有 Cookie 或账号副本。
   final BiliSession _session;
@@ -68,7 +101,7 @@ class BiliAccountService extends ChangeNotifier {
   /// [session] 的登录态快捷读数（组合根接线用）。
   bool get isLoggedIn => _session.isLoggedIn;
 
-  /// 账号资料由会话持有，服务只转发（ChangeNotifier 仍服务设置页刷新）。
+  /// 账号资料由会话持有，服务只转发（设置页读快照重建）。
   BiliAccount? get account => _session.account;
 
   /// 资料校验发现登录已失效（供页面显示「登录已过期」）。
@@ -76,6 +109,18 @@ class BiliAccountService extends ChangeNotifier {
 
   /// 最近一次扫码登录是否成功写入设置存储（false = 本次会话可用，重启失效）。
   bool get lastLoginPersisted => _lastLoginPersisted;
+
+  @override
+  BiliAccountState get state => BiliAccountState(
+    status: _status,
+    isLoggedIn: _session.isLoggedIn,
+    account: _session.account,
+    sessionExpired: _session.expired,
+    lastLoginPersisted: _lastLoginPersisted,
+  );
+
+  @override
+  Listenable get changes => _changes;
 
   /// 读取本地 / 同步到达的凭据；幂等。`BiliSession.ready` 会等它完成。
   Future<void> init() {
@@ -91,7 +136,7 @@ class BiliAccountService extends ChangeNotifier {
   Future<void> _loadFromSettings() async {
     final cookie = await _readCookie();
     _applyCookie(cookie);
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 同步应用远端凭据后的重载入口（组合根 mount 时绑定的钩子）。
@@ -100,7 +145,7 @@ class BiliAccountService extends ChangeNotifier {
     final cookie = await _readCookie();
     final changed = _applyCookie(cookie);
     if (!changed) return;
-    notifyListeners();
+    _changes.notify();
     if (cookie.isNotEmpty) {
       onLoggedIn?.call();
       unawaited(refreshProfile(force: true));
@@ -131,7 +176,7 @@ class BiliAccountService extends ChangeNotifier {
           ..clear()
           ..markExpired();
         _status = BiliAccountStatus.loggedOut;
-        notifyListeners();
+        _changes.notify();
         return;
       }
       final current = _session.account;
@@ -142,7 +187,7 @@ class BiliAccountService extends ChangeNotifier {
         userName: profile.userName ?? current?.userName,
       );
       _session.updateAccount(merged);
-      notifyListeners();
+      _changes.notify();
     } catch (e) {
       // 网络失败不判失效：保留登录态，下次打开账号页再试。
       _logger.warning('B 站账号资料获取失败: ${e.runtimeType}');
@@ -187,7 +232,7 @@ class BiliAccountService extends ChangeNotifier {
           _applyCookie(credentials.cookieHeader);
           final persisted = await _persistCookie(credentials.cookieHeader);
           _lastLoginPersisted = persisted;
-          notifyListeners();
+          _changes.notify();
           onLoggedIn?.call();
           unawaited(refreshProfile(force: true));
           return BiliQrPollResult(
@@ -235,7 +280,7 @@ class BiliAccountService extends ChangeNotifier {
     _status = BiliAccountStatus.loggedOut;
     _lastLoginPersisted = true;
     _lastProfileFetch = null;
-    notifyListeners();
+    _changes.notify();
   }
 
   Future<String> _readCookie() async {

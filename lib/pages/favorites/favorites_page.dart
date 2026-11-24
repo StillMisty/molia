@@ -151,7 +151,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
       localDataService: ref.read(trackLocalDataServiceProvider),
       collectionRequest: ref.read(libraryCollectionRequestProvider),
       downloadRecords: ref.read(downloadRecordsProvider),
-      cacheIndex: ref.read(localCacheIndexProvider),
+      cacheIndex: ref.read(localCacheIndexControllerProvider),
     );
     // 重新可见 = 重新进入本页：刷新历史顺序（provider 通知自带重建）。
     _vm.setPageVisible(ShellPageVisibility.maybeVisibleOf(context) ?? true);
@@ -457,7 +457,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
       },
       onImportLocal: () => unawaited(importLocalAudioFilesFlow(context)),
       onCheckLocalCache: () {
-        final index = ref.read(localCacheIndexProvider);
+        final index = ref.read(localCacheIndexControllerProvider);
         final cache = ref.read(cacheServiceProvider);
         unawaited(
           checkFavoritesLocalCache(

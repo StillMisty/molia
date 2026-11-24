@@ -9,8 +9,20 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/settings/device_settings.dart';
 import '../../data/settings/device_settings_keys.dart';
+import '../../utils/snapshot_source.dart';
 
-class PlaylistFolderCollapseController extends ChangeNotifier {
+/// 分组折叠状态的不可变快照。
+@immutable
+class PlaylistFolderCollapseState {
+  PlaylistFolderCollapseState(Set<String> collapsed)
+    : collapsed = Set.unmodifiable(collapsed);
+
+  /// 当前收起的分组名集合。
+  final Set<String> collapsed;
+}
+
+class PlaylistFolderCollapseController
+    implements SnapshotSource<PlaylistFolderCollapseState> {
   /// [settings] 仅测试注入；生产构造自己的设备本地入口。
   PlaylistFolderCollapseController({
     Set<String>? initiallyCollapsed,
@@ -22,6 +34,7 @@ class PlaylistFolderCollapseController extends ChangeNotifier {
 
   final DeviceSettings _settings;
   final Set<String> _collapsed;
+  final SnapshotSignal _changes = SnapshotSignal();
   bool _disposed = false;
 
   /// 是否读到过用户手动改过的折叠状态。null 持久值 = 首次进入，
@@ -31,6 +44,13 @@ class PlaylistFolderCollapseController extends ChangeNotifier {
   Set<String> get collapsed => Set.unmodifiable(_collapsed);
 
   bool isCollapsed(String folder) => _collapsed.contains(folder);
+
+  @override
+  PlaylistFolderCollapseState get state =>
+      PlaylistFolderCollapseState(_collapsed);
+
+  @override
+  Listenable get changes => _changes;
 
   /// 读取持久状态；读取失败保持当前内存值。重复调用安全。
   Future<void> load() async {
@@ -90,12 +110,10 @@ class PlaylistFolderCollapseController extends ChangeNotifier {
       _settings.write(kPlaylistFolderCollapsedKey, _collapsed.toList()..sort());
 
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) _changes.notify();
   }
 
-  @override
   void dispose() {
     _disposed = true;
-    super.dispose();
   }
 }

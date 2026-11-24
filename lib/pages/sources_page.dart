@@ -76,9 +76,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
       body: Consumer(
         builder: (context, ref, _) {
           final provider = ref.watch(sourcesProvider);
-          final BiliAccountService? biliAccount = ref.watch(
-            biliAccountProvider,
-          );
+          final BiliAccountState? biliAccount = ref.watch(biliAccountProvider);
           if (!provider.initialized) {
             return const Center(child: M3ELoadingIndicator());
           }
@@ -106,7 +104,7 @@ class _SourcesPageState extends ConsumerState<SourcesPage> {
   Widget _buildPlatformAccountsSection(
     BuildContext context,
     AppLocalizations l10n,
-    BiliAccountService account,
+    BiliAccountState account,
   ) {
     final loggedIn = account.status == BiliAccountStatus.loggedIn;
     return SettingsSectionCard(

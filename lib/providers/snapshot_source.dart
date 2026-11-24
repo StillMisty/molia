@@ -1,9 +1,10 @@
 /// 启动期状态对象 ↔ Riverpod 快照的桥接（Riverpod 半边）。
 ///
 /// 契约本身（`SnapshotSource` / `SnapshotSignal`）在
-/// `lib/utils/snapshot_source.dart`：数据层与播放层不得 import providers，
-/// 但它们的启动期对象同样要实现这套契约。UI 侧统一经 [SnapshotNotifier]
-/// 读快照；命令仍落在对象自己身上（经 `xxxControllerProvider` 取实例）。
+/// `lib/utils/snapshot_source.dart`：数据层、播放层与音源层都不得 import
+/// providers，但它们的启动期对象同样要实现这套契约。UI 侧统一经
+/// [SnapshotNotifier] 读快照；命令仍落在对象自己身上（经
+/// `xxxControllerProvider` 取实例）。
 ///
 /// 为什么状态不在 Notifier 里：这些对象与启动顺序、平台通道、服务生命周期
 /// 强耦合（见 ADR-0041 §2「服务不改成 Notifier」），容器只镜像它们的快照。

@@ -51,16 +51,12 @@ class _FakeSources extends SourcesProvider {
 }
 
 class _FakeDataSaver extends DataSaverService {
-  bool _enabled = false;
   final List<bool> calls = [];
 
   @override
-  bool get enabled => _enabled;
-
-  @override
   Future<void> setEnabled(bool value) async {
-    _enabled = value;
     calls.add(value);
+    await super.setEnabled(value);
   }
 }
 
