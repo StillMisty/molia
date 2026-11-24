@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'download_file_layout_cases.dart' as services_download_file_layout;
+import 'download_manager_state_cases.dart' as services_download_manager_state;
 import 'download_notification_presenter_cases.dart'
     as services_download_notification_presenter;
 import 'download_record_assembler_cases.dart'
@@ -19,6 +20,7 @@ void main() {
     services_download_notification_presenter.main,
   );
   group('download record assembler', services_download_record_assembler.main);
+  group('download manager state', services_download_manager_state.main);
   group('download records', services_download_records.main);
   group('download requests', services_download_requests.main);
   group('download task artifacts', services_download_task_artifacts.main);

@@ -33,13 +33,18 @@ enum LocalRelocateResult {
 /// 任务进度属于 [DownloadTask.progressListenable]，不会让本快照跟着 tick。
 @immutable
 class DownloadManagerState {
-  const DownloadManagerState({
+  /// 任务分组在构造时冻结：实现可以每次现建列表，消费方不得改写快照。
+  DownloadManagerState({
     required this.supported,
     required this.publisherSupported,
     required this.notificationsSupported,
     required this.initialized,
-    required this.taskGroups,
-  });
+    required DownloadTaskGroups taskGroups,
+  }) : taskGroups = (
+         running: List<DownloadTask>.unmodifiable(taskGroups.running),
+         queued: List<DownloadTask>.unmodifiable(taskGroups.queued),
+         failed: List<DownloadTask>.unmodifiable(taskGroups.failed),
+       );
 
   /// 下载目录是否可用。
   final bool supported;

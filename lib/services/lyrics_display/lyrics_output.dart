@@ -16,6 +16,10 @@ abstract final class LyricsOutputIds {
 }
 
 /// 一次投送的完整行数据（策略已应用，接收端直接展示）。
+///
+/// 集合字段在构造时冻结为只读副本：投送值会同时交给多个输出端
+/// （桌面悬浮窗 / 通知·锁屏），任何一个消费方都不得改写另一端的展示数据；
+/// [words] 也不能继续引用歌词模型里的逐字时间轴。
 @immutable
 class LyricsPresentation {
   final String trackId;
@@ -69,15 +73,15 @@ class LyricsPresentation {
   final int lineStartMs;
   final int lineEndMs;
 
-  const LyricsPresentation({
+  LyricsPresentation({
     required this.trackId,
     required this.title,
     required this.line,
-    this.extended = const [],
-    this.upcoming = const [],
+    List<String> extended = const [],
+    List<String> upcoming = const [],
     required this.isPlaying,
     required this.hasLyrics,
-    this.words,
+    List<LyricWord>? words,
     this.lineIndex = -1,
     this.hasCurrentLine = false,
     this.positionMs = 0,
@@ -85,7 +89,9 @@ class LyricsPresentation {
     this.scrollFollowsSinging = true,
     this.lineStartMs = -1,
     this.lineEndMs = -1,
-  });
+  }) : extended = List.unmodifiable(extended),
+       upcoming = List.unmodifiable(upcoming),
+       words = words == null ? null : List.unmodifiable(words);
 
   @override
   bool operator ==(Object other) =>
