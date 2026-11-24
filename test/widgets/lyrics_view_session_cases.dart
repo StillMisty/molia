@@ -154,32 +154,32 @@ void main() {
       host.setLyrics(synced: true);
       host.position = const Duration(seconds: 21);
       session.resetForLyrics();
-      expect(session.following, isTrue);
+      expect(session.state.following, isTrue);
 
       session.onUserScrollStarted();
-      expect(session.following, isFalse);
+      expect(session.state.following, isFalse);
       expect(
-        session.quickActionsBarVisible,
+        session.state.quickActionsBarVisible,
         isTrue,
         reason: '同步 + 可滚动：手动暂停后操作栏必须可见（居中当前行入口）',
       );
 
       scheduler.elapse(const Duration(seconds: 2));
-      expect(session.following, isFalse, reason: '恢复窗口未到');
+      expect(session.state.following, isFalse, reason: '恢复窗口未到');
       scheduler.elapse(const Duration(seconds: 1));
-      expect(session.following, isTrue);
+      expect(session.state.following, isTrue);
       scheduler.runFrames();
       expect(host.scrollCalls, [2], reason: '恢复后滚回当前行（21s → 第 2 行）');
 
       session.onUserScrollStarted();
       expect(
-        session.following,
+        session.state.following,
         isTrue,
         reason: '恢复后的 350ms 窗口内忽略用户滚动通知（跟随动画自身会发通知）',
       );
       scheduler.elapse(const Duration(milliseconds: 400));
       session.onUserScrollStarted();
-      expect(session.following, isFalse);
+      expect(session.state.following, isFalse);
     });
 
     test('复制模式禁用跟随并锁定单曲循环，退出恢复原播放模式', () {
@@ -188,13 +188,13 @@ void main() {
       session.resetForLyrics();
 
       expect(session.toggleCopyMode(), isTrue);
-      expect(session.copyMode, isTrue);
-      expect(session.following, isFalse);
+      expect(session.state.copyMode, isTrue);
+      expect(session.state.following, isFalse);
       expect(host.playModeCalls, [PlayMode.singleRepeat]);
 
       expect(session.toggleCopyMode(), isFalse);
-      expect(session.copyMode, isFalse);
-      expect(session.following, isTrue);
+      expect(session.state.copyMode, isFalse);
+      expect(session.state.following, isTrue);
       expect(host.playModeCalls, [PlayMode.singleRepeat, PlayMode.shuffle]);
     });
 
@@ -202,38 +202,38 @@ void main() {
       host.setLyrics(synced: true);
       host.quickActionsEnabled = false;
       session.resetForLyrics();
-      expect(session.quickActionsBarVisible, isFalse);
+      expect(session.state.quickActionsBarVisible, isFalse);
 
       session.toggleCopyMode();
       expect(
-        session.quickActionsBarVisible,
+        session.state.quickActionsBarVisible,
         isTrue,
         reason: '复制模式必须保留出口，否则收起播放器后无法退出',
       );
       session.toggleCopyMode();
-      expect(session.quickActionsBarVisible, isFalse);
+      expect(session.state.quickActionsBarVisible, isFalse);
     });
 
     test('手动操作栏到点自动收起，手动请求可再次唤出', () {
       host.setLyrics(synced: false);
       session.resetForLyrics();
-      expect(session.following, isFalse, reason: '未同步歌词不跟随');
-      expect(session.quickActionsBarVisible, isFalse);
+      expect(session.state.following, isFalse, reason: '未同步歌词不跟随');
+      expect(session.state.quickActionsBarVisible, isFalse);
 
       session.onUserScrollActivity();
-      expect(session.manualQuickActionsVisible, isTrue);
-      expect(session.quickActionsBarVisible, isTrue);
+      expect(session.state.manualQuickActionsVisible, isTrue);
+      expect(session.state.quickActionsBarVisible, isTrue);
 
       scheduler.elapse(const Duration(seconds: 2));
-      expect(session.manualQuickActionsVisible, isTrue, reason: '停留窗口未到');
+      expect(session.state.manualQuickActionsVisible, isTrue, reason: '停留窗口未到');
       scheduler.elapse(const Duration(seconds: 1));
-      expect(session.manualQuickActionsVisible, isFalse);
-      expect(session.quickActionsBarVisible, isFalse);
+      expect(session.state.manualQuickActionsVisible, isFalse);
+      expect(session.state.quickActionsBarVisible, isFalse);
 
       session.showManualQuickActionsTemporarily();
-      expect(session.manualQuickActionsVisible, isTrue);
+      expect(session.state.manualQuickActionsVisible, isTrue);
       scheduler.elapse(const Duration(seconds: 3));
-      expect(session.manualQuickActionsVisible, isFalse);
+      expect(session.state.manualQuickActionsVisible, isFalse);
     });
 
     test('目标行未布局时按帧重试，到达上限后停止', () {
@@ -276,7 +276,7 @@ void main() {
     test('未同步 / 空歌词不会恢复跟随', () {
       host.setLyrics(synced: false, count: 4);
       session.resetForLyrics();
-      expect(session.following, isFalse);
+      expect(session.state.following, isFalse);
       session.centerCurrentLine();
       expect(host.hapticCount, 1, reason: '居中动作仍有反馈');
       scheduler.runFrames();
@@ -285,12 +285,12 @@ void main() {
       host.setLyrics(synced: true, count: 0);
       session.resetForLyrics();
       session.onUserScrollStarted();
-      expect(session.following, isFalse);
+      expect(session.state.following, isFalse);
       scheduler.elapse(const Duration(seconds: 3));
-      expect(session.following, isFalse, reason: '空歌词永远没有可跟随目标');
+      expect(session.state.following, isFalse, reason: '空歌词永远没有可跟随目标');
 
       session.showManualQuickActionsTemporarily();
-      expect(session.manualQuickActionsVisible, isFalse);
+      expect(session.state.manualQuickActionsVisible, isFalse);
     });
 
     test('隐藏页不排滚动，重新可见后按最新行号补一次', () {
@@ -322,17 +322,17 @@ void main() {
       session.resetForLyrics();
 
       session.suspendFollow();
-      expect(session.following, isFalse);
+      expect(session.state.following, isFalse);
       session.restoreFollow(wasFollowing: true);
-      expect(session.following, isTrue);
+      expect(session.state.following, isTrue);
       scheduler.runFrames();
       expect(host.scrollCalls, [1]);
 
       session.suspendFollow();
       session.restoreFollow(wasFollowing: false);
-      expect(session.following, isFalse);
+      expect(session.state.following, isFalse);
       scheduler.elapse(const Duration(seconds: 3));
-      expect(session.following, isFalse, reason: '换源前没有跟随，不替用户恢复');
+      expect(session.state.following, isFalse, reason: '换源前没有跟随，不替用户恢复');
     });
   });
 }

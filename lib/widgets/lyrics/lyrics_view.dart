@@ -109,7 +109,7 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
   void initState() {
     super.initState();
     _viewSession = LyricsViewSession(host: this);
-    _viewSession.addListener(_onViewSessionChanged);
+    _viewSession.changes.addListener(_onViewSessionChanged);
     _scroll = LyricsScrollDriver(
       externalController: widget.controller,
       topOverlay: _topOverlay,
@@ -146,14 +146,14 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
     _scroll.jumpToTop();
     // 复制模式锁定单曲循环：跨曲目保留会改变新曲的播放行为，换曲即退出。
     // 放到微任务里：本回调由会话通知触发，避免在通知链内重入播放命令。
-    if (_viewSession.copyMode) {
+    if (_viewSession.state.copyMode) {
       Future.microtask(_viewSession.toggleCopyMode);
     }
   }
 
   @override
   void dispose() {
-    _viewSession.removeListener(_onViewSessionChanged);
+    _viewSession.changes.removeListener(_onViewSessionChanged);
     _viewSession.dispose();
     _quickActionsMotion.dispose();
     _fabMenuController.dispose();
@@ -185,7 +185,7 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
   /// 底栏遮挡：快捷操作栏（FAB menu 的 FAB）可见时 = 屏边距 + FAB 尺寸
   /// + 底部安全区；隐藏时为 0。
   double _bottomOverlay() {
-    if (!_viewSession.quickActionsBarVisible) return 0.0;
+    if (!_viewSession.state.quickActionsBarVisible) return 0.0;
     final padding = MediaQuery.paddingOf(context);
     return padding.bottom + _quickActionsScreenOffset + _quickActionsFabSize;
   }
@@ -213,8 +213,8 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
       l10n: l10n,
       hasLyrics: _session.lines.isNotEmpty,
       synced: _session.isSynced,
-      following: _viewSession.following,
-      copyMode: _viewSession.copyMode,
+      following: _viewSession.state.following,
+      copyMode: _viewSession.state.copyMode,
       onSwapSource: () => unawaited(_showSourceSwapPage()),
       onToggleCopyMode: () {
         HapticsService.lightImpact();
@@ -307,7 +307,8 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
       _viewSession.reportLineIndex(currentLineIndex);
     }
 
-    final bool shouldShowQuickActions = _viewSession.quickActionsBarVisible;
+    final bool shouldShowQuickActions =
+        _viewSession.state.quickActionsBarVisible;
     if (active) {
       _syncQuickActions(shouldShowQuickActions);
     }
@@ -404,7 +405,7 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
                   isPastLine: isPastLine,
                   isCurrentLine: isCurrentLine,
                   active: active,
-                  copyMode: _viewSession.copyMode,
+                  copyMode: _viewSession.state.copyMode,
                   wideLayout: isWideLyricLayout,
                   showTranslation: showTranslation,
                   translation: lineTranslation,
@@ -553,7 +554,7 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
     }
 
     // 进入新页面前暂停自动滚动（离页期间不跑滚动工作）。
-    final bool wasFollowing = _viewSession.following;
+    final bool wasFollowing = _viewSession.state.following;
     _viewSession.suspendFollow();
 
     final lyrics = ref.read(lyricsProvider.notifier);
@@ -620,7 +621,7 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
     final lyricsDisplaySettings = ref.read(lyricsDisplaySettingsProvider);
 
     // 暂停当前的自动滚动（离页期间不跑滚动工作）。
-    final bool wasFollowing = _viewSession.following;
+    final bool wasFollowing = _viewSession.state.following;
     _viewSession.suspendFollow();
 
     await ResponsiveNavigation.showSecondaryPage<void>(
