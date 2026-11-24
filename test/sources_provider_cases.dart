@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/domain/models/source.dart' as domain;
 import 'package:molia/domain/models/source_script.dart';
+import 'package:molia/providers/sources_backend.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/sources/lx/lx_engine.dart';
 import 'package:molia/sources/lx/lx_engine_supervisor.dart';
@@ -60,7 +61,7 @@ void main() {
       settings: testSettingsRegistry(),
     );
     await manager.init();
-    final provider = SourcesProvider(manager);
+    final provider = SourcesProvider(SourceManagerBackend(manager));
     addTearDown(provider.dispose);
     addTearDown(manager.dispose);
     addTearDown(supervisor.close);
@@ -401,6 +402,31 @@ void main() {
     expect(info.name, 'provider 测试音源');
     expect(f.provider.activeScriptId, info.id);
     expect(f.provider.hasActiveSource, isTrue);
+  });
+
+  test('快照：state 聚合脚本 / 渠道 / 偏好，并在通知后换新', () async {
+    final f = await fixture();
+    expect(f.provider.state.scripts, isEmpty);
+    expect(f.provider.state.channels, isNotEmpty);
+
+    var notifications = 0;
+    void count() => notifications++;
+    f.provider.changes.addListener(count);
+    addTearDown(() => f.provider.changes.removeListener(count));
+
+    final info = await f.provider.importScript(_script(), activate: true);
+
+    expect(notifications, greaterThan(0));
+    final state = f.provider.state;
+    expect(state.activeScriptId, info.id);
+    expect(state.scripts.single.id, info.id);
+    expect(state.preferredQuality, f.provider.preferredQuality);
+    expect(state.channels, f.provider.channels);
+    expect(
+      () => state.channels.add(state.channels.first),
+      throwsUnsupportedError,
+      reason: '快照里的列表必须是不可变视图',
+    );
   });
 
   test('importFromUrl：非 HTTP(S) 地址 / 404 → 可读 SourceScriptException', () async {

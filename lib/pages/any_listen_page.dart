@@ -59,7 +59,7 @@ class _AnyListenPageState extends ConsumerState<AnyListenPage> {
   @override
   void initState() {
     super.initState();
-    _provider = widget.provider ?? ref.read(sourcesProvider);
+    _provider = widget.provider ?? ref.read(sourcesControllerProvider);
     _load();
   }
 

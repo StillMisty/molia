@@ -14,7 +14,6 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/sources/builtin/discover_source.dart';
-import 'package:molia/sources/source_manager.dart' hide SourceKind;
 import 'package:molia/widgets/adaptive_layout.dart';
 import 'package:molia/widgets/channel_search_bar.dart';
 import 'package:molia/widgets/library_channel_selector.dart';
@@ -22,9 +21,9 @@ import 'package:molia/widgets/shell_reselect.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_library_repository.dart';
+import '../support/fake_sources_backend.dart';
 import '../support/fakes.dart';
 import '../support/provider_test_scope.dart';
-import '../support/settings_test_support.dart';
 
 class _FakeDiscoverSource extends DiscoverSource {
   @override
@@ -79,58 +78,52 @@ class _FakeDiscoverSource extends DiscoverSource {
   Future<List<String>> hotSearches(BuiltinTransport http) async => const [];
 }
 
-class _FakeSources extends SourcesProvider {
-  _FakeSources() : super(SourceManager(settings: testSettingsRegistry()));
-
-  @override
-  bool get initialized => true;
-
-  @override
-  List<SourceDescriptor> get channels => const [
-    SourceDescriptor(
-      key: 'kw',
-      displayName: '酷我音乐',
-      kind: SourceKind.builtin,
-      discoverable: true,
-    ),
-  ];
-
-  @override
-  String get preferredQuality => '320k';
-}
+SourcesProvider _fakeSources() => SourcesProvider(
+  FakeSourcesBackend(
+    channels: const [
+      SourceDescriptor(
+        key: 'kw',
+        displayName: '酷我音乐',
+        kind: SourceKind.builtin,
+        discoverable: true,
+      ),
+    ],
+  ),
+);
 
 /// 两个可搜索渠道：搜索 tab 常显，顶部渠道选择必须始终只有一个。
 ///
 /// 名称刻意含 5 个汉字：窄屏下曾因下拉弹层继承触发框宽度只剩「前两个字」。
-class _SearchSources extends _FakeSources {
-  @override
-  List<SourceDescriptor> get channels => const [
-    SourceDescriptor(
-      key: 'kw',
-      displayName: '网易音乐',
-      kind: SourceKind.builtin,
-      discoverable: true,
-      capabilities: SourceCapabilities(search: true),
-    ),
-    SourceDescriptor(
-      key: 'tx',
-      displayName: 'QQ音乐',
-      kind: SourceKind.builtin,
-      capabilities: SourceCapabilities(search: true),
-    ),
-    SourceDescriptor(
-      key: 'bili',
-      displayName: '哔哩哔哩',
-      kind: SourceKind.builtin,
-      capabilities: SourceCapabilities(search: true),
-    ),
-  ];
-}
+SourcesProvider _searchSources() => SourcesProvider(
+  FakeSourcesBackend(
+    channels: const [
+      SourceDescriptor(
+        key: 'kw',
+        displayName: '网易音乐',
+        kind: SourceKind.builtin,
+        discoverable: true,
+        capabilities: SourceCapabilities(search: true),
+      ),
+      SourceDescriptor(
+        key: 'tx',
+        displayName: 'QQ音乐',
+        kind: SourceKind.builtin,
+        capabilities: SourceCapabilities(search: true),
+      ),
+      SourceDescriptor(
+        key: 'bili',
+        displayName: '哔哩哔哩',
+        kind: SourceKind.builtin,
+        capabilities: SourceCapabilities(search: true),
+      ),
+    ],
+  ),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late _FakeSources sources;
+  late SourcesProvider sources;
   late ProviderTestScope scope;
   late ChannelSelection selection;
   late PlaybackProvider playback;
@@ -139,7 +132,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    sources = _FakeSources();
+    sources = _fakeSources();
     selection = ChannelSelection(
       validKeys: () => const ['kw'],
       defaultKey: () => 'kw',
@@ -231,7 +224,7 @@ void main() {
         find.descendant(of: find.byType(M3ETabs), matching: find.byIcon(icon));
 
     testWidgets('搜索条 hint 与胶囊垂直居中', (tester) async {
-      final searchSources = _SearchSources();
+      final searchSources = _searchSources();
       addTearDown(searchSources.dispose);
       await pump(tester, 900, sourcesOverride: searchSources);
 
@@ -309,7 +302,7 @@ void main() {
     });
 
     testWidgets('搜索 tab：顶部渠道选择常显，条内不重复，tab 宽度不跳', (tester) async {
-      final searchSources = _SearchSources();
+      final searchSources = _searchSources();
       addTearDown(searchSources.dispose);
       await pump(tester, 900, sourcesOverride: searchSources);
 
@@ -333,7 +326,7 @@ void main() {
     });
 
     testWidgets('窄屏：渠道名在触发框与下拉弹层里都完整显示', (tester) async {
-      final searchSources = _SearchSources();
+      final searchSources = _searchSources();
       addTearDown(searchSources.dispose);
       await pump(tester, 360, sourcesOverride: searchSources);
 
@@ -384,7 +377,7 @@ void main() {
     });
 
     testWidgets('重复点击资料库：切回搜索 tab 并聚焦搜索框', (tester) async {
-      final searchSources = _SearchSources();
+      final searchSources = _searchSources();
       addTearDown(searchSources.dispose);
       final reselect = ShellReselectSignal();
       addTearDown(reselect.dispose);

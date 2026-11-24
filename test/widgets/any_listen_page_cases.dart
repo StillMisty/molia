@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/any_listen_page.dart';
+import 'package:molia/providers/sources_backend.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/sources/source_manager.dart';
 
@@ -21,7 +22,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     manager = SourceManager(settings: testSettingsRegistry());
     await manager.init();
-    sources = SourcesProvider(manager);
+    sources = SourcesProvider(SourceManagerBackend(manager));
   });
 
   tearDown(() => sources.dispose());

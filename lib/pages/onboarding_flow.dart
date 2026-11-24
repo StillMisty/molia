@@ -203,6 +203,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     AppLocalizations l10n,
   ) {
     final sources = ref.watch(sourcesProvider);
+    final controller = ref.read(sourcesControllerProvider);
     final ready = sources.initialized;
     final channels = sources.channels;
     return Column(
@@ -246,7 +247,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
                     key: ValueKey<String>('onboardingChannel-${channel.key}'),
                     value: channel.enabled,
                     onChanged: (value) => unawaited(
-                      sources.setChannelEnabled(channel.key, value),
+                      controller.setChannelEnabled(channel.key, value),
                     ),
                   ),
                 ],
@@ -262,6 +263,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     AppLocalizations l10n,
   ) {
     final sources = ref.watch(sourcesProvider);
+    final controller = ref.read(sourcesControllerProvider);
     final dataSaver = ref.watch(maybeDataSaverServiceProvider);
     final scheme = Theme.of(context).colorScheme;
     final quality = sources.preferredQuality;
@@ -289,7 +291,8 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             for (final option in options)
               (option.value, sourceQualityLabel(l10n, option.value)),
           ],
-          onChanged: (value) => unawaited(sources.setPreferredQuality(value)),
+          onChanged: (value) =>
+              unawaited(controller.setPreferredQuality(value)),
         ),
         if (dataSaver != null) ...[
           const SizedBox(height: 24),

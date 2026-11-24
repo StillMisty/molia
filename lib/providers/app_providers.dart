@@ -32,6 +32,7 @@ import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/snapshot_source.dart';
 import 'package:molia/providers/search_provider.dart';
+import 'package:molia/providers/sources_backend.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/sync_provider.dart';
 import 'package:molia/providers/sync_ui_state.dart';
@@ -420,7 +421,17 @@ final maybeLyricsDisplayProvider =
     );
 final maybeScrobbleServiceProvider = _maybeListenable<ScrobbleService>();
 final maybeLibraryAddSettingsProvider = _maybeListenable<LibraryAddSettings>();
-final maybeSourcesProvider = _maybeListenable<SourcesProvider>();
+final maybeSourcesProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<SourcesProvider, SourcesState>,
+      SourcesState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<SourcesProvider>(),
+      ),
+    );
+final maybeSourcesControllerProvider =
+    maybeSnapshotController<SourcesProvider>();
 final maybeSourceManagerProvider = _maybeService<SourceManager>();
 
 // ---------------------------------------------------------------------------
@@ -541,12 +552,22 @@ final discoverBuiltinTransportProvider = Provider<BuiltinTransport>(
   (ref) => BuiltinTransport(),
 );
 
+/// 音源管理控制器的懒构造：已登记（测试 / 宿主）优先复用，否则创建并释放。
+final sourcesControllerProvider = Provider<SourcesProvider>((ref) {
+  final existing = ref.read(appRuntimeProvider).maybe<SourcesProvider>();
+  if (existing != null) return existing;
+  final provider = SourcesProvider(
+    SourceManagerBackend(ref.read(sourceManagerProvider)),
+  );
+  ref.onDispose(provider.dispose);
+  return provider;
+});
+
 final sourcesProvider =
-    NotifierProvider<LazyListenableNotifier<SourcesProvider>, SourcesProvider>(
-      () => LazyListenableNotifier(
-        (ref) => SourcesProvider(ref.read(sourceManagerProvider)),
-      ),
-    );
+    NotifierProvider<
+      SnapshotNotifier<SourcesProvider, SourcesState>,
+      SourcesState
+    >(() => SnapshotNotifier((ref) => ref.watch(sourcesControllerProvider)));
 
 /// 诊断页控制器的懒构造：已登记（测试 / 宿主）优先复用，否则创建并释放。
 final diagnosticsPageControllerProvider = Provider<DiagnosticsProvider>((ref) {

@@ -12,6 +12,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:molia/services/memory/app_memory_manager.dart';
 import 'package:molia/pages/sources_page.dart';
+import 'package:molia/providers/sources_backend.dart';
 import 'package:molia/providers/sources_provider.dart';
 
 import '../test/support/provider_test_scope.dart';
@@ -191,7 +192,7 @@ void main() {
     // isolate 卡死时整轮集成测试会永久等待；进程最终由 tearDownAll 强退。
     addTearDown(manager.dispose);
 
-    final sources = SourcesProvider(manager);
+    final sources = SourcesProvider(SourceManagerBackend(manager));
     addTearDown(sources.dispose);
     final scope = ProviderTestScope();
     scope.put<SourceManager>(manager);

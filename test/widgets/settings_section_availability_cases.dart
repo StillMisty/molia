@@ -16,6 +16,7 @@ import 'package:molia/services/scrobble/scrobble_service.dart';
 import 'package:molia/services/source_swap/source_swap_settings.dart';
 import 'package:molia/widgets/settings/settings_section_availability.dart';
 
+import '../support/fake_sources_backend.dart';
 import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
@@ -192,7 +193,7 @@ SettingsSectionAvailability _allAvailable({
     dataSaver: DataSaverService(),
     sourceSwap: SourceSwapSettings(settings: testSettingsRegistry()),
     audioFocus: AudioFocusSettings(settings: testSettingsRegistry()),
-    sources: _FakeSourcesProvider(),
+    sources: SourcesProvider(FakeSourcesBackend()),
     lyricsDisplay: LyricsDisplayState(capabilities: lyricsCapabilities),
     scrobble: _FakeScrobbleService(),
     libraryAdd: LibraryAddSettings(settings: testSettingsRegistry()),
@@ -238,10 +239,6 @@ mixin _PresenceOnly {
 class _FakeSyncProvider extends ChangeNotifier
     with _PresenceOnly
     implements SyncProvider {}
-
-class _FakeSourcesProvider extends ChangeNotifier
-    with _PresenceOnly
-    implements SourcesProvider {}
 
 class _FakeScrobbleService extends ChangeNotifier
     with _PresenceOnly

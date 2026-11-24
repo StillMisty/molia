@@ -96,7 +96,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       nav: ref.read(navProvider.notifier),
       tray: ref.read(traySettingsProvider.notifier),
       update: ref.watch(maybeUpdateProvider),
-      sources: ref.read(maybeSourcesProvider),
+      sources: ref.read(maybeSourcesControllerProvider),
       scrobble: ref.read(maybeScrobbleServiceProvider),
       libraryAdd: ref.read(maybeLibraryAddSettingsProvider),
       statistics: ref.read(playStatisticsServiceProvider),
@@ -415,7 +415,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           Consumer(
             builder: (context, ref, _) {
               final quality = ref.watch(
-                sourcesProvider.select((provider) => provider.preferredQuality),
+                sourcesProvider.select((state) => state.preferredQuality),
               );
               return SettingsDropdownRow<String>(
                 key: const Key('settingsDefaultQualityItem'),

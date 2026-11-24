@@ -37,8 +37,9 @@ class _DiagnosticsLogPageState extends ConsumerState<DiagnosticsLogPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted)
+      if (mounted) {
         unawaited(ref.read(diagnosticsPageControllerProvider).loadLogs());
+      }
     });
   }
 
