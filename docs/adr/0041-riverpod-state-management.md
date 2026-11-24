@@ -118,7 +118,9 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 - `state` 暴露**不可变快照**（`@immutable`，字段名沿用旧 getter）；
 - `changes` 是 `SnapshotSignal`（只通知、不持有状态），保留
   `Listenable` / `ValueListenable` 订阅面给播放服务、原生回调；
-- Riverpod 两面（`lib/providers/snapshot_source.dart`）：
+- 契约与 Riverpod 镜像分两处：`lib/utils/snapshot_source.dart` 只放
+  `SnapshotSource` / `SnapshotSignal`（数据层与播放层不得 import providers），
+  `lib/providers/snapshot_source.dart` 放镜像与控制器：
   - `xProvider` = `SnapshotNotifier` 镜像快照，UI `ref.watch` 读；
   - `xControllerProvider` = `snapshotController<X>()`，命令 / 服务句柄从这里
     `ref.read`。
@@ -128,13 +130,24 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 迁移完成后删除。
 
 已按此形态落地的对象：`AudioFocusSettings`（`bool` 快照）、`AiDjProvider`
-（`AiDjState`）、`LibraryProvider`（`LibraryState`：历史 / 列表 / 收藏键 / 版本戳）。
+（`AiDjState`）、`LibraryProvider`（`LibraryState`：历史 / 列表 / 收藏键 / 版本戳）、
+`SearchProvider` / `ChannelSelection`、`LyricsDisplayProvider`、`PlaybackProvider`
+（`PlaybackState`）、`ScrobbleService`（`ScrobbleState`：连接状态 / 账号 / 待发计数 /
+授权阶段）、`SyncEngine`（`SyncEngineSnapshot`：初始化 / 在跑 / 最近报告）、
+`SyncControlPlane`（`SyncControlPlaneState`：身份 / 开关 / 名册 / 日志 / 口令）、
+`FavoriteFact`（`FavoriteFactState`：键 / 行 / 计数 / 版本）、
+`PlaybackPowerPolicy`（前台 / 桌面歌词 / 歌词输出）、
+`CastSessionController`（`CastSessionSnapshot`）。
+
+`SyncEngine` / `SyncControlPlane` / `FavoriteFact` / `PlaybackPowerPolicy` /
+`CastSessionController` 没有独立 Riverpod provider：它们分别是 `SyncProvider`、
+`LibraryProvider` 的内部事实或只在服务内部订阅，对外仍经所属门面；`changes`
+是唯一订阅面。
 
 仍以 `ChangeNotifier` 实现、经 `LegacyListenableNotifier` 暴露的类有两类：
-启动期服务（`SourceManager`、`DownloadService`、`ScrobbleService`、数据层
-store…）与体量较大的页面状态（`PlaybackProvider` 等）。它们与启动顺序 /
-服务生命周期强耦合，内部快照化按模块继续推进；UI 契约已经统一为 `ref`，
-后续替换不改变页面代码。
+启动期服务（`SourceManager`、`DownloadService`、数据层 store…）与体量较大的
+页面状态（`SyncProvider` 等）。它们与启动顺序 / 服务生命周期强耦合，内部快照化
+按模块继续推进；UI 契约已经统一为 `ref`，后续替换不改变页面代码。
 
 ### 搜索 / 渠道 / 扇出（第三批）
 

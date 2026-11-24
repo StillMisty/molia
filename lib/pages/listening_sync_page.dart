@@ -32,7 +32,7 @@ class _ListeningSyncPageState extends ConsumerState<ListeningSyncPage> {
   void initState() {
     super.initState();
     // 凭据在本机凭据库：首帧后已读；本页打开时再补一次（幂等）。
-    unawaited(ref.read(scrobbleServiceProvider).init());
+    unawaited(ref.read(scrobbleControllerProvider).init());
   }
 
   /// 服务名的唯一来源：设置行、同意书、断开确认与 Last.fm 对话框共用。
@@ -44,17 +44,19 @@ class _ListeningSyncPageState extends ConsumerState<ListeningSyncPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final service = ref.watch(scrobbleServiceProvider);
+    final state = ref.watch(scrobbleProvider);
+    final service = ref.read(scrobbleControllerProvider);
     if (l10n == null) return const SizedBox.shrink();
     return SettingsSubPage(
       title: l10n.listeningSyncTitle,
-      children: _sections(context, l10n, service),
+      children: _sections(context, l10n, state, service),
     );
   }
 
   List<Widget> _sections(
     BuildContext context,
     AppLocalizations l10n,
+    ScrobbleState state,
     ScrobbleService service,
   ) {
     return [
@@ -67,7 +69,7 @@ class _ListeningSyncPageState extends ConsumerState<ListeningSyncPage> {
             icon: Icons.sync_rounded,
             title: l10n.listeningSyncMaster,
             subtitle: l10n.listeningSyncMasterSubtitle,
-            value: service.masterEnabled,
+            value: state.masterEnabled,
             onChanged: _busy
                 ? (_) {}
                 : (value) => service.setMasterEnabled(value),
@@ -99,6 +101,7 @@ class _ListeningSyncPageState extends ConsumerState<ListeningSyncPage> {
       _targetSection(
         context,
         l10n,
+        state,
         service,
         target: ScrobbleTarget.listenBrainz,
         icon: Icons.headphones_rounded,
@@ -110,6 +113,7 @@ class _ListeningSyncPageState extends ConsumerState<ListeningSyncPage> {
       _targetSection(
         context,
         l10n,
+        state,
         service,
         target: ScrobbleTarget.lastFm,
         icon: Icons.radio_rounded,
@@ -149,6 +153,7 @@ class _ListeningSyncPageState extends ConsumerState<ListeningSyncPage> {
   Widget _targetSection(
     BuildContext context,
     AppLocalizations l10n,
+    ScrobbleState state,
     ScrobbleService service, {
     required ScrobbleTarget target,
     required IconData icon,
@@ -157,11 +162,11 @@ class _ListeningSyncPageState extends ConsumerState<ListeningSyncPage> {
     required String learnMore,
   }) {
     final title = _targetName(target);
-    final status = service.statusOf(target);
+    final status = state.statusOf(target);
     final connected =
-        service.activeFor(target) || status == ScrobbleTargetStatus.connected;
-    final queued = service.queuedFor(target);
-    final statusText = _statusText(l10n, service, target, status, queued);
+        state.activeFor(target) || status == ScrobbleTargetStatus.connected;
+    final queued = state.queuedFor(target);
+    final statusText = _statusText(l10n, state, target, status, queued);
     return SettingsSectionCard(
       title: title,
       footer: Align(
@@ -194,7 +199,7 @@ class _ListeningSyncPageState extends ConsumerState<ListeningSyncPage> {
 
   String _statusText(
     AppLocalizations l10n,
-    ScrobbleService service,
+    ScrobbleState state,
     ScrobbleTarget target,
     ScrobbleTargetStatus status,
     int queued,
@@ -202,9 +207,9 @@ class _ListeningSyncPageState extends ConsumerState<ListeningSyncPage> {
     final base = switch (status) {
       ScrobbleTargetStatus.disconnected => l10n.listeningSyncDisconnected,
       ScrobbleTargetStatus.connected =>
-        service.accountOf(target).isEmpty
+        state.accountOf(target).isEmpty
             ? l10n.listeningSyncConnected
-            : l10n.listeningSyncConnectedAs(service.accountOf(target)),
+            : l10n.listeningSyncConnectedAs(state.accountOf(target)),
       ScrobbleTargetStatus.needsConsent => l10n.listeningSyncNeedsConsent,
       ScrobbleTargetStatus.needsAuthorization => l10n.listeningSyncNeedsAuth,
       ScrobbleTargetStatus.retrying => l10n.listeningSyncRetrying,
