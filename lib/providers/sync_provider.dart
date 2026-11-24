@@ -54,8 +54,8 @@ class SyncProvider extends ChangeNotifier
     this._pairing,
     this._triggers,
   }) : _endpoints = localEndpoints ?? LocalEndpointsService() {
-    _engine.addListener(notifyListeners);
-    _controlPlane.addListener(notifyListeners);
+    _engine.changes.addListener(notifyListeners);
+    _controlPlane.changes.addListener(notifyListeners);
   }
 
   final SyncEngine _engine;
@@ -96,6 +96,8 @@ class SyncProvider extends ChangeNotifier
 
   /// UI 只读的不可变投影：每次读取按当前快照重建（纯计算、廉价）。
   SyncUiState get state {
+    final control = _controlPlane.state;
+    final engine = _engine.state;
     final nowMs = _controlPlane.nowMs();
     final ports = _controlPlane.lanDiscoveryPorts;
     final transportStates = <SyncTransportId, SyncTransportUiState>{
@@ -103,9 +105,9 @@ class SyncProvider extends ChangeNotifier
     };
     final lan = transportStates[SyncTransportId.lan]!;
     final permissionNeedsAttention = _lanPermissionNeedsAttention(lan);
-    final peers = _controlPlane.peers;
-    final manualPeers = _controlPlane.manualPeers;
-    final lastReport = _engine.lastReport;
+    final peers = control.peers;
+    final manualPeers = control.manualPeers;
+    final lastReport = engine.lastReport;
     final onCellular = _scheduler?.onCellular ?? false;
     final powerSaveActive = _scheduler?.powerSaveActive ?? false;
     final nearbyAvailability = resolveSyncNearbyAvailability(
@@ -122,13 +124,11 @@ class SyncProvider extends ChangeNotifier
       powerSaveActive: powerSaveActive,
     );
     return SyncUiState(
-      enabled: _controlPlane.enabled,
-      syncing: _engine.syncing,
-      deviceId: _controlPlane.deviceId,
-      deviceName: _controlPlane.deviceName,
-      categories: Map<SyncCategory, bool>.unmodifiable(
-        _controlPlane.categories,
-      ),
+      enabled: control.enabled,
+      syncing: engine.syncing,
+      deviceId: control.deviceId,
+      deviceName: control.deviceName,
+      categories: control.categories,
       enabledTransports: Set<SyncTransportId>.unmodifiable({
         for (final entry in transportStates.entries)
           if (entry.value.enabled) entry.key,
@@ -136,10 +136,10 @@ class SyncProvider extends ChangeNotifier
       transports: Map<SyncTransportId, SyncTransportUiState>.unmodifiable(
         transportStates,
       ),
-      webdav: _controlPlane.webdav,
-      log: List<SyncLogEntry>.unmodifiable(_controlPlane.log),
-      peers: List<SyncPeerState>.unmodifiable(peers),
-      manualPeers: List<ManualPeer>.unmodifiable(manualPeers),
+      webdav: control.webdav,
+      log: control.log,
+      peers: peers,
+      manualPeers: manualPeers,
       peerView: SyncPeerView.from(
         peers: peers,
         manualPeers: manualPeers,
@@ -147,7 +147,7 @@ class SyncProvider extends ChangeNotifier
         nowMs: nowMs,
       ),
       lanDiscoveryPorts: ports,
-      lanHttpPort: _controlPlane.lanHttpPort,
+      lanHttpPort: control.lanHttpPort,
       nearbyAvailability: nearbyAvailability,
       nearbyDevices:
           _pairing?.nearbyDevices ??
@@ -169,14 +169,14 @@ class SyncProvider extends ChangeNotifier
       canCheckNow: _scheduler?.canRunAutomatically ?? false,
       syncLevel: _scheduler?.level,
       activity24h: SyncActivitySummary.fromEntries(
-        _controlPlane.activity,
+        control.activity,
         nowMs: nowMs,
       ),
       onCellular: onCellular,
       powerSaveActive: powerSaveActive,
-      cellularPolicy: _controlPlane.cellularPolicy,
-      passphrase: _controlPlane.passphrase,
-      maskedPassphrase: _controlPlane.maskedPassphrase,
+      cellularPolicy: control.cellularPolicy,
+      passphrase: control.passphrase,
+      maskedPassphrase: control.maskedPassphrase,
     );
   }
 
@@ -544,8 +544,8 @@ class SyncProvider extends ChangeNotifier
   void dispose() {
     // 先摘掉监听再释放被监听对象：调度器 / 引擎在销毁路径里仍可能通知，
     // 已 dispose 的 provider 不应再把通知转发给 UI。
-    _engine.removeListener(notifyListeners);
-    _controlPlane.removeListener(notifyListeners);
+    _engine.changes.removeListener(notifyListeners);
+    _controlPlane.changes.removeListener(notifyListeners);
     // 触发桥先于调度器释放：取消流订阅 / 恢复设置与回调钩子。
     _triggers?.dispose();
     _scheduler?.dispose();
