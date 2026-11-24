@@ -92,7 +92,8 @@ class SourceManager extends ChangeNotifier {
        // 字段按本类惯例私有。
        // ignore: prefer_initializing_formals
        _lazyActivationCooldown = lazyActivationCooldown {
-    _preferences = SourcePreferences(_settings)..addListener(notifyListeners);
+    _preferences = SourcePreferences(_settings)
+      ..changes.addListener(notifyListeners);
     _executor = SourceRouteExecutor(
       engine: _engine,
       anyListenSource: _anyListenSource,
@@ -705,8 +706,7 @@ class SourceManager extends ChangeNotifier {
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
-    _preferences.removeListener(notifyListeners);
-    _preferences.dispose();
+    _preferences.changes.removeListener(notifyListeners);
     _anyListenSource.dispose();
     _engine.onStateChanged = null;
     _engine.close();

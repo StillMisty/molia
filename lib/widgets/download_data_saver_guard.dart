@@ -18,8 +18,8 @@ Future<bool> confirmDownloadOnDataSaver(BuildContext context) async {
   final dataSaver = ProviderScope.containerOf(
     context,
     listen: false,
-  ).read(dataSaverServiceProvider);
-  if (!dataSaver.active) return true;
+  ).read(dataSaverServiceControllerProvider);
+  if (!(dataSaver?.active ?? false)) return true;
   final l10n = AppLocalizations.of(context)!;
   final navigator = Navigator.of(context, rootNavigator: true);
   final confirmed = await M3EDialog.show<bool>(

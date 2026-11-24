@@ -84,8 +84,7 @@ void main() {
     });
 
     test('音乐文件夹行在 iOS 隐藏，加入位置行只看服务是否挂载', () {
-      final addSettings = LibraryAddSettings(settings: testSettingsRegistry());
-      addTearDown(addSettings.dispose);
+      const addSettings = LibraryAddSettingsState(LibraryAddPosition.top);
 
       final ios = SettingsSectionAvailability(
         platform: TargetPlatform.iOS,
@@ -188,13 +187,19 @@ SettingsSectionAvailability _allAvailable({
   Map<String, LyricsOutputCapability> lyricsCapabilities = const {},
 }) {
   return SettingsSectionAvailability(
-    dataSaver: DataSaverService(),
-    sourceSwap: SourceSwapSettings(settings: testSettingsRegistry()),
+    dataSaver: const DataSaverState(
+      enabled: true,
+      qualityCap: '128k',
+      coversSaverEnabled: true,
+      onCellular: false,
+      detectionAvailable: true,
+    ),
+    sourceSwap: const SourceSwapSettingsState(autoEnabled: true),
     audioFocus: AudioFocusSettings(settings: testSettingsRegistry()),
     sources: _FakeSourcesProvider(),
     lyricsDisplay: LyricsDisplayState(capabilities: lyricsCapabilities),
     scrobble: _FakeScrobbleService(),
-    libraryAdd: LibraryAddSettings(settings: testSettingsRegistry()),
+    libraryAdd: const LibraryAddSettingsState(LibraryAddPosition.top),
     statistics: _FakePlayStatisticsService(),
     sync: _FakeSyncProvider(),
     tray: ProviderTestScope().container.read(traySettingsProvider.notifier),

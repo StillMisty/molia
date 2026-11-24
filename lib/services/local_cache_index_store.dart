@@ -16,9 +16,29 @@ import 'package:flutter/foundation.dart';
 import '../domain/models/local_cache_index.dart';
 import '../domain/ports/local_cache_index.dart';
 import '../sources/source_track.dart';
+import '../utils/snapshot_signal.dart';
 import 'audio_cache_store.dart';
 
-class LocalCacheIndexStore extends ChangeNotifier {
+/// 本机缓存索引的不可变快照（UI 经 `localCacheIndexProvider` 读）。
+@immutable
+class LocalCacheIndexState {
+  const LocalCacheIndexState({
+    required this.entries,
+    required this.initialized,
+    required this.revision,
+  });
+
+  /// 索引行（按缓存完成时间倒序）。
+  final List<LocalCacheIndexEntry> entries;
+
+  /// 初始化是否已尝试完成。
+  final bool initialized;
+
+  /// 索引内容变化计数。
+  final int revision;
+}
+
+class LocalCacheIndexStore implements SnapshotSource<LocalCacheIndexState> {
   LocalCacheIndexStore({
     required this._persistence,
     this.maxEntries = defaultMaxEntries,
@@ -46,6 +66,8 @@ class LocalCacheIndexStore extends ChangeNotifier {
   /// 预取，三个来源不能各自读改写造成丢行。
   Future<void> _writeTail = Future<void>.value();
 
+  final SnapshotSignal _changes = SnapshotSignal();
+
   int _revision = 0;
   bool _disposed = false;
 
@@ -66,6 +88,16 @@ class LocalCacheIndexStore extends ChangeNotifier {
 
   /// 索引内容变化计数（同键换快照也会递增；本地歌曲输入签名的失效信号）。
   int get revision => _revision;
+
+  @override
+  LocalCacheIndexState get state => LocalCacheIndexState(
+    entries: entries,
+    initialized: _initialized,
+    revision: _revision,
+  );
+
+  @override
+  Listenable get changes => _changes;
 
   /// 装载持久化索引（幂等）。
   ///
@@ -252,12 +284,10 @@ class LocalCacheIndexStore extends ChangeNotifier {
   }
 
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) _changes.notify();
   }
 
-  @override
   void dispose() {
     _disposed = true;
-    super.dispose();
   }
 }

@@ -316,7 +316,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
               M3ESwitch(
                 key: const Key('onboardingDataSaver'),
                 value: dataSaver.enabled,
-                onChanged: (value) => unawaited(dataSaver.setEnabled(value)),
+                onChanged: (value) {
+                  final controller = ref.read(
+                    dataSaverServiceControllerProvider,
+                  );
+                  if (controller != null) {
+                    unawaited(controller.setEnabled(value));
+                  }
+                },
               ),
             ],
           ),

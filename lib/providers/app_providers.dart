@@ -283,20 +283,36 @@ final updateProvider =
     );
 final sourceSwapSettingsProvider =
     NotifierProvider<
-      LegacyListenableNotifier<SourceSwapSettings>,
-      SourceSwapSettings
+      SnapshotNotifier<SourceSwapSettings, SourceSwapSettingsState>,
+      SourceSwapSettingsState
+    >(() => SnapshotNotifier((ref) => _require<SourceSwapSettings>(ref)));
+final maybeSourceSwapSettingsProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<SourceSwapSettings, SourceSwapSettingsState>,
+      SourceSwapSettingsState?
     >(
-      () =>
-          LegacyListenableNotifier((ref) => _require<SourceSwapSettings>(ref)),
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<SourceSwapSettings>(),
+      ),
     );
+final sourceSwapSettingsControllerProvider =
+    maybeSnapshotController<SourceSwapSettings>();
 final libraryAddSettingsProvider =
     NotifierProvider<
-      LegacyListenableNotifier<LibraryAddSettings>,
-      LibraryAddSettings
+      SnapshotNotifier<LibraryAddSettings, LibraryAddSettingsState>,
+      LibraryAddSettingsState
+    >(() => SnapshotNotifier((ref) => _require<LibraryAddSettings>(ref)));
+final maybeLibraryAddSettingsProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<LibraryAddSettings, LibraryAddSettingsState>,
+      LibraryAddSettingsState?
     >(
-      () =>
-          LegacyListenableNotifier((ref) => _require<LibraryAddSettings>(ref)),
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<LibraryAddSettings>(),
+      ),
     );
+final libraryAddSettingsControllerProvider =
+    maybeSnapshotController<LibraryAddSettings>();
 
 final shortcutSettingsProvider =
     NotifierProvider<
@@ -326,16 +342,37 @@ final downloadRecordsProvider =
             DownloadRecords(initialized: true, supported: false),
       ),
     );
-final localCacheIndexProvider = Provider<LocalCacheIndexStore?>(
-  (ref) => ref.read(appRuntimeProvider).maybe<LocalCacheIndexStore>(),
-);
+final localCacheIndexProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<LocalCacheIndexStore, LocalCacheIndexState>,
+      LocalCacheIndexState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<LocalCacheIndexStore>(),
+      ),
+    );
+final localCacheIndexControllerProvider =
+    maybeSnapshotController<LocalCacheIndexStore>();
 final downloadManagerProvider = Provider<DownloadManager?>(
   (ref) => ref.read(appRuntimeProvider).maybe<DownloadManager>(),
 );
 
-final downloadSettingsProvider = Provider<DownloadSettings?>(
-  (ref) => ref.read(appRuntimeProvider).maybe<DownloadSettings>(),
-);
+final downloadSettingsProvider =
+    NotifierProvider<
+      SnapshotNotifier<DownloadSettings, DownloadSettingsState>,
+      DownloadSettingsState
+    >(() => SnapshotNotifier((ref) => _require<DownloadSettings>(ref)));
+final maybeDownloadSettingsProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<DownloadSettings, DownloadSettingsState>,
+      DownloadSettingsState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<DownloadSettings>(),
+      ),
+    );
+final downloadSettingsControllerProvider =
+    maybeSnapshotController<DownloadSettings>();
 
 final localLibraryServiceProvider =
     NotifierProvider<
@@ -347,9 +384,20 @@ final localLibraryServiceProvider =
     );
 final dataSaverServiceProvider =
     NotifierProvider<
-      LegacyListenableNotifier<DataSaverService>,
-      DataSaverService
-    >(() => LegacyListenableNotifier((ref) => _require<DataSaverService>(ref)));
+      SnapshotNotifier<DataSaverService, DataSaverState>,
+      DataSaverState
+    >(() => SnapshotNotifier((ref) => _require<DataSaverService>(ref)));
+final maybeDataSaverServiceProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<DataSaverService, DataSaverState>,
+      DataSaverState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<DataSaverService>(),
+      ),
+    );
+final dataSaverServiceControllerProvider =
+    maybeSnapshotController<DataSaverService>();
 final biliAccountProvider = Provider<BiliAccountService?>(
   (ref) => ref.read(appRuntimeProvider).maybe<BiliAccountService>(),
 );
@@ -385,8 +433,6 @@ final maybeAiDjControllerProvider = maybeSnapshotController<AiDjProvider>();
 Provider<T?> _maybeService<T extends Object>() =>
     Provider<T?>((ref) => ref.read(appRuntimeProvider).maybe<T>());
 
-final maybeDataSaverServiceProvider = _maybeListenable<DataSaverService>();
-final maybeSourceSwapSettingsProvider = _maybeListenable<SourceSwapSettings>();
 final maybeLyricsDisplayProvider =
     NotifierProvider<
       NullableSnapshotNotifier<LyricsDisplayProvider, LyricsDisplayState>,
@@ -398,7 +444,6 @@ final maybeLyricsDisplayProvider =
     );
 final maybeUpdateProvider = _maybeListenable<UpdateProvider>();
 final maybeScrobbleServiceProvider = _maybeListenable<ScrobbleService>();
-final maybeLibraryAddSettingsProvider = _maybeListenable<LibraryAddSettings>();
 final maybeSyncProvider = _maybeListenable<SyncProvider>();
 final maybeSourcesProvider = _maybeListenable<SourcesProvider>();
 final maybeSourceManagerProvider = _maybeService<SourceManager>();

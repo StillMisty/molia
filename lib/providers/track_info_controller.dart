@@ -46,17 +46,17 @@ class TrackInfoController extends _$TrackInfoController {
   TrackInfoState build() {
     _playback = ref.read(playbackControllerProvider);
     _localDataService = ref.read(trackLocalDataServiceProvider);
-    _dataSaver = ref.read(maybeDataSaverServiceProvider);
+    _dataSaver = ref.read(dataSaverServiceControllerProvider);
     _localData = TrackLocalDataController(
       service: _localDataService,
       cacheService: ref.read(cacheServiceProvider),
       downloadRecords: ref.read(downloadRecordsProvider),
     );
-    _dataSaver?.addListener(_syncAvailability);
+    _dataSaver?.changes.addListener(_syncAvailability);
     _playback.changes.addListener(_syncTrack);
     ref.onDispose(() {
       _playback.changes.removeListener(_syncTrack);
-      _dataSaver?.removeListener(_syncAvailability);
+      _dataSaver?.changes.removeListener(_syncAvailability);
       _localData.dispose();
     });
     _syncTrack();

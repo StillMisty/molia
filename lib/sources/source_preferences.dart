@@ -4,8 +4,9 @@
 /// 已生效）。
 ///
 /// 边界：
-/// - 本模块是 [ChangeNotifier]：偏好变化在改完内存后立即通知；
-///   `SourceManager` 订阅并转发自己的通知，UI（音源页 / 设置页）据此刷新；
+/// - 本模块以只读快照 [state] + 变更信号 [changes] 暴露（ADR-0041「启动期
+///   状态对象」）；`SourceManager` 订阅 `changes` 并转发自己的通知，UI（音源
+///   页 / 设置页）据此刷新；
 /// - 跨设备同步应用远端值后的定向重载在构造时自绑（键的声明仍是
 ///   `data/settings/settings_keys.dart` 的唯一事实）；
 /// - 「渠道列表怎么排/有哪些」不属于本模块：那依赖激活脚本声明的源，
@@ -16,9 +17,30 @@ import 'package:flutter/foundation.dart';
 
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
+import '../utils/snapshot_signal.dart';
 import 'source_track.dart' show kLxQualityOrder;
 
-class SourcePreferences extends ChangeNotifier {
+/// 渠道偏好的不可变快照（`SourceManager` 转发给 UI 的同一份值）。
+@immutable
+class SourcePreferencesState {
+  SourcePreferencesState({
+    required this.preferredQuality,
+    required List<String> sourceOrder,
+    required Set<String> disabledChannels,
+  }) : sourceOrder = List.unmodifiable(sourceOrder),
+       disabledChannels = Set.unmodifiable(disabledChannels);
+
+  /// 默认音质偏好。
+  final String preferredQuality;
+
+  /// 用户自定义的渠道顺序（未列出的渠道排在末尾）。
+  final List<String> sourceOrder;
+
+  /// 已停用的渠道集合。
+  final Set<String> disabledChannels;
+}
+
+class SourcePreferences implements SnapshotSource<SourcePreferencesState> {
   SourcePreferences(SettingsAccess settings) : _settings = settings;
 
   /// 音质偏好的默认值（`reload` 的先重置值，与键默认值一致）。
@@ -27,6 +49,7 @@ class SourcePreferences extends ChangeNotifier {
   static const List<String> _supportedQualitys = kLxQualityOrder;
 
   final SettingsAccess _settings;
+  final SnapshotSignal _changes = SnapshotSignal();
 
   String _preferredQuality = _defaultQuality;
   List<String> _sourceOrder = const [];
@@ -41,6 +64,16 @@ class SourcePreferences extends ChangeNotifier {
 
   /// 已停用的渠道集合（持久化；停用只影响列表/选择，不影响已保存曲目的取链）。
   Set<String> get disabledChannels => Set.unmodifiable(_disabledChannels);
+
+  @override
+  SourcePreferencesState get state => SourcePreferencesState(
+    preferredQuality: _preferredQuality,
+    sourceOrder: _sourceOrder,
+    disabledChannels: _disabledChannels,
+  );
+
+  @override
+  Listenable get changes => _changes;
 
   /// 从存储读取偏好；不通知（调用方决定刷新时机：启动时静默，
   /// 重载时由 [reload] 统一通知）。
@@ -71,13 +104,13 @@ class SourcePreferences extends ChangeNotifier {
     _sourceOrder = const [];
     _disabledChannels = <String>{};
     await load();
-    notifyListeners();
+    _changes.notify();
   }
 
   Future<void> setPreferredQuality(String quality) async {
     if (!_supportedQualitys.contains(quality)) return;
     _preferredQuality = quality;
-    notifyListeners();
+    _changes.notify();
     await _persist(() => _settings.write(kLxDefaultQuality, quality));
   }
 
@@ -90,7 +123,7 @@ class SourcePreferences extends ChangeNotifier {
     }
     if (listEquals(_sourceOrder, cleaned)) return;
     _sourceOrder = cleaned;
-    notifyListeners();
+    _changes.notify();
     await _persist(() => _settings.write(kLxSourceOrder, cleaned));
   }
 
@@ -102,7 +135,7 @@ class SourcePreferences extends ChangeNotifier {
         ? _disabledChannels.remove(key)
         : _disabledChannels.add(key);
     if (!changed) return;
-    notifyListeners();
+    _changes.notify();
     await _persist(
       () => _settings.write(kLxChannelDisabled, _disabledChannels.toList()),
     );
@@ -112,7 +145,7 @@ class SourcePreferences extends ChangeNotifier {
   Future<void> resetChannelOrder() async {
     if (_sourceOrder.isEmpty) return;
     _sourceOrder = const [];
-    notifyListeners();
+    _changes.notify();
     await _persist(() => _settings.clear(kLxSourceOrder));
   }
 
