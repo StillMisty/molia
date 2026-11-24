@@ -100,7 +100,7 @@ class FavoritesViewModel extends ChangeNotifier {
       controllerOf: controllerOf,
       persist: _session.persistScrollOffsets,
     );
-    _session.addListener(_forwardChange);
+    _session.changes.addListener(_forwardChange);
     _folderCollapse.addListener(_forwardChange);
     unawaited(_session.start());
     unawaited(_folderCollapse.load());
@@ -127,13 +127,15 @@ class FavoritesViewModel extends ChangeNotifier {
   CollectionSession get session => _session;
   PlaylistFolderCollapseController get folderCollapse => _folderCollapse;
 
-  bool get selecting => _session.selecting;
-  int get selectedCount => _session.selectedCount;
-  bool get searching => _session.searching;
-  CollectionTrackSort get sort => _session.sort;
-  int get selectedId => _session.selectedId;
-  List<String> get collectionOrder => _session.collectionOrder;
-  int get localSongsCount => _session.localSongsCount;
+  CollectionSessionState get sessionState => _session.state;
+
+  bool get selecting => _session.state.selecting;
+  int get selectedCount => _session.state.selectedCount;
+  bool get searching => _session.state.searching;
+  CollectionTrackSort get sort => _session.state.sort;
+  int get selectedId => _session.state.selectedId;
+  List<String> get collectionOrder => _session.state.collectionOrder;
+  int get localSongsCount => _session.state.localSongsCount;
   bool get locatePending => _locatePending;
   Map<String, int> get smartVersionCounts => _smartVersionCounts;
 
@@ -183,9 +185,9 @@ class FavoritesViewModel extends ChangeNotifier {
       cacheService?.revision.addListener(_onServiceChanged);
     }
     if (!identical(collectionRequest, _collectionRequest)) {
-      _collectionRequest?.removeListener(_onCollectionRequest);
+      _collectionRequest?.changes.removeListener(_onCollectionRequest);
       _collectionRequest = collectionRequest;
-      collectionRequest?.addListener(_onCollectionRequest);
+      collectionRequest?.changes.addListener(_onCollectionRequest);
       _onCollectionRequest();
     }
     if (!identical(downloadRecords, _downloadRecords)) {
@@ -541,11 +543,11 @@ class FavoritesViewModel extends ChangeNotifier {
     _cacheService?.revision.removeListener(_onServiceChanged);
     _downloadRecords?.removeListener(_onServiceChanged);
     _cacheIndex?.removeListener(_onServiceChanged);
-    _collectionRequest?.removeListener(_onCollectionRequest);
+    _collectionRequest?.changes.removeListener(_onCollectionRequest);
     _folderCollapse
       ..removeListener(_forwardChange)
       ..dispose();
-    _session.removeListener(_forwardChange);
+    _session.changes.removeListener(_forwardChange);
     _bookkeeping.dispose();
     _session.dispose();
     super.dispose();

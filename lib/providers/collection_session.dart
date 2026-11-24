@@ -24,6 +24,7 @@ import 'library_collections.dart';
 import 'library_outcome.dart';
 import 'library_provider.dart';
 import 'local_songs_collection.dart';
+import 'snapshot_source.dart';
 
 /// 资料库的一帧读取快照。
 ///
@@ -328,9 +329,40 @@ class CollectionSessionView {
   bool get hasFailed => phase == CollectionViewPhase.failed;
 }
 
+/// 收藏 / 历史页共用会话的不可变快照。
+///
+/// 字段名沿用旧 [CollectionSession] 的公开 getter；需要当前视图的命令
+/// （`allSelected` / `selectedRows` / `isSelected`）仍落在会话上。
+@immutable
+class CollectionSessionState {
+  const CollectionSessionState({
+    required this.selectedId,
+    required this.selecting,
+    required this.selectedCount,
+    required this.searching,
+    required this.reordering,
+    required this.sort,
+    required this.collectionOrder,
+    required this.localSongsCount,
+    required this.selectionAnchorKey,
+  });
+
+  final int selectedId;
+  final bool selecting;
+  final int selectedCount;
+  final bool searching;
+  final bool reordering;
+  final CollectionTrackSort sort;
+  final List<String> collectionOrder;
+  final int localSongsCount;
+  final String? selectionAnchorKey;
+}
+
 /// 把「当前合集」的状态机从页面里拿出来：恢复 / 校准 / 模式 / 选择 / 加载
 /// 组合 / 滚动激活只在这里发生。
-class CollectionSession extends ChangeNotifier {
+///
+/// 对外形态是「不可变快照 + 会话命令」：页面读 [state]，通知走 [changes]。
+class CollectionSession implements SnapshotSource<CollectionSessionState> {
   CollectionSession({
     LibraryCollections? collections,
     CollectionPresenter? presenter,
@@ -350,6 +382,9 @@ class CollectionSession extends ChangeNotifier {
   final CollectionPresenter _presenter;
   final CollectionScrollPort? _scroll;
   final LocalSongsCollection _localSongs;
+
+  /// 变更信号（替代 `ChangeNotifier.notifyListeners` 的订阅面）。
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 多选状态机（选择按行 key 保存，见 [CollectionSelection]）。
   final CollectionSelection _selection = CollectionSelection();
@@ -396,6 +431,23 @@ class CollectionSession extends ChangeNotifier {
   bool get searching => _searching;
   bool get reordering => _reordering;
   CollectionTrackSort get sort => _sort;
+
+  /// 不可变快照：View Model / 页面读它，通知走 [changes]。
+  @override
+  CollectionSessionState get state => CollectionSessionState(
+    selectedId: _selectedId,
+    selecting: _selection.isSelecting,
+    selectedCount: _selection.selectedCount,
+    searching: _searching,
+    reordering: _reordering,
+    sort: _sort,
+    collectionOrder: List.unmodifiable(_collectionOrder),
+    localSongsCount: _localSongs.count,
+    selectionAnchorKey: _selection.anchorKey,
+  );
+
+  @override
+  Listenable get changes => _changes;
 
   /// 清空多选（Esc / 关闭多选栏 / 切换合集 / 批量写入成功后）。
   void clearSelection() => _selection.clear();
@@ -834,19 +886,17 @@ class CollectionSession extends ChangeNotifier {
   void _forwardChange() => _notify();
 
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) _changes.notify();
   }
 
   static Future<Set<TrackId>> _noCachedAudioTracks(List<Track> tracks) async =>
       const <TrackId>{};
 
-  @override
   void dispose() {
     _disposed = true;
     _selection.removeListener(_forwardChange);
     _localSongs.removeListener(_forwardChange);
     _selection.dispose();
     _localSongs.dispose();
-    super.dispose();
   }
 }

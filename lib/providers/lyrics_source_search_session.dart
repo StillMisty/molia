@@ -17,6 +17,7 @@ import '../services/lyrics/lyric_provider.dart';
 import '../services/lyrics/lyrics_match.dart';
 import '../services/lyrics/lyrics_source_strategy.dart';
 import 'lyrics_provider.dart';
+import 'snapshot_source.dart';
 import 'source_fan_out.dart';
 
 final _logger = Logger('molia.lyrics_source_search_session');
@@ -134,11 +135,38 @@ class _CachedLyricsPreview {
   final LyricsPayload? payload;
 }
 
+/// 手动歌词搜索会话的不可变快照。
+///
+/// 逐源结果 / 分组行等派生读取仍由会话方法提供（需要当前策略与预览缓存），
+/// 这里只收视图每帧都要读的标量状态。
+@immutable
+class LyricsSourceSearchState {
+  const LyricsSourceSearchState({
+    required this.query,
+    required this.activeSourceKey,
+    required this.isFetchingLyric,
+    required this.selected,
+    required this.isAnyProviderLoading,
+    required this.preview,
+  });
+
+  final String query;
+  final String activeSourceKey;
+  final bool isFetchingLyric;
+  final LyricsSearchResult? selected;
+  final bool isAnyProviderLoading;
+
+  /// 选中结果的预览；没有选中、或选中项已被新查询清掉时为 null。
+  final LyricsPreview? preview;
+}
+
 /// 手动歌词搜索会话：来源顺序 / 可用性、逐源结果、选中态与确认写缓存。
 ///
 /// 搜索协议与通知节拍（立即通知查询 / 清空 / 选中，合并同轮来源完成）
 /// 由 [FanOutSearchSession] 统一持有；本类只叠加歌词侧的状态与流程。
-class LyricsSourceSearchSession extends ChangeNotifier {
+/// 对外形态是「不可变快照 + 会话命令」：视图读 [state]，通知走 [changes]。
+class LyricsSourceSearchSession
+    implements SnapshotSource<LyricsSourceSearchState> {
   LyricsSourceSearchSession({
     required List<LyricsSourceStrategy> strategies,
     Set<String>? enabledChannelKeys,
@@ -248,6 +276,9 @@ class LyricsSourceSearchSession extends ChangeNotifier {
   bool _isFetchingLyric = false;
   bool _disposed = false;
 
+  /// 变更信号（替代 `ChangeNotifier.notifyListeners` 的订阅面）。
+  final SnapshotSignal _changes = SnapshotSignal();
+
   /// 当前预览只对 [_previewResult] 生效；选中项被搜索 / 重试清掉时，
   /// [preview] 读取会返回 null，不把旧歌词挂在新列表上。
   LyricsPreview? _preview;
@@ -265,6 +296,20 @@ class LyricsSourceSearchSession extends ChangeNotifier {
   /// 由会话持有而不是视图 State：与音频换源（`SourceSwapProvider`）的
   /// `activeSourceKey` 保持同一归属层，视图重建 / 切 tab 都不会丢筛选。
   String _activeSourceKey = '';
+
+  /// 不可变快照：视图 / 测试读它，通知走 [changes]。
+  @override
+  LyricsSourceSearchState get state => LyricsSourceSearchState(
+    query: query,
+    activeSourceKey: _activeSourceKey,
+    isFetchingLyric: _isFetchingLyric,
+    selected: _searchSession.selected,
+    isAnyProviderLoading: _searchSession.isSearching,
+    preview: preview,
+  );
+
+  @override
+  Listenable get changes => _changes;
 
   /// 本次会话的来源（已按渠道开关过滤，并按渠道管理顺序排列）。
   List<LyricsSourceStrategy> get strategies => _strategies;
@@ -718,15 +763,13 @@ class LyricsSourceSearchSession extends ChangeNotifier {
     _searchSession.notifyNow();
   }
 
-  void _notifyListeners() => notifyListeners();
+  void _notifyListeners() => _changes.notify();
 
-  @override
   void dispose() {
     _disposed = true;
     _invalidatePreview();
     _previewCache.clear();
     _searchSession.changes.removeListener(_notifyListeners);
     _searchSession.dispose();
-    super.dispose();
   }
 }

@@ -567,7 +567,7 @@ void main() {
     session.select(result);
 
     var notifications = 0;
-    session.addListener(() => notifications++);
+    session.changes.addListener(() => notifications++);
 
     session.selectSource('tx');
     expect(notifications, 1);

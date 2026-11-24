@@ -522,12 +522,24 @@ final diagnosticsExporterProvider = Provider<DiagnosticsExporter>(
 // 组合根派生状态：懒构造，等价于旧 `provider_tree.dart` 的 `create:`。
 // ---------------------------------------------------------------------------
 
+/// 跨页收藏请求的控制器：已登记（测试 / 宿主）优先复用。
+final libraryCollectionRequestControllerProvider =
+    Provider<LibraryCollectionRequest>((ref) {
+      final existing = ref
+          .read(appRuntimeProvider)
+          .maybe<LibraryCollectionRequest>();
+      if (existing != null) return existing;
+      return LibraryCollectionRequest();
+    });
+
 final libraryCollectionRequestProvider =
     NotifierProvider<
-      LazyNullableListenableNotifier<LibraryCollectionRequest>,
-      LibraryCollectionRequest?
+      SnapshotNotifier<LibraryCollectionRequest, LibraryCollectionRequestState>,
+      LibraryCollectionRequestState
     >(
-      () => LazyNullableListenableNotifier((ref) => LibraryCollectionRequest()),
+      () => SnapshotNotifier(
+        (ref) => ref.watch(libraryCollectionRequestControllerProvider),
+      ),
     );
 
 final downloadRequestsProvider =

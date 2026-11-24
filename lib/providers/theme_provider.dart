@@ -12,6 +12,7 @@ import '../data/settings/settings_key.dart';
 import '../data/settings/settings_keys.dart';
 import '../data/settings/settings_module.dart';
 import '../theme/scheme_builder.dart';
+import 'snapshot_source.dart';
 
 part 'theme_provider.g.dart';
 
@@ -147,7 +148,7 @@ class ThemeProvider extends _$ThemeProvider {
   late final SettingsAccess _settings;
   late final DeviceSettings _deviceSettings;
   Future<void> _preferencesReady = Future.value();
-  final _ChangeSignal _changes = _ChangeSignal();
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 跨出 Riverpod 边界的变化信号（桌面歌词输出等仍以 Listenable 订阅）。
   ///
@@ -163,7 +164,6 @@ class ThemeProvider extends _$ThemeProvider {
           SettingsModule(keys: settingsKeys, reload: reloadFromPreferences),
         );
     _deviceSettings = DeviceSettings();
-    ref.onDispose(_changes.dispose);
     _preferencesReady = _loadPreferences();
     return _snapshot();
   }
@@ -437,9 +437,4 @@ class ThemeProvider extends _$ThemeProvider {
       logger.severe('保存主题偏好失败: $e');
     }
   }
-}
-
-/// 只暴露通知动作的 ChangeNotifier：主题状态本身走 Riverpod。
-final class _ChangeSignal extends ChangeNotifier {
-  void notify() => notifyListeners();
 }

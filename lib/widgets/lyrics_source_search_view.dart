@@ -110,7 +110,7 @@ class _LyricsSourceSearchViewState extends ConsumerState<LyricsSourceSearchView>
       trackArtist: widget.initialArtistName,
       trackAlbum: widget.initialAlbum,
       trackDuration: widget.initialDuration,
-    )..addListener(_onSessionChanged);
+    )..changes.addListener(_onSessionChanged);
 
     final initialQuery =
         '${widget.initialTrackTitle} ${widget.initialArtistName}'.trim();
@@ -129,7 +129,7 @@ class _LyricsSourceSearchViewState extends ConsumerState<LyricsSourceSearchView>
   @override
   void dispose() {
     _session
-      ..removeListener(_onSessionChanged)
+      ..changes.removeListener(_onSessionChanged)
       ..dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
