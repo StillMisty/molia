@@ -160,9 +160,16 @@ class LocalPlaybackService
   /// 服务是否已释放：异步装载 / 会话启动的收尾不再通知已释放的订阅方。
   bool _disposed = false;
 
+  /// 快照队列视图缓存（按 [queueRevision] 失效）。
+  ///
+  /// 位置 tick 也走一次快照读取；队列没变时复用同一份不可变视图，
+  /// 避免每 400ms 为快照复制整个队列。
+  List<SourceTrack>? _stateQueue;
+  int? _stateQueueRevision;
+
   @override
   LocalPlaybackServiceState get state => LocalPlaybackServiceState(
-    queueTracks: queueTracks,
+    queueTracks: _stateQueueTracks,
     currentIndex: currentIndex,
     currentSourceTrack: currentSourceTrack,
     contextName: contextName,
@@ -173,6 +180,16 @@ class LocalPlaybackService
     currentQuality: currentQuality,
     lastError: lastError,
   );
+
+  List<SourceTrack> get _stateQueueTracks {
+    final revision = queueRevision;
+    final cached = _stateQueue;
+    if (cached != null && revision == _stateQueueRevision) return cached;
+    final queue = queueTracks;
+    _stateQueue = queue;
+    _stateQueueRevision = revision;
+    return queue;
+  }
 
   @override
   Listenable get changes => _changes;

@@ -1888,18 +1888,27 @@ void main() {
     expect(initial.isLoading, isFalse);
     expect(initial.mode, PlayMode.listLoop);
     expect(initial.duration, const Duration(seconds: 30));
+    // 队列版本未变时复用同一份不可变视图：位置 tick 不为快照复制整条队列。
+    expect(
+      identical(service.state.queueTracks, service.state.queueTracks),
+      isTrue,
+    );
 
     // 低频状态变化：快照同源更新，且只通知一次。
     await service.setMode(PlayMode.shuffle);
     expect(service.state.mode, PlayMode.shuffle);
     expect(notifications, 1);
 
+    await service.enqueueTracks([_track(index: 2)]);
+    expect(service.state.queueTracks.length, 3);
+    expect(notifications, 2);
+
     // 位置 tick 只走原有独立通道（400ms 节流），不因为快照化提高频率。
     player.emitPosition(const Duration(seconds: 5));
     await pumpEventQueue();
     expect(service.position, const Duration(seconds: 5));
     expect(service.state.duration, initial.duration);
-    expect(notifications, 1, reason: '位置推进不立刻发快照');
+    expect(notifications, 2, reason: '位置推进不立刻发快照');
   });
 
   group('音频缓存单写者约束（#60）', () {
