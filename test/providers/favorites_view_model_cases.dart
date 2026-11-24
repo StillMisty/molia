@@ -174,12 +174,39 @@ void main() {
     );
     expect(reveal?.kind, FavoritesLocateKind.reveal);
     expect(reveal?.index, 1);
-    expect(viewModel.locatePending, isFalse, reason: '一次请求只消费一次');
+    expect(viewModel.state.locatePending, isFalse, reason: '一次请求只消费一次');
+  });
+
+  test('快照暴露搜索 / 定位 / 合集顺序，命令后通知 changes', () {
+    var notifications = 0;
+    viewModel.changes.addListener(() => notifications++);
+
+    final initial = viewModel.state;
+    expect(initial.searching, isFalse);
+    expect(initial.selecting, isFalse);
+    expect(initial.collectionOrder, isEmpty);
+
+    viewModel.openSearch();
+    expect(viewModel.state.searching, isTrue);
+    expect(notifications, 1);
+
+    viewModel.requestLocate();
+    expect(viewModel.state.locatePending, isTrue);
+
+    viewModel.exitSearch();
+    viewModel.reorderCollections(const ['playlist:2']);
+    final snapshot = viewModel.state;
+    expect(snapshot.collectionOrder, ['playlist:2']);
+    expect(
+      () => snapshot.collectionOrder.add('playlist:3'),
+      throwsUnsupportedError,
+      reason: '快照里的顺序是只读视图',
+    );
   });
 
   test('dispose 后取消订阅且不再通知', () {
     var notifications = 0;
-    viewModel.addListener(() => notifications++);
+    viewModel.changes.addListener(() => notifications++);
     viewModel.requestLocate();
     expect(notifications, 1);
 

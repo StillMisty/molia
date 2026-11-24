@@ -603,7 +603,7 @@ Widget buildFavoritesCollectionTab(
       unawaited(playFavoritesView(actions: actions, view: view, index: index));
     },
     onRowLongPress: (key) {
-      if (viewModel.selecting && viewModel.selectionAnchorKey != null) {
+      if (viewModel.state.selecting && viewModel.selectionAnchorKey != null) {
         viewModel.selectRangeTo(view, key);
         return;
       }

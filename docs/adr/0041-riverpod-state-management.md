@@ -168,6 +168,23 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 仍未迁移：`SyncProvider`、`SourcesProvider`、`SourceManager`、
 `LocalPlaybackService`、页面级视图模型与 widget 内部会话（见后续批次）。
 
+### 页面级视图模型（第七批）
+
+由页面自己创建、`dispose` 的视图模型同样统一成「不可变快照 + `changes`」，
+但**不**额外加 Riverpod provider：它们的生命周期就是页面 State，消费方用
+`ListenableBuilder(listenable: vm.changes)` 读 `vm.state`：
+
+- `AlbumViewModel` → `AlbumViewState`（头部实体 + `PagedListState`）；
+  `ArtistViewModel` → `ArtistViewState`（同形）；条目与实体同一响应写入，
+  分页列表本身仍由 `PagedListController` 发布，快照不复制列表；
+- `FavoritesViewModel` → `FavoritesViewState`（多选 / 搜索 / 排序 / 当前合集 /
+  合集顺序 / 本地歌曲计数 / 定位挂起）；搜索词仍在页面的
+  `TextEditingController`，智能列表 `displayRows` 的版本计数是同帧投影结果，
+  不进快照；
+- `LocalSongsCollection` → `LocalSongsState`（行 / 计数 / 加载态 / 行列表版本）；
+  它由 `CollectionSession` 内部持有，会话改订阅 `changes`。行列表仍是合集自己
+  缓存的那份（presenter 按引用复用视图），快照不复制、不重新包装。
+
 ### 搜索 / 渠道 / 扇出（第三批）
 
 - `ChannelSelection` → `ChannelSelectionState`（当前 key + 可用渠道顺序），

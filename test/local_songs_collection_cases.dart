@@ -421,6 +421,34 @@ void main() {
     expect(localData.requests, hasLength(1));
   });
 
+  test('快照暴露行 / 计数 / 加载态，异步落定后通知 changes', () async {
+    final completer = Completer<Set<TrackId>>();
+    final collection = LocalSongsCollection(
+      loadCachedAudioTrackIds: (_) => completer.future,
+    );
+    addTearDown(collection.dispose);
+    var notifications = 0;
+    collection.changes.addListener(() => notifications++);
+
+    final load = collection.sync(
+      inputFor(_FakeDownloads(), index: [indexOf('1')]),
+    );
+
+    expect(collection.state.rows, isEmpty);
+    expect(collection.state.count, 0);
+    expect(collection.state.loading, isTrue, reason: '缓存索引还在途');
+    expect(collection.state.rowsRevision, collection.rowsRevision);
+
+    completer.complete({const TrackId('wy', '1')});
+    await load;
+
+    expect(notifications, 1);
+    expect(collection.state.rows.single.title, 'Song 1');
+    expect(collection.state.count, 1);
+    expect(collection.state.loading, isFalse);
+    expect(collection.state.rowsRevision, collection.rowsRevision);
+  });
+
   group('行列表缓存', () {
     test('输入不变：rows 返回同一列表，count 与 rows 同源', () async {
       final downloads = _FakeDownloads(records: [downloadOf('1')]);

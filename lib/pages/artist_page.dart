@@ -20,7 +20,6 @@ import '../domain/ports/artist_repository.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/app_providers.dart';
 import '../providers/artist_view_model.dart';
-import '../providers/paged_list_controller.dart';
 import '../widgets/responsive.dart';
 import '../widgets/detail_page/detail_cover_header.dart';
 import '../widgets/favorite_action.dart';
@@ -114,9 +113,9 @@ class _ArtistPageState extends State<ArtistPage> {
     unawaited(
       _handoff.play(
         context,
-        _viewModel.items,
+        _viewModel.state.items,
         startIndex: index,
-        contextName: _viewModel.artist?.name,
+        contextName: _viewModel.state.artist?.name,
         fallbackContextName: widget.fallbackName,
       ),
     );
@@ -125,9 +124,9 @@ class _ArtistPageState extends State<ArtistPage> {
   /// 「随机播放全部」：洗牌与起播下标的顺序统一由 handoff 负责。
   Future<void> _playShuffled() => _handoff.play(
     context,
-    _viewModel.items,
+    _viewModel.state.items,
     shuffle: true,
-    contextName: _viewModel.artist?.name,
+    contextName: _viewModel.state.artist?.name,
     fallbackContextName: widget.fallbackName,
   );
 
@@ -140,8 +139,8 @@ class _ArtistPageState extends State<ArtistPage> {
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
     final body = ListenableBuilder(
-      listenable: _viewModel,
-      // view model 每次变更发布新的不可变分页状态：整块 body 按最新快照重建。
+      listenable: _viewModel.changes,
+      // view model 每次变更发布新的不可变快照：整块 body 按最新快照重建。
       builder: (context, _) => _buildBody(context, l10n, _viewModel.state),
     );
     if (widget.embedded) return body;
@@ -157,22 +156,22 @@ class _ArtistPageState extends State<ArtistPage> {
   Widget _buildBody(
     BuildContext context,
     AppLocalizations l10n,
-    PagedListState<Track> state,
+    ArtistViewState viewState,
   ) {
     // `notFound` 与一般加载失败是两种文案（失败原因在控制器状态里）。
-    final error = state.error;
+    final error = viewState.page.error;
     final notFound =
         error is SourceFailure && error.kind == FailureKind.notFound;
     return PagedTrackCollectionBody<Track>(
-      state: state,
+      state: viewState.page,
       headerBuilder: (context, state) {
-        final artist = _viewModel.artist;
+        final artist = viewState.artist;
         // 列表态必有实体（与曲目同一响应写入）；空值只为类型收窄。
         if (artist == null) return const SizedBox.shrink();
         return _buildHeader(context, l10n, artist, state.items.length);
       },
       rowBuilder: (context, index, count, tableColumns) =>
-          _buildTrackRow(context, index, count),
+          _buildTrackRow(context, viewState, index, count),
       onRetry: () => unawaited(_load()),
       onLoadMore: () => unawaited(_viewModel.loadMore()),
       emptyText: l10n.artistEmpty,
@@ -182,11 +181,16 @@ class _ArtistPageState extends State<ArtistPage> {
     );
   }
 
-  Widget _buildTrackRow(BuildContext context, int index, int count) {
-    final track = _viewModel.items[index];
+  Widget _buildTrackRow(
+    BuildContext context,
+    ArtistViewState viewState,
+    int index,
+    int count,
+  ) {
+    final track = viewState.items[index];
     return FavoriteTrackTile.track(
       track: track,
-      fallbackCoverUrl: _viewModel.artist?.avatarUrl,
+      fallbackCoverUrl: viewState.artist?.avatarUrl,
       position: calculateCardPosition(index, count),
       onTap: () => _playFrom(index),
       // 菜单行：成功也确认一句（动作藏在弹层里，弹层关闭后需要回执）。
@@ -218,7 +222,7 @@ class _ArtistPageState extends State<ArtistPage> {
         onPlay: () => _playFrom(0),
         onShuffle: () => unawaited(_playShuffled()),
         onAddToLibrary: () =>
-            unawaited(_handoff.addToLibrary(context, _viewModel.items)),
+            unawaited(_handoff.addToLibrary(context, _viewModel.state.items)),
       ),
     );
   }

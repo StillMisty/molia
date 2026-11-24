@@ -375,7 +375,7 @@ class CollectionSession implements SnapshotSource<CollectionSessionState> {
              loadCachedAudioTrackIds ?? _noCachedAudioTracks,
        ) {
     _selection.addListener(_forwardChange);
-    _localSongs.addListener(_forwardChange);
+    _localSongs.changes.addListener(_forwardChange);
   }
 
   final LibraryCollections _collections;
@@ -895,7 +895,7 @@ class CollectionSession implements SnapshotSource<CollectionSessionState> {
   void dispose() {
     _disposed = true;
     _selection.removeListener(_forwardChange);
-    _localSongs.removeListener(_forwardChange);
+    _localSongs.changes.removeListener(_forwardChange);
     _selection.dispose();
     _localSongs.dispose();
   }
