@@ -351,18 +351,25 @@ final downloadManagerProvider =
 final downloadManagerControllerProvider =
     maybeSnapshotController<DownloadManager>();
 
-final downloadSettingsProvider = Provider<DownloadSettings?>(
-  (ref) => ref.read(appRuntimeProvider).maybe<DownloadSettings>(),
-);
+final downloadSettingsProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<DownloadSettings, DownloadSettingsState>,
+      DownloadSettingsState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<DownloadSettings>(),
+      ),
+    );
+final downloadSettingsControllerProvider =
+    maybeSnapshotController<DownloadSettings>();
 
 final localLibraryServiceProvider =
     NotifierProvider<
-      LegacyListenableNotifier<LocalLibraryService>,
-      LocalLibraryService
-    >(
-      () =>
-          LegacyListenableNotifier((ref) => _require<LocalLibraryService>(ref)),
-    );
+      SnapshotNotifier<LocalLibraryService, LocalLibraryServiceState>,
+      LocalLibraryServiceState
+    >(() => SnapshotNotifier((ref) => _require<LocalLibraryService>(ref)));
+final localLibraryServiceControllerProvider =
+    snapshotController<LocalLibraryService>();
 final dataSaverServiceProvider =
     NotifierProvider<
       LegacyListenableNotifier<DataSaverService>,

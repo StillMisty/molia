@@ -583,7 +583,9 @@ class _DownloadsManagePageState extends ConsumerState<DownloadsManagePage> {
 
   /// 手动检查一次文件，并在提示里给出结果；缺失明细在收藏 › 文件不见。
   Future<void> _checkMissingFiles(AppLocalizations l10n) async {
-    final LocalLibraryService? service = ref.read(localLibraryServiceProvider);
+    final LocalLibraryService? service = ref.read(
+      localLibraryServiceControllerProvider,
+    );
     final NotificationService? notifications = ref.read(
       maybeNotificationServiceProvider,
     );

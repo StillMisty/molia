@@ -128,11 +128,16 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 迁移完成后删除。
 
 已按此形态落地的对象：`AudioFocusSettings`（`bool` 快照）、`AiDjProvider`
-（`AiDjState`）、`LibraryProvider`（`LibraryState`：历史 / 列表 / 收藏键 / 版本戳）。
+（`AiDjState`）、`LibraryProvider`（`LibraryState`：历史 / 列表 / 收藏键 / 版本戳）、
+`DownloadRecords`（记录列表 / 版本戳 / 能力位）、`DownloadQueue`（三组任务）、
+`DownloadManager`（能力位 / 就绪态 / 任务结构）、`DownloadRequests`（修订号）、
+`DownloadSettings`（下载设置开关）、`LocalLibraryService`（文件夹列表 / 扫描态）。
+进度类高频数据不进快照：`DownloadTask.progressListenable`、
+`LocalLibraryService.progressListenable`。
 
 仍以 `ChangeNotifier` 实现、经 `LegacyListenableNotifier` 暴露的类有两类：
-启动期服务（`SourceManager`、`DownloadService`、`ScrobbleService`、数据层
-store…）与体量较大的页面状态（`PlaybackProvider` 等）。它们与启动顺序 /
+启动期服务（`SourceManager`、`ScrobbleService`、数据层
+store…）与体量较大的页面状态（`DiscoverProvider` 等）。它们与启动顺序 /
 服务生命周期强耦合，内部快照化按模块继续推进；UI 契约已经统一为 `ref`，
 后续替换不改变页面代码。
 

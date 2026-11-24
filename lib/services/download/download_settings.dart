@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/settings/device_settings.dart';
 import '../../data/settings/device_settings_keys.dart';
+import '../../providers/snapshot_source.dart';
 
 /// 默认文件名模板：`{artist} - {title}`（无歌手时只留歌名）。
 const String kDefaultFilenameTemplate = kDefaultDownloadFilenameTemplate;
@@ -22,8 +23,31 @@ const List<String> kFilenameTemplatePlaceholders = [
   '{album}',
 ];
 
+/// 下载设置对 UI 暴露的不可变快照（字段名沿用旧 getter）。
+@immutable
+class DownloadSettingsState {
+  const DownloadSettingsState({
+    required this.saveDir,
+    required this.filenameTemplate,
+    required this.embedTags,
+    required this.publishToPublicDir,
+    required this.notifications,
+  });
+
+  /// 自定义保存目录（空 = 平台默认）。
+  final String saveDir;
+
+  final String filenameTemplate;
+  final bool embedTags;
+  final bool publishToPublicDir;
+  final bool notifications;
+}
+
 /// 下载设置：读写设备本地设置，变更即时生效（服务每次下载读取）。
-class DownloadSettings extends ChangeNotifier {
+///
+/// 通知面是 [changes]：设置页经 `downloadSettingsProvider` 读快照重建开关，
+/// 写入命令从控制器取实例。
+class DownloadSettings implements SnapshotSource<DownloadSettingsState> {
   /// [settings] 仅测试注入；生产构造自己的设备本地入口。
   DownloadSettings({DeviceSettings? settings})
     : _settings = settings ?? DeviceSettings();
@@ -35,6 +59,7 @@ class DownloadSettings extends ChangeNotifier {
   static const String keyNotifications = kDownloadNotificationsKeyName;
 
   final DeviceSettings _settings;
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 自定义保存目录（空 = 平台默认：桌面系统下载目录下 `Molia/`）。
   String _saveDir = '';
@@ -55,6 +80,18 @@ class DownloadSettings extends ChangeNotifier {
   bool get publishToPublicDir => _publishToPublicDir;
   bool get notifications => _notifications;
 
+  @override
+  DownloadSettingsState get state => DownloadSettingsState(
+    saveDir: _saveDir,
+    filenameTemplate: _filenameTemplate,
+    embedTags: _embedTags,
+    publishToPublicDir: _publishToPublicDir,
+    notifications: _notifications,
+  );
+
+  @override
+  Listenable get changes => _changes;
+
   /// 加载已保存值（组合根 / 测试调用一次）。
   Future<void> init() async {
     _saveDir = await _settings.read(kDownloadSaveDirKey);
@@ -62,7 +99,7 @@ class DownloadSettings extends ChangeNotifier {
     _embedTags = await _settings.read(kDownloadEmbedTagsKey);
     _publishToPublicDir = await _settings.read(kDownloadPublishPublicDirKey);
     _notifications = await _settings.read(kDownloadNotificationsKey);
-    notifyListeners();
+    _changes.notify();
   }
 
   Future<void> setSaveDir(String value) async {
@@ -70,7 +107,7 @@ class DownloadSettings extends ChangeNotifier {
     if (next == _saveDir) return;
     _saveDir = next;
     await _settings.write(kDownloadSaveDirKey, next);
-    notifyListeners();
+    _changes.notify();
   }
 
   Future<void> setFilenameTemplate(String value) async {
@@ -78,14 +115,14 @@ class DownloadSettings extends ChangeNotifier {
     if (next == _filenameTemplate) return;
     _filenameTemplate = next;
     await _settings.write(kDownloadFilenameTemplateKey, next);
-    notifyListeners();
+    _changes.notify();
   }
 
   Future<void> setEmbedTags(bool value) async {
     if (value == _embedTags) return;
     _embedTags = value;
     await _settings.write(kDownloadEmbedTagsKey, value);
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 公共目录发布开关（只影响之后的下载；已有下载用管理页「补发布」）。
@@ -93,7 +130,7 @@ class DownloadSettings extends ChangeNotifier {
     if (value == _publishToPublicDir) return;
     _publishToPublicDir = value;
     await _settings.write(kDownloadPublishPublicDirKey, value);
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 下载进度通知开关（只影响之后的下载；进行中的任务保持原状）。
@@ -101,7 +138,7 @@ class DownloadSettings extends ChangeNotifier {
     if (value == _notifications) return;
     _notifications = value;
     await _settings.write(kDownloadNotificationsKey, value);
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 按模板生成文件名基名（未做非法字符清洗，由下载服务统一 sanitize）。

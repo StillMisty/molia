@@ -9,12 +9,43 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../data/files/local_locator.dart';
+import '../../providers/snapshot_source.dart';
 import '../download/missing_file_probe.dart';
 import 'music_folder_scanner.dart';
 import 'music_folder_watcher.dart';
 import 'music_folders.dart';
 
-class LocalLibraryService extends ChangeNotifier {
+/// 本地曲库服务对 UI 暴露的不可变快照（扫描进度不在其中）。
+///
+/// 扫描进度是高频数据，走 [LocalLibraryService.progressListenable]：页面只为
+/// 那一行（或那一枚计数器）重建，扫描对象 / 文件夹列表变化才换快照。
+@immutable
+class LocalLibraryServiceState {
+  const LocalLibraryServiceState({
+    required this.initialized,
+    required this.scanning,
+    required this.scanningFolderId,
+    required this.folders,
+    required this.canWatchFolders,
+    required this.canScanOnStartup,
+    required this.canAddFolder,
+  });
+
+  final bool initialized;
+  final bool scanning;
+
+  /// 正在扫描的文件夹 id（未扫描时为空）。
+  final String? scanningFolderId;
+
+  /// 已配置的音乐文件夹（不可变列表）。
+  final List<MusicFolder> folders;
+
+  final bool canWatchFolders;
+  final bool canScanOnStartup;
+  final bool canAddFolder;
+}
+
+class LocalLibraryService implements SnapshotSource<LocalLibraryServiceState> {
   LocalLibraryService({
     required this.folders,
     required this.scanner,
@@ -51,22 +82,51 @@ class LocalLibraryService extends ChangeNotifier {
   bool _initialized = false;
   bool _scanning = false;
   String? _scanningFolderId;
-  ScanProgress? _progress;
   ScanCancellation? _cancellation;
+  bool _disposed = false;
+
+  final SnapshotSignal _changes = SnapshotSignal();
+
+  /// 高频扫描进度通道（`null` = 未在扫描）；不进入快照。
+  final ValueNotifier<ScanProgress?> _progressListenable =
+      ValueNotifier<ScanProgress?>(null);
 
   bool get initialized => _initialized;
   bool get scanning => _scanning;
   String? get scanningFolderId => _scanningFolderId;
-  ScanProgress? get progress => _progress;
   bool get canWatchFolders => _canWatch;
   bool get canScanOnStartup => _canScanOnStartup;
   bool get canAddFolder => _canAddFolder;
+
+  /// 当前扫描进度（未扫描时为 null）。
+  ScanProgress? get progress => _progressListenable.value;
+
+  /// 进度订阅面：只有扫描进度行订阅它。
+  ValueListenable<ScanProgress?> get progressListenable => _progressListenable;
+
+  @override
+  LocalLibraryServiceState get state => LocalLibraryServiceState(
+    initialized: _initialized,
+    scanning: _scanning,
+    scanningFolderId: _scanningFolderId,
+    folders: List<MusicFolder>.unmodifiable(folders.folders),
+    canWatchFolders: _canWatch,
+    canScanOnStartup: _canScanOnStartup,
+    canAddFolder: _canAddFolder,
+  );
+
+  @override
+  Listenable get changes => _changes;
+
+  void _publishProgress(ScanProgress? progress) {
+    if (!_disposed) _progressListenable.value = progress;
+  }
 
   Future<void> init() async {
     if (_initialized) return;
     await folders.load();
     _initialized = true;
-    notifyListeners();
+    _changes.notify();
   }
 
   Future<MusicFolderAddResult> addFolder(String locator) async {
@@ -95,7 +155,7 @@ class LocalLibraryService extends ChangeNotifier {
       for (final folder in folders.folders)
         if (!isContentLocator(folder.root)) folder.root,
     ]);
-    notifyListeners();
+    _changes.notify();
   }
 
   Future<void> scanFolder(String id) async {
@@ -166,15 +226,12 @@ class LocalLibraryService extends ChangeNotifier {
       for (final folder in targets) {
         if (_cancellation!.isCancelled) break;
         _scanningFolderId = folder.id;
-        _progress = ScanProgress(processed: 0, directory: folder.root);
-        notifyListeners();
+        _publishProgress(ScanProgress(processed: 0, directory: folder.root));
+        _changes.notify();
         final outcome = await scanner.scan(
           folder.root,
           cancellation: _cancellation,
-          onProgress: (progress) {
-            _progress = progress;
-            notifyListeners();
-          },
+          onProgress: _publishProgress,
         );
         lastOutcome = outcome;
         if (outcome.unavailable) anyUnavailable = true;
@@ -204,9 +261,9 @@ class LocalLibraryService extends ChangeNotifier {
     } finally {
       _scanning = false;
       _scanningFolderId = null;
-      _progress = null;
+      _publishProgress(null);
       _cancellation = null;
-      notifyListeners();
+      _changes.notify();
     }
     return lastOutcome;
   }
@@ -220,9 +277,10 @@ class LocalLibraryService extends ChangeNotifier {
     }
   }
 
-  @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     unawaited(watcher.stop());
-    super.dispose();
+    _progressListenable.dispose();
   }
 }
