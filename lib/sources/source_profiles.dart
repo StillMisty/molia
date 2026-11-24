@@ -114,7 +114,7 @@ extension SourceProfileDescriptors on Iterable<SourceProfile> {
 /// 一次构建的只读画像快照：按 key 查能力 + 已排序的渠道 / 可搜索列表。
 ///
 /// 刻意不做增量缓存：输入（激活脚本、any-listen、偏好）都已在各自的
-/// ChangeNotifier 里维护，重复构建只有个位数条目；多一份缓存就多一处失效
+/// 快照对象里维护，重复构建只有个位数条目；多一份缓存就多一处失效
 /// 逻辑，反而容易与路由漂移。
 class SourceProfiles {
   SourceProfiles._(this._byKey, this.channels, this.declarations)

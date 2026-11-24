@@ -1,8 +1,8 @@
 /// Riverpod 与启动期实例之间的桥。
 ///
 /// 迁移期组合根仍按顺序构造服务；这里把同一实例登记为 provider，UI 只通过
-/// `ref` 读取。纯依赖用 `Provider`；仍以 `ChangeNotifier` 通知的服务用
-/// [LegacyListenableNotifier] 保留「每次 notify 都重建 watcher」的语义。
+/// `ref` 读取。纯依赖用 `Provider`；启动期状态对象用 [SnapshotNotifier]
+/// 镜像不可变快照，命令经 `xxxControllerProvider` 落在实例自己身上。
 ///
 /// 组合根自己的派生状态（评论 / 发现 / 换源 / 下载请求 / 单曲信息等）直接
 /// 在 provider 里懒构造，跟旧 `provider_tree.dart` 的 `create:` 语义一致。
@@ -11,7 +11,6 @@
 /// （ADR-0041）。
 library;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:molia/app/bootstrap/runtime_providers.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
@@ -72,31 +71,6 @@ import 'package:molia/services/source_swap/swap_query_planner.dart';
 import 'package:molia/services/track_local_data_service.dart';
 import 'package:molia/services/update/update_check_coordinator.dart';
 import 'package:molia/sources/source_manager.dart';
-
-/// 把一个启动期 `ChangeNotifier` 实例暴露成 Riverpod provider。
-///
-/// `state = _value` 是同一实例；`updateShouldNotify` 恒为 true，因此每次
-/// `notifyListeners()` 都会通知 watcher（与 `MultiProvider` 的行为一致）。
-class LegacyListenableNotifier<T extends Listenable> extends Notifier<T> {
-  LegacyListenableNotifier(this._resolve);
-
-  final T Function(Ref ref) _resolve;
-  late T _value;
-
-  @override
-  T build() {
-    final value = _resolve(ref);
-    _value = value;
-    value.addListener(_onChanged);
-    ref.onDispose(() => value.removeListener(_onChanged));
-    return value;
-  }
-
-  void _onChanged() => state = _value;
-
-  @override
-  bool updateShouldNotify(T previous, T next) => true;
-}
 
 T _require<T>(Ref ref) => ref.watch(appRuntimeProvider).require<T>();
 
@@ -377,9 +351,11 @@ final biliAccountProvider =
 final biliAccountControllerProvider =
     maybeSnapshotController<BiliAccountService>();
 final sourceManagerProvider =
-    NotifierProvider<LegacyListenableNotifier<SourceManager>, SourceManager>(
-      () => LegacyListenableNotifier((ref) => _require<SourceManager>(ref)),
-    );
+    NotifierProvider<
+      SnapshotNotifier<SourceManager, SourceManagerState>,
+      SourceManagerState
+    >(() => SnapshotNotifier((ref) => _require<SourceManager>(ref)));
+final sourceManagerControllerProvider = snapshotController<SourceManager>();
 
 // ---------------------------------------------------------------------------
 // 可空别名：设置页等“可选入口”消费方使用，未接线时返回 null。
@@ -554,7 +530,7 @@ final sourcesControllerProvider = Provider<SourcesProvider>((ref) {
   final existing = ref.read(appRuntimeProvider).maybe<SourcesProvider>();
   if (existing != null) return existing;
   final provider = SourcesProvider(
-    SourceManagerBackend(ref.read(sourceManagerProvider)),
+    SourceManagerBackend(ref.read(sourceManagerControllerProvider)),
   );
   ref.onDispose(provider.dispose);
   return provider;
@@ -577,7 +553,8 @@ final diagnosticsPageControllerProvider = Provider<DiagnosticsProvider>((ref) {
     builder: exporter,
     saveAs: ref.read(saveAsProvider),
     appInfo: exporter.appInfo.load,
-    restartEngine: () => ref.read(sourceManagerProvider).retryEngine(),
+    restartEngine: () =>
+        ref.read(sourceManagerControllerProvider).retryEngine(),
     logReader: LogTailReader(
       directory: service.logSink?.directory ?? () async => null,
     ),

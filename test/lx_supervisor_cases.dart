@@ -706,7 +706,7 @@ void main() {
       await manager.init();
 
       var notifications = 0;
-      manager.addListener(() => notifications++);
+      manager.changes.addListener(() => notifications++);
 
       await manager.importScript('''
 /**
