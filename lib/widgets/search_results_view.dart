@@ -49,14 +49,17 @@ typedef OpenSearchArtist = Future<void> Function(
 /// - 遮罩版：最多预览 [SearchPreviewSession.defaultMaxItems] 行，以「查看全部
 ///   结果」出口收尾；当前渠道不支持搜索时显示专用空态。
 ///
-/// 结果集合 / 预览顺序 / 高亮都由 [SearchSession] 的投影提供；本模块只保留
-/// 行呈现与导航编排，宿主传入同一个会话即可。
+/// 结果集合 / 预览顺序 / 高亮由宿主传入的不可变 [SearchProjection] 提供；
+/// 本模块只保留行呈现与导航编排，命令（分页 / 重试 / 切类型）仍经同一个
+/// [SearchSession] 发出。宿主 watch 搜索快照后重建本组件。
 class SearchResultsView extends StatefulWidget {
   const SearchResultsView({
     super.key,
     required this.variant,
     required this.session,
+    required this.projection,
     required this.onPlay,
+    this.highlightedKey,
     this.onOpenArtist,
     this.onOpenAllResults,
     this.controller,
@@ -76,8 +79,14 @@ class SearchResultsView extends StatefulWidget {
 
   final SearchResultsVariant variant;
 
-  /// 唯一的搜索会话：结果 / 预览 / 高亮 / 意图都从这里读或发。
+  /// 命令出口：分页 / 重试 / 切类型（结果与预览不从这里读）。
   final SearchSession session;
+
+  /// 宿主 watch 到的搜索快照投影（结果 / 预览 / 空态判据）。
+  final SearchProjection projection;
+
+  /// 遮罩预览的高亮行 key（来自同一份搜索快照）。
+  final String? highlightedKey;
 
   /// 单曲 / 歌词行点击：播放语义归宿主。
   final void Function(SearchRow row) onPlay;
@@ -114,30 +123,13 @@ class _SearchResultsViewState extends State<SearchResultsView> {
   final Map<String, GlobalKey> _highlightKeys = {};
   String? _lastEnsuredKey;
 
-  /// 会话通知（结果 / 关键词 / 类型）+ 预览通知（高亮移动）都重建结果面。
-  late Listenable _stateListenable;
-
-  @override
-  void initState() {
-    super.initState();
-    _bindSession();
-  }
-
   @override
   void didUpdateWidget(covariant SearchResultsView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session != widget.session) {
-      _bindSession();
       _highlightKeys.clear();
       _lastEnsuredKey = null;
     }
-  }
-
-  void _bindSession() {
-    _stateListenable = Listenable.merge([
-      widget.session,
-      widget.session.preview,
-    ]);
   }
 
   @override
@@ -171,21 +163,16 @@ class _SearchResultsViewState extends State<SearchResultsView> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: _stateListenable,
-      builder: (context, _) {
-        final projection = widget.session.projection;
-        return switch (widget.variant) {
-          SearchResultsVariant.page => _buildPage(context, projection),
-          SearchResultsVariant.docked =>
-            // 当前渠道不支持搜索时，即使还没输入关键词也要显示专用空态；
-            // 可搜索且无词时结果面留空（只留搜索条）。
-            !projection.isActive && projection.hasActiveSearchSource
-                ? const SizedBox.shrink()
-                : _buildDocked(context, projection),
-        };
-      },
-    );
+    final projection = widget.projection;
+    return switch (widget.variant) {
+      SearchResultsVariant.page => _buildPage(context, projection),
+      SearchResultsVariant.docked =>
+        // 当前渠道不支持搜索时，即使还没输入关键词也要显示专用空态；
+        // 可搜索且无词时结果面留空（只留搜索条）。
+        !projection.isActive && projection.hasActiveSearchSource
+            ? const SizedBox.shrink()
+            : _buildDocked(context, projection),
+    };
   }
 
   Widget _buildPage(BuildContext context, SearchProjection projection) {
@@ -440,11 +427,9 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     final currentKeys = {for (final item in preview.items) item.key};
     // 在 build 里裁剪高亮 GlobalKey 缓存：只影响缓存本身（删掉已不在结果里的
     // 行的 key），不 setState、不改变任何参与布局的值，因此不会触发重建或
-    // 时序问题；`_itemKey` 同样在 build 里 putIfAbsent。放到 didUpdateWidget
-    // 不行（结果来自 session/preview 通知，不走 widget 更新），另挂监听反而
-    // 多一条生命周期要维护。
+    // 时序问题；`_itemKey` 同样在 build 里 putIfAbsent。
     _highlightKeys.removeWhere((key, _) => !currentKeys.contains(key));
-    _scheduleEnsureHighlighted(widget.session.preview.highlightedKey);
+    _scheduleEnsureHighlighted(widget.highlightedKey);
 
     return _panel(
       context,
@@ -486,7 +471,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
                         preview.items[index],
                         index,
                         preview.items.length,
-                        highlightedKey: widget.session.preview.highlightedKey,
+                        highlightedKey: widget.highlightedKey,
                       ),
                   ],
                 ),

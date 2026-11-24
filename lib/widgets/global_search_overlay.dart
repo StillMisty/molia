@@ -352,7 +352,7 @@ class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
   @override
   void initState() {
     super.initState();
-    _search = ref.read(searchProvider);
+    _search = ref.read(searchControllerProvider);
     _session = _search.session;
     // 会话是搜索状态的唯一源：遮罩打开时用绑定器种上当前关键词，
     // 之后资料库改词 / 清空也会立即反映到输入框（不再逐帧补同步）。
@@ -361,8 +361,12 @@ class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
       search: _search,
       hotKeywords: () => ref.read(discoverProvider).hotSearches,
     );
-    _search.addListener(_onSearchChanged);
-    _session.preview.addListener(_onPreviewChanged);
+    // 快照变更（含预览高亮移动）都由 provider 合并后通知：不再直接订阅会话。
+    ref.listenManual(searchProvider, (previous, next) {
+      if (!mounted) return;
+      setState(() {});
+      _announceResults(next);
+    });
     _assist.addListener(_onAssistChanged);
     _focusNode.addListener(_onFieldFocus);
     // 打开 / 重新聚焦都全选已有文本：Ctrl+F 后直接输入即替换上次关键词。
@@ -371,8 +375,6 @@ class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
 
   @override
   void dispose() {
-    _search.removeListener(_onSearchChanged);
-    _session.preview.removeListener(_onPreviewChanged);
     _assist.removeListener(_onAssistChanged);
     _focusNode.removeListener(_onFieldFocus);
     _assist.dispose();
@@ -398,7 +400,7 @@ class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
 
   /// 渠道选择：发现内容与搜索一起切，然后把焦点还给输入框。
   void _selectChannel(String key) {
-    ref.read(channelSelectionProvider).select(key);
+    ref.read(channelSelectionControllerProvider).select(key);
     final textLength = _field.text.length;
     final selection = _field.selection;
     final wasSelectAll =
@@ -428,18 +430,6 @@ class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
     });
   }
 
-  /// 会话通知：输入激活态 / 结果 / 播报都跟同一份投影走。
-  void _onSearchChanged() {
-    if (!mounted) return;
-    setState(() {});
-    _announceResults();
-  }
-
-  /// 预览通知：↑↓ 只改高亮，不触发搜索状态（也不重算结果）。
-  void _onPreviewChanged() {
-    if (mounted) setState(() {});
-  }
-
   /// 辅助块通知：焦点 / 建议高亮变化只影响搜索条下方这一块。
   void _onAssistChanged() {
     if (mounted) setState(() {});
@@ -447,17 +437,25 @@ class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
 
   void _onFieldFocus() => _assist.setFocused(_focusNode.hasFocus);
 
-  SearchPreviewItem? get _highlightedItem => _session.preview.highlightedItem;
+  /// 当前高亮预览行：key 来自搜索快照，条目按同一份预览排序查找。
+  SearchPreviewItem? _highlightedItemOf(SearchState state) {
+    final key = state.previewHighlightedKey;
+    if (key == null) return null;
+    for (final item in state.projection.preview.items) {
+      if (item.key == key) return item;
+    }
+    return null;
+  }
 
   /// 结果数变化时给读屏播报（空词 / 加载中不播报；文案走 l10n）。
   ///
-  /// 防抖 / 首屏在途时 [SearchProvider.isSearchBusy] 为真；单渠道首屏返回后
-  /// 才转 false，因此总条数只播报一次。
-  void _announceResults() {
-    if (!mounted || !_session.isActive || _session.isBusy) return;
+  /// 防抖 / 首屏在途时 `isSearchBusy` 为真；单渠道首屏返回后才转 false，
+  /// 因此总条数只播报一次。
+  void _announceResults(SearchState state) {
+    if (!mounted || !state.isSearchActive || state.isSearchBusy) return;
     final message = _l10n(context)
-        .searchResultsAnnouncement(_session.resultCount);
-    final key = '${_session.query}\u0000$message';
+        .searchResultsAnnouncement(state.projection.resultCount);
+    final key = '${state.searchQuery}\u0000$message';
     if (key == _lastAnnouncement) return;
     _lastAnnouncement = key;
     final view = View.maybeOf(context);
@@ -494,7 +492,7 @@ class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
   void _handleEnter() {
     if (_closing || _field.value.composing.isValid) return;
     if (_assist.selectHighlighted()) return;
-    final item = _highlightedItem;
+    final item = _highlightedItemOf(ref.read(searchProvider));
     if (item is SearchPreviewTrack) {
       _playItem(item.row);
       return;
@@ -581,6 +579,7 @@ class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
+    final state = ref.watch(searchProvider);
     final sources = ref.watch(sourcesProvider);
     final selection = ref.watch(channelSelectionProvider);
     final enabledChannels = [
@@ -588,7 +587,7 @@ class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
         if (channel.enabled) channel,
     ];
     final rect = widget.restingRect;
-    final showHint = _session.isActive;
+    final showHint = state.isSearchActive;
     // 面板限高：条下沿到窗口底部留出边距与底部键位提示，更长的列表交给资料库。
     final maxPanelHeight = math.max(
       0.0,
@@ -653,6 +652,8 @@ class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
                               )
                             : _GlobalSearchResults(
                                 session: _session,
+                                projection: state.projection,
+                                highlightedKey: state.previewHighlightedKey,
                                 correction: _assist.value.correction,
                                 onCorrectionTap: _assist.acceptCorrection,
                                 onOpenAllResults: _openAllResults,
@@ -694,6 +695,8 @@ class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
 class _GlobalSearchResults extends StatelessWidget {
   const _GlobalSearchResults({
     required this.session,
+    required this.projection,
+    required this.highlightedKey,
     required this.onOpenAllResults,
     required this.onPlayItem,
     required this.onOpenArtist,
@@ -702,6 +705,8 @@ class _GlobalSearchResults extends StatelessWidget {
   });
 
   final SearchSession session;
+  final SearchProjection projection;
+  final String? highlightedKey;
   final VoidCallback onOpenAllResults;
   final void Function(SearchRow row) onPlayItem;
   final OpenSearchArtist onOpenArtist;
@@ -712,6 +717,8 @@ class _GlobalSearchResults extends StatelessWidget {
   Widget build(BuildContext context) => SearchResultsView(
     variant: SearchResultsVariant.docked,
     session: session,
+    projection: projection,
+    highlightedKey: highlightedKey,
     correction: correction,
     onCorrectionTap: onCorrectionTap,
     onPlay: onPlayItem,

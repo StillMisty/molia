@@ -56,7 +56,7 @@ class _LibrarySearchTabState extends ConsumerState<LibrarySearchTab>
     _ownsSearchFocusNode = widget.focusNode == null;
     _searchFocusNode =
         widget.focusNode ?? FocusNode(debugLabel: 'librarySearchField');
-    _searchProvider = ref.read(searchProvider);
+    _searchProvider = ref.read(searchControllerProvider);
     _searchInput = SearchInputBinding(
       session: _searchProvider.session,
       controller: _searchController,
@@ -111,8 +111,7 @@ class _LibrarySearchTabState extends ConsumerState<LibrarySearchTab>
     return Consumer(
       builder: (context, ref, child) {
         final search = ref.watch(searchProvider);
-        final session = search.session;
-        final isSearchActive = session.isActive;
+        final isSearchActive = search.isSearchActive;
 
         // AI 推歌开启时，下方空占位让位给推荐流（推荐流自身有引导卡 / 骨架 /
         // 错误卡）；关闭时保留「输入关键词搜索歌曲」占位。

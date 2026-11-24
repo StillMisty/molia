@@ -194,7 +194,7 @@ class _LibraryState extends ConsumerState<Library> {
     if (needsFallback) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ref.read(channelSelectionProvider).ensureValid();
+        ref.read(channelSelectionControllerProvider).ensureValid();
       });
     }
 
@@ -407,7 +407,7 @@ class _LibraryState extends ConsumerState<Library> {
     // 选择直接交给 ChannelSelection：脚本渠道可能在页面 build 之后才加入
     // 列表，用 build 快照查找会静默忽略选择。渠道只有一份状态，发现内容与
     // 搜索都随 ChannelSelection 更新。
-    ref.read(channelSelectionProvider).select(key);
+    ref.read(channelSelectionControllerProvider).select(key);
   }
 
   Widget _tabContent(_LibraryTab tab) => switch (tab) {

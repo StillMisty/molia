@@ -317,6 +317,38 @@ void main() {
     expect(provider.songResults.items.map((row) => row.id.uri), ['kw:hello-1']);
   });
 
+  test('快照：state 镜像会话，同一轮多次会话通知合并为一次发布', () async {
+    final registry = _FakeRegistry(
+      {'kw': _FakeMusicSource('kw')},
+      [_descriptor('kw', '酷我')],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    var notifications = 0;
+    provider.changes.addListener(() => notifications++);
+
+    provider.updateSearchQuery('a');
+    provider.updateSearchQuery('ab');
+    expect(notifications, 0, reason: '同轮通知合并到微任务，不在命令内同步发布');
+    await Future<void>.delayed(Duration.zero);
+    expect(notifications, 1, reason: '两次输入只发布一次快照');
+
+    final state = provider.state;
+    expect(state.searchQuery, 'ab');
+    expect(state.searchKind, SearchKind.song);
+    expect(state.isSearchActive, isTrue);
+    expect(state.isSearchBusy, provider.isSearchBusy);
+    expect(state.activeSourceKey, 'kw');
+    expect(state.sourceChannels, same(provider.sourceChannels));
+    expect(state.songResults, same(provider.songResults));
+    expect(state.projection.query, 'ab');
+    expect(
+      state.previewHighlightedKey,
+      provider.session.preview.highlightedKey,
+    );
+  });
+
   test('单源分页 / 跨页去重 / 到底守卫', () async {
     final kw = _FakeMusicSource('kw')
       ..onSearch = (query) => Future.value(
