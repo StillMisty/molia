@@ -107,7 +107,7 @@ void main() {
         await manager.init();
 
         var notified = 0;
-        manager.addListener(() => notified++);
+        manager.changes.addListener(() => notified++);
 
         final saved = await manager.updateAnyListenConfig(
           const AnyListenConfig(

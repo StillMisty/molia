@@ -163,10 +163,12 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 - `BiliAccountService` → `BiliAccountState`（只含展示面；Cookie 留在
   `BiliSession`，不进快照、不写日志）；
 - `SourcePreferences` → `SourcePreferencesState`；`SourceManager` 订阅
-  `preferences.changes` 转发自己的通知。
+  `preferences.changes` 转发自己的通知，并暴露自己的 `SourceManagerState`
+  （引擎状态 / 脚本 / 渠道启停 / 首选音质 / 加载错误），`changes` 供后端
+  适配器与组合根订阅。
 
-仍未迁移：`SyncProvider`、`SourcesProvider`、`SourceManager`、
-`LocalPlaybackService`、页面级视图模型与 widget 内部会话（见后续批次）。
+仍未迁移：`LocalPlaybackService`、页面级视图模型与 widget 内部会话
+（见后续批次）。
 
 ### 页面级视图模型（第七批）
 

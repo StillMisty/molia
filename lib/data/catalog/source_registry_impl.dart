@@ -17,7 +17,7 @@ import 'manager_catalog_source.dart';
 ///   `lx_source_order` 的读写完全由 manager 承担；
 /// - `byKey`/`forTrack`：懒创建并缓存 [SourceManagerMusicSource]（按 key 单例）；
 ///   `local` key 特殊路由到 [LocalMusicSource]（本地下载副本，manager 不认识）；
-/// - `changes`：把 manager 的 ChangeNotifier 通知转发为广播流；
+/// - `changes`：把 manager 的变更信号转发为广播流；
 /// - `refresh`：仅广播一次变更（manager 状态变化本就自动通知），供外部
 ///   状态（登录态等）变化后强制消费方重读描述列表。
 ///
@@ -26,7 +26,7 @@ import 'manager_catalog_source.dart';
 /// 只有空 key 返回 null。
 class SourceRegistryImpl implements SourceRegistry {
   SourceRegistryImpl(this._manager, {LocalMusicSource? localSource}) {
-    _manager.addListener(_onManagerChanged);
+    _manager.changes.addListener(_onManagerChanged);
     _localSource = localSource ?? LocalMusicSource();
   }
 
@@ -87,7 +87,7 @@ class SourceRegistryImpl implements SourceRegistry {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _manager.removeListener(_onManagerChanged);
+    _manager.changes.removeListener(_onManagerChanged);
     _changes.close();
   }
 

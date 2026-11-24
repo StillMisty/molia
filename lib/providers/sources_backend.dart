@@ -75,62 +75,67 @@ abstract interface class SourcesBackend implements Listenable {
   void clearUpdateAlert();
 }
 
-/// [SourcesBackend] 的生产实现：纯委托给启动期的 `SourceManager`。
+/// [SourcesBackend] 的生产实现：状态读 [SourceManager.state] 快照，命令
+/// 仍由 manager 自己执行。
 ///
-/// 生命周期仍归组合根：本适配器不 dispose 被包住的 manager。
+/// 生命周期仍归组合根：本适配器不 dispose 被包住的 manager；监听直接挂在
+/// manager 的 [SourceManager.changes] 上，适配器本身不另存订阅。
 class SourceManagerBackend implements SourcesBackend {
   SourceManagerBackend(this._manager);
 
   final SourceManager _manager;
 
+  SourceManagerState get _state => _manager.state;
+
   @override
-  void addListener(VoidCallback listener) => _manager.addListener(listener);
+  void addListener(VoidCallback listener) =>
+      _manager.changes.addListener(listener);
 
   @override
   void removeListener(VoidCallback listener) =>
-      _manager.removeListener(listener);
+      _manager.changes.removeListener(listener);
 
   @override
-  bool get initialized => _manager.initialized;
+  bool get initialized => _state.initialized;
 
   @override
-  bool get hasActiveSource => _manager.hasActiveSource;
+  bool get hasActiveSource => _state.hasActiveSource;
 
   @override
-  bool get isActivating => _manager.isActivating;
+  bool get isActivating => _state.isActivating;
 
   @override
-  String? get activeError => _manager.activeError;
+  String? get activeError => _state.activeError;
 
   @override
-  LxScriptInfo? get activeScript => _manager.activeScript;
+  LxScriptInfo? get activeScript => _state.activeScript;
 
   @override
-  Map<String, LxSourceDecl> get activeSources => _manager.activeSources;
+  Map<String, LxSourceDecl> get activeSources => _state.activeSources;
 
   @override
-  List<LxScriptInfo> get scripts => _manager.scripts;
+  List<LxScriptInfo> get scripts => _state.scripts;
 
   @override
-  List<SourceDescriptor> get searchableSources => _manager.searchableSources;
+  List<SourceDescriptor> get searchableSources => _state.searchableSources;
 
   @override
-  List<SourceDescriptor> get channels => _manager.channels;
+  List<SourceDescriptor> get channels => _state.channels;
 
   @override
-  String get preferredQuality => _manager.preferredQuality;
+  String get preferredQuality => _state.preferredQuality;
 
   @override
-  List<String> get sourceOrder => _manager.sourceOrder;
+  List<String> get sourceOrder => _state.sourceOrder;
 
   @override
-  LxUpdateAlert? get lastUpdateAlert => _manager.lastUpdateAlert;
+  LxUpdateAlert? get lastUpdateAlert => _state.lastUpdateAlert;
 
   @override
-  AnyListenConfig get anyListenConfig => _manager.anyListenConfig;
+  AnyListenConfig get anyListenConfig => _state.anyListenConfig;
 
   @override
-  bool get anyListenAvailable => _manager.anyListenAvailable;
+  bool get anyListenAvailable => _state.anyListenAvailable;
 
   @override
   Future<LxScriptInfo> importScript(String script, {bool activate = false}) =>

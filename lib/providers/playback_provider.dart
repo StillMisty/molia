@@ -323,7 +323,7 @@ class PlaybackProvider implements SnapshotSource<PlaybackState> {
     // position 走独立 ValueListenable 通道（_positionChannel）：进度 tick
     // 只重建进度条/歌词行，不触发整 Provider 重建（会话只在动作时落盘，
     // 进度 tick 不写库）。
-    _sourceManager?.addListener(_onSourceManagerChanged);
+    _sourceManager?.changes.addListener(_onSourceManagerChanged);
     _dataSaver?.changes.addListener(_onDataSaverChanged);
     _preferencesReady = () async {
       if (_observer != null) await _observer.ready;
@@ -894,7 +894,7 @@ class PlaybackProvider implements SnapshotSource<PlaybackState> {
   void dispose() {
     _session.liveSnapshotChannel.removeListener(_onLiveSnapshot);
     sleepTimer.dispose();
-    _sourceManager?.removeListener(_onSourceManagerChanged);
+    _sourceManager?.changes.removeListener(_onSourceManagerChanged);
     _dataSaver?.changes.removeListener(_onDataSaverChanged);
     // 在途的音量防抖写入：取消定时器并尽力落一次，避免丢最后一次拖动值。
     if (_volumePersistTimer != null) {

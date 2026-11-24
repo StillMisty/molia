@@ -214,7 +214,7 @@ void main() {
     final manager = SourceManager(settings: testSettingsRegistry());
     addTearDown(manager.dispose);
     var notifications = 0;
-    manager.addListener(() => notifications++);
+    manager.changes.addListener(() => notifications++);
 
     await manager.setPreferredQuality('flac');
     expect(manager.preferredQuality, 'flac');
