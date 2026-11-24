@@ -104,7 +104,7 @@ void main() {
     test('歌词入口按输出能力显隐，两路都不可用时给解释', () {
       final desktopOnly = SettingsSectionAvailability(
         platform: TargetPlatform.android,
-        lyricsDisplay: _FakeLyricsDisplayProvider(
+        lyricsDisplay: LyricsDisplayState(
           capabilities: {LyricsOutputIds.desktop: LyricsOutputCapability.ready},
         ),
       );
@@ -115,7 +115,7 @@ void main() {
 
       final unsupported = SettingsSectionAvailability(
         platform: TargetPlatform.android,
-        lyricsDisplay: _FakeLyricsDisplayProvider(),
+        lyricsDisplay: LyricsDisplayState(),
       );
       expect(unsupported.desktopLyricsVisible, isFalse);
       expect(unsupported.systemMediaLyricsVisible, isFalse);
@@ -125,7 +125,7 @@ void main() {
     test('系统媒体会话初始化失败：支持但给可见提示', () {
       final availability = SettingsSectionAvailability(
         platform: TargetPlatform.android,
-        lyricsDisplay: _FakeLyricsDisplayProvider(
+        lyricsDisplay: LyricsDisplayState(
           capabilities: {LyricsOutputIds.media: LyricsOutputCapability.ready},
           mediaSessionInitFailed: true,
         ),
@@ -136,7 +136,7 @@ void main() {
       // 输出端本身不支持时，失败标记不额外提示（否则会提示一个不存在的入口）。
       final unsupported = SettingsSectionAvailability(
         platform: TargetPlatform.android,
-        lyricsDisplay: _FakeLyricsDisplayProvider(mediaSessionInitFailed: true),
+        lyricsDisplay: LyricsDisplayState(mediaSessionInitFailed: true),
       );
       expect(unsupported.mediaSessionLyricsHintVisible, isFalse);
     });
@@ -192,7 +192,7 @@ SettingsSectionAvailability _allAvailable({
     sourceSwap: SourceSwapSettings(settings: testSettingsRegistry()),
     audioFocus: AudioFocusSettings(settings: testSettingsRegistry()),
     sources: _FakeSourcesProvider(),
-    lyricsDisplay: _FakeLyricsDisplayProvider(capabilities: lyricsCapabilities),
+    lyricsDisplay: LyricsDisplayState(capabilities: lyricsCapabilities),
     scrobble: _FakeScrobbleService(),
     libraryAdd: LibraryAddSettings(settings: testSettingsRegistry()),
     statistics: _FakePlayStatisticsService(),
@@ -232,21 +232,3 @@ class _FakeUpdateProvider extends ChangeNotifier
 class _FakePlayStatisticsService
     with _PresenceOnly
     implements PlayStatisticsService {}
-
-class _FakeLyricsDisplayProvider extends ChangeNotifier
-    with _PresenceOnly
-    implements LyricsDisplayProvider {
-  _FakeLyricsDisplayProvider({
-    this.capabilities = const {},
-    this.mediaSessionInitFailed = false,
-  });
-
-  final Map<String, LyricsOutputCapability> capabilities;
-
-  @override
-  final bool mediaSessionInitFailed;
-
-  @override
-  LyricsOutputCapability capabilityOf(String outputId) =>
-      capabilities[outputId] ?? LyricsOutputCapability.unsupported;
-}

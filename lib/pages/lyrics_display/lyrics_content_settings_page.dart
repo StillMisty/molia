@@ -64,6 +64,7 @@ class _LyricsContentSettingsPageState
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final settings = ref.watch(lyricsDisplaySettingsProvider);
+    final controller = ref.read(lyricsDisplaySettingsControllerProvider);
     final display = ref.watch(lyricsDisplayProvider);
     final mediaSupported =
         display.capabilityOf(LyricsOutputIds.media) !=
@@ -81,14 +82,14 @@ class _LyricsContentSettingsPageState
             title: l10n.lyricsPageTranslationSwitch,
             subtitle: l10n.lyricsPageTranslationSubtitle,
             value: settings.pageTranslationEnabled,
-            onChanged: settings.setPageTranslationEnabled,
+            onChanged: (value) => controller?.setPageTranslationEnabled(value),
           ),
           SettingsSwitchTile(
             icon: Icons.record_voice_over_rounded,
             title: l10n.lyricsPageRomaSwitch,
             subtitle: l10n.lyricsPageRomaSubtitle,
             value: settings.pageRomaEnabled,
-            onChanged: settings.setPageRomaEnabled,
+            onChanged: (value) => controller?.setPageRomaEnabled(value),
           ),
         ],
       ),
@@ -108,7 +109,7 @@ class _LyricsContentSettingsPageState
               title: l10n.lyricsNotificationEnable,
               subtitle: l10n.lyricsNotificationEnableSubtitle,
               value: settings.notificationEnabled,
-              onChanged: settings.setNotificationEnabled,
+              onChanged: (value) => controller?.setNotificationEnabled(value),
             ),
             // 权限被拒：设置深链（允许通知后媒体通知/锁屏卡才能稳定展示）。
             if (showPermissionHint)
@@ -131,7 +132,7 @@ class _LyricsContentSettingsPageState
               title: l10n.lyricsBluetoothEnable,
               subtitle: l10n.lyricsBluetoothEnableSubtitle,
               value: settings.bluetoothEnabled,
-              onChanged: settings.setBluetoothEnabled,
+              onChanged: (value) => controller?.setBluetoothEnabled(value),
             ),
             SettingsSwitchTile(
               switchKey: const Key('lyricsBluetoothA2dpSwitch'),
@@ -139,7 +140,7 @@ class _LyricsContentSettingsPageState
               title: l10n.lyricsBluetoothOnlyA2dp,
               subtitle: '',
               value: settings.bluetoothOnlyWhenA2dp,
-              onChanged: settings.setBluetoothOnlyWhenA2dp,
+              onChanged: (value) => controller?.setBluetoothOnlyWhenA2dp(value),
             ),
           ],
         ),

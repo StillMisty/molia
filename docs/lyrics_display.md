@@ -42,7 +42,7 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 | 歌词会话 | `LyricsProvider`（`LyricsState`：`trackId/status/lines/isSynced/providerName`） | 新增翻译/罗马音字段；曲目变化统一由组合根调 `ensureForTrack`（页面是否打开、输出是否启用都加载），空结果允许一次自动重试。 |
 | 取词 | `LyricsService`：缓存 → 曲目原生（`SourceManager.fetchLyric`：脚本 / any-listen / 内置平台（六个音乐平台 + B 站 CC 字幕））→ 本渠道名字搜索（3s 同源预算）→ 其它渠道并行竞速（netease/qq/kugou/kuwo/migu/lrclib，首个非空兜底） | 结构化返回（原文 + 翻译 + 罗马音 + 逐字），缓存兼容；v2 起平台原生优先，v3 起名字回退也先跟曲目来源渠道。手动换源来源由 `LyricsSourceRegistry` 派生：五平台 + 汽水 + LRCLIB + B 站字幕（后两者只进手动换源、不参与自动回退）。 |
 | 系统媒体会话 | `LocalAudioHandler`（`flutter_media_session` 统一后端，Linux 走其原生 MPRIS，Android/iOS/macOS/Windows/Linux） | 增加元数据覆盖（歌词行），不改 `LocalPlaybackService`；后端可注入（见 ADR-0010）。 |
-| 设置持久化 | `DataSaverService`（SharedPreferences + ChangeNotifier）为范本 | 新 `LyricsDisplaySettings` 同模式，单 JSON 键 + 版本号。 |
+| 设置持久化 | `DataSaverService`（SharedPreferences + ChangeNotifier）为范本 | `LyricsDisplaySettings` 沿用单 JSON 键 + 版本号的持久化模式；状态按 ADR-0041 暴露不可变快照。 |
 | 分层约束 | `test/architecture/layering_test.dart` R1–R5 | 新代码放 `lib/services/`、`lib/providers/`，不新增违规。 |
 
 ## 4. 功能需求
@@ -281,7 +281,7 @@ class LyricsPresentation {
 abstract class LyricsOutput {
   String get id;                       // 'desktop_overlay' | 'notification' | 'bluetooth'
   LyricsOutputCapability get capability;
-  Future<void> start(LyricsDisplaySettings settings); // 幂等
+  Future<void> start(LyricsDisplaySettingsState settings); // 幂等，按配置快照生效
   Future<void> apply(LyricsPresentation presentation);
   Future<void> clear();
   Future<void> stop();
@@ -290,8 +290,11 @@ abstract class LyricsOutput {
 
 `LyricsDisplayProvider` 对外（供设置页/播放页）：
 
-- `capabilityOf(String id)`、`settings`（ChangeNotifier）、`requestPermission(id)`；
-- `a2dpConnected`（Android 蓝牙分组展示用）；
+- 低频快照 `LyricsDisplayState`：`capabilityOf(String id)`、`a2dpConnected`、
+  `anyOutputEnabled`、`mediaSessionInitFailed`；UI 经 `lyricsDisplayProvider` 读；
+- 命令 `refreshCapabilities` / `requestDesktopOverlayPermission` /
+  `resetDesktopPosition`；经 `lyricsDisplayControllerProvider` 调用；
+- 逐行歌词与播放进度不进快照：仍走 `syncLyrics` / `updatePosition` 独立通道；
 - `previewPresentation`（设置页预览用）。
 
 ### 5.3 行跟踪算法

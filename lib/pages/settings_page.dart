@@ -60,7 +60,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         // 首屏直达的桌面歌词入口按能力显隐：打开设置时先复查一次。
-        ref.read(maybeLyricsDisplayProvider)?.refreshCapabilities();
+        ref.read(lyricsDisplayControllerProvider)?.refreshCapabilities();
       }
     });
   }
@@ -75,7 +75,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
       // 从系统「显示在其他应用上层」授权页返回：复查桌面歌词能力。
-      ref.read(maybeLyricsDisplayProvider)?.refreshCapabilities();
+      ref.read(lyricsDisplayControllerProvider)?.refreshCapabilities();
     }
   }
 

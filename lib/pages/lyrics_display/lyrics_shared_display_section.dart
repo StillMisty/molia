@@ -23,6 +23,10 @@ class LyricsSharedDisplaySection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final settings = ref.watch(lyricsDisplaySettingsProvider);
+    final controller = ref.read(lyricsDisplaySettingsControllerProvider);
+    // 滑杆松手立即落盘；控制器未接线（独立预览）时保持无操作。
+    Future<void> flushSettings() =>
+        controller?.flushPersistence() ?? Future<void>.value();
     return SettingsSectionCard(
       title: title,
       children: [
@@ -31,14 +35,14 @@ class LyricsSharedDisplaySection extends ConsumerWidget {
           title: l10n.lyricsSharedTranslationSwitch,
           subtitle: l10n.lyricsDisplayTranslationSubtitle,
           value: settings.translationEnabled,
-          onChanged: settings.setTranslationEnabled,
+          onChanged: (value) => controller?.setTranslationEnabled(value),
         ),
         SettingsSwitchTile(
           icon: Icons.record_voice_over_rounded,
           title: l10n.lyricsSharedRomaSwitch,
           subtitle: l10n.lyricsDisplayRomaSubtitle,
           value: settings.romaEnabled,
-          onChanged: settings.setRomaEnabled,
+          onChanged: (value) => controller?.setRomaEnabled(value),
         ),
         SettingsSliderRow(
           icon: Icons.sync_alt_rounded,
@@ -49,9 +53,11 @@ class LyricsSharedDisplaySection extends ConsumerWidget {
           max: 500,
           divisions: 20,
           // 滑杆步进 50ms：够用且不与歌词时间戳的精度纠缠。
-          onChanged: (value) =>
-              settings.setOffsetMs((value / 50).round() * 50, persist: false),
-          onChangeEnd: (_) => unawaited(settings.flushPersistence()),
+          onChanged: (value) => controller?.setOffsetMs(
+            (value / 50).round() * 50,
+            persist: false,
+          ),
+          onChangeEnd: (_) => unawaited(flushSettings()),
         ),
         SettingsChoiceRow<UnsyncedBehavior>(
           icon: Icons.help_outline_rounded,
@@ -62,7 +68,7 @@ class LyricsSharedDisplaySection extends ConsumerWidget {
             (UnsyncedBehavior.hide, l10n.lyricsDisplayUnsyncedHide),
             (UnsyncedBehavior.firstLine, l10n.lyricsDisplayUnsyncedFirstLine),
           ],
-          onChanged: settings.setUnsyncedBehavior,
+          onChanged: (value) => controller?.setUnsyncedBehavior(value),
         ),
       ],
     );

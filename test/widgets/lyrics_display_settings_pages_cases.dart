@@ -7,6 +7,7 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/lyrics_display/desktop_lyrics_settings_page.dart';
 import 'package:molia/pages/lyrics_display/lyrics_content_settings_page.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
+import 'package:molia/providers/snapshot_source.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_display/lyrics_output.dart';
@@ -119,14 +120,19 @@ void main() {
   });
 }
 
-class _FakeLyricsDisplay extends ChangeNotifier
-    implements LyricsDisplayProvider {
-  @override
-  bool get mediaSessionInitFailed => false;
+class _FakeLyricsDisplay implements LyricsDisplayProvider {
+  final SnapshotSignal _signal = SnapshotSignal();
 
   @override
-  LyricsOutputCapability capabilityOf(String outputId) =>
-      LyricsOutputCapability.ready;
+  LyricsDisplayState get state => const LyricsDisplayState(
+    capabilities: {
+      LyricsOutputIds.desktop: LyricsOutputCapability.ready,
+      LyricsOutputIds.media: LyricsOutputCapability.ready,
+    },
+  );
+
+  @override
+  Listenable get changes => _signal;
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>

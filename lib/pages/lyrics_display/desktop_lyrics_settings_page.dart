@@ -31,8 +31,13 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final settings = ref.watch(lyricsDisplaySettingsProvider);
+    final controller = ref.read(lyricsDisplaySettingsControllerProvider);
     final theme = ref.watch(themeProvider);
     final display = ref.watch(lyricsDisplayProvider);
+    final displayController = ref.read(lyricsDisplayControllerProvider);
+    // 滑杆松手立即落盘；控制器未接线（独立预览）时保持无操作。
+    Future<void> flushSettings() =>
+        controller?.flushPersistence() ?? Future<void>.value();
     final capability = display.capabilityOf(LyricsOutputIds.desktop);
     final scheme = resolveSurfaceScheme(
       settings.desktopSchemeSource,
@@ -55,10 +60,10 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
                     capability == LyricsOutputCapability.needsPermission) {
                   // 未授权：不假装开启，直接引导到系统授权页；
                   // 授权返回后由设置首屏的 lifecycle 监听复查能力。
-                  await display.requestDesktopOverlayPermission();
+                  await displayController?.requestDesktopOverlayPermission();
                   return;
                 }
-                await settings.setDesktopEnabled(value);
+                await controller?.setDesktopEnabled(value);
               },
             ),
             if (capability == LyricsOutputCapability.needsPermission)
@@ -82,7 +87,8 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
                     ),
                     M3EButton.icon(
                       style: M3EButtonStyle.text,
-                      onPressed: display.requestDesktopOverlayPermission,
+                      onPressed:
+                          displayController?.requestDesktopOverlayPermission,
                       icon: const Icon(Icons.lock_open_rounded, size: 18),
                       label: Text(l10n.lyricsDesktopPermissionGrant),
                     ),
@@ -98,11 +104,11 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
               min: LyricsDisplaySettings.fontSizeRange.first,
               max: LyricsDisplaySettings.fontSizeRange.last,
               divisions: 36,
-              onChanged: (value) => settings.setDesktopFontSize(
+              onChanged: (value) => controller?.setDesktopFontSize(
                 value.roundToDouble(),
                 persist: false,
               ),
-              onChangeEnd: (_) => unawaited(settings.flushPersistence()),
+              onChangeEnd: (_) => unawaited(flushSettings()),
             ),
             SettingsSliderRow(
               icon: Icons.opacity_rounded,
@@ -112,11 +118,11 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
               min: LyricsDisplaySettings.opacityRange.first * 100,
               max: LyricsDisplaySettings.opacityRange.last * 100,
               divisions: 16,
-              onChanged: (value) => settings.setDesktopOpacity(
+              onChanged: (value) => controller?.setDesktopOpacity(
                 (value / 100).clamp(0.2, 1.0),
                 persist: false,
               ),
-              onChangeEnd: (_) => unawaited(settings.flushPersistence()),
+              onChangeEnd: (_) => unawaited(flushSettings()),
             ),
             SettingsSliderRow(
               icon: Icons.width_normal_rounded,
@@ -127,8 +133,8 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
               max: LyricsDisplaySettings.widthRange.last,
               divisions: 12,
               onChanged: (value) =>
-                  settings.setDesktopWidthPercent(value, persist: false),
-              onChangeEnd: (_) => unawaited(settings.flushPersistence()),
+                  controller?.setDesktopWidthPercent(value, persist: false),
+              onChangeEnd: (_) => unawaited(flushSettings()),
             ),
             // 显示行数（默认 1 = 只显示当前行）。
             // 保持 dropdown：选项多、文案是纯数字，下拉比分段更省横向空间。
@@ -139,7 +145,7 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
               options: [
                 for (final value in const [1, 2, 3, 4, 5]) (value, '$value'),
               ],
-              onChanged: settings.setDesktopMaxLines,
+              onChanged: (value) => controller?.setDesktopMaxLines(value),
             ),
             // 取色来源：决定颜色行「跟随主题角色」用哪套方案（应用主题 /
             // 当前曲目封面）；自定义行不受影响。
@@ -151,7 +157,7 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
                 (SurfaceColorSource.appTheme, l10n.lyricsDesktopSchemeAppTheme),
                 (SurfaceColorSource.artwork, l10n.lyricsDesktopSchemeArtwork),
               ],
-              onChanged: settings.setDesktopSchemeSource,
+              onChanged: (value) => controller?.setDesktopSchemeSource(value),
             ),
             LyricColorRow(
               key: const Key('desktopColorPlayedRow'),
@@ -160,8 +166,12 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
               source: settings.desktopPlayedColorSource,
               customColor: settings.desktopPlayedColor,
               scheme: scheme,
-              onSourceChanged: settings.setDesktopPlayedColorSource,
-              onCustomColorChanged: settings.setDesktopPlayedColor,
+              onSourceChanged: (value) async {
+                await controller?.setDesktopPlayedColorSource(value);
+              },
+              onCustomColorChanged: (value) async {
+                await controller?.setDesktopPlayedColor(value);
+              },
             ),
             LyricColorRow(
               key: const Key('desktopColorUnplayedRow'),
@@ -170,8 +180,12 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
               source: settings.desktopUnplayedColorSource,
               customColor: settings.desktopUnplayedColor,
               scheme: scheme,
-              onSourceChanged: settings.setDesktopUnplayedColorSource,
-              onCustomColorChanged: settings.setDesktopUnplayedColor,
+              onSourceChanged: (value) async {
+                await controller?.setDesktopUnplayedColorSource(value);
+              },
+              onCustomColorChanged: (value) async {
+                await controller?.setDesktopUnplayedColor(value);
+              },
             ),
             Padding(
               padding: const EdgeInsets.only(top: 2, bottom: 4),
@@ -193,7 +207,7 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
               title: l10n.lyricsDesktopLock,
               subtitle: '',
               value: settings.desktopLock,
-              onChanged: settings.setDesktopLock,
+              onChanged: (value) => controller?.setDesktopLock(value),
             ),
             SettingsChoiceRow<DesktopScrollMode>(
               key: const Key('desktopScrollModeRow'),
@@ -208,14 +222,14 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
                 ),
                 (DesktopScrollMode.constant, l10n.lyricsDesktopScrollConstant),
               ],
-              onChanged: settings.setDesktopScrollMode,
+              onChanged: (value) => controller?.setDesktopScrollMode(value),
             ),
             SettingsSwitchTile(
               icon: Icons.visibility_off_rounded,
               title: l10n.lyricsDesktopHideOnPause,
               subtitle: l10n.lyricsDesktopHideOnPauseSubtitle,
               value: settings.desktopHideOnPause,
-              onChanged: settings.setDesktopHideOnPause,
+              onChanged: (value) => controller?.setDesktopHideOnPause(value),
             ),
             SettingsNavTile(
               key: const Key('lyricsDesktopAdvancedItem'),
@@ -231,7 +245,7 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
               padding: const EdgeInsets.only(top: 8),
               child: M3EButton.icon(
                 style: M3EButtonStyle.tonal,
-                onPressed: display.resetDesktopPosition,
+                onPressed: displayController?.resetDesktopPosition,
                 icon: const Icon(Icons.center_focus_strong_rounded),
                 label: Text(l10n.lyricsDesktopResetPosition),
               ),
@@ -246,7 +260,7 @@ class DesktopLyricsSettingsPage extends ConsumerWidget {
   Widget _previewCard(
     BuildContext context,
     AppLocalizations l10n,
-    LyricsDisplaySettings settings,
+    LyricsDisplaySettingsState settings,
     ColorScheme scheme,
   ) {
     final fontSize = math.min(settings.desktopFontSize, 28.0);

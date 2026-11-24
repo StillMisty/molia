@@ -17,7 +17,7 @@ class MediaLyricOutput implements LyricsOutput {
   final bool Function() _a2dpConnected;
   final MediaLyricComposer _composer;
 
-  LyricsDisplaySettings? _settings;
+  LyricsDisplaySettingsState? _settings;
   LyricMetadataOverride? _last;
   LyricsOutputCapability _capability = LyricsOutputCapability.unsupported;
 
@@ -28,7 +28,7 @@ class MediaLyricOutput implements LyricsOutput {
   LyricsOutputCapability get capability => _capability;
 
   @override
-  Future<void> start(LyricsDisplaySettings settings) async {
+  Future<void> start(LyricsDisplaySettingsState settings) async {
     _settings = settings;
     _capability = _supported()
         ? LyricsOutputCapability.ready

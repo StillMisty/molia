@@ -148,7 +148,7 @@ abstract class LyricsOutput {
 
   LyricsOutputCapability get capability;
 
-  Future<void> start(LyricsDisplaySettings settings);
+  Future<void> start(LyricsDisplaySettingsState settings);
 
   Future<void> apply(LyricsPresentation presentation);
 

@@ -59,8 +59,8 @@ class SettingsSectionAvailability {
   /// 音源管理门面（缺省时隐藏默认音质行）。
   final SourcesProvider? sources;
 
-  /// 歌词显示投送面（能力决定桌面歌词 / 系统媒体歌词入口）。
-  final LyricsDisplayProvider? lyricsDisplay;
+  /// 歌词显示投送面的低频快照（能力决定桌面歌词 / 系统媒体歌词入口）。
+  final LyricsDisplayState? lyricsDisplay;
 
   /// 听歌同步服务（缺省时隐藏入口）。
   final ScrobbleService? scrobble;
