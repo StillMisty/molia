@@ -136,14 +136,14 @@ class _FakeService extends LocalPlaybackService {
     _playing = playing;
     _position = position;
     _mode = mode;
-    notifyListeners();
+    notifyChanges();
   }
 
   /// 播放推进（位置 tick / 播放态变化），不触发观察者的强制落盘。
   void advance({Duration? position, bool? playing}) {
     if (position != null) _position = position;
     if (playing != null) _playing = playing;
-    notifyListeners();
+    notifyChanges();
   }
 
   @override
@@ -151,20 +151,20 @@ class _FakeService extends LocalPlaybackService {
     toggleCalls++;
     if (!hasTrack) return;
     _playing = !_playing;
-    notifyListeners();
+    notifyChanges();
   }
 
   @override
   Future<void> toggleMode() async {
     toggleModeCalls++;
     _mode = _mode.next;
-    notifyListeners();
+    notifyChanges();
   }
 
   @override
   Future<void> setMode(PlayMode mode) async {
     _mode = mode;
-    notifyListeners();
+    notifyChanges();
   }
 
   @override
@@ -178,7 +178,7 @@ class _FakeService extends LocalPlaybackService {
       _position = Duration.zero;
       _contextName = null;
     }
-    notifyListeners();
+    notifyChanges();
   }
 }
 

@@ -83,135 +83,82 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 
 ### 实施说明（迁移完成时的实际形态）
 
-- 启动期仍由 `app_bootstrap.dart` 按序构造服务；`runtime_wiring.dart` 把实例登记进
-  `AppRuntime`，provider 只负责暴露与懒构造派生状态。这样保留了启动顺序的既有语义，
-  也避免了 4000 行 boot 代码一次性重写带来的回归。
-- 仍以 `ChangeNotifier` 实现的业务对象由 `LegacyListenableNotifier` /
-  `LazyListenableNotifier` 适配：对外是 Riverpod `Notifier`，通知语义与旧
-  `MultiProvider` 一致。后续新增状态必须直接写 `Notifier` / `AsyncNotifier`；
-  存量业务对象可按模块继续内聚（去掉内部 `ChangeNotifier`），不影响 UI 契约。
+启动期装配不变：`app_bootstrap.dart` 按序构造服务，`runtime_wiring.dart` 把实例
+登记进 `AppRuntime`，provider 只负责暴露与懒构造派生状态。状态层终态只有两种形态：
+
+1. **容器持有的 UI 状态**：`Notifier<State>` / `AsyncNotifier<State>`
+   （`@Riverpod` 代码生成）；UI `ref.watch(xProvider)` 读不可变快照，命令走
+   `ref.read(xProvider.notifier)`。
+2. **启动期 / 页面内部对象**：`SnapshotSource<State>`（`state` 不可变快照 +
+   `changes` 信号，`SnapshotSignal` 只通知、不持状态）。这类对象与启动顺序、
+   平台通道、服务生命周期强耦合，按 §2 不改成 `Notifier`：
+   - 契约在 `lib/utils/snapshot_source.dart`：`lib/data`、`lib/sources`、
+     `lib/playback` 不得 import providers，但它们的状态对象同样要实现该契约；
+   - Riverpod 镜像在 `lib/providers/snapshot_source.dart`：
+     `xProvider` = `SnapshotNotifier`（UI `ref.watch` 读快照），
+     `xControllerProvider` = `snapshotController<X>()`（命令 / 服务句柄）；
+   - 页面 / widget 自己创建并释放的会话不额外加 provider，宿主用
+     `ListenableBuilder(listenable: obj.changes)` 读 `obj.state`。
+
+**不再有** `ChangeNotifier` 状态类：`lib/**` 由
+`test/architecture/snapshot_state_cases.dart` 守卫，白名单为空；迁移期的
+`LegacyListenableNotifier` / `LazyListenableNotifier` 适配器已随最后一批删除。
+新增状态必须直接写上面两种形态之一。
+
+**高频通道白名单**（不进快照，保持原有细粒度订阅）：
+
+- 播放进度 `PlaybackEngine.position` / `PlaybackProvider.position`（≤4Hz）；
+- 下载任务进度 `DownloadTask.progressListenable`、本地扫描进度；
+- 更新下载进度 `UpdateProgress`；
+- AI 生成进度 `AiDjProvider.generationState`；
+- 歌词逐行迁移与预览高亮节拍（快照只带离散状态）；
+- 封面 / 播放页过渡的逐帧进度（`pageDeckReveal`、dragging 进度）；
+- 滚动位置与输入框文本（`TextEditingController` / `ScrollController`）。
+
+**已落地的对象**
+
+容器持有的 `Notifier<State>`：`ThemeProvider`、`CollectionModeStore`、
+`AnnualReportProvider`、`PlayStatisticsProvider`、`TrackInfoController`、
+`CommentsProvider`、`NavProvider`、`TraySettings`、`LyricsProvider`、
+`LocalLibraryProvider`、`SourceSwapProvider`、`DiscoverProvider`。
+
+启动期对象（`SnapshotSource` + 控制器 provider）：`AudioFocusSettings`（`bool`
+快照）、`AiDjProvider`（`AiDjState`）、`LibraryProvider`（`LibraryState`：历史 /
+列表 / 收藏键 / 版本戳）、`SearchProvider` / `ChannelSelection`、
+`LyricsDisplayProvider` / `LyricsDisplaySettings`、`PlaybackProvider`
+（`PlaybackState`）、`ScrobbleService`、`SyncProvider`（`SyncUiState`）、
+`UpdateProvider`、`DiagnosticsProvider`、`SourcesProvider`（底层经可注入的
+`SourcesBackend`）、`DownloadRecords` / `DownloadQueue` / `DownloadManager` /
+`DownloadRequests` / `DownloadSettings`、`LocalLibraryService`、
+`LocalPlaybackService`、`SourceManager`（`SourceManagerState`：引擎状态 / 脚本 /
+渠道启停 / 首选音质 / 加载错误）、以及设置与偏好批次：`DataSaverService`、
+`LibraryAddSettings`、`SourceSwapSettings`、`ShortcutSettings`、
+`MusicFoldersStore`、`PlaylistFolderCollapseController`、
+`LocalCacheIndexStore`、`BiliAccountService`（只含展示面，Cookie 留在
+`BiliSession`）、`SourcePreferences`、`AudioRouteMonitor`。
+
+作为内部事实、没有独立 provider 的对象：`SyncEngine`、`SyncControlPlane`、
+`FavoriteFact`、`PlaybackPowerPolicy`、`CastSessionController`、
+`LocalPlaybackService`——分别经 `SyncProvider`、`LibraryProvider`、
+`PlaybackEngine` 等门面投影；`changes` 是唯一订阅面。
+
+页面 / widget 内部会话（快照 + `changes`，由宿主重建）：`AlbumViewModel`、
+`ArtistViewModel`、`FavoritesViewModel`、`LocalSongsCollection`、
+`CollectionSession`、`CollectionSelection`、`LyricsSourceSearchSession`、
+`LibraryCollectionRequest`、`ShellPresentation`、`NowPlayingController`、
+`PlayerMorphController`、`CoverSwapSession`、`LyricsViewSession`。
+`ShellReselectSignal` / `ShellLongPressSignal` 是一次性意图通道（无状态，只有
+`changes` + `trigger()`），不实现 `SnapshotSource`。
+
+**约定**
+
+- 快照由持有方独占：`state` getter 可以复用内部列表引用（不逐次复制），消费方
+  只读、不原地修改；集合在构造时能低成本包装的就用 `unmodifiable`。
 - 可空依赖（`SaveAs` / `NotificationService` / `BiliAccountService` /
-  `PlaybackProvider` 的查询路径）保留 `maybeXxxProvider`，避免把“未接线”从可表达
-  状态变成启动期异常。
-
-### 内部状态快照（第二批）
-
-以下 UI 状态已从 `ChangeNotifier` 改成真正的 `Notifier<ImmutableState>`，
-消费方读 `ref.watch(xProvider)`、命令走 `ref.read(xProvider.notifier)`：
-
-- `ThemeProvider` → `ThemeState`
-- `CollectionModeStore` → `CollectionModeState`
-- `AnnualReportProvider` → `AnnualReportState`
-- `PlayStatisticsProvider` → `PlayStatisticsState`
-- `TrackInfoController` → `TrackInfoState`
-- `CommentsProvider` → `CommentsState`
-- `NavProvider` → `NavState`
-- `TraySettings` → `TraySettingsState`
-
-### 启动期状态对象：快照 + 控制器
-
-组合根按启动顺序构造的状态对象（播放会话、资料库、歌词显示、设置与服务）
-不改成 `Notifier`：它们与启动顺序、平台通道、服务生命周期强耦合，正是 §2
-里「服务不改成 Notifier」的对象。它们统一改成：
-
-- 类不再 `extends ChangeNotifier`，自己的可变字段只留在内部；
-- `state` 暴露**不可变快照**（`@immutable`，字段名沿用旧 getter）；
-- `changes` 是 `SnapshotSignal`（只通知、不持有状态），保留
-  `Listenable` / `ValueListenable` 订阅面给播放服务、原生回调；
-- 契约与 Riverpod 镜像分两处：`lib/utils/snapshot_source.dart` 只放
-  `SnapshotSource` / `SnapshotSignal`（数据层、播放层与音源层都不得 import
-  providers），`lib/providers/snapshot_source.dart` 放镜像与控制器：
-  - `xProvider` = `SnapshotNotifier` 镜像快照，UI `ref.watch` 读；
-  - `xControllerProvider` = `snapshotController<X>()`，命令 / 服务句柄从这里
-    `ref.read`。
-
-这样 UI 契约仍是「watch 快照、read 控制器发命令」，`lib/` 内不再有
-`ChangeNotifier`；`LegacyListenableNotifier` / `LazyListenableNotifier` 在
-迁移完成后删除。
-
-已按此形态落地的对象：`AudioFocusSettings`（`bool` 快照）、`AiDjProvider`
-（`AiDjState`）、`LibraryProvider`（`LibraryState`：历史 / 列表 / 收藏键 / 版本戳）、
-`SearchProvider` / `ChannelSelection`、`LyricsDisplayProvider`、`PlaybackProvider`
-（`PlaybackState`）、`ScrobbleService`（`ScrobbleState`：连接状态 / 账号 / 待发计数 /
-授权阶段）、`SyncEngine`（`SyncEngineSnapshot`：初始化 / 在跑 / 最近报告）、
-`SyncControlPlane`（`SyncControlPlaneState`：身份 / 开关 / 名册 / 日志 / 口令）、
-`FavoriteFact`（`FavoriteFactState`：键 / 行 / 计数 / 版本）、
-`PlaybackPowerPolicy`（前台 / 桌面歌词 / 歌词输出）、
-`CastSessionController`（`CastSessionSnapshot`）、`DownloadRecords`（记录列表 /
-版本戳 / 能力位）、`DownloadQueue`（三组任务）、`DownloadManager`（能力位 /
-就绪态 / 任务结构）、`DownloadSettings`、`LocalLibraryService`（文件夹列表 / 扫描态）。
-
-`SyncEngine` / `SyncControlPlane` / `FavoriteFact` / `PlaybackPowerPolicy` /
-`CastSessionController` 没有独立 Riverpod provider：它们分别是 `SyncProvider`、
-`LibraryProvider` 的内部事实或只在服务内部订阅，对外仍经所属门面；`changes`
-是唯一订阅面。进度类高频数据不进快照：`DownloadTask.progressListenable`、
-`LocalLibraryService.progressListenable`。
-
-### 设置与偏好（第六批）
-
-设置 / 设备本地偏好统一改成「不可变快照 + `changes`」；命令方法名与签名不变，
-加载完成后再通知：
-
-- `DataSaverService` → `DataSaverState`（开关 / 音质上限 / 封面省流 / 网络态）；
-  `blockNetworkArtwork` / `effectiveQuality` 是即时判定，仍直接读实例；
-- `DownloadSettings` → `DownloadSettingsState`；`LibraryAddSettings` →
-  `LibraryAddSettingsState`；`SourceSwapSettings` → `SourceSwapSettingsState`；
-- `ShortcutSettings` → `ShortcutSettingsState`（两组开关与绑定）；录制态不进
-  快照（只影响按键让位，不驱动 UI）；
-- `MusicFoldersStore` → `MusicFoldersState`；`PlaylistFolderCollapseController` →
-  `PlaylistFolderCollapseState`；`LocalCacheIndexStore` → `LocalCacheIndexState`；
-- `BiliAccountService` → `BiliAccountState`（只含展示面；Cookie 留在
-  `BiliSession`，不进快照、不写日志）；
-- `SourcePreferences` → `SourcePreferencesState`；`SourceManager` 订阅
-  `preferences.changes` 转发自己的通知，并暴露自己的 `SourceManagerState`
-  （引擎状态 / 脚本 / 渠道启停 / 首选音质 / 加载错误），`changes` 供后端
-  适配器与组合根订阅。
-
-仍未迁移：`LocalPlaybackService`、页面级视图模型与 widget 内部会话
-（见后续批次）。
-
-### 页面级视图模型（第七批）
-
-由页面自己创建、`dispose` 的视图模型同样统一成「不可变快照 + `changes`」，
-但**不**额外加 Riverpod provider：它们的生命周期就是页面 State，消费方用
-`ListenableBuilder(listenable: vm.changes)` 读 `vm.state`：
-
-- `AlbumViewModel` → `AlbumViewState`（头部实体 + `PagedListState`）；
-  `ArtistViewModel` → `ArtistViewState`（同形）；条目与实体同一响应写入，
-  分页列表本身仍由 `PagedListController` 发布，快照不复制列表；
-- `FavoritesViewModel` → `FavoritesViewState`（多选 / 搜索 / 排序 / 当前合集 /
-  合集顺序 / 本地歌曲计数 / 定位挂起）；搜索词仍在页面的
-  `TextEditingController`，智能列表 `displayRows` 的版本计数是同帧投影结果，
-  不进快照；
-- `LocalSongsCollection` → `LocalSongsState`（行 / 计数 / 加载态 / 行列表版本）；
-  它由 `CollectionSession` 内部持有，会话改订阅 `changes`。行列表仍是合集自己
-  缓存的那份（presenter 按引用复用视图），快照不复制、不重新包装。
-
-### 搜索 / 渠道 / 扇出（第三批）
-
-- `ChannelSelection` → `ChannelSelectionState`（当前 key + 可用渠道顺序），
-  `SearchProvider` → `SearchState`（关键词 / 类型 / 结果 / 投影 / 预览高亮）。
-  两者仍是组合根按启动顺序构造的实例：Riverpod 侧
-  `channelSelectionProvider` / `searchProvider` 只镜像快照，命令经
-  `channelSelectionControllerProvider` / `searchControllerProvider`。
-- `SearchSession` / `SearchPreviewSession` / `FanOutSearchSession` 不再是
-  `ChangeNotifier`：可变状态留在会话内部，`changes` 是唯一订阅面。
-  `SearchProvider` 把同一轮事件循环内的会话 / 预览通知合并成**一次**快照更新；
-  查询防抖、结果批量更新节拍与输入框（`TextEditingController`）持有高频值的
-  分工都不变。
-- `SearchAssistController` 改用 `Listenable` 信号（`changes`），宿主仍用
-  `ListenableBuilder` / `addListener` 消费。
-- 消费方改为 watch 快照 + read 控制器：`library_search_tab`、`search_section`、
-  `global_search_overlay`、`search_results_view`（后者只接收不可变投影，分页 /
-  重试命令仍经会话）。
-- 后续批次已把播放 / 资料库 / 同步 / 更新 / 诊断 / 音源管理门面与收藏会话
-  按同一形态落地：`SyncProvider` → `SyncUiState`、`UpdateProvider` →
-  `UpdateState`、`DiagnosticsProvider` → `DiagnosticsState`、
-  `SourcesProvider` → `SourcesState`（底层改经可注入的 `SourcesBackend`，
-  测试用假注册表）；页面级 `CollectionSession` /
-  `LyricsSourceSearchSession` / `LibraryCollectionRequest` 也改为
-  `SnapshotSource` + `changes`，`LyricsSourceSearchSession` 的
-  `ListenableBuilder` / `addListener` 消费面随之改为 `changes`。
+  `PlaybackProvider` 的查询路径）保留 `maybeXxxProvider`，未接线返回 `null`
+  而不是抛启动期异常。
+- 快照是「上次通知时的值」：需要即时判定的路径（换源、定位当前曲目、音质恢复态）
+  读控制器实例，不读快照。
 
 ## 后果
 
