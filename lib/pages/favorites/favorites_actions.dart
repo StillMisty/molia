@@ -288,7 +288,7 @@ Future<void> exportFavoritesPlaylist({
   required FavoritesIoCommandsFactory ioCommands,
   required bool Function() isActive,
 }) async {
-  final SyncProvider? sync = ref.read(syncProvider);
+  final SyncProvider? sync = ref.read(maybeSyncControllerProvider);
   final format = await showPlaylistExportSheet(
     context,
     moliaAvailable: sync != null,

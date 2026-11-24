@@ -27,7 +27,7 @@ class BackupRestorePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final SyncProvider? sync = ref.watch(maybeSyncProvider);
+    final SyncProvider? sync = ref.read(maybeSyncControllerProvider);
     return SettingsSubPage(
       title: l10n.settingsBackupRestoreTitle,
       children: [

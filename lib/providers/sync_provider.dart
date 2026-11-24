@@ -18,6 +18,7 @@ import '../domain/ports/sync_transport.dart';
 import '../services/local_endpoints_service.dart';
 import '../services/manual_peer_service.dart';
 import '../services/sync_trigger_bridge.dart';
+import 'snapshot_source.dart';
 import 'sync_commands.dart';
 import 'sync_nearby_availability.dart';
 import 'sync_peer_view.dart';
@@ -36,8 +37,9 @@ export '../services/manual_peer_service.dart' show SyncManualPeerOutcome;
 ///
 /// 手动恢复动作仍直接走引擎（添加手动对端 / 失败重试 / 配对成功）：手动请求
 /// 一律加入引擎的轮次链并等补跑轮，不经调度器，也不提供首屏「立即同步」。
-class SyncProvider extends ChangeNotifier
+class SyncProvider
     implements
+        SnapshotSource<SyncUiState>,
         SyncCommands,
         SyncPairingCommands,
         SyncNearbyCommands,
@@ -54,8 +56,8 @@ class SyncProvider extends ChangeNotifier
     this._pairing,
     this._triggers,
   }) : _endpoints = localEndpoints ?? LocalEndpointsService() {
-    _engine.addListener(notifyListeners);
-    _controlPlane.addListener(notifyListeners);
+    _engine.addListener(_changes.notify);
+    _controlPlane.addListener(_changes.notify);
   }
 
   final SyncEngine _engine;
@@ -76,6 +78,9 @@ class SyncProvider extends ChangeNotifier
   /// 本地变更触发桥：provider 持有其生命周期，dispose 时统一取消订阅。
   final SyncTriggerBridge? _triggers;
 
+  /// 变更信号（替代 `ChangeNotifier.notifyListeners` 的订阅面）。
+  final SnapshotSignal _changes = SnapshotSignal();
+
   late final ManualPeerService _manualPeerService = ManualPeerService(
     manualPeers: () => _controlPlane.manualPeers,
     addManualPeer: _controlPlane.addManualPeer,
@@ -95,6 +100,7 @@ class SyncProvider extends ChangeNotifier
   );
 
   /// UI 只读的不可变投影：每次读取按当前快照重建（纯计算、廉价）。
+  @override
   SyncUiState get state {
     final nowMs = _controlPlane.nowMs();
     final ports = _controlPlane.lanDiscoveryPorts;
@@ -179,6 +185,10 @@ class SyncProvider extends ChangeNotifier
       maskedPassphrase: _controlPlane.maskedPassphrase,
     );
   }
+
+  /// 变更信号（引擎 / 控制面每次通知后由 provider 重新读取快照）。
+  @override
+  Listenable get changes => _changes;
 
   /// 用户动作面；UI 只经这里改状态。
   SyncCommands get commands => this;
@@ -280,7 +290,7 @@ class SyncProvider extends ChangeNotifier
       debugPrint('[Molia] 申请局域网权限失败: $e');
     }
     if (granted) await _applyTransportEnabled(SyncTransportKind.lan, true);
-    notifyListeners();
+    _changes.notify();
     return granted;
   }
 
@@ -455,7 +465,7 @@ class SyncProvider extends ChangeNotifier
       json,
       includeCredentials: includeCredentials,
     );
-    notifyListeners();
+    _changes.notify();
     return outcome;
   }
 
@@ -472,7 +482,7 @@ class SyncProvider extends ChangeNotifier
     await _engine.init();
     // 启动阶段不主动读写口令：口令只在用户真正开启传输 / 配对时按需生成
     // （见 `_applyTransportEnabled`），凭据库读写留在对应动作里。
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 启动已启用的传输（首帧后调用；幂等）。
@@ -506,7 +516,7 @@ class SyncProvider extends ChangeNotifier
   ///
   /// 只在局域网已开启或本会话已申请过时查询：避免首次启动就把「未申请」
   /// 误判成「被拒」并常驻警告行。授权后立刻启动已启用的局域网传输；
-  /// 警告行 / 权限状态由 [notifyListeners] 更新。
+  /// 警告行 / 权限状态由 [changes] 更新。
   Future<void> _refreshLanPermissionIfKnown() async {
     final permission = _lanPermission;
     if (permission == null || !permission.needsPermission) return;
@@ -530,7 +540,7 @@ class SyncProvider extends ChangeNotifier
       // 轮会覆盖这次启用；再排一个 check 会和它争 `_roundRunning`，并丢掉
       // 零对端时 resume 轮 arm 的重连阶梯。
     }
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 退后台 / 锁屏：先让传输停止发现（公告 / 重连计时器），再取消调度器
@@ -540,12 +550,11 @@ class SyncProvider extends ChangeNotifier
     _scheduler?.onAppHidden();
   }
 
-  @override
   void dispose() {
     // 先摘掉监听再释放被监听对象：调度器 / 引擎在销毁路径里仍可能通知，
     // 已 dispose 的 provider 不应再把通知转发给 UI。
-    _engine.removeListener(notifyListeners);
-    _controlPlane.removeListener(notifyListeners);
+    _engine.removeListener(_changes.notify);
+    _controlPlane.removeListener(_changes.notify);
     // 触发桥先于调度器释放：取消流订阅 / 恢复设置与回调钩子。
     _triggers?.dispose();
     _scheduler?.dispose();
@@ -553,6 +562,5 @@ class SyncProvider extends ChangeNotifier
     unawaited(_pairing?.dispose() ?? Future<void>.value());
     // worker isolate 随 provider 释放（进程退出前不留常驻 isolate）。
     unawaited(_codec?.dispose() ?? Future<void>.value());
-    super.dispose();
   }
 }

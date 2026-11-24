@@ -60,9 +60,8 @@ class SyncContentPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = ref.watch(syncProvider);
-    final state = provider.state;
-    final commands = provider.commands;
+    final state = ref.watch(syncProvider);
+    final commands = ref.read(syncControllerProvider).commands;
     return SettingsSubPage(
       title: l10n.syncContentSection,
       children: [

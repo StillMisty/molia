@@ -34,6 +34,7 @@ import 'package:molia/providers/snapshot_source.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/sync_provider.dart';
+import 'package:molia/providers/sync_ui_state.dart';
 import 'package:molia/providers/update_provider.dart';
 import 'package:molia/services/ai/ai_recommendation_service.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
@@ -274,9 +275,20 @@ final lyricsDisplaySettingsControllerProvider =
     maybeSnapshotController<LyricsDisplaySettings>();
 
 final syncProvider =
-    NotifierProvider<LegacyListenableNotifier<SyncProvider>, SyncProvider>(
-      () => LegacyListenableNotifier((ref) => _require<SyncProvider>(ref)),
+    NotifierProvider<SnapshotNotifier<SyncProvider, SyncUiState>, SyncUiState>(
+      () => SnapshotNotifier((ref) => _require<SyncProvider>(ref)),
     );
+final maybeSyncProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<SyncProvider, SyncUiState>,
+      SyncUiState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<SyncProvider>(),
+      ),
+    );
+final syncControllerProvider = snapshotController<SyncProvider>();
+final maybeSyncControllerProvider = maybeSnapshotController<SyncProvider>();
 final updateProvider =
     NotifierProvider<
       SnapshotNotifier<UpdateProvider, UpdateState>,
@@ -410,7 +422,6 @@ final maybeLyricsDisplayProvider =
     );
 final maybeScrobbleServiceProvider = _maybeListenable<ScrobbleService>();
 final maybeLibraryAddSettingsProvider = _maybeListenable<LibraryAddSettings>();
-final maybeSyncProvider = _maybeListenable<SyncProvider>();
 final maybeSourcesProvider = _maybeListenable<SourcesProvider>();
 final maybeSourceManagerProvider = _maybeService<SourceManager>();
 

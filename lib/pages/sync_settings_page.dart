@@ -65,7 +65,7 @@ class _SyncSettingsPageState extends ConsumerState<SyncSettingsPage> {
     super.initState();
     // 进入设置页 = 本机地址缓存的真实失效点：网络切换后重进即可看到新地址
     // （附近设备探测与手动地址兜底也走这份缓存）。
-    final provider = ref.read(syncProvider);
+    final provider = ref.read(syncControllerProvider);
     _nearbyScan = NearbyScanSession(port: SyncProviderNearbyScanPort(provider));
     _relativeTimeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
@@ -91,11 +91,11 @@ class _SyncSettingsPageState extends ConsumerState<SyncSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = ref.watch(syncProvider);
-    // provider 通知会重建本页：扫描节拍由会话按可用性 / 局域网运行状态的差异
+    final state = ref.watch(syncProvider);
+    final provider = ref.read(syncControllerProvider);
+    // 快照通知会重建本页：扫描节拍由会话按可用性 / 局域网运行状态的差异
     // 决定，页面不再自己持有定时器与基线字段。
     _nearbyScan.sync();
-    final state = provider.state;
     final commands = provider.commands;
     return SettingsSubPage(
       title: l10n.settingsSyncTitle,

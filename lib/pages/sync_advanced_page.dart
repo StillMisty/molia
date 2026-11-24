@@ -35,15 +35,15 @@ class _SyncAdvancedPageState extends ConsumerState<SyncAdvancedPage> {
   void initState() {
     super.initState();
     // 进入页 = 本机地址缓存的真实失效点：网络切换后重进即可看到新地址。
-    final provider = ref.read(syncProvider);
+    final provider = ref.read(syncControllerProvider);
     provider.commands.endpoints.refresh();
-    _loadEndpoints(provider.state);
+    _loadEndpoints(ref.read(syncProvider));
   }
 
   /// 传输开关 / 端口变化时重建地址清单；签名不变就复用上一次的 future。
   void _loadEndpoints(SyncUiState state) {
     _endpointsSignature = _signatureOf(state);
-    _endpoints = ref.read(syncProvider).commands.endpoints.list();
+    _endpoints = ref.read(syncControllerProvider).commands.endpoints.list();
   }
 
   static Object _signatureOf(SyncUiState state) {
@@ -59,8 +59,8 @@ class _SyncAdvancedPageState extends ConsumerState<SyncAdvancedPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = ref.watch(syncProvider);
-    final state = provider.state;
+    final state = ref.watch(syncProvider);
+    final provider = ref.read(syncControllerProvider);
     if (_endpointsSignature != _signatureOf(state)) _loadEndpoints(state);
     return SettingsSubPage.body(
       title: l10n.syncAdvancedTitle,

@@ -27,8 +27,8 @@ class SyncLogPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = ref.watch(syncProvider);
-    final state = provider.state;
+    final state = ref.watch(syncProvider);
+    final provider = ref.read(syncControllerProvider);
     final entries = state.log;
     return SettingsSubPage(
       title: l10n.syncLogTitle,

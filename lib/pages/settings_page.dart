@@ -100,7 +100,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       scrobble: ref.read(maybeScrobbleServiceProvider),
       libraryAdd: ref.read(maybeLibraryAddSettingsProvider),
       statistics: ref.read(playStatisticsServiceProvider),
-      sync: ref.read(maybeSyncProvider),
+      sync: ref.read(maybeSyncControllerProvider),
     );
     // 两列流式需要比单列舒适行宽（`maxWidth`）更宽的画布：上限取设置弹层
     // 宽度，两列各占约半宽；单列沿用 `maxWidth` 不变。判据只由宽度档位
