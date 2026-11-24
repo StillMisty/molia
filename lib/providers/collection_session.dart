@@ -342,7 +342,7 @@ class CollectionSession extends ChangeNotifier {
          loadCachedAudioTrackIds:
              loadCachedAudioTrackIds ?? _noCachedAudioTracks,
        ) {
-    _selection.addListener(_forwardChange);
+    _selection.changes.addListener(_forwardChange);
     _localSongs.addListener(_forwardChange);
   }
 
@@ -391,8 +391,8 @@ class CollectionSession extends ChangeNotifier {
   CollectionSelection get selection => _selection;
 
   int get selectedId => _selectedId;
-  bool get selecting => _selection.isSelecting;
-  int get selectedCount => _selection.selectedCount;
+  bool get selecting => _selection.state.isSelecting;
+  int get selectedCount => _selection.state.selectedCount;
   bool get searching => _searching;
   bool get reordering => _reordering;
   CollectionTrackSort get sort => _sort;
@@ -412,7 +412,7 @@ class CollectionSession extends ChangeNotifier {
       .selectRangeTo(key, [for (final row in view.visibleRows) row.key]);
 
   /// 当前范围锚点；长按第二段手势只在有锚点时解释为区间。
-  String? get selectionAnchorKey => _selection.anchorKey;
+  String? get selectionAnchorKey => _selection.state.anchorKey;
 
   /// 某一行是否选中（行渲染读取，生产代码不直接碰选择状态机）。
   bool isSelected(String key) => _selection.isSelected(key);
@@ -718,7 +718,7 @@ class CollectionSession extends ChangeNotifier {
     )) {
       return true;
     }
-    if (_selection.isSelecting) {
+    if (_selection.state.isSelecting) {
       _selection.toggle(key);
       return true;
     }
@@ -843,9 +843,8 @@ class CollectionSession extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _selection.removeListener(_forwardChange);
+    _selection.changes.removeListener(_forwardChange);
     _localSongs.removeListener(_forwardChange);
-    _selection.dispose();
     _localSongs.dispose();
     super.dispose();
   }
