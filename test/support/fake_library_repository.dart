@@ -27,6 +27,12 @@ class FakeLibraryRepository implements LibraryStore {
   bool failPlaylistWrites = false;
   bool failTrackWrites = false;
 
+  /// 关闭变更事件派发：模拟生产变更流的异步窗口（事件尚未到达 / 丢失）。
+  ///
+  /// 读投影的写路径必须不依赖事件才能通过「读取在途时收藏」的回归；
+  /// 默认开着，保持既有用例「写入即刷新」的语义。
+  bool suppressChanges = false;
+
   /// sync: true —— 变更事件在写入调用栈内同步派发，provider 的重载
   /// Future 在 widget 测试的 fake-async 区内正常完成（否则跨 zone 挂起）。
   final StreamController<LibraryChange> _changes =
@@ -43,6 +49,7 @@ class FakeLibraryRepository implements LibraryStore {
 
   /// 模拟真实仓库的变更事件（provider 依此决定缓存失效范围）。
   void _changed(LibraryChange change) {
+    if (suppressChanges) return;
     if (!_changes.isClosed) _changes.add(change);
   }
 

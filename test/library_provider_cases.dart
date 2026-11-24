@@ -16,6 +16,7 @@ import 'support/sync_test_support.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
+import 'support/fake_library_repository.dart';
 import 'support/memory_database.dart';
 
 /// 计数仓库：增量路径的验收标准是「不查库」，所以直接观察查询次数。
@@ -177,6 +178,21 @@ class _CountingLibraryRepository extends LibraryRepository {
       return Future.error(StateError('playlist delete failed'));
     }
     return super.deletePlaylist(id);
+  }
+}
+
+/// 收藏键读取闸门 + 可关闭的变更事件：复刻生产变更流尚未送达的窗口。
+class _GatedFakeLibraryRepository extends FakeLibraryRepository {
+  Completer<Set<String>>? nextKeys;
+
+  @override
+  Future<Set<String>> favoriteKeys() {
+    final gate = nextKeys;
+    if (gate != null) {
+      nextKeys = null;
+      return gate.future;
+    }
+    return super.favoriteKeys();
   }
 }
 
@@ -789,6 +805,50 @@ void main() {
       isTrue,
       reason: '在途旧快照不能覆盖已落库的收藏（播放页心形会回空心）',
     );
+  });
+
+  test('收藏键读取在途时收藏：异步事件未到，快照仍保持已收藏', () async {
+    final fake = _GatedFakeLibraryRepository()..suppressChanges = true;
+    addTearDown(fake.dispose);
+    final local = LibraryProvider(repository: fake, playbackProvider: playback);
+    addTearDown(local.dispose);
+
+    await local.toggleFavorite(
+      sourceKey: 'wy',
+      songId: 'seed',
+      title: 'Seed',
+      raw: {'songId': 'seed'},
+    );
+    await local.refreshPlaylists(force: true);
+    await local.ensureFavoritesLoaded(force: true);
+    final staleKeys = await fake.favoriteKeys();
+
+    final gate = Completer<Set<String>>();
+    fake.nextKeys = gate;
+    final reading = local.ensureFavoritesLoaded(force: true);
+    await Future<void>.delayed(Duration.zero);
+
+    final outcome = await local.toggleFavorite(
+      sourceKey: 'wy',
+      songId: '1',
+      title: 'Song 1',
+      raw: {'songId': 1},
+    );
+    expect(outcome.isFavorite, isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(local.state.isFavorite('wy', '1'), isTrue);
+
+    // 旧快照不含 1：事件仍未派发，写入口必须自己把最终状态重放回来。
+    gate.complete(staleKeys);
+    await reading;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+      local.state.isFavorite('wy', '1'),
+      isTrue,
+      reason: '播放页心形读的是 LibraryState 快照，不能被旧键快照打回空心',
+    );
+    expect(local.state.favoriteKeys, contains('wy:1'));
   });
 
   test('收藏键两个在途读取：后发起的快照优先，旧快照不能回滚', () async {

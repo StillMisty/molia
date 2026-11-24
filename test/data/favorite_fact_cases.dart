@@ -171,6 +171,53 @@ void main() {
     expect(fact.rows!.map((row) => row.songId), ['1', '2']);
   });
 
+  test('写入口读取在途时记录待重放：事件未到也不被旧快照覆盖', () async {
+    await seedFavorites([track('1', sortOrder: 0, addedAt: 1)]);
+    await fact.ensureLoaded(force: true);
+
+    final gate = Completer<Set<String>>();
+    repository.nextKeys = gate;
+    // 生产变更流是异步的；这里直接关掉事件，确保结果只依赖写入口的重放。
+    repository.suppressChanges = true;
+
+    final reading = fact.ensureLoaded(force: true);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+      await fact.toggle(sourceKey: 'wy', songId: '2', title: 'Song 2'),
+      isTrue,
+    );
+    expect(fact.contains('wy', '2'), isTrue);
+
+    gate.complete({'wy:1'});
+    await reading;
+
+    expect(fact.contains('wy', '2'), isTrue, reason: '写入口必须记录待重放，不能依赖异步仓库事件');
+    expect(fact.count, 2);
+  });
+
+  test('批量写入口读取在途时也记录待重放', () async {
+    await seedFavorites([track('1', sortOrder: 0, addedAt: 1)]);
+    await fact.ensureLoaded(force: true);
+
+    final gate = Completer<Set<String>>();
+    repository.nextKeys = gate;
+    repository.suppressChanges = true;
+
+    final reading = fact.ensureLoaded(force: true);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(await fact.addAll([track('2')]), 1);
+    await fact.removeAll([(sourceKey: 'wy', songId: '1')]);
+
+    gate.complete({'wy:1'});
+    await reading;
+
+    expect(fact.contains('wy', '2'), isTrue, reason: '批量加入必须重放');
+    expect(fact.contains('wy', '1'), isFalse, reason: '批量取消必须重放');
+    expect(fact.count, 1);
+  });
+
   test('批量校准在途时切换：旧键 / 旧行快照都不会覆盖新收藏', () async {
     await seedFavorites([track('1', sortOrder: 0, addedAt: 1)]);
     await fact.ensureLoaded(force: true);

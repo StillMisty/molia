@@ -156,6 +156,35 @@ void main() {
     });
   });
 
+  testWidgets('播放页收藏按钮：点击后图标翻转，再点取消', (tester) async {
+    emitSingle(track('1'));
+
+    await tester.pumpWidget(host(const Player()));
+    await tester.pump();
+
+    expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.favorite_border_rounded));
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(library.isFavorite('wy', '1'), isTrue);
+    expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.favorite_rounded));
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(library.isFavorite('wy', '1'), isFalse);
+    expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
+  });
+
   testWidgets('360 宽收起态高度为 0，完整层不可读', (tester) async {
     final semantics = tester.ensureSemantics();
     final l10n = lookupAppLocalizations(const Locale('zh'));

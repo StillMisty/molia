@@ -272,13 +272,11 @@ class FavoriteFact implements SnapshotSource<FavoriteFactState> {
   /// 重复应用同一状态不会再次递增版本或通知。
   void applyChange(FavoriteToggle toggle) {
     if (_disposed) return;
-    if (_keysInFlight > 0) {
-      final previous = _pending[toggle.key];
-      _pending[toggle.key] = (
-        favorite: toggle.favorite,
-        track: toggle.favorite ? (toggle.track ?? previous?.track) : null,
-      );
-    }
+    _recordPending(
+      key: toggle.key,
+      favorite: toggle.favorite,
+      track: toggle.track,
+    );
     final changed = _mutate(
       add: toggle.favorite ? [toggle.key] : const [],
       remove: toggle.favorite ? const [] : [toggle.key],
@@ -287,11 +285,29 @@ class FavoriteFact implements SnapshotSource<FavoriteFactState> {
     if (changed) _notify();
   }
 
+  /// 记录本轮读取期间到达的最终收藏状态。
+  ///
+  /// 写入口与仓库事件都调用这里：生产环境的仓库变更流是异步的，不能等事件
+  /// 到达后才记录待重放——旧读取快照可能先落地并覆盖本次写入。读取结束后
+  /// 由 [_drainPending] 按 key 的最终状态重放；没有读取在途时无需记录。
+  void _recordPending({
+    required String key,
+    required bool favorite,
+    PlaylistTrack? track,
+  }) {
+    if (_keysInFlight <= 0) return;
+    final previous = _pending[key];
+    _pending[key] = (
+      favorite: favorite,
+      track: favorite ? (track ?? previous?.track) : null,
+    );
+  }
+
   /// 收藏 / 取消收藏（唯一写入路径）。
   ///
   /// 仓库写失败向上抛，由 provider 在边界收口成可提示的结果；失败不污染
-  /// 事实。仓库事件通常已在写调用栈内同步补好状态，这里的补丁是幂等的
-  /// 兜底（直接使用模块、没有事件转发的调用方也得到正确状态）。
+  /// 事实。写入成功后立即补键；如果整表读取在途，同时记录最终状态供读取
+  /// 落地后重放（仓库事件是异步的，不能作为唯一依据）。
   Future<bool> toggle({
     required String sourceKey,
     required String songId,
@@ -313,6 +329,7 @@ class FavoriteFact implements SnapshotSource<FavoriteFactState> {
       raw: raw,
     );
     final key = _keyOf(sourceKey, songId);
+    _recordPending(key: key, favorite: favorite);
     final changed = _mutate(
       add: favorite ? [key] : const [],
       remove: favorite ? const [] : [key],
@@ -330,6 +347,9 @@ class FavoriteFact implements SnapshotSource<FavoriteFactState> {
     if (tracks.isEmpty) return 0;
     final added = await _repository.addFavorites(tracks);
     if (added > 0) {
+      for (final track in tracks) {
+        _recordPending(key: track.key, favorite: true, track: track);
+      }
       final changed = _mutate(add: [for (final track in tracks) track.key]);
       if (changed) _notify();
     }
@@ -341,6 +361,9 @@ class FavoriteFact implements SnapshotSource<FavoriteFactState> {
     if (keys.isEmpty) return 0;
     final removed = await _repository.removeFavorites(keys);
     if (removed > 0) {
+      for (final key in keys) {
+        _recordPending(key: _keyOf(key.sourceKey, key.songId), favorite: false);
+      }
       final changed = _mutate(
         remove: [for (final key in keys) _keyOf(key.sourceKey, key.songId)],
       );
