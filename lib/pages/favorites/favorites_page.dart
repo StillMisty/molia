@@ -106,7 +106,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
   bool _backClaim() => favoritesBackClaim(
     context: context,
     selecting: _selecting,
-    searching: _vm.searching,
+    searching: _vm.state.searching,
     reordering: _vm.session.reordering,
   );
 
@@ -122,7 +122,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
   /// 顶住正文（顶部细进度条示意刷新），避免整块闪成居中 spinner。
   CollectionView? _lastBodyView;
 
-  bool get _selecting => _vm.selecting;
+  bool get _selecting => _vm.state.selecting;
 
   @override
   void initState() {
@@ -349,7 +349,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
         ? ref.watch(libraryProvider)
         : ref.read(libraryProvider);
     return ListenableBuilder(
-      listenable: _vm,
+      listenable: _vm.changes,
       builder: (context, _) => _buildPage(context, library),
     );
   }
@@ -416,7 +416,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
 
     // 长按定位请求：加载中挂起（数据就绪后的下一次 build 再消费）；曲库
     // 浏览没有歌曲列表，直接提示先选列表；读取失败已有失败态，清掉即可。
-    if (_vm.locatePending &&
+    if (_vm.state.locatePending &&
         (surface == FavoritesCollectionSurface.failed ||
             surface == FavoritesCollectionSurface.libraryBrowse)) {
       _vm.clearLocate();
@@ -698,7 +698,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
       ],
     );
     return PopScope(
-      canPop: !_selecting && !_vm.searching && !reorderActive,
+      canPop: !_selecting && !_vm.state.searching && !reorderActive,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         if (_selecting) {
@@ -709,7 +709,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
           _exitReorder();
           return;
         }
-        if (_vm.searching) _exitSearch();
+        if (_vm.state.searching) _exitSearch();
       },
       child: ResponsivePageContainer(
         pageType: ResponsivePageType.browse,

@@ -125,9 +125,9 @@ FavoritesHeaderData buildFavoritesHeaderData({
     l10n: l10n,
     view: view,
     currentPlaylist: currentPlaylist,
-    searching: viewModel.searching,
+    searching: viewModel.state.searching,
     reorderActive: reorderActive,
-    sort: viewModel.sort,
+    sort: viewModel.state.sort,
     libraryIndex: libraryIndex,
     mostPlayedByTime: byTime,
     canDownloadPlaylist: requests != null,
@@ -163,7 +163,7 @@ FavoritesSelectionHeaderData buildFavoritesSelectionHeaderData({
   return FavoritesSelectionHeaderData(
     l10n: l10n,
     view: view,
-    selectedCount: viewModel.selectedCount,
+    selectedCount: viewModel.state.selectedCount,
     allSelected: viewModel.allSelected(view) == true,
     allFavorited:
         selectedRows.isNotEmpty && callbacks.isAllFavorited(selectedRows),

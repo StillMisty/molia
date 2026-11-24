@@ -24,6 +24,7 @@ import '../services/library/playlist_folder_prefs.dart';
 import '../services/local_cache_index_store.dart';
 import '../services/track_local_data_service.dart';
 import '../utils/collection_row_query.dart';
+import '../utils/snapshot_source.dart';
 import '../widgets/scroll_to_top.dart';
 import 'smart_list_rows.dart';
 import '../widgets/collection_picker.dart';
@@ -79,8 +80,54 @@ class FavoritesImportResult {
   final String? message;
 }
 
+/// 收藏页的不可变快照：多选 / 搜索 / 排序 / 当前合集 / 定位挂起。
+///
+/// 字段名沿用旧 getter；命令（切换合集、多选、排序、导入）仍在
+/// [FavoritesViewModel] 上。合集会话本身持有这份真值（页面每次 build 交给它
+/// 一帧输入），快照只在会话 / 服务 / 折叠状态通知后重新读取一次。
+///
+/// 不包含 `smartVersionCounts`：那是 `displayRows` 在同一帧算出的投影结果，
+/// 进快照会让快照依赖 build 顺序，也要为一次 build 触发重建。
+@immutable
+class FavoritesViewState {
+  const FavoritesViewState({
+    required this.selecting,
+    required this.selectedCount,
+    required this.searching,
+    required this.sort,
+    required this.selectedId,
+    required this.collectionOrder,
+    required this.localSongsCount,
+    required this.locatePending,
+  });
+
+  /// 是否处于多选模式。
+  final bool selecting;
+
+  /// 已选行数（行 key 集合大小，跨视图切换保留）。
+  final int selectedCount;
+
+  /// 是否处于搜索态（搜索词本身留在页面的 `TextEditingController`）。
+  final bool searching;
+
+  /// 当前排序方式。
+  final CollectionTrackSort sort;
+
+  /// 当前合集 id（哨兵值表示收藏 / 历史 / 本地歌曲 / 曲库 / 智能列表）。
+  final int selectedId;
+
+  /// 合集自定义顺序（持久化键；不可变视图）。
+  final List<String> collectionOrder;
+
+  /// 本地歌曲合集当前行数（合集弹层计数与列表行数同源）。
+  final int localSongsCount;
+
+  /// 壳层长按挂起了一次「定位当前播放曲目」请求。
+  final bool locatePending;
+}
+
 /// 收藏页 ViewModel。
-class FavoritesViewModel extends ChangeNotifier {
+class FavoritesViewModel implements SnapshotSource<FavoritesViewState> {
   FavoritesViewModel({
     required ScrollController Function(String collectionKey) controllerOf,
     PlaylistFolderCollapseController? folderCollapse,
@@ -110,6 +157,8 @@ class FavoritesViewModel extends ChangeNotifier {
   late final CollectionScrollBookkeeping _bookkeeping;
   late final PlaylistFolderCollapseController _folderCollapse;
 
+  final SnapshotSignal _changes = SnapshotSignal();
+
   CacheService? _cacheService;
   TrackLocalDataService? _localDataService;
   LibraryCollectionRequest? _collectionRequest;
@@ -124,18 +173,24 @@ class FavoritesViewModel extends ChangeNotifier {
   Map<String, int> _smartVersionCounts = const {};
   String _smartVersionSignature = '';
 
+  @override
+  Listenable get changes => _changes;
+
+  /// 当前快照：页面重建需要的多选 / 搜索 / 排序 / 合集 / 定位全在这里。
+  @override
+  FavoritesViewState get state => FavoritesViewState(
+    selecting: _session.selecting,
+    selectedCount: _session.selectedCount,
+    searching: _session.searching,
+    sort: _session.sort,
+    selectedId: _session.selectedId,
+    collectionOrder: List.unmodifiable(_session.collectionOrder),
+    localSongsCount: _session.localSongsCount,
+    locatePending: _locatePending,
+  );
+
   CollectionSession get session => _session;
   PlaylistFolderCollapseController get folderCollapse => _folderCollapse;
-
-  bool get selecting => _session.selecting;
-  int get selectedCount => _session.selectedCount;
-  bool get searching => _session.searching;
-  CollectionTrackSort get sort => _session.sort;
-  int get selectedId => _session.selectedId;
-  List<String> get collectionOrder => _session.collectionOrder;
-  int get localSongsCount => _session.localSongsCount;
-  bool get locatePending => _locatePending;
-  Map<String, int> get smartVersionCounts => _smartVersionCounts;
 
   /// 本帧的缓存索引快照（本地歌曲合集的输入）。
   CollectionCacheIndex get cacheIndexSnapshot {
@@ -260,6 +315,9 @@ class FavoritesViewModel extends ChangeNotifier {
       _bookkeeping.restoreOffsets(offsets);
 
   /// 智能列表的展示行：重复组只展开一次代表行，版本行按需插入。
+  ///
+  /// 同帧写入 [smartVersionCounts]（行渲染要用的版本计数）；这份投影结果
+  /// 不进快照，见 [FavoritesViewState] 的说明。
   List<CollectionRow> displayRows({
     required CollectionView view,
     required String query,
@@ -278,19 +336,22 @@ class FavoritesViewModel extends ChangeNotifier {
     return result.rows;
   }
 
+  /// 最近一次 [displayRows] 算出的版本计数（行渲染在同一帧读取）。
+  Map<String, int> get smartVersionCounts => _smartVersionCounts;
+
   void toggleSmartVersions(CollectionRow row) {
     if (_disposed) return;
     if (!_expandedSmartVersions.remove(row.key)) {
       _expandedSmartVersions.add(row.key);
     }
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 壳层长按：挂起一次定位请求（等数据 / 布局就绪后消费）。
   void requestLocate() {
     if (_disposed) return;
     _locatePending = true;
-    notifyListeners();
+    _changes.notify();
   }
 
   void clearLocate() => _locatePending = false;
@@ -363,7 +424,7 @@ class FavoritesViewModel extends ChangeNotifier {
           icon: Icons.library_music_rounded,
           // 计数与列表行数同源：下载 / 导入记录 + 缓存完成索引里命中缓存的
           // 行（弹层打开前会先把缓存行重算到当前输入）。
-          trackCount: localSongsCount,
+          trackCount: _session.localSongsCount,
           selected: selected == LibraryCollections.downloadsSentinel,
           pinned: true,
         ),
@@ -385,7 +446,10 @@ class FavoritesViewModel extends ChangeNotifier {
       for (final playlist in playlists)
         if (playlist.id != favoritesId) 'playlist:${playlist.id}',
     ];
-    final orderedKeys = LibraryCollections.applyOrder(natural, collectionOrder);
+    final orderedKeys = LibraryCollections.applyOrder(
+      natural,
+      _session.collectionOrder,
+    );
     final byKey = <String, CollectionPickerEntry>{
       for (final playlist in playlists)
         if (playlist.id != favoritesId)
@@ -528,14 +592,13 @@ class FavoritesViewModel extends ChangeNotifier {
   }
 
   void _onServiceChanged() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) _changes.notify();
   }
 
   void _forwardChange() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) _changes.notify();
   }
 
-  @override
   void dispose() {
     _disposed = true;
     _cacheService?.revision.removeListener(_onServiceChanged);
@@ -548,7 +611,6 @@ class FavoritesViewModel extends ChangeNotifier {
     _session.removeListener(_forwardChange);
     _bookkeeping.dispose();
     _session.dispose();
-    super.dispose();
   }
 }
 
