@@ -56,7 +56,7 @@ typedef LyricsDisplayStack = ({
 Future<LyricsDisplayStack> buildLyricsDisplayStack({
   required CatalogStack catalog,
   required PlaybackProvider playback,
-  required LyricsProvider lyricsProvider,
+  required LyricsProvider lyricsSession,
   required LocalAudioHandler? audioHandler,
   required PlaybackPowerPolicy powerPolicy,
   required CustomCoverStore customCovers,
@@ -159,18 +159,19 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   playback.position.addListener(
     () => lyricsDisplay.updatePosition(playback.currentPosition),
   );
-  lyricsProvider.addListener(
-    () => lyricsDisplay.syncLyrics(lyricsProvider.state),
+  container.listen<LyricsState>(
+    lyricsProvider,
+    (_, next) => lyricsDisplay.syncLyrics(next),
   );
   lyricsDisplay.syncPlayback(playback.snapshot);
   lyricsDisplay.updatePosition(playback.currentPosition);
-  lyricsDisplay.syncLyrics(lyricsProvider.state);
+  lyricsDisplay.syncLyrics(container.read(lyricsProvider));
 
   // 曲目变化 → 歌词会话唯一加载入口：页面 / 输出都不再各自触发取词，
   // 是否启用桌面歌词也不影响（会话只负责把当前曲目的状态准备好）。
   wireLyricsSession(
     playback: playback,
-    lyricsProvider: lyricsProvider,
+    lyricsProvider: lyricsSession,
     powerPolicy: powerPolicy,
   );
 
@@ -178,7 +179,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   // （顺序：显示 → 预载 → 取色 → 启动预解析）。
   wireNextTrackLyricsPreload(
     playback: playback,
-    lyricsProvider: lyricsProvider,
+    lyricsProvider: lyricsSession,
     powerPolicy: powerPolicy,
   );
 

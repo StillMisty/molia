@@ -2,14 +2,15 @@
 /// 结果收口（不依赖 widget 生命周期）。
 library;
 
+import 'support/lyrics_test_support.dart';
+
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/lyrics_source_search_session.dart';
+import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/lyrics/lyric_provider.dart';
 import 'package:molia/services/lyrics/lyrics_source_strategy.dart';
-import 'package:molia/services/lyrics_service.dart';
 
 typedef _SavedLyrics = ({
   String trackId,
@@ -143,10 +144,7 @@ void main() {
     Duration? duration,
     bool disposeOnTearDown = true,
   }) {
-    final lyricsProvider = LyricsProvider(
-      service: service ?? _FakeLyricsService(),
-    );
-    if (disposeOnTearDown) addTearDown(lyricsProvider.dispose);
+    final lyricsProvider = buildLyricsProvider(service ?? _FakeLyricsService());
     final session = LyricsSourceSearchSession(
       strategies: sources,
       enabledChannelKeys: enabledChannelKeys,
@@ -875,8 +873,7 @@ void main() {
       matches: [sunnyDay('A')],
       payload: const LyricsPayload(lyric: '[00:01.00]晴天'),
     )..fetchGate = gate;
-    final lyricsProvider = LyricsProvider(service: _FakeLyricsService());
-    addTearDown(lyricsProvider.dispose);
+    final lyricsProvider = buildLyricsProvider(_FakeLyricsService());
     final session = LyricsSourceSearchSession(
       strategies: [strategy(qq)],
       lyricsProvider: lyricsProvider,

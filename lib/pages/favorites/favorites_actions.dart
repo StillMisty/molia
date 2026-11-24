@@ -498,7 +498,7 @@ CollectionRowActionWiring _favoritesActionWiring({
         : () => showSourceSwapPage(
             context,
             seed: swap.track,
-            lyricsProvider: ref.read(lyricsProvider),
+            lyricsProvider: ref.read(lyricsProvider.notifier),
             playlistId: swap.playlistId,
             historyKey: swap.historyKey,
           ),

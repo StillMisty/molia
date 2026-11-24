@@ -11,6 +11,7 @@ import '../../domain/models/smart_lists.dart';
 import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/app_providers.dart';
+import '../../providers/lyrics_provider.dart';
 import '../../providers/collection_actions.dart';
 import '../../providers/collection_io_commands.dart';
 import '../../providers/collection_presenter.dart';
@@ -663,7 +664,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
                           shuffleRandom: widget.shuffleRandom,
                           actions: _actions,
                           downloadRecords: ref.read(downloadRecordsProvider),
-                          lyrics: ref.read(lyricsProvider),
+                          lyrics: ref.read(lyricsProvider.notifier),
                           library: ref.read(libraryProvider),
                           isActive: () => mounted,
                         ),

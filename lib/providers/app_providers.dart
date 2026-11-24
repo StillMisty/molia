@@ -29,7 +29,6 @@ import 'package:molia/providers/library_collection_request.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/local_library_provider.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
-import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/providers/source_swap_provider.dart';
@@ -58,6 +57,7 @@ import 'package:molia/services/library/library_add_settings.dart';
 import 'package:molia/services/local/local_library_service.dart';
 import 'package:molia/services/local/local_metadata_service.dart';
 import 'package:molia/services/local_cache_index_store.dart';
+import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/lyrics/lyrics_source_registry.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/notification_service.dart';
@@ -237,10 +237,7 @@ final scrobbleServiceProvider =
       LegacyListenableNotifier<ScrobbleService>,
       ScrobbleService
     >(() => LegacyListenableNotifier((ref) => _require<ScrobbleService>(ref)));
-final lyricsProvider =
-    NotifierProvider<LegacyListenableNotifier<LyricsProvider>, LyricsProvider>(
-      () => LegacyListenableNotifier((ref) => _require<LyricsProvider>(ref)),
-    );
+
 final lyricsDisplayProvider =
     NotifierProvider<
       LegacyListenableNotifier<LyricsDisplayProvider>,
@@ -404,6 +401,9 @@ final artworkPaletteServiceProvider = Provider<ArtworkPaletteService>(
 );
 final customCoverStoreProvider = Provider<CustomCoverStore>(
   (ref) => _require<CustomCoverStore>(ref),
+);
+final lyricsServiceProvider = Provider<LyricsService>(
+  (ref) => _require<LyricsService>(ref),
 );
 final aiSettingsStoreProvider = Provider<AiSettingsStore>(
   (ref) => _require<AiSettingsStore>(ref),

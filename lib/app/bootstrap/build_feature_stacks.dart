@@ -47,7 +47,7 @@ Future<FeatureStacks> buildFeatureStacks({
     playback: playback.playbackProvider,
     libraryProvider: core.libraryProvider,
   );
-  final lyrics = buildLyricsStack(local: local);
+  final lyrics = buildLyricsStack(local: local, container: container);
   wireBiliLoginLyricsRefresh(
     account: catalog.biliAccount,
     sourceManager: catalog.sourceManager,
@@ -59,7 +59,7 @@ Future<FeatureStacks> buildFeatureStacks({
   final displayFuture = buildLyricsDisplayStack(
     catalog: catalog,
     playback: playback.playbackProvider,
-    lyricsProvider: lyrics.lyricsProvider,
+    lyricsSession: lyrics.lyricsProvider,
     audioHandler: playback.audioHandler,
     powerPolicy: platform.powerPolicy,
     customCovers: local.customCovers,

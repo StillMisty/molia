@@ -74,6 +74,7 @@ void wireCoreRuntime(AppRuntime runtime, CoreStacks core) {
   runtime.put<LocalLibraryService>(local.localLibrary);
   runtime.put<LocalMetadataService>(local.localMetadata);
   runtime.put<LocalCacheIndexStore>(local.localCacheIndex);
+  runtime.put(local.lyricsService);
   runtime.put<CustomCoverStore>(local.customCovers);
   runtime.put(CacheService.instance);
 

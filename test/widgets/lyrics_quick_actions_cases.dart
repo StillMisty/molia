@@ -5,7 +5,6 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/lyrics_provider.dart';
-import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/widgets/lyrics.dart';
@@ -14,17 +13,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/cover_test_support.dart';
 import '../support/provider_test_scope.dart';
 import '../support/fakes.dart';
+import '../support/lyrics_test_support.dart';
 import '../support/settings_test_support.dart';
-
-class _FakeLyricsProvider extends LyricsProvider {
-  _FakeLyricsProvider(this._state)
-    : super(service: LyricsService(providers: const []));
-
-  final LyricsState _state;
-
-  @override
-  LyricsState get state => _state;
-}
 
 /// 歌词 FAB：前四项固定为 换源 / 复制歌词 / 歌词海报 / 显示设置，
 /// 「居中当前行」只能作为第五项追加（不改变前四项）。
@@ -97,8 +87,9 @@ void main() {
       final facade = FakePlaybackFacade();
       final playback = buildTestPlaybackProvider(facade: facade);
       final display = LyricsDisplaySettings(settings: testSettingsRegistry());
-      final lyrics = _FakeLyricsProvider(
-        const LyricsState(trackId: 'kw:1', status: LyricsStatus.ready),
+      const lyricsState = LyricsState(
+        trackId: 'kw:1',
+        status: LyricsStatus.ready,
       );
       final track = Track(
         id: const TrackId('kw', '1'),
@@ -118,12 +109,12 @@ void main() {
       addTearDown(() {
         playback.dispose();
         display.dispose();
-        lyrics.dispose();
       });
 
-      final scope = ProviderTestScope();
+      final scope = ProviderTestScope(
+        overrides: [fixedLyricsOverride(lyricsState)],
+      );
       scope.put<PlaybackProvider>(playback);
-      scope.put<LyricsProvider>(lyrics);
       scope.put<LyricsDisplaySettings>(display);
       putCoverStore(scope);
       await tester.pumpWidget(

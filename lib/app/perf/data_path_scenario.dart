@@ -231,7 +231,7 @@ Future<void> _run({
     if (current != null) {
       final lyricsWatch = Stopwatch()..start();
       await lyrics.lyricsProvider.load(current);
-      final state = lyrics.lyricsProvider.state;
+      final state = lyrics.lyricsProvider.currentState;
       DataPathTrace.event(
         'scenario.lyrics.done',
         fields: () => {

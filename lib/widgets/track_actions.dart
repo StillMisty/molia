@@ -16,6 +16,7 @@ import '../pages/artist_page.dart';
 import '../pages/song_comments_page.dart';
 import '../pages/source_swap_page.dart';
 import '../providers/app_providers.dart';
+import '../providers/lyrics_provider.dart';
 import 'lyrics_source_search_view.dart';
 
 /// 当前曲目渠道是否支持评论（能力位唯一判定；无 provider 时按不支持）。
@@ -100,7 +101,7 @@ Future<LyricsSearchSelection?> openTrackSourceSwap(
   return showSourceSwapPage(
     ref.context,
     seed: track,
-    lyricsProvider: ref.read(lyricsProvider),
+    lyricsProvider: ref.read(lyricsProvider.notifier),
     initialTab: initialTab,
   );
 }

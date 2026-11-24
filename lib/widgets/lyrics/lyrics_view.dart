@@ -59,14 +59,11 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
   /// 快捷操作栏 FAB 容器尺寸（M3EFabSize.regular = 56dp，与展开态关闭键一致）。
   static const double _quickActionsFabSize = 56;
 
-  /// 歌词会话模块：会话真相的唯一来源（本组件只消费，不维护加载镜像）。
-  LyricsProvider? _lyricsProvider;
+  /// 当前曲目的会话状态（曲目变化由组合根经 `ensureForTrack` 推进）。
+  LyricsState _session = LyricsState.idle;
 
   /// 上一次已应用的会话状态（渲染侧簿记：内容变了才重置滚动 / 行 key）。
   LyricsState _lastState = LyricsState.idle;
-
-  /// 当前曲目的会话状态（曲目变化由组合根经 `ensureForTrack` 推进）。
-  LyricsState get _session => _lyricsProvider?.state ?? LyricsState.idle;
 
   /// 会话是否正在加载（渲染侧直接读该状态）。
   bool get _isLoading => _session.status == LyricsStatus.loading;
@@ -129,16 +126,6 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
     );
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final provider = ref.read(lyricsProvider);
-    if (identical(provider, _lyricsProvider)) return;
-    _lyricsProvider?.removeListener(_onLyricsProviderChanged);
-    _lyricsProvider = provider;
-    provider.addListener(_onLyricsProviderChanged);
-  }
-
   /// 视图会话的离散状态变化（跟随 / 复制模式 / 操作栏显隐）：重建渲染。
   void _onViewSessionChanged() {
     if (mounted) setState(() {});
@@ -146,9 +133,8 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
 
   /// 会话状态变化（组合根按曲目推进 / 换源页手动保存等外部替换）：
   /// 状态值没变就直接跳过，避免无谓 setState。
-  void _onLyricsProviderChanged() {
+  void _onLyricsProviderChanged(LyricsState state) {
     if (!mounted) return;
-    final state = _session;
     if (state == _lastState) return;
     final trackChanged = state.trackId != _lastState.trackId;
     _lastState = state;
@@ -167,7 +153,6 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
 
   @override
   void dispose() {
-    _lyricsProvider?.removeListener(_onLyricsProviderChanged);
     _viewSession.removeListener(_onViewSessionChanged);
     _viewSession.dispose();
     _quickActionsMotion.dispose();
@@ -253,6 +238,11 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    ref.listen<LyricsState>(lyricsProvider, (_, next) {
+      _session = next;
+      _onLyricsProviderChanged(next);
+    });
+    _session = ref.watch(lyricsProvider);
     final l10n = AppLocalizations.of(context)!;
     final playback = ref.read(playbackProvider);
 
@@ -566,7 +556,7 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
     final bool wasFollowing = _viewSession.following;
     _viewSession.suspendFollow();
 
-    final lyrics = ref.read(lyricsProvider);
+    final lyrics = ref.read(lyricsProvider.notifier);
     final result = await showSourceSwapPage(
       context,
       seed: currentTrack,
@@ -583,7 +573,7 @@ class _LyricsWidgetState extends ConsumerState<LyricsWidget>
     // 换源页歌词 tab 返回了歌词（页面已通过 LyricsProvider.saveManual
     // 写缓存并更新会话状态；这里只把结果落到本地渲染状态）
     if (selection != null && selection.lyrics.isNotEmpty) {
-      final lyricsState = lyrics.state;
+      final lyricsState = lyrics.currentState;
       if (lyricsState.trackId != trackId ||
           lyricsState.status != LyricsStatus.ready) {
         return;

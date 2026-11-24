@@ -7,12 +7,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/domain/models/playback.dart';
+import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/domain/models/lyric_line.dart';
 import 'package:molia/providers/library_provider.dart';
-import 'package:molia/providers/lyrics_provider.dart';
-import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/widgets/responsive.dart';
@@ -28,17 +27,8 @@ import '../support/provider_test_scope.dart';
 import '../support/fake_library_repository.dart';
 import '../support/perf_app_harness.dart';
 import '../support/fakes.dart';
+import '../support/lyrics_test_support.dart';
 import '../support/settings_test_support.dart';
-
-class _FakeLyricsProvider extends LyricsProvider {
-  _FakeLyricsProvider(this._state)
-    : super(service: LyricsService(providers: const []));
-
-  final LyricsState _state;
-
-  @override
-  LyricsState get state => _state;
-}
 
 Widget _app(
   Widget child, {
@@ -347,16 +337,14 @@ void main() {
         duration: const Duration(minutes: 3),
         origin: TrackOrigin.builtin,
       );
-      final lyrics = _FakeLyricsProvider(
-        LyricsState(
-          trackId: 'kw:1',
-          status: LyricsStatus.ready,
-          lines: const [
-            LyricLine(Duration(seconds: 1), '第一行'),
-            LyricLine(Duration(seconds: 30), '第二行'),
-          ],
-          isSynced: true,
-        ),
+      const lyricsState = LyricsState(
+        trackId: 'kw:1',
+        status: LyricsStatus.ready,
+        lines: [
+          LyricLine(Duration(seconds: 1), '第一行'),
+          LyricLine(Duration(seconds: 30), '第二行'),
+        ],
+        isSynced: true,
       );
       facade.emit(
         PlaybackSnapshot(
@@ -371,12 +359,12 @@ void main() {
       addTearDown(() {
         playback.dispose();
         display.dispose();
-        lyrics.dispose();
       });
       final semantics = tester.ensureSemantics();
-      final scope = ProviderTestScope();
+      final scope = ProviderTestScope(
+        overrides: [fixedLyricsOverride(lyricsState)],
+      );
       scope.put<PlaybackProvider>(playback);
-      scope.put<LyricsProvider>(lyrics);
       scope.put<LyricsDisplaySettings>(display);
       putCoverStore(scope);
       await tester.pumpWidget(scope.wrap(_app(const LyricsWidget())));

@@ -10,6 +10,7 @@ import '../l10n/app_localizations.dart';
 import '../pages/source_swap_page.dart';
 import '../pages/track_local_data_page.dart';
 import '../providers/app_providers.dart';
+import '../providers/lyrics_provider.dart';
 import '../providers/sleep_timer.dart';
 import '../providers/track_info_controller.dart';
 import '../providers/sources_provider.dart';
@@ -99,8 +100,8 @@ class TrackInfoView extends ConsumerWidget {
             false);
     final lyricsProviderName = ref.watch(
       lyricsProvider.select(
-        (provider) => track != null && provider.state.trackId == track.id.uri
-            ? provider.state.providerName
+        (session) => track != null && session.trackId == track.id.uri
+            ? session.providerName
             : null,
       ),
     );

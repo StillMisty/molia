@@ -29,7 +29,6 @@ import 'package:molia/providers/channel_selection.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/local_library_provider.dart';
-import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/play_statistics_provider.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
@@ -210,8 +209,6 @@ Future<FakePlaybackFacade> pumpPerfApp(
     sourceRegistry: registry,
   );
   addTearDown(search.dispose);
-  final lyrics = LyricsProvider(service: LyricsService(providers: const []));
-  addTearDown(lyrics.dispose);
   final lyricsDisplay = LyricsDisplaySettings(settings: testSettingsRegistry());
   addTearDown(lyricsDisplay.dispose);
 
@@ -253,7 +250,7 @@ Future<FakePlaybackFacade> pumpPerfApp(
     ..put<ChannelSelection>(selection)
     ..put<DiscoverProvider>(discover)
     ..put<SearchProvider>(search)
-    ..put<LyricsProvider>(lyrics)
+    ..put<LyricsService>(LyricsService(providers: const []))
     ..put<LyricsDisplaySettings>(lyricsDisplay)
     ..put<CustomCoverStore>(CustomCoverStore());
   configureRuntime?.call(runtime);
