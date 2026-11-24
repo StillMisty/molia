@@ -4,13 +4,14 @@
 /// 弹层本身（[showCollectionPicker]）不认识收藏页，这里只做编排与结果回传。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/library.dart';
 import '../../domain/models/library_browse.dart';
 import '../../domain/models/playlist_folders.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/collection_presenter.dart';
 import '../../providers/collection_session.dart';
 import '../../providers/favorites_view_model.dart';
@@ -34,6 +35,7 @@ Future<CollectionPickerOutcome?> showFavoritesCollectionPicker({
   required List<PlaylistInfo> playlists,
   required int? favoritesId,
   required int selected,
+  required int historyCount,
   required LibraryProvider provider,
   required DownloadRecords? records,
   required FavoritesViewModel viewModel,
@@ -64,8 +66,6 @@ Future<CollectionPickerOutcome?> showFavoritesCollectionPicker({
     }
     folderCollapse.applyDefaults(folders, expanded: selectedFolder);
   }
-  final localLibraryIndex = provider.history; // 保持 provider 引用可读性
-  assert(localLibraryIndex.isNotEmpty || localLibraryIndex.isEmpty);
   return showCollectionPicker(
     context,
     title: l10n.favoritesSwitchTitle,
@@ -74,7 +74,7 @@ Future<CollectionPickerOutcome?> showFavoritesCollectionPicker({
       playlists: playlists,
       favoritesId: favoritesId,
       selected: selected,
-      historyCount: provider.history.length,
+      historyCount: historyCount,
       localSongsSupported: records?.supported ?? false,
       browseIndex: browseIndex,
     ),
@@ -111,6 +111,7 @@ Future<CollectionPickerOutcome?> showFavoritesCollectionPicker({
 
 /// 读取当前 context 的 provider 快照并打开合集弹层（页面只关心结果）。
 Future<CollectionPickerOutcome?> openFavoritesCollectionPicker({
+  required WidgetRef ref,
   required BuildContext context,
   required AppLocalizations l10n,
   required CollectionFrame frame,
@@ -121,9 +122,10 @@ Future<CollectionPickerOutcome?> openFavoritesCollectionPicker({
   required void Function(List<String> keys) onOrderChanged,
   required bool Function() isActive,
 }) {
-  final provider = context.read<LibraryProvider>();
-  final records = context.read<DownloadRecords?>();
-  final localLibrary = context.read<LocalLibraryProvider?>();
+  final library = ref.read(libraryProvider);
+  final provider = ref.read(libraryControllerProvider);
+  final DownloadRecords? records = ref.read(downloadRecordsControllerProvider);
+  final LocalLibraryState localLibrary = ref.read(localLibraryProvider);
   return showFavoritesCollectionPicker(
     context: context,
     l10n: l10n,
@@ -131,11 +133,12 @@ Future<CollectionPickerOutcome?> openFavoritesCollectionPicker({
     playlists: playlists,
     favoritesId: favoritesId,
     selected: selected,
+    historyCount: library.history.length,
     provider: provider,
     records: records,
     viewModel: viewModel,
-    browseIndex: localLibrary?.snapshot?.index,
-    smartRows: localLibrary?.smartRows ?? const {},
+    browseIndex: localLibrary.snapshot?.index,
+    smartRows: localLibrary.smartRows,
     ensureLocalSongsReady: viewModel.session.ensureLocalSongsReady,
     onOrderChanged: onOrderChanged,
     isActive: isActive,

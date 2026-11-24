@@ -12,10 +12,10 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/playback_transport.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/player_cover_deck.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/cover_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
 
@@ -79,13 +79,12 @@ void main() {
     Size size = const Size(480, 640),
     double textScale = 1,
   }) {
-    return MultiProvider(
-      providers: [
-        coverStoreProvider(),
-        ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-        ChangeNotifierProvider<LibraryProvider>.value(value: library),
-      ],
-      child: M3EMaterialApp(
+    final scope = ProviderTestScope();
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryProvider>(library);
+    putCoverStore(scope);
+    return scope.wrap(
+      M3EMaterialApp(
         data: M3EThemeData.fromMaterial(ThemeData.light()),
         theme: ThemeData.light(),
         locale: const Locale('zh'),

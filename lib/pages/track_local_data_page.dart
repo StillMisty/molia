@@ -15,14 +15,15 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../domain/models/download.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../services/audio_cache_platform.dart';
 import '../services/cache_service.dart';
 import '../services/download/download_manager.dart';
@@ -58,7 +59,7 @@ Future<void> showTrackLocalDataPage(
 }
 
 @visibleForTesting
-class TrackLocalDataPage extends StatefulWidget {
+class TrackLocalDataPage extends ConsumerStatefulWidget {
   const TrackLocalDataPage({
     super.key,
     required this.track,
@@ -72,10 +73,10 @@ class TrackLocalDataPage extends StatefulWidget {
   final bool embedded;
 
   @override
-  State<TrackLocalDataPage> createState() => _TrackLocalDataPageState();
+  ConsumerState<TrackLocalDataPage> createState() => _TrackLocalDataPageState();
 }
 
-class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
+class _TrackLocalDataPageState extends ConsumerState<TrackLocalDataPage> {
   static const List<LocalCachePart> _cacheParts = LocalCachePart.values;
 
   TrackLocalDataService? _service;
@@ -98,9 +99,13 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final service = context.read<TrackLocalDataService?>();
-    final cacheService = context.read<CacheService?>() ?? CacheService.instance;
-    final records = context.read<DownloadRecords?>();
+    final TrackLocalDataService? service = ref.read(
+      trackLocalDataServiceProvider,
+    );
+    final cacheService = ref.read(cacheServiceProvider);
+    final DownloadRecords? records = ref.read(
+      downloadRecordsControllerProvider,
+    );
     if (_controller == null ||
         !identical(_service, service) ||
         !identical(_cacheService, cacheService) ||
@@ -118,16 +123,18 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     // 页面始终绑定一首曲目：构造后立即加载（控制器内部单飞 / 去重）。
     _controller!.setTrack(widget.track);
 
-    final downloads = context.read<DownloadManager?>();
+    final DownloadManager? downloads = ref.read(
+      downloadManagerControllerProvider,
+    );
     if (!identical(_downloads, downloads)) {
-      if (_listening) _downloads?.taskChanges.removeListener(_onTasksChanged);
+      if (_listening) _downloads?.changes.removeListener(_onTasksChanged);
       _downloads = downloads;
       _task = null;
-      if (_listening) downloads?.taskChanges.addListener(_onTasksChanged);
+      if (_listening) downloads?.changes.addListener(_onTasksChanged);
     }
     if (!_listening) {
       _listening = true;
-      _downloads?.taskChanges.addListener(_onTasksChanged);
+      _downloads?.changes.addListener(_onTasksChanged);
     }
     _syncTask();
   }
@@ -145,7 +152,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   @override
   void dispose() {
     if (_listening) {
-      _downloads?.taskChanges.removeListener(_onTasksChanged);
+      _downloads?.changes.removeListener(_onTasksChanged);
     }
     _controller?.dispose();
     super.dispose();
@@ -186,7 +193,9 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   /// 在排队 / 下载期间仍可操作。省流生效时先确认；已有活动任务只提示一句，
   /// 不在这里等它（与入口原来的非阻塞语义一致）。
   Future<void> _downloadAudio() async {
-    final requests = context.read<DownloadRequests?>();
+    final DownloadRequests? requests = ref.read(
+      downloadRequestsControllerProvider,
+    );
     if (requests == null) return;
     final l10n = AppLocalizations.of(context)!;
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
@@ -203,7 +212,9 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
 
   /// 单独下载 / 转存歌词或封面（缓存优先，同样不触网），终态与音频同一套。
   Future<void> _downloadPart({required bool lyrics}) async {
-    final requests = context.read<DownloadRequests?>();
+    final DownloadRequests? requests = ref.read(
+      downloadRequestsControllerProvider,
+    );
     if (requests == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
@@ -293,7 +304,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final path = record.filePath;
     if (path == null || path.isEmpty || _busy) return;
     final l10n = AppLocalizations.of(context)!;
-    final saveAs = context.read<SaveAs?>();
+    final SaveAs? saveAs = ref.read(saveAsProvider);
     try {
       await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
     } catch (_) {
@@ -378,7 +389,9 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   }
 
   void _showMessage(String message) {
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
     if (notifications != null) {
       notifications.showSnackBar(message);
     } else {
@@ -436,10 +449,13 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       );
     }
     return ListenableBuilder(
-      listenable: task,
-      builder: (context, _) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _buildAudioSection(l10n, data, _task, audioEnabled),
+      listenable: task.changes,
+      builder: (context, _) => ListenableBuilder(
+        listenable: task.progressListenable,
+        builder: (context, _) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: _buildAudioSection(l10n, data, _task, audioEnabled),
+        ),
       ),
     );
   }

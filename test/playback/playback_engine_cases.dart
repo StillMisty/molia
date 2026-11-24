@@ -133,14 +133,14 @@ class _FakeService extends LocalPlaybackService {
     _shuffleIndices = shuffleIndices;
     _previousIndex = previousIndex;
     _previousOfPreviousIndex = previousOfPreviousIndex;
-    notifyListeners();
+    notifyChanges();
   }
 
   void change({bool? playing, Duration? position, String? error}) {
     if (playing != null) _playing = playing;
     if (position != null) _position = position;
     if (error != null) _error = error;
-    notifyListeners();
+    notifyChanges();
   }
 
   @override
@@ -165,7 +165,7 @@ class _FakeService extends LocalPlaybackService {
     playQueueIndexCalls++;
     calls.add('playQueueIndex');
     _index = index;
-    notifyListeners();
+    notifyChanges();
   }
 
   String? _currentQuality;
@@ -177,7 +177,7 @@ class _FakeService extends LocalPlaybackService {
   Future<void> setCurrentQuality(String quality) async {
     calls.add('setCurrentQuality:$quality');
     _currentQuality = quality;
-    notifyListeners();
+    notifyChanges();
   }
 
   final List<List<SourceTrack>> enqueued = [];
@@ -188,7 +188,7 @@ class _FakeService extends LocalPlaybackService {
     enqueued.add(List.of(tracks));
     _queue.addAll(tracks);
     _queueRevision++;
-    notifyListeners();
+    notifyChanges();
   }
 
   int? lastMoveFrom;
@@ -216,14 +216,14 @@ class _FakeService extends LocalPlaybackService {
   Future<void> toggle() async {
     calls.add('toggle');
     _playing = !_playing;
-    notifyListeners();
+    notifyChanges();
   }
 
   @override
   Future<void> seek(Duration position) async {
     calls.add('seek');
     _position = position;
-    notifyListeners();
+    notifyChanges();
   }
 
   final List<double> volumes = [];
@@ -244,7 +244,7 @@ class _FakeService extends LocalPlaybackService {
   Future<void> setMode(PlayMode mode) async {
     calls.add('setMode');
     _mode = mode;
-    notifyListeners();
+    notifyChanges();
   }
 
   @override
@@ -255,7 +255,7 @@ class _FakeService extends LocalPlaybackService {
     _queue.clear();
     _queueRevision++;
     _playing = false;
-    notifyListeners();
+    notifyChanges();
   }
 
   /// 换源：记录并原地替换（模拟真实服务按 id 全量命中）。
@@ -274,7 +274,7 @@ class _FakeService extends LocalPlaybackService {
     }
     if (!hit) return;
     _queueRevision++;
-    notifyListeners();
+    notifyChanges();
   }
 
   /// 补图：与真实服务同口径，封面真变了才替换并自增版本号。
@@ -287,7 +287,7 @@ class _FakeService extends LocalPlaybackService {
     if (old.coverUrl == next) return;
     _queue[index] = old.copyWith(coverUrl: next);
     _queueRevision++;
-    notifyListeners();
+    notifyChanges();
   }
 }
 

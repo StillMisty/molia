@@ -10,18 +10,18 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
-import 'package:provider/provider.dart';
 
 import '../domain/models/library.dart';
 import '../domain/models/smart_lists.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/library_collection_request.dart';
 import '../providers/library_provider.dart';
-import '../providers/playback_provider.dart';
 import '../services/download/download_requests.dart';
 import '../services/download/download_maintenance.dart';
 import '../services/download/download_records.dart';
@@ -41,14 +41,15 @@ import '../widgets/settings/settings_tiles.dart';
 /// 等待任务列表最多展示多少行，其余折叠成「还有 N 首等待中」。
 const int _maxQueuedRows = 20;
 
-class DownloadsManagePage extends StatefulWidget {
+class DownloadsManagePage extends ConsumerStatefulWidget {
   const DownloadsManagePage({super.key});
 
   @override
-  State<DownloadsManagePage> createState() => _DownloadsManagePageState();
+  ConsumerState<DownloadsManagePage> createState() =>
+      _DownloadsManagePageState();
 }
 
-class _DownloadsManagePageState extends State<DownloadsManagePage> {
+class _DownloadsManagePageState extends ConsumerState<DownloadsManagePage> {
   /// 维护动作（清扫 / 补发布 / 孤儿删除）单独占用，不影响下载操作。
   bool _busy = false;
 
@@ -63,7 +64,9 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final maintenance = context.read<DownloadMaintenance?>();
+    final DownloadMaintenance? maintenance = ref.read(
+      downloadMaintenanceProvider,
+    );
     if (!identical(maintenance, _rootMaintenance)) {
       _rootMaintenance = maintenance;
       _rootPath = maintenance?.rootPath() ?? Future<String?>.value();
@@ -73,10 +76,15 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final downloads = context.watch<DownloadManager?>();
-    final maintenance = context.read<DownloadMaintenance?>();
-    final queueLength = context.select<PlaybackProvider, int>(
-      (provider) => provider.snapshot.queue.length,
+    final DownloadManagerState? downloads = ref.watch(downloadManagerProvider);
+    final DownloadManager? manager = ref.read(
+      downloadManagerControllerProvider,
+    );
+    final DownloadMaintenance? maintenance = ref.read(
+      downloadMaintenanceProvider,
+    );
+    final queueLength = ref.watch(
+      playbackProvider.select((provider) => provider.snapshot.queue.length),
     );
 
     return SettingsSubPage(
@@ -94,8 +102,8 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
             onPressed: open,
           ),
           onSelected: (value) {
-            if (value == 'cancelAll' && downloads != null) {
-              unawaited(_cancelQueued(downloads));
+            if (value == 'cancelAll' && manager != null) {
+              unawaited(_cancelQueued(manager));
             } else if (value == 'cleanupOrphans' && maintenance != null) {
               unawaited(_cleanupOrphans(maintenance));
             }
@@ -107,6 +115,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
               leading: const Icon(Icons.playlist_remove_rounded),
               enabled:
                   !_busy &&
+                  manager != null &&
                   downloads != null &&
                   downloads.taskGroups.queued.isNotEmpty,
               isDestructive: true,
@@ -122,7 +131,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
         ),
       ],
       children: [
-        _buildTasksSection(l10n, downloads),
+        _buildTasksSection(l10n, downloads, manager),
         const SizedBox(height: kSettingsSectionSpacing),
         // 批量下载：当前队列（跳过已下载与本地曲目）。只入队，不阻塞页面。
         SettingsSectionCard(
@@ -137,8 +146,8 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                   downloads == null || !downloads.supported || queueLength == 0
                   ? null
                   : () {
-                      final queue = context
-                          .read<PlaybackProvider>()
+                      final queue = ref
+                          .read(playbackControllerProvider)
                           .snapshot
                           .queue;
                       unawaited(_batchDownload(queue));
@@ -187,22 +196,19 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                     : () => unawaited(_publishPublic(maintenance)),
               ),
             // 缺文件：只显示数量 + 检查入口（不恢复完整已完成列表）。
-            Builder(
-              builder: (context) {
-                final records = context.watch<DownloadRecords?>();
-                final missing = records == null
-                    ? 0
-                    : records.downloads
-                          .where((record) => record.isMissing)
-                          .length;
+            Consumer(
+              builder: (context, ref, _) {
+                final DownloadRecordsState records = ref.watch(
+                  downloadRecordsProvider,
+                );
                 return SettingsNavTile(
                   key: const Key('downloadsMissingFilesItem'),
                   icon: Icons.report_gmailerrorred_rounded,
                   title: l10n.localFileCheckFiles,
-                  subtitle: l10n.missingFilesCount(missing),
-                  onTap: _busy || records == null
+                  subtitle: l10n.missingFilesCount(records.missingCount),
+                  onTap: _busy
                       ? null
-                      : () => unawaited(_checkMissingFiles(context, l10n)),
+                      : () => unawaited(_checkMissingFiles(l10n)),
                 );
               },
             ),
@@ -223,9 +229,13 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     );
   }
 
-  /// 任务区只订阅队列结构（增删 / 状态），每行再单独订阅自己的进度。
-  Widget _buildTasksSection(AppLocalizations l10n, DownloadManager? downloads) {
-    if (downloads == null) {
+  /// 任务区随管理面快照重建（增删 / 状态），每行再单独订阅自己的进度。
+  Widget _buildTasksSection(
+    AppLocalizations l10n,
+    DownloadManagerState? downloads,
+    DownloadManager? manager,
+  ) {
+    if (downloads == null || manager == null) {
       return SettingsSectionCard(
         title: l10n.downloadsTasksSection,
         children: [
@@ -238,109 +248,106 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
         ],
       );
     }
-    return ListenableBuilder(
-      listenable: downloads.taskChanges,
-      builder: (context, _) {
-        final groups = downloads.taskGroups;
-        final running = groups.running;
-        final queued = groups.queued;
-        final failed = groups.failed;
-        final visibleQueued = _showAllQueued
-            ? queued
-            : queued.take(_maxQueuedRows).toList();
-        final hiddenQueued = queued.length - visibleQueued.length;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    final groups = downloads.taskGroups;
+    final running = groups.running;
+    final queued = groups.queued;
+    final failed = groups.failed;
+    final visibleQueued = _showAllQueued
+        ? queued
+        : queued.take(_maxQueuedRows).toList();
+    final hiddenQueued = queued.length - visibleQueued.length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SettingsSectionCard(
+          title: l10n.downloadsTasksSection,
           children: [
-            SettingsSectionCard(
-              title: l10n.downloadsTasksSection,
-              children: [
-                if (running.isEmpty && queued.isEmpty)
-                  SettingsInfoTile(
-                    key: const Key('downloadsTasksEmpty'),
-                    icon: Icons.check_circle_rounded,
-                    title: l10n.downloadsNoTasks,
-                    subtitle: '',
-                  )
-                else ...[
-                  for (final task in [...running, ...visibleQueued])
-                    _taskTile(l10n, downloads, task),
-                  if (queued.length > _maxQueuedRows)
-                    SettingsNavTile(
-                      key: const Key('downloadsWaitingToggle'),
-                      icon: _showAllQueued
-                          ? Icons.expand_less_rounded
-                          : Icons.expand_more_rounded,
-                      // 收起态说「还有 N 首」；展开后总数已经全部铺在列表中，
-                      // 标题改成「等待中 N 首」，不再重复「还有」的暗示。
-                      title: _showAllQueued
-                          ? l10n.downloadsWaitingTotal(queued.length)
-                          : l10n.downloadsWaitingMore(hiddenQueued),
-                      subtitle: _showAllQueued
-                          ? l10n.downloadsWaitingCollapse
-                          : l10n.downloadsWaitingShowAll,
-                      onTap: () =>
-                          setState(() => _showAllQueued = !_showAllQueued),
-                    ),
-                ],
-              ],
-            ),
-            if (failed.isNotEmpty) ...[
-              const SizedBox(height: kSettingsSectionSpacing),
-              SettingsSectionCard(
-                title: l10n.downloadsFailedSection,
-                children: [
-                  SettingsNavTile(
-                    key: const Key('downloadsRetryAllItem'),
-                    icon: Icons.refresh_rounded,
-                    title: l10n.downloadsRetryAll,
-                    subtitle: '',
-                    onTap: () => _retryAll(downloads, failed),
-                  ),
-                  for (final task in failed) _failedTile(l10n, downloads, task),
-                ],
-              ),
+            if (running.isEmpty && queued.isEmpty)
+              SettingsInfoTile(
+                key: const Key('downloadsTasksEmpty'),
+                icon: Icons.check_circle_rounded,
+                title: l10n.downloadsNoTasks,
+                subtitle: '',
+              )
+            else ...[
+              for (final task in [...running, ...visibleQueued])
+                _taskTile(l10n, manager, task),
+              if (queued.length > _maxQueuedRows)
+                SettingsNavTile(
+                  key: const Key('downloadsWaitingToggle'),
+                  icon: _showAllQueued
+                      ? Icons.expand_less_rounded
+                      : Icons.expand_more_rounded,
+                  // 收起态说「还有 N 首」；展开后总数已经全部铺在列表中，
+                  // 标题改成「等待中 N 首」，不再重复「还有」的暗示。
+                  title: _showAllQueued
+                      ? l10n.downloadsWaitingTotal(queued.length)
+                      : l10n.downloadsWaitingMore(hiddenQueued),
+                  subtitle: _showAllQueued
+                      ? l10n.downloadsWaitingCollapse
+                      : l10n.downloadsWaitingShowAll,
+                  onTap: () => setState(() => _showAllQueued = !_showAllQueued),
+                ),
             ],
           ],
-        );
-      },
+        ),
+        if (failed.isNotEmpty) ...[
+          const SizedBox(height: kSettingsSectionSpacing),
+          SettingsSectionCard(
+            title: l10n.downloadsFailedSection,
+            children: [
+              SettingsNavTile(
+                key: const Key('downloadsRetryAllItem'),
+                icon: Icons.refresh_rounded,
+                title: l10n.downloadsRetryAll,
+                subtitle: '',
+                onTap: () => _retryAll(manager, failed),
+              ),
+              for (final task in failed) _failedTile(l10n, manager, task),
+            ],
+          ),
+        ],
+      ],
     );
   }
 
-  /// 单条运行 / 等待任务：行内只订阅任务自身的进度与状态。
+  /// 单条运行 / 等待任务：行内只订阅任务自身的状态，进度条再订阅进度通道。
   Widget _taskTile(
     AppLocalizations l10n,
     DownloadManager downloads,
     DownloadTask task,
   ) {
     return ListenableBuilder(
-      listenable: task,
-      builder: (context, _) {
-        final running = task.status == DownloadTaskStatus.running;
-        final status = downloadTaskStatusLabel(l10n, task);
-        final quality = task.quality.isEmpty
-            ? ''
-            : sourceQualityLabel(l10n, task.quality);
-        return SettingsInfoTile(
-          key: Key('downloadsTask_${task.key}'),
-          icon: running ? Icons.downloading_rounded : Icons.schedule_rounded,
-          title: task.track.title,
-          subtitle: [
-            status,
-            quality,
-          ].where((part) => part.isNotEmpty).join(' · '),
-          progress: _taskProgress(context, task),
-          trailing: M3EIconButton(
-            key: Key('downloadsTaskCancel_${task.key}'),
-            variant: M3EIconButtonVariant.standard,
-            icon: const Icon(Icons.close_rounded),
-            semanticLabel: l10n.downloadCancel,
-            onPressed: _canCancel(task.status)
-                ? () => downloads.cancelTrack(task.track)
-                : null,
-          ),
-        );
-      },
+      listenable: task.changes,
+      builder: (context, _) => ListenableBuilder(
+        listenable: task.progressListenable,
+        builder: (context, _) {
+          final running = task.status == DownloadTaskStatus.running;
+          final status = downloadTaskStatusLabel(l10n, task);
+          final quality = task.quality.isEmpty
+              ? ''
+              : sourceQualityLabel(l10n, task.quality);
+          return SettingsInfoTile(
+            key: Key('downloadsTask_${task.key}'),
+            icon: running ? Icons.downloading_rounded : Icons.schedule_rounded,
+            title: task.track.title,
+            subtitle: [
+              status,
+              quality,
+            ].where((part) => part.isNotEmpty).join(' · '),
+            progress: _taskProgress(context, task),
+            trailing: M3EIconButton(
+              key: Key('downloadsTaskCancel_${task.key}'),
+              variant: M3EIconButtonVariant.standard,
+              icon: const Icon(Icons.close_rounded),
+              semanticLabel: l10n.downloadCancel,
+              onPressed: _canCancel(task.status)
+                  ? () => downloads.cancelTrack(task.track)
+                  : null,
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -370,7 +377,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     DownloadTask task,
   ) {
     return ListenableBuilder(
-      listenable: task,
+      listenable: task.changes,
       builder: (context, _) {
         final reason = downloadTaskStatusLabel(l10n, task);
         return SettingsInfoTile(
@@ -409,7 +416,9 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   /// 下载服务唯一实现，页面不再先算一遍候选。
   Future<void> _batchDownload(List<Track> queue) async {
     final l10n = AppLocalizations.of(context)!;
-    final requests = context.read<DownloadRequests?>();
+    final DownloadRequests? requests = ref.read(
+      downloadRequestsControllerProvider,
+    );
     if (requests == null) return;
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
     try {
@@ -437,9 +446,16 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   /// 选择歌单 → 批量下载（跳过已下载与本地曲目）。
   Future<void> _pickPlaylist() async {
     final l10n = AppLocalizations.of(context)!;
-    final library = context.read<LibraryProvider?>();
-    final downloads = context.read<DownloadManager?>();
-    if (library == null || downloads == null) return;
+    final LibraryState? library = ref.read(maybeLibraryProvider);
+    final LibraryProvider? libraryController = ref.read(
+      maybeLibraryControllerProvider,
+    );
+    final DownloadManager? downloads = ref.read(
+      downloadManagerControllerProvider,
+    );
+    if (library == null || libraryController == null || downloads == null) {
+      return;
+    }
     final playlists = library.playlists;
     if (playlists.isEmpty) {
       _showMessage(l10n.downloadsEmpty);
@@ -478,10 +494,11 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
       ),
     );
     if (picked == null || !mounted) return;
-    final tracks = await library.loadPlaylistTracks(picked.id);
+    final tracks = await libraryController.loadPlaylistTracks(picked.id);
     if (!mounted) return;
     final domainTracks = [
-      for (final track in tracks) library.trackFromPlaylistTrack(track),
+      for (final track in tracks)
+        libraryController.trackFromPlaylistTrack(track),
     ];
     await _batchDownload(domainTracks);
   }
@@ -568,18 +585,21 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   }
 
   /// 手动检查一次文件，并在提示里给出结果；缺失明细在收藏 › 文件不见。
-  Future<void> _checkMissingFiles(
-    BuildContext context,
-    AppLocalizations l10n,
-  ) async {
-    final service = context.read<LocalLibraryService?>();
-    final notifications = context.read<NotificationService?>();
-    final request = context.read<LibraryCollectionRequest?>();
+  Future<void> _checkMissingFiles(AppLocalizations l10n) async {
+    final LocalLibraryService? service = ref.read(
+      localLibraryServiceControllerProvider,
+    );
+    final NotificationService? notifications = ref.read(
+      maybeNotificationServiceProvider,
+    );
+    final LibraryCollectionRequest request = ref.read(
+      libraryCollectionRequestControllerProvider,
+    );
     if (service == null) return;
     final result = await service.checkFiles();
     if (!mounted) return;
     // 请求收藏页切到「文件不见」，用户关掉设置后即可看到明细。
-    request?.requestSmartList(SmartListIds.missingFiles);
+    request.requestSmartList(SmartListIds.missingFiles);
     notifications?.showSnackBar(l10n.missingFilesCount(result.changed));
   }
 
@@ -666,7 +686,9 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   }
 
   void _showMessage(String message) {
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      maybeNotificationServiceProvider,
+    );
     if (notifications != null) {
       notifications.showSnackBar(message);
     } else {

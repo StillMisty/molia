@@ -1,4 +1,5 @@
 import 'package:flutter/gestures.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -221,7 +222,7 @@ class TrackRowSurface {
 /// 调用方只给 [TrackRowModel] + [TrackRowSurface] + 行内回调：当前曲目订阅
 /// （[selectCurrentTrackState]）、时长格式化（[durationText]）、表格 / 双行
 /// 版式与选中 / 当前优先级都在本模块内。
-class TrackRow extends StatelessWidget {
+class TrackRow extends ConsumerWidget {
   const TrackRow({
     super.key,
     required this.model,
@@ -287,7 +288,7 @@ class TrackRow extends StatelessWidget {
       M3ETheme.of(context).listTheme.cardList.gap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final M3EThemeData m3e = M3ETheme.of(context);
     final M3EColorScheme scheme = m3e.colorScheme;
     final M3ETypeScale type = m3e.typeScale;
@@ -300,7 +301,7 @@ class TrackRow extends StatelessWidget {
     // 当前曲目订阅只有这一份实现：行自己的 build 里逐行 select，只重建本行。
     final CurrentTrackState current = trackId == null
         ? (isCurrent: false, isPlaying: false)
-        : selectCurrentTrackState(context, trackId);
+        : selectCurrentTrackState(ref, trackId);
     final bool isCurrent = current.isCurrent;
     final bool isPlaying = current.isPlaying;
     final Color contentColor = selected

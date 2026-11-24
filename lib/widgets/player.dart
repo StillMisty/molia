@@ -1,12 +1,13 @@
 import 'dart:math';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/playback_provider.dart';
 import 'cover_deck_metrics.dart';
 import 'now_playing_summary.dart';
@@ -24,7 +25,7 @@ import 'volume_control.dart';
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-class Player extends StatefulWidget {
+class Player extends ConsumerStatefulWidget {
   final bool isLargeScreen;
 
   /// 封面区横向手势宿主 key（由封面堆叠模块持有）：拖动期间 element 必须
@@ -61,10 +62,10 @@ class Player extends StatefulWidget {
   });
 
   @override
-  State<Player> createState() => _PlayerState();
+  ConsumerState<Player> createState() => _PlayerState();
 }
 
-class _PlayerState extends State<Player> with TickerProviderStateMixin {
+class _PlayerState extends ConsumerState<Player> with TickerProviderStateMixin {
   Track? _lastTrack;
 
   // 标题单行 38、进度排 46（滑杆盒 32 + 时间行 2+16 的溢出绘制 + 余量）、
@@ -188,14 +189,13 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final track = context.select<PlaybackProvider, Track?>(
-      (provider) => provider.snapshot.current,
+    final track = ref.watch(
+      playbackProvider.select((provider) => provider.snapshot.current),
     );
 
-    final playbackProvider = Provider.of<PlaybackProvider>(
-      context,
-      listen: false,
-    );
+    // 只读一次控制器快照（不订阅整棵播放器）：标题块的 lastPlayed* 兜底值
+    // 要取现场值，音量拖动等通知不应重建整页。
+    final playback = ref.read(playbackControllerProvider).state;
 
     // 展示曲目沿用上一次非空曲目：换歌瞬间快照可能短暂为空，直接回退到
     // 「无曲目播放页」会让封面 / 标题闪一帧。
@@ -211,10 +211,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             constraints: const BoxConstraints(
               maxWidth: playbackCoverMaxLogicalEdge,
             ),
-            child: _buildLargeScreenPlayerLayout(
-              displayTrack,
-              playbackProvider,
-            ),
+            child: _buildLargeScreenPlayerLayout(displayTrack, playback),
           ),
         ),
       );
@@ -228,7 +225,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             constraints: const BoxConstraints(maxWidth: double.infinity),
             child: _buildSmallScreenPlayerLayout(
               displayTrack,
-              playbackProvider,
+              playback,
               morph: widget.morph,
             ),
           ),
@@ -237,11 +234,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     }
 
     return RepaintBoundary(
-      child: _buildExpandableSmallScreenLayout(
-        displayTrack,
-        playbackProvider,
-        expand,
-      ),
+      child: _buildExpandableSmallScreenLayout(displayTrack, playback, expand),
     );
   }
 
@@ -253,7 +246,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// [_smallScreenDeckMetrics]）。
   Widget _buildSmallScreenPlayerLayout(
     Track? displayTrack,
-    PlaybackProvider playbackProvider, {
+    PlaybackState playback, {
     PlayerMorphController? morph,
   }) {
     return LayoutBuilder(
@@ -285,7 +278,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               padding: const EdgeInsets.symmetric(
                 horizontal: _contentHorizontalPadding,
               ),
-              child: _buildTrackInfo(context, displayTrack, playbackProvider),
+              child: _buildTrackInfo(context, displayTrack, playback),
             ),
             const SizedBox(height: 2),
             _buildSeekBar(),
@@ -311,7 +304,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 比外层预算小一截、容器底部多出等量空白。
   Widget _buildExpandableSmallScreenLayout(
     Track? displayTrack,
-    PlaybackProvider playbackProvider,
+    PlaybackState playback,
     Animation<double> expand,
   ) {
     return LayoutBuilder(
@@ -329,7 +322,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         // 透明度 / 点击门控）：整棵播放器不随每一帧动画重建。
         final Widget fullLayer = _buildSmallScreenPlayerLayout(
           displayTrack,
-          playbackProvider,
+          playback,
           morph: widget.morph,
         );
         return AnimatedBuilder(
@@ -433,7 +426,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Widget _buildTrackInfo(
     BuildContext context,
     Track? displayTrack,
-    PlaybackProvider playbackProvider,
+    PlaybackState playback,
   ) {
     return AnimatedBuilder(
       animation: _trackEntrance,
@@ -444,7 +437,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           child: Opacity(opacity: t.clamp(0.0, 1.0), child: child),
         );
       },
-      child: _buildTrackInfoText(context, displayTrack, playbackProvider),
+      child: _buildTrackInfoText(context, displayTrack, playback),
     );
   }
 
@@ -458,15 +451,15 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Widget _buildTrackInfoText(
     BuildContext context,
     Track? displayTrack,
-    PlaybackProvider playbackProvider,
+    PlaybackState playback,
   ) {
     final header =
         displayTrack?.title ??
-        playbackProvider.lastPlayedTrackName ??
+        playback.lastPlayedTrackName ??
         _l10n(context).noCurrentTrackPlaying;
     final artistText = displayTrack != null
         ? _artistsLabel(context, displayTrack)
-        : playbackProvider.lastPlayedArtists ?? _l10n(context).unknownArtist;
+        : playback.lastPlayedArtists ?? _l10n(context).unknownArtist;
 
     return NowPlayingTrackText.page(
       title: header,
@@ -487,7 +480,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 封面按两轴可用空间自适应。
   Widget _buildLargeScreenPlayerLayout(
     Track? displayTrack,
-    PlaybackProvider playbackProvider,
+    PlaybackState playback,
   ) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -539,7 +532,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               padding: const EdgeInsets.symmetric(
                 horizontal: _contentHorizontalPadding,
               ),
-              child: _buildTrackInfo(context, displayTrack, playbackProvider),
+              child: _buildTrackInfo(context, displayTrack, playback),
             ),
             if (widget.desktopLayout) ...[
               const SizedBox(height: 8),

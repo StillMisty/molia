@@ -10,6 +10,7 @@ import '../services/update/update_installer.dart';
 import '../services/update/update_notification_presenter.dart';
 import '../services/update/update_preferences.dart';
 import '../services/update/update_service.dart';
+import 'snapshot_source.dart';
 
 /// 更新状态机的阶段（设置页据此渲染状态与可用操作）。
 enum UpdateStatus {
@@ -69,6 +70,71 @@ class UpdateProgress {
   double? get fraction => total > 0 ? (received / total).clamp(0.0, 1.0) : null;
 }
 
+/// UI 经 `ref.watch(updateProvider)` 读到的更新快照。
+///
+/// 字段名沿用旧 [UpdateProvider] 的公开 getter；下载进度是高频通道，仍在
+/// [UpdateProvider.progress] 这个独立 `ValueListenable` 上，不进快照。
+@immutable
+class UpdateState {
+  const UpdateState({
+    required this.status,
+    required this.release,
+    required this.releaseAsset,
+    required this.installResult,
+    required this.installResultVersion,
+    required this.failure,
+    required this.lastCheckedAt,
+    required this.checkOnStartup,
+    required this.checkDaily,
+    required this.anyAutoCheckEnabled,
+    required this.channel,
+    required this.manifestUrlOverride,
+    required this.downloadPrefix,
+    required this.platform,
+    required this.currentVersionLabel,
+    required this.updateAvailable,
+    required this.supportsInAppInstall,
+    required this.hasDownloadedPackage,
+  });
+
+  final UpdateStatus status;
+
+  /// 清单里的最新发布（检查成功后有值）。
+  final AppRelease? release;
+
+  /// 当前发布实际会下载的产物（大小展示与下载共用同一次选择）。
+  final ReleaseAsset? releaseAsset;
+
+  /// 上次安装结果回执；null 表示没有待展示的回执。
+  final UpdateInstallResult? installResult;
+
+  /// 回执对应的目标版本。
+  final String? installResultVersion;
+
+  final UpdateFailureKind? failure;
+
+  final DateTime? lastCheckedAt;
+  final bool checkOnStartup;
+  final bool checkDaily;
+  final bool anyAutoCheckEnabled;
+  final UpdateChannel channel;
+  final String manifestUrlOverride;
+  final String downloadPrefix;
+  final UpdatePlatformInfo? platform;
+
+  /// 当前版本展示文案（当前版本 + 构建号）。
+  final String currentVersionLabel;
+
+  /// 是否处于「有更新可用」的任一阶段（设置入口副标题据此显示）。
+  final bool updateAvailable;
+
+  /// 当前平台是否支持应用内安装。
+  final bool supportsInAppInstall;
+
+  /// 是否已有「与当前清单一致」的下载包（授权后可直接重试安装）。
+  final bool hasDownloadedPackage;
+}
+
 /// 设置页「关于与更新」的状态机：检查 → 下载 → 安装。
 ///
 /// 职责边界：
@@ -78,7 +144,11 @@ class UpdateProgress {
 ///   直接依赖窗口实现，测试可注入假实现；
 /// - 下载通知经 [UpdateNotificationPresenter] 管理（端口 / 节流在里面），
 ///   这里只报「开始 / 进度 / 收尾」，不感知 Android 通道细节。
-class UpdateProvider extends ChangeNotifier {
+///
+/// 对外形态是「不可变快照 + 控制器」（ADR-0041「启动期状态对象」）：UI 经
+/// `updateProvider` 读 [UpdateState]，命令经 `updateControllerProvider` 调用；
+/// 安装 / 退出 / 回执流程不变。
+class UpdateProvider implements SnapshotSource<UpdateState> {
   UpdateProvider({
     required this._service,
     required this._preferences,
@@ -105,6 +175,9 @@ class UpdateProvider extends ChangeNotifier {
   final Future<void> Function()? _quitApp;
   final DateTime Function() _now;
   final Logger _logger = Logger('molia.update_provider');
+
+  /// 变更信号（替代 `ChangeNotifier.notifyListeners` 的订阅面）。
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 下载进度（高频通道）。
   final ValueNotifier<UpdateProgress> progress = ValueNotifier(
@@ -194,6 +267,33 @@ class UpdateProvider extends ChangeNotifier {
   bool get hasDownloadedPackage =>
       _downloadedPath != null && _sameAsDownloaded(_release);
 
+  /// 不可变快照：UI 经 `updateProvider` 读它（每次 [changes] 通知后重建）。
+  @override
+  UpdateState get state => UpdateState(
+    status: _status,
+    release: _release,
+    releaseAsset: _selectedAsset,
+    installResult: _installResult,
+    installResultVersion: _installResultVersion,
+    failure: _failure,
+    lastCheckedAt: _preferences.lastCheckedAt,
+    checkOnStartup: _preferences.checkOnStartup,
+    checkDaily: _preferences.checkDaily,
+    anyAutoCheckEnabled: _preferences.anyAutoCheckEnabled,
+    channel: _preferences.channel,
+    manifestUrlOverride: _preferences.manifestUrlOverride,
+    downloadPrefix: _preferences.downloadPrefix,
+    platform: _platform,
+    currentVersionLabel: currentVersionLabel,
+    updateAvailable: updateAvailable,
+    supportsInAppInstall: supportsInAppInstall,
+    hasDownloadedPackage: hasDownloadedPackage,
+  );
+
+  /// 变更信号（安装结果 / 偏好 / 下载状态变化）。
+  @override
+  Listenable get changes => _changes;
+
   /// 启动准备（组合根在**首帧之后**调用一次）：平台包信息 → 本地偏好 →
   /// 平台信息。
   ///
@@ -220,7 +320,7 @@ class UpdateProvider extends ChangeNotifier {
     } catch (e) {
       _logger.warning('读取平台信息失败: $e');
     }
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 启动时消费上次安装留下的 pending：版本达到即成功，否则判为未完成。
@@ -506,13 +606,13 @@ class UpdateProvider extends ChangeNotifier {
   Future<void> setCheckOnStartup(bool value) async {
     if (_preferences.checkOnStartup == value) return;
     await _preferences.setCheckOnStartup(value);
-    notifyListeners();
+    _changes.notify();
   }
 
   Future<void> setCheckDaily(bool value) async {
     if (_preferences.checkDaily == value) return;
     await _preferences.setCheckDaily(value);
-    notifyListeners();
+    _changes.notify();
   }
 
   Future<void> setChannel(UpdateChannel value) async {
@@ -540,7 +640,7 @@ class UpdateProvider extends ChangeNotifier {
   void _invalidateReleaseForChangedParameters() {
     if (_status == UpdateStatus.downloading ||
         _status == UpdateStatus.installing) {
-      notifyListeners();
+      _changes.notify();
       return;
     }
     _invalidateRelease();
@@ -622,18 +722,16 @@ class UpdateProvider extends ChangeNotifier {
 
   void _setStatus(UpdateStatus status) {
     if (_status == status) {
-      notifyListeners();
+      _changes.notify();
       return;
     }
     _status = status;
-    notifyListeners();
+    _changes.notify();
   }
 
-  @override
   void dispose() {
     _cancelToken?.cancel('provider disposed');
     _notificationPresenter?.stop();
     progress.dispose();
-    super.dispose();
   }
 }

@@ -1,9 +1,9 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
-import '../providers/playback_provider.dart';
+import '../providers/app_providers.dart';
 import '../providers/sleep_timer.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
@@ -60,35 +60,33 @@ String sleepTimerStatusLabel(AppLocalizations l10n, SleepTimerState state) {
 
 /// 打开定时关闭弹层（歌曲信息页唯一入口）。
 Future<void> showSleepTimerSheet(BuildContext context) {
-  final playback = context.read<PlaybackProvider>();
   return ResponsiveNavigation.showSimpleModal<void>(
     context: context,
     title: AppLocalizations.of(context)!.sleepTimerTitle,
     // 顶栏不放关闭按钮：下滑 / 点遮罩 / 系统返回关闭。
     showCloseButton: false,
-    child: _SleepTimerSheet(playback: playback),
+    child: const _SleepTimerSheet(),
   );
 }
 
 /// 定时关闭弹层：状态 + 时长滑杆 + 两个勾选 + 取消。
 ///
 /// 时长为本地草稿：拖动只改显示，松手才写入控制器并开始倒计时。
-class _SleepTimerSheet extends StatefulWidget {
-  const _SleepTimerSheet({required this.playback});
-
-  final PlaybackProvider playback;
+class _SleepTimerSheet extends ConsumerStatefulWidget {
+  const _SleepTimerSheet();
 
   @override
-  State<_SleepTimerSheet> createState() => _SleepTimerSheetState();
+  ConsumerState<_SleepTimerSheet> createState() => _SleepTimerSheetState();
 }
 
-class _SleepTimerSheetState extends State<_SleepTimerSheet> {
+class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
   late int _minutes;
 
   @override
   void initState() {
     super.initState();
-    final duration = widget.playback.sleepTimer.value.duration;
+    final timer = ref.read(playbackControllerProvider).sleepTimer;
+    final duration = timer.value.duration;
     _minutes = duration == null
         ? kSleepTimerDefaultMinutes
         : snapSleepTimerMinutes(duration.inMinutes.toDouble());
@@ -109,7 +107,7 @@ class _SleepTimerSheetState extends State<_SleepTimerSheet> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final timer = widget.playback.sleepTimer;
+    final timer = ref.read(playbackControllerProvider).sleepTimer;
 
     return SimpleModalBody(
       // 移动端弹层叠在应用底栏之上，视口会比内容高度短一点；底部留一档避免

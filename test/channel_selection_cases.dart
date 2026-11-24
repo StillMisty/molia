@@ -44,6 +44,39 @@ void main() {
     await _waitForKey(second, 'kg', reason: '跨重启恢复渠道偏好');
   });
 
+  test('state 快照与 changes：只发布真实变更，可用渠道保持管理顺序', () {
+    var keys = ['wy', 'kg'];
+    final selection = ChannelSelection(
+      validKeys: () => keys,
+      defaultKey: () => 'wy',
+    );
+    addTearDown(selection.dispose);
+
+    var notifications = 0;
+    selection.changes.addListener(() => notifications++);
+
+    expect(selection.state.key, 'wy');
+    expect(selection.state.validKeys, ['wy', 'kg']);
+    expect(selection.state.isValid, isTrue);
+    expect(
+      () => selection.state.validKeys.add('tx'),
+      throwsUnsupportedError,
+      reason: '快照里的可用渠道是只读副本',
+    );
+
+    selection.select('wy');
+    expect(notifications, 0, reason: '同值选择不发布');
+
+    selection.select('kg');
+    expect(notifications, 1);
+    expect(selection.key, 'kg');
+    expect(selection.state.key, 'kg');
+
+    keys = ['kg'];
+    expect(selection.state.validKeys, ['kg']);
+    expect(selection.state.isValid, isTrue);
+  });
+
   test('在途恢复不能覆盖用户刚做出的选择', () async {
     SharedPreferences.setMockInitialValues({});
     final settings = testSettingsRegistry();

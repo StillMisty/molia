@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/domain/models/track.dart';
@@ -18,6 +17,7 @@ import 'package:molia/widgets/lyrics_selection_page.dart';
 import 'package:molia/widgets/track_artwork.dart';
 
 import '../support/fakes.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 const _trackId = TrackId('wy', '1');
@@ -28,13 +28,12 @@ Widget _host(
   required PlaybackProvider playback,
   CustomCoverStore? covers,
 }) {
-  return MultiProvider(
-    providers: [
-      Provider<CustomCoverStore>.value(value: covers ?? CustomCoverStore()),
-      Provider<NotificationService>.value(value: NotificationService()),
-      ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-    ],
-    child: M3EMaterialApp(
+  final scope = ProviderTestScope();
+  scope.put<CustomCoverStore>(covers ?? CustomCoverStore());
+  scope.put<NotificationService>(NotificationService());
+  scope.put<PlaybackProvider>(playback);
+  return scope.wrap(
+    M3EMaterialApp(
       data: M3EThemeData.fromMaterial(ThemeData.light()),
       theme: ThemeData.light(),
       locale: const Locale('zh'),

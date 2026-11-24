@@ -1,17 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/lyrics_display/desktop_lyrics_settings_page.dart';
 import 'package:molia/pages/lyrics_display/lyrics_content_settings_page.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
+import 'package:molia/utils/snapshot_source.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_display/lyrics_output.dart';
 
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 void main() {
@@ -19,18 +20,20 @@ void main() {
 
   late LyricsDisplaySettings settings;
   late ThemeProvider theme;
+  late ProviderTestScope scope;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     final registry = testSettingsRegistry();
     settings = LyricsDisplaySettings(settings: registry);
-    theme = ThemeProvider(settings: registry);
+    scope = ProviderTestScope(registry: registry);
+    scope.put<LyricsDisplaySettings>(settings);
+    theme = scope.theme;
     await theme.preferencesReady;
   });
 
   tearDown(() {
     settings.dispose();
-    theme.dispose();
   });
 
   Future<void> pump(
@@ -42,14 +45,10 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    scope.put<LyricsDisplayProvider>(display);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<LyricsDisplaySettings>.value(value: settings),
-          ChangeNotifierProvider<LyricsDisplayProvider>.value(value: display),
-          ChangeNotifierProvider<ThemeProvider>.value(value: theme),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -121,14 +120,19 @@ void main() {
   });
 }
 
-class _FakeLyricsDisplay extends ChangeNotifier
-    implements LyricsDisplayProvider {
-  @override
-  bool get mediaSessionInitFailed => false;
+class _FakeLyricsDisplay implements LyricsDisplayProvider {
+  final SnapshotSignal _signal = SnapshotSignal();
 
   @override
-  LyricsOutputCapability capabilityOf(String outputId) =>
-      LyricsOutputCapability.ready;
+  LyricsDisplayState get state => const LyricsDisplayState(
+    capabilities: {
+      LyricsOutputIds.desktop: LyricsOutputCapability.ready,
+      LyricsOutputIds.media: LyricsOutputCapability.ready,
+    },
+  );
+
+  @override
+  Listenable get changes => _signal;
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>

@@ -7,39 +7,52 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../app/bootstrap/runtime_providers.dart';
 import '../../data/settings/device_settings.dart';
 import '../../data/settings/device_settings_keys.dart';
 
+part 'tray_settings.g.dart';
+
+/// 托盘偏好快照。
+@immutable
+class TraySettingsState {
+  const TraySettingsState({required this.closeToTray});
+
+  final bool closeToTray;
+}
+
 /// 托盘行为偏好：读写设备本地设置，变更即时生效
 /// （`WindowChrome` 的关闭策略每次读取）。
-class TraySettings extends ChangeNotifier {
-  /// [settings] 仅测试注入；生产构造自己的设备本地入口。
-  TraySettings({DeviceSettings? settings})
-    : _settings = settings ?? DeviceSettings();
-
+@Riverpod(keepAlive: true, name: 'traySettingsProvider')
+class TraySettings extends _$TraySettings {
   static const String keyCloseToTray = kTrayCloseToTrayKeyName;
-
-  /// 默认「关闭即最小化到托盘」（播放器惯例：关闭窗口不打断播放）。
   static const bool defaultCloseToTray = kDefaultTrayCloseToTray;
 
-  final DeviceSettings _settings;
+  late final DeviceSettings _settings;
+  Future<void> _ready = Future.value();
 
-  bool _closeToTray = defaultCloseToTray;
+  @override
+  TraySettingsState build() {
+    _settings = ref.watch(deviceSettingsProvider);
+    _ready = _load();
+    return const TraySettingsState(closeToTray: defaultCloseToTray);
+  }
 
-  /// 点关闭时最小化到托盘；false = 直接退出应用。
-  bool get closeToTray => _closeToTray;
+  bool get closeToTray => state.closeToTray;
+  Future<void> get preferencesReady => _ready;
 
-  /// 加载已保存值（组合根 / 测试调用一次）。
-  Future<void> init() async {
-    _closeToTray = await _settings.read(kTrayCloseToTrayKey);
-    notifyListeners();
+  Future<void> init() => _ready = _load();
+
+  Future<void> _load() async {
+    final value = await _settings.read(kTrayCloseToTrayKey);
+    state = TraySettingsState(closeToTray: value);
   }
 
   Future<void> setCloseToTray(bool value) async {
-    if (value == _closeToTray) return;
-    _closeToTray = value;
+    if (state.closeToTray == value) return;
+    state = TraySettingsState(closeToTray: value);
     await _settings.write(kTrayCloseToTrayKey, value);
-    notifyListeners();
   }
 }

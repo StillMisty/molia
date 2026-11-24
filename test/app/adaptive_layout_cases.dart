@@ -12,10 +12,10 @@ import 'package:molia/widgets/now_playing_layout_metrics.dart';
 import 'package:molia/widgets/responsive.dart';
 import 'package:molia/widgets/settings/settings_section_grid.dart';
 import 'package:molia/widgets/track_row.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/cover_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/fakes.dart';
 import '../support/perf_app_harness.dart';
 import '../support/settings_test_support.dart';
@@ -370,22 +370,25 @@ void main() {
   group('设置两列', () {
     late ThemeProvider theme;
     late PlaybackProvider playback;
+    late ProviderTestScope scope;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
       final registry = testSettingsRegistry();
       attachStaticSettingsForTest(registry);
-      theme = ThemeProvider(settings: registry);
+      scope = ProviderTestScope(registry: registry);
+      theme = scope.theme;
       await theme.preferencesReady;
       playback = buildTestPlaybackProvider(
         settings: registry,
         facade: FakePlaybackFacade(),
       );
       await playback.preferencesReady;
+      scope.put<PlaybackProvider>(playback);
+      putCoverStore(scope);
     });
 
     tearDown(() {
-      theme.dispose();
       playback.dispose();
     });
 
@@ -401,13 +404,8 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
       await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            coverStoreProvider(),
-            ChangeNotifierProvider<ThemeProvider>.value(value: theme),
-            ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ],
-          child: M3EMaterialApp(
+        scope.wrap(
+          M3EMaterialApp(
             data: M3EThemeData.fromMaterial(ThemeData.light()),
             theme: ThemeData.light(),
             locale: const Locale('zh'),

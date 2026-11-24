@@ -10,10 +10,10 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/playback_transport.dart';
 import 'package:molia/widgets/player_morph.dart';
 import 'package:molia/widgets/volume_control.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/cover_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/fakes.dart';
 
 /// 桌面底栏：播放模式 + 音量 + 队列（ADR-0030，与播放页进度排同源）。
@@ -38,13 +38,12 @@ void main() {
       PlaybackSnapshot(current: track, queue: [track], currentIndex: 0),
     );
 
+    final scope = ProviderTestScope();
+    scope.put<PlaybackProvider>(playback);
+    putCoverStore(scope);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          coverStoreProvider(),
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -80,7 +79,7 @@ void main() {
       find.descendant(of: bar, matching: find.byType(PlaybackModeButton)),
     );
     await tester.pumpAndSettle();
-    expect(playback.currentMode, PlayMode.sequential);
+    expect(playback.state.currentMode, PlayMode.sequential);
     expect(
       find.descendant(of: bar, matching: find.byType(VolumeControl)),
       findsOneWidget,

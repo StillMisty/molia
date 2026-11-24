@@ -8,16 +8,16 @@
 /// 「换源」（默认音频 tab，placement 为列表/历史原位替换）。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/source_swap_provider.dart';
-import '../services/lyrics/lyrics_source_registry.dart';
 import '../services/lyrics/lyrics_source_strategy.dart';
 import '../widgets/labels/lyrics_provider_label.dart';
 import '../widgets/responsive.dart';
@@ -60,13 +60,16 @@ Future<LyricsSearchSelection?> showSourceSwapPage(
       initialTab: initialTab,
       embedded: true,
       // 与自动回退共用注册表：B 站可用性闭包 / 传输实例都只有一份。
-      lyricsSources: context.read<LyricsSourceRegistry>().strategies,
+      lyricsSources: ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(lyricsSourceRegistryProvider).strategies,
     ),
   );
 }
 
 @visibleForTesting
-class SourceSwapPage extends StatefulWidget {
+class SourceSwapPage extends ConsumerStatefulWidget {
   const SourceSwapPage({
     super.key,
     required this.request,
@@ -88,10 +91,10 @@ class SourceSwapPage extends StatefulWidget {
   final List<LyricsSourceStrategy> lyricsSources;
 
   @override
-  State<SourceSwapPage> createState() => _SourceSwapPageState();
+  ConsumerState<SourceSwapPage> createState() => _SourceSwapPageState();
 }
 
-class _SourceSwapPageState extends State<SourceSwapPage> {
+class _SourceSwapPageState extends ConsumerState<SourceSwapPage> {
   static const List<SourceSwapTab> _tabs = [
     SourceSwapTab.lyrics,
     SourceSwapTab.audio,
@@ -121,7 +124,7 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
     // 只读一次：来源标签 / 渠道顺序不随搜索通知变化，页面不应因 provider
     // 通知整页重建。标签只用可搜索描述符；停用 / 非搜索脚本不在其中，
     // 标签回退源 key。
-    final swapProvider = context.read<SourceSwapProvider>();
+    final swapProvider = ref.read(sourceSwapProvider.notifier);
     final sourceDescriptors = swapProvider.searchableSources;
     // 歌词来源跟随渠道停用：取「已启用渠道」而不是「可搜索渠道」，
     // 六个音乐平台没有 LX 脚本时仍能用歌词来源。

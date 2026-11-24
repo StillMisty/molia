@@ -7,9 +7,9 @@ library;
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/download.dart'
     show DownloadedTrack, kLocalSourceKey;
@@ -17,6 +17,7 @@ import '../../domain/models/library.dart';
 import '../../domain/models/library_browse.dart';
 import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/collection_actions.dart';
 import '../../providers/collection_batch_download_adapter.dart';
 import '../../providers/collection_io_commands.dart';
@@ -33,7 +34,6 @@ import '../../services/download/download_manager.dart';
 import '../../services/download/download_records.dart';
 import '../../services/download/download_requests.dart';
 import '../../services/haptics.dart';
-import '../../services/local/local_metadata_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/playlist/playlist_import_service.dart';
 import '../../services/save_as.dart';
@@ -280,6 +280,7 @@ Future<void> runFavoritesBatchDownload({
 
 /// 导出列表：M3U8 / Molia 备份。
 Future<void> exportFavoritesPlaylist({
+  required WidgetRef ref,
   required BuildContext context,
   required AppLocalizations l10n,
   required PlaylistInfo playlist,
@@ -287,26 +288,26 @@ Future<void> exportFavoritesPlaylist({
   required FavoritesIoCommandsFactory ioCommands,
   required bool Function() isActive,
 }) async {
-  final sync = context.read<SyncProvider?>();
+  final SyncProvider? sync = ref.read(maybeSyncControllerProvider);
   final format = await showPlaylistExportSheet(
     context,
     moliaAvailable: sync != null,
   );
   if (!context.mounted || !isActive() || format == null) return;
-  final outcome = await ioCommands(sync: sync, saveAs: context.read<SaveAs?>())
-      .exportPlaylist(
-        playlist: playlist,
-        displayName: view.displayName,
-        tracks: view.tracks,
-        format: switch (format) {
-          PlaylistExportFormat.m3u8 => CollectionExportFormat.m3u8,
-          PlaylistExportFormat.molia => CollectionExportFormat.molia,
-        },
-        dialogTitle: switch (format) {
-          PlaylistExportFormat.m3u8 => l10n.playlistExportM3u8,
-          PlaylistExportFormat.molia => l10n.playlistExportMolia,
-        },
-      );
+  final SaveAs? saveAs = ref.read(saveAsProvider);
+  final outcome = await ioCommands(sync: sync, saveAs: saveAs).exportPlaylist(
+    playlist: playlist,
+    displayName: view.displayName,
+    tracks: view.tracks,
+    format: switch (format) {
+      PlaylistExportFormat.m3u8 => CollectionExportFormat.m3u8,
+      PlaylistExportFormat.molia => CollectionExportFormat.molia,
+    },
+    dialogTitle: switch (format) {
+      PlaylistExportFormat.m3u8 => l10n.playlistExportM3u8,
+      PlaylistExportFormat.molia => l10n.playlistExportMolia,
+    },
+  );
   if (!context.mounted || !isActive()) return;
   switch (outcome) {
     case CollectionExportSaved(
@@ -377,6 +378,7 @@ Future<void> changeFavoritesPlaylistCover({
 
 /// 曲库分组起播：队列组装 / 洗牌 / 触感 / 上下文名都在 TrackHandoff。
 Future<void> playFavoritesBrowseTracks({
+  required WidgetRef ref,
   required BuildContext context,
   required List<BrowseTrack> tracks,
   required String contextName,
@@ -385,7 +387,7 @@ Future<void> playFavoritesBrowseTracks({
   int startIndex = 0,
 }) async {
   if (tracks.isEmpty) return;
-  final library = context.read<LibraryProvider>();
+  final library = ref.read(libraryControllerProvider);
   final handoff = TrackHandoffCollectionHandoff(context, random: random);
   await handoff.play(
     [
@@ -419,11 +421,12 @@ Future<void> addFavoritesBrowseToLibrary({
 
 /// 曲库换源入口（与行动作的换源共用页面）。
 Future<void> swapFavoritesBrowseTrack({
+  required WidgetRef ref,
   required BuildContext context,
   required BrowseTrack track,
   required LyricsProvider lyrics,
 }) async {
-  final library = context.read<LibraryProvider>();
+  final library = ref.read(libraryControllerProvider);
   await showSourceSwapPage(
     context,
     seed: library.trackFromPlaylistTrack(track.toPlaylistTrack(addedAt: 0)),
@@ -435,6 +438,7 @@ Future<void> swapFavoritesBrowseTrack({
 /// 按行变体归一；页面只保留「哪些动作」的投影，具体流程都在这里。
 List<RowAction> buildFavoritesRowActions({
   required BuildContext context,
+  required WidgetRef ref,
   required AppLocalizations l10n,
   required CollectionSession session,
   required CollectionView view,
@@ -447,6 +451,7 @@ List<RowAction> buildFavoritesRowActions({
     specs: session.rowActionsFor(row, view),
     wiring: _favoritesActionWiring(
       context: context,
+      ref: ref,
       l10n: l10n,
       view: view,
       row: row,
@@ -459,12 +464,13 @@ List<RowAction> buildFavoritesRowActions({
   if (view.isSmartList) return primary;
   return mergeRowActions(
     primary,
-    trackCommonActions(context, _favoritesDomainTrack(context, row)),
+    trackCommonActions(context, _favoritesDomainTrack(ref, row)),
   );
 }
 
 CollectionRowActionWiring _favoritesActionWiring({
   required BuildContext context,
+  required WidgetRef ref,
   required AppLocalizations l10n,
   required CollectionView view,
   required CollectionRow row,
@@ -492,7 +498,7 @@ CollectionRowActionWiring _favoritesActionWiring({
         : () => showSourceSwapPage(
             context,
             seed: swap.track,
-            lyricsProvider: context.read<LyricsProvider>(),
+            lyricsProvider: ref.read(lyricsProvider.notifier),
             playlistId: swap.playlistId,
             historyKey: swap.historyKey,
           ),
@@ -507,7 +513,7 @@ CollectionRowActionWiring _favoritesActionWiring({
             l10n: l10n,
             song: localSong,
             actions: actions,
-            notification: context.read<NotificationService?>(),
+            notification: ref.read(notificationServiceProvider),
             isActive: isActive,
           ),
     onEditLocalTitle: localRecord == null
@@ -516,16 +522,16 @@ CollectionRowActionWiring _favoritesActionWiring({
             context: context,
             l10n: l10n,
             record: localRecord,
-            service: context.read<LocalMetadataService?>(),
-            notifications: context.read<NotificationService?>(),
+            service: ref.read(localMetadataServiceProvider),
+            notifications: ref.read(notificationServiceProvider),
             isActive: isActive,
           ),
     onLocateLocalFile: localRecord?.isMissing == true
         ? () => locateFavoritesLocalFile(
             l10n: l10n,
             record: localRecord!,
-            manager: context.read<DownloadManager>(),
-            notifications: context.read<NotificationService?>(),
+            manager: ref.read(downloadManagerControllerProvider),
+            notifications: ref.read(notificationServiceProvider),
             isActive: isActive,
           )
         : null,
@@ -534,8 +540,8 @@ CollectionRowActionWiring _favoritesActionWiring({
         : () => refreshFavoritesLocalMetadata(
             l10n: l10n,
             record: localRecord,
-            manager: context.read<DownloadManager?>(),
-            notifications: context.read<NotificationService?>(),
+            manager: ref.read(downloadManagerControllerProvider),
+            notifications: ref.read(notificationServiceProvider),
             isActive: isActive,
           ),
     isFavorite: commands.isFavorite,
@@ -545,8 +551,8 @@ CollectionRowActionWiring _favoritesActionWiring({
 }
 
 /// 合集行 → 领域曲目（公共动作的能力位 / 平台 id 需要领域形状）。
-Track _favoritesDomainTrack(BuildContext context, CollectionRow row) {
-  final library = context.read<LibraryProvider>();
+Track _favoritesDomainTrack(WidgetRef ref, CollectionRow row) {
+  final library = ref.read(libraryControllerProvider);
   return switch (row) {
     TrackCollectionRow(:final track) => library.trackFromPlaylistTrack(track),
     HistoryCollectionRow(:final entry) => library.trackFromHistoryEntry(entry),
@@ -558,14 +564,15 @@ Track _favoritesDomainTrack(BuildContext context, CollectionRow row) {
 
 /// 收藏页当前点击时的合集 I/O 命令工厂。
 CollectionIoCommands buildFavoritesIoCommands(
+  WidgetRef ref,
   BuildContext context, {
   DiscoverProvider? discover,
   DownloadRequests? requests,
   SyncProvider? sync,
   SaveAs? saveAs,
 }) {
-  final provider = context.read<LibraryProvider>();
-  final records = context.read<DownloadRecords?>();
+  final provider = ref.read(libraryControllerProvider);
+  final DownloadRecords? records = ref.read(downloadRecordsControllerProvider);
   const files = FilePickerCollectionPlaylistFiles();
   return CollectionIoCommands(
     filePicker: files,
@@ -573,7 +580,7 @@ CollectionIoCommands buildFavoritesIoCommands(
     importService: PlaylistImportService(
       localImporter: DownloadRecordsPlaylistLocalImporter(
         records,
-        context.read<DownloadManager?>(),
+        ref.read(downloadManagerControllerProvider),
       ),
       resolver: LibraryPlaylistKeyResolver(provider, records),
     ),
@@ -636,14 +643,17 @@ DownloadedTrack? findFavoritesLocalRecord(
 
 /// 曲库行「从文件刷新信息」：重读标签并提示结果。
 Future<void> refreshFavoritesBrowseLocal({
+  required WidgetRef ref,
   required BuildContext context,
   required AppLocalizations l10n,
   required DownloadedTrack? record,
   required bool Function() isActive,
 }) async {
   if (record == null) return;
-  final manager = context.read<DownloadManager?>();
-  final notifications = context.read<NotificationService?>();
+  final DownloadManager? manager = ref.read(downloadManagerControllerProvider);
+  final NotificationService? notifications = ref.read(
+    notificationServiceProvider,
+  );
   final updated = await manager?.refreshLocalMetadata(record);
   if (!context.mounted || !isActive()) return;
   notifications?.showSnackBar(

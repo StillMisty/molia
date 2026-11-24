@@ -9,17 +9,16 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/annual_report.dart';
 import '../../domain/models/source.dart' show SourceDescriptor;
 import '../../domain/ports/source_registry.dart';
 import '../../l10n/app_localizations.dart';
 import '../../providers/annual_report_provider.dart';
-import '../../providers/library_provider.dart';
-import '../../providers/playback_provider.dart';
+import '../../providers/app_providers.dart';
 import '../../services/notification_service.dart';
 import '../../theme/m3e_context.dart';
 import '../../widgets/empty_state.dart';
@@ -27,7 +26,7 @@ import '../../widgets/settings/settings_subpage.dart';
 import 'annual_report_poster.dart';
 import 'annual_report_sections.dart';
 
-class AnnualReportPage extends StatefulWidget {
+class AnnualReportPage extends ConsumerStatefulWidget {
   const AnnualReportPage({
     super.key,
     required this.years,
@@ -38,10 +37,10 @@ class AnnualReportPage extends StatefulWidget {
   final int featuredYear;
 
   @override
-  State<AnnualReportPage> createState() => _AnnualReportPageState();
+  ConsumerState<AnnualReportPage> createState() => _AnnualReportPageState();
 }
 
-class _AnnualReportPageState extends State<AnnualReportPage> {
+class _AnnualReportPageState extends ConsumerState<AnnualReportPage> {
   late final AnnualReportProvider _provider;
   bool _shareSheetOpen = false;
   bool _savingPlaylist = false;
@@ -49,15 +48,15 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
   @override
   void initState() {
     super.initState();
-    _provider = context.read<AnnualReportProvider>();
-    final registry = context.read<SourceRegistry?>();
+    _provider = ref.read(annualReportPageProvider.notifier);
+    final SourceRegistry? registry = ref.read(sourceRegistryProvider);
     final sourceNames = <String, String>{
       for (final descriptor
           in registry?.descriptors ?? const <SourceDescriptor>[])
         descriptor.key: descriptor.displayName,
     };
     // provider 可能在本帧才被懒创建：配置即通知，必须等首帧结束再写，
-    // 否则会在 ChangeNotifierProvider 挂载期间触发重建断言。
+    // 否则会在 provider 构建 / 通知期间触发「构建中修改状态」断言。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _provider.configure(
@@ -78,25 +77,26 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AnnualReportProvider>(
-      builder: (context, provider, _) {
+    return Consumer(
+      builder: (context, ref, _) {
+        ref.watch(annualReportPageProvider);
         final l10n = AppLocalizations.of(context)!;
         return SettingsSubPage.body(
           title: l10n.annualReportTitle,
           safeArea: true,
           actions: [
-            _yearPicker(l10n, provider),
-            if (provider.report?.hasData ?? false)
+            _yearPicker(l10n, _provider),
+            if (_provider.report?.hasData ?? false)
               M3EIconButton(
                 variant: M3EIconButtonVariant.standard,
                 icon: const Icon(Icons.ios_share_rounded),
                 semanticLabel: l10n.shareAction,
                 onPressed: _shareSheetOpen
                     ? null
-                    : () => unawaited(_openShareSheet(provider)),
+                    : () => unawaited(_openShareSheet(_provider)),
               ),
           ],
-          body: _body(context, l10n, provider),
+          body: _body(context, l10n, _provider),
         );
       },
     );
@@ -274,8 +274,8 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
   Future<void> _playTopTracks(AnnualReport report, int index) async {
     if (report.topTracks.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
-    final library = context.read<LibraryProvider>();
-    final playback = context.read<PlaybackProvider>();
+    final library = ref.read(libraryControllerProvider);
+    final playback = ref.read(playbackControllerProvider);
     final tracks = [
       for (final entry in report.topTracks)
         library.sourceTrackFromRaw(
@@ -299,10 +299,12 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
     if (report.topTracks.isEmpty || _savingPlaylist) return;
     setState(() => _savingPlaylist = true);
     final l10n = AppLocalizations.of(context)!;
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
     final name = l10n.annualReportPlaylistName(report.year);
     try {
-      final library = context.read<LibraryProvider>();
+      final library = ref.read(libraryControllerProvider);
       final result = await library.importTracksAsPlaylist(
         name: name,
         tracks: buildAnnualPlaylistTracks(

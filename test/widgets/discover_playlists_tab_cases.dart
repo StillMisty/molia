@@ -4,14 +4,14 @@ import 'package:material_ui/material_ui.dart';
 import 'package:molia/domain/models/discover.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/channel_selection.dart';
-import 'package:molia/providers/discover_provider.dart';
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/discover_playlists_tab.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/cover_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/fake_discover_api.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
@@ -27,7 +27,7 @@ void main() {
   late LibraryProvider library;
   late ChannelSelection selection;
   late FakeDiscoverSource source;
-  late DiscoverProvider discover;
+  late ProviderTestScope scope;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -47,16 +47,17 @@ void main() {
       defaultKey: () => 'wy',
       initialKey: 'wy',
     );
-    discover = DiscoverProvider(
-      playbackProvider: playback,
-      libraryProvider: library,
-      selection: selection,
-      sources: {'wy': source},
+    scope = ProviderTestScope(
+      overrides: [
+        discoverSourcesProvider.overrideWithValue({'wy': source}),
+      ],
     );
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryProvider>(library);
+    scope.put<ChannelSelection>(selection);
   });
 
   tearDown(() async {
-    discover.dispose();
     selection.dispose();
     library.dispose();
     playback.dispose();
@@ -64,12 +65,9 @@ void main() {
   });
 
   Widget host() {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider<DiscoverProvider>.value(value: discover),
-        coverStoreProvider(),
-      ],
-      child: M3EMaterialApp(
+    putCoverStore(scope);
+    return scope.wrap(
+      M3EMaterialApp(
         data: M3EThemeData.fromMaterial(ThemeData.light()),
         theme: ThemeData.light(),
         locale: const Locale('zh'),

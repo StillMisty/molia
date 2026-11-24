@@ -48,8 +48,8 @@ void main() {
       await viewModel.loadFirstPage();
 
       expect(viewModel.state.items.map((track) => track.id.uri), ['wy:1']);
-      expect(viewModel.album?.name, '专辑');
-      expect(viewModel.state.hasMore, isTrue);
+      expect(viewModel.state.album?.name, '专辑');
+      expect(viewModel.state.page.hasMore, isTrue);
       expect(repository.requestedPages, [1]);
     });
 
@@ -64,7 +64,7 @@ void main() {
         'wy:1',
         'wy:2',
       ]);
-      expect(viewModel.state.hasMore, isFalse);
+      expect(viewModel.state.page.hasMore, isFalse);
       expect(repository.requestedPages, [1, 2]);
     });
 
@@ -72,15 +72,34 @@ void main() {
       repository.next = (_) async =>
           throw const SourceFailure(kind: FailureKind.network, message: 'boom');
       await viewModel.loadFirstPage();
-      expect(viewModel.state.failed, isTrue);
-      expect(viewModel.album, isNull);
+      expect(viewModel.state.page.failed, isTrue);
+      expect(viewModel.state.album, isNull);
 
       repository.next = (_) async => albumOf('恢复', hasMore: false);
       await viewModel.retry();
 
-      expect(viewModel.state.failed, isFalse);
+      expect(viewModel.state.page.failed, isFalse);
       expect(viewModel.state.items, hasLength(1));
-      expect(viewModel.album?.name, '恢复');
+      expect(viewModel.state.album?.name, '恢复');
+    });
+
+    test('快照随分页状态更新并通知 changes', () async {
+      var notifications = 0;
+      viewModel.changes.addListener(() => notifications++);
+      repository.next = (_) async => albumOf('快照', hasMore: true);
+
+      await viewModel.loadFirstPage();
+
+      expect(notifications, greaterThan(0));
+      final snapshot = viewModel.state;
+      expect(snapshot.album?.name, '快照');
+      expect(snapshot.items.single.id.uri, 'wy:快照');
+      expect(identical(snapshot.items, snapshot.page.items), isTrue);
+      expect(
+        () => snapshot.items.add(snapshot.items.single),
+        throwsUnsupportedError,
+        reason: '分页结果用零拷贝只读视图',
+      );
     });
 
     test('过期响应丢弃：重试后先返回的旧页不覆盖新状态', () async {
@@ -101,7 +120,7 @@ void main() {
       stale.complete(albumOf('旧', hasMore: true, tracks: [trackOf('1')]));
       await firstLoad.timeout(const Duration(seconds: 1));
 
-      expect(viewModel.album?.name, '新');
+      expect(viewModel.state.album?.name, '新');
       expect(viewModel.state.items.map((track) => track.id.uri), ['wy:2']);
     });
   });
@@ -139,7 +158,7 @@ void main() {
       await viewModel.loadFirstPage();
 
       expect(viewModel.state.items.map((track) => track.id.uri), ['wy:1']);
-      expect(viewModel.artist?.name, '歌手');
+      expect(viewModel.state.artist?.name, '歌手');
       expect(repository.requestedPages, [1]);
     });
 
@@ -161,15 +180,29 @@ void main() {
       repository.next = (_) async =>
           throw const SourceFailure(kind: FailureKind.network, message: 'boom');
       await viewModel.loadFirstPage();
-      expect(viewModel.state.failed, isTrue);
-      expect(viewModel.artist, isNull);
+      expect(viewModel.state.page.failed, isTrue);
+      expect(viewModel.state.artist, isNull);
 
       repository.next = (_) async => artistOf('恢复', hasMore: false);
       await viewModel.retry();
 
-      expect(viewModel.state.failed, isFalse);
+      expect(viewModel.state.page.failed, isFalse);
       expect(viewModel.state.items, hasLength(1));
-      expect(viewModel.artist?.name, '恢复');
+      expect(viewModel.state.artist?.name, '恢复');
+    });
+
+    test('快照随分页状态更新并通知 changes', () async {
+      var notifications = 0;
+      viewModel.changes.addListener(() => notifications++);
+      repository.next = (_) async => artistOf('快照', hasMore: true);
+
+      await viewModel.loadFirstPage();
+
+      expect(notifications, greaterThan(0));
+      final snapshot = viewModel.state;
+      expect(snapshot.artist?.name, '快照');
+      expect(snapshot.items.single.id.uri, 'wy:快照');
+      expect(identical(snapshot.items, snapshot.page.items), isTrue);
     });
 
     test('过期响应丢弃：重试后先返回的旧页不覆盖新状态', () async {
@@ -190,7 +223,7 @@ void main() {
       stale.complete(artistOf('旧', hasMore: true, tracks: [trackOf('1')]));
       await firstLoad.timeout(const Duration(seconds: 1));
 
-      expect(viewModel.artist?.name, '新');
+      expect(viewModel.state.artist?.name, '新');
       expect(viewModel.state.items.map((track) => track.id.uri), ['wy:2']);
     });
   });

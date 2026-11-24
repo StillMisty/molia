@@ -83,8 +83,8 @@ void main() {
     final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
 
-    expect(provider.fadePreset, PlaybackFadePreset.ms200);
-    expect(provider.smartShuffleEnabled, isTrue);
+    expect(provider.state.fadePreset, PlaybackFadePreset.ms200);
+    expect(provider.state.smartShuffleEnabled, isTrue);
 
     await provider.preferencesReady;
     expect(backend.fadeDuration, const Duration(milliseconds: 200));
@@ -104,8 +104,8 @@ void main() {
 
     expect(backend.fadeDuration, const Duration(milliseconds: 150));
     expect(backend.smartShuffle, isFalse);
-    expect(provider.fadePreset, PlaybackFadePreset.ms150);
-    expect(provider.smartShuffleEnabled, isFalse);
+    expect(provider.state.fadePreset, PlaybackFadePreset.ms150);
+    expect(provider.state.smartShuffleEnabled, isFalse);
     expect(provider.snapshot, snapshotBefore, reason: '手感不是播放事件');
     expect(backend.volumes.length, volumeCallsBefore, reason: '淡变不改变用户音量');
 
@@ -128,8 +128,8 @@ void main() {
     addTearDown(second.dispose);
     await second.preferencesReady;
 
-    expect(second.fadePreset, PlaybackFadePreset.off);
-    expect(second.smartShuffleEnabled, isFalse);
+    expect(second.state.fadePreset, PlaybackFadePreset.off);
+    expect(second.state.smartShuffleEnabled, isFalse);
     expect(backend.fadeDuration, Duration.zero);
     expect(backend.smartShuffle, isFalse);
   });

@@ -18,14 +18,13 @@ import 'package:molia/pages/artist_page.dart';
 import 'package:molia/providers/channel_selection.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
-import 'package:molia/sources/source_manager.dart' hide SourceKind;
 import 'package:molia/widgets/channel_search_bar.dart';
 import 'package:molia/widgets/global_search_overlay.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/fake_sources_backend.dart';
 import '../support/fakes.dart';
-import '../support/settings_test_support.dart';
+import '../support/provider_test_scope.dart';
 
 /// 只实现搜索所需表面的假音源。
 class _FakeMusicSource implements MusicSource {
@@ -151,24 +150,6 @@ class _FakeArtistRepository implements ArtistRepository {
   }) async => const ArtistDetail(id: 'artist-1', name: '歌手一号');
 }
 
-class _FakeSources extends SourcesProvider {
-  _FakeSources() : super(SourceManager(settings: testSettingsRegistry()));
-
-  @override
-  bool get initialized => true;
-
-  @override
-  List<SourceDescriptor> get channels => const [
-    SourceDescriptor(
-      key: 'kw',
-      displayName: '酷我音乐',
-      kind: SourceKind.builtin,
-      discoverable: true,
-      capabilities: SourceCapabilities(search: true, artist: true),
-    ),
-  ];
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -199,21 +180,32 @@ void main() {
       sourceRegistry: registry,
     );
     addTearDown(search.dispose);
-    final sources = _FakeSources();
+    final sources = SourcesProvider(
+      FakeSourcesBackend(
+        channels: const [
+          SourceDescriptor(
+            key: 'kw',
+            displayName: '酷我音乐',
+            kind: SourceKind.builtin,
+            discoverable: true,
+            capabilities: SourceCapabilities(search: true, artist: true),
+          ),
+        ],
+      ),
+    );
     addTearDown(sources.dispose);
     final controller = GlobalSearchController();
     addTearDown(controller.dispose);
     var viewAllCalls = 0;
 
+    final scope = ProviderTestScope();
+    scope.put<SearchProvider>(search);
+    scope.put<SourcesProvider>(sources);
+    scope.put<ChannelSelection>(selection);
+    scope.put<ArtistRepository>(_FakeArtistRepository());
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<SearchProvider>.value(value: search),
-          ChangeNotifierProvider<SourcesProvider>.value(value: sources),
-          ChangeNotifierProvider<ChannelSelection>.value(value: selection),
-          Provider<ArtistRepository>.value(value: _FakeArtistRepository()),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),

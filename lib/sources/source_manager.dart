@@ -15,6 +15,7 @@ import 'lx/lx_engine_types.dart';
 import 'lx/lx_script_info.dart';
 import 'lx/lx_script_repository.dart';
 import 'lx/lx_script_update.dart';
+import 'source_manager_state.dart';
 import 'source_preferences.dart';
 import 'source_profiles.dart';
 import 'source_route_executor.dart';
@@ -26,6 +27,7 @@ import '../domain/models/comment.dart';
 import '../domain/models/source.dart' show SourceCapabilities, SourceDescriptor;
 import '../domain/models/source_script.dart' show SourceScriptUpdate;
 import '../domain/ports/music_source.dart' show PlayableStream;
+import '../utils/snapshot_source.dart';
 
 // UI（音源页）白名单仅允许直连 source_manager，这里把在线更新流程的
 // 返回/异常类型随管理器一起导出，避免扩大分层豁免。
@@ -35,6 +37,8 @@ export 'lx/lx_script_update.dart'
 // SourceKind 定义在 sources/source_profiles.dart（画像模块的唯一事实），
 // 这里 re-export 保持既有 import 路径与调用方不变。
 export 'source_profiles.dart' show SourceKind, SourceProfile, SourceProfiles;
+// 快照类型随管理器一起导出，保持既有 import 路径可用。
+export 'source_manager_state.dart';
 
 /// 音源管理器：
 /// - 管理已导入的 LX 音源脚本（导入 / 删除 / 激活）；
@@ -49,8 +53,11 @@ export 'source_profiles.dart' show SourceKind, SourceProfile, SourceProfiles;
 /// 本类只保留生命周期（引擎 / 脚本仓库 / 偏好 / any-listen 配置）与画像
 /// facade；搜索 / 取链 / 歌词 / 封面 / 评论 / 专辑 / 歌手 / 歌词搜索的实际
 /// 路线执行在 [SourceRouteExecutor]，公开签名与错误语义保持不变。
-class SourceManager extends ChangeNotifier {
+class SourceManager implements SnapshotSource<SourceManagerState> {
   final LxScriptRepository repository = LxScriptRepository();
+
+  /// 变更信号（替代 `ChangeNotifier.notifyListeners` 的订阅面）。
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 引擎自愈包装：超时/isolate 退出后自动按退避重启。
   /// 构造参数仅用于测试注入（默认创建真实 supervisor，行为不变）。
@@ -92,7 +99,8 @@ class SourceManager extends ChangeNotifier {
        // 字段按本类惯例私有。
        // ignore: prefer_initializing_formals
        _lazyActivationCooldown = lazyActivationCooldown {
-    _preferences = SourcePreferences(_settings)..addListener(notifyListeners);
+    _preferences = SourcePreferences(_settings)
+      ..changes.addListener(_onPreferencesChanged);
     _executor = SourceRouteExecutor(
       engine: _engine,
       anyListenSource: _anyListenSource,
@@ -156,6 +164,37 @@ class SourceManager extends ChangeNotifier {
 
   /// 当前音源是否可用（激活了脚本且引擎就绪）。
   bool get hasActiveSource => _engine.isRunning && _activeSources.isNotEmpty;
+
+  /// 不可变快照：UI / 日志经 [changes] 通知后重建。
+  @override
+  SourceManagerState get state {
+    final profiles = sourceProfiles;
+    return SourceManagerState(
+      initialized: _initialized,
+      isActivating: _activatingId != null,
+      activeError: _activeError,
+      activeScript: repository.activeScript,
+      activeSources: _activeSources,
+      scripts: repository.scripts,
+      engineReady: _engine.isRunning,
+      engineFailed: _engine.isFailed,
+      hasActiveSource: hasActiveSource,
+      preferredQuality: _preferences.preferredQuality,
+      lastUpdateAlert: _lastUpdateAlert,
+      sourceOrder: _preferences.sourceOrder,
+      disabledChannels: _preferences.disabledChannels,
+      channels: profiles.channels.toDescriptors(),
+      searchableSources: profiles.searchable.toDescriptors(),
+      anyListenConfig: _anyListenSource.config,
+      anyListenAvailable: _anyListenSource.isUsable,
+    );
+  }
+
+  /// 变更信号（音源页 / 播放门面 / 同步桥 / 注册表适配器共同订阅）。
+  @override
+  Listenable get changes => _changes;
+
+  void _onPreferencesChanged() => _changes.notify();
 
   /// 内置平台 HTTP 传输（组合根与其它栈共享同一实例；只读）。
   BuiltinTransport get builtinTransport => _builtinTransport;
@@ -222,7 +261,7 @@ class SourceManager extends ChangeNotifier {
       case LxEngineState.restarting:
         return;
     }
-    notifyListeners();
+    _changes.notify();
   }
 
   Future<void> init() async {
@@ -246,12 +285,12 @@ class SourceManager extends ChangeNotifier {
         _lastUpdateAlert = alert;
         // 运行期上报的更新地址记入当前激活脚本，供「立即更新」使用。
         unawaited(_recordUpdateUrl(alert));
-        notifyListeners();
+        _changes.notify();
       }),
     );
 
     _initialized = true;
-    notifyListeners();
+    _changes.notify();
 
     final activeId = repository.activeId;
     if (activeId != null) {
@@ -279,7 +318,7 @@ class SourceManager extends ChangeNotifier {
         await _engine.dispose();
         _activeSources = {};
       }
-      notifyListeners();
+      _changes.notify();
       return;
     }
     try {
@@ -331,14 +370,14 @@ class SourceManager extends ChangeNotifier {
   /// 只写本地，不发起网络请求；返回是否持久化成功。
   Future<bool> updateAnyListenConfig(AnyListenConfig config) async {
     final saved = await _anyListenSource.updateConfig(config);
-    notifyListeners();
+    _changes.notify();
     return saved;
   }
 
   /// 重新从 shared_preferences 加载 any-listen 配置（例如设置页直接写入后）。
   Future<void> reloadAnyListenConfig() async {
     await _anyListenSource.init();
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 导入脚本（不激活时可用于预览）。
@@ -352,7 +391,7 @@ class SourceManager extends ChangeNotifier {
     }
     await repository.add(info);
     onScriptWritten?.call(info.id);
-    notifyListeners();
+    _changes.notify();
     if (activate || repository.activeScript == null) {
       await this.activate(info.id);
     }
@@ -368,7 +407,7 @@ class SourceManager extends ChangeNotifier {
     _cancelActivationRetry();
     _activatingId = id;
     _activeError = null;
-    notifyListeners();
+    _changes.notify();
     try {
       final sources = await _engine.start(script);
       _activeSources = sources;
@@ -381,7 +420,7 @@ class SourceManager extends ChangeNotifier {
       rethrow;
     } finally {
       _activatingId = null;
-      notifyListeners();
+      _changes.notify();
     }
   }
 
@@ -396,7 +435,7 @@ class SourceManager extends ChangeNotifier {
     _activeError = null;
     _activationRetryAttempt = 0;
     await repository.setActive(null);
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 安排一次延迟激活重试（[_activationRetryDelays] 用尽后不再重试）。
@@ -476,7 +515,7 @@ class SourceManager extends ChangeNotifier {
     } else {
       _activeError = _engine.failureReason ?? '音源引擎仍未恢复，请稍后重试';
     }
-    notifyListeners();
+    _changes.notify();
     return ok;
   }
 
@@ -490,7 +529,7 @@ class SourceManager extends ChangeNotifier {
       await _engine.dispose();
       _activeSources = {};
     }
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 分页搜索；路由与失败语义见 [SourceRouteExecutor.searchWithMeta]。
@@ -590,7 +629,7 @@ class SourceManager extends ChangeNotifier {
     if (active == null || active.updateUrl == url) return;
     try {
       await repository.replace(active.id, active.copyWith(updateUrl: url));
-      notifyListeners();
+      _changes.notify();
     } catch (e) {
       debugPrint('[SourceManager] 记录更新地址失败: $e');
     }
@@ -686,7 +725,7 @@ class SourceManager extends ChangeNotifier {
     if (repository.activeId == id) {
       await activate(id);
     } else {
-      notifyListeners();
+      _changes.notify();
     }
     return replaced;
   }
@@ -696,20 +735,17 @@ class SourceManager extends ChangeNotifier {
 
   void clearUpdateAlert() {
     _lastUpdateAlert = null;
-    notifyListeners();
+    _changes.notify();
   }
 
-  @override
   void dispose() {
     _cancelActivationRetry();
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
-    _preferences.removeListener(notifyListeners);
-    _preferences.dispose();
+    _preferences.changes.removeListener(_onPreferencesChanged);
     _anyListenSource.dispose();
     _engine.onStateChanged = null;
     _engine.close();
-    super.dispose();
   }
 }

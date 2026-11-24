@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/domain/models/diagnostics.dart';
@@ -22,6 +21,7 @@ import 'package:molia/services/notification_service.dart';
 
 import '../support/fake_save_as.dart';
 import '../support/notification_recorder.dart';
+import '../support/provider_test_scope.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -139,15 +139,12 @@ Future<void> _pumpLogPage(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
+  final scope = ProviderTestScope();
+  scope.put<DiagnosticsProvider>(harness.provider);
+  scope.put<NotificationService>(harness.notifications);
   await tester.pumpWidget(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider<DiagnosticsProvider>.value(
-          value: harness.provider,
-        ),
-        Provider<NotificationService>.value(value: harness.notifications),
-      ],
-      child: M3EMaterialApp(
+    scope.wrap(
+      M3EMaterialApp(
         data: M3EThemeData.fromMaterial(ThemeData.light()),
         theme: ThemeData.light(),
         locale: const Locale('zh'),

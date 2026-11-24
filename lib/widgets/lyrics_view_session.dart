@@ -7,19 +7,21 @@
 /// 控制器与换源 / 选择页导航仍在 widget（宿主）一侧。
 ///
 /// 播放事实经 [LyricsViewHost] 索取：会话不 import `PlaybackProvider`，也不
-/// 依赖 Flutter 组件（只依赖 foundation 的 [ChangeNotifier]）。定时窗口同样
+/// 依赖 Flutter 组件（只依赖 foundation 与 `snapshot_source`）。定时窗口同样
 /// 由宿主注入（[LyricsViewScheduler]），测试手动推进，不真实等待 3 秒。
 ///
-/// 只在离散状态迁移（跟随 / 复制模式 / 操作栏 / 可滚性）时
-/// [LyricsViewSession.notifyListeners]；逐帧播放进度与 350ms 抑制窗口结束
+/// 只在离散状态迁移（跟随 / 复制模式 / 操作栏 / 可滚性）时发
+/// [LyricsViewSession.changes]；逐帧播放进度与 350ms 抑制窗口结束
 /// 不通知——抑制只影响下一次滚动通知是否被采纳，不改变任何像素。
 library;
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart'
+    show Listenable, VoidCallback, immutable;
 
 import '../domain/models/lyric_line.dart';
 import '../domain/models/play_mode.dart';
 import '../services/lyrics_display/lyric_timing_policy.dart';
+import '../utils/snapshot_source.dart';
 
 /// 会话的定时能力。
 ///
@@ -110,8 +112,71 @@ abstract interface class LyricsViewHost {
   LyricsViewScheduler get scheduler;
 }
 
+/// 歌词页视图会话对宿主暴露的不可变快照。
+///
+/// 字段沿用旧 [LyricsViewSession] 的公开 getter；依赖宿主测量结果的字段
+/// （可滚性、是否有词）在读取时按当前宿主事实求值，通知仍只在会话自己的
+/// 离散迁移时发出。
+@immutable
+class LyricsViewState {
+  const LyricsViewState({
+    required this.following,
+    required this.copyMode,
+    required this.manualQuickActionsVisible,
+    required this.scrollable,
+    required this.hasLines,
+    required this.isSynced,
+    required this.quickActionsEnabled,
+    required this.hasTrack,
+  });
+
+  /// 是否自动跟随当前行。
+  final bool following;
+
+  /// 是否处于复制模式。
+  final bool copyMode;
+
+  /// 操作栏是否处于手动可见窗口内。
+  final bool manualQuickActionsVisible;
+
+  /// 歌词内容是否可滚动（宿主测量结果）。
+  final bool scrollable;
+
+  /// 当前是否有歌词。
+  final bool hasLines;
+
+  /// 当前歌词是否有时间轴。
+  final bool isSynced;
+
+  /// 宿主是否允许展示快捷操作栏（播放页收起态才展开）。
+  final bool quickActionsEnabled;
+
+  /// 是否有当前曲目（无曲目时快捷操作栏隐藏）。
+  final bool hasTrack;
+
+  /// 是否只有在用户手动滚动后才需要展示操作栏：
+  /// 未同步歌词没有可跟随目标；同步但内容不可滚动时也只在手动滚动后出现。
+  bool get requiresManualQuickActions => hasLines && (!isSynced || !scrollable);
+
+  /// 快捷操作栏当前是否应展示（FAB 显隐与底栏锚点共用同一口径）。
+  bool get quickActionsBarVisible {
+    // 复制模式下必须保留出口（否则收起播放器后无法退出复制模式）。
+    if (!quickActionsEnabled && !copyMode) return false;
+    if (!hasTrack) return false;
+    if (copyMode || !hasLines) return true;
+    if (isSynced && scrollable) {
+      // 同步 + 可滚动：手动暂停跟随时才需要「居中当前行」。
+      return !following;
+    }
+    return requiresManualQuickActions && manualQuickActionsVisible;
+  }
+}
+
 /// 歌词页视图状态机。
-class LyricsViewSession extends ChangeNotifier {
+///
+/// 状态形态（ADR-0041「启动期状态对象：快照 + 控制器」）：可变字段只留在
+/// 内部，[state] 暴露不可变快照，[changes] 是唯一通知面。
+class LyricsViewSession implements SnapshotSource<LyricsViewState> {
   LyricsViewSession({
     required this.host,
     this.timing = const LyricsViewTiming(),
@@ -156,41 +221,22 @@ class LyricsViewSession extends ChangeNotifier {
   LyricsTimerHandle? _resumeTimer;
   LyricsTimerHandle? _quickActionsHideTimer;
 
-  /// 是否自动跟随当前行。
-  bool get following => _following;
+  final SnapshotSignal _changes = SnapshotSignal();
 
-  /// 是否处于复制模式。
-  bool get copyMode => _copyMode;
+  @override
+  LyricsViewState get state => LyricsViewState(
+    following: _following,
+    copyMode: _copyMode,
+    manualQuickActionsVisible: _manualQuickActionsVisible,
+    scrollable: _scrollable,
+    hasLines: host.lines.isNotEmpty,
+    isSynced: host.isSynced,
+    quickActionsEnabled: host.quickActionsEnabled,
+    hasTrack: host.hasTrack,
+  );
 
-  /// 操作栏是否处于手动可见窗口内。
-  bool get manualQuickActionsVisible => _manualQuickActionsVisible;
-
-  /// 歌词内容是否可滚动（宿主测量结果）。
-  bool get scrollable => _scrollable;
-
-  /// 当前是否有歌词。
-  bool get hasLines => host.lines.isNotEmpty;
-
-  /// 当前歌词是否有时间轴。
-  bool get isSynced => host.isSynced;
-
-  /// 是否只有在用户手动滚动后才需要展示操作栏：
-  /// 未同步歌词没有可跟随目标；同步但内容不可滚动时也只在手动滚动后出现。
-  bool get requiresManualQuickActions =>
-      hasLines && (!isSynced || !_scrollable);
-
-  /// 快捷操作栏当前是否应展示（FAB 显隐与底栏锚点共用同一口径）。
-  bool get quickActionsBarVisible {
-    // 复制模式下必须保留出口（否则收起播放器后无法退出复制模式）。
-    if (!host.quickActionsEnabled && !_copyMode) return false;
-    if (!host.hasTrack) return false;
-    if (_copyMode || !hasLines) return true;
-    if (isSynced && _scrollable) {
-      // 同步 + 可滚动：手动暂停跟随时才需要「居中当前行」。
-      return !_following;
-    }
-    return requiresManualQuickActions && _manualQuickActionsVisible;
-  }
+  @override
+  Listenable get changes => _changes;
 
   /// 歌词会话内容变化（换曲 / 换词 / 同曲补翻译）后的重置。
   ///
@@ -203,7 +249,7 @@ class LyricsViewSession extends ChangeNotifier {
     _pendingScrollIndex = null;
     _pendingScrollRetries = 0;
     _manualQuickActionsVisible = false;
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 页面重新可见：隐藏期间进度通道被放弃，行号可能已经过期，重置簿记让
@@ -218,8 +264,9 @@ class LyricsViewSession extends ChangeNotifier {
   /// 立刻收起手动操作栏（与显隐条件保持一致）。
   void setScrollable(bool canScroll) {
     if (_disposed) return;
-    final bool wasRequiresManual = requiresManualQuickActions;
-    final bool nextRequiresManual = hasLines && (!isSynced || !canScroll);
+    final bool wasRequiresManual = state.requiresManualQuickActions;
+    final bool nextRequiresManual =
+        host.lines.isNotEmpty && (!host.isSynced || !canScroll);
     if (_scrollable == canScroll && wasRequiresManual == nextRequiresManual) {
       return;
     }
@@ -228,7 +275,7 @@ class LyricsViewSession extends ChangeNotifier {
       _manualQuickActionsVisible = false;
       _cancelHideTimer();
     }
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 开启自动跟随；[suppression] 为忽略用户滚动通知的窗口。
@@ -239,12 +286,12 @@ class LyricsViewSession extends ChangeNotifier {
     final Duration window = suppression ?? timing.userScrollSuppression;
     // 无论走哪条分支，排队的「延迟恢复」都已不需要。
     _cancelResume();
-    if (!isSynced) {
+    if (!host.isSynced) {
       final bool changed = _following || _suppressUserScroll;
       _following = false;
       _suppressUserScroll = false;
       _cancelSuppressionTimer();
-      if (changed) notifyListeners();
+      if (changed) _changes.notify();
       return;
     }
     final bool changed = !_following;
@@ -257,7 +304,7 @@ class LyricsViewSession extends ChangeNotifier {
         _suppressUserScroll = false;
       });
     }
-    if (changed) notifyListeners();
+    if (changed) _changes.notify();
   }
 
   /// 取消排队的「手动滚动后恢复自动跟随」。
@@ -288,10 +335,10 @@ class LyricsViewSession extends ChangeNotifier {
       _following = false;
       _suppressUserScroll = false;
       _cancelSuppressionTimer();
-      notifyListeners();
+      _changes.notify();
     }
     _scheduleResume();
-    if (requiresManualQuickActions) _showManualQuickActions();
+    if (state.requiresManualQuickActions) _showManualQuickActions();
   }
 
   /// 拖拽 / 滚轮 / 惯性滑行（ScrollStart / ScrollUpdate / Overscroll）。
@@ -301,7 +348,7 @@ class LyricsViewSession extends ChangeNotifier {
   void onUserScrollActivity() {
     if (_disposed) return;
     _scheduleResume();
-    if (requiresManualQuickActions) _showManualQuickActions();
+    if (state.requiresManualQuickActions) _showManualQuickActions();
   }
 
   /// 非用户发起的滚动（自动跟随动画 / 用户通知的 idle 回调）。
@@ -325,7 +372,7 @@ class LyricsViewSession extends ChangeNotifier {
     if (_disposed) return _copyMode;
     if (_copyMode) {
       _copyMode = false;
-      _following = isSynced;
+      _following = host.isSynced;
       // 恢复跟随的滚动动画会发用户滚动通知，先压一个窗口。
       _suppressUserScroll = true;
       _cancelHideTimer();
@@ -344,7 +391,7 @@ class LyricsViewSession extends ChangeNotifier {
         );
       }
       _scheduleRevealCurrentLine();
-      notifyListeners();
+      _changes.notify();
       return false;
     }
 
@@ -356,7 +403,7 @@ class LyricsViewSession extends ChangeNotifier {
     _cancelHideTimer();
     _previousPlayMode = host.currentPlayMode;
     host.setPlayMode(PlayMode.singleRepeat);
-    notifyListeners();
+    _changes.notify();
     return true;
   }
 
@@ -386,7 +433,7 @@ class LyricsViewSession extends ChangeNotifier {
     _following = false;
     _suppressUserScroll = false;
     _cancelSuppressionTimer();
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 换源页返回新歌词后的跟随恢复。
@@ -398,7 +445,7 @@ class LyricsViewSession extends ChangeNotifier {
     _cancelHideTimer();
     _manualQuickActionsVisible = false;
     _previousLineIndex = -1;
-    if (restoreFollow && isSynced) {
+    if (restoreFollow && host.isSynced) {
       _following = true;
       _suppressUserScroll = true;
       _cancelSuppressionTimer();
@@ -417,7 +464,7 @@ class LyricsViewSession extends ChangeNotifier {
       _suppressUserScroll = false;
       _cancelSuppressionTimer();
     }
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 换源 / 选择页取消或未返回歌词：按打开前的状态恢复跟随。
@@ -437,7 +484,11 @@ class LyricsViewSession extends ChangeNotifier {
   ///
   /// 隐藏页 / 未跟随 / 无歌词 / 无当前行都不调度；帧末回调再做一次门控。
   void reportLineIndex(int index) {
-    if (_disposed || !host.active || !_following || !hasLines || index < 0) {
+    if (_disposed ||
+        !host.active ||
+        !_following ||
+        host.lines.isEmpty ||
+        index < 0) {
       return;
     }
     if (_previousLineIndex == index && _pendingScrollIndex == null) return;
@@ -451,7 +502,7 @@ class LyricsViewSession extends ChangeNotifier {
 
   /// 执行一次目标行滚动；目标未布局时粗定位并按帧重试（上限后放弃）。
   void _scrollToLine(int index) {
-    if (_disposed || !host.active || !_following || !isSynced) return;
+    if (_disposed || !host.active || !_following || !host.isSynced) return;
     if (!host.canScroll || index < 0 || index >= host.lines.length) return;
     if (host.scrollToLine(index)) {
       _pendingScrollIndex = null;
@@ -489,7 +540,7 @@ class LyricsViewSession extends ChangeNotifier {
   ///
   /// 复制模式刻意禁用自动滚动、无时间戳 / 空歌词没有可跟随目标：都不排恢复。
   void _scheduleResume() {
-    if (_copyMode || !isSynced || !hasLines) return;
+    if (_copyMode || !host.isSynced || host.lines.isEmpty) return;
     _cancelResume();
     _resumeTimer = host.scheduler.startTimer(timing.userScrollResume, () {
       _resumeTimer = null;
@@ -498,7 +549,13 @@ class LyricsViewSession extends ChangeNotifier {
   }
 
   void _resumeAfterUserScroll() {
-    if (_disposed || _copyMode || !isSynced || _following || !hasLines) return;
+    if (_disposed ||
+        _copyMode ||
+        !host.isSynced ||
+        _following ||
+        host.lines.isEmpty) {
+      return;
+    }
     enableFollow();
     if (!host.isPlaying) {
       // 暂停中：只恢复跟随状态，不把视图从用户停留处拽回；
@@ -509,26 +566,29 @@ class LyricsViewSession extends ChangeNotifier {
   }
 
   void _showManualQuickActions() {
-    if (_disposed || !requiresManualQuickActions || _copyMode || !hasLines) {
+    if (_disposed ||
+        !state.requiresManualQuickActions ||
+        _copyMode ||
+        host.lines.isEmpty) {
       return;
     }
     if (!_manualQuickActionsVisible) {
       _manualQuickActionsVisible = true;
-      notifyListeners();
+      _changes.notify();
     }
     _cancelHideTimer();
     _quickActionsHideTimer = host.scheduler.startTimer(
       timing.quickActionsHide,
       () {
         if (_disposed ||
-            !requiresManualQuickActions ||
+            !state.requiresManualQuickActions ||
             _copyMode ||
-            !hasLines) {
+            host.lines.isEmpty) {
           return;
         }
         if (!_manualQuickActionsVisible) return;
         _manualQuickActionsVisible = false;
-        notifyListeners();
+        _changes.notify();
       },
     );
   }
@@ -555,12 +615,10 @@ class LyricsViewSession extends ChangeNotifier {
     });
   }
 
-  @override
   void dispose() {
     _disposed = true;
     _cancelSuppressionTimer();
     _cancelResume();
     _cancelHideTimer();
-    super.dispose();
   }
 }

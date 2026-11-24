@@ -4,8 +4,10 @@ import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/domain/models/annual_report.dart';
 import 'package:molia/providers/annual_report_provider.dart';
+import 'package:molia/providers/app_providers.dart';
 
 import '../support/memory_database.dart';
+import '../support/provider_test_scope.dart';
 import '../support/sync_test_support.dart';
 
 void main() {
@@ -21,15 +23,19 @@ void main() {
       statisticsSync: testStatisticsSyncStore(() => db),
     );
     enabled = ValueNotifier<bool>(true);
-    provider = AnnualReportProvider(
-      repository: repository,
-      clock: () => DateTime(2026, 11, 14),
-      recordingEnabled: enabled,
+    final scope = ProviderTestScope(
+      overrides: [
+        annualReportClockProvider.overrideWithValue(
+          () => DateTime(2026, 11, 14),
+        ),
+        playStatisticsRepositoryProvider.overrideWithValue(repository),
+        annualReportRecordingEnabledProvider.overrideWithValue(enabled),
+      ],
     );
+    provider = scope.container.read(annualReportPageProvider.notifier);
   });
 
   tearDown(() async {
-    provider.dispose();
     enabled.dispose();
     await repository.dispose();
     await db.close();

@@ -16,7 +16,6 @@ import 'package:molia/pages/library.dart';
 import 'package:molia/pages/nowplaying.dart';
 import 'package:molia/services/back_claims.dart';
 import 'package:molia/services/onboarding_store.dart';
-import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/now_playing_controller.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/player_morph.dart';
@@ -105,14 +104,27 @@ void main() {
     return scope.visible;
   }
 
-  /// 点底栏 / 导航轨的播放目的地（唯一一颗 Molia 标志图标）。
+  /// 播放页目的地图标：未选中空心 / 选中实心的音符成对，按图标查找。
+  ///
+  /// 包内 `icon↔selectedIcon` 交叉淡化时两态可能同时在树里，`findsWidgets`
+  /// 后取 `.first` 即可。
+  Finder nowPlayingDestination([Finder? nav]) => find.descendant(
+    of:
+        nav ??
+        (find.byType(M3ENavigationBar).evaluate().isNotEmpty
+            ? find.byType(M3ENavigationBar)
+            : find.byType(M3ENavigationRail)),
+    matching: find.byWidgetPredicate(
+      (widget) =>
+          widget is Icon &&
+          (widget.icon == Icons.music_note_rounded ||
+              widget.icon == Icons.music_note_outlined),
+    ),
+  );
+
+  /// 点底栏 / 导航轨的播放目的地（两颗音符字形之一）。
   Future<void> openNowPlaying(WidgetTester tester, {int frames = 90}) async {
-    final nav = find.byType(M3ENavigationBar).evaluate().isNotEmpty
-        ? find.byType(M3ENavigationBar)
-        : find.byType(M3ENavigationRail);
-    await tester.tap(
-      find.descendant(of: nav, matching: find.byType(MoliaMark)),
-    );
+    await tester.tap(nowPlayingDestination().first);
     await pumpFrames(tester, frames: frames);
   }
 
@@ -378,9 +390,7 @@ void main() {
     expect(find.byType(FavoritesPage), findsOneWidget);
 
     final nav = find.byType(M3ENavigationBar);
-    await tester.tap(
-      find.descendant(of: nav, matching: find.byType(MoliaMark)),
-    );
+    await tester.tap(nowPlayingDestination(nav).first);
     // 单帧即终态：没有 Overlay 飞行副本，出场页已经透明。
     await tester.pump();
 
@@ -468,9 +478,7 @@ void main() {
     // 进入播放页（单栏默认正常布局）：正常播放页是播放 tab 的终态，返回即
     // 交给系统退出，而不是先收成歌词整页。
     final nav = find.byType(M3ENavigationBar);
-    await tester.tap(
-      find.descendant(of: nav, matching: find.byType(MoliaMark)),
-    );
+    await tester.tap(nowPlayingDestination(nav).first);
     await pumpFrames(tester, frames: 60);
     expect(find.byType(NowPlaying), findsOneWidget);
     expect(playerHeight(tester), greaterThan(0));
@@ -748,14 +756,10 @@ void main() {
     // 歌词整页时页面占用优先：壳层让位、播放器不恢复。
     pageClaimsBack = true;
     final nav = find.byType(M3ENavigationBar);
-    await tester.tap(
-      find.descendant(of: nav, matching: find.byType(MoliaMark)),
-    );
+    await tester.tap(nowPlayingDestination(nav).first);
     await pumpFrames(tester, frames: 60);
     // 进入播放页是正常布局：先收成歌词整页，壳层才会参与返回裁决。
-    await tester.tap(
-      find.descendant(of: nav, matching: find.byType(MoliaMark)),
-    );
+    await tester.tap(nowPlayingDestination(nav).first);
     await pumpFrames(tester, frames: 150);
     expect(playerHeight(tester), closeTo(0, 0.5));
     expect(shellCanPop(tester), isFalse);

@@ -1,4 +1,6 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/app/bootstrap/runtime_providers.dart';
 import 'package:molia/domain/models/app_release.dart';
 import 'package:molia/providers/collection_mode.dart';
 import 'package:molia/providers/theme_provider.dart';
@@ -8,6 +10,7 @@ import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/services/window/window_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 /// 迁移到 DeviceSettings 的零散设备本地 store：默认值 / 键名 / 重载行为。
@@ -44,15 +47,17 @@ void main() {
   });
 
   test('托盘：默认关闭即最小化，写入后新实例读回', () async {
-    final tray = TraySettings();
-    addTearDown(tray.dispose);
-    await tray.init();
+    final scope = ProviderTestScope();
+    final tray = scope.container.read(traySettingsProvider.notifier);
+    await tray.preferencesReady;
     expect(tray.closeToTray, isTrue);
 
     await tray.setCloseToTray(false);
-    final reloaded = TraySettings();
-    addTearDown(reloaded.dispose);
-    await reloaded.init();
+    final reloadedScope = ProviderTestScope();
+    final reloaded = reloadedScope.container.read(
+      traySettingsProvider.notifier,
+    );
+    await reloaded.preferencesReady;
     expect(reloaded.closeToTray, isFalse);
   });
 
@@ -124,41 +129,63 @@ void main() {
   });
 
   test('曲库浏览模式：默认专辑，未知值回退专辑', () async {
-    final store = CollectionModeStore();
-    addTearDown(store.dispose);
+    final scope = ProviderTestScope();
+    final store = scope.container.read(collectionModeProvider.notifier);
     await store.load();
-    expect(store.mode, CollectionMode.albums);
+    expect(
+      scope.container.read(collectionModeProvider).mode,
+      CollectionMode.albums,
+    );
 
     await store.setMode(CollectionMode.artists);
-    final reloaded = CollectionModeStore();
-    addTearDown(reloaded.dispose);
+    final reloadedScope = ProviderTestScope();
+    final reloaded = reloadedScope.container.read(
+      collectionModeProvider.notifier,
+    );
     await reloaded.load();
-    expect(reloaded.mode, CollectionMode.artists);
+    expect(
+      reloadedScope.container.read(collectionModeProvider).mode,
+      CollectionMode.artists,
+    );
 
     SharedPreferences.setMockInitialValues({
       CollectionModeStore.prefsKey: 'future-layout',
     });
-    final unknown = CollectionModeStore();
-    addTearDown(unknown.dispose);
+    final unknownScope = ProviderTestScope();
+    final unknown = unknownScope.container.read(
+      collectionModeProvider.notifier,
+    );
     await unknown.load();
-    expect(unknown.mode, CollectionMode.albums);
+    expect(
+      unknownScope.container.read(collectionModeProvider).mode,
+      CollectionMode.albums,
+    );
   });
 
   test('全局字体：写 app_font_family，null 回到系统默认并删除键', () async {
-    final registry = testSettingsRegistry();
-    final theme = ThemeProvider(settings: registry);
-    addTearDown(theme.dispose);
+    ProviderContainer createContainer() {
+      final container = ProviderContainer(
+        overrides: [
+          settingsRegistryProvider.overrideWithValue(testSettingsRegistry()),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    final container = createContainer();
+    final theme = container.read(themeProvider.notifier);
     await theme.preferencesReady;
-    expect(theme.appFontFamily, isNull);
+    expect(container.read(themeProvider).appFontFamily, isNull);
 
     await theme.setAppFontFamily('Inter');
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('app_font_family'), 'Inter');
 
-    final reloaded = ThemeProvider(settings: registry);
-    addTearDown(reloaded.dispose);
+    final reloadedContainer = createContainer();
+    final reloaded = reloadedContainer.read(themeProvider.notifier);
     await reloaded.preferencesReady;
-    expect(reloaded.appFontFamily, 'Inter');
+    expect(reloadedContainer.read(themeProvider).appFontFamily, 'Inter');
 
     await reloaded.setAppFontFamily(null);
     expect(prefs.containsKey('app_font_family'), isFalse);

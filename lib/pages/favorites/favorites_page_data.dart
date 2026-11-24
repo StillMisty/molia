@@ -4,17 +4,17 @@
 /// 当前帧读一次局部 UI 依赖（曲库索引 / 智能列表口径 / 下载能力）。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/library.dart';
-import '../../domain/models/library_browse.dart';
 import '../../domain/models/smart_lists.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
+import '../../providers/local_library_provider.dart';
 import '../../providers/collection_presenter.dart';
 import '../../providers/collection_session.dart';
 import '../../providers/favorites_view_model.dart';
-import '../../providers/local_library_provider.dart';
 import '../../services/download/download_requests.dart';
 import '../../utils/collection_row_query.dart';
 import 'favorites_header.dart';
@@ -88,6 +88,7 @@ class FavoritesSelectionCallbacks {
 /// 标题行 / 搜索行 / 调整顺序行需要的值 + 回调。
 FavoritesHeaderData buildFavoritesHeaderData({
   required BuildContext context,
+  required WidgetRef ref,
   required AppLocalizations l10n,
   required FavoritesViewModel viewModel,
   required TextEditingController searchController,
@@ -107,24 +108,28 @@ FavoritesHeaderData buildFavoritesHeaderData({
     }
   }
   final libraryIndex = view.isLibraryBrowse
-      ? context.select<LocalLibraryProvider?, LibraryBrowseIndex?>(
-          (provider) => provider?.snapshot?.index,
+      ? ref.watch(
+          localLibraryProvider.select((provider) => provider.snapshot?.index),
         )
       : null;
   final byTime = view.isSmartList
-      ? context.select<LocalLibraryProvider?, bool>(
-          (provider) =>
-              provider?.mostPlayedMetric == SmartListMetric.listeningTime,
+      ? ref.watch(
+          localLibraryProvider.select(
+            (provider) =>
+                provider.mostPlayedMetric == SmartListMetric.listeningTime,
+          ),
         )
       : false;
-  final requests = context.read<DownloadRequests?>();
+  final DownloadRequests? requests = ref.read(
+    downloadRequestsControllerProvider,
+  );
   return FavoritesHeaderData(
     l10n: l10n,
     view: view,
     currentPlaylist: currentPlaylist,
-    searching: viewModel.searching,
+    searching: viewModel.state.searching,
     reorderActive: reorderActive,
-    sort: viewModel.sort,
+    sort: viewModel.state.sort,
     libraryIndex: libraryIndex,
     mostPlayedByTime: byTime,
     canDownloadPlaylist: requests != null,
@@ -160,7 +165,7 @@ FavoritesSelectionHeaderData buildFavoritesSelectionHeaderData({
   return FavoritesSelectionHeaderData(
     l10n: l10n,
     view: view,
-    selectedCount: viewModel.selectedCount,
+    selectedCount: viewModel.state.selectedCount,
     allSelected: viewModel.allSelected(view) == true,
     allFavorited:
         selectedRows.isNotEmpty && callbacks.isAllFavorited(selectedRows),

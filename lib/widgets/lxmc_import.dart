@@ -1,13 +1,13 @@
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/library.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/library_provider.dart';
+import '../providers/app_providers.dart';
 import '../services/library/lxmc_import_service.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
@@ -21,7 +21,12 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 成功返回导入结果（收藏页据此切换到新列表）；取消 / 失败返回 null。
 Future<LxmcImportResult?> importLxmcFavoritesFlow(BuildContext context) async {
   final l10n = _l10n(context);
-  final provider = context.read<LibraryProvider>();
+  // 非 widget 辅助函数：调用处（收藏页 / 备份页）只传 context，因此从最近的
+  // ProviderScope 取容器读依赖，而不是引入 `Provider.of`。
+  final provider = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(libraryControllerProvider);
   // 数据层解码异常在服务内翻译成稳定原因，widget 不直接依赖 data 层。
   final service = LxmcImportService(importBytes: provider.importLxmcBytes);
   final messengerContext = context;

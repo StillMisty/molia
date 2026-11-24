@@ -1,9 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart'
-    show ValueListenable, VoidCallback, visibleForTesting;
+    show
+        Listenable,
+        ValueListenable,
+        VoidCallback,
+        immutable,
+        visibleForTesting;
 import 'package:logging/logging.dart';
-import 'package:material_ui/material_ui.dart';
 
 import '../app/perf/data_path_trace.dart';
 import '../data/catalog/catalog_service.dart';
@@ -30,6 +34,7 @@ import '../sources/source_manager.dart';
 import '../sources/source_track.dart';
 import '../utils/notify_throttler.dart';
 import 'sleep_timer.dart';
+import '../utils/snapshot_source.dart';
 
 final _logger = Logger('molia.playback_provider');
 
@@ -54,17 +59,94 @@ class _StateValueListenable<T> implements ValueListenable<T> {
       _source.removeListener(listener);
 }
 
+/// UI 经 `ref.watch(playbackProvider)` 读到的播放器快照。
+///
+/// 字段沿用旧 [PlaybackProvider] 的公开 getter；曲目 / 队列 / 下标 / 模式
+/// 留在 [PlaybackSnapshot] 里不透传摊平（它仍是 UI 唯一播放态类型）。
+/// **高频进度不在快照里**：进度走 `playbackControllerProvider.position`
+/// （`ValueListenable`），4Hz 变化不为它发快照。
+@immutable
+class PlaybackState {
+  const PlaybackState({
+    required this.snapshot,
+    required this.defaultPlayMode,
+    required this.volume,
+    required this.muted,
+    required this.fadePreset,
+    required this.smartShuffleEnabled,
+    required this.restoreSessionEnabled,
+    required this.hasRestoredSession,
+    required this.currentQualityType,
+    required this.isCurrentQualityOverridden,
+    required this.lastPlayedImageUrl,
+    required this.lastPlayedTrackName,
+    required this.lastPlayedArtists,
+  });
+
+  /// 协调者的展示投影（恢复态感知）：曲目 / 队列 / 播放中 / 模式 / 错误。
+  final PlaybackSnapshot snapshot;
+
+  /// 默认播放模式（设置页配置；无曲目时已应用到服务）。
+  final PlayMode defaultPlayMode;
+
+  /// 应用内音量（0..1，不含静音状态）；设备本地，不随账号同步。
+  final double volume;
+
+  /// 是否静音（不改 [volume] 的值）。
+  final bool muted;
+
+  /// 淡入淡出档位（设备本地）。
+  final PlaybackFadePreset fadePreset;
+
+  /// 随机播放是否少放最近听过的歌（设备本地）。
+  final bool smartShuffleEnabled;
+
+  /// 启动时是否恢复上次播放。
+  final bool restoreSessionEnabled;
+
+  /// 是否有可恢复的上次播放会话（无真实曲目时才生效）。
+  final bool hasRestoredSession;
+
+  /// 当前曲目本次播放选用的音质（LX 标识：`flac` / `320k`…）。
+  final String currentQualityType;
+
+  /// 本次播放音质是否由用户手动选择（偏离偏好 × 省流上限的派生值）。
+  final bool isCurrentQualityOverridden;
+
+  /// 最后播放曲目信息（离线空态展示）。
+  final String? lastPlayedImageUrl;
+  final String? lastPlayedTrackName;
+  final String? lastPlayedArtists;
+
+  bool get isPlaying => snapshot.isPlaying;
+
+  bool get isLoading => snapshot.isLoading;
+
+  bool get hasTrack => snapshot.current != null;
+
+  PlayMode get currentMode => snapshot.mode;
+
+  /// 当前曲目的领域 id（sourceKey + 平台 id），收藏 / 资料库 UI 使用。
+  TrackId? get currentTrackId => snapshot.current?.id;
+}
+
 /// UI 播放状态唯一入口：读 [PlaybackSessionCoordinator] 的展示投影、命令转给协调者。
 ///
 /// 对外只暴露领域 [PlaybackSnapshot]（协调者 [PlaybackSessionCoordinator.displaySnapshot]：
 /// 真实播放来自 facade，冷启动恢复态由协调者构造覆盖快照）与高频 position 通道。
 /// 所有播放均走本地音源。
 ///
+/// 对外形态是「不可变快照 + 控制器」（ADR-0041「启动期状态对象」）：
+/// - [state] 是 UI 读的 [PlaybackState]，经 `playbackProvider` 镜像；
+/// - [changes] 是只负责通知的 `SnapshotSignal`；
+/// - 命令方法留在本类，UI 经 `playbackControllerProvider` 调用；
+/// - 进度 / 定时关闭仍是独立 `ValueListenable` 通道，不进快照。
+///
 /// 职责边界（docs/architecture.md §1）：
 /// - 错误提示走注入的 [UiMessenger]（不依赖 `main.dart`）；
 /// - UI 状态读协调者展示投影；定时关闭 / 失败恢复订阅 live 投影；
 /// - 应用内音量 / 静音是设备本地状态：不进 [PlaybackSnapshot]（快照 `==`
-///   契约与低频语义不能动、音量也不是播放事件），变化直接 `notifyListeners`
+///   契约与低频语义不能动、音量也不是播放事件），变化直接通知
 ///   且不新增节流类别；
 /// - 只保留命令 / 队列 / 模式与快照投影：命令一律转给
 ///   [PlaybackSessionCoordinator]（恢复态与 live 的交接、恢复态快照构造与会话
@@ -77,11 +159,14 @@ class _StateValueListenable<T> implements ValueListenable<T> {
 /// `_facade.playTracks`（新播放上下文，由快照监听落盘）、追加队列
 /// `_facade.enqueueTracks`（只编辑队列）、`_facade.setVolume`（设备本地状态）、
 /// 无曲目时应用默认模式（只影响下一次播放的初始模式）。
-class PlaybackProvider extends ChangeNotifier {
+class PlaybackProvider implements SnapshotSource<PlaybackState> {
   final PlaybackFacade _facade;
   final SettingsAccess _settings;
   final UiMessenger _messenger;
   final SourceManager? _sourceManager;
+
+  /// 变更信号（替代 `ChangeNotifier.notifyListeners` 的订阅面）。
+  final SnapshotSignal _changes = SnapshotSignal();
 
   String _channelDisplayName(String key) {
     final manager = _sourceManager;
@@ -190,7 +275,7 @@ class PlaybackProvider extends ChangeNotifier {
       channelDisplayName: _channelDisplayName,
     );
     _notifyThrottler = CategorizedNotifyThrottler(
-      notifyCallback: super.notifyListeners,
+      notifyCallback: _changes.notify,
       categoryIntervals: {
         'track': const Duration(milliseconds: 16), // 曲目切换几乎立即响应
         'queue': const Duration(milliseconds: 300), // 队列更新节流 300ms
@@ -238,8 +323,8 @@ class PlaybackProvider extends ChangeNotifier {
     // position 走独立 ValueListenable 通道（_positionChannel）：进度 tick
     // 只重建进度条/歌词行，不触发整 Provider 重建（会话只在动作时落盘，
     // 进度 tick 不写库）。
-    _sourceManager?.addListener(_onSourceManagerChanged);
-    _dataSaver?.addListener(_onDataSaverChanged);
+    _sourceManager?.changes.addListener(_onSourceManagerChanged);
+    _dataSaver?.changes.addListener(_onDataSaverChanged);
     _preferencesReady = () async {
       if (_observer != null) await _observer.ready;
       await _loadDefaultPlayMode();
@@ -253,14 +338,34 @@ class PlaybackProvider extends ChangeNotifier {
     _handlePlaybackSnapshot();
   }
 
-  /// UI 状态唯一入口：读协调者的展示投影（恢复态感知）。
+  /// 不可变快照：UI 经 `playbackProvider` 读它（每次 [changes] 通知后重建）。
+  @override
+  PlaybackState get state => PlaybackState(
+    snapshot: _session.displaySnapshot,
+    defaultPlayMode: _defaultPlayMode,
+    volume: _volume,
+    muted: _muted,
+    fadePreset: _fadePreset,
+    smartShuffleEnabled: _smartShuffleEnabled,
+    restoreSessionEnabled: _session.restoreSessionEnabled,
+    hasRestoredSession: _session.hasRestoredSession,
+    currentQualityType: _currentQualityType(),
+    isCurrentQualityOverridden: _isCurrentQualityOverridden(),
+    lastPlayedImageUrl: _observer?.lastPlayedImageUrl,
+    lastPlayedTrackName: _observer?.lastPlayedTrackName,
+    lastPlayedArtists: _observer?.lastPlayedArtists,
+  );
+
+  /// 变更信号（`Listenable` 订阅面：统计 / 滚动 / 托盘 / 歌词显示沿用）。
+  @override
+  Listenable get changes => _changes;
+
+  /// 领域播放快照：协调者的展示投影（恢复态感知）。
   ///
   /// 真实播放接管后它原样透传 facade；恢复态返回协调者构造的恢复快照。
-  /// provider 不再自己判断该用哪一份。
+  /// provider 不再自己判断该用哪一份。服务（统计 / 同步 / 桌面小组件）直接
+  /// 读它；UI 读 [state]（同一投影 + 设备本地偏好）。
   PlaybackSnapshot get snapshot => _session.displaySnapshot;
-
-  /// 是否有可恢复的上次播放会话（无真实曲目时才生效）。
-  bool get hasRestoredSession => _session.hasRestoredSession;
 
   /// 恢复态本轮洗牌是否加权（测试 / 诊断用）。
   @visibleForTesting
@@ -274,13 +379,6 @@ class PlaybackProvider extends ChangeNotifier {
   /// 真实播放与快照同源；恢复态为上次保存的进度。
   Duration get currentPosition => _session.position.value;
 
-  PlayMode get currentMode => snapshot.mode;
-
-  /// 当前曲目的领域 id（sourceKey + 平台 id），收藏/资料库 UI 使用。
-  TrackId? get currentTrackId => snapshot.current?.id;
-
-  bool get hasTrack => snapshot.current != null;
-
   /// 当前曲目本次播放选用的音质（LX 音质标识：`flac`/`320k`…，见
   /// `kLxQualityOrder`）。
   ///
@@ -288,7 +386,8 @@ class PlaybackProvider extends ChangeNotifier {
   /// 按偏好音质 × 曲目可用音质（纯函数 [pickQualityFor]）派生。无曲目或
   /// 曲目无可用音质时回退到偏好音质。省流生效（移动数据 + 已开启）时按
   /// 上限取值。UI 展示统一用 `sourceQualityLabel(l10n, type)` 本地化。
-  String get currentQualityType {
+  String _currentQualityType() {
+    final snapshot = _session.displaySnapshot;
     final actual = snapshot.quality;
     if (actual != null && actual.isNotEmpty) return actual;
     final preferred = _sourceManager?.preferredQuality ?? '320k';
@@ -306,7 +405,8 @@ class PlaybackProvider extends ChangeNotifier {
   ///
   /// 手动选择允许越过省流上限，此时歌曲信息页不再显示「省流模式」后缀，
   /// 避免出现「在省流模式下播放无损」的矛盾提示。
-  bool get isCurrentQualityOverridden {
+  bool _isCurrentQualityOverridden() {
+    final snapshot = _session.displaySnapshot;
     final track = snapshot.current;
     final actual = snapshot.quality;
     if (track == null || actual == null || actual.isEmpty) return false;
@@ -318,20 +418,8 @@ class PlaybackProvider extends ChangeNotifier {
     return actual != pickQualityFor(supported, effective);
   }
 
-  bool get isPlaying => snapshot.isPlaying;
-
-  bool get isLoading => snapshot.isLoading;
-
-  /// 默认播放模式（设置页配置；启动无曲目时已应用到服务）。
-  PlayMode get defaultPlayMode => _defaultPlayMode;
-
   /// 持久化偏好加载完成（测试等待启动态就绪）。
   Future<void> get preferencesReady => _preferencesReady;
-
-  /// 最后播放曲目信息（离线空态展示）：状态与持久化在 [PlaybackObserver]。
-  String? get lastPlayedImageUrl => _observer?.lastPlayedImageUrl;
-  String? get lastPlayedTrackName => _observer?.lastPlayedTrackName;
-  String? get lastPlayedArtists => _observer?.lastPlayedArtists;
 
   /// 播放音源曲目（本地播放）。[tracks] 为上下文队列。
   Future<void> playSourceTracks(
@@ -491,7 +579,7 @@ class PlaybackProvider extends ChangeNotifier {
     final track = snapshot.current;
     if (track == null || quality.isEmpty) return;
     if (!track.qualities.any((option) => option.type == quality)) return;
-    if (hasRestoredSession) return;
+    if (_session.hasRestoredSession) return;
     // 音质切换是一次新的取链操作：允许失败恢复重新走一次同源重试。
     _errorRecovery.resetRetryGuard();
     try {
@@ -530,12 +618,6 @@ class PlaybackProvider extends ChangeNotifier {
     _applyOutcome(await _session.togglePlayMode());
   }
 
-  /// 应用内音量（0..1，不含静音；静音由 [muted] 表达）。
-  double get volume => _volume;
-
-  /// 是否静音（不改 [volume] 的值）。
-  bool get muted => _muted;
-
   /// 设置音量：clamp → 应用到播放后端（静音时只更新值、不解除静音）→
   /// 通知；落盘防抖（滑杆拖动每帧都会走到这里）。
   Future<void> setVolume(double value) async {
@@ -544,7 +626,7 @@ class PlaybackProvider extends ChangeNotifier {
     _volume = clamped;
     await _applyEffectiveVolume();
     _scheduleVolumePersist();
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 静音开关：切换后把有效音量（静音 = 0）应用到后端 → 持久化 → 通知。
@@ -556,7 +638,7 @@ class PlaybackProvider extends ChangeNotifier {
     _volumePersistTimer?.cancel();
     _volumePersistTimer = null;
     await _persistVolumeState();
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 相对调整音量（键盘快捷键 ±5%）：clamp 0..1；**静音态下调整即解除静音**
@@ -572,7 +654,7 @@ class PlaybackProvider extends ChangeNotifier {
     _muted = false;
     await _applyEffectiveVolume();
     _scheduleVolumePersist();
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 音量落盘防抖：拖动滑杆时每帧都调 [setVolume]，逐帧写 SharedPreferences
@@ -592,18 +674,12 @@ class PlaybackProvider extends ChangeNotifier {
 
   Timer? _volumePersistTimer;
 
-  /// 淡入淡出档位（设备本地；UI 只读这里）。
-  PlaybackFadePreset get fadePreset => _fadePreset;
-
-  /// 随机播放是否少放最近听过的歌（设备本地）。
-  bool get smartShuffleEnabled => _smartShuffleEnabled;
-
   /// 设置淡入淡出档位：立即推给播放服务并落盘（离散选择，不需要防抖）。
   Future<void> setFadePreset(PlaybackFadePreset preset) async {
     if (_fadePreset == preset) return;
     _fadePreset = preset;
     _facade.setFadeDuration(preset.duration);
-    notifyListeners();
+    _changes.notify();
     await _feelStore.save(
       fade: _fadePreset,
       smartShuffle: _smartShuffleEnabled,
@@ -615,7 +691,7 @@ class PlaybackProvider extends ChangeNotifier {
     if (_smartShuffleEnabled == enabled) return;
     _smartShuffleEnabled = enabled;
     _facade.setSmartShuffle(enabled);
-    notifyListeners();
+    _changes.notify();
     await _feelStore.save(fade: _fadePreset, smartShuffle: enabled);
   }
 
@@ -713,9 +789,6 @@ class PlaybackProvider extends ChangeNotifier {
     _muted = saved.muted;
     await _applyEffectiveVolume();
   }
-
-  /// 启动时恢复上次播放（设置页开关，默认开）。
-  bool get restoreSessionEnabled => _session.restoreSessionEnabled;
 
   /// 设置「启动时恢复上次播放」。
   ///
@@ -818,12 +891,11 @@ class PlaybackProvider extends ChangeNotifier {
     _notifyThrottler.notify(category);
   }
 
-  @override
   void dispose() {
     _session.liveSnapshotChannel.removeListener(_onLiveSnapshot);
     sleepTimer.dispose();
-    _sourceManager?.removeListener(_onSourceManagerChanged);
-    _dataSaver?.removeListener(_onDataSaverChanged);
+    _sourceManager?.changes.removeListener(_onSourceManagerChanged);
+    _dataSaver?.changes.removeListener(_onDataSaverChanged);
     // 在途的音量防抖写入：取消定时器并尽力落一次，避免丢最后一次拖动值。
     if (_volumePersistTimer != null) {
       _volumePersistTimer!.cancel();
@@ -837,6 +909,5 @@ class PlaybackProvider extends ChangeNotifier {
     // 注意：facade / backend / LocalPlaybackService 由组合根创建并注入
     // （系统媒体会话复用同一实例），此处不能 dispose，只解除监听。
     _notifyThrottler.dispose();
-    super.dispose();
   }
 }

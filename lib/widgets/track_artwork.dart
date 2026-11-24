@@ -13,20 +13,24 @@
 /// `CoverViewer`（`contain`），不要在这里改成 contain 来兼顾两种语义。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
+import '../providers/app_providers.dart';
 import '../services/artwork/artwork_cache.dart';
 import '../services/covers/cover_resolution.dart';
 import '../services/covers/custom_cover_store.dart';
 import 'app_network_image.dart';
 
-/// 当前 Provider 树里的封面存储（组合根注入的唯一实例）。
+/// 当前容器里的封面存储（组合根注入的唯一实例）。
 ///
-/// 没有 Provider 视为组合根接线错误：`read` 直接抛错。
+/// 没有容器视为组合根接线错误：`read` 直接抛错。
 CustomCoverStore coverStoreOf(BuildContext context) =>
-    context.read<CustomCoverStore>();
+    ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(customCoverStoreProvider);
 
 /// 当前 Provider 树里的封面解析器（解析器由存储持有，规则只一份）。
 CoverResolver coverResolverOf(BuildContext context) =>
@@ -36,7 +40,7 @@ CoverResolver coverResolverOf(BuildContext context) =>
 ///
 /// 给「图片之外还有状态文案」的宿主使用（歌曲信息页 / 设置默认封面行 /
 /// 封面弹层），这样这些页面也不需要手写 `revision.addListener`。
-class CoverChangeBuilder extends StatefulWidget {
+class CoverChangeBuilder extends ConsumerStatefulWidget {
   const CoverChangeBuilder({
     super.key,
     required this.builder,
@@ -49,10 +53,10 @@ class CoverChangeBuilder extends StatefulWidget {
   final bool listen;
 
   @override
-  State<CoverChangeBuilder> createState() => _CoverChangeBuilderState();
+  ConsumerState<CoverChangeBuilder> createState() => _CoverChangeBuilderState();
 }
 
-class _CoverChangeBuilderState extends State<CoverChangeBuilder> {
+class _CoverChangeBuilderState extends ConsumerState<CoverChangeBuilder> {
   CoverResolver? _covers;
   void Function()? _removeListener;
 
@@ -105,7 +109,7 @@ class _CoverChangeBuilderState extends State<CoverChangeBuilder> {
 /// [track] 优先；没有领域曲目时用 [coverKey]（列表行的自定义封面查询键）
 /// 或 [trackId] + [originalUrl]。默认封面只作为主图缺失 / 加载失败的回退，
 /// 主图始终是真实封面（保证「远端封面坏了」看起来不是「有封面」）。
-class TrackArtwork extends StatelessWidget {
+class TrackArtwork extends ConsumerWidget {
   const TrackArtwork({
     super.key,
     this.track,
@@ -193,7 +197,7 @@ class TrackArtwork extends StatelessWidget {
       listenForChanges && (showDefaultCover || _hasQueryKey);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return CoverChangeBuilder(
       listen: _needsRevision,
       builder: (context, covers) {

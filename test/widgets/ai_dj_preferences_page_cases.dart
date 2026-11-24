@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/domain/models/ai_dj.dart';
@@ -17,6 +16,7 @@ import '../support/ai_dj_test_support.dart';
 import '../support/fake_ai_generator.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 void main() {
@@ -61,10 +61,10 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final scope = ProviderTestScope()..put<AiDjProvider>(provider);
     await tester.pumpWidget(
-      ChangeNotifierProvider<AiDjProvider>.value(
-        value: provider,
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -108,7 +108,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      provider.preferences.sections.contains(AiUpstreamSection.summary),
+      provider.state.preferences.sections.contains(AiUpstreamSection.summary),
       isFalse,
     );
     expect(find.text('已发送 7 项'), findsOneWidget);

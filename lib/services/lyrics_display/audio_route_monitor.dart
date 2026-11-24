@@ -2,13 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../utils/snapshot_source.dart';
 import 'lyrics_channel.dart';
 
 /// A2DP（蓝牙音频）连接状态：蓝牙歌词的门控信号。
 ///
 /// 探测函数与变化流可注入（单测不触平台通道）；非 Android 平台恒为 false；
 /// 检测失败按「未连接」处理，仅影响蓝牙 output 的生效率。
-class AudioRouteMonitor extends ChangeNotifier {
+///
+/// 快照是单个布尔值（[state]），订阅面是 [changes]；不再继承 `ChangeNotifier`。
+class AudioRouteMonitor implements SnapshotSource<bool> {
   AudioRouteMonitor({
     LyricsChannel? channel,
     Future<bool> Function()? probe,
@@ -20,11 +23,16 @@ class AudioRouteMonitor extends ChangeNotifier {
   final LyricsChannel? _channelOverride;
   final Future<bool> Function()? _probeOverride;
   final Stream<bool>? _changesOverride;
+  final SnapshotSignal _signal = SnapshotSignal();
 
   StreamSubscription<bool>? _subscription;
   bool _connected = false;
 
-  bool get connected => _connected;
+  @override
+  bool get state => _connected;
+
+  @override
+  Listenable get changes => _signal;
 
   Future<void> init() async {
     try {
@@ -53,12 +61,10 @@ class AudioRouteMonitor extends ChangeNotifier {
   void _set(bool value) {
     if (value == _connected) return;
     _connected = value;
-    notifyListeners();
+    _signal.notify();
   }
 
-  @override
   void dispose() {
     _subscription?.cancel();
-    super.dispose();
   }
 }

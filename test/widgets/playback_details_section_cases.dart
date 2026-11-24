@@ -6,10 +6,11 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/settings/playback_details_section.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
+
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 void main() {
@@ -17,6 +18,7 @@ void main() {
 
   late PlaybackProvider playback;
   late NavProvider nav;
+  late ProviderTestScope scope;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -26,23 +28,20 @@ void main() {
       facade: FakePlaybackFacade(),
     );
     await playback.preferencesReady;
-    nav = NavProvider(settings: registry);
+    scope = ProviderTestScope(registry: registry);
+    nav = scope.container.read(navProvider.notifier);
     await nav.preferencesReady;
+    scope.put<PlaybackProvider>(playback);
   });
 
   tearDown(() {
-    nav.dispose();
     playback.dispose();
   });
 
   Future<void> pumpSection(WidgetTester tester) async {
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<NavProvider>.value(value: nav),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -64,11 +63,11 @@ void main() {
     // 宽屏四段放得下：仍是分段（窄屏才会降级为下拉，见下一条用例）。
     await tester.tap(find.text('0.15 秒'));
     await tester.pumpAndSettle();
-    expect(playback.fadePreset, PlaybackFadePreset.ms150);
+    expect(playback.state.fadePreset, PlaybackFadePreset.ms150);
 
     await tester.tap(find.byKey(const Key('settingsSmartShuffleSwitch')));
     await tester.pumpAndSettle();
-    expect(playback.smartShuffleEnabled, isFalse);
+    expect(playback.state.smartShuffleEnabled, isFalse);
 
     await tester.tap(
       find.byKey(const Key('settingsReturnToPlayerLyricsSwitch')),

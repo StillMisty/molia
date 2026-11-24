@@ -143,7 +143,7 @@ final class UnavailableSourceRoute extends SourceRoute {
 
 /// 按画像 + 脚本声明回答路由问题。
 ///
-/// 每次读取都是当前快照（输入已在各自的 ChangeNotifier 里维护），刻意不
+/// 每次读取都是当前快照（输入已在各自的快照对象里维护），刻意不
 /// 缓存：避免「路由缓存了、画像变了」的第二份失效逻辑。
 class SourceRouting {
   const SourceRouting({required this.profiles});

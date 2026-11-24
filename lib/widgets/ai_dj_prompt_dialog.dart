@@ -6,35 +6,32 @@ library;
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
+import '../providers/app_providers.dart';
 import '../theme/m3e_context.dart';
 import 'ai_dj_shared.dart';
 
 /// 打开「发送给 AI 的内容」弹窗。
-Future<void> showAiDjPromptDialog(BuildContext context, AiDjProvider provider) {
-  return M3EDialog.show<void>(
-    context,
-    dialog: _AiDjPromptDialog(provider: provider),
-  );
+Future<void> showAiDjPromptDialog(BuildContext context) {
+  return M3EDialog.show<void>(context, dialog: const _AiDjPromptDialog());
 }
 
 enum _PromptTab { preview, lastSent, lastRaw }
 
-class _AiDjPromptDialog extends StatefulWidget {
-  const _AiDjPromptDialog({required this.provider});
-
-  final AiDjProvider provider;
+class _AiDjPromptDialog extends ConsumerStatefulWidget {
+  const _AiDjPromptDialog();
 
   @override
-  State<_AiDjPromptDialog> createState() => _AiDjPromptDialogState();
+  ConsumerState<_AiDjPromptDialog> createState() => _AiDjPromptDialogState();
 }
 
-class _AiDjPromptDialogState extends State<_AiDjPromptDialog> {
+class _AiDjPromptDialogState extends ConsumerState<_AiDjPromptDialog> {
   _PromptTab _tab = _PromptTab.preview;
   AiPrompt? _preview;
   bool _loading = true;
@@ -46,7 +43,7 @@ class _AiDjPromptDialogState extends State<_AiDjPromptDialog> {
   }
 
   Future<void> _loadPreview() async {
-    final prompt = await widget.provider.previewPrompt();
+    final prompt = await ref.read(aiDjControllerProvider).previewPrompt();
     if (!mounted) return;
     setState(() {
       _preview = prompt;
@@ -57,7 +54,8 @@ class _AiDjPromptDialogState extends State<_AiDjPromptDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final preferences = widget.provider.preferences;
+    final state = ref.watch(aiDjProvider);
+    final preferences = state.preferences;
     final sections = [
       for (final section in AiUpstreamSection.values)
         if (preferences.sections.contains(section))
@@ -108,9 +106,9 @@ class _AiDjPromptDialogState extends State<_AiDjPromptDialog> {
               height: bodyHeight,
               child: SingleChildScrollView(
                 child: switch (_tab) {
-                  _PromptTab.preview => _buildPreview(l10n),
-                  _PromptTab.lastSent => _buildLastSent(l10n),
-                  _PromptTab.lastRaw => _buildLastRaw(l10n),
+                  _PromptTab.preview => _buildPreview(l10n, state),
+                  _PromptTab.lastSent => _buildLastSent(l10n, state),
+                  _PromptTab.lastRaw => _buildLastRaw(l10n, state),
                 },
               ),
             ),
@@ -127,7 +125,7 @@ class _AiDjPromptDialogState extends State<_AiDjPromptDialog> {
     );
   }
 
-  Widget _buildPreview(AppLocalizations l10n) {
+  Widget _buildPreview(AppLocalizations l10n, AiDjState state) {
     if (_loading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
@@ -137,9 +135,7 @@ class _AiDjPromptDialogState extends State<_AiDjPromptDialog> {
     final prompt = _preview;
     if (prompt == null) {
       return Text(
-        widget.provider.hasConfig
-            ? l10n.aiDjPromptUnavailable
-            : l10n.aiDjNotConfigured,
+        state.hasConfig ? l10n.aiDjPromptUnavailable : l10n.aiDjNotConfigured,
       );
     }
     return Column(
@@ -152,8 +148,8 @@ class _AiDjPromptDialogState extends State<_AiDjPromptDialog> {
     );
   }
 
-  Widget _buildLastSent(AppLocalizations l10n) {
-    final prompt = widget.provider.lastSentPrompt;
+  Widget _buildLastSent(AppLocalizations l10n, AiDjState state) {
+    final prompt = state.lastSentPrompt;
     if (prompt == null) return Text(l10n.aiDjNoLastPrompt);
     return _promptBlock(
       l10n,
@@ -163,8 +159,8 @@ class _AiDjPromptDialogState extends State<_AiDjPromptDialog> {
     );
   }
 
-  Widget _buildLastRaw(AppLocalizations l10n) {
-    final raw = widget.provider.lastRawResponse;
+  Widget _buildLastRaw(AppLocalizations l10n, AiDjState state) {
+    final raw = state.lastRawResponse;
     if (raw == null || raw.trim().isEmpty) {
       return Text(l10n.aiDjNoLastResponse);
     }

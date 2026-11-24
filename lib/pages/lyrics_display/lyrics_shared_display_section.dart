@@ -1,9 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../services/lyrics_display/lyrics_display_settings.dart';
 import '../../widgets/settings/settings_tiles.dart';
 
@@ -12,16 +13,20 @@ import '../../widgets/settings/settings_tiles.dart';
 /// 这些策略由 `LyricsDisplayProvider` 在 Dart 侧统一应用，改一次对桌面
 /// 悬浮窗、通知栏·锁屏与蓝牙全部生效。只在「歌词与输出」页出现一份，
 /// 桌面歌词页不再重复铺同一组行。
-class LyricsSharedDisplaySection extends StatelessWidget {
+class LyricsSharedDisplaySection extends ConsumerWidget {
   const LyricsSharedDisplaySection({super.key, this.title});
 
   /// 分组标题；缺省不显示（由页面标题承担语义时）。
   final String? title;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final settings = context.watch<LyricsDisplaySettings>();
+    final settings = ref.watch(lyricsDisplaySettingsProvider);
+    final controller = ref.read(lyricsDisplaySettingsControllerProvider);
+    // 滑杆松手立即落盘；控制器未接线（独立预览）时保持无操作。
+    Future<void> flushSettings() =>
+        controller?.flushPersistence() ?? Future<void>.value();
     return SettingsSectionCard(
       title: title,
       children: [
@@ -30,14 +35,14 @@ class LyricsSharedDisplaySection extends StatelessWidget {
           title: l10n.lyricsSharedTranslationSwitch,
           subtitle: l10n.lyricsDisplayTranslationSubtitle,
           value: settings.translationEnabled,
-          onChanged: settings.setTranslationEnabled,
+          onChanged: (value) => controller?.setTranslationEnabled(value),
         ),
         SettingsSwitchTile(
           icon: Icons.record_voice_over_rounded,
           title: l10n.lyricsSharedRomaSwitch,
           subtitle: l10n.lyricsDisplayRomaSubtitle,
           value: settings.romaEnabled,
-          onChanged: settings.setRomaEnabled,
+          onChanged: (value) => controller?.setRomaEnabled(value),
         ),
         SettingsSliderRow(
           icon: Icons.sync_alt_rounded,
@@ -48,9 +53,11 @@ class LyricsSharedDisplaySection extends StatelessWidget {
           max: 500,
           divisions: 20,
           // 滑杆步进 50ms：够用且不与歌词时间戳的精度纠缠。
-          onChanged: (value) =>
-              settings.setOffsetMs((value / 50).round() * 50, persist: false),
-          onChangeEnd: (_) => unawaited(settings.flushPersistence()),
+          onChanged: (value) => controller?.setOffsetMs(
+            (value / 50).round() * 50,
+            persist: false,
+          ),
+          onChangeEnd: (_) => unawaited(flushSettings()),
         ),
         SettingsChoiceRow<UnsyncedBehavior>(
           icon: Icons.help_outline_rounded,
@@ -61,7 +68,7 @@ class LyricsSharedDisplaySection extends StatelessWidget {
             (UnsyncedBehavior.hide, l10n.lyricsDisplayUnsyncedHide),
             (UnsyncedBehavior.firstLine, l10n.lyricsDisplayUnsyncedFirstLine),
           ],
-          onChanged: settings.setUnsyncedBehavior,
+          onChanged: (value) => controller?.setUnsyncedBehavior(value),
         ),
       ],
     );

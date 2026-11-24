@@ -1,11 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/bili_account.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../services/bili_account_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/card_list_surface.dart';
@@ -21,14 +22,14 @@ AppLocalizations _l10n(BuildContext context) =>
 ///
 /// 只服务 B 站字幕歌词：登录后的 Cookie 只在字幕与账号资料请求里使用；
 /// 播放、搜索、评论和字幕 CDN 继续匿名（见 ADR-0016）。
-class BiliAccountPage extends StatefulWidget {
+class BiliAccountPage extends ConsumerStatefulWidget {
   const BiliAccountPage({super.key});
 
   @override
-  State<BiliAccountPage> createState() => _BiliAccountPageState();
+  ConsumerState<BiliAccountPage> createState() => _BiliAccountPageState();
 }
 
-class _BiliAccountPageState extends State<BiliAccountPage>
+class _BiliAccountPageState extends ConsumerState<BiliAccountPage>
     with WidgetsBindingObserver {
   late final BiliAccountService _service;
   Timer? _pollTimer;
@@ -42,7 +43,7 @@ class _BiliAccountPageState extends State<BiliAccountPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _service = context.read<BiliAccountService>();
+    _service = ref.read(biliAccountControllerProvider)!;
     unawaited(_initialize());
   }
 
@@ -74,8 +75,10 @@ class _BiliAccountPageState extends State<BiliAccountPage>
     final l10n = _l10n(context);
     return SettingsSubPage.body(
       title: l10n.biliAccountTitle,
-      body: Consumer<BiliAccountService>(
-        builder: (context, service, _) {
+      body: Consumer(
+        builder: (context, ref, _) {
+          final service = ref.watch(biliAccountProvider);
+          if (service == null) return const SizedBox.shrink();
           if (service.status == BiliAccountStatus.unknown) {
             return const Center(child: M3ELoadingIndicator());
           }
@@ -95,7 +98,7 @@ class _BiliAccountPageState extends State<BiliAccountPage>
   List<Widget> _buildLoggedIn(
     BuildContext context,
     AppLocalizations l10n,
-    BiliAccountService service,
+    BiliAccountState service,
   ) {
     final name = service.account?.userName;
     return [
@@ -135,7 +138,7 @@ class _BiliAccountPageState extends State<BiliAccountPage>
   List<Widget> _buildLoggedOut(
     BuildContext context,
     AppLocalizations l10n,
-    BiliAccountService service,
+    BiliAccountState service,
   ) {
     return [
       SettingsSectionCard(

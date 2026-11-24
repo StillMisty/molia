@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../domain/models/download.dart';
 import '../../domain/models/track.dart';
+import '../../providers/snapshot_source.dart';
 import 'download_queue.dart';
 
 /// 重定位结果（UI 只按这些分支提示）。
@@ -27,11 +28,55 @@ enum LocalRelocateResult {
   fileMissing,
 }
 
+/// 管理面对 UI 暴露的不可变快照：能力位 / 就绪态 + 按状态分组的任务结构。
+///
+/// 任务进度属于 [DownloadTask.progressListenable]，不会让本快照跟着 tick。
+@immutable
+class DownloadManagerState {
+  /// 任务分组在构造时冻结：实现可以每次现建列表，消费方不得改写快照。
+  DownloadManagerState({
+    required this.supported,
+    required this.publisherSupported,
+    required this.notificationsSupported,
+    required this.initialized,
+    required DownloadTaskGroups taskGroups,
+  }) : taskGroups = (
+         running: List<DownloadTask>.unmodifiable(taskGroups.running),
+         queued: List<DownloadTask>.unmodifiable(taskGroups.queued),
+         failed: List<DownloadTask>.unmodifiable(taskGroups.failed),
+       );
+
+  /// 下载目录是否可用。
+  final bool supported;
+
+  /// 是否支持发布公共 Downloads 副本（仅 Android）。
+  final bool publisherSupported;
+
+  /// 是否支持系统下载通知（仅 Android）。
+  final bool notificationsSupported;
+
+  /// 下载记录是否已加载。
+  final bool initialized;
+
+  /// 按状态分组的音频任务（运行 / 等待 / 失败）。
+  final DownloadTaskGroups taskGroups;
+
+  /// 从实现（`DownloadService`）取当前能力位与任务结构。
+  factory DownloadManagerState.of(DownloadManager manager) =>
+      DownloadManagerState(
+        supported: manager.supported,
+        publisherSupported: manager.publisherSupported,
+        notificationsSupported: manager.notificationsSupported,
+        initialized: manager.initialized,
+        taskGroups: manager.taskGroups,
+      );
+}
+
 /// 下载命令面（由 `DownloadService` 实现）。
 ///
-/// 继承 [ChangeNotifier] 只为让能力位 / 就绪状态可被页面监听；下载进度属于
-/// 任务自身（[DownloadTask]），任务结构变化走 [taskChanges]。
-abstract class DownloadManager extends ChangeNotifier {
+/// 快照只承载能力位 / 就绪状态与任务结构；下载进度属于任务自身
+/// （[DownloadTask]），命令调用方直接持有实现实例。
+abstract class DownloadManager implements SnapshotSource<DownloadManagerState> {
   /// 下载目录是否可用（无文件系统 / 目录解析失败时为 false）。
   bool get supported;
 
@@ -49,9 +94,6 @@ abstract class DownloadManager extends ChangeNotifier {
 
   /// 加载已有下载记录并探测存储可用性（幂等）。
   Future<void> init();
-
-  /// 任务结构变化（增删 / 状态切换）。
-  Listenable get taskChanges;
 
   /// 按状态分组的音频任务（运行 / 等待 / 失败）。
   DownloadTaskGroups get taskGroups;

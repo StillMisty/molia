@@ -82,11 +82,11 @@ extension _NowPlayingGestures on _NowPlayingState {
     // 展开请求与 tab 请求共用一次通知：只有 tab 版本前进才重放 tab，否则
     // 收起播放器会把上一次请求的页再切一遍。
     final bool hasTabRequest =
-        controller.tabRequestVersion != _handledTabRequest;
+        controller.state.tabRequestVersion != _handledTabRequest;
     if (!hasTabRequest) return;
-    _handledTabRequest = controller.tabRequestVersion;
+    _handledTabRequest = controller.state.tabRequestVersion;
 
-    final int? requested = controller.requestedTab;
+    final int? requested = controller.state.requestedTab;
     if (requested == null) return;
     controller.activeTab.value = requested;
 

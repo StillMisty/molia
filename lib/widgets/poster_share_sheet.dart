@@ -8,12 +8,13 @@ library;
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../services/notification_service.dart';
 import '../services/poster/poster_share_file.dart';
 import '../services/save_as.dart';
@@ -41,9 +42,10 @@ Future<void> showPosterShareSheet(
   String? copyText,
   PosterFileShare? shareFile,
 }) {
-  // 弹层挂在根 Navigator 上，拿不到页面里的 Provider；依赖必须在打开前取好。
-  final saveAs = context.read<SaveAs?>();
-  final notifications = context.read<NotificationService?>();
+  // 弹层挂在根 Navigator 上；依赖在打开前取好，避免弹层内再解析组合根。
+  final container = ProviderScope.containerOf(context, listen: false);
+  final saveAs = container.read(maybeSaveAsProvider);
+  final notifications = container.read(maybeNotificationServiceProvider);
   return ResponsiveNavigation.showSimpleModal<void>(
     context: context,
     title: title,
@@ -62,7 +64,7 @@ Future<void> showPosterShareSheet(
 }
 
 /// 统一分享弹层正文。页面通常经 [showPosterShareSheet] 打开，测试可直接挂载。
-class PosterShareSheet extends StatefulWidget {
+class PosterShareSheet extends ConsumerStatefulWidget {
   const PosterShareSheet({
     super.key,
     required this.renderPoster,
@@ -97,10 +99,10 @@ class PosterShareSheet extends StatefulWidget {
   final NotificationService? notifications;
 
   @override
-  State<PosterShareSheet> createState() => _PosterShareSheetState();
+  ConsumerState<PosterShareSheet> createState() => _PosterShareSheetState();
 }
 
-class _PosterShareSheetState extends State<PosterShareSheet> {
+class _PosterShareSheetState extends ConsumerState<PosterShareSheet> {
   Uint8List? _bytes;
   bool _generating = true;
   bool _failed = false;
@@ -138,7 +140,7 @@ class _PosterShareSheetState extends State<PosterShareSheet> {
   }
 
   NotificationService? get _notifications =>
-      widget.notifications ?? context.read<NotificationService?>();
+      widget.notifications ?? ref.read(maybeNotificationServiceProvider);
 
   void _message(String text) {
     final service = _notifications;
@@ -184,7 +186,7 @@ class _PosterShareSheetState extends State<PosterShareSheet> {
     final bytes = _bytes;
     if (bytes == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
-    final saveAs = widget.saveAs ?? context.read<SaveAs?>();
+    final saveAs = widget.saveAs ?? ref.read(maybeSaveAsProvider);
     if (saveAs == null) {
       _error(l10n.shareSaveFailed);
       return;

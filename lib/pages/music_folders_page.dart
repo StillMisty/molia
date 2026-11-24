@@ -4,12 +4,14 @@ import 'package:flutter/foundation.dart';
 
 import 'package:android_file_picker/android_file_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../services/local/local_library_service.dart';
+import '../services/local/music_folder_scanner.dart';
 import '../services/local/music_folders.dart';
 import '../services/notification_service.dart';
 import '../widgets/empty_state.dart';
@@ -19,13 +21,19 @@ import '../widgets/settings/settings_tiles.dart';
 /// 音乐文件夹：添加 / 移除 / 手动扫描 / 进度与摘要（设备本地配置）。
 ///
 /// 入口在「数据与存储 › 下载设置」；iOS 不展示（没有目录访问）。
-class MusicFoldersPage extends StatelessWidget {
+class MusicFoldersPage extends ConsumerWidget {
   const MusicFoldersPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final service = context.watch<LocalLibraryService?>();
+    final LocalLibraryServiceState? service = ref.watch(
+      localLibraryServiceProvider,
+    );
+    final LocalLibraryService? controller = ref.read(
+      localLibraryServiceControllerProvider,
+    );
+    final folders = service?.folders ?? const <MusicFolder>[];
     return SettingsSubPage(
       title: l10n.musicFoldersTitle,
       children: [
@@ -37,30 +45,35 @@ class MusicFoldersPage extends StatelessWidget {
               icon: Icons.create_new_folder_rounded,
               title: l10n.musicFoldersAdd,
               subtitle: l10n.musicFoldersSubtitle,
-              onTap: service == null
+              onTap: controller == null
                   ? null
-                  : () => _addFolder(context, l10n, service),
+                  : () => _addFolder(ref, l10n, controller),
             ),
-            for (final folder
-                in service?.folders.folders ?? const <MusicFolder>[])
-              _FolderRow(folder: folder, service: service!),
-            if (service != null && service.scanning)
-              SettingsInfoTile(
-                icon: Icons.hourglass_top_rounded,
-                title: l10n.musicFoldersScanning(
-                  service.progress == null ? 0 : service.progress!.processed,
+            if (service != null && controller != null)
+              for (final folder in folders)
+                _FolderRow(
+                  folder: folder,
+                  state: service,
+                  controller: controller,
                 ),
-                subtitle: '',
-                trailing: M3EButton.text(
-                  onPressed: service.cancelScan,
-                  child: Text(l10n.musicFoldersCancelScan),
+            if (service != null && controller != null && service.scanning)
+              ValueListenableBuilder<ScanProgress?>(
+                valueListenable: controller.progressListenable,
+                builder: (context, progress, _) => SettingsInfoTile(
+                  icon: Icons.hourglass_top_rounded,
+                  title: l10n.musicFoldersScanning(progress?.processed ?? 0),
+                  subtitle: '',
+                  trailing: M3EButton.text(
+                    onPressed: controller.cancelScan,
+                    child: Text(l10n.musicFoldersCancelScan),
+                  ),
                 ),
               ),
             if (defaultTargetPlatform == TargetPlatform.android)
               SettingsSectionHint(text: l10n.musicFoldersAndroidNote),
           ],
         ),
-        if (service != null && service.folders.folders.isEmpty)
+        if (folders.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: kSettingsSectionSpacing),
             child: EmptyState(
@@ -74,11 +87,13 @@ class MusicFoldersPage extends StatelessWidget {
   }
 
   Future<void> _addFolder(
-    BuildContext context,
+    WidgetRef ref,
     AppLocalizations l10n,
     LocalLibraryService service,
   ) async {
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
     Uri? picked;
     try {
       picked = await FilePicker.pickDirectory(
@@ -117,54 +132,64 @@ class MusicFoldersPage extends StatelessWidget {
 }
 
 class _FolderRow extends StatelessWidget {
-  const _FolderRow({required this.folder, required this.service});
+  const _FolderRow({
+    required this.folder,
+    required this.state,
+    required this.controller,
+  });
 
   final MusicFolder folder;
-  final LocalLibraryService service;
+  final LocalLibraryServiceState state;
+  final LocalLibraryService controller;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final scanning = service.scanning && service.scanningFolderId == folder.id;
-    return SettingsInfoTile(
-      icon: Icons.folder_rounded,
-      title: folder.title.isEmpty ? l10n.musicFoldersTitle : folder.title,
-      subtitle: scanning
-          ? l10n.musicFoldersScanning(service.progress?.processed ?? 0)
-          : _summaryText(l10n, folder.lastScan),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          M3EIconButton(
-            variant: M3EIconButtonVariant.standard,
-            icon: Icon(scanning ? Icons.stop_rounded : Icons.refresh_rounded),
-            semanticLabel: scanning
-                ? l10n.musicFoldersCancelScan
-                : l10n.musicFoldersRescan,
-            onPressed: scanning
-                ? service.cancelScan
-                : () => unawaited(service.scanFolder(folder.id)),
-          ),
-          M3EMenu.entries(
-            position: M3EMenuAnchorPosition.bottomEnd,
-            anchorBuilder: (context, open) => M3EIconButton(
+    final scanning = state.scanning && state.scanningFolderId == folder.id;
+    return ValueListenableBuilder<ScanProgress?>(
+      valueListenable: controller.progressListenable,
+      builder: (context, progress, _) => SettingsInfoTile(
+        icon: Icons.folder_rounded,
+        title: folder.title.isEmpty ? l10n.musicFoldersTitle : folder.title,
+        subtitle: scanning
+            ? l10n.musicFoldersScanning(progress?.processed ?? 0)
+            : _summaryText(l10n, folder.lastScan),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            M3EIconButton(
               variant: M3EIconButtonVariant.standard,
-              icon: const Icon(Icons.more_vert_rounded),
-              semanticLabel: l10n.musicFoldersRemove,
-              onPressed: open,
+              icon: Icon(scanning ? Icons.stop_rounded : Icons.refresh_rounded),
+              semanticLabel: scanning
+                  ? l10n.musicFoldersCancelScan
+                  : l10n.musicFoldersRescan,
+              onPressed: scanning
+                  ? controller.cancelScan
+                  : () => unawaited(controller.scanFolder(folder.id)),
             ),
-            onSelected: (value) {
-              if (value == 'remove') unawaited(service.removeFolder(folder.id));
-            },
-            entries: [
-              M3EMenuEntry(
-                label: l10n.musicFoldersRemove,
-                value: 'remove',
-                isDestructive: true,
+            M3EMenu.entries(
+              position: M3EMenuAnchorPosition.bottomEnd,
+              anchorBuilder: (context, open) => M3EIconButton(
+                variant: M3EIconButtonVariant.standard,
+                icon: const Icon(Icons.more_vert_rounded),
+                semanticLabel: l10n.musicFoldersRemove,
+                onPressed: open,
               ),
-            ],
-          ),
-        ],
+              onSelected: (value) {
+                if (value == 'remove') {
+                  unawaited(controller.removeFolder(folder.id));
+                }
+              },
+              entries: [
+                M3EMenuEntry(
+                  label: l10n.musicFoldersRemove,
+                  value: 'remove',
+                  isDestructive: true,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

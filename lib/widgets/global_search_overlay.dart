@@ -40,17 +40,16 @@ import 'dart:math' as math;
 
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../pages/artist_page.dart';
-import '../providers/channel_selection.dart';
+import '../providers/app_providers.dart';
 import '../providers/discover_provider.dart';
 import '../providers/search_assist_controller.dart';
 import '../providers/search_provider.dart';
-import '../providers/sources_provider.dart';
 import '../services/escape_claims.dart';
 import '../services/key_claims.dart';
 import '../theme/m3e_context.dart';
@@ -93,7 +92,7 @@ typedef _ArtistRequest = ({
 
 /// 壳层搜索遮罩宿主：静止位置占位盒 + 自建搜索视图（打开入口见
 /// [GlobalSearchController.focus]）。
-class GlobalSearchOverlay extends StatefulWidget {
+class GlobalSearchOverlay extends ConsumerStatefulWidget {
   const GlobalSearchOverlay({
     super.key,
     required this.onViewAllResults,
@@ -124,7 +123,8 @@ class GlobalSearchOverlay extends StatefulWidget {
   static const Key transitionKey = Key('globalSearchTransition');
 
   @override
-  State<GlobalSearchOverlay> createState() => _GlobalSearchOverlayState();
+  ConsumerState<GlobalSearchOverlay> createState() =>
+      _GlobalSearchOverlayState();
 }
 
 /// 全局搜索的壳层入口：把「打开 / 聚焦搜索」暴露给壳层（Ctrl+F / 品牌区）。
@@ -152,7 +152,7 @@ class GlobalSearchController {
   void dispose() => open.dispose();
 }
 
-class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
+class _GlobalSearchOverlayState extends ConsumerState<GlobalSearchOverlay> {
   /// 遮罩打开：Esc / 导航键占用登记的判据。
   bool _isOpen = false;
 
@@ -313,7 +313,7 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
 ///
 /// 直接订阅 [SearchProvider]：关键词、类型分段、结果与失败态都在 provider 里，
 /// 面板只做展示；输入框在首帧 autofocus（打开即能打字，不丢按键）。
-class _GlobalSearchView extends StatefulWidget {
+class _GlobalSearchView extends ConsumerStatefulWidget {
   const _GlobalSearchView({
     super.key,
     required this.restingRect,
@@ -327,10 +327,10 @@ class _GlobalSearchView extends StatefulWidget {
   final VoidCallback onViewAllResults;
 
   @override
-  State<_GlobalSearchView> createState() => _GlobalSearchViewState();
+  ConsumerState<_GlobalSearchView> createState() => _GlobalSearchViewState();
 }
 
-class _GlobalSearchViewState extends State<_GlobalSearchView> {
+class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
   /// 遮罩与结果行共用的控制器（本视图独占；绑定器负责与会话双向同步）。
   final TextEditingController _field = TextEditingController();
   final FocusNode _focusNode = FocusNode(debugLabel: 'globalSearchField');
@@ -352,18 +352,21 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   @override
   void initState() {
     super.initState();
-    _search = context.read<SearchProvider>();
+    _search = ref.read(searchControllerProvider);
     _session = _search.session;
     // 会话是搜索状态的唯一源：遮罩打开时用绑定器种上当前关键词，
     // 之后资料库改词 / 清空也会立即反映到输入框（不再逐帧补同步）。
     _input = SearchInputBinding(session: _session, controller: _field);
     _assist = SearchAssistController(
       search: _search,
-      hotKeywords: () =>
-          context.read<DiscoverProvider?>()?.hotSearches ?? const [],
+      hotKeywords: () => ref.read(discoverProvider).hotSearches,
     );
-    _search.addListener(_onSearchChanged);
-    _session.preview.addListener(_onPreviewChanged);
+    // 快照变更（含预览高亮移动）都由 provider 合并后通知：不再直接订阅会话。
+    ref.listenManual(searchProvider, (previous, next) {
+      if (!mounted) return;
+      setState(() {});
+      _announceResults(next);
+    });
     _assist.addListener(_onAssistChanged);
     _focusNode.addListener(_onFieldFocus);
     // 打开 / 重新聚焦都全选已有文本：Ctrl+F 后直接输入即替换上次关键词。
@@ -372,8 +375,6 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
 
   @override
   void dispose() {
-    _search.removeListener(_onSearchChanged);
-    _session.preview.removeListener(_onPreviewChanged);
     _assist.removeListener(_onAssistChanged);
     _focusNode.removeListener(_onFieldFocus);
     _assist.dispose();
@@ -399,7 +400,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
 
   /// 渠道选择：发现内容与搜索一起切，然后把焦点还给输入框。
   void _selectChannel(String key) {
-    context.read<ChannelSelection>().select(key);
+    ref.read(channelSelectionControllerProvider).select(key);
     final textLength = _field.text.length;
     final selection = _field.selection;
     final wasSelectAll =
@@ -429,18 +430,6 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     });
   }
 
-  /// 会话通知：输入激活态 / 结果 / 播报都跟同一份投影走。
-  void _onSearchChanged() {
-    if (!mounted) return;
-    setState(() {});
-    _announceResults();
-  }
-
-  /// 预览通知：↑↓ 只改高亮，不触发搜索状态（也不重算结果）。
-  void _onPreviewChanged() {
-    if (mounted) setState(() {});
-  }
-
   /// 辅助块通知：焦点 / 建议高亮变化只影响搜索条下方这一块。
   void _onAssistChanged() {
     if (mounted) setState(() {});
@@ -448,17 +437,25 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
 
   void _onFieldFocus() => _assist.setFocused(_focusNode.hasFocus);
 
-  SearchPreviewItem? get _highlightedItem => _session.preview.highlightedItem;
+  /// 当前高亮预览行：key 来自搜索快照，条目按同一份预览排序查找。
+  SearchPreviewItem? _highlightedItemOf(SearchState state) {
+    final key = state.previewHighlightedKey;
+    if (key == null) return null;
+    for (final item in state.projection.preview.items) {
+      if (item.key == key) return item;
+    }
+    return null;
+  }
 
   /// 结果数变化时给读屏播报（空词 / 加载中不播报；文案走 l10n）。
   ///
-  /// 防抖 / 首屏在途时 [SearchProvider.isSearchBusy] 为真；单渠道首屏返回后
-  /// 才转 false，因此总条数只播报一次。
-  void _announceResults() {
-    if (!mounted || !_session.isActive || _session.isBusy) return;
+  /// 防抖 / 首屏在途时 `isSearchBusy` 为真；单渠道首屏返回后才转 false，
+  /// 因此总条数只播报一次。
+  void _announceResults(SearchState state) {
+    if (!mounted || !state.isSearchActive || state.isSearchBusy) return;
     final message = _l10n(context)
-        .searchResultsAnnouncement(_session.resultCount);
-    final key = '${_session.query}\u0000$message';
+        .searchResultsAnnouncement(state.projection.resultCount);
+    final key = '${state.searchQuery}\u0000$message';
     if (key == _lastAnnouncement) return;
     _lastAnnouncement = key;
     final view = View.maybeOf(context);
@@ -495,7 +492,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   void _handleEnter() {
     if (_closing || _field.value.composing.isValid) return;
     if (_assist.selectHighlighted()) return;
-    final item = _highlightedItem;
+    final item = _highlightedItemOf(ref.read(searchProvider));
     if (item is SearchPreviewTrack) {
       _playItem(item.row);
       return;
@@ -582,14 +579,15 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    final sources = context.watch<SourcesProvider>();
-    final selection = context.watch<ChannelSelection>();
+    final state = ref.watch(searchProvider);
+    final sources = ref.watch(sourcesProvider);
+    final selection = ref.watch(channelSelectionProvider);
     final enabledChannels = [
       for (final channel in sources.channels)
         if (channel.enabled) channel,
     ];
     final rect = widget.restingRect;
-    final showHint = _session.isActive;
+    final showHint = state.isSearchActive;
     // 面板限高：条下沿到窗口底部留出边距与底部键位提示，更长的列表交给资料库。
     final maxPanelHeight = math.max(
       0.0,
@@ -654,6 +652,8 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
                               )
                             : _GlobalSearchResults(
                                 session: _session,
+                                projection: state.projection,
+                                highlightedKey: state.previewHighlightedKey,
                                 correction: _assist.value.correction,
                                 onCorrectionTap: _assist.acceptCorrection,
                                 onOpenAllResults: _openAllResults,
@@ -695,6 +695,8 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
 class _GlobalSearchResults extends StatelessWidget {
   const _GlobalSearchResults({
     required this.session,
+    required this.projection,
+    required this.highlightedKey,
     required this.onOpenAllResults,
     required this.onPlayItem,
     required this.onOpenArtist,
@@ -703,6 +705,8 @@ class _GlobalSearchResults extends StatelessWidget {
   });
 
   final SearchSession session;
+  final SearchProjection projection;
+  final String? highlightedKey;
   final VoidCallback onOpenAllResults;
   final void Function(SearchRow row) onPlayItem;
   final OpenSearchArtist onOpenArtist;
@@ -713,6 +717,8 @@ class _GlobalSearchResults extends StatelessWidget {
   Widget build(BuildContext context) => SearchResultsView(
     variant: SearchResultsVariant.docked,
     session: session,
+    projection: projection,
+    highlightedKey: highlightedKey,
     correction: correction,
     onCorrectionTap: onCorrectionTap,
     onPlay: onPlayItem,

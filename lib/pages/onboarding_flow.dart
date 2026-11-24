@@ -7,31 +7,28 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
-import '../domain/models/source.dart';
-import '../domain/models/source_script.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/sources_provider.dart';
-import '../services/data_saver_service.dart';
+import '../providers/app_providers.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
 import '../widgets/labels/source_quality_label.dart';
 import '../widgets/settings/settings_tiles.dart';
 
-class OnboardingFlow extends StatefulWidget {
+class OnboardingFlow extends ConsumerStatefulWidget {
   const OnboardingFlow({super.key, required this.onFinished});
 
   /// 完成 / 跳过都走同一个回调：壳层负责写设备本地标记并切回正常骨架。
   final Future<void> Function() onFinished;
 
   @override
-  State<OnboardingFlow> createState() => _OnboardingFlowState();
+  ConsumerState<OnboardingFlow> createState() => _OnboardingFlowState();
 }
 
-class _OnboardingFlowState extends State<OnboardingFlow> {
+class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   static const int _stepCount = 4;
 
   int _step = 0;
@@ -115,7 +112,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                     builder: (context, opacity, child) =>
                         Opacity(opacity: opacity, child: child),
                     child: SingleChildScrollView(
-                      child: _buildStep(context, l10n, _step),
+                      child: _buildStep(context, ref, l10n, _step),
                     ),
                   ),
                 ),
@@ -148,20 +145,24 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     );
   }
 
-  Widget _buildStep(BuildContext context, AppLocalizations l10n, int step) =>
-      switch (step) {
-        0 => _textStep(
-          context,
-          icon: Icons.shield_rounded,
-          title: l10n.onboardingPrivacyTitle,
-          body: l10n.onboardingPrivacyBody,
-          noteTitle: l10n.onboardingPrivacyScriptsTitle,
-          noteBody: l10n.onboardingPrivacyScriptsBody,
-        ),
-        1 => _channelsStep(context, l10n),
-        2 => _qualityStep(context, l10n),
-        _ => _optionalStep(context, l10n),
-      };
+  Widget _buildStep(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+    int step,
+  ) => switch (step) {
+    0 => _textStep(
+      context,
+      icon: Icons.shield_rounded,
+      title: l10n.onboardingPrivacyTitle,
+      body: l10n.onboardingPrivacyBody,
+      noteTitle: l10n.onboardingPrivacyScriptsTitle,
+      noteBody: l10n.onboardingPrivacyScriptsBody,
+    ),
+    1 => _channelsStep(context, ref, l10n),
+    2 => _qualityStep(context, ref, l10n),
+    _ => _optionalStep(context, l10n),
+  };
 
   Widget _textStep(
     BuildContext context, {
@@ -196,10 +197,15 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     );
   }
 
-  Widget _channelsStep(BuildContext context, AppLocalizations l10n) {
-    final sources = context.watch<SourcesProvider?>();
-    final ready = sources?.initialized ?? false;
-    final channels = sources?.channels ?? const <SourceDescriptor>[];
+  Widget _channelsStep(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+  ) {
+    final sources = ref.watch(sourcesProvider);
+    final controller = ref.read(sourcesControllerProvider);
+    final ready = sources.initialized;
+    final channels = sources.channels;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -241,7 +247,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                     key: ValueKey<String>('onboardingChannel-${channel.key}'),
                     value: channel.enabled,
                     onChanged: (value) => unawaited(
-                      sources!.setChannelEnabled(channel.key, value),
+                      controller.setChannelEnabled(channel.key, value),
                     ),
                   ),
                 ],
@@ -251,12 +257,17 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     );
   }
 
-  Widget _qualityStep(BuildContext context, AppLocalizations l10n) {
-    final sources = context.watch<SourcesProvider?>();
-    final dataSaver = context.watch<DataSaverService?>();
+  Widget _qualityStep(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+  ) {
+    final sources = ref.watch(sourcesProvider);
+    final controller = ref.read(sourcesControllerProvider);
+    final dataSaver = ref.watch(maybeDataSaverServiceProvider);
     final scheme = Theme.of(context).colorScheme;
-    final quality = sources?.preferredQuality ?? '320k';
-    final options = sources?.qualityOptions ?? const <SourceQualityOption>[];
+    final quality = sources.preferredQuality;
+    final options = sources.qualityOptions;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -280,40 +291,46 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
             for (final option in options)
               (option.value, sourceQualityLabel(l10n, option.value)),
           ],
-          onChanged: sources == null
-              ? (_) {}
-              : (value) => unawaited(sources.setPreferredQuality(value)),
+          onChanged: (value) =>
+              unawaited(controller.setPreferredQuality(value)),
         ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.onboardingDataSaver,
-                    style: context.typeScale.bodyLarge,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    l10n.onboardingDataSaverHint,
-                    style: context.typeScale.bodySmall.copyWith(
-                      color: scheme.onSurfaceVariant,
+        if (dataSaver != null) ...[
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.onboardingDataSaver,
+                      style: context.typeScale.bodyLarge,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      l10n.onboardingDataSaverHint,
+                      style: context.typeScale.bodySmall.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            M3ESwitch(
-              key: const Key('onboardingDataSaver'),
-              value: dataSaver?.enabled ?? false,
-              onChanged: dataSaver == null
-                  ? null
-                  : (value) => unawaited(dataSaver.setEnabled(value)),
-            ),
-          ],
-        ),
+              M3ESwitch(
+                key: const Key('onboardingDataSaver'),
+                value: dataSaver.enabled,
+                onChanged: (value) {
+                  final controller = ref.read(
+                    dataSaverServiceControllerProvider,
+                  );
+                  if (controller != null) {
+                    unawaited(controller.setEnabled(value));
+                  }
+                },
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }

@@ -7,51 +7,55 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
+import '../providers/app_providers.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
 import '../widgets/ai_dj_shared.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/settings/settings_tiles.dart';
 
-class AiDjHistoryPage extends StatefulWidget {
+class AiDjHistoryPage extends ConsumerStatefulWidget {
   const AiDjHistoryPage({super.key});
 
   @override
-  State<AiDjHistoryPage> createState() => _AiDjHistoryPageState();
+  ConsumerState<AiDjHistoryPage> createState() => _AiDjHistoryPageState();
 }
 
-class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
+class _AiDjHistoryPageState extends ConsumerState<AiDjHistoryPage> {
   final Set<String> _expanded = {};
   final Set<String> _loading = {};
   final Set<String> _failed = {};
   final Map<String, AiDjBatch> _batches = {};
 
-  Future<void> _toggle(String id, AiDjProvider provider) async {
+  /// 命令面：历史加载 / 播放 / 删除都落在这个控制器上；读状态走快照。
+  AiDjProvider get _controller => ref.read(aiDjControllerProvider);
+
+  Future<void> _toggle(String id) async {
     if (_expanded.contains(id)) {
       setState(() => _expanded.remove(id));
       return;
     }
     setState(() => _expanded.add(id));
     if (_batches.containsKey(id) || _loading.contains(id)) return;
-    await _loadBatch(id, provider);
+    await _loadBatch(id);
   }
 
   /// 展开时的单批加载；失败只记这一批，重试也走这里（不触发重新生成）。
-  Future<void> _loadBatch(String id, AiDjProvider provider) async {
+  Future<void> _loadBatch(String id) async {
     if (_loading.contains(id)) return;
     setState(() {
       _loading.add(id);
       _failed.remove(id);
       _batches.remove(id);
     });
-    final batch = await provider.loadHistoryBatch(id);
+    final batch = await _controller.loadHistoryBatch(id);
     if (!mounted) return;
     setState(() {
       _loading.remove(id);
@@ -65,10 +69,7 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
   }
 
   /// 删除单批前先确认：历史页删除不可撤销，误触会丢整批记录。
-  Future<void> _deleteBatch(
-    AiDjHistoryEntry entry,
-    AiDjProvider provider,
-  ) async {
+  Future<void> _deleteBatch(AiDjHistoryEntry entry) async {
     final l10n = AppLocalizations.of(context)!;
     final navigator = Navigator.of(context, rootNavigator: true);
     final confirmed = await M3EDialog.show<bool>(
@@ -91,7 +92,7 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await provider.deleteHistoryBatch(entry.id);
+    await _controller.deleteHistoryBatch(entry.id);
     if (!mounted) return;
     setState(() {
       _expanded.remove(entry.id);
@@ -101,7 +102,7 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
     });
   }
 
-  Future<void> _clearHistory(AiDjProvider provider) async {
+  Future<void> _clearHistory() async {
     final l10n = AppLocalizations.of(context)!;
     final navigator = Navigator.of(context, rootNavigator: true);
     final confirmed = await M3EDialog.show<bool>(
@@ -124,7 +125,7 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
       ),
     );
     if (confirmed != true) return;
-    await provider.clearHistory();
+    await _controller.clearHistory();
     if (!mounted) return;
     setState(() {
       _expanded.clear();
@@ -134,7 +135,9 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
   }
 
   void _notify(String message) {
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
     if (notifications == null) {
       M3ESnackbar.show(context, message: message);
     } else {
@@ -145,8 +148,8 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = context.watch<AiDjProvider>();
-    final entries = provider.historyEntries;
+    final state = ref.watch(aiDjProvider);
+    final entries = state.historyEntries;
     return Scaffold(
       appBar: M3EAppBar.top(
         title: Text(l10n.aiDjHistoryTitle),
@@ -155,7 +158,7 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
           if (entries.length > 1)
             M3EButton.text(
               key: const Key('aiDjHistoryClearButton'),
-              onPressed: provider.isBusy ? null : () => _clearHistory(provider),
+              onPressed: state.isBusy ? null : _clearHistory,
               child: Text(l10n.aiDjHistoryClear),
             ),
         ],
@@ -170,7 +173,7 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
                 separatorBuilder: (context, index) =>
                     const SizedBox(height: 10),
                 itemBuilder: (context, index) =>
-                    _entryCard(l10n, provider, entries[index]),
+                    _entryCard(l10n, state, entries[index]),
               ),
       ),
     );
@@ -208,36 +211,36 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
 
   Widget _entryCard(
     AppLocalizations l10n,
-    AiDjProvider provider,
+    AiDjState state,
     AiDjHistoryEntry entry,
   ) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final active = provider.isActiveBatch(entry.id);
+    final active = state.isActiveBatch(entry.id);
     final expanded = _expanded.contains(entry.id);
     final batch = _batches[entry.id];
     final actions = <M3EButtonGroupAction>[
       M3EButtonGroupAction(
         icon: const Icon(Icons.play_arrow_rounded),
         label: Text(l10n.aiDjHistoryPlay),
-        enabled: !provider.queueBusy,
+        enabled: !state.queueBusy,
       ),
       M3EButtonGroupAction(
         icon: const Icon(Icons.playlist_add_rounded),
         label: Text(l10n.aiDjHistoryEnqueue),
-        enabled: !provider.queueBusy,
+        enabled: !state.queueBusy,
       ),
       if (!active)
         M3EButtonGroupAction(
           icon: const Icon(Icons.check_circle_rounded),
           label: Text(l10n.aiDjHistorySetActive),
-          enabled: !provider.isBusy,
+          enabled: !state.isBusy,
         ),
     ];
     final handlers = <VoidCallback>[
-      () => unawaited(provider.playHistoryBatch(entry.id)),
-      () => unawaited(provider.enqueueHistoryBatch(entry.id)),
-      if (!active) () => unawaited(provider.setActiveBatch(entry.id)),
+      () => unawaited(_controller.playHistoryBatch(entry.id)),
+      () => unawaited(_controller.enqueueHistoryBatch(entry.id)),
+      if (!active) () => unawaited(_controller.setActiveBatch(entry.id)),
     ];
     return CardListSurface(
       key: Key('aiDjHistoryEntry_${entry.id}'),
@@ -315,9 +318,9 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
                 variant: M3EIconButtonVariant.standard,
                 icon: const Icon(Icons.delete_rounded),
                 semanticLabel: l10n.aiDjHistoryDelete,
-                onPressed: provider.isBusy
+                onPressed: state.isBusy
                     ? null
-                    : () => unawaited(_deleteBatch(entry, provider)),
+                    : () => unawaited(_deleteBatch(entry)),
               ),
             ],
           ),
@@ -326,7 +329,7 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
             alignment: AlignmentDirectional.centerStart,
             child: M3EButton.text(
               key: Key('aiDjHistoryExpand_${entry.id}'),
-              onPressed: () => unawaited(_toggle(entry.id, provider)),
+              onPressed: () => unawaited(_toggle(entry.id)),
               child: Text(
                 expanded ? l10n.aiDjHistoryCollapse : l10n.aiDjHistoryExpand,
               ),
@@ -352,9 +355,9 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
                   ),
                   M3EButton.text(
                     key: Key('aiDjHistoryRetry_${entry.id}'),
-                    onPressed: provider.isBusy
+                    onPressed: state.isBusy
                         ? null
-                        : () => unawaited(_loadBatch(entry.id, provider)),
+                        : () => unawaited(_loadBatch(entry.id)),
                     child: Text(l10n.retry),
                   ),
                 ],
@@ -362,46 +365,48 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
             else if (batch != null)
               for (final (index, item) in batch.items.indexed)
                 M3ETappable(
-                  onTap: provider.queueBusy
+                  onTap: state.queueBusy
                       ? null
                       : () => unawaited(
-                          provider.playHistoryBatch(
+                          _controller.playHistoryBatch(
                             entry.id,
                             startIndex: index,
                           ),
                         ),
-                  enabled: !provider.queueBusy,
+                  enabled: !state.queueBusy,
                   mouseCursor: SystemMouseCursors.click,
                   semanticButton: true,
-                  builder: (BuildContext context, M3EInteractionState state) =>
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.track.title,
-                              style: context.typeScale.bodyMedium,
-                            ),
-                            Text(
-                              [
-                                if (item.track.artistLabel.isNotEmpty)
-                                  item.track.artistLabel,
-                              ].join(' · '),
-                              style: context.typeScale.bodySmall.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
-                            ),
-                            if (item.source.reason.isNotEmpty)
-                              Text(
-                                item.source.reason,
-                                style: context.typeScale.labelSmall.copyWith(
-                                  color: scheme.onSurfaceVariant,
+                  builder:
+                      (BuildContext context, M3EInteractionState interaction) =>
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.track.title,
+                                  style: context.typeScale.bodyMedium,
                                 ),
-                              ),
-                          ],
-                        ),
-                      ),
+                                Text(
+                                  [
+                                    if (item.track.artistLabel.isNotEmpty)
+                                      item.track.artistLabel,
+                                  ].join(' · '),
+                                  style: context.typeScale.bodySmall.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                if (item.source.reason.isNotEmpty)
+                                  Text(
+                                    item.source.reason,
+                                    style: context.typeScale.labelSmall
+                                        .copyWith(
+                                          color: scheme.onSurfaceVariant,
+                                        ),
+                                  ),
+                              ],
+                            ),
+                          ),
                 ),
           ],
         ],

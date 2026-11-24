@@ -110,7 +110,7 @@ void wirePlaybackObservers({
     playback: playback.playbackProvider,
     service: library.playStatisticsService,
   );
-  playback.playbackProvider.addListener(
+  playback.playbackProvider.changes.addListener(
     () => scrobble.service.onSnapshot(playback.playbackProvider.snapshot),
   );
   playback.playbackProvider.position.addListener(

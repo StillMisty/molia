@@ -167,8 +167,8 @@ Future<void> _run({
     final playing = await _waitFor(
       () =>
           playback.playbackProvider.snapshot.current != null &&
-          !playback.playbackProvider.isLoading &&
-          playback.playbackProvider.isPlaying,
+          !playback.playbackProvider.snapshot.isLoading &&
+          playback.playbackProvider.snapshot.isPlaying,
       timeout: const Duration(seconds: 45),
     );
     DataPathTrace.event(
@@ -211,8 +211,8 @@ Future<void> _run({
         final current = snapshot.current;
         return current != null &&
             current.id.uri != before &&
-            !playback.playbackProvider.isLoading &&
-            playback.playbackProvider.isPlaying;
+            !playback.playbackProvider.snapshot.isLoading &&
+            playback.playbackProvider.snapshot.isPlaying;
       }, timeout: const Duration(seconds: 45));
       DataPathTrace.event(
         'scenario.play.next.done',
@@ -231,7 +231,7 @@ Future<void> _run({
     if (current != null) {
       final lyricsWatch = Stopwatch()..start();
       await lyrics.lyricsProvider.load(current);
-      final state = lyrics.lyricsProvider.state;
+      final state = lyrics.lyricsProvider.currentState;
       DataPathTrace.event(
         'scenario.lyrics.done',
         fields: () => {

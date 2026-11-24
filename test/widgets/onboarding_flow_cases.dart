@@ -9,58 +9,24 @@ import 'package:molia/pages/onboarding_flow.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/services/data_saver_service.dart';
 import 'package:molia/services/onboarding_store.dart';
-import 'package:molia/sources/source_manager.dart' hide SourceKind;
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/fake_sources_backend.dart';
 import '../support/perf_app_harness.dart';
-import '../support/settings_test_support.dart';
+import '../support/provider_test_scope.dart';
 
-class _FakeSources extends SourcesProvider {
-  _FakeSources() : super(SourceManager(settings: testSettingsRegistry()));
-
-  bool ready = false;
-  String quality = '320k';
-  final List<(String, bool)> channelCalls = [];
-  final List<String> qualityCalls = [];
-
-  static const List<SourceDescriptor> _channels = [
-    SourceDescriptor(key: 'kw', displayName: '酷我音乐', kind: SourceKind.builtin),
-    SourceDescriptor(key: 'tx', displayName: 'QQ 音乐', kind: SourceKind.builtin),
-  ];
-
-  @override
-  bool get initialized => ready;
-
-  @override
-  List<SourceDescriptor> get channels => _channels;
-
-  @override
-  String get preferredQuality => quality;
-
-  @override
-  Future<void> setChannelEnabled(String key, bool enabled) async {
-    channelCalls.add((key, enabled));
-  }
-
-  @override
-  Future<void> setPreferredQuality(String quality) async {
-    this.quality = quality;
-    qualityCalls.add(quality);
-  }
-}
+const List<SourceDescriptor> _onboardingChannels = [
+  SourceDescriptor(key: 'kw', displayName: '酷我音乐', kind: SourceKind.builtin),
+  SourceDescriptor(key: 'tx', displayName: 'QQ 音乐', kind: SourceKind.builtin),
+];
 
 class _FakeDataSaver extends DataSaverService {
-  bool _enabled = false;
   final List<bool> calls = [];
 
   @override
-  bool get enabled => _enabled;
-
-  @override
   Future<void> setEnabled(bool value) async {
-    _enabled = value;
     calls.add(value);
+    await super.setEnabled(value);
   }
 }
 
@@ -77,7 +43,8 @@ class _NoNetworkOverrides extends HttpOverrides {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late _FakeSources sources;
+  late FakeSourcesBackend sourcesBackend;
+  late SourcesProvider sources;
   late _FakeDataSaver dataSaver;
   late int finished;
 
@@ -85,13 +52,18 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     // 进程内完成态不跨用例：每个用例都从「未完成」开始。
     OnboardingStore.resetSessionForTest();
-    sources = _FakeSources();
+    sourcesBackend = FakeSourcesBackend(
+      initialized: false,
+      channels: _onboardingChannels,
+    );
+    sources = SourcesProvider(sourcesBackend);
     dataSaver = _FakeDataSaver();
     finished = 0;
   });
 
   tearDown(() {
     sources.dispose();
+    sourcesBackend.dispose();
     dataSaver.dispose();
   });
 
@@ -102,13 +74,12 @@ void main() {
   }) async {
     tester.platformDispatcher.textScaleFactorTestValue = textScale;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final scope = ProviderTestScope();
+    scope.put<SourcesProvider>(sources);
+    scope.put<DataSaverService>(dataSaver);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<SourcesProvider>.value(value: sources),
-          ChangeNotifierProvider<DataSaverService>.value(value: dataSaver),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -188,8 +159,8 @@ void main() {
       findsNothing,
     );
 
-    sources.ready = true;
-    sources.notifyListeners();
+    sourcesBackend.initialized = true;
+    sourcesBackend.notifyListeners();
     await tester.pump();
     expect(
       find.byKey(const ValueKey<String>('onboardingChannel-kw')),
@@ -208,7 +179,7 @@ void main() {
       find.byKey(const ValueKey<String>('onboardingChannel-kw')),
     );
     await tester.pump();
-    expect(sources.channelCalls, [('kw', false)]);
+    expect(sourcesBackend.channelCalls, [('kw', false)]);
   });
 
   testWidgets('音质与省流直接写现有服务，不镜像状态', (tester) async {
@@ -222,7 +193,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('192K').last);
     await tester.pumpAndSettle();
-    expect(sources.qualityCalls, ['192k']);
+    expect(sourcesBackend.qualityCalls, ['192k']);
 
     await tester.tap(find.byKey(const Key('onboardingDataSaver')));
     await tester.pump();

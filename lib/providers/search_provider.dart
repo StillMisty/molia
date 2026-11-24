@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../app/perf/data_path_trace.dart';
@@ -12,23 +14,101 @@ import 'playback_provider.dart';
 import 'search_results.dart';
 import 'search_row.dart';
 import 'search_session.dart';
+import '../utils/snapshot_source.dart';
 
 export 'search_input_binding.dart';
 export 'search_results.dart' show SearchResults;
 export 'search_row.dart' show SearchRow;
 export 'search_session.dart';
 
+/// 搜索对 UI 暴露的不可变快照（字段名沿用旧 getter，页面只换读取来源）。
+@immutable
+class SearchState {
+  const SearchState({
+    required this.searchQuery,
+    required this.searchKind,
+    required this.isSearchActive,
+    required this.activeSourceKey,
+    required this.activeSource,
+    required this.hasActiveSearchSource,
+    required this.isSearchPending,
+    required this.isSearchBusy,
+    required this.isSearching,
+    required this.sourceChannels,
+    required this.supportedSearchKinds,
+    required this.hasSearchableSources,
+    required this.songResults,
+    required this.artistResults,
+    required this.lyricResults,
+    required this.projection,
+    required this.previewHighlightedKey,
+  });
+
+  /// 已提交的搜索关键词（输入框的高频值仍由 `TextEditingController` 持有）。
+  final String searchQuery;
+
+  /// 当前搜索类型（搜索页分段）。
+  final SearchKind searchKind;
+
+  final bool isSearchActive;
+
+  /// 当前渠道 key（`''` = 尚未确定；不是「全部来源」）。
+  final String activeSourceKey;
+
+  /// 当前渠道的搜索描述；渠道未注册 / 脚本未加载时为 null。
+  final SourceDescriptor? activeSource;
+
+  /// 当前渠道是否真的可搜索（Ctrl+F / 空态的唯一判据）。
+  final bool hasActiveSearchSource;
+
+  /// 当前关键词已提交、但当前类型还没有真正发起搜索（防抖窗口 / 切类型）。
+  final bool isSearchPending;
+
+  /// 搜索是否仍在进行：防抖等待或当前类型首屏请求在途。
+  final bool isSearchBusy;
+
+  /// 当前类型是否首屏加载中。
+  final bool isSearching;
+
+  /// 所有可搜索渠道（顺序 = 渠道管理排序）。
+  final List<SourceDescriptor> sourceChannels;
+
+  /// 当前渠道支持且已启用的搜索类型。
+  final List<SearchKind> supportedSearchKinds;
+
+  /// 是否存在可搜索来源（区别「全应用无音源」与「当前渠道不支持搜索」）。
+  final bool hasSearchableSources;
+
+  /// 单曲 / 歌手 / 歌词结果快照（按类型保留行形状）。
+  final SearchResults<SearchRow> songResults;
+  final SearchResults<ArtistSummary> artistResults;
+  final SearchResults<SearchRow> lyricResults;
+
+  /// 当前类型的视图投影（结果 / 预览 / 空态判据）。
+  final SearchProjection projection;
+
+  /// 遮罩预览的高亮行 key（键盘 ↑↓ / 结果到达后的自动高亮）。
+  final String? previewHighlightedKey;
+
+  /// 单曲结果的扁平投影（播放与性能场景读取这里）。
+  List<SearchRow> get searchResults => songResults.items;
+
+  /// 单曲结果列表（无关键词时为空）。
+  List<SearchRow> get filteredResults =>
+      searchQuery.isEmpty ? const [] : searchResults;
+}
+
 /// 当前渠道搜索的对外门面：状态与调度全部委托 [SearchSession]。
 ///
 /// 本类只保留三件事：
 /// - 组合根注入的目录服务 → 会话页取数（网络 / 缓存层不搬进会话）；
 /// - 播放出口 [playItem]（搜索结果整体进队列，依赖 [PlaybackProvider]）；
-/// - 把会话通知转成 provider 通知，维持现有 `context.watch<SearchProvider>()`
-///   订阅面。
+/// - 把会话变更合并成**一次**不可变快照更新（[state] / [changes]），
+///   UI 经 `searchProvider` watch、经 `searchControllerProvider` 发命令。
 ///
 /// 查询 / 清空 / 切类型 / 防抖 / 渠道补搜的策略都在会话内单点实现；UI 可
 /// 直接读 [session]（投影 / 预览）并发送意图。
-class SearchProvider extends ChangeNotifier {
+class SearchProvider implements SnapshotSource<SearchState> {
   final PlaybackProvider _playbackProvider;
 
   /// 搜索入口：带 single-flight + LRU + TTL 的目录服务（可为 null：无音源）。
@@ -36,6 +116,13 @@ class SearchProvider extends ChangeNotifier {
 
   /// 搜索会话：关键词、类型、结果控制器、预览与渠道反应都在这里。
   late final SearchSession session;
+
+  /// 快照变更信号；同一轮事件循环内的多次会话通知合并成一次。
+  final SnapshotSignal _changes = SnapshotSignal();
+
+  bool _publishPending = false;
+  int _publishEpoch = 0;
+  bool _disposed = false;
 
   static const int _searchPageSize = 30;
 
@@ -52,10 +139,46 @@ class SearchProvider extends ChangeNotifier {
       fetchArtistPage: _fetchArtistPage,
       fetchLyricPage: _fetchLyricPage,
     );
-    session.addListener(_onSessionChanged);
+    // 会话与预览是两条信号（高亮移动只发预览），快照一次性读取两者。
+    session.changes.addListener(_schedulePublish);
+    session.preview.changes.addListener(_schedulePublish);
   }
 
-  void _onSessionChanged() => notifyListeners();
+  /// 通知合并：并行结果 / 清空 + 预览刷新在同一轮事件循环内只发布一次。
+  void _schedulePublish() {
+    if (_disposed || _publishPending) return;
+    _publishPending = true;
+    final epoch = _publishEpoch;
+    scheduleMicrotask(() {
+      if (_disposed || epoch != _publishEpoch) return;
+      _publishPending = false;
+      _changes.notify();
+    });
+  }
+
+  @override
+  SearchState get state => SearchState(
+    searchQuery: session.query,
+    searchKind: session.kind,
+    isSearchActive: session.isActive,
+    activeSourceKey: session.activeSourceKey,
+    activeSource: session.activeSource,
+    hasActiveSearchSource: session.hasActiveSearchSource,
+    isSearchPending: session.isPending,
+    isSearchBusy: session.isBusy,
+    isSearching: session.isSearching,
+    sourceChannels: List.unmodifiable(session.sourceChannels),
+    supportedSearchKinds: List.unmodifiable(session.supportedKinds),
+    hasSearchableSources: session.hasSearchableSources,
+    songResults: session.songResults,
+    artistResults: session.artistResults,
+    lyricResults: session.lyricResults,
+    projection: session.projection,
+    previewHighlightedKey: session.preview.highlightedKey,
+  );
+
+  @override
+  Listenable get changes => _changes;
 
   String get searchQuery => session.query;
 
@@ -211,10 +334,13 @@ class SearchProvider extends ChangeNotifier {
     );
   }
 
-  @override
+  /// 释放会话与预览（组合根 / 测试负责调用）。
   void dispose() {
-    session.removeListener(_onSessionChanged);
+    _disposed = true;
+    _publishEpoch++;
+    _publishPending = false;
+    session.changes.removeListener(_schedulePublish);
+    session.preview.changes.removeListener(_schedulePublish);
     session.dispose();
-    super.dispose();
   }
 }

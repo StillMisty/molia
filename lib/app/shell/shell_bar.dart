@@ -5,7 +5,7 @@ part of 'app_shell.dart';
 /// 点击整条头部：不在播放页 → 进入并展开；已在播放页收起态 → 就地展开
 /// （共享封面飞行由壳层统一发起）。播放页展开（或飞行中）时交叉淡出为
 /// 应用图标 + 自定义应用名，不响应点击。
-class _ShellBarHeader extends StatelessWidget {
+class _ShellBarHeader extends ConsumerWidget {
   const _ShellBarHeader({
     super.key,
     required this.morph,
@@ -23,17 +23,19 @@ class _ShellBarHeader extends StatelessWidget {
   final VoidCallback onOpenPlayer;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // 无曲目标题时信息区本来就回退应用名，不做入场动画（避免同文案
     // 位移淡入与标题淡出叠影）。
-    final hasTrackTitle = context.select<PlaybackProvider, bool>((provider) {
-      final track = provider.snapshot.current;
-      return track != null && track.title.isNotEmpty;
-    });
-    return AnimatedBuilder(
-      animation: morph,
+    final hasTrackTitle = ref.watch(
+      playbackProvider.select((provider) {
+        final track = provider.snapshot.current;
+        return track != null && track.title.isNotEmpty;
+      }),
+    );
+    return ListenableBuilder(
+      listenable: morph.changes,
       builder: (context, _) {
-        final showTrack = !morph.barHeaderHidden;
+        final showTrack = !morph.state.barHeaderHidden;
         // 封面与歌名+作者两行文本等高（titleMedium 24 + labelSmall 16）。
         // 点击语义与 12dp 间距由摘要模块收口，这里只给封面槽叠加品牌标志。
         return NowPlayingSummary(
@@ -88,7 +90,10 @@ class _ShellBarHeader extends StatelessWidget {
 /// 吸附）从 0（隐藏）到 1（展示）；消费面把进度 clamp 到 0..1 后派生
 /// 位移 / 缩放与透明度（effects 不过冲）。文本与按钮是两个兄弟子树，
 /// 弹簧由壳层 State 持有后分别消费；快速连切靠 motor 中途重定向续接。
-class _BarHeaderReveal extends ChangeNotifier {
+///
+/// 订阅面直接是弹簧本身（逐帧高频通道，不进展示快照）：本类只做
+/// `Listenable` 转发，不继承 `ChangeNotifier`。
+class _BarHeaderReveal implements Listenable {
   _BarHeaderReveal({required TickerProvider vsync, required bool revealed})
     : _motion = SingleMotionController(
         motion: SpringMotion(
@@ -97,9 +102,7 @@ class _BarHeaderReveal extends ChangeNotifier {
         ),
         vsync: vsync,
         initialValue: revealed ? 1 : 0,
-      ) {
-    _motion.addListener(notifyListeners);
-  }
+      );
 
   final SingleMotionController _motion;
 
@@ -109,11 +112,13 @@ class _BarHeaderReveal extends ChangeNotifier {
   void setRevealed(bool value) => _motion.animateTo(value ? 1 : 0);
 
   @override
-  void dispose() {
-    _motion.removeListener(notifyListeners);
-    _motion.dispose();
-    super.dispose();
-  }
+  void addListener(VoidCallback listener) => _motion.addListener(listener);
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      _motion.removeListener(listener);
+
+  void dispose() => _motion.dispose();
 }
 
 /// 顶栏文本区转场：歌名 + 作者作为一块整体入场（不错峰），应用名出场

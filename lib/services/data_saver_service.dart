@@ -7,6 +7,37 @@ import 'package:logging/logging.dart';
 import '../data/settings/device_settings.dart';
 import '../data/settings/device_settings_keys.dart';
 import '../sources/source_track.dart' show capQualityFor;
+import '../utils/snapshot_source.dart';
+
+/// 省流设置的不可变快照（UI 经 `dataSaverServiceProvider` 读）。
+@immutable
+class DataSaverState {
+  const DataSaverState({
+    required this.enabled,
+    required this.qualityCap,
+    required this.coversSaverEnabled,
+    required this.onCellular,
+    required this.detectionAvailable,
+  });
+
+  /// 是否开启省流模式（用户手动开关；开启不等于已生效）。
+  final bool enabled;
+
+  /// 省流音质上限（LX 音质标识）。
+  final String qualityCap;
+
+  /// 生效时是否同时限制封面（仅使用本地缓存）。
+  final bool coversSaverEnabled;
+
+  /// 当前是否处于移动数据网络。
+  final bool onCellular;
+
+  /// 网络类型检测是否可用。
+  final bool detectionAvailable;
+
+  /// 省流是否实际生效：已开启且当前为移动数据。
+  bool get active => enabled && onCellular;
+}
 
 /// 省流模式（数据节省）服务。
 ///
@@ -24,7 +55,10 @@ import '../sources/source_track.dart' show capQualityFor;
 ///   由 [detectionAvailable] 供 UI 提示；
 /// - 本服务只提供策略判定，不直接改播放行为：音质在 composition root 的
 ///   取链回调里套用，封面在 `ArtworkCache` 网关注入判定。
-class DataSaverService extends ChangeNotifier {
+///
+/// 状态是只读快照 [state]，订阅面是 [changes]（ADR-0041「启动期状态对象」）；
+/// 需要即时判定的网关 / 播放路径直接读实例上的 getter（快照是上次通知时的值）。
+class DataSaverService implements SnapshotSource<DataSaverState> {
   /// [settings] 仅测试注入；生产构造自己的设备本地入口。
   DataSaverService({
     DeviceSettings? settings,
@@ -48,6 +82,9 @@ class DataSaverService extends ChangeNotifier {
   final Future<bool> Function()? _cellularProbe;
   final Stream<bool>? _cellularChanges;
   final Logger _logger = Logger('molia.data_saver_service');
+
+  /// 变更信号（替代 `ChangeNotifier.notifyListeners` 的订阅面）。
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 原始 connectivity 事件（每个事件都发射，即使蜂窝布尔值没变）。
   ///
@@ -89,6 +126,18 @@ class DataSaverService extends ChangeNotifier {
 
   /// 省流是否实际生效：已开启且当前为移动数据。
   bool get active => _enabled && _onCellular;
+
+  @override
+  DataSaverState get state => DataSaverState(
+    enabled: _enabled,
+    qualityCap: _quality,
+    coversSaverEnabled: _coversSaverEnabled,
+    onCellular: _onCellular,
+    detectionAvailable: _detectionAvailable,
+  );
+
+  @override
+  Listenable get changes => _changes;
 
   /// 当前实际应使用的取链音质：生效时把偏好压到上限，否则原样返回。
   String effectiveQuality(String preferred) =>
@@ -142,21 +191,21 @@ class DataSaverService extends ChangeNotifier {
   Future<void> setEnabled(bool value) async {
     if (_enabled == value) return;
     _enabled = value;
-    notifyListeners();
+    _changes.notify();
     await _settings.write(kDataSaverEnabledKey, value);
   }
 
   Future<void> setQualityCap(String value) async {
     if (!qualityOptions.contains(value) || _quality == value) return;
     _quality = value;
-    notifyListeners();
+    _changes.notify();
     await _settings.write(kDataSaverQualityKey, value);
   }
 
   Future<void> setCoversSaverEnabled(bool value) async {
     if (_coversSaverEnabled == value) return;
     _coversSaverEnabled = value;
-    notifyListeners();
+    _changes.notify();
     await _settings.write(kDataSaverCoversKey, value);
   }
 
@@ -177,22 +226,20 @@ class DataSaverService extends ChangeNotifier {
       _connectivityKnown = true;
       // 检测不到时保守保持「未生效」，避免在未知网络上误降音质。
       _onCellular = false;
-      if (changed) notifyListeners();
+      if (changed) _changes.notify();
     }
   }
 
-  @override
   void dispose() {
     unawaited(_subscription?.cancel());
     _subscription = null;
     unawaited(_networkEvents.close());
-    super.dispose();
   }
 
   void _setOnCellular(bool value) {
     if (_onCellular == value) return;
     _onCellular = value;
-    notifyListeners();
+    _changes.notify();
   }
 
   Future<void> _loadPreferences() async {

@@ -22,6 +22,7 @@ import '../services/save_as.dart';
 import 'diagnostics/diagnostics_log_controller.dart';
 import 'diagnostics/diagnostics_report_controller.dart';
 import 'diagnostics/diagnostics_view_models.dart';
+import 'snapshot_source.dart';
 
 export 'diagnostics/diagnostics_report_controller.dart'
     show
@@ -31,8 +32,43 @@ export 'diagnostics/diagnostics_report_controller.dart'
         buildDiagnosticsIssueUri;
 export 'diagnostics/diagnostics_view_models.dart';
 
+/// 诊断页的聚合快照：UI 经 `diagnosticsPageProvider` 读它。
+///
+/// 页面各卡片仍按分区订阅窄 [ValueListenable]（summary / 检查 / 日志…），
+/// 这里只是把同一批值收成一份不可变快照，方便整体读取与测试断言。
+@immutable
+class DiagnosticsState {
+  const DiagnosticsState({
+    required this.summary,
+    required this.checkResults,
+    required this.issueGroups,
+    required this.session,
+    required this.appInfo,
+    required this.reportState,
+    required this.logsState,
+    required this.metrics,
+    required this.isExporting,
+    required this.hasCheckableChannels,
+  });
+
+  final DiagnosticsSummary summary;
+  final DiagnosticsChecksState checkResults;
+  final List<DiagnosticIssueGroup> issueGroups;
+  final DiagnosticSessionInfo? session;
+  final DiagnosticsAppInfo? appInfo;
+  final DiagnosticsReportState reportState;
+  final DiagnosticsLogsState logsState;
+  final ResolveMetricsSnapshot metrics;
+  final bool isExporting;
+  final bool hasCheckableChannels;
+}
+
 /// 页面状态与动作的唯一入口；所有通知都走窄 [ValueListenable]。
-class DiagnosticsProvider extends ChangeNotifier {
+///
+/// 对外形态是「不可变快照 + 控制器」（ADR-0041「启动期状态对象」）：
+/// `diagnosticsPageProvider` 镜像 [DiagnosticsState]，命令 / 窄订阅经
+/// `diagnosticsPageControllerProvider` 取实例；日志流 / 导出 / 健康检查不变。
+class DiagnosticsProvider implements SnapshotSource<DiagnosticsState> {
   DiagnosticsProvider({
     required this.service,
     required this.builder,
@@ -69,9 +105,15 @@ class DiagnosticsProvider extends ChangeNotifier {
       now: now,
       isDisposed: () => _disposed,
     );
+    for (final notifier in _narrowNotifiers) {
+      notifier.addListener(_onPartChanged);
+    }
     _subscription = service.changes.listen((_) => _refresh());
     _refresh();
   }
+
+  /// 变更信号（任一窄分区变化后由 provider 重新读取快照）。
+  final SnapshotSignal _changes = SnapshotSignal();
 
   final DiagnosticsService service;
   final DiagnosticsBundleBuilder builder;
@@ -120,6 +162,39 @@ class DiagnosticsProvider extends ChangeNotifier {
   DiagnosticLogStatus? _lastLogStatus;
   bool get isExporting => reportState.value.busy;
   bool get hasCheckableChannels => checkResults.value.hasCheckableChannels;
+
+  /// 页面各分区的窄订阅面（聚合快照由同一批值组成）。
+  Iterable<Listenable> get _narrowNotifiers => [
+    summary,
+    checkResults,
+    issueGroups,
+    session,
+    appInfo,
+    reportState,
+    logsState,
+    metrics,
+  ];
+
+  /// 不可变聚合快照：任一窄分区变化后由 provider 重新读取。
+  @override
+  DiagnosticsState get state => DiagnosticsState(
+    summary: summary.value,
+    checkResults: checkResults.value,
+    issueGroups: List.unmodifiable(issueGroups.value),
+    session: session.value,
+    appInfo: appInfo.value,
+    reportState: reportState.value,
+    logsState: logsState.value,
+    metrics: metrics.value,
+    isExporting: isExporting,
+    hasCheckableChannels: hasCheckableChannels,
+  );
+
+  /// 变更信号（替代 `ChangeNotifier.notifyListeners` 的订阅面）。
+  @override
+  Listenable get changes => _changes;
+
+  void _onPartChanged() => _changes.notify();
 
   /// 打开页面时读一次包信息（无网络、无磁盘扫描）；失败不阻塞页面。
   void ensureAppInfo() {
@@ -371,10 +446,12 @@ class DiagnosticsProvider extends ChangeNotifier {
     );
   }
 
-  @override
   void dispose() {
     _disposed = true;
     unawaited(_subscription?.cancel());
+    for (final notifier in _narrowNotifiers) {
+      notifier.removeListener(_onPartChanged);
+    }
     summary.dispose();
     checkResults.dispose();
     issueGroups.dispose();
@@ -383,7 +460,6 @@ class DiagnosticsProvider extends ChangeNotifier {
     reportState.dispose();
     logsState.dispose();
     metrics.dispose();
-    super.dispose();
   }
 }
 

@@ -22,7 +22,6 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/desktop/desktop_shell.dart';
 import 'package:molia/services/window/window_chrome.dart';
-import 'package:molia/widgets/molia_mark.dart';
 
 import '../support/perf_app_harness.dart';
 
@@ -58,7 +57,7 @@ Future<void> _pumpFrames(WidgetTester tester, {int frames = 40}) async {
   }
 }
 
-/// 点底栏 / 导航轨的播放目的地（Molia 标志图标）。
+/// 点底栏 / 导航轨的播放目的地（音符字形：未选中空心 / 选中实心成对）。
 ///
 /// 360 走底栏、640 走导航轨；按图标定位，两种骨架都成立。不要在展开后
 /// 再按标签找：展开态播放页里没有同名导航文字。
@@ -67,8 +66,16 @@ Future<void> _openPlayerDestination(WidgetTester tester) async {
   final rail = find.byType(M3ENavigationRail);
   final nav = bar.evaluate().isNotEmpty ? bar : rail;
   expect(nav, findsOneWidget, reason: '当前宽度应命中底栏或导航轨');
-  final mark = find.descendant(of: nav, matching: find.byType(MoliaMark));
-  expect(mark, findsWidgets, reason: '播放目的地应使用 MoliaMark');
+  final mark = find.descendant(
+    of: nav,
+    matching: find.byWidgetPredicate(
+      (widget) =>
+          widget is Icon &&
+          (widget.icon == Icons.music_note_rounded ||
+              widget.icon == Icons.music_note_outlined),
+    ),
+  );
+  expect(mark, findsWidgets, reason: '播放目的地应使用音符字形');
   await tester.tap(mark.first);
 }
 

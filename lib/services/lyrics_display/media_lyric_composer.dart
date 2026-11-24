@@ -45,7 +45,7 @@ class MediaLyricComposer {
 
   LyricMetadataOverride? compose({
     required LyricsPresentation presentation,
-    required LyricsDisplaySettings settings,
+    required LyricsDisplaySettingsState settings,
     required bool a2dpConnected,
   }) {
     final fields = <LyricsMetadataTarget, String>{};

@@ -9,7 +9,11 @@ import 'package:molia/sources/builtin/discover_source.dart';
 
 import 'support/fake_discover_api.dart';
 import 'support/fake_library_repository.dart';
+
+import 'package:molia/providers/app_providers.dart';
+
 import 'support/fakes.dart';
+import 'support/provider_test_scope.dart';
 
 /// 发现 provider 单测：多平台委托 / 错误归一化 / 播放 / 收藏 / 加入列表。
 void main() {
@@ -21,6 +25,7 @@ void main() {
   late LibraryProvider library;
   late FakeDiscoverSource source;
   late DiscoverProvider discover;
+  ProviderTestScope? lastScope;
 
   /// 发现页的渠道集合只来自内置发现数据源；默认取规范顺序第一个可用项。
   DiscoverProvider buildDiscover({
@@ -39,13 +44,14 @@ void main() {
           keys.isEmpty ? BuiltinDiscover.sourceKeys.first : keys.first,
       initialKey: initialKey,
     );
-    addTearDown(selection.dispose);
-    return DiscoverProvider(
-      playbackProvider: playback,
-      libraryProvider: library,
-      sources: sources,
-      selection: selection,
+    final scope = ProviderTestScope(
+      overrides: [discoverSourcesProvider.overrideWithValue(sources)],
     );
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryProvider>(library);
+    scope.put<ChannelSelection>(selection);
+    lastScope = scope;
+    return scope.container.read(discoverProvider.notifier);
   }
 
   setUp(() {
@@ -64,7 +70,6 @@ void main() {
   });
 
   tearDown(() async {
-    discover.dispose();
     library.dispose();
     playback.dispose();
     await repository.dispose();
@@ -76,7 +81,6 @@ void main() {
       'kg': FakeDiscoverSource(sourceKey: 'kg'),
     };
     final provider = buildDiscover(sources: sources);
-    addTearDown(provider.dispose);
     expect(provider.channelKey, 'wy');
 
     provider.selectChannel('kg');
@@ -215,12 +219,18 @@ void main() {
   test('loadHotSearches：成功后缓存；失败静默为空', () async {
     await discover.loadHotSearches();
     expect(discover.hotSearches, ['晴天', '夜曲']);
+    final snapshot = discover.state;
+    expect(snapshot.hotSearches, ['晴天', '夜曲']);
+    expect(
+      () => snapshot.hotSearches.add('多余'),
+      throwsUnsupportedError,
+      reason: '快照不能反向修改内部热搜缓存',
+    );
     await discover.loadHotSearches();
     expect(source.hotSearchCalls, 1); // 幂等，不重复请求
 
     final failing = FakeDiscoverSource()..fail = true;
     final discover2 = buildDiscover(sources: {'wy': failing});
-    addTearDown(discover2.dispose);
     await discover2.loadHotSearches();
     expect(discover2.hotSearches, isEmpty);
   });
@@ -228,7 +238,6 @@ void main() {
   test('平台切换：数据源紧随，热搜按平台分别缓存', () async {
     final tx = FakeDiscoverSource(sourceKey: 'tx');
     final multi = buildDiscover(sources: {'wy': source, 'tx': tx});
-    addTearDown(multi.dispose);
     expect(multi.sourceKeys, ['tx', 'wy']);
     expect(multi.channelKey, 'tx', reason: '默认选中规范顺序第一个可用平台');
 
@@ -279,7 +288,7 @@ void main() {
 
   test('资料库变化转发通知（收藏按钮响应）', () async {
     var notified = 0;
-    discover.addListener(() => notified++);
+    lastScope!.container.listen(discoverProvider, (_, _) => notified++);
     final playlistId = await repository.createPlaylist('列表');
     await library.refreshPlaylists(force: true);
     expect(playlistId, greaterThan(0));

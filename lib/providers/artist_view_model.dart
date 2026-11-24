@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import '../domain/models/artist.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/artist_repository.dart';
+import '../utils/snapshot_source.dart';
 import 'paged_list_controller.dart';
 
 /// 一页歌手响应：曲目与头部实体同页返回（头部随分页响应更新）。
@@ -23,8 +24,26 @@ class _ArtistPageResult extends PagedResult<Track> {
   final ArtistDetail artist;
 }
 
+/// 歌手页的不可变快照：头部实体 + 当前分页状态。
+///
+/// 字段名沿用旧 getter（`artist` / `items`）；分页状态本身仍由
+/// [PagedListController] 发布 —— 快照只在它变更后重新读取一次，不复制列表。
+@immutable
+class ArtistViewState {
+  const ArtistViewState({required this.artist, required this.page});
+
+  /// 最近一次成功响应携带的歌手实体；首屏成功前 / 重试后为 null。
+  final ArtistDetail? artist;
+
+  /// 当前分页状态（不可变值；控制器每次变更发布新实例）。
+  final PagedListState<Track> page;
+
+  /// 已加载曲目（与 [page] 同一份列表，不复制）。
+  List<Track> get items => page.items;
+}
+
 /// 歌手页状态机：首屏 / 加载更多 / 失败重试 / 过期响应丢弃。
-class ArtistViewModel extends ChangeNotifier {
+class ArtistViewModel implements SnapshotSource<ArtistViewState> {
   ArtistViewModel({
     required this._repository,
     required this.sourceKey,
@@ -35,24 +54,27 @@ class ArtistViewModel extends ChangeNotifier {
       // 平台分页边界会重复返回（忽略 page 时重复整表）：按 track id 跨页去重。
       keyOf: (track) => track.id.uri,
       onPageAccepted: _acceptPage,
-    )..addListener(notifyListeners);
+    )..addListener(_onPageChanged);
   }
 
   final ArtistRepository _repository;
   final String sourceKey;
   final String artistId;
 
+  final SnapshotSignal _changes = SnapshotSignal();
+
   late final PagedListController<Track> _controller;
 
-  /// 最近一次成功响应携带的歌手实体；首屏成功前 / [reset] 后为 null。
+  /// 最近一次成功响应携带的歌手实体；首屏成功前 / [retry] 后为 null。
   ArtistDetail? _artist;
 
-  ArtistDetail? get artist => _artist;
+  @override
+  Listenable get changes => _changes;
 
-  /// 当前分页状态（不可变值；控制器每次变更发布新实例）。
-  PagedListState<Track> get state => _controller.state;
-
-  List<Track> get items => _controller.items;
+  /// 当前快照：实体与分页状态同帧读取（控制器已发布新状态后才通知）。
+  @override
+  ArtistViewState get state =>
+      ArtistViewState(artist: _artist, page: _controller.state);
 
   Future<void> loadFirstPage() => _controller.loadFirstPage();
 
@@ -83,11 +105,11 @@ class ArtistViewModel extends ChangeNotifier {
     if (page is _ArtistPageResult) _artist = page.artist;
   }
 
-  @override
+  void _onPageChanged() => _changes.notify();
+
   void dispose() {
     _controller
-      ..removeListener(notifyListeners)
+      ..removeListener(_onPageChanged)
       ..dispose();
-    super.dispose();
   }
 }

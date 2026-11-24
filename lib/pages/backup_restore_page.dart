@@ -1,11 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/sync_provider.dart';
 import '../services/json_backup_picker.dart';
 import '../services/notification_service.dart';
@@ -20,13 +21,13 @@ import '../widgets/settings/settings_tiles.dart';
 /// 低频且带破坏性（导入会合并并以备份为准），从设置首屏下沉一页，避免与
 /// 日常统计 / 同步入口混排。完整备份只经同步引擎的适配器收集 / 合并；引擎
 /// 未挂载（测试）时导出 / 导入都按失败处理（没有可回退的旧数据源）。
-class BackupRestorePage extends StatelessWidget {
+class BackupRestorePage extends ConsumerWidget {
   const BackupRestorePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final syncProvider = context.watch<SyncProvider?>();
+    final SyncProvider? sync = ref.read(maybeSyncControllerProvider);
     return SettingsSubPage(
       title: l10n.settingsBackupRestoreTitle,
       children: [
@@ -37,14 +38,14 @@ class BackupRestorePage extends StatelessWidget {
               icon: Icons.upload_file_rounded,
               title: l10n.exportDataTitle,
               subtitle: l10n.exportDataSubtitle,
-              onTap: () => _exportData(context, l10n, syncProvider),
+              onTap: () => _exportData(context, ref, l10n, sync),
             ),
             SettingsNavTile(
               key: const Key('settingsImportItem'),
               icon: Icons.download_rounded,
               title: l10n.importDataTitle,
               subtitle: l10n.importDataSubtitle,
-              onTap: () => _showImportDialog(context, l10n, syncProvider),
+              onTap: () => _showImportDialog(context, ref, l10n, sync),
             ),
             SettingsNavTile(
               key: const Key('settingsImportFavoritesItem'),
@@ -61,13 +62,13 @@ class BackupRestorePage extends StatelessWidget {
 
   Future<void> _exportData(
     BuildContext context,
+    WidgetRef ref,
     AppLocalizations l10n,
     SyncProvider? syncProvider,
   ) async {
-    final saveAs = Provider.of<SaveAs?>(context, listen: false);
-    final notificationService = Provider.of<NotificationService>(
-      context,
-      listen: false,
+    final SaveAs? saveAs = ref.read(saveAsProvider);
+    final NotificationService notificationService = ref.read(
+      notificationServiceProvider,
     );
     final currentContext = context;
 
@@ -99,12 +100,12 @@ class BackupRestorePage extends StatelessWidget {
 
   Future<void> _showImportDialog(
     BuildContext context,
+    WidgetRef ref,
     AppLocalizations l10n,
     SyncProvider? syncProvider,
   ) async {
-    final notificationService = Provider.of<NotificationService>(
-      context,
-      listen: false,
+    final NotificationService notificationService = ref.read(
+      notificationServiceProvider,
     );
     final navigator = Navigator.of(context, rootNavigator: true);
     final currentContext = context;

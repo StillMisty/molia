@@ -10,14 +10,14 @@
 /// 写路径、乐观更新与回滚仍由 provider 负责；本模块不碰仓库，也不改收藏缓存。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/library_outcome.dart';
-import '../providers/library_provider.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
@@ -59,8 +59,8 @@ class FavoriteHeart {
 
 /// 切换领域曲目的收藏，并按 [feedback] 提示。
 ///
-/// 返回切换结果（成功带切换后状态、失败带切换前状态）；没有资料库时返回
-/// null 且不提示——入口本身应当已经隐藏，这里只兜底。
+/// 返回切换结果（成功带切换后状态、失败带切换前状态）；资料库实例由组合根
+/// 注入，入口本身应当已经隐藏，这里只做守卫。
 ///
 /// 触感不在这里：各宿主的触感属于交互版式（菜单行本来就没有），调用方
 /// 需要在点击时先触发。
@@ -69,8 +69,10 @@ Future<FavoriteToggleOutcome?> toggleLibraryFavorite(
   Track track, {
   FavoriteFeedback feedback = FavoriteFeedback.confirmation,
 }) async {
-  final library = context.read<LibraryProvider?>();
-  if (library == null) return null;
+  final library = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(libraryControllerProvider);
   final outcome = await library.toggleFavoriteTrack(track);
   if (!context.mounted) return outcome;
   showFavoriteFeedback(context, outcome, feedback: feedback);

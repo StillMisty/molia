@@ -1,11 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../../providers/lyrics_display_provider.dart';
-import '../../services/lyrics_display/lyrics_display_settings.dart';
+import '../../providers/app_providers.dart';
 import '../../services/lyrics_display/lyrics_output.dart';
 import '../../services/notification_permission.dart';
 import '../../widgets/settings/settings_subpage.dart';
@@ -18,7 +17,7 @@ import 'system_media_lyrics_advanced_page.dart';
 /// 首屏只给两个总开关；输出目标 / 格式 / 翻译 / 暂停行为 / 更新间隔等
 /// 细节收进「高级」。这样首屏的「系统媒体歌词」入口可以并回本页，歌词
 /// 只剩桌面歌词与「歌词与输出」两条路径。
-class LyricsContentSettingsPage extends StatefulWidget {
+class LyricsContentSettingsPage extends ConsumerStatefulWidget {
   const LyricsContentSettingsPage({super.key, this.embedded = false});
 
   /// 作为二级页正文挂进外层 chrome（侧边弹层 / 全屏路由的 AppBar）时为
@@ -26,11 +25,12 @@ class LyricsContentSettingsPage extends StatefulWidget {
   final bool embedded;
 
   @override
-  State<LyricsContentSettingsPage> createState() =>
+  ConsumerState<LyricsContentSettingsPage> createState() =>
       _LyricsContentSettingsPageState();
 }
 
-class _LyricsContentSettingsPageState extends State<LyricsContentSettingsPage>
+class _LyricsContentSettingsPageState
+    extends ConsumerState<LyricsContentSettingsPage>
     with WidgetsBindingObserver {
   NotificationPermissionStatus _permission =
       NotificationPermissionStatus.unsupported;
@@ -63,12 +63,12 @@ class _LyricsContentSettingsPageState extends State<LyricsContentSettingsPage>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final settings = context.watch<LyricsDisplaySettings>();
-    final display = context.watch<LyricsDisplayProvider?>();
+    final settings = ref.watch(lyricsDisplaySettingsProvider);
+    final controller = ref.read(lyricsDisplaySettingsControllerProvider);
+    final display = ref.watch(lyricsDisplayProvider);
     final mediaSupported =
-        display != null &&
         display.capabilityOf(LyricsOutputIds.media) !=
-            LyricsOutputCapability.unsupported;
+        LyricsOutputCapability.unsupported;
     final showPermissionHint =
         settings.notificationEnabled &&
         _permission != NotificationPermissionStatus.granted &&
@@ -82,14 +82,14 @@ class _LyricsContentSettingsPageState extends State<LyricsContentSettingsPage>
             title: l10n.lyricsPageTranslationSwitch,
             subtitle: l10n.lyricsPageTranslationSubtitle,
             value: settings.pageTranslationEnabled,
-            onChanged: settings.setPageTranslationEnabled,
+            onChanged: (value) => controller?.setPageTranslationEnabled(value),
           ),
           SettingsSwitchTile(
             icon: Icons.record_voice_over_rounded,
             title: l10n.lyricsPageRomaSwitch,
             subtitle: l10n.lyricsPageRomaSubtitle,
             value: settings.pageRomaEnabled,
-            onChanged: settings.setPageRomaEnabled,
+            onChanged: (value) => controller?.setPageRomaEnabled(value),
           ),
         ],
       ),
@@ -109,7 +109,7 @@ class _LyricsContentSettingsPageState extends State<LyricsContentSettingsPage>
               title: l10n.lyricsNotificationEnable,
               subtitle: l10n.lyricsNotificationEnableSubtitle,
               value: settings.notificationEnabled,
-              onChanged: settings.setNotificationEnabled,
+              onChanged: (value) => controller?.setNotificationEnabled(value),
             ),
             // 权限被拒：设置深链（允许通知后媒体通知/锁屏卡才能稳定展示）。
             if (showPermissionHint)
@@ -132,7 +132,7 @@ class _LyricsContentSettingsPageState extends State<LyricsContentSettingsPage>
               title: l10n.lyricsBluetoothEnable,
               subtitle: l10n.lyricsBluetoothEnableSubtitle,
               value: settings.bluetoothEnabled,
-              onChanged: settings.setBluetoothEnabled,
+              onChanged: (value) => controller?.setBluetoothEnabled(value),
             ),
             SettingsSwitchTile(
               switchKey: const Key('lyricsBluetoothA2dpSwitch'),
@@ -140,7 +140,7 @@ class _LyricsContentSettingsPageState extends State<LyricsContentSettingsPage>
               title: l10n.lyricsBluetoothOnlyA2dp,
               subtitle: '',
               value: settings.bluetoothOnlyWhenA2dp,
-              onChanged: settings.setBluetoothOnlyWhenA2dp,
+              onChanged: (value) => controller?.setBluetoothOnlyWhenA2dp(value),
             ),
           ],
         ),

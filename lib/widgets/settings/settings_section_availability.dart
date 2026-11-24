@@ -48,10 +48,10 @@ class SettingsSectionAvailability {
        _traySupported = traySupported ?? AppTray.isSupported;
 
   /// 省流模式（可选：测试 / 精简挂载时缺省）。
-  final DataSaverService? dataSaver;
+  final DataSaverState? dataSaver;
 
   /// 自动换源偏好（可选：测试 / 精简挂载时缺省）。
-  final SourceSwapSettings? sourceSwap;
+  final SourceSwapSettingsState? sourceSwap;
 
   /// 音频焦点偏好（Android / iOS 挂载；桌面无实现）。
   final AudioFocusSettings? audioFocus;
@@ -59,14 +59,14 @@ class SettingsSectionAvailability {
   /// 音源管理门面（缺省时隐藏默认音质行）。
   final SourcesProvider? sources;
 
-  /// 歌词显示投送面（能力决定桌面歌词 / 系统媒体歌词入口）。
-  final LyricsDisplayProvider? lyricsDisplay;
+  /// 歌词显示投送面的低频快照（能力决定桌面歌词 / 系统媒体歌词入口）。
+  final LyricsDisplayState? lyricsDisplay;
 
   /// 听歌同步服务（缺省时隐藏入口）。
   final ScrobbleService? scrobble;
 
   /// 加入位置偏好（缺省时隐藏「加入位置」行）。
-  final LibraryAddSettings? libraryAdd;
+  final LibraryAddSettingsState? libraryAdd;
 
   /// 听歌统计服务（缺省时隐藏统计开关与入口）。
   final PlayStatisticsService? statistics;
@@ -77,8 +77,8 @@ class SettingsSectionAvailability {
   /// 托盘偏好（与平台能力同时具备才显示托盘 / 窗口行）。
   final TraySettings? tray;
 
-  /// 更新编排（缺省时隐藏更新入口）。
-  final UpdateProvider? update;
+  /// 更新编排的快照（缺省时隐藏更新入口）。
+  final UpdateState? update;
 
   /// 导航偏好（缺省时隐藏启动页与底部导航行）。
   final NavProvider? nav;

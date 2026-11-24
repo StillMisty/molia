@@ -6,16 +6,17 @@ import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/annual_report_page.dart';
 import 'package:molia/providers/annual_report_provider.dart';
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/save_as.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_save_as.dart';
 import '../support/memory_database.dart';
 import '../support/notification_recorder.dart';
 import '../support/sync_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 /// 年度报告页：单页滚动、一个分享主操作、空年份隐藏行动。
@@ -47,30 +48,32 @@ void main() {
     FakeSaveAs? saveAs,
     RecordingNotificationService? notifications,
   }) async {
+    final scope = ProviderTestScope(
+      overrides: [
+        annualReportClockProvider.overrideWithValue(
+          () => DateTime(2026, 11, 14),
+        ),
+        playStatisticsRepositoryProvider.overrideWithValue(repository),
+        annualReportRecordingEnabledProvider.overrideWithValue(null),
+      ],
+    );
+    scope.put<CustomCoverStore>(CustomCoverStore());
+    if (saveAs != null) scope.put<SaveAs>(saveAs);
+    if (notifications != null) {
+      scope.put<NotificationService>(notifications);
+    }
     await tester.pumpWidget(
-      M3EMaterialApp(
-        locale: const Locale('zh'),
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          ...GlobalMaterialLocalizations.delegates,
-        ],
-        supportedLocales: const [Locale('zh')],
-        data: M3EThemeData.fromMaterial(ThemeData.light()),
-        theme: ThemeData.light(),
-        home: MultiProvider(
-          providers: [
-            ChangeNotifierProvider(
-              create: (_) => AnnualReportProvider(
-                repository: repository,
-                clock: () => DateTime(2026, 11, 14),
-              ),
-            ),
-            Provider<CustomCoverStore>.value(value: CustomCoverStore()),
-            if (saveAs != null) Provider<SaveAs>.value(value: saveAs),
-            if (notifications != null)
-              Provider<NotificationService?>.value(value: notifications),
+      scope.wrap(
+        M3EMaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
           ],
-          child: AnnualReportPage(years: years, featuredYear: featuredYear),
+          supportedLocales: const [Locale('zh')],
+          data: M3EThemeData.fromMaterial(ThemeData.light()),
+          theme: ThemeData.light(),
+          home: AnnualReportPage(years: years, featuredYear: featuredYear),
         ),
       ),
     );

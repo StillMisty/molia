@@ -1,6 +1,6 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/discover.dart';
 import '../domain/models/track.dart';
@@ -14,9 +14,12 @@ import 'track_row.dart';
 /// 结果提示复用资料库的收藏反馈（成功只靠图标态，失败必须明说）。
 Future<void> toggleDiscoverFavorite(
   BuildContext context,
+  WidgetRef ref,
   DiscoverTrack track,
 ) async {
-  final outcome = await context.read<DiscoverProvider>().toggleFavorite(track);
+  final outcome = await ref
+      .read(discoverProvider.notifier)
+      .toggleFavorite(track);
   if (!context.mounted) return;
   showFavoriteFeedback(
     context,
@@ -31,9 +34,10 @@ Future<void> toggleDiscoverFavorite(
 /// 交接模块，避免「选择目标 → 写入 → 反馈」再抄一份。
 Future<void> addDiscoverTrackToPlaylist(
   BuildContext context,
+  WidgetRef ref,
   DiscoverTrack track,
 ) {
-  final discover = context.read<DiscoverProvider>();
+  final discover = ref.read(discoverProvider.notifier);
   return const TrackHandoff().addPlaylistTracksToLibrary(context, [
     discover.toPlaylistTrack(track),
   ]);
@@ -43,7 +47,7 @@ Future<void> addDiscoverTrackToPlaylist(
 /// 发现域适配层：只把 DiscoverProvider 的状态与写入流程接上去）。
 ///
 /// 只订阅本行的收藏态（`select`），避免曲目长列表因 provider 任意通知整表重建。
-class DiscoverTrackTile extends StatelessWidget {
+class DiscoverTrackTile extends ConsumerWidget {
   final DiscoverTrack track;
 
   /// 列表内位置（首末行外侧圆角）。
@@ -64,13 +68,12 @@ class DiscoverTrackTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final favorite = context.select<DiscoverProvider, bool>(
-      (provider) => provider.isFavorite(track),
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(discoverProvider);
+    final favorite = ref.read(discoverProvider.notifier).isFavorite(track);
     // 菜单公共动作需要领域 Track 的能力位 / 平台 id；转换与播放同一入口，
     // 不另造一份映射（payload 只在这里透传，页面仍不读）。
-    final domainTrack = context.read<DiscoverProvider>().domainTracksOf([
+    final domainTrack = ref.read(discoverProvider.notifier).domainTracksOf([
       track,
     ]).single;
     return TrackMenuTile(
@@ -87,8 +90,8 @@ class DiscoverTrackTile extends StatelessWidget {
       position: position,
       onTap: onTap,
       favorite: favorite,
-      onToggleFavorite: () => toggleDiscoverFavorite(context, track),
-      onAddToPlaylist: () => addDiscoverTrackToPlaylist(context, track),
+      onToggleFavorite: () => toggleDiscoverFavorite(context, ref, track),
+      onAddToPlaylist: () => addDiscoverTrackToPlaylist(context, ref, track),
     );
   }
 }

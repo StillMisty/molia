@@ -1,11 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/diagnostics.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/diagnostics_provider.dart';
 import '../../services/notification_service.dart';
 import '../settings/settings_tiles.dart';
@@ -323,7 +324,11 @@ Future<void> _restartEngine(
   DiagnosticsProvider provider,
   AppLocalizations l10n,
 ) async {
-  final notifications = context.read<NotificationService?>();
+  // 弹层内的按钮回调只有 dialog context：从最近的 ProviderScope 取容器。
+  final NotificationService? notifications = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(notificationServiceProvider);
   final ok = await provider.restartSourceEngine();
   notifications?.showSnackBar(
     ok ? l10n.diagnosticsEngineRestarted : l10n.diagnosticsEngineRestartFailed,
@@ -337,7 +342,11 @@ Future<void> _copyDetails(
   AppLocalizations l10n,
   DiagnosticCheckRow row,
 ) async {
-  final notifications = context.read<NotificationService?>();
+  // 弹层内的按钮回调只有 dialog context：从最近的 ProviderScope 取容器。
+  final NotificationService? notifications = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(notificationServiceProvider);
   final text = _detailsText(l10n, row);
   final ok = await provider.copyPlainText(text);
   notifications?.showSnackBar(

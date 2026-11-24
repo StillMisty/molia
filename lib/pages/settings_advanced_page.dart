@@ -12,11 +12,12 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/theme_provider.dart';
 import '../providers/update_provider.dart';
 import '../services/app_branding_service.dart';
@@ -33,21 +34,21 @@ import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 import '../widgets/track_artwork.dart';
 
-class SettingsAdvancedPage extends StatelessWidget {
+class SettingsAdvancedPage extends ConsumerWidget {
   const SettingsAdvancedPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     return SettingsSubPage(
       title: l10n.settingsAdvancedTitle,
       safeArea: true,
       children: [
-        _appearanceSection(context, l10n),
+        _appearanceSection(context, ref, l10n),
         const SizedBox(height: kSettingsSectionSpacing),
         const PlaybackDetailsSection(),
         const SizedBox(height: kSettingsSectionSpacing),
-        _librarySection(context, l10n),
+        _librarySection(context, ref, l10n),
         const SizedBox(height: kSettingsSectionSpacing),
         _generalSection(context, l10n),
         if (isDesktopPlatform()) ...[
@@ -55,35 +56,39 @@ class SettingsAdvancedPage extends StatelessWidget {
           _desktopSection(l10n),
         ],
         const SizedBox(height: kSettingsSectionSpacing),
-        _onlineSection(context, l10n),
+        _onlineSection(context, ref, l10n),
         const SizedBox(height: kSettingsSectionSpacing),
-        _updateSection(context, l10n),
+        _updateSection(context, ref, l10n),
       ],
     );
   }
 
   /// 字体与封面：两者都保留自定义能力，只是不再占首屏。
-  Widget _appearanceSection(BuildContext context, AppLocalizations l10n) {
+  Widget _appearanceSection(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+  ) {
     final m3e = M3ETheme.of(context);
+    final appFontFamily = ref.watch(
+      themeProvider.select((theme) => theme.appFontFamily),
+    );
     return SettingsSectionCard(
       title: l10n.settingsAdvancedAppearanceTitle,
       children: [
-        Selector<ThemeProvider, String?>(
-          selector: (context, provider) => provider.appFontFamily,
-          builder: (context, appFontFamily, _) => SettingsNavTile(
-            key: const Key('settingsAppFontItem'),
-            icon: Icons.text_fields_rounded,
-            title: l10n.settingsAppFont,
-            subtitle: appFontFamily ?? l10n.fontSystemDefault,
-            trailing: Text(
-              'Aa',
-              style: m3e.typeScale.titleMedium.copyWith(
-                fontFamily: appFontFamily,
-                color: m3e.colorScheme.onSurfaceVariant,
-              ),
+        SettingsNavTile(
+          key: const Key('settingsAppFontItem'),
+          icon: Icons.text_fields_rounded,
+          title: l10n.settingsAppFont,
+          subtitle: appFontFamily ?? l10n.fontSystemDefault,
+          trailing: Text(
+            'Aa',
+            style: m3e.typeScale.titleMedium.copyWith(
+              fontFamily: appFontFamily,
+              color: m3e.colorScheme.onSurfaceVariant,
             ),
-            onTap: () => _showAppFontPicker(context, l10n, appFontFamily),
           ),
+          onTap: () => _showAppFontPicker(context, ref, l10n, appFontFamily),
         ),
         // 默认封面：只作用于没有封面 / 远端加载失败的歌曲封面，
         // 不参与取色、下载与标签。
@@ -114,30 +119,31 @@ class SettingsAdvancedPage extends StatelessWidget {
     );
   }
 
-  Widget _librarySection(BuildContext context, AppLocalizations l10n) {
-    final settings = context.watch<LibraryAddSettings?>();
+  Widget _librarySection(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+  ) {
+    final LibraryAddSettingsState? settings = ref.watch(
+      maybeLibraryAddSettingsProvider,
+    );
     if (settings == null) return const SizedBox.shrink();
     return SettingsSectionCard(
       title: l10n.settingsAdvancedLibraryAddTitle,
       children: [
-        Selector<LibraryAddSettings, LibraryAddPosition>(
-          selector: (context, value) => value.position,
-          builder: (context, position, _) =>
-              SettingsChoiceRow<LibraryAddPosition>(
-                key: const Key('settingsLibraryAddPositionItem'),
-                icon: Icons.playlist_add_rounded,
-                title: l10n.settingsLibraryAddPosition,
-                subtitle: l10n.settingsLibraryAddPositionSubtitle,
-                value: position,
-                options: [
-                  (LibraryAddPosition.top, l10n.settingsLibraryAddPositionTop),
-                  (
-                    LibraryAddPosition.bottom,
-                    l10n.settingsLibraryAddPositionBottom,
-                  ),
-                ],
-                onChanged: settings.setPosition,
-              ),
+        SettingsChoiceRow<LibraryAddPosition>(
+          key: const Key('settingsLibraryAddPositionItem'),
+          icon: Icons.playlist_add_rounded,
+          title: l10n.settingsLibraryAddPosition,
+          subtitle: l10n.settingsLibraryAddPositionSubtitle,
+          value: settings.position,
+          options: [
+            (LibraryAddPosition.top, l10n.settingsLibraryAddPositionTop),
+            (LibraryAddPosition.bottom, l10n.settingsLibraryAddPositionBottom),
+          ],
+          onChanged: (value) => ref
+              .read(libraryAddSettingsControllerProvider)
+              ?.setPosition(value),
         ),
       ],
     );
@@ -191,8 +197,12 @@ class SettingsAdvancedPage extends StatelessWidget {
     );
   }
 
-  Widget _onlineSection(BuildContext context, AppLocalizations l10n) {
-    final dataSaver = context.watch<DataSaverService?>();
+  Widget _onlineSection(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+  ) {
+    final DataSaverState? dataSaver = ref.watch(maybeDataSaverServiceProvider);
     if (dataSaver == null) return const SizedBox.shrink();
     return SettingsSectionCard(
       title: l10n.settingsAdvancedDataSaverTitle,
@@ -207,15 +217,22 @@ class SettingsAdvancedPage extends StatelessWidget {
             for (final option in DataSaverService.qualityOptions)
               (option, sourceQualityLabel(l10n, option)),
           ],
-          onChanged: (value) => dataSaver.setQualityCap(value),
+          onChanged: (value) => ref
+              .read(dataSaverServiceControllerProvider)
+              ?.setQualityCap(value),
         ),
       ],
     );
   }
 
-  Widget _updateSection(BuildContext context, AppLocalizations l10n) {
-    final provider = context.watch<UpdateProvider?>();
-    if (provider == null) return const SizedBox.shrink();
+  Widget _updateSection(
+    BuildContext context,
+    WidgetRef ref,
+    AppLocalizations l10n,
+  ) {
+    final UpdateState? state = ref.watch(maybeUpdateProvider);
+    final UpdateProvider? controller = ref.read(maybeUpdateControllerProvider);
+    if (state == null || controller == null) return const SizedBox.shrink();
     return SettingsSectionCard(
       title: l10n.settingsAdvancedUpdateSourceTitle,
       children: [
@@ -223,30 +240,30 @@ class SettingsAdvancedPage extends StatelessWidget {
           key: const Key('settingsUpdateManifestItem'),
           icon: Icons.link_rounded,
           title: l10n.updateManifestOverrideTitle,
-          subtitle: provider.manifestUrlOverride.isEmpty
+          subtitle: state.manifestUrlOverride.isEmpty
               ? l10n.updateManifestOverrideDefault
-              : provider.manifestUrlOverride,
+              : state.manifestUrlOverride,
           onTap: () => _editText(
             context,
             title: l10n.updateManifestOverrideTitle,
             hint: l10n.updateManifestOverrideHint,
-            initial: provider.manifestUrlOverride,
-            onSave: provider.setManifestUrlOverride,
+            initial: state.manifestUrlOverride,
+            onSave: controller.setManifestUrlOverride,
           ),
         ),
         SettingsNavTile(
           key: const Key('settingsUpdateMirrorItem'),
           icon: Icons.cloud_download_rounded,
           title: l10n.updateDownloadPrefixTitle,
-          subtitle: provider.downloadPrefix.isEmpty
+          subtitle: state.downloadPrefix.isEmpty
               ? l10n.updateDownloadPrefixDefault
-              : provider.downloadPrefix,
+              : state.downloadPrefix,
           onTap: () => _editText(
             context,
             title: l10n.updateDownloadPrefixTitle,
             hint: l10n.updateDownloadPrefixHint,
-            initial: provider.downloadPrefix,
-            onSave: provider.setDownloadPrefix,
+            initial: state.downloadPrefix,
+            onSave: controller.setDownloadPrefix,
           ),
         ),
       ],
@@ -257,10 +274,11 @@ class SettingsAdvancedPage extends StatelessWidget {
   /// null 表示系统默认；选择后经 ThemeProvider 立即重建全局主题。
   Future<void> _showAppFontPicker(
     BuildContext context,
+    WidgetRef ref,
     AppLocalizations l10n,
     String? current,
   ) async {
-    final themeProvider = context.read<ThemeProvider>();
+    final theme = ref.read(themeProvider.notifier);
     final choice = await showFontPickerSheet(
       context,
       title: l10n.settingsAppFont,
@@ -269,7 +287,7 @@ class SettingsAdvancedPage extends StatelessWidget {
           : FontChoice.family(current),
     );
     if (choice == null || choice.inherit) return;
-    await themeProvider.setAppFontFamily(choice.family);
+    await theme.setAppFontFamily(choice.family);
   }
 
   /// 自定义应用名称：文本输入弹层（空白回退默认名称 Molia）。

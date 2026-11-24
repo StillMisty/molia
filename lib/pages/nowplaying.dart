@@ -170,14 +170,14 @@ class _NowPlayingState extends State<NowPlaying>
   void initState() {
     super.initState();
     // 请求先于挂载（壳层先发请求、页面后才挂载）：作为初始页消费，不补动画。
-    final int? requested = widget.controller?.requestedTab;
+    final int? requested = widget.controller?.state.requestedTab;
     _desktopTab = requested ?? nowPlayingLyricsTabIndex;
     _visibleTab = ValueNotifier<int>(requested ?? nowPlayingLyricsTabIndex);
     // 壳层返回层级读的是「当前 tab」：挂载时就同步一次，避免先点开队列
     // 再按 Esc 时壳层还停留在默认歌词页。
     widget.controller?.activeTab.value = requested ?? nowPlayingLyricsTabIndex;
     // 挂载前已消费过的请求不再重放（初始页已经取过 requestedTab）。
-    _handledTabRequest = widget.controller?.tabRequestVersion ?? 0;
+    _handledTabRequest = widget.controller?.state.tabRequestVersion ?? 0;
     _pageController = PageController(
       initialPage: requested ?? _currentPageIndex,
     );
@@ -195,15 +195,15 @@ class _NowPlayingState extends State<NowPlaying>
       initialValue: 0,
     )..value = 1.0;
     _expandController.addListener(_handleExpandProgress);
-    widget.controller?.addListener(_handleControllerRequest);
+    widget.controller?.changes.addListener(_handleControllerRequest);
   }
 
   @override
   void didUpdateWidget(covariant NowPlaying oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
-      oldWidget.controller?.removeListener(_handleControllerRequest);
-      widget.controller?.addListener(_handleControllerRequest);
+      oldWidget.controller?.changes.removeListener(_handleControllerRequest);
+      widget.controller?.changes.addListener(_handleControllerRequest);
     }
     // 回写通道换了接收方：去重缓存作废，下一次布局重新报告真值。
     if (oldWidget.onExpansionChanged != widget.onExpansionChanged) {
@@ -216,7 +216,7 @@ class _NowPlayingState extends State<NowPlaying>
 
   @override
   void dispose() {
-    widget.controller?.removeListener(_handleControllerRequest);
+    widget.controller?.changes.removeListener(_handleControllerRequest);
     _expandController.dispose();
     _pageController.dispose();
     _visibleTab.dispose();

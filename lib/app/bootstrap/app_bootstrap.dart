@@ -9,35 +9,57 @@ library;
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/onboarding_store.dart';
 import '../../services/window/window_chrome.dart';
 import '../perf/data_path_scenario.dart';
 import '../perf/frame_stats.dart';
 import 'app_dependencies.dart';
+import 'app_runtime.dart';
 import 'build_aux_stacks.dart';
 import 'build_core_stacks.dart';
 import 'build_feature_stacks.dart';
 import 'platform_bootstrap.dart';
 import 'post_frame_init.dart';
 import 'root_widget.dart';
+import 'runtime_providers.dart';
+import 'runtime_wiring.dart';
 import 'startup_trace.dart';
 
 /// 启动 Molia：平台装配 → 各栈按序构建 → runApp → 首帧收尾。
 Future<void> runMoliaApp() async {
   final platform = await bootstrapPlatform();
   final core = await buildCoreStacks(platform: platform);
-  final features = await buildFeatureStacks(platform: platform, core: core);
+  // Riverpod 容器在功能栈之前创建：主题 / 导航等状态 provider 由容器持有，
+  // 组合根只注入启动阶段产出的基础依赖；功能栈通过容器读取同一实例。
+  // 登记表是可变对象：核心栈先登记，功能栈 / 尾部栈完成后继续补登记。
+  final runtime = AppRuntime();
+  wireCoreRuntime(runtime, core);
+  final container = ProviderContainer(
+    overrides: [
+      appRuntimeProvider.overrideWithValue(runtime),
+      settingsRegistryProvider.overrideWithValue(core.catalog.settings),
+    ],
+  );
+  final features = await buildFeatureStacks(
+    platform: platform,
+    core: core,
+    container: container,
+  );
+  wireFeatureRuntime(runtime, features);
   final aux = await buildAuxStacks(
     platform: platform,
     core: core,
     features: features,
   );
+  wireAuxRuntime(runtime, platform: platform, aux: aux);
   final dependencies = AppDependencies(
     platform: platform,
     core: core,
     features: features,
     aux: aux,
+    container: container,
   );
 
   // 首次引导标记：在 runApp 前读一次，首帧要么是引导、要么是正常壳层，

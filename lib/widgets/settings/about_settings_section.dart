@@ -58,14 +58,14 @@ class AboutSettingsSection extends StatelessWidget {
   }
 
   /// 更新入口副标题：上次安装未完成优先，其次「可更新至 x.y.z」，否则当前版本。
-  String _updateSubtitle(AppLocalizations l10n, UpdateProvider provider) {
-    if (provider.installResult == UpdateInstallResult.incomplete) {
+  String _updateSubtitle(AppLocalizations l10n, UpdateState state) {
+    if (state.installResult == UpdateInstallResult.incomplete) {
       return l10n.updateInstallIncomplete;
     }
-    final version = provider.release?.version;
-    if (provider.updateAvailable && version != null && version.isNotEmpty) {
+    final version = state.release?.version;
+    if (state.updateAvailable && version != null && version.isNotEmpty) {
       return l10n.settingsUpdateAvailable(version);
     }
-    return l10n.settingsUpdateSubtitle(provider.currentVersionLabel);
+    return l10n.settingsUpdateSubtitle(state.currentVersionLabel);
   }
 }

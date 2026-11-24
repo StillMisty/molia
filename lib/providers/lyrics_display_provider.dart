@@ -12,9 +12,40 @@ import '../services/lyrics_display/lyrics_display_settings.dart';
 import '../services/lyrics_display/lyrics_output.dart';
 import '../services/notification_permission.dart';
 import 'lyrics_provider.dart';
+import '../utils/snapshot_source.dart';
 
 /// 桌面悬浮窗控制条动作 → 播放控制命令（由组合根接回 PlaybackProvider）。
 enum LyricsPlaybackCommand { playPause, previous, next }
+
+/// 歌词显示调度的低频快照：平台能力 / 输出开关 / 蓝牙路由 / 会话初始化结果。
+///
+/// 逐行歌词与播放进度不在这里：它们按 tick 走独立通道（`updatePosition` /
+/// `syncLyrics`），进快照会按秒级重建 watcher。
+@immutable
+class LyricsDisplayState {
+  const LyricsDisplayState({
+    this.capabilities = const <String, LyricsOutputCapability>{},
+    this.a2dpConnected = false,
+    this.anyOutputEnabled = false,
+    this.mediaSessionInitFailed = false,
+  });
+
+  /// 各输出端当前能力（键 = [LyricsOutputIds]）。
+  final Map<String, LyricsOutputCapability> capabilities;
+
+  /// 蓝牙音频（A2DP）是否连接：蓝牙歌词的门控信号。
+  final bool a2dpConnected;
+
+  /// 至少一个输出处于启用配置（用于决定是否主动取词 / 请求通知权限）。
+  final bool anyOutputEnabled;
+
+  /// 系统媒体会话初始化失败（平台支持但初始化返回 null）。
+  final bool mediaSessionInitFailed;
+
+  /// 输出能力（未登记的输出按不支持处理）。
+  LyricsOutputCapability capabilityOf(String outputId) =>
+      capabilities[outputId] ?? LyricsOutputCapability.unsupported;
+}
 
 /// 歌词显示调度：订阅播放快照 / 进度 / 歌词状态，把「当前该展示什么」
 /// 投送到各 [LyricsOutput]。
@@ -22,15 +53,21 @@ enum LyricsPlaybackCommand { playPause, previous, next }
 /// - 所有展示策略（行定位、偏移、回退、格式、门控）在 Dart 侧应用；
 /// - 只在行 / 播放态变化时下发（[LyricsPresentation] 去重）；
 /// - 任一输出失败只降级该输出，不影响播放与 UI。
-class LyricsDisplayProvider extends ChangeNotifier {
+///
+/// 组合根按启动顺序构造它（平台通道 / 输出生命周期），因此它是普通控制器：
+/// 低频状态经 [state] 暴露快照，[changes] 通知 Riverpod watcher；命令仍由
+/// 设置页等消费方直接调用。
+class LyricsDisplayProvider implements SnapshotSource<LyricsDisplayState> {
   LyricsDisplayProvider({
-    required this.settings,
+    required LyricsDisplaySettings settings,
     required List<LyricsOutput> outputs,
     this._audioRoute,
     this._themeListenable,
     this._onPlaybackCommand,
     this._mediaSessionInitFailed = false,
-  }) : _outputs = List.unmodifiable(outputs) {
+  }) : _settings = settings,
+       _settingsState = settings.state,
+       _outputs = List.unmodifiable(outputs) {
     for (final output in _outputs) {
       if (output is InteractiveLyricsOutput) {
         _subscriptions.add(output.actions.listen(_onOutputAction));
@@ -41,24 +78,29 @@ class LyricsDisplayProvider extends ChangeNotifier {
         _subscriptions.add(
           output.capabilityChanges.listen((_) {
             if (_disposed) return;
-            notifyListeners();
+            _changes.notify();
             unawaited(_syncOutputs());
           }),
         );
       }
     }
-    settings.addListener(_onSettingsChanged);
-    _audioRoute?.addListener(_onA2dpChanged);
+    _settings.changes.addListener(_onSettingsChanged);
+    _audioRoute?.changes.addListener(_onA2dpChanged);
     _themeListenable?.addListener(_onThemeChanged);
     unawaited(_syncOutputs());
     _maybeRequestNotificationPermission();
   }
 
-  final LyricsDisplaySettings settings;
+  final LyricsDisplaySettings _settings;
+
+  /// 设置快照缓存：设置变更时刷新，投送与门控都读它，避免每个 tick 重建。
+  LyricsDisplaySettingsState _settingsState;
+
   final List<LyricsOutput> _outputs;
   final AudioRouteMonitor? _audioRoute;
   final Listenable? _themeListenable;
   final void Function(LyricsPlaybackCommand command)? _onPlaybackCommand;
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 系统媒体会话初始化失败（Android 等平台支持但 init 返回 null）：
   /// 歌词显示设置页据此给出可见提示（否则只剩日志，用户只看到「开关没反应」）。
@@ -81,38 +123,38 @@ class LyricsDisplayProvider extends ChangeNotifier {
   LyricsState _lyricsState = LyricsState.idle;
   bool _disposed = false;
 
-  bool get a2dpConnected => _audioRoute?.connected ?? false;
+  @override
+  LyricsDisplayState get state => LyricsDisplayState(
+    capabilities: {for (final output in _outputs) output.id: output.capability},
+    a2dpConnected: _audioRoute?.state ?? false,
+    anyOutputEnabled: _anyOutputEnabled,
+    mediaSessionInitFailed: _mediaSessionInitFailed,
+  );
 
-  /// 至少一个输出处于启用配置（用于决定是否主动取词）。
-  bool get anyOutputEnabled =>
-      settings.desktopEnabled ||
-      settings.notificationEnabled ||
-      settings.bluetoothEnabled;
+  @override
+  Listenable get changes => _changes;
 
-  /// 系统媒体会话初始化失败（平台支持但初始化返回 null）：
-  /// 歌词显示设置页据此给出可见提示。
-  bool get mediaSessionInitFailed => _mediaSessionInitFailed;
+  bool get _anyOutputEnabled =>
+      _settingsState.desktopEnabled ||
+      _settingsState.notificationEnabled ||
+      _settingsState.bluetoothEnabled;
 
   /// 首次开启任一歌词输出时请求通知权限（通知/锁屏歌词依赖媒体通知）。
   void _maybeRequestNotificationPermission() {
-    if (_notificationPermissionAsked || !anyOutputEnabled) return;
+    if (_notificationPermissionAsked || !_anyOutputEnabled) return;
     _notificationPermissionAsked = true;
     unawaited(NotificationPermission.ensureRequested());
   }
 
   /// 输出能力（设置页按此显隐分组 / 提示权限）。
-  LyricsOutputCapability capabilityOf(String outputId) {
-    for (final output in _outputs) {
-      if (output.id == outputId) return output.capability;
-    }
-    return LyricsOutputCapability.unsupported;
-  }
+  LyricsOutputCapability capabilityOf(String outputId) =>
+      state.capabilityOf(outputId);
 
   /// 复查平台能力（授权返回 / 回前台时调用），并按配置重新激活输出。
   Future<void> refreshCapabilities() async {
     await _desktopOutput?.refreshCapability();
     await _syncOutputs();
-    if (!_disposed) notifyListeners();
+    if (!_disposed) _changes.notify();
   }
 
   /// 跳系统悬浮窗授权页。
@@ -157,28 +199,28 @@ class LyricsDisplayProvider extends ChangeNotifier {
   LyricsPresentation? _buildPresentation() {
     final track = _currentTrack;
     if (track == null) return null;
-    final state = _lyricsState;
+    final lyrics = _lyricsState;
     final ready =
-        state.status == LyricsStatus.ready &&
-        state.lines.isNotEmpty &&
-        state.trackId == track.id.uri;
+        lyrics.status == LyricsStatus.ready &&
+        lyrics.lines.isNotEmpty &&
+        lyrics.trackId == track.id.uri;
     final tracked = ready
         ? _tracker.track(
-            lines: state.lines,
-            translations: state.translations,
-            romas: state.romas,
-            isSynced: state.isSynced,
+            lines: lyrics.lines,
+            translations: lyrics.translations,
+            romas: lyrics.romas,
+            isSynced: lyrics.isSynced,
             position: _position,
             title: track.title,
-            offsetMs: settings.offsetMs,
-            translationEnabled: settings.translationEnabled,
-            romaEnabled: settings.romaEnabled,
-            unsyncedBehavior: settings.unsyncedBehavior,
-            maxLines: settings.desktopMaxLines,
+            offsetMs: _settingsState.offsetMs,
+            translationEnabled: _settingsState.translationEnabled,
+            romaEnabled: _settingsState.romaEnabled,
+            unsyncedBehavior: _settingsState.unsyncedBehavior,
+            maxLines: _settingsState.desktopMaxLines,
           )
         : const TrackedLine();
     final scrollFollowsSinging =
-        settings.desktopScrollMode == DesktopScrollMode.followSinging;
+        _settingsState.desktopScrollMode == DesktopScrollMode.followSinging;
     var lineStartMs = tracked.lineStartMs;
     var lineEndMs = tracked.lineEndMs;
     if (!scrollFollowsSinging) {
@@ -212,7 +254,7 @@ class LyricsDisplayProvider extends ChangeNotifier {
       lineIndex: tracked.index,
       hasCurrentLine: tracked.index >= 0,
       // 与行跟踪同一有效位置（叠加歌词偏移），逐字渐染与之对齐。
-      positionMs: _position.inMilliseconds + settings.offsetMs,
+      positionMs: _position.inMilliseconds + _settingsState.offsetMs,
       positionAtEpochMs:
           (_positionStamp ?? DateTime.now()).millisecondsSinceEpoch,
       scrollFollowsSinging: scrollFollowsSinging,
@@ -255,9 +297,10 @@ class LyricsDisplayProvider extends ChangeNotifier {
   bool _isOutputEnabled(String outputId) {
     switch (outputId) {
       case LyricsOutputIds.desktop:
-        return settings.desktopEnabled;
+        return _settingsState.desktopEnabled;
       case LyricsOutputIds.media:
-        return settings.notificationEnabled || settings.bluetoothEnabled;
+        return _settingsState.notificationEnabled ||
+            _settingsState.bluetoothEnabled;
       default:
         return false;
     }
@@ -274,22 +317,23 @@ class LyricsDisplayProvider extends ChangeNotifier {
   Future<void> _syncOutputs() async {
     if (_disposed) return;
     for (final output in _outputs) {
-      await _guard(output.start(settings));
+      await _guard(output.start(_settingsState));
     }
     _dispatch(force: true);
   }
 
   void _onSettingsChanged() {
     if (_disposed) return;
+    _settingsState = _settings.state;
     _maybeRequestNotificationPermission();
     unawaited(_syncOutputs());
-    notifyListeners();
+    _changes.notify();
   }
 
   void _onA2dpChanged() {
     if (_disposed) return;
     _dispatch(force: true);
-    notifyListeners();
+    _changes.notify();
   }
 
   void _onThemeChanged() {
@@ -309,11 +353,13 @@ class LyricsDisplayProvider extends ChangeNotifier {
       case LyricsOutputAction.next:
         _onPlaybackCommand?.call(LyricsPlaybackCommand.next);
       case LyricsOutputAction.toggleTranslation:
-        unawaited(settings.setTranslationEnabled(!settings.translationEnabled));
+        unawaited(
+          _settings.setTranslationEnabled(!_settingsState.translationEnabled),
+        );
       case LyricsOutputAction.lock:
-        unawaited(settings.setDesktopLock(!settings.desktopLock));
+        unawaited(_settings.setDesktopLock(!_settingsState.desktopLock));
       case LyricsOutputAction.close:
-        unawaited(settings.setDesktopEnabled(false));
+        unawaited(_settings.setDesktopEnabled(false));
     }
   }
 
@@ -324,11 +370,11 @@ class LyricsDisplayProvider extends ChangeNotifier {
     return null;
   }
 
-  @override
+  /// 释放订阅与输出；组合根退出时调用。
   void dispose() {
     _disposed = true;
-    settings.removeListener(_onSettingsChanged);
-    _audioRoute?.removeListener(_onA2dpChanged);
+    _settings.changes.removeListener(_onSettingsChanged);
+    _audioRoute?.changes.removeListener(_onA2dpChanged);
     _themeListenable?.removeListener(_onThemeChanged);
     for (final sub in _subscriptions) {
       unawaited(sub.cancel());
@@ -337,6 +383,5 @@ class LyricsDisplayProvider extends ChangeNotifier {
     for (final output in _outputs) {
       unawaited(_guard(output.stop()));
     }
-    super.dispose();
   }
 }

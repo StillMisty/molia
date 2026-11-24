@@ -12,7 +12,6 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/pages/statistics/statistics_heatmap.dart';
 import 'package:molia/services/app_logging.dart';
 import 'package:molia/widgets/collection_track_list.dart';
-import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:motor/motor.dart';
 
@@ -70,11 +69,16 @@ void main() {
   });
 
   /// 移动骨架没有软件内快捷键（`DesktopShortcuts` 只包桌面骨架），切页要
-  /// 走真实的底栏入口；播放页目的地用 Molia 标志图标（唯一的一颗）。
+  /// 走真实的底栏入口；播放页目的地用音符字形（未选中空心 / 选中实心成对）。
   Future<void> openNowPlaying(WidgetTester tester, {int frames = 90}) async {
     final destination = find.descendant(
       of: find.byType(M3ENavigationBar),
-      matching: find.byType(MoliaMark),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is Icon &&
+            (widget.icon == Icons.music_note_rounded ||
+                widget.icon == Icons.music_note_outlined),
+      ),
     );
     expect(destination, findsWidgets, reason: '移动底栏缺少播放页入口');
     await tester.tap(destination.first);

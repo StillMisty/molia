@@ -95,7 +95,7 @@ void main() {
       final policy = PlaybackPowerPolicy();
       addTearDown(policy.dispose);
       var notifications = 0;
-      policy.addListener(() => notifications++);
+      policy.changes.addListener(() => notifications++);
 
       policy.markForeground();
       expect(notifications, 0);

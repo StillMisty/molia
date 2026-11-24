@@ -104,7 +104,7 @@ class TrackLocalDataController implements ValueListenable<TrackLocalDataState> {
     this.recordsDebounce = const Duration(milliseconds: 300),
     TrackLocalDataTimerFactory? timerFactory,
   }) : _startTimer = timerFactory ?? _defaultTimerFactory {
-    _downloadRecords?.addListener(_onDownloadRecordsChanged);
+    _downloadRecords?.changes.addListener(_onDownloadRecordsChanged);
     _cacheService.revision.addListener(_onCacheRevisionChanged);
   }
 
@@ -274,7 +274,7 @@ class TrackLocalDataController implements ValueListenable<TrackLocalDataState> {
     _disposed = true;
     _generation++;
     _cancelDebounce();
-    _downloadRecords?.removeListener(_onDownloadRecordsChanged);
+    _downloadRecords?.changes.removeListener(_onDownloadRecordsChanged);
     _cacheService.revision.removeListener(_onCacheRevisionChanged);
     final trailing = _trailing;
     _trailing = null;

@@ -5,12 +5,13 @@
 /// `lib/domain/models/annual_report.dart`，本文件不复制聚合逻辑。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/annual_report.dart';
 import '../../domain/ports/source_registry.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 
 /// 汇总数字块：图标 / 文案 / 计数。
 class AnnualReportMetric {
@@ -59,7 +60,10 @@ String annualReportSourceName(
   String sourceKey,
 ) {
   if (sourceKey == 'other') return l10n.statsSourceOther;
-  final registry = context.read<SourceRegistry?>();
+  final SourceRegistry? registry = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(sourceRegistryProvider);
   for (final descriptor in registry?.descriptors ?? const []) {
     if (descriptor.key == sourceKey) return descriptor.displayName;
   }

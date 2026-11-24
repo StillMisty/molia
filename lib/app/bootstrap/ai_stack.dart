@@ -91,7 +91,7 @@ AiStack buildAiStack({
   );
   // init 读本机凭据库 / 历史批次，由首帧后的 post_frame_init 触发；
   // 页面直接打开时也会再调一次（幂等）。
-  playback.addListener(aiDjProvider.onPlaybackChanged);
+  playback.changes.addListener(aiDjProvider.onPlaybackChanged);
   playback.position.addListener(aiDjProvider.onPositionChanged);
 
   return (

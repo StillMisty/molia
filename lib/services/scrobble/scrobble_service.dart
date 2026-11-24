@@ -18,6 +18,7 @@ import '../../domain/models/scrobble.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/scrobble_sink.dart';
 import '../../domain/scrobble/scrobble_rules.dart';
+import '../../utils/snapshot_source.dart';
 import 'lastfm_sink.dart';
 import 'scrobble_outbox.dart';
 import 'scrobble_preferences.dart';
@@ -25,7 +26,72 @@ import 'scrobble_preferences.dart';
 /// 连接操作的结论（设置页据此给文案）。
 enum ScrobbleConnectResult { connected, invalidCredential, unreachable }
 
-class ScrobbleService extends ChangeNotifier {
+/// 听歌同步的不可变快照：连接状态、账号、待发计数与授权阶段。
+///
+/// 读的是服务当前内存事实（不触发凭据库 / 发件箱 IO）；UI 经
+/// `scrobbleProvider` 镜像它，命令经 `scrobbleControllerProvider` 发出。
+@immutable
+class ScrobbleState {
+  const ScrobbleState({
+    required this.ready,
+    required this.masterEnabled,
+    required this.lastFmConfigured,
+    required this.lastFmStage,
+    required this.lastFmAuthorizationUri,
+    required this.statuses,
+    required this.accounts,
+    required this.queued,
+    required this.consents,
+    required this.activeTargets,
+    required this.queuedTotal,
+  });
+
+  /// 偏好 / 凭据 / 发件箱是否已加载。
+  final bool ready;
+
+  /// 总开关。
+  final bool masterEnabled;
+
+  /// 本版本是否内置 Last.fm 应用凭证。
+  final bool lastFmConfigured;
+
+  /// Last.fm 浏览器授权阶段。
+  final LastFmAuthStage lastFmStage;
+
+  /// Last.fm 授权页地址（阶段可用时有值）。
+  final Uri? lastFmAuthorizationUri;
+
+  /// 每个服务的连接状态。
+  final Map<ScrobbleTarget, ScrobbleTargetStatus> statuses;
+
+  /// 每个服务显示用账号名（空 = 未连接）。
+  final Map<ScrobbleTarget, String> accounts;
+
+  /// 每个服务的待发事件数。
+  final Map<ScrobbleTarget, int> queued;
+
+  /// 每个服务是否已同意当前条款版本。
+  final Map<ScrobbleTarget, bool> consents;
+
+  /// 真正在发送的服务（总开关 + 服务开关 + 凭据齐全）。
+  final Set<ScrobbleTarget> activeTargets;
+
+  /// 发件箱条目总数。
+  final int queuedTotal;
+
+  ScrobbleTargetStatus statusOf(ScrobbleTarget target) =>
+      statuses[target] ?? ScrobbleTargetStatus.disconnected;
+
+  String accountOf(ScrobbleTarget target) => accounts[target] ?? '';
+
+  int queuedFor(ScrobbleTarget target) => queued[target] ?? 0;
+
+  bool consentFor(ScrobbleTarget target) => consents[target] ?? false;
+
+  bool activeFor(ScrobbleTarget target) => activeTargets.contains(target);
+}
+
+class ScrobbleService implements SnapshotSource<ScrobbleState> {
   ScrobbleService({
     required this.preferences,
     required this.outbox,
@@ -73,6 +139,7 @@ class ScrobbleService extends ChangeNotifier {
 
   bool _ready = false;
   bool _disposed = false;
+  final SnapshotSignal _changes = SnapshotSignal();
   Timer? _timer;
   PlaybackSnapshot _snapshot = PlaybackSnapshot.empty;
   ScrobbleSession? _session;
@@ -80,6 +147,37 @@ class ScrobbleService extends ChangeNotifier {
   LastFmAuth? _lastFmAuth;
 
   bool get ready => _ready;
+
+  /// 不可变快照：UI 经 `scrobbleProvider` 镜像它（每次 [changes] 后重建）。
+  @override
+  ScrobbleState get state => ScrobbleState(
+    ready: _ready,
+    masterEnabled: preferences.masterEnabled,
+    lastFmConfigured: _lastFmConfig.isConfigured,
+    lastFmStage: lastFmStage,
+    lastFmAuthorizationUri: lastFmAuthorizationUri,
+    statuses: Map<ScrobbleTarget, ScrobbleTargetStatus>.unmodifiable(_statuses),
+    accounts: Map<ScrobbleTarget, String>.unmodifiable({
+      for (final target in ScrobbleTarget.values)
+        target: preferences.accountFor(target),
+    }),
+    queued: Map<ScrobbleTarget, int>.unmodifiable({
+      for (final target in ScrobbleTarget.values)
+        target: outbox.lengthFor(target),
+    }),
+    consents: Map<ScrobbleTarget, bool>.unmodifiable({
+      for (final target in ScrobbleTarget.values)
+        target: preferences.consentFor(target),
+    }),
+    activeTargets: Set<ScrobbleTarget>.unmodifiable({
+      for (final target in ScrobbleTarget.values)
+        if (activeFor(target)) target,
+    }),
+    queuedTotal: outbox.length,
+  );
+
+  @override
+  Listenable get changes => _changes;
 
   bool get masterEnabled => preferences.masterEnabled;
 
@@ -470,14 +568,12 @@ class ScrobbleService extends ChangeNotifier {
   }
 
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) _changes.notify();
   }
 
-  @override
   void dispose() {
     _disposed = true;
     _timer?.cancel();
     _timer = null;
-    super.dispose();
   }
 }

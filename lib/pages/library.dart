@@ -1,14 +1,13 @@
 import 'dart:math' as math;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/source.dart' show SourceDescriptor;
 import '../l10n/app_localizations.dart';
-import '../providers/channel_selection.dart';
+import '../providers/app_providers.dart';
 import '../providers/discover_provider.dart';
-import '../providers/sources_provider.dart';
 import '../widgets/responsive.dart';
 import '../widgets/scroll_to_top.dart';
 import '../widgets/discover_layout.dart';
@@ -36,7 +35,7 @@ enum _LibraryTab { search, leaderboards, playlists }
 /// - 顶部渠道选择在所有 tab（含搜索）左侧常显，同时决定热榜 / 歌单与搜索；
 /// - 当前渠道不支持搜索时隐藏搜索 tab；热榜 / 歌单按渠道能力隐藏；
 /// - 个人内容（播放历史 / 我的列表 / 导入收藏）在收藏页。
-class Library extends StatefulWidget {
+class Library extends ConsumerStatefulWidget {
   const Library({super.key, this.reselect, this.showSearchRequest});
 
   /// 壳层「重复点击底栏 / 导航轨资料库目的地」的请求通道：
@@ -51,10 +50,10 @@ class Library extends StatefulWidget {
   final ShellReselectSignal? showSearchRequest;
 
   @override
-  State<Library> createState() => _LibraryState();
+  ConsumerState<Library> createState() => _LibraryState();
 }
 
-class _LibraryState extends State<Library> {
+class _LibraryState extends ConsumerState<Library> {
   /// 用户选中的 tab（默认搜索）；隐藏是临时的，不覆盖该意图。
   _LibraryTab _tab = _LibraryTab.search;
 
@@ -81,20 +80,22 @@ class _LibraryState extends State<Library> {
   @override
   void initState() {
     super.initState();
-    widget.reselect?.addListener(_handleReselect);
-    widget.showSearchRequest?.addListener(_handleShowSearchRequest);
+    widget.reselect?.changes.addListener(_handleReselect);
+    widget.showSearchRequest?.changes.addListener(_handleShowSearchRequest);
   }
 
   @override
   void didUpdateWidget(covariant Library oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.reselect != widget.reselect) {
-      oldWidget.reselect?.removeListener(_handleReselect);
-      widget.reselect?.addListener(_handleReselect);
+      oldWidget.reselect?.changes.removeListener(_handleReselect);
+      widget.reselect?.changes.addListener(_handleReselect);
     }
     if (oldWidget.showSearchRequest != widget.showSearchRequest) {
-      oldWidget.showSearchRequest?.removeListener(_handleShowSearchRequest);
-      widget.showSearchRequest?.addListener(_handleShowSearchRequest);
+      oldWidget.showSearchRequest?.changes.removeListener(
+        _handleShowSearchRequest,
+      );
+      widget.showSearchRequest?.changes.addListener(_handleShowSearchRequest);
     }
   }
 
@@ -108,8 +109,8 @@ class _LibraryState extends State<Library> {
 
   @override
   void dispose() {
-    widget.reselect?.removeListener(_handleReselect);
-    widget.showSearchRequest?.removeListener(_handleShowSearchRequest);
+    widget.reselect?.changes.removeListener(_handleReselect);
+    widget.showSearchRequest?.changes.removeListener(_handleShowSearchRequest);
     _searchResultsController.dispose();
     _leaderboardsController.dispose();
     _playlistsController.dispose();
@@ -164,11 +165,11 @@ class _LibraryState extends State<Library> {
     // 可见性门控：资料页在壳层常驻，隐藏时放弃订阅（见 ShellPageVisibility）。
     final visible = ShellPageVisibility.maybeVisibleOf(context) ?? true;
     final sources = visible
-        ? context.watch<SourcesProvider>()
-        : context.read<SourcesProvider>();
+        ? ref.watch(sourcesProvider)
+        : ref.read(sourcesProvider);
     final discover = visible
-        ? context.watch<DiscoverProvider>()
-        : context.read<DiscoverProvider>();
+        ? ref.watch(discoverProvider)
+        : ref.read(discoverProvider);
 
     // 仅启用项可被选中/展示；停用项保留在「音源管理」页以便再次启用。
     final enabledChannels = [
@@ -195,7 +196,7 @@ class _LibraryState extends State<Library> {
     if (needsFallback) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        context.read<ChannelSelection>().ensureValid();
+        ref.read(channelSelectionControllerProvider).ensureValid();
       });
     }
 
@@ -408,7 +409,7 @@ class _LibraryState extends State<Library> {
     // 选择直接交给 ChannelSelection：脚本渠道可能在页面 build 之后才加入
     // 列表，用 build 快照查找会静默忽略选择。渠道只有一份状态，发现内容与
     // 搜索都随 ChannelSelection 更新。
-    context.read<ChannelSelection>().select(key);
+    ref.read(channelSelectionControllerProvider).select(key);
   }
 
   Widget _tabContent(_LibraryTab tab) => switch (tab) {

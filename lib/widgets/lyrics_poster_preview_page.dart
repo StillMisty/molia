@@ -5,14 +5,14 @@ import 'dart:ui' as ui;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../domain/models/track.dart';
+import '../providers/app_providers.dart';
 import '../services/artwork_palette_service.dart';
 import '../services/covers/cover_resolution.dart';
 import '../services/haptics.dart';
-import '../services/notification_service.dart';
 import '../services/save_as.dart';
 import '../services/lyrics_poster_service.dart';
 import '../services/poster/poster_style_settings.dart';
@@ -30,7 +30,7 @@ import 'font_picker_sheet.dart';
 import 'poster_style_sheet.dart';
 import 'track_artwork.dart';
 
-class LyricsPosterPreviewPage extends StatefulWidget {
+class LyricsPosterPreviewPage extends ConsumerStatefulWidget {
   final String lyrics;
   final String trackTitle;
   final String artistName;
@@ -49,11 +49,12 @@ class LyricsPosterPreviewPage extends StatefulWidget {
   });
 
   @override
-  State<LyricsPosterPreviewPage> createState() =>
+  ConsumerState<LyricsPosterPreviewPage> createState() =>
       _LyricsPosterPreviewPageState();
 }
 
-class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
+class _LyricsPosterPreviewPageState
+    extends ConsumerState<LyricsPosterPreviewPage> {
   bool _isLoading = true;
   bool _isOperating = false; // 保存或分享操作中
 
@@ -200,7 +201,9 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         return buildColorScheme(Color(_customSeed), appScheme.brightness);
       case PosterColorSource.artwork:
         final url = _paletteCoverUrl;
-        final paletteService = context.read<ArtworkPaletteService?>();
+        final ArtworkPaletteService? paletteService = ref.read(
+          artworkPaletteServiceProvider,
+        );
         if (url == null || url.isEmpty || paletteService == null) {
           return appScheme;
         }
@@ -306,12 +309,12 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
           }
         });
         if (hasPoster) {
-          Provider.of<NotificationService>(
-            context,
-            listen: false,
-          ).showErrorSnackBar(
-            AppLocalizations.of(context)!.posterGenerationFailed(e.toString()),
-          );
+          ref
+              .read(notificationServiceProvider)
+              .showErrorSnackBar(
+                AppLocalizations.of(context)!
+                    .posterGenerationFailed(e.toString()),
+              );
         }
       }
     } finally {
@@ -355,7 +358,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
 
     try {
       final l10n = AppLocalizations.of(context)!;
-      final saveAs = context.read<SaveAs?>();
+      final SaveAs? saveAs = ref.read(saveAsProvider);
       if (saveAs == null) throw StateError('SaveAs 未装配');
       final bytes = await _posterPngBytes();
       final result = await saveAs.saveBytes(
@@ -367,10 +370,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         dialogTitle: l10n.save,
       );
       if (!mounted) return;
-      final notifications = Provider.of<NotificationService>(
-        context,
-        listen: false,
-      );
+      final notifications = ref.read(notificationServiceProvider);
       switch (result) {
         case SaveAsSaved(:final displayPath, :final kind):
           notifications.showSuccessSnackBar(
@@ -383,12 +383,11 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       }
     } catch (e) {
       if (mounted) {
-        Provider.of<NotificationService>(
-          context,
-          listen: false,
-        ).showErrorSnackBar(
-          '${AppLocalizations.of(context)!.operationFailed}: ${e.toString()}',
-        );
+        ref
+            .read(notificationServiceProvider)
+            .showErrorSnackBar(
+              '${AppLocalizations.of(context)!.operationFailed}: ${e.toString()}',
+            );
       }
     } finally {
       if (mounted) {
@@ -420,12 +419,11 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       );
     } catch (e) {
       if (mounted) {
-        Provider.of<NotificationService>(
-          context,
-          listen: false,
-        ).showErrorSnackBar(
-          '${AppLocalizations.of(context)!.operationFailed}: ${e.toString()}',
-        );
+        ref
+            .read(notificationServiceProvider)
+            .showErrorSnackBar(
+              '${AppLocalizations.of(context)!.operationFailed}: ${e.toString()}',
+            );
       }
     } finally {
       if (mounted) {

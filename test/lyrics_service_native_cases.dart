@@ -1,11 +1,12 @@
 import 'dart:async';
 
+import 'support/lyrics_test_support.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/track.dart';
-import 'package:molia/providers/lyrics_provider.dart';
+import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/lyrics/lyric_provider.dart';
 import 'package:molia/services/lyrics_cache.dart';
-import 'package:molia/services/lyrics_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 取词链路：曲目原生优先、首个非空即返回、扩展行透传与落缓存。
@@ -373,8 +374,8 @@ void main() {
   });
 
   test('LyricsState 行携带逐字时间轴（lxlyric 对齐）', () async {
-    final provider = LyricsProvider(
-      service: _StubService(
+    final provider = buildLyricsProvider(
+      _StubService(
         const LyricsResult(
           lyric: '[00:01.00]你好',
           lxlyric: '[00:01.00]<0,200>你<200,300>好',
@@ -383,8 +384,8 @@ void main() {
       ),
     );
     await provider.load(track('10'));
-    expect(provider.state.lines.single.words, hasLength(2));
-    expect(provider.state.lines.single.words!.first.text, '你');
+    expect(provider.currentState.lines.single.words, hasLength(2));
+    expect(provider.currentState.lines.single.words!.first.text, '你');
   });
 }
 

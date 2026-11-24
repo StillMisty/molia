@@ -19,6 +19,8 @@ const Map<String, Set<String>> _whitelist = {};
 const List<String> _domainForbidden = [
   'package:flutter/',
   'package:provider/',
+  'package:flutter_riverpod/',
+  'package:riverpod_annotation/',
   'lib/providers/',
   'lib/data/',
   'lib/sources/',
@@ -29,6 +31,9 @@ const List<String> _domainForbidden = [
 ];
 
 const List<String> _dataForbidden = [
+  'package:provider/',
+  'package:flutter_riverpod/',
+  'package:riverpod_annotation/',
   'lib/providers/',
   'lib/pages/',
   'lib/widgets/',

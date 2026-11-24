@@ -1,13 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../domain/models/app_release.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/update_provider.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
@@ -23,32 +24,37 @@ final DateFormat _checkedAtDateFormat = DateFormat('yyyy-MM-dd HH:mm');
 /// 从设置首屏「通用与数据」进入（入口副标题显示当前版本或可更新版本）。
 /// 平台差异（Android 系统安装器 / 桌面替换重启 / iOS 不支持）
 /// 全部由 [UpdateProvider] 与安装策略层消化，这里只按状态渲染。
-class UpdateSettingsPage extends StatelessWidget {
+class UpdateSettingsPage extends ConsumerWidget {
   const UpdateSettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     // 测试等场景可能不提供 provider：显示空页而不是崩溃（入口行同样隐藏）。
-    final provider = context.watch<UpdateProvider?>();
+    final UpdateState? state = ref.watch(maybeUpdateProvider);
+    final UpdateProvider? provider = ref.read(maybeUpdateControllerProvider);
 
     return SettingsSubPage.body(
       title: l10n.settingsUpdateTitle,
-      body: provider == null
+      body: state == null || provider == null
           ? const SizedBox.shrink()
           : SettingsSubPageList(
               children: [
-                _UpdateSection(provider: provider, l10n: l10n),
+                _UpdateSection(state: state, controller: provider, l10n: l10n),
                 // 检查中不展示上一次的结果：否则会把上一次下载过的版本
                 // 当成当前可安装版本显示（状态未对齐的观感 bug）。
-                if (provider.release != null &&
-                    provider.status != UpdateStatus.upToDate &&
-                    provider.status != UpdateStatus.checking) ...[
+                if (state.release != null &&
+                    state.status != UpdateStatus.upToDate &&
+                    state.status != UpdateStatus.checking) ...[
                   const SizedBox(height: kSettingsSectionSpacing),
-                  _ReleaseSection(provider: provider, l10n: l10n),
+                  _ReleaseSection(
+                    state: state,
+                    controller: provider,
+                    l10n: l10n,
+                  ),
                 ],
                 const SizedBox(height: kSettingsSectionSpacing),
-                _AboutSection(provider: provider, l10n: l10n),
+                _AboutSection(state: state, l10n: l10n),
               ],
             ),
     );
@@ -57,18 +63,23 @@ class UpdateSettingsPage extends StatelessWidget {
 
 /// 更新：渠道 / 启动时与每日检查 / 检查更新入口。
 class _UpdateSection extends StatelessWidget {
-  const _UpdateSection({required this.provider, required this.l10n});
+  const _UpdateSection({
+    required this.state,
+    required this.controller,
+    required this.l10n,
+  });
 
-  final UpdateProvider provider;
+  final UpdateState state;
+  final UpdateProvider controller;
   final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
     final busy =
-        provider.status == UpdateStatus.checking ||
-        provider.status == UpdateStatus.downloading ||
-        provider.status == UpdateStatus.installing;
-    final installResult = provider.installResult;
+        state.status == UpdateStatus.checking ||
+        state.status == UpdateStatus.downloading ||
+        state.status == UpdateStatus.installing;
+    final installResult = state.installResult;
     return SettingsSectionCard(
       title: l10n.updateSettingsSection,
       children: [
@@ -78,7 +89,7 @@ class _UpdateSection extends StatelessWidget {
           icon: Icons.alt_route_rounded,
           title: l10n.updateChannelTitle,
           subtitle: l10n.updateChannelSubtitle,
-          value: provider.channel,
+          value: state.channel,
           options: [
             (UpdateChannel.stable, l10n.updateChannelStable),
             (UpdateChannel.beta, l10n.updateChannelBeta),
@@ -88,31 +99,31 @@ class _UpdateSection extends StatelessWidget {
             UpdateChannel.stable: Icons.verified_rounded,
             UpdateChannel.beta: Icons.science_rounded,
           },
-          onChanged: (channel) => unawaited(provider.setChannel(channel)),
+          onChanged: (channel) => unawaited(controller.setChannel(channel)),
         ),
         SettingsSwitchTile(
           switchKey: const Key('settingsUpdateCheckOnStartupSwitch'),
           icon: Icons.rocket_launch_rounded,
           title: l10n.updateCheckOnStartupTitle,
           subtitle: l10n.updateCheckOnStartupSubtitle,
-          value: provider.checkOnStartup,
-          onChanged: (value) => unawaited(provider.setCheckOnStartup(value)),
+          value: state.checkOnStartup,
+          onChanged: (value) => unawaited(controller.setCheckOnStartup(value)),
         ),
         SettingsSwitchTile(
           switchKey: const Key('settingsUpdateCheckDailySwitch'),
           icon: Icons.schedule_rounded,
           title: l10n.updateCheckDailyTitle,
           subtitle: l10n.updateCheckDailySubtitle,
-          value: provider.checkDaily,
-          onChanged: (value) => unawaited(provider.setCheckDaily(value)),
+          value: state.checkDaily,
+          onChanged: (value) => unawaited(controller.setCheckDaily(value)),
         ),
         SettingsNavTile(
           key: const Key('settingsUpdateCheckItem'),
           icon: Icons.system_update_alt_rounded,
           title: l10n.updateCheckTitle,
-          subtitle: updateStatusText(l10n, provider),
+          subtitle: updateStatusText(l10n, state),
           // 检查中 / 下载中不允许重复触发；下载中应走发布卡片的取消按钮。
-          onTap: busy ? null : () => unawaited(provider.check()),
+          onTap: busy ? null : () => unawaited(controller.check()),
         ),
       ],
     );
@@ -124,7 +135,7 @@ class _UpdateSection extends StatelessWidget {
         key: const Key('settingsUpdateInstallResultItem'),
         icon: Icons.check_circle_rounded,
         title: l10n.updateInstallSucceeded(
-          provider.installResultVersion ?? provider.currentVersionLabel,
+          state.installResultVersion ?? state.currentVersionLabel,
         ),
         subtitle: '',
       ),
@@ -140,19 +151,24 @@ class _UpdateSection extends StatelessWidget {
 
 /// 新版本：版本信息 + 发布说明 + 进度 + 操作按钮。
 class _ReleaseSection extends StatelessWidget {
-  const _ReleaseSection({required this.provider, required this.l10n});
+  const _ReleaseSection({
+    required this.state,
+    required this.controller,
+    required this.l10n,
+  });
 
-  final UpdateProvider provider;
+  final UpdateState state;
+  final UpdateProvider controller;
   final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
-    final release = provider.release!;
+    final release = state.release!;
     final theme = Theme.of(context);
     final m3e = M3ETheme.of(context);
     final releasedAt = release.releasedAt;
     // 与真正下载共用同一次产物选择：Windows 便携版这里显示的是 zip 大小。
-    final size = provider.releaseAsset?.size;
+    final size = state.releaseAsset?.size;
 
     return SettingsSectionCard(
       title: l10n.updateReleaseSection,
@@ -187,9 +203,9 @@ class _ReleaseSection extends StatelessWidget {
               ),
             ),
           ),
-        if (provider.status == UpdateStatus.downloading)
-          _DownloadProgress(provider: provider, l10n: l10n),
-        _ReleaseActions(provider: provider, l10n: l10n),
+        if (state.status == UpdateStatus.downloading)
+          _DownloadProgress(provider: controller, l10n: l10n),
+        _ReleaseActions(state: state, controller: controller, l10n: l10n),
       ],
     );
   }
@@ -245,19 +261,23 @@ class _DownloadProgress extends StatelessWidget {
 /// 有主操作时收进 split button 的尾部菜单；没有主操作的平台/状态
 /// （iOS、安装中）保留独立文本按钮。
 class _ReleaseActions extends StatelessWidget {
-  const _ReleaseActions({required this.provider, required this.l10n});
+  const _ReleaseActions({
+    required this.state,
+    required this.controller,
+    required this.l10n,
+  });
 
-  final UpdateProvider provider;
+  final UpdateState state;
+  final UpdateProvider controller;
   final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
-    final status = provider.status;
-    final platform = provider.platform?.platform;
+    final status = state.status;
+    final platform = state.platform?.platform;
     final canOpenPage =
-        provider.release?.notesUrl != null &&
-        status != UpdateStatus.downloading;
-    final permissionMissing = provider.failure == UpdateFailureKind.permission;
+        state.release?.notesUrl != null && status != UpdateStatus.downloading;
+    final permissionMissing = state.failure == UpdateFailureKind.permission;
 
     final primary = _primaryAction(
       context,
@@ -273,7 +293,7 @@ class _ReleaseActions extends StatelessWidget {
         M3EButton.icon(
           key: const Key('settingsUpdateCancelButton'),
           style: M3EButtonStyle.text,
-          onPressed: provider.cancelDownload,
+          onPressed: controller.cancelDownload,
           icon: const Icon(Icons.close_rounded, size: 18),
           label: Text(l10n.updateCancelDownload),
         ),
@@ -365,27 +385,27 @@ class _ReleaseActions extends StatelessWidget {
         key: const Key('settingsUpdatePermissionButton'),
         icon: Icons.app_settings_alt_rounded,
         label: l10n.updateGrantInstallPermission,
-        onPressed: () => unawaited(provider.openInstallPermissionSettings()),
+        onPressed: () => unawaited(controller.openInstallPermissionSettings()),
       );
     }
-    if (provider.hasDownloadedPackage && status != UpdateStatus.available) {
+    if (state.hasDownloadedPackage && status != UpdateStatus.available) {
       return (
         key: const Key('settingsUpdateInstallButton'),
         icon: Icons.install_mobile_rounded,
         label: l10n.updateInstallNow,
-        onPressed: () => unawaited(provider.installDownloaded()),
+        onPressed: () => unawaited(controller.installDownloaded()),
       );
     }
     return (
       key: const Key('settingsUpdateDownloadButton'),
       icon: Icons.download_rounded,
       label: l10n.updateDownloadAndInstall,
-      onPressed: () => unawaited(provider.downloadAndInstall()),
+      onPressed: () => unawaited(controller.downloadAndInstall()),
     );
   }
 
   Future<void> _openReleasePage(BuildContext context) async {
-    final url = provider.release?.notesUrl;
+    final url = state.release?.notesUrl;
     if (url == null) return;
     await launchUrl(url, mode: LaunchMode.externalApplication);
   }
@@ -393,14 +413,14 @@ class _ReleaseActions extends StatelessWidget {
 
 /// 关于：当前版本 / 平台 / 项目主页。
 class _AboutSection extends StatelessWidget {
-  const _AboutSection({required this.provider, required this.l10n});
+  const _AboutSection({required this.state, required this.l10n});
 
-  final UpdateProvider provider;
+  final UpdateState state;
   final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
-    final platform = provider.platform;
+    final platform = state.platform;
     return SettingsSectionCard(
       title: l10n.updateAboutSection,
       children: [
@@ -408,7 +428,7 @@ class _AboutSection extends StatelessWidget {
           key: const Key('settingsUpdateVersionItem'),
           icon: Icons.info_outline_rounded,
           title: l10n.updateCurrentVersion,
-          subtitle: provider.currentVersionLabel,
+          subtitle: state.currentVersionLabel,
         ),
         if (platform != null)
           SettingsInfoTile(
@@ -438,10 +458,10 @@ class _AboutSection extends StatelessWidget {
 }
 
 /// 检查更新行的状态文案（供页面与设置入口共用）。
-String updateStatusText(AppLocalizations l10n, UpdateProvider provider) {
-  switch (provider.status) {
+String updateStatusText(AppLocalizations l10n, UpdateState state) {
+  switch (state.status) {
     case UpdateStatus.idle:
-      final last = provider.lastCheckedAt;
+      final last = state.lastCheckedAt;
       return last == null
           ? l10n.updateStatusIdle
           : l10n.updateLastChecked(_checkedAtDateFormat.format(last));
@@ -450,7 +470,7 @@ String updateStatusText(AppLocalizations l10n, UpdateProvider provider) {
     case UpdateStatus.upToDate:
       return l10n.updateStatusUpToDate;
     case UpdateStatus.available:
-      return l10n.updateStatusAvailable(provider.release?.version ?? '');
+      return l10n.updateStatusAvailable(state.release?.version ?? '');
     case UpdateStatus.downloading:
       return l10n.updateStatusDownloading;
     case UpdateStatus.downloaded:
@@ -458,7 +478,7 @@ String updateStatusText(AppLocalizations l10n, UpdateProvider provider) {
     case UpdateStatus.installing:
       return l10n.updateStatusInstalling;
     case UpdateStatus.error:
-      return updateFailureText(l10n, provider.failure);
+      return updateFailureText(l10n, state.failure);
   }
 }
 

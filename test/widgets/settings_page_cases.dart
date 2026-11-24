@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/data/play_statistics_repository.dart';
@@ -20,6 +19,7 @@ import 'package:molia/widgets/settings/settings_tiles.dart';
 import '../support/cover_test_support.dart';
 import '../support/fakes.dart';
 import '../support/memory_database.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 import '../support/sync_test_support.dart';
 
@@ -27,6 +27,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late ThemeProvider theme;
+  late ProviderTestScope scope;
   late PlaybackProvider playback;
   late NavProvider nav;
   late TraySettings tray;
@@ -37,17 +38,18 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final registry = testSettingsRegistry();
     attachStaticSettingsForTest(registry);
-    theme = ThemeProvider(settings: registry);
+    scope = ProviderTestScope(registry: registry);
+    theme = scope.theme;
     await theme.preferencesReady;
     playback = buildTestPlaybackProvider(
       settings: registry,
       facade: FakePlaybackFacade(),
     );
     await playback.preferencesReady;
-    nav = NavProvider(settings: registry);
+    nav = scope.container.read(navProvider.notifier);
     await nav.preferencesReady;
-    tray = TraySettings();
-    await tray.init();
+    tray = scope.container.read(traySettingsProvider.notifier);
+    await tray.preferencesReady;
     libraryAdd = LibraryAddSettings(settings: registry);
     await libraryAdd.init();
     final db = openMemoryDatabase();
@@ -59,14 +61,14 @@ void main() {
         statisticsSync: testStatisticsSyncStore(() => db),
       ),
     );
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryAddSettings>(libraryAdd);
+    scope.put<PlayStatisticsService>(statistics);
+    putCoverStore(scope);
   });
 
   tearDown(() {
-    nav.dispose();
-    tray.dispose();
-    libraryAdd.dispose();
     playback.dispose();
-    theme.dispose();
   });
 
   Future<void> pumpSettings(WidgetTester tester) async {
@@ -76,17 +78,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          coverStoreProvider(),
-          ChangeNotifierProvider<ThemeProvider>.value(value: theme),
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<NavProvider>.value(value: nav),
-          ChangeNotifierProvider<TraySettings>.value(value: tray),
-          ChangeNotifierProvider<LibraryAddSettings>.value(value: libraryAdd),
-          Provider<PlayStatisticsService>.value(value: statistics),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),

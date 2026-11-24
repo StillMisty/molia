@@ -8,7 +8,7 @@ import 'dart:async';
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models/comment.dart';
 import '../l10n/app_localizations.dart';
@@ -35,7 +35,7 @@ String commentTimeLabel(AppLocalizations l10n, DateTime time) {
 }
 
 /// 单类评论列表（分页加载 + 刷新 + 空/错误态）。
-class CommentListView extends StatelessWidget {
+class CommentListView extends ConsumerWidget {
   const CommentListView({super.key, required this.kind});
 
   final CommentKind kind;
@@ -44,10 +44,11 @@ class CommentListView extends StatelessWidget {
   static const int maxInlineReplies = 3;
 
   @override
-  Widget build(BuildContext context) {
-    final provider = context.watch<CommentsProvider>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final provider = ref.watch(commentsProvider);
+    final controller = ref.read(commentsProvider.notifier);
     final state = provider.stateOf(kind);
-    if (!provider.isSupported) {
+    if (!controller.isSupported) {
       return DetailPageEmpty(
         icon: Icons.comments_disabled_rounded,
         message: _l10n(context).commentsUnsupported,
@@ -80,7 +81,7 @@ class CommentListView extends StatelessWidget {
         hasMore: state.hasMore,
         isLoadingMore: state.isLoadingMore,
         loadMoreFailed: state.loadMoreFailed,
-        onLoadMore: () => unawaited(provider.loadMore()),
+        onLoadMore: () => unawaited(controller.loadMore()),
         child: ListView.builder(
           padding: const EdgeInsets.only(bottom: 24),
           // 末项固定为页脚（加载中 / 加载更多失败 / 已到底）。
@@ -91,7 +92,7 @@ class CommentListView extends StatelessWidget {
                 hasMore: state.hasMore,
                 isLoadingMore: state.isLoadingMore,
                 loadMoreFailed: state.loadMoreFailed,
-                onRetry: () => unawaited(provider.loadMore()),
+                onRetry: () => unawaited(controller.loadMore()),
                 failureLabel: _l10n(context).commentsLoadMoreFailed,
                 endLabel: _l10n(context).commentsNoMore,
                 retryKey: const Key('commentsLoadMoreRetry'),
@@ -111,7 +112,7 @@ class CommentListView extends StatelessWidget {
     }
     return M3ERefreshIndicator(
       // 首屏失败没有缓存可清，重试直接重新取数；其余状态刷新当前 tab。
-      onRefresh: state.failed ? provider.retry : provider.refresh,
+      onRefresh: state.failed ? controller.retry : controller.refresh,
       child: content,
     );
   }

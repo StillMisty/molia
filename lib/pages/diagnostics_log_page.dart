@@ -1,13 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/diagnostics.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/diagnostics_provider.dart';
-import '../services/notification_service.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/diagnostics/diagnostics_labels.dart';
 import '../widgets/empty_state.dart';
@@ -21,14 +21,14 @@ enum DiagnosticsLogLevelFilter { all, warning, error }
 ///
 /// 只在打开本页时读一次磁盘；筛选全部在内存结果上执行，不改写文件，也不
 /// 提供删除 / 清空（轮转由日志 sink 自动处理）。
-class DiagnosticsLogPage extends StatefulWidget {
+class DiagnosticsLogPage extends ConsumerStatefulWidget {
   const DiagnosticsLogPage({super.key});
 
   @override
-  State<DiagnosticsLogPage> createState() => _DiagnosticsLogPageState();
+  ConsumerState<DiagnosticsLogPage> createState() => _DiagnosticsLogPageState();
 }
 
-class _DiagnosticsLogPageState extends State<DiagnosticsLogPage> {
+class _DiagnosticsLogPageState extends ConsumerState<DiagnosticsLogPage> {
   final TextEditingController _search = TextEditingController();
   DiagnosticsLogLevelFilter _level = DiagnosticsLogLevelFilter.all;
   String _keyword = '';
@@ -37,7 +37,9 @@ class _DiagnosticsLogPageState extends State<DiagnosticsLogPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(context.read<DiagnosticsProvider>().loadLogs());
+      if (mounted) {
+        unawaited(ref.read(diagnosticsPageControllerProvider).loadLogs());
+      }
     });
   }
 
@@ -50,7 +52,7 @@ class _DiagnosticsLogPageState extends State<DiagnosticsLogPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final provider = context.read<DiagnosticsProvider>();
+    final provider = ref.read(diagnosticsPageControllerProvider);
     return ValueListenableBuilder<DiagnosticsLogsState>(
       valueListenable: provider.logsState,
       builder: (context, logs, _) {
@@ -225,13 +227,13 @@ class _DiagnosticsLogPageState extends State<DiagnosticsLogPage> {
     AppLocalizations l10n,
     List<DiagnosticLogEntry> filtered,
   ) async {
-    final notifications = context.read<NotificationService?>();
+    final notifications = ref.read(notificationServiceProvider);
     if (filtered.isEmpty) {
-      notifications?.showSnackBar(l10n.diagnosticsLogsCopyEmpty);
+      notifications.showSnackBar(l10n.diagnosticsLogsCopyEmpty);
       return;
     }
     final ok = await provider.copyLogEntries(filtered);
-    notifications?.showSnackBar(
+    notifications.showSnackBar(
       ok
           ? l10n.diagnosticsLogsCopied(filtered.length)
           : l10n.diagnosticsActionCopyFailed,
@@ -244,10 +246,10 @@ class _DiagnosticsLogPageState extends State<DiagnosticsLogPage> {
     DiagnosticsProvider provider,
     AppLocalizations l10n,
   ) async {
-    final notifications = context.read<NotificationService?>();
+    final notifications = ref.read(notificationServiceProvider);
     final ok = await provider.revealLogDirectory();
     if (!ok) {
-      notifications?.showErrorSnackBar(l10n.diagnosticsLogsOpenDirectoryFailed);
+      notifications.showErrorSnackBar(l10n.diagnosticsLogsOpenDirectoryFailed);
     }
   }
 }

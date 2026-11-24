@@ -1,9 +1,9 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/nav_provider.dart';
-import '../services/notification_service.dart';
 import '../widgets/nav_destination_style.dart';
 import '../widgets/settings/settings_reorderable_rows.dart';
 import '../widgets/settings/settings_subpage.dart';
@@ -14,14 +14,15 @@ import '../widgets/settings/settings_tiles.dart';
 /// 三条拖拽列表不占设置首屏：低频、手势重（拖拽与开关互不抢），单独一页
 /// 能给出足够行距与提示。行为与首屏内联版本一致：启动首页锁定、即时生效
 /// 并持久化。
-class BottomNavSettingsPage extends StatelessWidget {
+class BottomNavSettingsPage extends ConsumerWidget {
   const BottomNavSettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final nav = context.watch<NavProvider>();
-    final order = nav.order;
+    final navState = ref.watch(navProvider);
+    final nav = ref.read(navProvider.notifier);
+    final order = navState.order;
 
     return SettingsSubPage(
       title: l10n.settingsBottomNavTitle,
@@ -32,7 +33,7 @@ class BottomNavSettingsPage extends StatelessWidget {
               itemCount: order.length,
               itemKey: (index) => ValueKey(order[index]),
               itemBuilder: (context, index) =>
-                  _buildRow(context, l10n, nav, order[index], index),
+                  _buildRow(context, ref, l10n, nav, order[index], index),
               onReorder: (oldIndex, newIndex) =>
                   nav.reorder(oldIndex, newIndex),
             ),
@@ -46,6 +47,7 @@ class BottomNavSettingsPage extends StatelessWidget {
 
   Widget _buildRow(
     BuildContext context,
+    WidgetRef ref,
     AppLocalizations l10n,
     NavProvider nav,
     ShellDestination destination,
@@ -73,10 +75,9 @@ class BottomNavSettingsPage extends StatelessWidget {
         // 置灰后正常不可达；留作并发/同步改变状态时的兜底拒绝提示。
         final accepted = await nav.setVisible(destination, value);
         if (!accepted && context.mounted) {
-          Provider.of<NotificationService>(
-            context,
-            listen: false,
-          ).showSnackBar(l10n.settingsBottomNavKeepOne);
+          ref
+              .read(notificationServiceProvider)
+              .showSnackBar(l10n.settingsBottomNavKeepOne);
         }
       },
     );

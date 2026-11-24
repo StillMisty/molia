@@ -8,6 +8,7 @@
 library;
 
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
@@ -15,6 +16,7 @@ import '../domain/models/download.dart';
 import '../domain/models/library.dart';
 import '../domain/models/local_cache_index.dart';
 import '../domain/models/track.dart';
+import '../utils/snapshot_source.dart';
 
 /// 缓存索引读取端口：页面注入 `TrackLocalDataService.cachedAudioTrackIds`。
 ///
@@ -82,16 +84,44 @@ class LocalSongsInput {
   );
 }
 
+/// 本地歌曲合集的不可变快照：可见行、计数与加载态。
+///
+/// [rows] 是合集自己缓存列表的零拷贝只读视图：包围一次、按引用复用，
+/// presenter 仍能用列表身份判断视图能否复用；消费方无法原地改写。
+@immutable
+class LocalSongsState {
+  const LocalSongsState({
+    required this.rows,
+    required this.count,
+    required this.loading,
+    required this.rowsRevision,
+  });
+
+  /// 当前可见行：下载 / 导入记录在前，缓存行在后（同一曲目下载优先）。
+  final List<CollectionLocalSong> rows;
+
+  /// 弹层计数与列表行数同源（[rows] 的长度）。
+  final int count;
+
+  /// 是否显示加载态。
+  final bool loading;
+
+  /// [rows] 被替换的次数（测试 / 诊断信号；内容变化才递增）。
+  final int rowsRevision;
+}
+
 /// 本地歌曲合集：拥有联结、下载优先去重、输入签名、加载令牌与加载态。
 ///
 /// 页面在浏览本地歌曲合集时每帧调用 [sync]；签名没变时立即返回（或在途
 /// 加载的 Future），签名变了才发起一次缓存目录列举。异步结果落地前会比对
 /// 令牌，输入已经变过的旧结果直接丢弃——不能把旧索引算出的缓存行盖到新
 /// 输入上。
-class LocalSongsCollection extends ChangeNotifier {
+class LocalSongsCollection implements SnapshotSource<LocalSongsState> {
   LocalSongsCollection({required this._loadCachedAudioTrackIds});
 
   final CachedAudioTrackIdsLookup _loadCachedAudioTrackIds;
+
+  final SnapshotSignal _changes = SnapshotSignal();
 
   LocalSongsInput? _input;
   List<CollectionLocalSong> _cachedRows = const [];
@@ -124,6 +154,19 @@ class LocalSongsCollection extends ChangeNotifier {
   /// 同一签名下复用在途加载（合集弹层计数要等它落定，不能读半旧状态）。
   Future<void>? _inFlight;
 
+  /// 变更信号（替代 `ChangeNotifier.notifyListeners` 的订阅面）。
+  @override
+  Listenable get changes => _changes;
+
+  /// 当前快照：行 / 计数 / 加载态 / 行列表版本同帧读取。
+  @override
+  LocalSongsState get state => LocalSongsState(
+    rows: rows,
+    count: count,
+    loading: loading,
+    rowsRevision: _rowsRevision,
+  );
+
   /// 当前可见行：下载 / 导入记录在前，缓存行在后；同一曲目下载优先。
   ///
   /// 缓存行来自上一轮落定结果（新输入加载期间旧缓存行保持可见，避免列表
@@ -153,13 +196,13 @@ class LocalSongsCollection extends ChangeNotifier {
       for (final row in _cachedRows)
         if (!downloadKeys.contains(row.key)) row,
     ];
-    _rows = rows;
+    _rows = UnmodifiableListView(rows);
     _rowsSignature = signature;
     _rowsDownloads = input.downloads;
     _rowsIndexEntries = input.indexEntries;
     _rowsCachedRows = _cachedRows;
     _rowsRevision++;
-    return rows;
+    return _rows!;
   }
 
   /// [rows] 被替换的次数（内容变化才递增；测试 / 诊断用）。
@@ -259,15 +302,13 @@ class LocalSongsCollection extends ChangeNotifier {
     _cachedRows = cached;
     _loadedSignature = signature;
     _indexLoading = false;
-    notifyListeners();
+    _changes.notify();
   }
 
-  @override
   void dispose() {
     // 让在途结果失效：完成回调不能再读写已释放的状态。
     _token++;
     _inFlight = null;
-    super.dispose();
   }
 }
 

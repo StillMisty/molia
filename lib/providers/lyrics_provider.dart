@@ -1,11 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import 'app_providers.dart';
 
 import '../app/perf/data_path_trace.dart';
 import '../domain/models/track.dart';
 import '../domain/models/lyric_line.dart';
 import '../services/lyrics_service.dart';
+
+part 'lyrics_provider.g.dart';
 
 /// 歌词加载状态。
 enum LyricsStatus { idle, loading, ready, empty }
@@ -70,15 +75,18 @@ class LyricsState {
 /// 曲目变化的加载入口只有 [ensureForTrack]：组合根订阅播放快照后调用，
 /// 页面只渲染 [state]（不再从 build 触发取词）。输出侧 / 预取 / 手动选择
 /// 分别走 [preload] / [saveManual]；[retry] 供页面或用户显式重试。
-class LyricsProvider extends ChangeNotifier {
-  LyricsProvider({required LyricsService service})
-    // ignore: prefer_initializing_formals
-    : _service = service;
+@Riverpod(keepAlive: true, name: 'lyricsProvider')
+class LyricsProvider extends _$LyricsProvider {
+  late final LyricsService _service;
 
-  final LyricsService _service;
+  @override
+  LyricsState build() {
+    _service = ref.read(lyricsServiceProvider);
+    return LyricsState.idle;
+  }
 
-  LyricsState _state = LyricsState.idle;
-  LyricsState get state => _state;
+  /// 跨出 Riverpod 边界读取当前状态（启动接线 / 性能场景）。
+  LyricsState get currentState => state;
 
   /// 过期响应守卫：每次发起新加载自增。
   int _requestId = 0;
@@ -145,7 +153,7 @@ class LyricsProvider extends ChangeNotifier {
   Future<void> ensureForTrack(Track? track) async {
     final trackId = track?.id.uri ?? '';
     if (trackId.isEmpty) {
-      if (_currentTrack != null || _state.status != LyricsStatus.idle) {
+      if (_currentTrack != null || state.status != LyricsStatus.idle) {
         reset();
       }
       return;
@@ -158,13 +166,13 @@ class LyricsProvider extends ChangeNotifier {
       await _load(track!, trackId);
       return;
     }
-    if (_state.trackId != trackId) {
+    if (state.trackId != trackId) {
       // 会话曲目没变但展示状态被清空（例如 reset 之外的显式状态写入）：
       // 仍按「该曲目需要歌词」处理一次。
       await _load(track!, trackId);
       return;
     }
-    switch (_state.status) {
+    switch (state.status) {
       case LyricsStatus.ready || LyricsStatus.loading:
         return;
       case LyricsStatus.idle:
@@ -203,7 +211,7 @@ class LyricsProvider extends ChangeNotifier {
   Future<void> refreshAfterBiliLogin() async {
     final track = _currentTrack;
     if (track == null || track.id.sourceKey != 'bili') return;
-    if (_state.status == LyricsStatus.ready && _state.providerName == 'bili') {
+    if (state.status == LyricsStatus.ready && state.providerName == 'bili') {
       return;
     }
     try {
@@ -233,13 +241,13 @@ class LyricsProvider extends ChangeNotifier {
     _setState(LyricsState(trackId: trackId, status: LyricsStatus.loading));
     final result = await _fetch(track, ignoreCache: ignoreCache);
     if (requestId != _requestId) return; // 过期响应：丢弃
-    _setState(_stateFor(trackId, result));
+    _setState(stateFor(trackId, result));
   }
 
   /// 预取下一首歌词（只写缓存，不改变当前展示状态）。
   Future<void> preload(Track track) async {
     final trackId = track.id.uri;
-    if (_state.trackId == trackId ||
+    if (state.trackId == trackId ||
         _preloadedTrackIds.contains(trackId) ||
         !_preloadingTrackIds.add(trackId)) {
       return;
@@ -280,9 +288,9 @@ class LyricsProvider extends ChangeNotifier {
       roma: roma,
       lxlyric: lxlyric,
     );
-    if (_state.trackId == trackId) {
+    if (state.trackId == trackId) {
       _setState(
-        _stateFor(
+        stateFor(
           trackId,
           LyricsResult(
             lyric: lyric,
@@ -304,7 +312,7 @@ class LyricsProvider extends ChangeNotifier {
     _setState(LyricsState.idle);
   }
 
-  LyricsState _stateFor(String trackId, LyricsResult? result) {
+  LyricsState stateFor(String trackId, LyricsResult? result) {
     if (result == null) {
       return LyricsState(trackId: trackId, status: LyricsStatus.empty);
     }
@@ -350,8 +358,7 @@ class LyricsProvider extends ChangeNotifier {
   }
 
   void _setState(LyricsState next) {
-    if (next == _state) return;
-    _state = next;
-    notifyListeners();
+    if (next == state) return;
+    state = next;
   }
 }

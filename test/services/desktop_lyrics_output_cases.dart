@@ -73,7 +73,7 @@ void main() {
     await settings.setDesktopFontSize(30);
 
     // 播放态未知时不抢先建窗（暂停隐藏默认开）：首次投送把窗口带出来。
-    await output.start(settings);
+    await output.start(settings.state);
     await output.apply(presentation());
     await pumpEventQueue();
     final methods = calls.map((call) => call.method).toList();
@@ -85,7 +85,7 @@ void main() {
     // 窗口已在且配置没变：再次 start（设置变更触发）不重发 setConfig，
     // 避免原生无谓重建（重建会闪一下横滚位移）。
     calls.clear();
-    await output.start(settings);
+    await output.start(settings.state);
     await pumpEventQueue();
     expect(
       calls.map((call) => call.method),
@@ -94,7 +94,7 @@ void main() {
 
     // 配置真的变了才下发。
     await settings.setDesktopFontSize(32);
-    await output.start(settings);
+    await output.start(settings.state);
     await pumpEventQueue();
     final configCall = calls.lastWhere(
       (call) => call.method == 'desktop.setConfig',
@@ -122,11 +122,11 @@ void main() {
     final settings = await desktopSettings();
     // 本用例只看槽位布局：关掉暂停隐藏，让 start 直接建窗。
     await settings.setDesktopHideOnPause(false);
-    expect(settings.translationEnabled, isTrue);
-    expect(settings.romaEnabled, isFalse);
+    expect(settings.state.translationEnabled, isTrue);
+    expect(settings.state.romaEnabled, isFalse);
 
     // 样式配置不带槽位：槽位属于逐行内容布局，随 update 一起投送。
-    await output.start(settings);
+    await output.start(settings.state);
     await output.apply(presentation());
     await pumpEventQueue();
     final showCall = calls.firstWhere((call) => call.method == 'desktop.show');
@@ -147,7 +147,7 @@ void main() {
     // 翻译 + 罗马音都开：2 个槽；开关只改 update，不走 setConfig。
     await settings.setRomaEnabled(true);
     calls.clear();
-    await output.start(settings);
+    await output.start(settings.state);
     await output.apply(presentation());
     await pumpEventQueue();
     expect(
@@ -160,7 +160,7 @@ void main() {
     // 关翻译、开罗马音：回到 1 个槽。
     await settings.setTranslationEnabled(false);
     calls.clear();
-    await output.start(settings);
+    await output.start(settings.state);
     await output.apply(presentation());
     await pumpEventQueue();
     updateCall = calls.lastWhere((call) => call.method == 'desktop.update');
@@ -169,7 +169,7 @@ void main() {
     // 都关：0 个槽（窗口只留主行）。
     await settings.setRomaEnabled(false);
     calls.clear();
-    await output.start(settings);
+    await output.start(settings.state);
     await output.apply(presentation());
     await pumpEventQueue();
     updateCall = calls.lastWhere((call) => call.method == 'desktop.update');
@@ -191,7 +191,7 @@ void main() {
       channel: LyricsChannel(),
       supported: true,
     );
-    await output.start(await desktopSettings());
+    await output.start((await desktopSettings()).state);
     await pumpEventQueue();
     expect(output.capability, LyricsOutputCapability.needsPermission);
     expect(calls.map((call) => call.method), isNot(contains('desktop.show')));
@@ -204,7 +204,7 @@ void main() {
     final settings = await desktopSettings();
     // 本用例只看内容映射：关掉暂停隐藏，避免暂停即收起窗口。
     await settings.setDesktopHideOnPause(false);
-    await output.start(settings);
+    await output.start(settings.state);
 
     await output.apply(
       LyricsPresentation(
@@ -252,6 +252,8 @@ void main() {
 
     // 暂停回退为歌名：逐字时间轴必须撤下（歌名没有词轴）。
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.title);
+    // 输出按不可变快照工作：设置变化后由调度方重发 start（幂等）。
+    await output.start(settings.state);
     await output.apply(
       LyricsPresentation(
         trackId: 'fake:1',
@@ -285,7 +287,7 @@ void main() {
     // 本用例只看内容映射：关掉暂停隐藏，避免暂停即收起窗口。
     await settings.setDesktopHideOnPause(false);
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.title);
-    await output.start(settings);
+    await output.start(settings.state);
 
     await output.apply(
       presentation(
@@ -312,7 +314,7 @@ void main() {
     final settings = await desktopSettings();
     // 本用例只看内容映射：关掉暂停隐藏，避免暂停即收起窗口。
     await settings.setDesktopHideOnPause(false);
-    await output.start(settings);
+    await output.start(settings.state);
 
     Future<Map> lastUpdate() async {
       await pumpEventQueue();
@@ -322,6 +324,7 @@ void main() {
 
     // keep：主行与扩展行原样保留。
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.keep);
+    await output.start(settings.state);
     await output.apply(
       presentation(
         isPlaying: false,
@@ -337,6 +340,7 @@ void main() {
 
     // title：主行换歌名，翻译/罗马音与后续行撤下。
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.title);
+    await output.start(settings.state);
     await output.apply(
       presentation(
         isPlaying: false,
@@ -353,6 +357,7 @@ void main() {
     // 不再依赖一次「空文本 update」。
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.clear);
     calls.clear();
+    await output.start(settings.state);
     await output.apply(
       presentation(
         isPlaying: false,
@@ -372,9 +377,9 @@ void main() {
     final channel = LyricsChannel();
     final output = DesktopLyricsOutput(channel: channel, supported: true);
     final settings = await desktopSettings();
-    expect(settings.desktopHideOnPause, isTrue);
+    expect(settings.state.desktopHideOnPause, isTrue);
 
-    await output.start(settings);
+    await output.start(settings.state);
     await output.apply(presentation());
     await pumpEventQueue();
 
@@ -408,13 +413,13 @@ void main() {
     final output = DesktopLyricsOutput(channel: channel, supported: true);
     final settings = await desktopSettings();
 
-    await output.start(settings);
+    await output.start(settings.state);
     await output.apply(presentation(isPlaying: false));
     await pumpEventQueue();
     calls.clear();
 
     // 暂停中改样式 / 回前台复查能力都会再走 start：不得重新显示窗口。
-    await output.start(settings);
+    await output.start(settings.state);
     await pumpEventQueue();
     expect(calls.map((call) => call.method), isNot(contains('desktop.show')));
 
@@ -428,7 +433,7 @@ void main() {
     await settings.setDesktopHideOnPause(false);
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.title);
 
-    await output.start(settings);
+    await output.start(settings.state);
     await output.apply(presentation());
     await pumpEventQueue();
     calls.clear();
@@ -446,7 +451,7 @@ void main() {
     final output = DesktopLyricsOutput(channel: channel, supported: true);
     final settings = await desktopSettings();
 
-    await output.start(settings);
+    await output.start(settings.state);
     await output.apply(presentation());
     await pumpEventQueue();
     await output.clear(); // 无曲目 / 输出停用：窗口移除
@@ -473,7 +478,7 @@ void main() {
     );
     final settings = await desktopSettings();
     await settings.setDesktopPlayedColorSource(LyricColorSource.primary);
-    await output.start(settings);
+    await output.start(settings.state);
     // 窗口随首次投送建立（播放态未知时不抢先显示）。
     await output.apply(presentation());
     await pumpEventQueue();
@@ -495,7 +500,7 @@ void main() {
       appFontFamily: () => fontFamily,
     );
     final settings = await desktopSettings();
-    await output.start(settings);
+    await output.start(settings.state);
     // 窗口随首次投送建立（播放态未知时不抢先显示）。
     await output.apply(presentation());
     await pumpEventQueue();
@@ -507,7 +512,7 @@ void main() {
     // 设置页选了字体（ThemeProvider 通知 → start 重下发）：只发变化项。
     calls.clear();
     fontFamily = 'Noto Sans CJK SC';
-    await output.start(settings);
+    await output.start(settings.state);
     await pumpEventQueue();
     final setConfig = calls.lastWhere(
       (call) => call.method == 'desktop.setConfig',
@@ -516,7 +521,7 @@ void main() {
 
     // 字体没再变：重复 start 不重发（避免原生无谓重建）。
     calls.clear();
-    await output.start(settings);
+    await output.start(settings.state);
     await pumpEventQueue();
     expect(
       calls.map((call) => call.method),
@@ -547,7 +552,7 @@ void main() {
     final output = DesktopLyricsOutput(channel: channel, supported: true);
     final settings = await desktopSettings();
     await settings.setDesktopHideOnPause(false);
-    await output.start(settings);
+    await output.start(settings.state);
 
     await output.apply(
       presentation(line: 'B', lineIndex: 4, hasCurrentLine: true),
@@ -569,7 +574,7 @@ void main() {
     final settings = await desktopSettings();
     await settings.setDesktopHideOnPause(false);
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.clear);
-    await output.start(settings);
+    await output.start(settings.state);
     await output.apply(
       presentation(line: 'A', lineIndex: 0, hasCurrentLine: true),
     );
@@ -644,7 +649,7 @@ void main() {
     final output = DesktopLyricsOutput(channel: channel, supported: true);
     final settings = await desktopSettings();
     await settings.setDesktopHideOnPause(false);
-    await output.start(settings);
+    await output.start(settings.state);
     await output.apply(presentation());
     expect(calls.map((call) => call.method), contains('desktop.show'));
 
@@ -704,7 +709,7 @@ void main() {
 
     // start 内部有 canDrawOverlays 的 await；apply 在它完成前就把播放态
     // 改成暂停。单飞 reconcile 必须保证最终不 show。
-    final starting = output.start(settings);
+    final starting = output.start(settings.state);
     final applying = output.apply(presentation(isPlaying: false));
     await Future.wait([starting, applying]);
     await pumpEventQueue();

@@ -1,22 +1,12 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../domain/models/play_mode.dart';
-import '../providers/lyrics_display_provider.dart';
-import '../providers/nav_provider.dart';
-import '../providers/playback_provider.dart';
-import '../providers/sources_provider.dart';
-import '../providers/sync_provider.dart';
-import '../providers/theme_provider.dart';
-import '../providers/update_provider.dart';
-import '../services/audio_focus_settings.dart';
-import '../services/data_saver_service.dart';
-import '../services/library/library_add_settings.dart';
-import '../services/play_statistics_service.dart';
-import '../services/scrobble/scrobble_service.dart';
-import '../services/source_swap/source_swap_settings.dart';
+import '../providers/app_providers.dart';
 import '../services/window/tray_settings.dart';
+import '../providers/nav_provider.dart';
+import '../providers/theme_provider.dart';
 import '../theme/m3e_context.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/color_hex.dart';
@@ -51,17 +41,17 @@ const double kSettingsSheetDesktopWidth = 880;
 /// 只负责内容；弹层宿主、内层 Navigator 与预测返回归属在
 /// `widgets/settings/settings_sheet.dart`。独立挂载（测试等）时照常渲染，
 /// 子页经 `openSettingsSubPage` push 到最近的 Navigator。
-class SettingsPage extends StatefulWidget {
+class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key, this.scrollController});
 
   /// 弹层滚动控制器（独立挂载时为 null，走默认行为）。
   final ScrollController? scrollController;
 
   @override
-  State<SettingsPage> createState() => _SettingsPageState();
+  ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage>
+class _SettingsPageState extends ConsumerState<SettingsPage>
     with WidgetsBindingObserver {
   @override
   void initState() {
@@ -70,7 +60,7 @@ class _SettingsPageState extends State<SettingsPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         // 首屏直达的桌面歌词入口按能力显隐：打开设置时先复查一次。
-        context.read<LyricsDisplayProvider?>()?.refreshCapabilities();
+        ref.read(lyricsDisplayControllerProvider)?.refreshCapabilities();
       }
     });
   }
@@ -85,7 +75,7 @@ class _SettingsPageState extends State<SettingsPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
       // 从系统「显示在其他应用上层」授权页返回：复查桌面歌词能力。
-      context.read<LyricsDisplayProvider?>()?.refreshCapabilities();
+      ref.read(lyricsDisplayControllerProvider)?.refreshCapabilities();
     }
   }
 
@@ -97,19 +87,20 @@ class _SettingsPageState extends State<SettingsPage>
     //   更新）→ watch：它们变化时整页要重算行；
     // - 只决定「有没有」的服务 → read：挂载关系由组合根在启动时固定，不值得
     //   为同步进度之类的通知重建九张卡。
+    ref.watch(navProvider);
     final availability = SettingsSectionAvailability(
-      dataSaver: context.watch<DataSaverService?>(),
-      sourceSwap: context.watch<SourceSwapSettings?>(),
-      audioFocus: context.watch<AudioFocusSettings?>(),
-      lyricsDisplay: context.watch<LyricsDisplayProvider?>(),
-      nav: context.watch<NavProvider?>(),
-      tray: context.watch<TraySettings?>(),
-      update: context.watch<UpdateProvider?>(),
-      sources: context.read<SourcesProvider?>(),
-      scrobble: context.read<ScrobbleService?>(),
-      libraryAdd: context.read<LibraryAddSettings?>(),
-      statistics: context.read<PlayStatisticsService?>(),
-      sync: context.read<SyncProvider?>(),
+      dataSaver: ref.watch(maybeDataSaverServiceProvider),
+      sourceSwap: ref.watch(maybeSourceSwapSettingsProvider),
+      audioFocus: ref.watch(audioFocusSettingsControllerProvider),
+      lyricsDisplay: ref.watch(maybeLyricsDisplayProvider),
+      nav: ref.read(navProvider.notifier),
+      tray: ref.read(traySettingsProvider.notifier),
+      update: ref.watch(maybeUpdateProvider),
+      sources: ref.read(maybeSourcesControllerProvider),
+      scrobble: ref.read(maybeScrobbleControllerProvider),
+      libraryAdd: ref.read(maybeLibraryAddSettingsProvider),
+      statistics: ref.read(playStatisticsServiceProvider),
+      sync: ref.read(maybeSyncControllerProvider),
     );
     // 两列流式需要比单列舒适行宽（`maxWidth`）更宽的画布：上限取设置弹层
     // 宽度，两列各占约半宽；单列沿用 `maxWidth` 不变。判据只由宽度档位
@@ -166,123 +157,95 @@ class _SettingsPageState extends State<SettingsPage>
   /// 应用字体与默认封面是低频个性化项，收进「高级设置」；本卡只留每天
   /// 会改的外观开关。
   Widget _appearanceSection(BuildContext context, AppLocalizations l10n) {
+    final theme = ref.watch(themeProvider);
+    final themeMode = theme.themeMode;
+    final baseColorSource = theme.baseColorSource;
+    final systemColorSource = theme.systemBaseColorSource;
+    final pureBlackEnabled = theme.pureBlackEnabled;
+    final seedColor = theme.seedColor;
     return SettingsSectionCard(
       title: l10n.settingsAppearanceTitle,
       children: [
-        Selector<
-          ThemeProvider,
-          ({
-            ThemeMode mode,
-            ColorBaseSource base,
-            SystemBaseColorSource systemColorSource,
-            bool pureBlack,
-            Color seed,
-          })
-        >(
-          selector: (context, provider) => (
-            mode: provider.themeMode,
-            base: provider.baseColorSource,
-            systemColorSource: provider.systemBaseColorSource,
-            pureBlack: provider.pureBlackEnabled,
-            seed: provider.seedColor,
-          ),
-          builder: (context, appearance, _) {
-            final (
-              mode: themeMode,
-              base: baseColorSource,
-              systemColorSource: systemColorSource,
-              pureBlack: pureBlackEnabled,
-              seed: seedColor,
-            ) = appearance;
-            // 同一个 Selector 产出的多行：行距由 SettingsRows 统一给。
-            return SettingsRows(
-              children: [
-                SettingsChoiceRow<ThemeMode>(
-                  key: const Key('settingsThemeModeItem'),
-                  icon: Icons.brightness_6_rounded,
-                  title: l10n.settingsThemeMode,
-                  value: themeMode,
-                  options: [
-                    (ThemeMode.system, l10n.themeModeSystem),
-                    (ThemeMode.light, l10n.themeModeLight),
-                    (ThemeMode.dark, l10n.themeModeDark),
-                  ],
-                  onChanged: (mode) {
-                    // 传平台亮度：system 模式下立即按当前系统亮度生效。
-                    context.read<ThemeProvider>().setThemeMode(
+        SettingsRows(
+          children: [
+            SettingsChoiceRow<ThemeMode>(
+              key: const Key('settingsThemeModeItem'),
+              icon: Icons.brightness_6_rounded,
+              title: l10n.settingsThemeMode,
+              value: themeMode,
+              options: [
+                (ThemeMode.system, l10n.themeModeSystem),
+                (ThemeMode.light, l10n.themeModeLight),
+                (ThemeMode.dark, l10n.themeModeDark),
+              ],
+              onChanged: (mode) {
+                // 传平台亮度：system 模式下立即按当前系统亮度生效。
+                ref
+                    .read(themeProvider.notifier)
+                    .setThemeMode(
                       mode,
                       platformBrightness: MediaQuery.platformBrightnessOf(
                         context,
                       ),
                     );
-                  },
-                ),
-                // 基础配色（单选）：壁纸 / 自定义；封面取色见「封面」分区。
-                SettingsChoiceRow<ColorBaseSource>(
-                  key: const Key('settingsBaseColorItem'),
-                  icon: Icons.palette_rounded,
-                  title: l10n.settingsBaseColor,
-                  subtitle: _baseColorSubtitle(
-                    l10n,
-                    baseColorSource,
-                    systemColorSource: systemColorSource,
-                    seedColor: seedColor,
-                  ),
-                  value: baseColorSource,
-                  options: [
-                    (
-                      ColorBaseSource.wallpaper,
-                      l10n.settingsBaseColorWallpaper,
-                    ),
-                    (ColorBaseSource.custom, l10n.settingsBaseColorCustom),
-                  ],
-                  // 壁纸图 / 强调色都不可用时壁纸项禁用
-                  //（仍可显示为选中态，配色回退种子色）。
-                  optionEnabled: (source) =>
-                      source != ColorBaseSource.wallpaper ||
-                      systemColorSource != SystemBaseColorSource.unavailable,
-                  onChanged: (source) =>
-                      context.read<ThemeProvider>().setBaseColorSource(source),
-                ),
-                // 自定义色仅作基础配色时显示，避免与「壁纸」并存产生歧义。
-                SettingsReveal(
-                  visible: baseColorSource == ColorBaseSource.custom,
-                  child: SettingsColorValueTile(
-                    key: const Key('settingsSeedColorItem'),
-                    icon: Icons.color_lens_rounded,
-                    title: l10n.settingsSeedColor,
-                    colorArgb: seedColor.toARGB32(),
-                    onTap: () => _pickSeedColor(context),
-                  ),
-                ),
-                SettingsSwitchTile(
-                  switchKey: const Key('settingsPureBlackSwitch'),
-                  icon: Icons.dark_mode_rounded,
-                  title: l10n.settingsPureBlack,
-                  subtitle: l10n.settingsPureBlackSubtitle,
-                  value: pureBlackEnabled,
-                  onChanged: (value) =>
-                      context.read<ThemeProvider>().setPureBlackEnabled(value),
-                ),
-                // 封面：播放时跟随封面取色。
-                Selector<ThemeProvider, bool>(
-                  selector: (context, provider) =>
-                      provider.followArtworkEnabled,
-                  builder: (context, followArtworkEnabled, _) =>
-                      SettingsSwitchTile(
-                        switchKey: const Key('settingsFollowArtworkSwitch'),
-                        icon: Icons.album_rounded,
-                        title: l10n.settingsFollowArtwork,
-                        subtitle: l10n.settingsFollowArtworkSubtitle,
-                        value: followArtworkEnabled,
-                        onChanged: (value) => context
-                            .read<ThemeProvider>()
-                            .setFollowArtworkEnabled(value),
-                      ),
-                ),
+              },
+            ),
+            // 基础配色（单选）：壁纸 / 自定义；封面取色见「封面」分区。
+            SettingsChoiceRow<ColorBaseSource>(
+              key: const Key('settingsBaseColorItem'),
+              icon: Icons.palette_rounded,
+              title: l10n.settingsBaseColor,
+              subtitle: _baseColorSubtitle(
+                l10n,
+                baseColorSource,
+                systemColorSource: systemColorSource,
+                seedColor: seedColor,
+              ),
+              value: baseColorSource,
+              options: [
+                (ColorBaseSource.wallpaper, l10n.settingsBaseColorWallpaper),
+                (ColorBaseSource.custom, l10n.settingsBaseColorCustom),
               ],
-            );
-          },
+              // 壁纸图 / 强调色都不可用时壁纸项禁用
+              //（仍可显示为选中态，配色回退种子色）。
+              optionEnabled: (source) =>
+                  source != ColorBaseSource.wallpaper ||
+                  systemColorSource != SystemBaseColorSource.unavailable,
+              onChanged: (source) =>
+                  ref.read(themeProvider.notifier).setBaseColorSource(source),
+            ),
+            // 自定义色仅作基础配色时显示，避免与「壁纸」并存产生歧义。
+            SettingsReveal(
+              visible: baseColorSource == ColorBaseSource.custom,
+              child: SettingsColorValueTile(
+                key: const Key('settingsSeedColorItem'),
+                icon: Icons.color_lens_rounded,
+                title: l10n.settingsSeedColor,
+                colorArgb: seedColor.toARGB32(),
+                onTap: () => _pickSeedColor(context),
+              ),
+            ),
+            SettingsSwitchTile(
+              switchKey: const Key('settingsPureBlackSwitch'),
+              icon: Icons.dark_mode_rounded,
+              title: l10n.settingsPureBlack,
+              subtitle: l10n.settingsPureBlackSubtitle,
+              value: pureBlackEnabled,
+              onChanged: (value) =>
+                  ref.read(themeProvider.notifier).setPureBlackEnabled(value),
+            ),
+            // 封面：播放时跟随封面取色。
+            SettingsSwitchTile(
+              switchKey: const Key('settingsFollowArtworkSwitch'),
+              icon: Icons.album_rounded,
+              title: l10n.settingsFollowArtwork,
+              subtitle: l10n.settingsFollowArtworkSubtitle,
+              value: theme.followArtworkEnabled,
+              onChanged: (value) => ref
+                  .read(themeProvider.notifier)
+                  .setFollowArtworkEnabled(value),
+            ),
+          ],
         ),
       ],
     );
@@ -300,50 +263,66 @@ class _SettingsPageState extends State<SettingsPage>
     return SettingsSectionCard(
       title: l10n.settingsPlaybackTitle,
       children: [
-        Selector<PlaybackProvider, PlayMode>(
-          selector: (context, provider) => provider.defaultPlayMode,
-          builder: (context, defaultPlayMode, _) => SettingsChoiceRow<PlayMode>(
-            key: const Key('settingsDefaultPlayModeItem'),
-            icon: Icons.play_circle_outline_rounded,
-            title: l10n.settingsDefaultPlayMode,
-            // 「默认」= 新播放会话的初始模式，不打断当前播放。
-            subtitle: l10n.settingsDefaultPlayModeSubtitle,
-            value: defaultPlayMode,
-            options: [
-              (PlayMode.listLoop, l10n.playModeListLoop),
-              (PlayMode.sequential, l10n.playModeSequential),
-              (PlayMode.singleRepeat, l10n.playModeSingleRepeat),
-              (PlayMode.shuffle, l10n.playModeShuffle),
-            ],
-            onChanged: (mode) =>
-                context.read<PlaybackProvider>().setDefaultPlayMode(mode),
-          ),
+        Consumer(
+          builder: (context, ref, _) {
+            final defaultPlayMode = ref.watch(
+              playbackProvider.select((provider) => provider.defaultPlayMode),
+            );
+            return SettingsChoiceRow<PlayMode>(
+              key: const Key('settingsDefaultPlayModeItem'),
+              icon: Icons.play_circle_outline_rounded,
+              title: l10n.settingsDefaultPlayMode,
+              // 「默认」= 新播放会话的初始模式，不打断当前播放。
+              subtitle: l10n.settingsDefaultPlayModeSubtitle,
+              value: defaultPlayMode,
+              options: [
+                (PlayMode.listLoop, l10n.playModeListLoop),
+                (PlayMode.sequential, l10n.playModeSequential),
+                (PlayMode.singleRepeat, l10n.playModeSingleRepeat),
+                (PlayMode.shuffle, l10n.playModeShuffle),
+              ],
+              onChanged: (mode) =>
+                  ref.read(playbackControllerProvider).setDefaultPlayMode(mode),
+            );
+          },
         ),
-        Selector<PlaybackProvider, bool>(
-          selector: (context, provider) => provider.restoreSessionEnabled,
-          builder: (context, restoreSession, _) => SettingsSwitchTile(
-            switchKey: const Key('settingsRestoreSessionSwitch'),
-            icon: Icons.restore_rounded,
-            title: l10n.settingsRestoreSessionTitle,
-            subtitle: l10n.settingsRestoreSessionSubtitle,
-            value: restoreSession,
-            onChanged: (value) => context
-                .read<PlaybackProvider>()
-                .setRestoreSessionEnabled(value),
-          ),
+        Consumer(
+          builder: (context, ref, _) {
+            final restoreSession = ref.watch(
+              playbackProvider.select(
+                (provider) => provider.restoreSessionEnabled,
+              ),
+            );
+            return SettingsSwitchTile(
+              switchKey: const Key('settingsRestoreSessionSwitch'),
+              icon: Icons.restore_rounded,
+              title: l10n.settingsRestoreSessionTitle,
+              subtitle: l10n.settingsRestoreSessionSubtitle,
+              value: restoreSession,
+              onChanged: (value) => ref
+                  .read(playbackControllerProvider)
+                  .setRestoreSessionEnabled(value),
+            );
+          },
         ),
         // 其他应用播放声音时是否继续播放：桌面没有音频焦点实现，不显示。
         if (availability.audioFocusRowVisible)
-          Selector<AudioFocusSettings, bool>(
-            selector: (context, settings) => settings.playWithOtherApps,
-            builder: (context, playWithOtherApps, _) => SettingsSwitchTile(
-              switchKey: const Key('settingsPlayWithOtherAppsSwitch'),
-              icon: Icons.multitrack_audio_rounded,
-              title: l10n.settingsPlayWithOtherApps,
-              subtitle: l10n.settingsPlayWithOtherAppsSubtitle,
-              value: playWithOtherApps,
-              onChanged: availability.audioFocus!.setPlayWithOtherApps,
-            ),
+          Consumer(
+            builder: (context, ref, _) {
+              final playWithOtherApps = ref.watch(
+                maybeAudioFocusSettingsProvider.select(
+                  (enabled) => enabled ?? false,
+                ),
+              );
+              return SettingsSwitchTile(
+                switchKey: const Key('settingsPlayWithOtherAppsSwitch'),
+                icon: Icons.multitrack_audio_rounded,
+                title: l10n.settingsPlayWithOtherApps,
+                subtitle: l10n.settingsPlayWithOtherAppsSubtitle,
+                value: playWithOtherApps,
+                onChanged: availability.audioFocus!.setPlayWithOtherApps,
+              );
+            },
           ),
       ],
     );
@@ -433,36 +412,48 @@ class _SettingsPageState extends State<SettingsPage>
         ),
         // 音源默认音质：设置页唯一入口。
         if (sources != null)
-          Selector<SourcesProvider, String>(
-            selector: (context, provider) => provider.preferredQuality,
-            builder: (context, quality, _) => SettingsDropdownRow<String>(
-              key: const Key('settingsDefaultQualityItem'),
-              icon: Icons.high_quality_rounded,
-              title: l10n.sourcesDefaultQuality,
-              subtitle: l10n.sourcesQualityHint,
-              // 音质标签都是短词（无损 / 320K / Hi-Res）：字段从 112 起按最长
-              // 选项自适应加宽（「Hi-Res」不被折行），把其余宽度让给标题与说明。
-              fieldWidth: 112,
-              value: quality,
-              options: [
-                for (final option in sources.qualityOptions)
-                  (option.value, sourceQualityLabel(l10n, option.value)),
-              ],
-              onChanged: sources.setPreferredQuality,
-            ),
+          Consumer(
+            builder: (context, ref, _) {
+              final quality = ref.watch(
+                sourcesProvider.select((state) => state.preferredQuality),
+              );
+              return SettingsDropdownRow<String>(
+                key: const Key('settingsDefaultQualityItem'),
+                icon: Icons.high_quality_rounded,
+                title: l10n.sourcesDefaultQuality,
+                subtitle: l10n.sourcesQualityHint,
+                // 音质标签都是短词（无损 / 320K / Hi-Res）：字段从 112 起按最长
+                // 选项自适应加宽（「Hi-Res」不被折行），把其余宽度让给标题与说明。
+                fieldWidth: 112,
+                value: quality,
+                options: [
+                  for (final option in sources.qualityOptions)
+                    (option.value, sourceQualityLabel(l10n, option.value)),
+                ],
+                onChanged: sources.setPreferredQuality,
+              );
+            },
           ),
         // 自动换源：播放失败后的跨源找回（手动换源不受此开关控制）。
         if (sourceSwapSettings != null)
-          Selector<SourceSwapSettings, bool>(
-            selector: (context, settings) => settings.autoEnabled,
-            builder: (context, autoEnabled, _) => SettingsSwitchTile(
-              switchKey: const Key('settingsAutoSourceSwapSwitch'),
-              icon: Icons.swap_horiz_rounded,
-              title: l10n.settingsAutoSourceSwap,
-              subtitle: l10n.settingsAutoSourceSwapSubtitle,
-              value: autoEnabled,
-              onChanged: (value) => sourceSwapSettings.setAutoEnabled(value),
-            ),
+          Consumer(
+            builder: (context, ref, _) {
+              final autoEnabled = ref.watch(
+                maybeSourceSwapSettingsProvider.select(
+                  (settings) => settings?.autoEnabled ?? false,
+                ),
+              );
+              return SettingsSwitchTile(
+                switchKey: const Key('settingsAutoSourceSwapSwitch'),
+                icon: Icons.swap_horiz_rounded,
+                title: l10n.settingsAutoSourceSwap,
+                subtitle: l10n.settingsAutoSourceSwapSubtitle,
+                value: autoEnabled,
+                onChanged: (value) => ref
+                    .read(sourceSwapSettingsControllerProvider)
+                    ?.setAutoEnabled(value),
+              );
+            },
           ),
         // 省流模式：开关行排在在线服务入口之前，开启时才展开跟随子项
         //（音质上限 / 封面省流）；副标题保留当前网络状态，让「仅移动数据
@@ -479,7 +470,8 @@ class _SettingsPageState extends State<SettingsPage>
               onCellular: dataSaver.onCellular,
             ),
             value: dataSaver.enabled,
-            onChanged: (value) => dataSaver.setEnabled(value),
+            onChanged: (value) =>
+                ref.read(dataSaverServiceControllerProvider)?.setEnabled(value),
           ),
           SettingsReveal(
             visible: dataSaver.enabled,
@@ -489,7 +481,9 @@ class _SettingsPageState extends State<SettingsPage>
               title: l10n.settingsDataSaverCovers,
               subtitle: l10n.settingsDataSaverCoversSubtitle,
               value: dataSaver.coversSaverEnabled,
-              onChanged: (value) => dataSaver.setCoversSaverEnabled(value),
+              onChanged: (value) => ref
+                  .read(dataSaverServiceControllerProvider)
+                  ?.setCoversSaverEnabled(value),
             ),
           ),
         ],
@@ -537,12 +531,12 @@ class _SettingsPageState extends State<SettingsPage>
   /// 自定义色是「基础配色」的一种；封面覆盖开启时，播放有封面的歌曲
   /// 期间会被封面取色盖过（设置项文案已说明）。
   Future<void> _pickSeedColor(BuildContext context) async {
-    final themeProvider = context.read<ThemeProvider>();
+    final theme = ref.read(themeProvider);
     final picked = await showAppColorPicker(
       context,
-      initialColor: themeProvider.seedColor.toARGB32(),
+      initialColor: theme.seedColor.toARGB32(),
     );
     if (picked == null) return;
-    await themeProvider.setSeedColor(Color(picked));
+    await ref.read(themeProvider.notifier).setSeedColor(Color(picked));
   }
 }

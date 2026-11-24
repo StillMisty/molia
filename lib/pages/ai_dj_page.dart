@@ -12,9 +12,9 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/ai_dj.dart';
 import '../domain/models/failure.dart';
@@ -22,7 +22,7 @@ import '../l10n/app_localizations.dart';
 import '../pages/ai_dj_history_page.dart';
 import '../pages/ai_dj_preferences_page.dart';
 import '../providers/ai_dj_provider.dart';
-import '../providers/playback_provider.dart';
+import '../providers/app_providers.dart';
 import '../services/ai/ai_generation_executor.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
@@ -35,21 +35,26 @@ import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 import '../widgets/track_row.dart';
 
-class AiDjPage extends StatefulWidget {
+class AiDjPage extends ConsumerStatefulWidget {
   const AiDjPage({super.key});
 
   @override
-  State<AiDjPage> createState() => _AiDjPageState();
+  ConsumerState<AiDjPage> createState() => _AiDjPageState();
 }
 
-class _AiDjPageState extends State<AiDjPage> {
+class _AiDjPageState extends ConsumerState<AiDjPage> {
   /// 分区间距（分区标题之间）。
   static const double _sectionGap = 24;
 
   /// 配置文本落盘防抖：逐字写凭据库既慢又没有必要。
   static const Duration _configSaveDelay = Duration(milliseconds: 400);
 
-  late final AiDjProvider _provider;
+  /// 命令面：配置 / 生成 / 队列动作都落在这个控制器上；读状态走快照 [_state]。
+  late final AiDjProvider _controller;
+
+  /// 最近一次 build 的快照（dispose 里冲刷配置时仍要读它）。
+  late AiDjState _state;
+
   final TextEditingController _baseUrlController = TextEditingController();
   final TextEditingController _apiKeyController = TextEditingController();
   final TextEditingController _modelController = TextEditingController();
@@ -63,10 +68,11 @@ class _AiDjPageState extends State<AiDjPage> {
   @override
   void initState() {
     super.initState();
-    _provider = context.read<AiDjProvider>();
+    _controller = ref.read(aiDjControllerProvider);
+    _state = ref.read(aiDjProvider);
     // 配置在本机凭据库：首帧后已读；本页打开时再补一次（幂等）。
-    unawaited(_provider.init());
-    final config = _provider.config;
+    unawaited(_controller.init());
+    final config = _state.config;
     if (config == null) {
       // 首次配置：默认预填第一个内置预设（DeepSeek），只需粘 API Key。
       final preset = LlmProviderPreset.builtIn.first;
@@ -75,10 +81,10 @@ class _AiDjPageState extends State<AiDjPage> {
     } else {
       _loadConfigIntoControllers(config);
     }
-    _editingConfig = !_provider.hasConfig;
+    _editingConfig = !_state.hasConfig;
     // 启用状态下确保有列表可浏览（列表缺失才生成，不跨天自动换批）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_provider.ensureRecommendations());
+      if (mounted) unawaited(_controller.ensureRecommendations());
     });
   }
 
@@ -111,7 +117,7 @@ class _AiDjPageState extends State<AiDjPage> {
     _configSaveTimer = Timer(_configSaveDelay, () {
       final config = _formConfig();
       if (!config.isComplete) return;
-      unawaited(_provider.saveConfig(config));
+      unawaited(_controller.saveConfig(config));
     });
   }
 
@@ -143,19 +149,23 @@ class _AiDjPageState extends State<AiDjPage> {
           onPressed: () => _openPage(const AiDjHistoryPage()),
         ),
       ],
-      body: Consumer<AiDjProvider>(
-        builder: (context, provider, _) => ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-          children: [
-            _statusSection(l10n, provider),
-            if (provider.enabled) ...[
-              _preferencesSection(l10n, provider),
-              ..._recommendationsSection(context, l10n, provider),
-              ..._sendingSection(l10n, provider),
+      body: Consumer(
+        builder: (context, ref, _) {
+          final state = ref.watch(aiDjProvider);
+          _state = state;
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [
+              _statusSection(l10n, state),
+              if (state.enabled) ...[
+                _preferencesSection(l10n, state),
+                ..._recommendationsSection(context, l10n, state),
+                ..._sendingSection(l10n),
+              ],
+              ..._configSection(l10n, state),
             ],
-            ..._configSection(l10n, provider),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -186,12 +196,12 @@ class _AiDjPageState extends State<AiDjPage> {
     );
   }
 
-  Widget _statusSection(AppLocalizations l10n, AiDjProvider provider) {
+  Widget _statusSection(AppLocalizations l10n, AiDjState state) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final statusText = switch (provider.status) {
+    final statusText = switch (state.status) {
       AiDjStatus.off =>
-        provider.enabled ? l10n.aiDjStatusIdle : l10n.aiDjStatusOff,
+        state.enabled ? l10n.aiDjStatusIdle : l10n.aiDjStatusOff,
       AiDjStatus.preparing => l10n.aiDjStatusPreparing,
       AiDjStatus.playing => l10n.aiDjStatusPlaying,
       AiDjStatus.error => l10n.aiDjStatusError,
@@ -231,7 +241,7 @@ class _AiDjPageState extends State<AiDjPage> {
               const SizedBox(width: 4),
               M3ESwitch(
                 key: const Key('aiDjModeSwitch'),
-                value: provider.enabled,
+                value: state.enabled,
                 onChanged: _busy
                     ? null
                     : (value) => value ? _enable() : _disable(),
@@ -239,16 +249,16 @@ class _AiDjPageState extends State<AiDjPage> {
             ],
           ),
         ),
-        if (provider.enabled && provider.queuedCount > 0) ...[
+        if (state.enabled && state.queuedCount > 0) ...[
           const SizedBox(height: 8),
           Text(
-            l10n.aiDjQueued(provider.queuedCount),
+            l10n.aiDjQueued(state.queuedCount),
             style: context.typeScale.labelSmall.copyWith(
               color: scheme.onSurfaceVariant,
             ),
           ),
         ],
-        if (provider.lastError != null) ...[
+        if (state.lastError != null) ...[
           const SizedBox(height: 8),
           Row(
             children: [
@@ -256,22 +266,22 @@ class _AiDjPageState extends State<AiDjPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  aiDjFailureText(l10n, provider.lastError!),
+                  aiDjFailureText(l10n, state.lastError!),
                   style: context.typeScale.bodySmall,
                 ),
               ),
               M3EButton.icon(
                 style: M3EButtonStyle.text,
-                onPressed: provider.isBusy
+                onPressed: state.isBusy
                     ? null
-                    : () => unawaited(provider.refreshRecommendations()),
+                    : () => unawaited(_controller.refreshRecommendations()),
                 icon: const Icon(Icons.refresh_rounded, size: 18),
                 label: Text(l10n.aiDjRetry),
               ),
             ],
           ),
         ],
-        if (provider.autoFeedError != null && !provider.autoFeedHalted) ...[
+        if (state.autoFeedError != null && !state.autoFeedHalted) ...[
           const SizedBox(height: 8),
           Row(
             key: const Key('aiDjAutoFeedError'),
@@ -287,7 +297,7 @@ class _AiDjPageState extends State<AiDjPage> {
             ],
           ),
         ],
-        if (provider.autoFeedHalted) ...[
+        if (state.autoFeedHalted) ...[
           const SizedBox(height: 8),
           Row(
             key: const Key('aiDjAutoFeedHalted'),
@@ -296,13 +306,13 @@ class _AiDjPageState extends State<AiDjPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  l10n.aiDjAutoFeedHalted(provider.autoFeedFailures),
+                  l10n.aiDjAutoFeedHalted(state.autoFeedFailures),
                   style: context.typeScale.bodySmall,
                 ),
               ),
               M3EButton.text(
                 key: const Key('aiDjAutoFeedResumeButton'),
-                onPressed: provider.resumeAutoFeed,
+                onPressed: _controller.resumeAutoFeed,
                 child: Text(l10n.aiDjAutoFeedResume),
               ),
             ],
@@ -312,7 +322,7 @@ class _AiDjPageState extends State<AiDjPage> {
     );
   }
 
-  Widget _preferencesSection(AppLocalizations l10n, AiDjProvider provider) {
+  Widget _preferencesSection(AppLocalizations l10n, AiDjState state) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Padding(
@@ -336,7 +346,7 @@ class _AiDjPageState extends State<AiDjPage> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    aiDjPreferencesSummary(l10n, provider.preferences),
+                    aiDjPreferencesSummary(l10n, state.preferences),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: context.typeScale.bodySmall.copyWith(
@@ -356,23 +366,24 @@ class _AiDjPageState extends State<AiDjPage> {
   List<Widget> _recommendationsSection(
     BuildContext context,
     AppLocalizations l10n,
-    AiDjProvider provider,
+    AiDjState state,
   ) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final batch = provider.recommendations;
+    final batch = state.recommendations;
     final items = batch?.items ?? const <ResolvedRecommendation>[];
-    final nowPlaying = context
-        .select<PlaybackProvider, ({String? uri, bool isPlaying})>(
-          (playback) => (
-            uri: playback.snapshot.current?.id.uri,
-            isPlaying: playback.snapshot.isPlaying,
-          ),
-        );
+    final nowPlaying = ref.watch(
+      playbackProvider.select(
+        (playback) => (
+          uri: playback.snapshot.current?.id.uri,
+          isPlaying: playback.snapshot.isPlaying,
+        ),
+      ),
+    );
     // 播放类动作只挡队列操作；显式生成进行中旧列表仍可播放 / 入队。
-    final queueBusy = provider.queueBusy;
-    final canReplace = !provider.isBusy && !provider.hasReplacing;
-    final radioActive = provider.status == AiDjStatus.playing;
+    final queueBusy = state.queueBusy;
+    final canReplace = !state.isBusy && !state.hasReplacing;
+    final radioActive = state.status == AiDjStatus.playing;
 
     return [
       const SizedBox(height: _sectionGap),
@@ -396,7 +407,7 @@ class _AiDjPageState extends State<AiDjPage> {
             leadingIcon: Icons.play_arrow_rounded,
             style: M3EButtonStyle.filled,
             enabled: items.isNotEmpty && !queueBusy,
-            onPressed: () => unawaited(provider.startRadio()),
+            onPressed: () => unawaited(_controller.startRadio()),
             items: [
               M3ESplitButtonItem<_PlayAllAction>(
                 value: _PlayAllAction.enqueue,
@@ -413,8 +424,8 @@ class _AiDjPageState extends State<AiDjPage> {
                 ? Icons.auto_awesome_rounded
                 : Icons.refresh_rounded,
             style: M3EButtonStyle.tonal,
-            enabled: !provider.isBusy,
-            onPressed: () => unawaited(provider.refreshRecommendations()),
+            enabled: !state.isBusy,
+            onPressed: () => unawaited(_controller.refreshRecommendations()),
             items: [
               M3ESplitButtonItem<_BatchAction>(
                 value: _BatchAction.feed,
@@ -430,18 +441,18 @@ class _AiDjPageState extends State<AiDjPage> {
       const SizedBox(height: 12),
       // 进度分片只重建这条进度带，不带走整页列表。
       ValueListenableBuilder<AiGenerationState>(
-        valueListenable: provider.generationState,
+        valueListenable: _controller.generationState,
         builder: (context, generation, _) {
           final progress = generation.progress;
           if (progress == null) return const SizedBox.shrink();
           return _GenerationStrip(
             progress: progress,
-            onCancel: provider.cancelGeneration,
+            onCancel: _controller.cancelGeneration,
           );
         },
       ),
       // 生成中且没有旧列表：进度带已经说明正在生成，不再回落成引导卡。
-      if (provider.progress != null && items.isEmpty)
+      if (_controller.progress != null && items.isEmpty)
         const SizedBox.shrink()
       else if (batch == null || items.isEmpty)
         _emptyRecommendations(l10n)
@@ -456,13 +467,13 @@ class _AiDjPageState extends State<AiDjPage> {
             isPlaying: nowPlaying.isPlaying,
             busy: queueBusy,
             canReplace: canReplace,
-            replacing: provider.isReplacing(items[i].track.id.uri),
-            onPlay: () => unawaited(provider.playRecommendation(i)),
-            onReplace: () => unawaited(provider.replaceRecommendation(i)),
+            replacing: state.isReplacing(items[i].track.id.uri),
+            onPlay: () => unawaited(_controller.playRecommendation(i)),
+            onReplace: () => unawaited(_controller.replaceRecommendation(i)),
             onNotInterested: () =>
-                unawaited(provider.markNotInterested(items[i].track.id.uri)),
+                unawaited(_controller.markNotInterested(items[i].track.id.uri)),
             onMoreLikeThis: () =>
-                unawaited(provider.addSeed(items[i].source.label)),
+                unawaited(_controller.addSeed(items[i].source.label)),
           ),
         ],
       ],
@@ -480,7 +491,7 @@ class _AiDjPageState extends State<AiDjPage> {
             ),
             M3EButton.text(
               key: const Key('aiDjRetryUnresolvedButton'),
-              onPressed: provider.isBusy ? null : _retryUnresolved,
+              onPressed: state.isBusy ? null : _retryUnresolved,
               child: Text(l10n.aiDjRetryUnresolved),
             ),
           ],
@@ -516,7 +527,7 @@ class _AiDjPageState extends State<AiDjPage> {
     );
   }
 
-  List<Widget> _sendingSection(AppLocalizations l10n, AiDjProvider provider) {
+  List<Widget> _sendingSection(AppLocalizations l10n) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return [
@@ -526,7 +537,7 @@ class _AiDjPageState extends State<AiDjPage> {
       CardListSurface(
         key: const Key('aiDjPromptRow'),
         position: M3ECardPosition.single,
-        onPressed: () => unawaited(showAiDjPromptDialog(context, provider)),
+        onPressed: () => unawaited(showAiDjPromptDialog(context)),
         padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
         child: Row(
           children: [
@@ -559,13 +570,13 @@ class _AiDjPageState extends State<AiDjPage> {
     ];
   }
 
-  List<Widget> _configSection(AppLocalizations l10n, AiDjProvider provider) {
+  List<Widget> _configSection(AppLocalizations l10n, AiDjState state) {
     final scheme = Theme.of(context).colorScheme;
     return [
       const SizedBox(height: _sectionGap),
       _sectionHeader(
         l10n.aiDjConfigTitle,
-        trailing: !_editingConfig && provider.hasConfig
+        trailing: !_editingConfig && state.hasConfig
             ? M3EButton.text(
                 key: const Key('aiDjManageConfigButton'),
                 onPressed: () => setState(() => _editingConfig = true),
@@ -574,7 +585,7 @@ class _AiDjPageState extends State<AiDjPage> {
             : null,
       ),
       const SizedBox(height: 8),
-      if (_editingConfig) _configForm(l10n) else _configSummary(l10n, provider),
+      if (_editingConfig) _configForm(l10n) else _configSummary(l10n, state),
       const SizedBox(height: 12),
       M3EDivider(color: scheme.outlineVariant.withValues(alpha: 0.5)),
       const SizedBox(height: 4),
@@ -589,7 +600,7 @@ class _AiDjPageState extends State<AiDjPage> {
             label: Text(l10n.aiDjTestConnection),
             enabled: !_busy,
           ),
-          if (!_editingConfig && provider.hasConfig)
+          if (!_editingConfig && state.hasConfig)
             M3EButtonGroupAction(
               icon: const Icon(Icons.delete_rounded),
               label: Text(l10n.aiDjClearConfig),
@@ -691,20 +702,20 @@ class _AiDjPageState extends State<AiDjPage> {
   void _flushPendingConfig() {
     _configSaveTimer?.cancel();
     final pending = _formConfig();
-    final saved = _provider.config;
+    final saved = _state.config;
     final changed =
         saved == null ||
         saved.baseUrl != pending.baseUrl ||
         saved.apiKey != pending.apiKey ||
         saved.model != pending.model;
     if (pending.isComplete && changed) {
-      unawaited(_provider.saveConfig(pending));
+      unawaited(_controller.saveConfig(pending));
     }
   }
 
-  Widget _configSummary(AppLocalizations l10n, AiDjProvider provider) {
+  Widget _configSummary(AppLocalizations l10n, AiDjState state) {
     final scheme = Theme.of(context).colorScheme;
-    final config = provider.config;
+    final config = state.config;
     if (config == null) {
       return Text(
         l10n.aiDjNotConfigured,
@@ -749,17 +760,16 @@ class _AiDjPageState extends State<AiDjPage> {
   /// 开启功能（不接管播放；列表缺失时生成一批）。
   Future<void> _enable() async {
     final l10n = AppLocalizations.of(context)!;
-    final provider = _provider;
-    if (!provider.hasConfig) {
+    if (!ref.read(aiDjProvider).hasConfig) {
       setState(() => _editingConfig = true);
       _notify(l10n.aiDjNotConfigured, error: true);
       return;
     }
-    if (!await ensureAiDjConsent(context, provider)) return;
+    if (!await ensureAiDjConsent(context, _controller)) return;
     if (!mounted) return;
     setState(() => _busy = true);
     try {
-      await provider.setEnabled(true);
+      await _controller.setEnabled(true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -794,37 +804,36 @@ class _AiDjPageState extends State<AiDjPage> {
       ),
     );
     if (keepQueue == null || !mounted) return;
-    await _provider.stop(keepQueue: keepQueue);
-    await _provider.setEnabled(false);
+    await _controller.stop(keepQueue: keepQueue);
+    await _controller.setEnabled(false);
   }
 
   Future<void> _enqueueAll() async {
     final l10n = AppLocalizations.of(context)!;
-    final provider = _provider;
-    final before = provider.queuedCount;
-    await provider.enqueueRecommendations();
+    final before = ref.read(aiDjProvider).queuedCount;
+    await _controller.enqueueRecommendations();
     if (!mounted) return;
-    if (provider.queuedCount == before) {
+    if (ref.read(aiDjProvider).queuedCount == before) {
       _notify(l10n.aiDjEnqueueEmpty);
     }
   }
 
   Future<void> _feedBatch() async {
-    final provider = _provider;
-    final before = provider.historyCount;
-    await provider.feedMore();
+    final before = ref.read(aiDjProvider).historyCount;
+    await _controller.feedMore();
     if (!mounted) return;
-    if (provider.historyCount > before) {
+    if (ref.read(aiDjProvider).historyCount > before) {
       _notify(AppLocalizations.of(context)!.aiDjFeedDone);
     }
   }
 
   Future<void> _retryUnresolved() async {
-    final provider = _provider;
-    final before = provider.recommendations?.unresolved.length ?? 0;
-    await provider.retryUnresolved();
+    final before =
+        ref.read(aiDjProvider).recommendations?.unresolved.length ?? 0;
+    await _controller.retryUnresolved();
     if (!mounted) return;
-    final after = provider.recommendations?.unresolved.length ?? 0;
+    final after =
+        ref.read(aiDjProvider).recommendations?.unresolved.length ?? 0;
     if (after < before) {
       _notify(AppLocalizations.of(context)!.aiDjUnresolvedRetried);
     }
@@ -832,7 +841,6 @@ class _AiDjPageState extends State<AiDjPage> {
 
   Future<void> _testConnection() async {
     final l10n = AppLocalizations.of(context)!;
-    final provider = _provider;
     final editing = _editingConfig;
     final config = editing
         ? LlmConfig(
@@ -840,18 +848,18 @@ class _AiDjPageState extends State<AiDjPage> {
             apiKey: _apiKeyController.text,
             model: _modelController.text,
           )
-        : provider.config;
+        : ref.read(aiDjProvider).config;
     if (config == null || !config.isComplete) {
       _notify(l10n.aiDjNotConfigured, error: true);
       return;
     }
     setState(() => _busy = true);
     try {
-      await provider.testConnection(config);
+      await _controller.testConnection(config);
       if (!mounted) return;
       // 表单值测通即存：消除「测过了但忘记保存」的坑，配置以刚验证的那份为准。
       if (editing) {
-        await provider.saveConfig(config);
+        await _controller.saveConfig(config);
         if (!mounted) return;
         setState(() => _editingConfig = false);
         _notify(l10n.aiDjTestSaved);
@@ -891,14 +899,16 @@ class _AiDjPageState extends State<AiDjPage> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await _provider.clearConfig();
+    await _controller.clearConfig();
     if (!mounted) return;
     _loadConfigIntoControllers(null);
     setState(() => _editingConfig = true);
   }
 
   void _notify(String message, {bool error = false}) {
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
     if (notifications == null) {
       M3ESnackbar.show(context, message: message);
       return;
@@ -915,14 +925,14 @@ class _AiDjPageState extends State<AiDjPage> {
 ///
 /// 只保留一件「正在生成」的说明：不再叠 spinner、阶段步进、等待秒数与
 /// 骨架行。静默自动补歌永远不实例化本组件（provider 不设置 progress）。
-class _GenerationStrip extends StatelessWidget {
+class _GenerationStrip extends ConsumerWidget {
   const _GenerationStrip({required this.progress, required this.onCancel});
 
   final AiDjProgress progress;
   final VoidCallback onCancel;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final title = aiDjPhaseText(l10n, progress);
     return Padding(

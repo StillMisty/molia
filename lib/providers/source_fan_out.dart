@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
 import '../domain/models/failure.dart';
+import '../utils/snapshot_source.dart';
 
 final _logger = Logger('molia.source_fan_out');
 
@@ -155,9 +156,8 @@ abstract interface class FanOutSearchControl {
 
   void clear();
 
-  void addListener(VoidCallback listener);
-
-  void removeListener(VoidCallback listener);
+  /// 变更信号（查询开始 / 清空 / 选中 / 逐源完成）。
+  Listenable get changes;
 
   void dispose();
 }
@@ -182,13 +182,13 @@ final class _SourceRun<R> {
   }
 }
 
-/// 跨来源扇出搜索会话（[ChangeNotifier]）。
+/// 跨来源扇出搜索会话。
 ///
 /// 通知策略：查询开始 / 清空 / 选中变化立即通知；来源完成合并同一轮事件
 /// 循环内的通知（并行搜索几乎同时返回时只重建一次），不同时刻返回的来源
-/// 仍逐条通知，保留「逐源出结果」的观感。
-class FanOutSearchSession<R> extends ChangeNotifier
-    implements FanOutSearchControl {
+/// 仍逐条通知，保留「逐源出结果」的观感。消费面订阅 [changes]，
+/// 状态仍由各自的 getter 读取。
+class FanOutSearchSession<R> implements FanOutSearchControl {
   FanOutSearchSession({required List<FanOutSource<R>> Function() sources})
     : _sourceProvider = sources;
 
@@ -214,6 +214,11 @@ class FanOutSearchSession<R> extends ChangeNotifier
   /// 合并同一轮事件循环内的通知（见 [_scheduleNotify]）。
   bool _notifyPending = false;
   int _notifyEpoch = 0;
+
+  final SnapshotSignal _changes = SnapshotSignal();
+
+  @override
+  Listenable get changes => _changes;
 
   /// 当前来源（按声明顺序）。
   List<FanOutSource<R>> get sources => _sourceProvider();
@@ -416,7 +421,7 @@ class FanOutSearchSession<R> extends ChangeNotifier
   /// 立即通知并作废已排队的合并通知。
   ///
   /// 消费面自己的状态（换源筛选 / 取词中）变化也走这里：若直接
-  /// `notifyListeners()`，紧跟着的合并通知会让界面再重建一次。
+  /// `_changes.notify()`，紧跟着的合并通知会让界面再重建一次。
   void notifyNow() => _notifyNow();
 
   /// 开一个来源的执行体；不可用来源只记状态、不发请求。
@@ -539,7 +544,7 @@ class FanOutSearchSession<R> extends ChangeNotifier
     // 让已排队的合并通知过期，避免紧接着再重建一次。
     _notifyEpoch++;
     _notifyPending = false;
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 合并同一轮事件循环内的来源完成（并行搜索几乎同时返回）为一次重建；
@@ -551,7 +556,7 @@ class FanOutSearchSession<R> extends ChangeNotifier
     scheduleMicrotask(() {
       if (_disposed || epoch != _notifyEpoch) return;
       _notifyPending = false;
-      notifyListeners();
+      _changes.notify();
     });
   }
 
@@ -564,7 +569,6 @@ class FanOutSearchSession<R> extends ChangeNotifier
     _unavailableKeys.clear();
     _selected = null;
     _selectedSourceKey = null;
-    super.dispose();
   }
 }
 

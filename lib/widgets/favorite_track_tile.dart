@@ -1,9 +1,9 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
-import '../providers/library_provider.dart';
+import '../providers/app_providers.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
 
@@ -15,12 +15,12 @@ import 'track_row.dart';
 /// - [FavoriteTrackTile.track]：领域曲目（歌手页 / 专辑页），标题 / 歌手
 ///   标签（[Track.artistLabel]）/ 封面 / 时长全部取领域值；
 /// - 默认构造：行数据（[TrackRowModel]）与收藏源由调用方注入（`favoriteOf`
-///   里做 `context.select`）；搜索结果行因表格列版式自建 [TrackRow]，不走
+///   里做 `ref.watch`）；搜索结果行因表格列版式自建 [TrackRow]，不走
 ///   本层。
 ///
 /// 收藏态一律在本组件 build 里 `select`（每行一个订阅）；不能挪到
 /// SliverList 的 itemBuilder 中直接 select（会整表重建并触发断言）。
-class FavoriteTrackTile extends StatelessWidget {
+class FavoriteTrackTile extends ConsumerWidget {
   /// 领域曲目构造（歌手页 / 专辑页共用）。
   factory FavoriteTrackTile.track({
     Key? key,
@@ -46,7 +46,7 @@ class FavoriteTrackTile extends StatelessWidget {
       surface: surface,
       position: position,
       onTap: onTap,
-      favoriteOf: (context) => favoriteOfTrack(context, track),
+      favoriteOf: (ref) => favoriteOfTrack(ref, track),
       onToggleFavorite: onToggleFavorite,
       onAddToPlaylist: onAddToPlaylist,
     );
@@ -80,8 +80,8 @@ class FavoriteTrackTile extends StatelessWidget {
   /// 点击整行；null 为不可点（如缺少可播放曲目的结果项）。
   final VoidCallback? onTap;
 
-  /// 本行收藏态（在 build 内以 `context.select` 订阅）。
-  final bool Function(BuildContext context) favoriteOf;
+  /// 本行收藏态（在 build 内以 `ref.watch` + `select` 订阅）。
+  final bool Function(WidgetRef ref) favoriteOf;
 
   /// 收藏 / 取消收藏。
   final VoidCallback onToggleFavorite;
@@ -90,14 +90,14 @@ class FavoriteTrackTile extends StatelessWidget {
   final VoidCallback onAddToPlaylist;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return TrackMenuTile(
       track: track,
       row: row,
       surface: surface,
       position: position,
       onTap: onTap,
-      favorite: favoriteOf(context),
+      favorite: favoriteOf(ref),
       onToggleFavorite: onToggleFavorite,
       onAddToPlaylist: onAddToPlaylist,
     );
@@ -105,8 +105,8 @@ class FavoriteTrackTile extends StatelessWidget {
 }
 
 /// 领域曲目的收藏态（歌手页 / 专辑页共用；每行一个 `select` 订阅）。
-bool favoriteOfTrack(BuildContext context, Track track) =>
-    context.select<LibraryProvider?, bool>(
-      (library) =>
-          library?.isFavorite(track.id.sourceKey, track.id.id) ?? false,
-    );
+bool favoriteOfTrack(WidgetRef ref, Track track) => ref.watch(
+  libraryProvider.select(
+    (library) => library.isFavorite(track.id.sourceKey, track.id.id),
+  ),
+);

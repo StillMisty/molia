@@ -4,41 +4,64 @@
 /// 只服务「曲库」合集；收藏 / 历史 / 本地歌曲 / 自建列表不再有模式切换。
 library;
 
-import 'package:flutter/foundation.dart';
+import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import '../app/bootstrap/runtime_providers.dart';
 import '../data/settings/device_settings.dart';
 import '../data/settings/device_settings_keys.dart';
 
+part 'collection_mode.g.dart';
+
 enum CollectionMode { albums, artists }
 
-class CollectionModeStore extends ChangeNotifier {
-  /// [settings] 仅测试注入；生产构造自己的设备本地入口。
-  CollectionModeStore({DeviceSettings? settings})
-    : _settings = settings ?? DeviceSettings();
+/// 曲库浏览模式的不可变快照。
+@immutable
+class CollectionModeState {
+  const CollectionModeState({required this.mode, required this.isLoaded});
 
+  final CollectionMode mode;
+  final bool isLoaded;
+
+  CollectionModeState copyWith({CollectionMode? mode, bool? isLoaded}) =>
+      CollectionModeState(
+        mode: mode ?? this.mode,
+        isLoaded: isLoaded ?? this.isLoaded,
+      );
+}
+
+@Riverpod(keepAlive: true, name: 'collectionModeProvider')
+class CollectionModeStore extends _$CollectionModeStore {
   static const String prefsKey = kLibraryBrowseModeKeyName;
 
-  final DeviceSettings _settings;
-  CollectionMode _mode = CollectionMode.albums;
-  bool _loaded = false;
+  late final DeviceSettings _settings;
 
-  CollectionMode get mode => _mode;
-  bool get isLoaded => _loaded;
+  @override
+  CollectionModeState build() {
+    _settings = ref.watch(deviceSettingsProvider);
+    unawaited(_load());
+    return const CollectionModeState(
+      mode: CollectionMode.albums,
+      isLoaded: false,
+    );
+  }
 
-  Future<void> load() async {
+  Future<void> _load() async {
     final raw = await _settings.read(kLibraryBrowseModeKey);
-    _mode = CollectionMode.values.firstWhere(
+    final mode = CollectionMode.values.firstWhere(
       (mode) => mode.name == raw,
       orElse: () => CollectionMode.albums,
     );
-    _loaded = true;
-    notifyListeners();
+    state = state.copyWith(mode: mode, isLoaded: true);
   }
 
+  Future<void> load() => _load();
+
   Future<void> setMode(CollectionMode mode) async {
-    if (_mode == mode) return;
-    _mode = mode;
-    notifyListeners();
+    if (state.mode == mode) return;
+    state = state.copyWith(mode: mode);
     await _settings.write(kLibraryBrowseModeKey, mode.name);
   }
 }

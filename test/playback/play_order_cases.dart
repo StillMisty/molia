@@ -68,8 +68,8 @@ void main() {
     addTearDown(provider.dispose);
 
     await provider.preferencesReady;
-    expect(provider.defaultPlayMode, PlayMode.listLoop);
-    expect(provider.currentMode, PlayMode.listLoop);
+    expect(provider.state.defaultPlayMode, PlayMode.listLoop);
+    expect(provider.state.currentMode, PlayMode.listLoop);
     expect(backend.calls.where((call) => call == 'setMode'), isEmpty);
   });
 
@@ -87,7 +87,7 @@ void main() {
     ];
     for (final mode in expected) {
       await provider.togglePlayMode();
-      expect(provider.currentMode, mode);
+      expect(provider.state.currentMode, mode);
     }
   });
 
@@ -98,8 +98,8 @@ void main() {
     addTearDown(provider.dispose);
 
     await provider.preferencesReady;
-    expect(provider.defaultPlayMode, PlayMode.shuffle);
-    expect(provider.currentMode, PlayMode.shuffle);
+    expect(provider.state.defaultPlayMode, PlayMode.shuffle);
+    expect(provider.state.currentMode, PlayMode.shuffle);
     expect(backend.calls, contains('setMode'));
   });
 
@@ -110,8 +110,8 @@ void main() {
     await provider.preferencesReady;
 
     await provider.setDefaultPlayMode(PlayMode.singleRepeat);
-    expect(provider.defaultPlayMode, PlayMode.singleRepeat);
-    expect(provider.currentMode, PlayMode.singleRepeat);
+    expect(provider.state.defaultPlayMode, PlayMode.singleRepeat);
+    expect(provider.state.currentMode, PlayMode.singleRepeat);
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('default_play_mode'), 'singleRepeat');
@@ -135,8 +135,8 @@ void main() {
     );
     await provider.setDefaultPlayMode(PlayMode.shuffle);
 
-    expect(provider.defaultPlayMode, PlayMode.shuffle);
-    expect(provider.currentMode, PlayMode.listLoop);
+    expect(provider.state.defaultPlayMode, PlayMode.shuffle);
+    expect(provider.state.currentMode, PlayMode.listLoop);
     expect(backend.calls.where((call) => call == 'setMode'), isEmpty);
 
     final prefs = await SharedPreferences.getInstance();

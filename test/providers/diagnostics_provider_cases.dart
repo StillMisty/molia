@@ -158,6 +158,11 @@ void main() {
     await pumpEventQueue();
     expect(rebuilds, 1);
     expect(provider.issueGroups.value.single.count, 2);
+    expect(
+      () => provider.state.issueGroups.add(first.single),
+      throwsUnsupportedError,
+      reason: '快照里的问题分组是只读副本',
+    );
   });
 
   test('摘要包含上次异常退出标记', () async {

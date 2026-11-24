@@ -15,6 +15,7 @@ import '../../data/files/local_locator.dart';
 import '../../data/settings/device_settings.dart';
 import '../../data/settings/device_settings_keys.dart';
 import '../../domain/models/music_folder.dart';
+import '../../utils/snapshot_source.dart';
 
 export '../../domain/models/music_folder.dart';
 
@@ -29,7 +30,29 @@ extension MusicFolderTitle on MusicFolder {
 /// （SAF 授权拒绝 / provider 无法枚举），UI 文案与「重新选择」引导不同。
 enum MusicFolderAddResult { added, duplicate, nested, invalid, unreadable }
 
-class MusicFoldersStore extends ChangeNotifier {
+/// 音乐文件夹配置的不可变快照。
+///
+/// UI 经 `LocalLibraryService` 的通知重建时读 [folders]；服务侧直接读同一
+/// 实例上的 getter（快照是上次通知时的值）。
+@immutable
+class MusicFoldersState {
+  MusicFoldersState({
+    required List<MusicFolder> folders,
+    required this.isLoaded,
+    required this.revision,
+  }) : folders = List.unmodifiable(folders);
+
+  /// 已添加的文件夹（按添加顺序）。
+  final List<MusicFolder> folders;
+
+  /// 是否已完成首次读取。
+  final bool isLoaded;
+
+  /// 配置变更计数（同内容重写也递增）。
+  final int revision;
+}
+
+class MusicFoldersStore implements SnapshotSource<MusicFoldersState> {
   /// [settings] / [clock] 仅测试注入；生产构造自己的设备本地入口。
   MusicFoldersStore({DeviceSettings? settings, DateTime Function()? clock})
     : _settings = settings ?? DeviceSettings(),
@@ -40,12 +63,23 @@ class MusicFoldersStore extends ChangeNotifier {
   final DeviceSettings _settings;
   final DateTime Function() _clock;
   final List<MusicFolder> _folders = [];
+  final SnapshotSignal _changes = SnapshotSignal();
   int _revision = 0;
   bool _loaded = false;
 
   List<MusicFolder> get folders => List.unmodifiable(_folders);
   bool get isLoaded => _loaded;
   int get revision => _revision;
+
+  @override
+  MusicFoldersState get state => MusicFoldersState(
+    folders: _folders,
+    isLoaded: _loaded,
+    revision: _revision,
+  );
+
+  @override
+  Listenable get changes => _changes;
 
   Future<void> load() async {
     final stored = await _settings.readJsonList(kMusicFoldersKey);
@@ -138,7 +172,7 @@ class MusicFoldersStore extends ChangeNotifier {
 
   void _bump() {
     _revision++;
-    notifyListeners();
+    _changes.notify();
   }
 
   bool _sameLocator(String a, String b) {

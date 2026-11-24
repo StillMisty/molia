@@ -31,12 +31,13 @@ extension _ShellBackIntent on _MyAppState {
   /// （[EscapeClaims]）与可配置键位由 `desktop_shortcuts.dart` 在本回调之前
   /// 处理。桌面骨架没有歌词整页状态，本分支只在移动骨架挂载键盘时可达。
   void _handleShellBackCommand() {
-    if (_presentation.effectiveDestination == ShellDestination.nowPlaying &&
+    if (_presentation.state.effectiveDestination ==
+            ShellDestination.nowPlaying &&
         _nowPlaying.activeTab.value == nowPlayingQueueTabIndex) {
       _closeQueuePanel();
       return;
     }
-    if (_presentation.expanded) {
+    if (_presentation.state.expanded) {
       _requestPlayerExpansion(false);
       return;
     }
@@ -53,7 +54,7 @@ extension _ShellBackIntent on _MyAppState {
     return PopScope(
       // 测试据此读取 canPop，断言「一级页允许系统退出」。
       key: const Key('shellBackScope'),
-      canPop: !_presentation.interceptsBack,
+      canPop: !_presentation.state.interceptsBack,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // 页面级 PopScope（多选 / 搜索 / 排序）也收到同一次回调，且返回

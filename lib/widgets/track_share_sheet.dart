@@ -10,16 +10,16 @@ library;
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../domain/models/download.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
-import '../services/notification_service.dart';
+import '../providers/app_providers.dart';
 import '../services/download/download_requests.dart';
 import '../services/download/download_records.dart';
 import 'labels/download_failure_label.dart';
@@ -37,7 +37,7 @@ Future<void> showTrackShareSheet(BuildContext context, {required Track track}) {
   );
 }
 
-class _TrackShareSheet extends StatelessWidget {
+class _TrackShareSheet extends ConsumerWidget {
   const _TrackShareSheet({required this.track, required this.pageContext});
 
   final Track track;
@@ -47,23 +47,19 @@ class _TrackShareSheet extends StatelessWidget {
   final BuildContext pageContext;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final notifications = context.read<NotificationService?>();
-    final records = context.read<DownloadRecords?>();
-    final requests = context.read<DownloadRequests?>();
+    final notifications = ref.read(notificationServiceProvider);
+    final records = ref.read(downloadRecordsControllerProvider);
+    final requests = ref.read(downloadRequestsControllerProvider);
     final pageUrl = track.platformPageUrl;
-    final record = records?.recordForTrack(track);
+    final record = records.recordForTrack(track);
     final trackIdLabel = track.id.uri.isEmpty
         ? l10n.trackInfoSourceUnknownId
         : track.id.uri;
 
     void message(String text) {
-      if (notifications != null) {
-        notifications.showSnackBar(text);
-      } else {
-        M3ESnackbar.show(pageContext, message: text);
-      }
+      notifications.showSnackBar(text);
     }
 
     return SimpleModalBody(

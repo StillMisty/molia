@@ -14,11 +14,11 @@ import 'package:molia/services/ai/ai_recommendation_store.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
 import 'package:molia/widgets/ai_dj_track_tile.dart';
 import 'package:molia/widgets/ai_dj_waiting.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/ai_dj_test_support.dart';
 import '../support/cover_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/fake_ai_generator.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
@@ -84,10 +84,11 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final scope = ProviderTestScope();
+    scope.put<AiDjProvider>(provider);
     await tester.pumpWidget(
-      ChangeNotifierProvider<AiDjProvider>.value(
-        value: provider,
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -112,7 +113,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
 
-    expect(provider.config?.model, 'model-b');
+    expect(provider.state.config?.model, 'model-b');
   });
 
   testWidgets('配置表单有显式完成按钮，收起前补存未落盘的输入', (tester) async {
@@ -152,10 +153,11 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final scope = ProviderTestScope();
+    scope.put<AiDjProvider>(provider);
     await tester.pumpWidget(
-      ChangeNotifierProvider<AiDjProvider>.value(
-        value: provider,
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -180,7 +182,7 @@ void main() {
     await tester.tap(find.byKey(const Key('aiDjConfigDoneButton')));
     await tester.pumpAndSettle();
 
-    expect(provider.config?.model, 'model-b');
+    expect(provider.state.config?.model, 'model-b');
     expect(find.byKey(const Key('aiDjConfigDoneButton')), findsNothing);
     expect(find.text('https://api.example.com/v1'), findsOneWidget);
   });
@@ -232,15 +234,14 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    final scope = ProviderTestScope();
+    scope.put<AiDjProvider>(ai);
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryProvider>(library);
+    putCoverStore(scope);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          coverStoreProvider(),
-          ChangeNotifierProvider<AiDjProvider>.value(value: ai),
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<LibraryProvider>.value(value: library),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -337,7 +338,7 @@ void main() {
     await ai.init();
     await ai.grantConsent();
     await ai.setEnabled(true);
-    expect(ai.recommendations?.items, hasLength(3));
+    expect(ai.state.recommendations?.items, hasLength(3));
     addTearDown(() {
       ai.dispose();
       library.dispose();
@@ -355,15 +356,14 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final scope = ProviderTestScope();
+    scope.put<AiDjProvider>(ai);
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryProvider>(library);
+    putCoverStore(scope);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          coverStoreProvider(),
-          ChangeNotifierProvider<AiDjProvider>.value(value: ai),
-          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<LibraryProvider>.value(value: library),
-        ],
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -395,7 +395,7 @@ void main() {
     // 生成中点击旧列表仍能起播。
     await tester.tap(find.text('Song 0'));
     await tester.pump();
-    expect(ai.status, AiDjStatus.playing);
+    expect(ai.state.status, AiDjStatus.playing);
     expect(backend.lastRequest?.startIndex, 0);
 
     gate.complete();

@@ -198,7 +198,7 @@ void main() {
     b.onSearch = b.queue;
     final session = buildSession([a, b]);
     var notifications = 0;
-    session.addListener(() => notifications++);
+    session.changes.addListener(() => notifications++);
 
     final pending = session.search('合并');
     expect(notifications, 1, reason: '查询开始立即通知');
@@ -265,7 +265,7 @@ void main() {
     gate.onSearch = gate.queue;
     final session = FanOutSearchSession<_Hit>(sources: () => [gate.adapter]);
     var notifications = 0;
-    session.addListener(() => notifications++);
+    session.changes.addListener(() => notifications++);
 
     final pending = session.search('迟到');
     expect(notifications, 1);

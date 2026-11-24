@@ -5,12 +5,12 @@
 /// `Player` 的 build 订阅之外（只订阅当前曲目），只能由本组件自己订阅。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/playback_provider.dart';
+import '../providers/app_providers.dart';
 
 /// AppLocalizations 查找：与播放器其它行组件同一约定，未注册 delegate 时
 /// 回退简体中文。
@@ -20,7 +20,7 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 播放页中心封面：语义是「播放 / 暂停 + 曲名」的按钮。
 ///
 /// 这里刻意不标 `image`：读屏用户听到的是可执行动作，而不是一张图。
-class PageCoverSemantics extends StatelessWidget {
+class PageCoverSemantics extends ConsumerWidget {
   const PageCoverSemantics({
     super.key,
     required this.track,
@@ -33,9 +33,9 @@ class PageCoverSemantics extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    final isPlaying = context.select<PlaybackProvider, bool>(
-      (provider) => provider.isPlaying,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isPlaying = ref.watch(
+      playbackProvider.select((provider) => provider.isPlaying),
     );
     final l10n = _l10n(context);
     final track = this.track;

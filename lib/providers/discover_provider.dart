@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../data/mapping/track_mapper.dart';
 import '../domain/models/discover.dart';
@@ -14,7 +15,11 @@ import '../sources/source_track.dart';
 import 'channel_selection.dart';
 import 'library_outcome.dart';
 import 'library_provider.dart';
+import '../app/bootstrap/runtime_providers.dart';
+import 'app_providers.dart';
 import 'playback_provider.dart';
+
+part 'discover_provider.g.dart';
 
 /// 发现能力失败（领域 [SourceFailure] 的 provider 包装，UI 只读 kind/retryable）。
 class DiscoverFailure implements Exception {
@@ -34,52 +39,118 @@ class DiscoverFailure implements Exception {
 ///   链接/ID 详情、搜索）、热搜词；
 /// - 曲目播放/收藏/加入列表复用 [PlaybackProvider] 与 [LibraryProvider]；
 /// - 错误统一归一化为 [DiscoverFailure]（内部 [SourceFailure]）。
-class DiscoverProvider extends ChangeNotifier {
-  DiscoverProvider({
-    required PlaybackProvider playbackProvider,
-    required LibraryProvider libraryProvider,
-    required ChannelSelection selection,
-    BuiltinTransport? builtinTransport,
-    Map<String, DiscoverSource>? sources,
-  }) : _builtinTransport = builtinTransport ?? BuiltinTransport(),
-       _playback = playbackProvider,
-       _library = libraryProvider,
-       // 公开参数名保持 selection，字段仍按本类惯例私有。
-       // ignore: prefer_initializing_formals
-       _selection = selection,
-       _sources = sources ?? BuiltinDiscover.sources {
-    // 渠道只有 ChannelSelection 一份：发现内容只订阅它，不自己保存 / 恢复。
-    _selection.addListener(_onChannelSelectionChanged);
-    // 收藏状态 / 我的列表变化时转发通知，让发现页的收藏按钮与「加入列表」
-    // 弹层保持响应。历史写入（每首歌一次）不转发——发现页对历史无依赖，
-    // 无脑转发会让整页（含全部 tab 与 AI 推荐卡片）随每次切歌重建。
-    _lastFavoritesRevision = _library.favoritesRevision;
-    _lastPlaylistsRevision = _library.playlistsRevision;
-    _library.addListener(_onLibraryChanged);
+/// 发现页对 UI 暴露的不可变快照。
+@immutable
+class DiscoverState {
+  const DiscoverState({
+    required this.channelKey,
+    required this.sourceKeys,
+    required this.hasDiscoverSource,
+    required this.supportsLeaderboards,
+    required this.supportsPlaylists,
+    required this.supportsPlaylistSearch,
+    required this.supportsHotSearch,
+    required this.leaderboards,
+    required this.hotSearches,
+    required this.hotSearchLoading,
+    required this.playlists,
+  });
+
+  final String channelKey;
+  final List<String> sourceKeys;
+  final bool hasDiscoverSource;
+  final bool supportsLeaderboards;
+  final bool supportsPlaylists;
+  final bool supportsPlaylistSearch;
+  final bool supportsHotSearch;
+  final List<DiscoverLeaderboard> leaderboards;
+  final List<String> hotSearches;
+  final bool hotSearchLoading;
+  final List<PlaylistInfo> playlists;
+
+  static const DiscoverState empty = DiscoverState(
+    channelKey: '',
+    sourceKeys: [],
+    hasDiscoverSource: false,
+    supportsLeaderboards: false,
+    supportsPlaylists: false,
+    supportsPlaylistSearch: false,
+    supportsHotSearch: false,
+    leaderboards: [],
+    hotSearches: [],
+    hotSearchLoading: false,
+    playlists: [],
+  );
+}
+
+@Riverpod(keepAlive: true, name: 'discoverProvider')
+class DiscoverProvider extends _$DiscoverProvider {
+  PlaybackProvider? _playback;
+  LibraryProvider? _library;
+  late final BuiltinTransport _builtinTransport;
+  ChannelSelection? _selection;
+  late final Map<String, DiscoverSource> _sources;
+
+  @override
+  DiscoverState build() {
+    _playback = ref.read(appRuntimeProvider).maybe<PlaybackProvider>();
+    _library = ref.read(appRuntimeProvider).maybe<LibraryProvider>();
+    _builtinTransport = ref.read(discoverBuiltinTransportProvider);
+    _selection = ref.read(appRuntimeProvider).maybe<ChannelSelection>();
+    _sources = ref.read(discoverSourcesProvider);
+    final library = _library;
+    final selection = _selection;
+    if (library == null || selection == null) {
+      return DiscoverState.empty;
+    }
+    _lastFavoritesRevision = library.favoritesRevision;
+    _lastPlaylistsRevision = library.playlistsRevision;
+    selection.changes.addListener(_onChannelSelectionChanged);
+    library.changes.addListener(_onLibraryChanged);
+    ref.onDispose(() {
+      _disposed = true;
+      selection.changes.removeListener(_onChannelSelectionChanged);
+      library.changes.removeListener(_onLibraryChanged);
+    });
+    return _snapshot();
+  }
+
+  DiscoverState _snapshot() => DiscoverState(
+    channelKey: _selection!.key,
+    sourceKeys: List.unmodifiable(sourceKeys),
+    hasDiscoverSource: hasDiscoverSource,
+    supportsLeaderboards: supportsLeaderboards,
+    supportsPlaylists: supportsPlaylists,
+    supportsPlaylistSearch: supportsPlaylistSearch,
+    supportsHotSearch: supportsHotSearch,
+    leaderboards: List.unmodifiable(leaderboards),
+    // 热搜词来自内部按渠道缓存的可变列表：复制一次，快照不能反向污染缓存。
+    hotSearches: List.unmodifiable(hotSearches),
+    hotSearchLoading: _hotSearchLoading,
+    playlists: List.unmodifiable(_library?.customPlaylists ?? const []),
+  );
+
+  void _emit() {
+    if (_disposed) return;
+    state = _snapshot();
   }
 
   void _onLibraryChanged() {
-    final favorites = _library.favoritesRevision;
-    final playlists = _library.playlistsRevision;
+    final library = _library;
+    if (library == null) return;
+    final favorites = library.favoritesRevision;
+    final playlists = library.playlistsRevision;
     if (favorites == _lastFavoritesRevision &&
         playlists == _lastPlaylistsRevision) {
       return;
     }
     _lastFavoritesRevision = favorites;
     _lastPlaylistsRevision = playlists;
-    notifyListeners();
+    _emit();
   }
 
   int _lastFavoritesRevision = 0;
   int _lastPlaylistsRevision = 0;
-
-  final PlaybackProvider _playback;
-  final LibraryProvider _library;
-
-  /// 发现端点共用的内置传输（组合根注入；测试各自构造）。
-  final BuiltinTransport _builtinTransport;
-  final ChannelSelection _selection;
-  final Map<String, DiscoverSource> _sources;
 
   bool _disposed = false;
 
@@ -89,11 +160,11 @@ class DiscoverProvider extends ChangeNotifier {
   /// 渠道集合是「可搜索源 + 内置发现平台」的并集：脚本扩展源 / any-listen 等
   /// 没有内置发现能力的渠道也可选，此时 `supports*` 全部为 false，UI 自动
   /// 隐藏热榜 / 歌单（含热搜词）。
-  String get channelKey => _selection.key;
+  String get channelKey => _selection?.key ?? '';
 
   void _onChannelSelectionChanged() {
     if (_disposed) return;
-    notifyListeners();
+    _emit();
   }
 
   /// 可用平台（保持内置注册顺序，注入的假数据源同样适用）。
@@ -116,7 +187,7 @@ class DiscoverProvider extends ChangeNotifier {
   ///
   /// 只委托给 [ChannelSelection]：搜索也读同一实例，不再需要调用方同步两份
   /// 渠道状态。偏好持久化与失败吞错在 selection 内。
-  void selectChannel(String sourceKey) => _selection.select(sourceKey);
+  void selectChannel(String sourceKey) => _selection?.select(sourceKey);
 
   bool get supportsLeaderboards => _source?.supportsLeaderboards ?? false;
   bool get supportsPlaylists => _source?.supportsPlaylists ?? false;
@@ -216,7 +287,7 @@ class DiscoverProvider extends ChangeNotifier {
     try {
       final words = await source.hotSearches(_builtinTransport);
       _hotSearchesBySource[key] = words;
-      if (key == channelKey) notifyListeners();
+      if (key == channelKey) _emit();
     } catch (e) {
       debugPrint('[Discover] 加载热搜词失败($key): $e');
     } finally {
@@ -260,9 +331,9 @@ class DiscoverProvider extends ChangeNotifier {
     final domainTracks = domainTracksOf(tracks);
     if (domainTracks.isEmpty) return;
     if (mode != null) {
-      await _playback.setPlayMode(mode);
+      await _playback!.setPlayMode(mode);
     }
-    await _playback.playDomainTracks(
+    await _playback!.playDomainTracks(
       domainTracks,
       index.clamp(0, domainTracks.length - 1),
       contextName: contextName,
@@ -279,10 +350,10 @@ class DiscoverProvider extends ChangeNotifier {
 
   /// 收藏 / 取消收藏；仓库写失败以 failed 结果返回（图标态保持原样）。
   Future<FavoriteToggleOutcome> toggleFavorite(DiscoverTrack track) =>
-      _library.toggleFavoriteSourceTrack(_toSourceTrack(track));
+      _library!.toggleFavoriteSourceTrack(_toSourceTrack(track));
 
   bool isFavorite(DiscoverTrack track) =>
-      _library.isFavorite(track.sourceKey, track.songId);
+      _library!.isFavorite(track.sourceKey, track.songId);
 
   /// 把歌单详情导入本地列表（同名列表复用）。
   ///
@@ -294,7 +365,7 @@ class DiscoverProvider extends ChangeNotifier {
     final name = detail.info.name.trim().isNotEmpty
         ? detail.info.name
         : (fallbackName ?? detail.info.id);
-    return _library.importTracksAsPlaylist(
+    return _library!.importTracksAsPlaylist(
       name: name,
       tracks: [for (final track in detail.tracks) toPlaylistTrack(track)],
     );
@@ -317,13 +388,14 @@ class DiscoverProvider extends ChangeNotifier {
   }
 
   /// 我的列表（自建列表，不含默认收藏）。
-  List<PlaylistInfo> get playlists => _library.customPlaylists;
+  List<PlaylistInfo> get playlists => _library?.customPlaylists ?? const [];
 
   /// 新建列表（「加入列表」弹层内联创建）。
-  Future<int> createPlaylist(String name) => _library.createPlaylist(name);
+  Future<int> createPlaylist(String name) async =>
+      await _library!.createPlaylist(name);
 
   /// 刷新我的列表（打开「加入列表」弹层前调用）。
-  Future<void> refreshPlaylists() => _library.refreshPlaylists(force: true);
+  Future<void> refreshPlaylists() => _library!.refreshPlaylists(force: true);
 
   /// 指定平台的数据源；无内置发现能力时抛 [DiscoverFailure]。
   DiscoverSource _sourceFor(String sourceKey) {
@@ -383,12 +455,4 @@ class DiscoverProvider extends ChangeNotifier {
     raw: track.raw,
     addedAt: DateTime.now().millisecondsSinceEpoch,
   );
-
-  @override
-  void dispose() {
-    _disposed = true;
-    _selection.removeListener(_onChannelSelectionChanged);
-    _library.removeListener(_onLibraryChanged);
-    super.dispose();
-  }
 }

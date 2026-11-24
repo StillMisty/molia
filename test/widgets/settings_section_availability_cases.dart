@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/models/app_release.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/nav_provider.dart';
+import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/sync_provider.dart';
 import 'package:molia/providers/update_provider.dart';
@@ -12,9 +14,10 @@ import 'package:molia/services/lyrics_display/lyrics_output.dart';
 import 'package:molia/services/play_statistics_service.dart';
 import 'package:molia/services/scrobble/scrobble_service.dart';
 import 'package:molia/services/source_swap/source_swap_settings.dart';
-import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/widgets/settings/settings_section_availability.dart';
 
+import '../support/fake_sources_backend.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 /// 设置卡可用性探针：每类可选子系统「在」与「不在」两种取值下的行决定。
@@ -83,8 +86,7 @@ void main() {
     });
 
     test('音乐文件夹行在 iOS 隐藏，加入位置行只看服务是否挂载', () {
-      final addSettings = LibraryAddSettings(settings: testSettingsRegistry());
-      addTearDown(addSettings.dispose);
+      const addSettings = LibraryAddSettingsState(LibraryAddPosition.top);
 
       final ios = SettingsSectionAvailability(
         platform: TargetPlatform.iOS,
@@ -103,7 +105,7 @@ void main() {
     test('歌词入口按输出能力显隐，两路都不可用时给解释', () {
       final desktopOnly = SettingsSectionAvailability(
         platform: TargetPlatform.android,
-        lyricsDisplay: _FakeLyricsDisplayProvider(
+        lyricsDisplay: LyricsDisplayState(
           capabilities: {LyricsOutputIds.desktop: LyricsOutputCapability.ready},
         ),
       );
@@ -114,7 +116,7 @@ void main() {
 
       final unsupported = SettingsSectionAvailability(
         platform: TargetPlatform.android,
-        lyricsDisplay: _FakeLyricsDisplayProvider(),
+        lyricsDisplay: LyricsDisplayState(),
       );
       expect(unsupported.desktopLyricsVisible, isFalse);
       expect(unsupported.systemMediaLyricsVisible, isFalse);
@@ -124,7 +126,7 @@ void main() {
     test('系统媒体会话初始化失败：支持但给可见提示', () {
       final availability = SettingsSectionAvailability(
         platform: TargetPlatform.android,
-        lyricsDisplay: _FakeLyricsDisplayProvider(
+        lyricsDisplay: LyricsDisplayState(
           capabilities: {LyricsOutputIds.media: LyricsOutputCapability.ready},
           mediaSessionInitFailed: true,
         ),
@@ -135,14 +137,15 @@ void main() {
       // 输出端本身不支持时，失败标记不额外提示（否则会提示一个不存在的入口）。
       final unsupported = SettingsSectionAvailability(
         platform: TargetPlatform.android,
-        lyricsDisplay: _FakeLyricsDisplayProvider(mediaSessionInitFailed: true),
+        lyricsDisplay: LyricsDisplayState(mediaSessionInitFailed: true),
       );
       expect(unsupported.mediaSessionLyricsHintVisible, isFalse);
     });
 
     test('托盘行同时需要平台能力与偏好实例', () {
-      final tray = TraySettings();
-      addTearDown(tray.dispose);
+      final tray = ProviderTestScope().container.read(
+        traySettingsProvider.notifier,
+      );
 
       expect(
         SettingsSectionAvailability(
@@ -186,22 +189,49 @@ SettingsSectionAvailability _allAvailable({
   Map<String, LyricsOutputCapability> lyricsCapabilities = const {},
 }) {
   return SettingsSectionAvailability(
-    dataSaver: DataSaverService(),
-    sourceSwap: SourceSwapSettings(settings: testSettingsRegistry()),
+    dataSaver: const DataSaverState(
+      enabled: true,
+      qualityCap: '128k',
+      coversSaverEnabled: true,
+      onCellular: false,
+      detectionAvailable: true,
+    ),
+    sourceSwap: const SourceSwapSettingsState(autoEnabled: true),
     audioFocus: AudioFocusSettings(settings: testSettingsRegistry()),
-    sources: _FakeSourcesProvider(),
-    lyricsDisplay: _FakeLyricsDisplayProvider(capabilities: lyricsCapabilities),
+    sources: SourcesProvider(FakeSourcesBackend()),
+    lyricsDisplay: LyricsDisplayState(capabilities: lyricsCapabilities),
     scrobble: _FakeScrobbleService(),
-    libraryAdd: LibraryAddSettings(settings: testSettingsRegistry()),
+    libraryAdd: const LibraryAddSettingsState(LibraryAddPosition.top),
     statistics: _FakePlayStatisticsService(),
     sync: _FakeSyncProvider(),
-    tray: TraySettings(),
-    update: _FakeUpdateProvider(),
-    nav: NavProvider(settings: testSettingsRegistry()),
+    tray: ProviderTestScope().container.read(traySettingsProvider.notifier),
+    update: _updateState,
+    nav: ProviderTestScope().container.read(navProvider.notifier),
     platform: platform,
     traySupported: traySupported,
   );
 }
+
+const _updateState = UpdateState(
+  status: UpdateStatus.idle,
+  release: null,
+  releaseAsset: null,
+  installResult: null,
+  installResultVersion: null,
+  failure: null,
+  lastCheckedAt: null,
+  checkOnStartup: false,
+  checkDaily: false,
+  anyAutoCheckEnabled: false,
+  channel: UpdateChannel.stable,
+  manifestUrlOverride: '',
+  downloadPrefix: '',
+  platform: null,
+  currentVersionLabel: '0.0.0+0',
+  updateAvailable: false,
+  supportsInAppInstall: false,
+  hasDownloadedPackage: false,
+);
 
 /// 探针只关心是否存在；重服务的成员用 noSuchMethod 兜底，避免为一次
 /// 「在不在树上」搭真实引擎。
@@ -215,36 +245,10 @@ class _FakeSyncProvider extends ChangeNotifier
     with _PresenceOnly
     implements SyncProvider {}
 
-class _FakeSourcesProvider extends ChangeNotifier
-    with _PresenceOnly
-    implements SourcesProvider {}
-
 class _FakeScrobbleService extends ChangeNotifier
     with _PresenceOnly
     implements ScrobbleService {}
 
-class _FakeUpdateProvider extends ChangeNotifier
-    with _PresenceOnly
-    implements UpdateProvider {}
-
 class _FakePlayStatisticsService
     with _PresenceOnly
     implements PlayStatisticsService {}
-
-class _FakeLyricsDisplayProvider extends ChangeNotifier
-    with _PresenceOnly
-    implements LyricsDisplayProvider {
-  _FakeLyricsDisplayProvider({
-    this.capabilities = const {},
-    this.mediaSessionInitFailed = false,
-  });
-
-  final Map<String, LyricsOutputCapability> capabilities;
-
-  @override
-  final bool mediaSessionInitFailed;
-
-  @override
-  LyricsOutputCapability capabilityOf(String outputId) =>
-      capabilities[outputId] ?? LyricsOutputCapability.unsupported;
-}

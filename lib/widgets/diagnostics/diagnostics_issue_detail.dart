@@ -1,11 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../domain/models/diagnostics.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/diagnostics_provider.dart';
 import '../../services/notification_service.dart';
 import '../settings/settings_tiles.dart';
@@ -179,7 +180,11 @@ Future<void> _copyDetails(
   AppLocalizations l10n,
   DiagnosticIssueGroup group,
 ) async {
-  final notifications = context.read<NotificationService?>();
+  // 弹层内的按钮回调只有 dialog context：从最近的 ProviderScope 取容器。
+  final NotificationService? notifications = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(notificationServiceProvider);
   final text = [
     '${l10n.diagnosticsIssueChannel}: ${group.channelDisplayName}',
     '${l10n.diagnosticsIssueCategory}: '

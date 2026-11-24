@@ -6,9 +6,13 @@
 /// 真实启动 / DB 开销由 `tool/agent/startup.sh` 与真实应用单独测。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide Provider;
+import 'package:riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/app_shell.dart';
+import 'package:molia/app/bootstrap/app_runtime.dart';
+import 'package:molia/app/bootstrap/runtime_providers.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/library_write_engine.dart'
@@ -20,18 +24,19 @@ import 'package:molia/domain/models/library_browse.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/channel_selection.dart';
-import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/local_library_provider.dart';
-import 'package:molia/providers/lyrics_provider.dart';
-import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/play_statistics_provider.dart';
+import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
+import 'package:molia/providers/sources_backend.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/back_claims.dart';
+import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/services/download/download_records.dart';
 import 'package:molia/services/escape_claims.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
@@ -39,14 +44,11 @@ import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/shortcut_bindings.dart';
 import 'package:molia/services/shortcut_settings.dart';
 import 'package:molia/sources/source_manager.dart';
-import 'package:provider/provider.dart';
-import 'package:provider/single_child_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fake_library_repository.dart';
 import 'fake_music_source.dart';
 import 'fakes.dart';
-import 'cover_test_support.dart';
 import 'memory_database.dart';
 import 'settings_test_support.dart';
 import 'sync_test_support.dart';
@@ -103,7 +105,7 @@ Future<FakePlaybackFacade> pumpPerfApp(
   bool waitForHome = true,
   PerfRealLibrary? realLibrary,
   bool disableAnimations = false,
-  List<SingleChildWidget> extraProviders = const [],
+  void Function(AppRuntime runtime)? configureRuntime,
 
   /// 在 MaterialApp 外再包一层（UI 预览用 RepaintBoundary 截图）；null = 原样。
   Widget Function(Widget child)? wrap,
@@ -124,13 +126,6 @@ Future<FakePlaybackFacade> pumpPerfApp(
   await ShortcutSettings.instance.resetScope(ShortcutScope.global);
   EscapeClaims.reset();
   BackClaims.reset();
-
-  final theme = ThemeProvider(settings: testSettingsRegistry());
-  addTearDown(theme.dispose);
-  await theme.preferencesReady;
-  final nav = NavProvider(settings: testSettingsRegistry());
-  addTearDown(nav.dispose);
-  await nav.preferencesReady;
 
   final repository = FakeLibraryRepository();
   addTearDown(repository.dispose);
@@ -165,15 +160,15 @@ Future<FakePlaybackFacade> pumpPerfApp(
   addTearDown(library.dispose);
 
   // 真实内存库只在显式请求时装配：默认装配仍是 fake 仓库，时序不受影响。
-  final realLibraryProviders = <SingleChildWidget>[];
+  final realLibraryOverrides = <Override>[];
   if (realLibrary != null) {
-    realLibraryProviders.addAll(
+    realLibraryOverrides.addAll(
       await _installRealLibrary(realLibrary, playback),
     );
   }
 
   final sourceManager = SourceManager(settings: testSettingsRegistry());
-  final sources = SourcesProvider(sourceManager);
+  final sources = SourcesProvider(SourceManagerBackend(sourceManager));
   addTearDown(() {
     sources.dispose();
     sourceManager.dispose();
@@ -184,13 +179,6 @@ Future<FakePlaybackFacade> pumpPerfApp(
     defaultKey: () => searchChannels.first,
   );
   addTearDown(selection.dispose);
-  final discover = DiscoverProvider(
-    playbackProvider: playback,
-    libraryProvider: library,
-    selection: selection,
-    sources: const {},
-  );
-  addTearDown(discover.dispose);
 
   final searchSource = FakeMusicSource(
     'kw',
@@ -214,8 +202,6 @@ Future<FakePlaybackFacade> pumpPerfApp(
     sourceRegistry: registry,
   );
   addTearDown(search.dispose);
-  final lyrics = LyricsProvider(service: LyricsService(providers: const []));
-  addTearDown(lyrics.dispose);
   final lyricsDisplay = LyricsDisplaySettings(settings: testSettingsRegistry());
   addTearDown(lyricsDisplay.dispose);
 
@@ -250,25 +236,40 @@ Future<FakePlaybackFacade> pumpPerfApp(
     tester.view.resetDevicePixelRatio();
   });
 
+  final runtime = AppRuntime()
+    ..put<PlaybackProvider>(playback)
+    ..put<LibraryProvider>(library)
+    ..put<SourcesProvider>(sources)
+    ..put<ChannelSelection>(selection)
+    ..put<SearchProvider>(search)
+    ..put<LyricsService>(LyricsService(providers: const []))
+    ..put<LyricsDisplaySettings>(lyricsDisplay)
+    ..put<CustomCoverStore>(CustomCoverStore());
+  configureRuntime?.call(runtime);
+  final container = ProviderContainer(
+    overrides: [
+      appRuntimeProvider.overrideWithValue(runtime),
+      settingsRegistryProvider.overrideWithValue(testSettingsRegistry()),
+      discoverSourcesProvider.overrideWithValue(const {}),
+      ...realLibraryOverrides,
+    ],
+  );
+  addTearDown(container.dispose);
+  final theme = container.read(themeProvider.notifier);
+  await theme.preferencesReady;
+  await container.read(navProvider.notifier).preferencesReady;
+  if (realLibrary != null) {
+    realLibrary._localLibrary = container.read(localLibraryProvider.notifier);
+    if (realLibrary.statisticsDays > 0) {
+      realLibrary._statisticsProvider = container.read(
+        playStatisticsPageProvider.notifier,
+      );
+    }
+  }
+
   await tester.pumpWidget(
-    MultiProvider(
-      providers: [
-        coverStoreProvider(),
-        ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-        ChangeNotifierProvider<LibraryProvider>.value(value: library),
-        ChangeNotifierProvider<SourcesProvider>.value(value: sources),
-        ChangeNotifierProvider<ChannelSelection>.value(value: selection),
-        ChangeNotifierProvider<DiscoverProvider>.value(value: discover),
-        ChangeNotifierProvider<SearchProvider>.value(value: search),
-        ChangeNotifierProvider<LyricsProvider>.value(value: lyrics),
-        ChangeNotifierProvider<LyricsDisplaySettings>.value(
-          value: lyricsDisplay,
-        ),
-        ChangeNotifierProvider<NavProvider>.value(value: nav),
-        ChangeNotifierProvider<ThemeProvider>.value(value: theme),
-        ...realLibraryProviders,
-        ...extraProviders,
-      ],
+    UncontrolledProviderScope(
+      container: container,
       child: (wrap ?? (child) => child)(
         MaterialApp(
           locale: const Locale('zh'),
@@ -309,7 +310,7 @@ Future<FakePlaybackFacade> pumpPerfApp(
 /// provider 只通过 [SingleChildWidget] 列表挂进树；页面正在用的
 /// FakeLibraryRepository 与 LibraryProvider 不受影响——本场景测的是「真实库
 /// 触发 → LocalLibraryProvider 重建 / 发布 → 页面 notify」的帧成本。
-Future<List<SingleChildWidget>> _installRealLibrary(
+Future<List<Override>> _installRealLibrary(
   PerfRealLibrary handle,
   PlaybackProvider playback,
 ) async {
@@ -364,35 +365,15 @@ Future<List<SingleChildWidget>> _installRealLibrary(
   );
   addTearDown(realLibrary.dispose);
 
-  final localLibrary = LocalLibraryProvider(
-    repository: repository,
-    downloads: downloads,
-    library: realLibrary,
-    statistics: statisticsRepository,
-  );
-  addTearDown(localLibrary.dispose);
-
-  PlayStatisticsProvider? statisticsProvider;
-  if (handle.statisticsDays > 0) {
-    statisticsProvider = PlayStatisticsProvider(
-      repository: statisticsRepository,
-    );
-    addTearDown(statisticsProvider.dispose);
-  }
-
   handle
     .._database = db
     .._repository = repository
-    .._localLibrary = localLibrary
-    .._statisticsRepository = statisticsRepository
-    .._statisticsProvider = statisticsProvider;
+    .._statisticsRepository = statisticsRepository;
 
   return [
-    ChangeNotifierProvider<LocalLibraryProvider>.value(value: localLibrary),
-    if (statisticsProvider != null)
-      ChangeNotifierProvider<PlayStatisticsProvider>.value(
-        value: statisticsProvider,
-      ),
+    libraryRepositoryProvider.overrideWithValue(repository),
+    playStatisticsRepositoryProvider.overrideWithValue(statisticsRepository),
+    localLibraryLibraryProvider.overrideWithValue(realLibrary),
   ];
 }
 

@@ -13,13 +13,13 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../domain/models/play_mode.dart';
+import '../providers/app_providers.dart';
 import '../providers/library_provider.dart';
-import '../providers/playback_provider.dart';
 import '../services/haptics.dart';
 import 'add_to_library.dart';
 
@@ -88,7 +88,11 @@ final class TrackHandoff {
     if (tracks.isEmpty) return;
     // 先快照：洗牌前要等一次模式写入，期间分页列表可能已被替换。
     final queue = List<Track>.of(tracks);
-    final playback = context.read<PlaybackProvider>();
+    // 非 widget 编排层：调用处仍是页面 context，从最近的 ProviderScope 读依赖。
+    final playback = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(playbackControllerProvider);
     final name = resolveTrackListName(
       name: contextName,
       fallbackName: fallbackContextName,
@@ -143,7 +147,10 @@ final class TrackHandoff {
     bool includeHistory = true,
   }) async {
     if (tracks.isEmpty) return false;
-    final library = context.read<LibraryProvider?>();
+    final LibraryProvider? library = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(maybeLibraryControllerProvider);
     if (library == null) return false;
     return addTracksToLibraryTarget(
       context,

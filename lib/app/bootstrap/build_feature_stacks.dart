@@ -6,6 +6,8 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'app_dependencies.dart';
 import 'ai_stack.dart';
 import 'desktop_stack.dart';
@@ -17,6 +19,7 @@ import 'startup_trace.dart';
 Future<FeatureStacks> buildFeatureStacks({
   required PlatformBootstrap platform,
   required CoreStacks core,
+  required ProviderContainer container,
 }) async {
   final catalog = core.catalog;
   final local = core.local;
@@ -36,6 +39,7 @@ Future<FeatureStacks> buildFeatureStacks({
     // 系统退出请求）；在销毁窗口前补写「已正常关闭」，避免下次启动误报
     // 异常退出。`onDetach` 仍保留兜底。
     beforeQuit: () => platform.diagnostics.service.session.onDetached(),
+    container: container,
   ).whenComplete(() => markStartupStep('sub.desktop.build', desktopWatch));
   final ai = buildAiStack(
     catalog: catalog,
@@ -43,7 +47,7 @@ Future<FeatureStacks> buildFeatureStacks({
     playback: playback.playbackProvider,
     libraryProvider: core.libraryProvider,
   );
-  final lyrics = buildLyricsStack(local: local);
+  final lyrics = buildLyricsStack(local: local, container: container);
   wireBiliLoginLyricsRefresh(
     account: catalog.biliAccount,
     sourceManager: catalog.sourceManager,
@@ -55,10 +59,11 @@ Future<FeatureStacks> buildFeatureStacks({
   final displayFuture = buildLyricsDisplayStack(
     catalog: catalog,
     playback: playback.playbackProvider,
-    lyricsProvider: lyrics.lyricsProvider,
+    lyricsSession: lyrics.lyricsProvider,
     audioHandler: playback.audioHandler,
     powerPolicy: platform.powerPolicy,
     customCovers: local.customCovers,
+    container: container,
   );
   final desktop = await desktopFuture;
   final display = await displayFuture;

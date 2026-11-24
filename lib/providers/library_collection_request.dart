@@ -6,15 +6,36 @@ library;
 
 import 'package:flutter/foundation.dart';
 
-class LibraryCollectionRequest extends ChangeNotifier {
+import 'snapshot_source.dart';
+
+/// 请求对象快照：当前是否有待消费的智能列表。
+@immutable
+class LibraryCollectionRequestState {
+  const LibraryCollectionRequestState({required this.pendingSmartListId});
+
+  final String? pendingSmartListId;
+}
+
+class LibraryCollectionRequest
+    implements SnapshotSource<LibraryCollectionRequestState> {
   String? _pendingSmartListId;
 
+  /// 变更信号（替代 `ChangeNotifier.notifyListeners` 的订阅面）。
+  final SnapshotSignal _changes = SnapshotSignal();
+
   String? get pendingSmartListId => _pendingSmartListId;
+
+  @override
+  LibraryCollectionRequestState get state =>
+      LibraryCollectionRequestState(pendingSmartListId: _pendingSmartListId);
+
+  @override
+  Listenable get changes => _changes;
 
   void requestSmartList(String id) {
     if (_pendingSmartListId == id) return;
     _pendingSmartListId = id;
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 收藏页消费请求；返回被请求的智能列表 id。

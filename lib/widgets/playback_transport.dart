@@ -7,12 +7,13 @@
 /// 小控件：各宿主自己排行、自己保留周边 chrome，版式不合并。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../domain/models/play_mode.dart';
+import '../providers/app_providers.dart';
 import '../providers/playback_provider.dart';
 import '../services/haptics.dart';
 import 'icon_swap.dart';
@@ -50,7 +51,7 @@ extension PlayModeTransportPresentation on PlayMode {
 ///
 /// [variant] / [size] / [visualSize] 是宿主唯一可调的外观差异：桌面底栏与
 /// 顶栏用 tonal 做一屏唯一视觉重点，播放页与迷你条用 standard。
-class PlaybackPlayPauseButton extends StatelessWidget {
+class PlaybackPlayPauseButton extends ConsumerWidget {
   const PlaybackPlayPauseButton({
     super.key,
     this.variant = M3EIconButtonVariant.standard,
@@ -63,11 +64,12 @@ class PlaybackPlayPauseButton extends StatelessWidget {
   final Size? visualSize;
 
   @override
-  Widget build(BuildContext context) {
-    final (hasTrack, isPlaying) = context
-        .select<PlaybackProvider, (bool, bool)>(
-          (provider) => (provider.hasTrack, provider.isPlaying),
-        );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final (hasTrack, isPlaying) = ref.watch(
+      playbackProvider.select(
+        (provider) => (provider.hasTrack, provider.isPlaying),
+      ),
+    );
     final l10n = _l10n(context);
     return _TransportIconButton(
       enabled: hasTrack,
@@ -79,7 +81,7 @@ class PlaybackPlayPauseButton extends StatelessWidget {
       semanticLabel: isPlaying ? l10n.pause : l10n.play,
       onPressed: () {
         HapticsService.lightImpact();
-        context.read<PlaybackProvider>().togglePlayPause();
+        ref.read(playbackControllerProvider).togglePlayPause();
       },
       variant: variant,
       size: size,
@@ -89,7 +91,7 @@ class PlaybackPlayPauseButton extends StatelessWidget {
 }
 
 /// 上一首：与播放 / 暂停同一启用谓词与触感口径。
-class PlaybackPreviousButton extends StatelessWidget {
+class PlaybackPreviousButton extends ConsumerWidget {
   const PlaybackPreviousButton({
     super.key,
     this.variant = M3EIconButtonVariant.standard,
@@ -102,9 +104,9 @@ class PlaybackPreviousButton extends StatelessWidget {
   final Size? visualSize;
 
   @override
-  Widget build(BuildContext context) {
-    final hasTrack = context.select<PlaybackProvider, bool>(
-      (provider) => provider.hasTrack,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasTrack = ref.watch(
+      playbackProvider.select((provider) => provider.hasTrack),
     );
     return _TransportIconButton(
       enabled: hasTrack,
@@ -112,7 +114,7 @@ class PlaybackPreviousButton extends StatelessWidget {
       semanticLabel: _l10n(context).previousTrackTooltip,
       onPressed: () {
         HapticsService.lightImpact();
-        context.read<PlaybackProvider>().skipToPrevious();
+        ref.read(playbackControllerProvider).skipToPrevious();
       },
       variant: variant,
       size: size,
@@ -122,7 +124,7 @@ class PlaybackPreviousButton extends StatelessWidget {
 }
 
 /// 下一首：与播放 / 暂停同一启用谓词与触感口径。
-class PlaybackNextButton extends StatelessWidget {
+class PlaybackNextButton extends ConsumerWidget {
   const PlaybackNextButton({
     super.key,
     this.variant = M3EIconButtonVariant.standard,
@@ -135,9 +137,9 @@ class PlaybackNextButton extends StatelessWidget {
   final Size? visualSize;
 
   @override
-  Widget build(BuildContext context) {
-    final hasTrack = context.select<PlaybackProvider, bool>(
-      (provider) => provider.hasTrack,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasTrack = ref.watch(
+      playbackProvider.select((provider) => provider.hasTrack),
     );
     return _TransportIconButton(
       enabled: hasTrack,
@@ -145,7 +147,7 @@ class PlaybackNextButton extends StatelessWidget {
       semanticLabel: _l10n(context).nextTrackTooltip,
       onPressed: () {
         HapticsService.lightImpact();
-        context.read<PlaybackProvider>().skipToNext();
+        ref.read(playbackControllerProvider).skipToNext();
       },
       variant: variant,
       size: size,
@@ -159,7 +161,7 @@ class PlaybackNextButton extends StatelessWidget {
 /// 无曲目也可切换（模式是会话偏好，先选模式再起播是合法操作），因此这里
 /// 不接 [PlaybackProvider.hasTrack] 的禁用谓词。点按按 [PlayMode.next] 循环，
 /// 不弹菜单：播放页进度排与桌面底栏都要一步可达（见 ADR-0030）。
-class PlaybackModeButton extends StatelessWidget {
+class PlaybackModeButton extends ConsumerWidget {
   const PlaybackModeButton({
     super.key,
     this.variant = M3EIconButtonVariant.standard,
@@ -172,9 +174,9 @@ class PlaybackModeButton extends StatelessWidget {
   final Size? visualSize;
 
   @override
-  Widget build(BuildContext context) {
-    final mode = context.select<PlaybackProvider, PlayMode>(
-      (provider) => provider.currentMode,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(
+      playbackProvider.select((provider) => provider.currentMode),
     );
     return M3EIconButton(
       variant: variant,
@@ -187,7 +189,7 @@ class PlaybackModeButton extends StatelessWidget {
       semanticLabel: mode.transportLabel(_l10n(context)),
       onPressed: () {
         HapticsService.lightImpact();
-        context.read<PlaybackProvider>().togglePlayMode();
+        ref.read(playbackControllerProvider).togglePlayMode();
       },
     );
   }
@@ -196,11 +198,11 @@ class PlaybackModeButton extends StatelessWidget {
 /// 进度滑杆的宿主：生命周期与订阅口径只此一份。
 ///
 /// 为什么收成宿主：播放页与桌面底栏各自 new 一遍 `SeekPreviewController`、
-/// 各自写一段相同的 `Selector`（duration / isPlaying / hasTrack），再加一遍
+/// 各自写一段相同的订阅（duration / isPlaying / hasTrack），再加一遍
 /// dispose。控制器要同时订阅 position 与换曲（曲目身份变化清预览），漏掉
 /// 任一 dispose 就是常驻监听 / 计时器。版式差异只有时间标签排布
 /// [timeLabels]，行的内边距 / 是否 Expanded 仍由宿主决定。
-class PlaybackSeekBar extends StatefulWidget {
+class PlaybackSeekBar extends ConsumerStatefulWidget {
   const PlaybackSeekBar({
     super.key,
     this.timeLabels = SeekTimeLabels.inline,
@@ -214,20 +216,20 @@ class PlaybackSeekBar extends StatefulWidget {
   final bool wavy;
 
   @override
-  State<PlaybackSeekBar> createState() => _PlaybackSeekBarState();
+  ConsumerState<PlaybackSeekBar> createState() => _PlaybackSeekBarState();
 }
 
-class _PlaybackSeekBarState extends State<PlaybackSeekBar> {
+class _PlaybackSeekBarState extends ConsumerState<PlaybackSeekBar> {
   late final PlaybackProvider _playback;
   late final SeekPreviewController _seekPreview;
 
   @override
   void initState() {
     super.initState();
-    _playback = context.read<PlaybackProvider>();
+    _playback = ref.read(playbackControllerProvider);
     _seekPreview = SeekPreviewController(
       position: _playback.position,
-      trackChanges: _playback,
+      trackChanges: _playback.changes,
       currentTrackId: () => _playback.snapshot.current?.id,
       seek: _playback.seekToPosition,
     );
@@ -243,24 +245,23 @@ class _PlaybackSeekBarState extends State<PlaybackSeekBar> {
   Widget build(BuildContext context) {
     // 只订阅滑杆需要的低频快照字段：progress tick 走 position 通道，
     // 不把整块宿主卷进每次位置采样。
-    return Selector<
-      PlaybackProvider,
-      ({int durationMs, bool isPlaying, bool hasTrack})
-    >(
-      selector: (_, provider) => (
-        durationMs: provider.snapshot.duration.inMilliseconds,
-        isPlaying: provider.isPlaying,
-        hasTrack: provider.hasTrack,
+    final state = ref.watch(
+      playbackProvider.select(
+        (provider) => (
+          durationMs: provider.snapshot.duration.inMilliseconds,
+          isPlaying: provider.isPlaying,
+          hasTrack: provider.hasTrack,
+        ),
       ),
-      builder: (context, state, _) => SeekBar(
-        controller: _seekPreview,
-        position: _playback.position,
-        durationMs: state.durationMs,
-        isPlaying: state.isPlaying,
-        hasTrack: state.hasTrack,
-        timeLabels: widget.timeLabels,
-        wavy: widget.wavy,
-      ),
+    );
+    return SeekBar(
+      controller: _seekPreview,
+      position: _playback.position,
+      durationMs: state.durationMs,
+      isPlaying: state.isPlaying,
+      hasTrack: state.hasTrack,
+      timeLabels: widget.timeLabels,
+      wavy: widget.wavy,
     );
   }
 }

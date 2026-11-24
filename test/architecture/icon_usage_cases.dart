@@ -7,9 +7,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// 平台自适应（`Icons.adaptive.*`）。
 ///
 /// 唯一例外是导航「未选中」半对（选中/未选中成对图标按 M3 惯例：
-/// 未选中空心、选中实心）：资料库没有圆角空心字形，退用 `_outlined`；
-/// 音符不使用图标字形，由 Molia 标志组件（`lib/widgets/molia_mark.dart`）承载。
-const Set<String> _outlinedPairAllowlist = {'library_music_outlined'};
+/// 未选中空心、选中实心）：资料库与音符没有圆角空心字形，退用 `_outlined`。
+const Set<String> _outlinedPairAllowlist = {
+  'library_music_outlined',
+  'music_note_outlined',
+};
 
 /// I2 例外：`IconSwap` 本身（配方所在处）、曲目行「缩略图 ⇄ 多选勾选」
 /// （不是按钮图标槽位切换，语义是封面被勾选态替换）、歌词页扩展行

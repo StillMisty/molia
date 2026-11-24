@@ -2,22 +2,22 @@
 /// （AI 页与发现页错误卡共用，避免两处漂移）。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/failure.dart';
 import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
-import '../services/notification_service.dart';
+import '../providers/app_providers.dart';
 
 /// 首次开启前的隐私确认：未确认则弹窗，确认后落库；返回是否已确认。
 Future<bool> ensureAiDjConsent(
   BuildContext context,
-  AiDjProvider provider,
+  AiDjProvider controller,
 ) async {
-  if (provider.consentGranted) return true;
+  if (controller.state.consentGranted) return true;
   final l10n = AppLocalizations.of(context)!;
   // 弹层 dialog 挂 root navigator（M3EDialog.show 语义）；AI 页位于设置弹层的
   // 嵌套 Navigator 内，页面 context 上的 pop 会误退本页，关闭要显式定向。
@@ -41,7 +41,7 @@ Future<bool> ensureAiDjConsent(
     ),
   );
   if (agreed != true) return false;
-  await provider.grantConsent();
+  await controller.grantConsent();
   return true;
 }
 
@@ -88,28 +88,28 @@ String aiDjUpdatedText(AppLocalizations l10n, DateTime time) {
   List<String> skipped,
   List<String> liked,
 })
-aiDjRoundFeedback(AiDjProvider provider) {
-  final notInterested = provider.notInterestedItems;
+aiDjRoundFeedback(AiDjState state) {
+  final notInterested = state.notInterestedItems;
   final manualLabels = {for (final item in notInterested) item.source.label};
   return (
     notInterested: notInterested,
     skipped: [
-      for (final label in provider.skippedLabels)
+      for (final label in state.skippedLabels)
         if (!manualLabels.contains(label)) label,
     ],
-    liked: provider.likedLabels,
+    liked: state.likedLabels,
   );
 }
 
 /// 反馈入口行摘要：本轮 / 长期条数；全空时显示空态文案。
-String aiDjFeedbackSummary(AppLocalizations l10n, AiDjProvider provider) {
-  final round = aiDjRoundFeedback(provider);
+String aiDjFeedbackSummary(AppLocalizations l10n, AiDjState state) {
+  final round = aiDjRoundFeedback(state);
   final roundCount =
       round.notInterested.length + round.skipped.length + round.liked.length;
   final memoryCount =
-      provider.rememberedSkippedLabels.length +
-      provider.rememberedLikedLabels.length +
-      provider.seeds.length;
+      state.rememberedSkippedLabels.length +
+      state.rememberedLikedLabels.length +
+      state.seeds.length;
   if (roundCount == 0 && memoryCount == 0) return l10n.aiDjFeedbackEmpty;
   return l10n.aiDjFeedbackSummary(roundCount, memoryCount);
 }
@@ -117,7 +117,7 @@ String aiDjFeedbackSummary(AppLocalizations l10n, AiDjProvider provider) {
 /// 清空 AI 记忆：确认 → 清空 → 提示（反馈弹窗与偏好页共用）。
 Future<void> confirmAndClearAiDjMemory(
   BuildContext context,
-  AiDjProvider provider,
+  AiDjProvider controller,
 ) async {
   final l10n = AppLocalizations.of(context)!;
   final navigator = Navigator.of(context, rootNavigator: true);
@@ -140,14 +140,13 @@ Future<void> confirmAndClearAiDjMemory(
     ),
   );
   if (confirmed != true) return;
-  await provider.clearFeedbackMemory();
+  await controller.clearFeedbackMemory();
   if (!context.mounted) return;
-  final notifications = context.read<NotificationService?>();
-  if (notifications == null) {
-    M3ESnackbar.show(context, message: l10n.aiDjMemoryCleared);
-  } else {
-    notifications.showSuccessSnackBar(l10n.aiDjMemoryCleared);
-  }
+  final notifications = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(notificationServiceProvider);
+  notifications.showSuccessSnackBar(l10n.aiDjMemoryCleared);
 }
 
 /// 历史批次来源标签。

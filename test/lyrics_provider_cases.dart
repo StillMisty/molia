@@ -3,6 +3,8 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/services/lyrics_service.dart';
 
+import 'support/lyrics_test_support.dart';
+
 /// 歌词会话模块：加载/解析/去重/过期守卫/预取/手动选择。
 Track _track(String id) => Track(
   id: TrackId('fake', id),
@@ -94,21 +96,24 @@ void main() {
         'fake:empty': null,
       },
     );
-    final provider = LyricsProvider(service: service);
+    final provider = buildLyricsProvider(service);
 
     await provider.load(_track('synced'));
-    expect(provider.state.status, LyricsStatus.ready);
-    expect(provider.state.isSynced, isTrue);
-    expect(provider.state.lines.map((line) => line.text), ['hello', 'world']);
+    expect(provider.currentState.status, LyricsStatus.ready);
+    expect(provider.currentState.isSynced, isTrue);
+    expect(provider.currentState.lines.map((line) => line.text), [
+      'hello',
+      'world',
+    ]);
 
     await provider.load(_track('plain'));
-    expect(provider.state.status, LyricsStatus.ready);
-    expect(provider.state.isSynced, isFalse);
-    expect(provider.state.lines, hasLength(2));
+    expect(provider.currentState.status, LyricsStatus.ready);
+    expect(provider.currentState.isSynced, isFalse);
+    expect(provider.currentState.lines, hasLength(2));
 
     await provider.load(_track('empty'));
-    expect(provider.state.status, LyricsStatus.empty);
-    expect(provider.state.lines, isEmpty);
+    expect(provider.currentState.status, LyricsStatus.empty);
+    expect(provider.currentState.lines, isEmpty);
   });
 
   test('B 站登录刷新：非 B 源且非手动时强制绕过缓存，手动 / B 源跳过', () async {
@@ -117,7 +122,7 @@ void main() {
         'bili:1': const LyricsResult(lyric: '[00:01.00]云', provider: 'netease'),
       },
     );
-    final provider = LyricsProvider(service: service);
+    final provider = buildLyricsProvider(service);
     final track = Track(
       id: const TrackId('bili', '1'),
       title: 'B 站歌',
@@ -145,17 +150,17 @@ void main() {
       },
     );
     service.delays['fake:a'] = const Duration(milliseconds: 50);
-    final provider = LyricsProvider(service: service);
+    final provider = buildLyricsProvider(service);
 
     final slowA = provider.ensureForTrack(_track('a'));
     await Future<void>.delayed(const Duration(milliseconds: 5));
     await provider.ensureForTrack(_track('b'));
-    expect(provider.state.trackId, 'fake:b');
+    expect(provider.currentState.trackId, 'fake:b');
 
     // 慢响应回来时已被守卫丢弃，仍是 b。
     await slowA;
-    expect(provider.state.trackId, 'fake:b');
-    expect(provider.state.lines.single.text, 'b');
+    expect(provider.currentState.trackId, 'fake:b');
+    expect(provider.currentState.lines.single.text, 'b');
 
     // 同一曲目已有结果：不重复取词。
     await provider.ensureForTrack(_track('b'));
@@ -168,35 +173,35 @@ void main() {
         'fake:a': const LyricsResult(lyric: '[00:01.00]a', provider: 'fake'),
       },
     );
-    final provider = LyricsProvider(service: service);
+    final provider = buildLyricsProvider(service);
 
     await provider.ensureForTrack(_track('a'));
     await provider.ensureForTrack(_track('a'));
     expect(service.requested.where((id) => id == 'fake:a').length, 1);
-    expect(provider.state.status, LyricsStatus.ready);
+    expect(provider.currentState.status, LyricsStatus.ready);
 
     // 换曲：状态先归 loading（旧行立即清空），完成后切换。
     final next = provider.ensureForTrack(_track('b'));
-    expect(provider.state.trackId, 'fake:b');
-    expect(provider.state.status, LyricsStatus.loading);
-    expect(provider.state.lines, isEmpty);
+    expect(provider.currentState.trackId, 'fake:b');
+    expect(provider.currentState.status, LyricsStatus.loading);
+    expect(provider.currentState.lines, isEmpty);
     await next;
-    expect(provider.state.status, LyricsStatus.empty);
+    expect(provider.currentState.status, LyricsStatus.empty);
   });
 
   test('ensure：空结果允许一次自动重试，之后不再打网络', () async {
     final service = _FakeLyricsService();
-    final provider = LyricsProvider(service: service);
+    final provider = buildLyricsProvider(service);
     final track = _track('flaky');
 
     await provider.ensureForTrack(track);
-    expect(provider.state.status, LyricsStatus.empty);
+    expect(provider.currentState.status, LyricsStatus.empty);
     expect(service.requested.length, 1);
 
     // 播放快照抖动再次 ensure：同一曲目空结果自动重试一次。
     await provider.ensureForTrack(track);
     expect(service.requested.length, 2);
-    expect(provider.state.status, LyricsStatus.empty);
+    expect(provider.currentState.status, LyricsStatus.empty);
 
     // 已用掉自动重试：后续重复 ensure 不再取词（避免快照抖动打网络）。
     await provider.ensureForTrack(track);
@@ -210,16 +215,16 @@ void main() {
       null,
       const LyricsResult(lyric: '[00:01.00]ok', provider: 'fake'),
     ]);
-    final provider = LyricsProvider(service: service);
+    final provider = buildLyricsProvider(service);
     final track = _track('retry');
 
     await provider.ensureForTrack(track);
     await provider.ensureForTrack(track); // 自动重试仍空
-    expect(provider.state.status, LyricsStatus.empty);
+    expect(provider.currentState.status, LyricsStatus.empty);
 
     await provider.retry();
-    expect(provider.state.status, LyricsStatus.ready);
-    expect(provider.state.lines.single.text, 'ok');
+    expect(provider.currentState.status, LyricsStatus.ready);
+    expect(provider.currentState.lines.single.text, 'ok');
     expect(service.requested.where((id) => id == 'fake:retry').length, 3);
   });
 
@@ -229,17 +234,17 @@ void main() {
         'fake:a': const LyricsResult(lyric: '[00:01.00]a', provider: 'fake'),
       },
     );
-    final provider = LyricsProvider(service: service);
+    final provider = buildLyricsProvider(service);
     await provider.ensureForTrack(_track('a'));
-    expect(provider.state.status, LyricsStatus.ready);
+    expect(provider.currentState.status, LyricsStatus.ready);
 
     await provider.ensureForTrack(null);
-    expect(provider.state.status, LyricsStatus.idle);
-    expect(provider.state.trackId, isNull);
+    expect(provider.currentState.status, LyricsStatus.idle);
+    expect(provider.currentState.trackId, isNull);
 
     final requestsBefore = service.requested.length;
     await provider.ensureForTrack(null);
-    expect(provider.state.status, LyricsStatus.idle);
+    expect(provider.currentState.status, LyricsStatus.idle);
     expect(service.requested.length, requestsBefore);
   });
 
@@ -253,19 +258,19 @@ void main() {
         'fake:next': const LyricsResult(lyric: '[00:01.00]n', provider: 'fake'),
       },
     );
-    final provider = LyricsProvider(service: service);
+    final provider = buildLyricsProvider(service);
 
     await provider.load(_track('current'));
     await provider.preload(_track('next'));
     await provider.preload(_track('next'));
 
-    expect(provider.state.trackId, 'fake:current');
+    expect(provider.currentState.trackId, 'fake:current');
     expect(service.requested.where((id) => id == 'fake:next').length, 1);
   });
 
   test('手动选择：写缓存并在仍是当前曲目时更新状态', () async {
     final service = _FakeLyricsService();
-    final provider = LyricsProvider(service: service);
+    final provider = buildLyricsProvider(service);
 
     await provider.load(_track('a'));
     await provider.saveManual(
@@ -275,9 +280,9 @@ void main() {
     );
 
     expect(service.saved.single.trackId, 'fake:a');
-    expect(provider.state.status, LyricsStatus.ready);
-    expect(provider.state.providerName, 'qq');
-    expect(provider.state.lines.single.text, '手动歌词');
+    expect(provider.currentState.status, LyricsStatus.ready);
+    expect(provider.currentState.providerName, 'qq');
+    expect(provider.currentState.lines.single.text, '手动歌词');
 
     // 非当前曲目：只写缓存，不动展示状态。
     await provider.saveManual(
@@ -285,7 +290,7 @@ void main() {
       lyric: '[00:03.00]别的歌词',
       providerName: 'qq',
     );
-    expect(provider.state.trackId, 'fake:a');
+    expect(provider.currentState.trackId, 'fake:a');
   });
 
   test('reset 清空状态', () async {
@@ -294,12 +299,12 @@ void main() {
         'fake:a': const LyricsResult(lyric: '[00:01.00]a', provider: 'fake'),
       },
     );
-    final provider = LyricsProvider(service: service);
+    final provider = buildLyricsProvider(service);
     await provider.load(_track('a'));
-    expect(provider.state.status, LyricsStatus.ready);
+    expect(provider.currentState.status, LyricsStatus.ready);
 
     provider.reset();
-    expect(provider.state.status, LyricsStatus.idle);
-    expect(provider.state.trackId, isNull);
+    expect(provider.currentState.status, LyricsStatus.idle);
+    expect(provider.currentState.trackId, isNull);
   });
 }

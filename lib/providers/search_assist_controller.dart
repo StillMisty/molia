@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import '../domain/models/catalog.dart' show SearchKind;
 import '../domain/search/search_assist.dart';
 import 'search_provider.dart';
+import '../utils/snapshot_source.dart';
 
 /// 搜索辅助块的一次投影。
 @immutable
@@ -58,7 +59,9 @@ class SearchAssistViewModel {
   }
 }
 
-class SearchAssistController extends ChangeNotifier {
+/// 变更以 [Listenable] 信号发出：宿主既可直接 `ListenableBuilder`，也可
+/// 监听后 `setState`；状态本身仍是只读的 [value] 快照。
+class SearchAssistController implements Listenable {
   SearchAssistController({
     required SearchProvider search,
     required List<String> Function() hotKeywords,
@@ -67,19 +70,28 @@ class SearchAssistController extends ChangeNotifier {
        _search = search,
        // ignore: prefer_initializing_formals
        _hotKeywords = hotKeywords {
-    _search.session.addListener(_onChanged);
+    _search.session.changes.addListener(_onChanged);
     _recompute();
   }
 
   final SearchProvider _search;
   final List<String> Function() _hotKeywords;
+  final SnapshotSignal _changes = SnapshotSignal();
 
   bool _focused = false;
   int _highlightedIndex = -1;
   String _lastSignature = '';
   SearchAssistViewModel _value = SearchAssistViewModel.empty;
+  bool _disposed = false;
 
   SearchAssistViewModel get value => _value;
+
+  @override
+  void addListener(VoidCallback listener) => _changes.addListener(listener);
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      _changes.removeListener(listener);
 
   /// 宿主输入框焦点变化：只有聚焦时才出现热搜 / 建议。
   void setFocused(bool value) {
@@ -168,7 +180,7 @@ class SearchAssistController extends ChangeNotifier {
       showChips: showChips,
       showSuggestions: showSuggestions && suggestions.isNotEmpty,
     );
-    notifyListeners();
+    if (!_disposed) _changes.notify();
   }
 
   /// 纠错只在「成功的单曲搜索首屏、零结果」时出现。
@@ -189,9 +201,9 @@ class SearchAssistController extends ChangeNotifier {
     return rankTypoCorrection(query: trimmed, hotKeywords: hot);
   }
 
-  @override
+  /// 释放：停止跟随搜索会话，之后的更新不再发信号。
   void dispose() {
-    _search.session.removeListener(_onChanged);
-    super.dispose();
+    _disposed = true;
+    _search.session.changes.removeListener(_onChanged);
   }
 }

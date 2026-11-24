@@ -30,7 +30,7 @@ class _PositionNotifier extends ValueNotifier<Duration>
 /// 高频进度通道都在这里只实现一次；协调者与 provider 只依赖领域端口。
 class PlaybackEngine implements PlaybackFacade {
   PlaybackEngine({required this._service}) {
-    _service.addListener(_onServiceChanged);
+    _service.changes.addListener(_onServiceChanged);
     _publish(initial: true);
   }
 
@@ -261,7 +261,7 @@ class PlaybackEngine implements PlaybackFacade {
   }
 
   void dispose() {
-    _service.removeListener(_onServiceChanged);
+    _service.changes.removeListener(_onServiceChanged);
     _snapshot.dispose();
     _position.dispose();
   }
@@ -273,16 +273,19 @@ class PlaybackEngine implements PlaybackFacade {
   /// 两步互不影响：进度通道按阈值去重且不触发快照通知；快照不含 position，
   /// 纯进度 tick 不会让订阅方重建 UI。
   void _publish({bool initial = false}) {
-    _syncPosition(initial: initial);
-    final next = _buildSnapshot();
+    // 一次事件只读一份服务快照：队列 / 播放态 / 时长等低频事实同源，
+    // 也避免在发布过程中被服务侧多次改写后拼出不存在的组合。
+    final state = _service.state;
+    _syncPosition(state, initial: initial);
+    final next = _buildSnapshot(state);
     if (next != _snapshot.value) {
       _snapshot.value = next;
     }
   }
 
   /// 换曲 / 首次直接对齐，其余 ≥250ms 才发（≤4Hz）。
-  void _syncPosition({bool initial = false}) {
-    final currentUri = _service.currentSourceTrack?.id;
+  void _syncPosition(LocalPlaybackServiceState state, {bool initial = false}) {
+    final currentUri = state.currentSourceTrack?.id;
     if (initial || currentUri != _lastPositionTrackUri) {
       _lastPositionTrackUri = currentUri;
       _position.value = _service.position;
@@ -292,9 +295,9 @@ class PlaybackEngine implements PlaybackFacade {
     }
   }
 
-  PlaybackSnapshot _buildSnapshot() {
-    final currentSource = _service.currentSourceTrack;
-    final index = _service.currentIndex;
+  PlaybackSnapshot _buildSnapshot(LocalPlaybackServiceState state) {
+    final currentSource = state.currentSourceTrack;
+    final index = state.currentIndex;
 
     // 一次投影复用 next / previous / previousOfPrevious / upNext：四个 getter
     // 各自都会重算整份投影（shuffle 下含 O(N) 的排列查找与 upNext 列表），
@@ -323,35 +326,34 @@ class PlaybackEngine implements PlaybackFacade {
 
     final duration = current == null
         ? Duration.zero
-        : (_service.duration > Duration.zero
-              ? _service.duration
+        : (state.duration > Duration.zero
+              ? state.duration
               : (current.duration ?? Duration.zero));
 
     return PlaybackSnapshot(
       current: current,
-      queue: _queueTracks(),
+      queue: _queueTracks(state.queueTracks),
       currentIndex: index,
       next: _toTrackOrNull(projection.next),
       previous: _toTrackOrNull(projection.previous),
       previousOfPrevious: _toTrackOrNull(projection.previousOfPrevious),
       upNext: _cachedUpNext,
       upNextIndices: projection.upNextIndices,
-      isPlaying: _service.isPlaying,
-      isLoading: _service.isLoading,
+      isPlaying: state.isPlaying,
+      isLoading: state.isLoading,
       duration: duration,
-      mode: _service.mode,
-      context: _readContext(),
-      quality: _service.currentQuality,
-      error: _readError(),
+      mode: state.mode,
+      context: _readContext(state.contextName),
+      quality: state.currentQuality,
+      error: _readError(state.lastError),
     );
   }
 
   /// 队列内容未变时复用上一份领域映射（判定依据见 `queueRevision`）。
-  List<Track> _queueTracks() {
+  List<Track> _queueTracks(List<SourceTrack> sourceQueue) {
     final revision = _service.queueRevision;
     final cached = _cachedQueue;
     if (cached != null && revision == _cachedQueueRevision) return cached;
-    final sourceQueue = _service.queueTracks;
     final queue = List<Track>.unmodifiable([
       for (final source in sourceQueue) _toTrack(source),
     ]);
@@ -377,14 +379,12 @@ class PlaybackEngine implements PlaybackFacade {
   Track _toTrack(SourceTrack source) =>
       _trackCache.putIfAbsent(source, () => trackFromSourceTrack(source));
 
-  PlaybackContext? _readContext() {
-    final name = _service.contextName;
+  PlaybackContext? _readContext(String? name) {
     if (name == null) return null;
     return PlaybackContext(name: name, type: 'lx', uri: 'lx:$name');
   }
 
-  SourceFailure? _readError() {
-    final raw = _service.lastError;
+  SourceFailure? _readError(Object? raw) {
     if (raw == null) {
       _cachedErrorRaw = null;
       _cachedError = null;

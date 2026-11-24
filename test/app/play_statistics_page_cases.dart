@@ -11,16 +11,17 @@ import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/pages/play_statistics_page.dart';
 import 'package:molia/pages/statistics/play_statistics_page.dart'
     show playStatisticsPosterFileName;
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/play_statistics_provider.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/save_as.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_save_as.dart';
 import '../support/memory_database.dart';
 import '../support/notification_recorder.dart';
 import '../support/sync_test_support.dart';
+import '../support/provider_test_scope.dart';
 import '../support/settings_test_support.dart';
 
 void main() {
@@ -29,6 +30,7 @@ void main() {
   late MoliaDatabase db;
   late PlayStatisticsRepository repository;
   late PlayStatisticsProvider provider;
+  late ProviderTestScope providerScope;
   late FakeSaveAs saveAs;
   late RecordingNotificationService notifications;
   late List<String> sharedPaths;
@@ -43,7 +45,14 @@ void main() {
       databaseProvider: () => db,
       statisticsSync: testStatisticsSyncStore(() => db),
     );
-    provider = PlayStatisticsProvider(repository: repository);
+    providerScope = ProviderTestScope(
+      overrides: [
+        playStatisticsRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    provider = providerScope.container.read(
+      playStatisticsPageProvider.notifier,
+    );
     saveAs = FakeSaveAs();
     notifications = RecordingNotificationService();
     sharedPaths = [];
@@ -82,33 +91,29 @@ void main() {
   });
 
   tearDown(() async {
-    provider.dispose();
     await repository.dispose();
     await db.close();
   });
 
   Future<void> pumpPage(
     WidgetTester tester, {
-    PlayStatisticsProvider? withProvider,
+    ProviderTestScope? withProviderScope,
   }) async {
-    final active = withProvider ?? provider;
+    final scope = withProviderScope ?? providerScope;
+    scope.put<SaveAs>(saveAs);
+    scope.put<NotificationService>(notifications);
     await tester.pumpWidget(
-      M3EMaterialApp(
-        locale: const Locale('zh'),
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          ...GlobalMaterialLocalizations.delegates,
-        ],
-        supportedLocales: const [Locale('zh')],
-        data: M3EThemeData.fromMaterial(ThemeData.light()),
-        theme: ThemeData.light(),
-        home: MultiProvider(
-          providers: [
-            ChangeNotifierProvider<PlayStatisticsProvider>.value(value: active),
-            Provider<SaveAs>.value(value: saveAs),
-            Provider<NotificationService?>.value(value: notifications),
+      scope.wrap(
+        M3EMaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
           ],
-          child: PlayStatisticsPage(
+          supportedLocales: const [Locale('zh')],
+          data: M3EThemeData.fromMaterial(ThemeData.light()),
+          theme: ThemeData.light(),
+          home: PlayStatisticsPage(
             sharePoster: (path, text) async {
               sharedPaths.add(path);
               sharedTexts.add(text);
@@ -224,13 +229,17 @@ void main() {
 
   testWidgets('导出文件名与载荷时间戳取统计窗口的 now', (tester) async {
     final fixed = DateTime(2030, 12, 31, 23, 59, 59);
-    final scoped = PlayStatisticsProvider(
-      repository: repository,
-      clock: () => fixed,
+    final scopedScope = ProviderTestScope(
+      overrides: [
+        playStatisticsRepositoryProvider.overrideWithValue(repository),
+        playStatisticsClockProvider.overrideWithValue(() => fixed),
+      ],
     );
-    addTearDown(scoped.dispose);
+    final scoped = scopedScope.container.read(
+      playStatisticsPageProvider.notifier,
+    );
 
-    await pumpPage(tester, withProvider: scoped);
+    await pumpPage(tester, withProviderScope: scopedScope);
     expect(scoped.window!.now, fixed);
     await openOverflow(tester);
     await tester.tap(find.text('导出数据'));

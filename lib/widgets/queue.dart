@@ -1,13 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../domain/models/play_mode.dart';
+import '../providers/app_providers.dart';
 import '../providers/playback_provider.dart';
 import '../theme/m3e_context.dart';
 import 'responsive.dart';
@@ -63,7 +64,7 @@ String _emptyQueueText({
 ///
 /// 列表不设「正在播放 / 接下来」两段小标题：面板本身就是队列
 /// （tab 文案已说明分组），标题只会把首行往下推。
-class QueueDisplay extends StatelessWidget {
+class QueueDisplay extends ConsumerWidget {
   const QueueDisplay({
     super.key,
     required this.controller,
@@ -87,7 +88,7 @@ class QueueDisplay extends StatelessWidget {
   static const double _sectionSpacing = 16;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final cardList = M3ETheme.of(context).listTheme.cardList;
 
@@ -95,28 +96,19 @@ class QueueDisplay extends StatelessWidget {
     // 当前曲目：record 只在队列快照变化时失效（进度 tick / 无关通知不会重建
     // 列表）。hasTrack 不能从 upNext 是否为空反推——最后一首 / 随机轮末 /
     // 单曲循环都有当前曲目，只是后面没有待播项。
-    final queueState = context
-        .select<
-          PlaybackProvider,
-          ({
-            List<Track> tracks,
-            List<int> indices,
-            int currentIndex,
-            int queueLength,
-            PlayMode mode,
-            bool hasTrack,
-          })
-        >((provider) {
-          final snapshot = provider.snapshot;
-          return (
-            tracks: snapshot.upNext,
-            indices: snapshot.upNextIndices,
-            currentIndex: snapshot.currentIndex,
-            queueLength: snapshot.queue.length,
-            mode: snapshot.mode,
-            hasTrack: snapshot.current != null,
-          );
-        });
+    final queueState = ref.watch(
+      playbackProvider.select((provider) {
+        final snapshot = provider.snapshot;
+        return (
+          tracks: snapshot.upNext,
+          indices: snapshot.upNextIndices,
+          currentIndex: snapshot.currentIndex,
+          queueLength: snapshot.queue.length,
+          mode: snapshot.mode,
+          hasTrack: snapshot.current != null,
+        );
+      }),
+    );
     final currentQueue = queueState.tracks;
     // 旧快照 / 测试未填下标时不做队列编辑（真实下标未知，猜行号会移错歌）；
     // 公共动作仍按行展示，列表本身不崩。
@@ -125,11 +117,11 @@ class QueueDisplay extends StatelessWidget {
         : const <int>[];
     // 当前曲目只归「正在播放」小节；播放页版式不订阅，避免无关重建。
     final Track? current = includeCurrent
-        ? context.select<PlaybackProvider, Track?>(
-            (provider) => provider.snapshot.current,
+        ? ref.watch(
+            playbackProvider.select((provider) => provider.snapshot.current),
           )
         : null;
-    final playbackProvider = context.read<PlaybackProvider>();
+    final playback = ref.read(playbackControllerProvider);
 
     return Scrollbar(
       controller: controller,
@@ -207,19 +199,17 @@ class QueueDisplay extends StatelessWidget {
                         currentIndex: queueState.currentIndex,
                         queueLength: queueState.queueLength,
                         mode: queueState.mode,
-                        playbackProvider: playbackProvider,
+                        playbackProvider: playback,
                         onTap: () {
                           // 用真实队列下标定位：随机排列 / 列表循环回绕时
                           // 面板行号与队列下标不同，重复曲目按 id 反查会
                           // 串到第一项（队列允许同一首出现多次）。
                           final index = queueIndex;
                           if (index != null) {
-                            unawaited(playbackProvider.playQueueIndex(index));
+                            unawaited(playback.playQueueIndex(index));
                           } else {
                             unawaited(
-                              playbackProvider.playLocalQueueItemById(
-                                track.id.uri,
-                              ),
+                              playback.playLocalQueueItemById(track.id.uri),
                             );
                           }
                         },

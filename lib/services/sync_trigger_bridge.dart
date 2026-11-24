@@ -66,8 +66,8 @@ class SyncTriggerBridge {
   /// 音源仓库变化（导入 / 删除 / 激活）→ 音源类别。
   void bindSourceManager(SourceManager sourceManager) {
     void onChange() => localChange(categories: const {SyncCategory.sources});
-    sourceManager.addListener(onChange);
-    _restores.add(() => sourceManager.removeListener(onChange));
+    sourceManager.changes.addListener(onChange);
+    _restores.add(() => sourceManager.changes.removeListener(onChange));
   }
 
   /// 设置 / 凭证写入：先调用绑前钩子，再标记类别并交给调用方追加增量日志。

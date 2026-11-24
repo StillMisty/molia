@@ -1,16 +1,17 @@
 /// 同步面的底栏提示出口：统一走 [NotificationService]（内部 = `M3ESnackbar`）。
 ///
 /// 为什么单独成文件：同步页、配对流程与传输弹层三处都要弹提示，而
-/// `NotificationService` 挂在应用根（`provider_tree`），提示固定出现在窗口
+/// `NotificationService` 由应用根容器注入，提示固定出现在窗口
 /// 底栏——不随设置弹层 / 嵌套 Navigator 的层级变化，也不依赖 `ScaffoldMessenger`
 /// 的 context 位置（见 `notification_service.dart` 的说明）。
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/device_sync.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../services/notification_service.dart';
 import '../utils/device_id.dart';
 
@@ -22,9 +23,12 @@ void showSyncNotice(
   String? actionLabel,
   VoidCallback? onAction,
 }) {
-  // 可空读取：测试与未接线场景下没有提示出口（提示静默丢弃，不抛异常）。
-  final notifications = context.read<NotificationService?>();
-  if (notifications == null) return;
+  // 提示出口挂在应用根（见 `notificationServiceProvider`）：这里只读一次，
+  // 不订阅。
+  final NotificationService notifications = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(notificationServiceProvider);
   if (isError) {
     notifications.showErrorSnackBar(
       message,
@@ -42,9 +46,12 @@ void showSyncNotice(
 
 /// 弹层用：先取好提示出口再关弹层（`pop` 之后弹层 context 已失效）。
 void showSyncNoticeAndClose(BuildContext context, String message) {
-  final notifications = context.read<NotificationService?>();
+  final NotificationService notifications = ProviderScope.containerOf(
+    context,
+    listen: false,
+  ).read(notificationServiceProvider);
   Navigator.of(context, rootNavigator: true).pop();
-  notifications?.showSnackBar(message);
+  notifications.showSnackBar(message);
 }
 
 /// 「已与『设备』连通」提示（应用壳收到 `SyncProvider.peerConnectedNotices`

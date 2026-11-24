@@ -1,11 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/any_listen.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/sources_provider.dart';
 import '../theme/app_semantic_colors.dart';
 import '../widgets/card_list_surface.dart';
@@ -24,19 +25,19 @@ AppLocalizations _l10n(BuildContext context) =>
 /// `M3ETypeScale` 排版）；分层：只依赖 [SourcesProvider] 与 domain 模型，
 /// 不直接 import `lib/sources/**`（R5）。保存/连接测试/配置刷新全部走 provider：
 /// - 传入 [provider] 时直接使用（集成测试 / 独立打开场景）；
-/// - 不传时从 `context.read<SourcesProvider>()` 获取（正式 App 由
+/// - 不传时从 `ref.read(sourcesProvider)` 获取（正式 App 由
 ///   composition root 注册）。
-class AnyListenPage extends StatefulWidget {
+class AnyListenPage extends ConsumerStatefulWidget {
   const AnyListenPage({super.key, this.provider});
 
   /// 可选：音源管理 provider。为空时从 context 读取。
   final SourcesProvider? provider;
 
   @override
-  State<AnyListenPage> createState() => _AnyListenPageState();
+  ConsumerState<AnyListenPage> createState() => _AnyListenPageState();
 }
 
-class _AnyListenPageState extends State<AnyListenPage> {
+class _AnyListenPageState extends ConsumerState<AnyListenPage> {
   /// 文本输入落盘防抖：逐字写会反复重载音源，停顿后再保存。
   static const Duration _saveDelay = Duration(milliseconds: 400);
 
@@ -58,7 +59,7 @@ class _AnyListenPageState extends State<AnyListenPage> {
   @override
   void initState() {
     super.initState();
-    _provider = widget.provider ?? context.read<SourcesProvider>();
+    _provider = widget.provider ?? ref.read(sourcesControllerProvider);
     _load();
   }
 
@@ -390,11 +391,11 @@ class _AnyListenPageState extends State<AnyListenPage> {
 }
 
 /// 按钮内联进度（保存 / 连接测试的进行态）。
-class _ButtonSpinner extends StatelessWidget {
+class _ButtonSpinner extends ConsumerWidget {
   const _ButtonSpinner();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return const SizedBox(
       width: 16,
       height: 16,

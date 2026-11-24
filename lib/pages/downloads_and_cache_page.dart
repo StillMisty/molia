@@ -9,11 +9,12 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../services/cache_service.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_settings.dart';
@@ -34,14 +35,15 @@ bool get _isAndroid => defaultTargetPlatform == TargetPlatform.android;
 
 bool get _isIos => defaultTargetPlatform == TargetPlatform.iOS;
 
-class DownloadsAndCachePage extends StatefulWidget {
+class DownloadsAndCachePage extends ConsumerStatefulWidget {
   const DownloadsAndCachePage({super.key});
 
   @override
-  State<DownloadsAndCachePage> createState() => _DownloadsAndCachePageState();
+  ConsumerState<DownloadsAndCachePage> createState() =>
+      _DownloadsAndCachePageState();
 }
 
-class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
+class _DownloadsAndCachePageState extends ConsumerState<DownloadsAndCachePage> {
   // 自定义输入范围：0 恒表示「不限制 / 永不过期」（CacheService 语义），
   // 其余值限制在合理区间，防止误输入导致缓存失控。
   static const int _audioMaxMinMb = 16;
@@ -62,7 +64,7 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
   int _artworkStaleDays = CacheService.defaultArtworkStaleDays;
   bool _busy = false;
 
-  CacheService? get _service => context.read<CacheService?>();
+  CacheService? get _service => ref.read(cacheServiceProvider);
 
   @override
   void initState() {
@@ -191,7 +193,9 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
 
   void _notifyCleared() {
     final l10n = AppLocalizations.of(context)!;
-    final notifications = context.read<NotificationService?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
     if (notifications != null) {
       notifications.showSuccessSnackBar(l10n.cacheCleared);
     } else {
@@ -202,8 +206,10 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final settings = context.watch<DownloadSettings?>();
-    final downloads = context.watch<DownloadManager?>();
+    final DownloadSettingsState? settings = ref.watch(
+      maybeDownloadSettingsProvider,
+    );
+    final DownloadManagerState? downloads = ref.watch(downloadManagerProvider);
     final cacheAvailable = _service != null;
     return SettingsSubPage(
       title: l10n.settingsDownloadsAndCacheTitle,
@@ -234,9 +240,12 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
   Widget _downloadSection(
     BuildContext context,
     AppLocalizations l10n,
-    DownloadSettings settings,
-    DownloadManager? downloads,
+    DownloadSettingsState settings,
+    DownloadManagerState? downloads,
   ) {
+    final DownloadSettings? controller = ref.read(
+      downloadSettingsControllerProvider,
+    );
     return SettingsSectionCard(
       title: l10n.downloadSettingsTitle,
       children: [
@@ -254,7 +263,7 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
           },
           value: _saveLocationLabel(l10n, settings),
           onTap: _supportsCustomSaveDir
-              ? () => unawaited(_pickDirectory(context, settings))
+              ? () => unawaited(_pickDirectory(context))
               : () => M3ESnackbar.show(
                   context,
                   message: _fixedLocationHint(l10n, settings),
@@ -269,8 +278,9 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
             title: l10n.downloadPublishToPublicDir,
             subtitle: l10n.downloadPublishToPublicDirSubtitle,
             value: settings.publishToPublicDir,
-            onChanged: (value) =>
-                unawaited(settings.setPublishToPublicDir(value)),
+            onChanged: (value) => unawaited(
+              controller?.setPublishToPublicDir(value) ?? Future<void>.value(),
+            ),
           ),
         // 文件名模板 / 标签写入 / 下载通知：与保存位置同属「下载」域，低频
         // 但改的时候一定是在这张卡里找，不再拆去高级设置。
@@ -288,7 +298,9 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
           title: l10n.downloadEmbedTags,
           subtitle: l10n.downloadEmbedTagsSubtitle,
           value: settings.embedTags,
-          onChanged: (value) => unawaited(settings.setEmbedTags(value)),
+          onChanged: (value) => unawaited(
+            controller?.setEmbedTags(value) ?? Future<void>.value(),
+          ),
         ),
         // 下载通知只在 Android 有语义（前台服务 + 通知栏进度）。
         if (downloads?.notificationsSupported ?? false)
@@ -299,7 +311,9 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
             subtitle: l10n.downloadNotificationsSubtitle,
             value: settings.notifications,
             onChanged: (value) {
-              unawaited(settings.setNotifications(value));
+              unawaited(
+                controller?.setNotifications(value) ?? Future<void>.value(),
+              );
               if (value) unawaited(NotificationPermission.ensureRequested());
             },
           ),
@@ -477,7 +491,10 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
   }
 
   /// 保存位置的显示值：桌面显示自定义路径 / 默认；移动端说明实际落点。
-  String _saveLocationLabel(AppLocalizations l10n, DownloadSettings settings) {
+  String _saveLocationLabel(
+    AppLocalizations l10n,
+    DownloadSettingsState settings,
+  ) {
     if (_isAndroid) return l10n.downloadSaveLocationAndroid;
     if (_isIos) return l10n.downloadSaveLocationIos;
     return settings.saveDir.isEmpty
@@ -485,7 +502,10 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
         : settings.saveDir;
   }
 
-  String _fixedLocationHint(AppLocalizations l10n, DownloadSettings settings) {
+  String _fixedLocationHint(
+    AppLocalizations l10n,
+    DownloadSettingsState settings,
+  ) {
     if (_isAndroid) {
       return settings.publishToPublicDir
           ? l10n.downloadSaveLocationFixedHintAndroid
@@ -496,13 +516,12 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
   }
 
   /// 选择保存目录（桌面）；选择器默认打开另存目录。
-  Future<void> _pickDirectory(
-    BuildContext context,
-    DownloadSettings settings,
-  ) async {
+  Future<void> _pickDirectory(BuildContext context) async {
     final l10n = AppLocalizations.of(context)!;
-    final notifications = context.read<NotificationService?>();
-    final saveAs = context.read<SaveAs?>();
+    final NotificationService? notifications = ref.read(
+      notificationServiceProvider,
+    );
+    final SaveAs? saveAs = ref.read(saveAsProvider);
     String? picked;
     try {
       // 保存目录只在桌面可改，pickDirectory() 给的是 file:// URI，
@@ -516,7 +535,7 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
       picked = null;
     }
     if (picked == null || picked.isEmpty) return;
-    await settings.setSaveDir(picked);
+    await ref.read(downloadSettingsControllerProvider)?.setSaveDir(picked);
     notifications?.showSnackBar(l10n.save);
   }
 
@@ -549,7 +568,7 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
   /// 编辑文件名模板：实时预览 + 恢复默认。
   Future<void> _editTemplate(
     BuildContext context,
-    DownloadSettings settings,
+    DownloadSettingsState settings,
   ) async {
     final l10n = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: settings.filenameTemplate);
@@ -617,7 +636,9 @@ class _DownloadsAndCachePageState extends State<DownloadsAndCachePage> {
     );
     controller.dispose();
     if (result == null) return;
-    await settings.setFilenameTemplate(result);
+    await ref
+        .read(downloadSettingsControllerProvider)
+        ?.setFilenameTemplate(result);
   }
 
   String _formatSize(int bytes) {

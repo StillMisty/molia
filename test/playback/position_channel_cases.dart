@@ -4,8 +4,9 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/playback_selectors.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../support/provider_test_scope.dart';
 
 import '../support/fakes.dart';
 
@@ -37,7 +38,7 @@ void main() {
         addTearDown(provider.dispose);
 
         var notifies = 0;
-        provider.addListener(() => notifies++);
+        provider.changes.addListener(() => notifies++);
 
         final track = _track('a');
         PlaybackSnapshot snapshotAt({bool isPlaying = true}) =>
@@ -105,10 +106,10 @@ void main() {
       var lastDuration = -1;
       var lastHasTrack = false;
 
+      final scope = ProviderTestScope()..put<PlaybackProvider>(provider);
       await tester.pumpWidget(
-        ChangeNotifierProvider<PlaybackProvider>.value(
-          value: provider,
-          child: MaterialApp(
+        scope.wrap(
+          MaterialApp(
             home: Scaffold(
               body: Column(
                 children: [

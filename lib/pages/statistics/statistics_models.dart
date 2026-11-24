@@ -4,12 +4,12 @@
 /// `lib/services/statistics/listening_statistics.dart`，本文件只做展示格式化。
 library;
 
-import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/play_statistics.dart';
 import '../../domain/ports/source_registry.dart';
 import '../../l10n/app_localizations.dart';
+import '../../providers/app_providers.dart';
 import '../../services/listening_stats_poster_service.dart';
 import '../../services/statistics/listening_statistics.dart';
 import '../../widgets/labels/listened_duration.dart';
@@ -25,8 +25,8 @@ String formatCompactStatisticsDate(int epochMs, {required DateTime now}) {
 }
 
 /// 来源显示名：注册表命中用平台名，否则回退原始 key。
-String statisticsSourceName(BuildContext context, String sourceKey) {
-  final registry = context.read<SourceRegistry?>();
+String statisticsSourceName(WidgetRef ref, String sourceKey) {
+  final SourceRegistry? registry = ref.read(sourceRegistryProvider);
   for (final descriptor in registry?.descriptors ?? const []) {
     if (descriptor.key == sourceKey) return descriptor.displayName;
   }

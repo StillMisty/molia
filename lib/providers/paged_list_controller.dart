@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/foundation.dart';
 
 /// 一页分页结果（最小形状，与具体领域结果类型解耦，任何列表可复用）。
@@ -206,9 +208,10 @@ class PagedListController<T> extends ValueNotifier<PagedListState<T>> {
             ? [...value.items, ...result.items]
             : [...result.items];
         final items = _keyOf == null ? merged : _dedupe(merged);
+        // 分页累计可达上千条：发布零拷贝只读视图，底层列表此后不再原地修改。
         // 未传 failed / loadMoreFailed / error：成功即清空失败态与异常。
         next = PagedListState<T>(
-          items: items,
+          items: UnmodifiableListView(items),
           page: page,
           total: result.total ?? value.total,
           // 追加去重后无新增：平台忽略 page 时据此停止翻页（防死循环）。

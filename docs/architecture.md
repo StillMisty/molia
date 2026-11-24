@@ -39,7 +39,17 @@
 
 1. `lib/domain/**` 禁止 Flutter/provider/HTTP/其它 lib 层；
 2. `lib/data/**`、`lib/sources/**`、`lib/playback/**` 禁止 providers/pages/widgets/main；
-3. `lib/providers/**` 禁止 import `lib/main.dart`；
+3. `lib/providers/**` 禁止 import `lib/main.dart`；状态按 ADR-0041：
+   - 容器持有的 UI 状态写 Riverpod `Notifier` / `AsyncNotifier`
+     （`@Riverpod` 代码生成）；
+   - 启动期 / 页面内部对象实现 `SnapshotSource<State>`（不可变 `state` +
+     `changes` 信号，契约在 `lib/utils/snapshot_source.dart`）：UI 经
+     `SnapshotNotifier` 读快照、经 `snapshotController` 发命令，页面内部会话用
+     `ListenableBuilder(listenable: obj.changes)`；
+   - `lib/**` 不再声明 `ChangeNotifier` 状态类，由
+     `test/architecture/snapshot_state_cases.dart` 守卫；
+   - 纯服务仍用函数式 `Provider` 注入；启动期实例统一经 `AppRuntime` 登记，
+     UI 只通过 `ref` 读取，不再使用 `package:provider`；
 4. `lib/main.dart` 是唯一 composition root，不允许被其它 lib 文件 import；
    它只做 `WidgetsFlutterBinding.ensureInitialized()` + `runMoliaApp()`（行数由
    `module_layout_test.dart` 守卫）。启动顺序集中在
@@ -47,9 +57,9 @@
    → 读引导标记 → runApp → 首帧回调；各阶段拆在 `platform_bootstrap.dart` 与
    `build_core_stacks.dart` / `build_feature_stacks.dart` /
    `build_aux_stacks.dart`（依赖进、装好的子系统出），观察者 / 生命周期 /
-   内存 / 托盘接在 `lib/app/bootstrap/wiring/**`，Provider 树与根 widget 在
-   `provider_tree.dart` / `root_widget.dart`；初始化顺序与前向引用关在 builder
-   内，main() 不再持有子系统细节；应用壳的对外入口是
+   内存 / 托盘接在 `lib/app/bootstrap/wiring/**`，Riverpod 容器与根 widget 在
+   `app_bootstrap.dart` / `runtime_wiring.dart` / `root_widget.dart`；初始化
+   顺序与前向引用关在 builder 内，main() 不再持有子系统细节；应用壳的对外入口是
    `lib/app/app_shell.dart`（barrel：MyApp / MyThemedApp / 全局 key 等公开
    类型），实现按职责拆在 `lib/app/shell/`（app_shell / shell_presentation /
    shell_bar / shell_page_layer / shell_progress / pairing_queue /
@@ -135,7 +145,8 @@
   `music_folder_watcher.dart`（防抖事件只当触发器，可定位路径只 stat 该路径，溢出回退整树；
   只对桌面路径根生效）、`missing_file_probe.dart`（空闲批量探测存在 / 大小，写 `missingAt` /
   `mtimeMs`；容器不可读时不标缺失）、`local_library_service.dart`（配置 + 扫描 + 监听 +
-  探测的编排与平台开关）、`local_write_gate.dart`（扫描导入 / 手动导入 / 探测共用一条串行
+  探测的编排与平台开关；文件夹列表 / `scanning` 等低频状态走 `localLibraryServiceProvider`
+  快照，扫描进度只走 `progressListenable`，不进快照）、`local_write_gate.dart`（扫描导入 / 手动导入 / 探测共用一条串行
   写队列）。树实现：桌面 `data/files/music_folder_tree_io.dart`（`dart:io`，保留深度 /
   符号链接 / 隐藏文件 / 排序规则），Android `data/saf/*`（`SafBridge` 端口：Pigeon
   channel 主路径、旧 `top.stillmisty.molia/saf` 通道回退；树枚举 + stat +
@@ -153,7 +164,8 @@
   旧的 `LocalPlaybackBackend` + `DefaultPlaybackFacade` 两层纯转发与
   `BackendSnapshot` 双形状已删除。
   `PlaybackProvider` 对外只暴露领域 `PlaybackSnapshot` + position 通道，两者都读
-  `PlaybackSessionCoordinator`（`lib/playback/`）的展示投影：真实播放取 facade，
+  `PlaybackSessionCoordinator`（`lib/playback/`）的展示投影（UI 经 Riverpod 读不可变
+  `PlaybackState` 快照、命令走 `playbackControllerProvider`，见 ADR-0041）：真实播放取 facade，
   冷启动恢复态取协调者构造的恢复快照（`isPlaying=false`）/ 保存进度。
   协调者另持有只反映真实播放的 live 投影（`liveSnapshot` / `liveSnapshotChannel` /
   `livePosition`，恢复态下为空）：UI 读展示面，定时关闭 / 失败恢复 / 默认播放模式
@@ -1149,6 +1161,10 @@
 取图 / 缓存 / 设置与省流上限；任务队列、命名 / 放置、任务产物、记录装配、记录写入、文件维护、提交
 日志与通知 presenter 是独立 module（见下）：
 
+- **状态面**：记录 / 队列 / 命令面 / 请求 / 设置都是「快照 + `changes`」形态
+  （ADR-0041）：UI watch 快照（记录列表、任务结构、能力位、设置开关），命令与
+  即时资格判定从 `*ControllerProvider` 取实例；已下载字节 / 速度走
+  `DownloadTask.progressListenable`（100ms 合并），不进入任何快照。
 - **下载请求**：`lib/services/download/download_requests.dart` 的
   `DownloadRequests` 是「能不能下 + 开始下 + 结果怎么回执」的唯一入口
   （`completed` / `failed` / `cancelled` / `alreadyDownloaded` / `active` /
@@ -1556,7 +1572,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   （`startSettle` / `land` / `releasePreview` / `settleCommit` / `crossfadeCorrection` /
   `hardReset` / `adoptSteadySlots` / `requestSkip` / `notifySwapped` / `armTimeout` …），
   次序不变量（例如「settling 前先把进度钉回起点」）由会话的调用顺序持有。会话是
-  `ChangeNotifier`，只在离散迁移通知；拖动跟手的逐帧进度不进会话。
+  快照对象（`SnapshotSource` / `changes`），只在离散迁移通知；拖动跟手的逐帧进度
+  不进会话。
 - **会话与阶段**：阶段 `idle → preview（跟手）→ committed（提交等待对账）→ settling
   （即时切歌完成中）` / `correcting`（对账不匹配校正）/ `returning`（松手未达标、
   取消或提交超时后的回退，预览目标保持到弹簧落位）。唯一一根进度控制器由 deck
@@ -1820,7 +1837,7 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   否则按启动页（设置 › 通用 › 启动时打开，默认播放页；存储首页被隐藏时按
   导航顺序兜底且**不改写存储**，避免同步回环）。上次页面记录在设备本地
   （`shell_last_destination_v1`），不随同步带到其它设备。
-  应用内音量（`PlaybackProvider.volume/muted`，设备本地持久化、落盘防抖 400ms）
+  应用内音量（`PlaybackState.volume/muted`，经 `PlaybackProvider` 命令改；设备本地持久化、落盘防抖 400ms）
   经 `PlaybackFacade.setVolume` 落到 just_audio（桌面 media_kit 同一播放器）。
   播放手感（`lib/services/playback_feel_store.dart` 单键 JSON，设备本地）：
   淡入淡出档位（关 / 0.15 / 0.2 / 0.3 秒，默认 0.2）与智能随机开关（默认开）
@@ -2077,7 +2094,8 @@ LX 脚本 / 内置平台 / any-listen 的模块布局、监督状态机、在线
   协议本身由 `test/collection_test.dart` 直接覆盖
   （含微任务重置时机）。
 - 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；
-  唯一例外 `library_music_outlined`（资料库未选中半对；音符图标已改用 `MoliaMark` 组件）。
+  唯一例外 `library_music_outlined` / `music_note_outlined`（资料库与音符的未选中
+  半对：没有圆角空心字形）。
   `test/architecture/architecture_guards_test.dart` 扫描强制。**同一按钮的状态图标切换**统一走
   `lib/widgets/icon_swap.dart::IconSwap`（150ms emphasized 交叉淡入 + 0.85→1 轻微缩放、
   减弱动效跳变），不要在调用点裸写 `AnimatedSwitcher`；底部导航 `icon↔selectedIcon`

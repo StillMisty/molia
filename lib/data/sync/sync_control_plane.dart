@@ -3,6 +3,7 @@ import 'package:logging/logging.dart';
 
 import '../../domain/models/device_sync.dart';
 import '../../domain/ports/sync_transport.dart';
+import '../../utils/snapshot_source.dart';
 import 'sync_activity.dart';
 import 'sync_passphrase.dart';
 import 'sync_state_store.dart';
@@ -20,7 +21,77 @@ import 'sync_transport_runtime.dart';
 ///
 /// 组合根契约：控制面与引擎必须拿到**同一个** [SyncStateStore] 与同一份
 /// 传输实例；控制面的写入就是引擎下一轮读到的状态，不存在第二份内存副本。
-class SyncControlPlane extends ChangeNotifier {
+///
+/// 形态是「不可变快照 + 通知信号」（ADR-0041「启动期状态对象」）：[state]
+/// 汇总所有只读观测面，[changes] 替代 `ChangeNotifier` 的订阅面。派生判据
+/// （传输状态 / 是否已有同步组）仍留在本类，因为它们要读传输实例。
+@immutable
+class SyncControlPlaneState {
+  const SyncControlPlaneState({
+    required this.enabled,
+    required this.deviceId,
+    required this.deviceName,
+    required this.categories,
+    required this.enabledTransports,
+    required this.webdav,
+    required this.lastSyncAt,
+    required this.log,
+    required this.peers,
+    required this.manualPeers,
+    required this.lanHttpPort,
+    required this.activity,
+    required this.cellularPolicy,
+    required this.passphrase,
+    required this.maskedPassphrase,
+  });
+
+  /// 同步总开关（任一路传输启用）。
+  final bool enabled;
+
+  /// 本机设备 id。
+  final String deviceId;
+
+  /// 本机显示名。
+  final String deviceName;
+
+  /// 类别开关。
+  final Map<SyncCategory, bool> categories;
+
+  /// 已启用传输 kind。
+  final Set<String> enabledTransports;
+
+  /// WebDAV 配置。
+  final WebDavConfig webdav;
+
+  /// 最近一次成功同步时间。
+  final int lastSyncAt;
+
+  /// 同步日志（新到旧）。
+  final List<SyncLogEntry> log;
+
+  /// 已知对端名册。
+  final List<SyncPeerState> peers;
+
+  /// 手动对端地址簿。
+  final List<ManualPeer> manualPeers;
+
+  /// 局域网 HTTP 端口。
+  final int lanHttpPort;
+
+  /// 24h 活动记录。
+  final List<SyncActivityEntry> activity;
+
+  /// 蜂窝策略。
+  final SyncCellularPolicy cellularPolicy;
+
+  /// 当前口令缓存（null = 尚未加载 / 未设置）。
+  final String? passphrase;
+
+  /// 打码口令（设置行副标题用）。
+  final String maskedPassphrase;
+}
+
+class SyncControlPlane implements SnapshotSource<SyncControlPlaneState> {
   SyncControlPlane({
     required SyncStateStore state,
     required Map<String, SyncTransport> transports,
@@ -38,6 +109,9 @@ class SyncControlPlane extends ChangeNotifier {
   final SyncTransportRuntime _runtime;
   final Logger _logger = Logger('molia.sync');
 
+  final SnapshotSignal _changes = SnapshotSignal();
+  bool _disposed = false;
+
   /// 口令缓存：设置页 / 附近设备配对要同步读取，不能每次都碰凭据库。写入路径
   /// 与凭据库保持一致（[readPassphrase] 是唯一的重新加载入口）。
   String? _passphrase;
@@ -45,6 +119,29 @@ class SyncControlPlane extends ChangeNotifier {
   bool _initialized = false;
 
   // 只读观测面（UI 只经这些 getter，不接触状态存储）
+
+  /// 不可变快照：设置页 / 同步页经 provider 镜像它，每次 [changes] 后重建。
+  @override
+  SyncControlPlaneState get state => SyncControlPlaneState(
+    enabled: _state.enabled,
+    deviceId: _state.deviceId,
+    deviceName: _state.deviceName,
+    categories: Map<SyncCategory, bool>.unmodifiable(_state.categories),
+    enabledTransports: Set<String>.unmodifiable(_state.enabledTransports),
+    webdav: _state.webdav,
+    lastSyncAt: _state.lastSyncAt,
+    log: List<SyncLogEntry>.unmodifiable(_state.log),
+    peers: List<SyncPeerState>.unmodifiable(_state.peers),
+    manualPeers: List<ManualPeer>.unmodifiable(_state.manualPeers),
+    lanHttpPort: _state.lanHttpPort,
+    activity: List<SyncActivityEntry>.unmodifiable(_state.activity),
+    cellularPolicy: _state.cellularPolicy,
+    passphrase: _passphrase,
+    maskedPassphrase: maskedPassphrase,
+  );
+
+  @override
+  Listenable get changes => _changes;
 
   bool get enabled => _state.enabled;
   String get deviceId => _state.deviceId;
@@ -114,7 +211,7 @@ class SyncControlPlane extends ChangeNotifier {
     if (_initialized) return;
     await _state.init();
     _initialized = true;
-    notifyListeners();
+    _notify();
   }
 
   /// 启动已启用且未运行的传输（幂等）。
@@ -152,7 +249,7 @@ class SyncControlPlane extends ChangeNotifier {
       }
     }
     await _state.setCategory(category, value);
-    notifyListeners();
+    _notify();
   }
 
   /// 开 / 关一路传输（= 总开关：两路都关时 [enabled] 为假，一切停摆）。
@@ -169,22 +266,22 @@ class SyncControlPlane extends ChangeNotifier {
         await _runtime.stop(kind);
       }
     }
-    notifyListeners();
+    _notify();
   }
 
   Future<void> setDeviceName(String value) async {
     await _state.setDeviceName(value);
-    notifyListeners();
+    _notify();
   }
 
   Future<void> setWebdavConfig(WebDavConfig config) async {
     await _state.setWebdavConfig(config);
-    notifyListeners();
+    _notify();
   }
 
   Future<void> setCellularPolicy(SyncCellularPolicy value) async {
     await _state.setCellularPolicy(value);
-    notifyListeners();
+    _notify();
   }
 
   // 手动对端地址簿（局域网发现失败时的兜底）
@@ -194,13 +291,13 @@ class SyncControlPlane extends ChangeNotifier {
   /// 返回 false 表示该地址已存在（UI 据此提示「已更新」而不是「已添加」）。
   Future<bool> addManualPeer(ManualPeer peer) async {
     final added = await _state.addManualPeer(peer);
-    notifyListeners();
+    _notify();
     return added;
   }
 
   Future<void> removeManualPeer(String host) async {
     await _state.removeManualPeer(host);
-    notifyListeners();
+    _notify();
   }
 
   /// 更新某条手动地址（身份与已学到的端点端口保留）。
@@ -216,7 +313,7 @@ class SyncControlPlane extends ChangeNotifier {
       probePort: probePort,
       name: name,
     );
-    notifyListeners();
+    _notify();
   }
 
   /// 从本机列表移除一台设备（名册 + 地址簿条目）。
@@ -226,7 +323,7 @@ class SyncControlPlane extends ChangeNotifier {
   Future<void> removePeer(String deviceId) async {
     if (deviceId.isEmpty) return;
     await _state.removePeer(deviceId);
-    notifyListeners();
+    _notify();
   }
 
   /// 显式清理某台设备的远端文件（用户动作；**不做自动删除**）。
@@ -261,7 +358,7 @@ class SyncControlPlane extends ChangeNotifier {
 
   Future<void> writeWebdavPassword(String password) async {
     await _state.writeWebdavPassword(password);
-    notifyListeners();
+    _notify();
   }
 
   /// 当前口令缓存；null = 尚未加载 / 未设置。
@@ -296,7 +393,7 @@ class SyncControlPlane extends ChangeNotifier {
     final generated = SyncPassphrase.generate();
     await _state.writePassphrase(generated);
     _passphrase = generated;
-    notifyListeners();
+    _notify();
     return generated;
   }
 
@@ -304,7 +401,16 @@ class SyncControlPlane extends ChangeNotifier {
   Future<void> setPassphrase(String passphrase) async {
     await _state.writePassphrase(passphrase);
     _passphrase = passphrase;
-    notifyListeners();
+    _notify();
+  }
+
+  void _notify() {
+    if (!_disposed) _changes.notify();
+  }
+
+  /// 组合根 / 测试在进程退出前释放；之后不再发通知。
+  void dispose() {
+    _disposed = true;
   }
 
   /// 重置口令：全部设备需重新输入（口令即信任根）。
@@ -316,7 +422,7 @@ class SyncControlPlane extends ChangeNotifier {
     await _state.writePassphrase(generated);
     await _state.resetGroupState();
     _passphrase = generated;
-    notifyListeners();
+    _notify();
     return generated;
   }
 }

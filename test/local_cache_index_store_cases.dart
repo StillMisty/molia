@@ -88,7 +88,7 @@ void main() {
       final store = LocalCacheIndexStore(persistence: persistence);
       addTearDown(store.dispose);
       var notifications = 0;
-      store.addListener(() => notifications++);
+      store.changes.addListener(() => notifications++);
 
       expect(store.initialized, isFalse);
       await store.init();
@@ -105,7 +105,7 @@ void main() {
       addTearDown(store.dispose);
       await store.init();
       var notifications = 0;
-      store.addListener(() => notifications++);
+      store.changes.addListener(() => notifications++);
 
       await store.recordCompleted(sourceTrack('1'));
 
@@ -161,7 +161,7 @@ void main() {
       await store.recordCompletedEntry(entry('1'));
       await store.recordCompletedEntry(entry('2'));
       var notifications = 0;
-      store.addListener(() => notifications++);
+      store.changes.addListener(() => notifications++);
 
       await store.remove('wy', '1');
 

@@ -1,8 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
-import 'package:provider/single_child_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/data/settings/device_settings.dart';
@@ -12,6 +10,7 @@ import 'package:molia/services/cache_service.dart';
 import 'package:molia/widgets/settings/settings_tiles.dart';
 
 import '../support/memory_cache_storage.dart';
+import '../support/provider_test_scope.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -19,16 +18,17 @@ void main() {
   Future<void> pump(
     WidgetTester tester,
     Widget page, {
-    required List<SingleChildWidget> providers,
+    required void Function(ProviderTestScope scope) configure,
   }) async {
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final scope = ProviderTestScope();
+    configure(scope);
     await tester.pumpWidget(
-      MultiProvider(
-        providers: providers,
-        child: M3EMaterialApp(
+      scope.wrap(
+        M3EMaterialApp(
           data: M3EThemeData.fromMaterial(ThemeData.light()),
           theme: ThemeData.light(),
           locale: const Locale('zh'),
@@ -54,7 +54,7 @@ void main() {
     await pump(
       tester,
       const DownloadsAndCachePage(),
-      providers: [Provider<CacheService>.value(value: cache)],
+      configure: (scope) => scope.put<CacheService>(cache),
     );
 
     for (final key in const [

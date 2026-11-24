@@ -1,9 +1,10 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../services/download/download_manager.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
@@ -19,9 +20,14 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 这里再兜一层防御。
 Future<void> importLocalAudioFilesFlow(BuildContext context) async {
   final l10n = _l10n(context);
-  final downloads = context.read<DownloadManager?>();
+  // 与 lxmc_import 同一约定：调用处只传 context，从最近的 ProviderScope 取容器。
+  final container = ProviderScope.containerOf(context, listen: false);
+  final DownloadManagerState? state = container.read(downloadManagerProvider);
+  final DownloadManager? downloads = container.read(
+    downloadManagerControllerProvider,
+  );
   final messengerContext = context;
-  if (downloads == null || !downloads.supported) return;
+  if (downloads == null || !(state?.supported ?? false)) return;
 
   final List<PlatformFile> files;
   try {

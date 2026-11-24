@@ -3,9 +3,9 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'any_listen_page.dart';
@@ -13,6 +13,7 @@ import '../domain/models/bili_account.dart';
 import '../domain/models/source.dart' show SourceDescriptor, SourceKind;
 import '../domain/models/source_script.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../providers/sources_provider.dart';
 import '../services/bili_account_service.dart';
 import '../theme/app_semantic_colors.dart';
@@ -35,14 +36,14 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 渠道排序复用 [SettingsReorderableRows] 的拖拽手柄模式。
 /// 分层：只依赖 [SourcesProvider] / 平台账号服务与 domain 模型，
 /// 不直接 import `lib/sources/**`（R5）。
-class SourcesPage extends StatefulWidget {
+class SourcesPage extends ConsumerStatefulWidget {
   const SourcesPage({super.key});
 
   @override
-  State<SourcesPage> createState() => _SourcesPageState();
+  ConsumerState<SourcesPage> createState() => _SourcesPageState();
 }
 
-class _SourcesPageState extends State<SourcesPage> {
+class _SourcesPageState extends ConsumerState<SourcesPage> {
   /// 正在执行在线更新的脚本 id（同一时间只允许一个，按钮显示 loading）。
   String? _updatingScriptId;
 
@@ -65,22 +66,25 @@ class _SourcesPageState extends State<SourcesPage> {
           onPressed: () {
             Navigator.of(context).push(
               M3EPageRoute<void>(
-                builder: (_) =>
-                    AnyListenPage(provider: context.read<SourcesProvider>()),
+                builder: (_) => AnyListenPage(
+                  provider: ref.read(sourcesControllerProvider),
+                ),
               ),
             );
           },
         ),
       ],
-      body: Consumer<SourcesProvider>(
-        builder: (context, provider, _) {
-          final biliAccount = context.watch<BiliAccountService?>();
-          if (!provider.initialized) {
+      body: Consumer(
+        builder: (context, ref, _) {
+          final state = ref.watch(sourcesProvider);
+          final provider = ref.read(sourcesControllerProvider);
+          final BiliAccountState? biliAccount = ref.watch(biliAccountProvider);
+          if (!state.initialized) {
             return const Center(child: M3ELoadingIndicator());
           }
           return SettingsSubPageList(
             children: [
-              _buildStatusSection(context, l10n, provider),
+              _buildStatusSection(context, l10n, state, provider),
               if (biliAccount != null) ...[
                 const SizedBox(height: kSettingsSectionSpacing),
                 _buildPlatformAccountsSection(context, l10n, biliAccount),
@@ -88,9 +92,9 @@ class _SourcesPageState extends State<SourcesPage> {
               const SizedBox(height: kSettingsSectionSpacing),
               _buildImportSection(context, l10n, provider),
               const SizedBox(height: kSettingsSectionSpacing),
-              _buildSortSection(context, l10n, provider),
+              _buildSortSection(context, l10n, state, provider),
               const SizedBox(height: kSettingsSectionSpacing),
-              _buildScriptsSection(context, l10n, provider),
+              _buildScriptsSection(context, l10n, state, provider),
             ],
           );
         },
@@ -102,7 +106,7 @@ class _SourcesPageState extends State<SourcesPage> {
   Widget _buildPlatformAccountsSection(
     BuildContext context,
     AppLocalizations l10n,
-    BiliAccountService account,
+    BiliAccountState account,
   ) {
     final loggedIn = account.status == BiliAccountStatus.loggedIn;
     return SettingsSectionCard(
@@ -126,15 +130,16 @@ class _SourcesPageState extends State<SourcesPage> {
   Widget _buildStatusSection(
     BuildContext context,
     AppLocalizations l10n,
+    SourcesState state,
     SourcesProvider provider,
   ) {
     final m3e = M3ETheme.of(context);
     final scheme = m3e.colorScheme;
     final semantic = AppSemanticColors.of(context);
-    final active = provider.activeScript;
-    final sources = provider.activeSourceEntries;
-    final hasActive = provider.hasActiveSource;
-    final alert = provider.lastUpdateAlert;
+    final active = state.activeScript;
+    final sources = state.activeSourceEntries;
+    final hasActive = state.hasActiveSource;
+    final alert = state.lastUpdateAlert;
 
     final Widget statusRow = Builder(
       builder: (context) => CardListSurface(
@@ -176,7 +181,7 @@ class _SourcesPageState extends State<SourcesPage> {
                           ),
                         ),
                       ),
-                      if (provider.isActivating) ...[
+                      if (state.isActivating) ...[
                         const SizedBox(width: kSettingsSmallSpacing),
                         const SizedBox(
                           width: 18,
@@ -196,9 +201,9 @@ class _SourcesPageState extends State<SourcesPage> {
                       ],
                     ],
                   ),
-                  if (provider.activeError != null)
+                  if (state.activeError != null)
                     Text(
-                      l10n.sourcesActivationFailed(provider.activeError!),
+                      l10n.sourcesActivationFailed(state.activeError!),
                       style: m3e.typeScale.bodySmall.copyWith(
                         color: scheme.error,
                       ),
@@ -206,13 +211,12 @@ class _SourcesPageState extends State<SourcesPage> {
                   // 引擎已被熔断（失败后自动停在 failed）时给一个立即重试入口：
                   // 等自动冷却可能还要几十秒，用户刚换好网络时应当能直接再试。
                   // 只在有已保存的激活脚本时出现：脚本不存在之类的错误重试无意义。
-                  if (provider.activeError != null &&
-                      provider.activeScriptId != null)
+                  if (state.activeError != null && state.activeScriptId != null)
                     Align(
                       alignment: AlignmentDirectional.centerStart,
                       child: M3EButton.icon(
                         key: const Key('sourcesRetryEngine'),
-                        onPressed: _retryingEngine || provider.isActivating
+                        onPressed: _retryingEngine || state.isActivating
                             ? null
                             : () => unawaited(_retryEngine(provider)),
                         style: M3EButtonStyle.text,
@@ -300,7 +304,13 @@ class _SourcesPageState extends State<SourcesPage> {
                     ),
                   ),
                   const SizedBox(height: kSettingsSmallSpacing),
-                  _buildUpdateAlertActions(context, l10n, provider, active),
+                  _buildUpdateAlertActions(
+                    context,
+                    l10n,
+                    state,
+                    provider,
+                    active,
+                  ),
                 ],
               ),
             ),
@@ -360,10 +370,11 @@ class _SourcesPageState extends State<SourcesPage> {
   Widget _buildSortSection(
     BuildContext context,
     AppLocalizations l10n,
+    SourcesState state,
     SourcesProvider provider,
   ) {
     // 渠道 = 可搜索源 + 内置发现平台的并集（含停用项，便于再次启用）。
-    final channels = provider.channels;
+    final channels = state.channels;
     return SettingsSectionCard(
       title: l10n.sourcesSortTitle,
       // 空态解释（无渠道）与排序规则提示共用卡片下方说明位。
@@ -380,7 +391,7 @@ class _SourcesPageState extends State<SourcesPage> {
             onReorder: provider.reorderChannel,
           ),
         // 重置动作只在有自定义顺序时出现（默认顺序下重置无意义）。
-        if (provider.sourceOrder.isNotEmpty)
+        if (state.sourceOrder.isNotEmpty)
           SettingsNavTile(
             key: const Key('sourcesSortResetItem'),
             icon: Icons.restart_alt_rounded,
@@ -430,9 +441,10 @@ class _SourcesPageState extends State<SourcesPage> {
   Widget _buildScriptsSection(
     BuildContext context,
     AppLocalizations l10n,
+    SourcesState state,
     SourcesProvider provider,
   ) {
-    final scripts = provider.scripts;
+    final scripts = state.scripts;
     return SettingsSectionCard(
       title: l10n.sourcesImportedScripts(scripts.length),
       footer: scripts.isEmpty
@@ -440,7 +452,7 @@ class _SourcesPageState extends State<SourcesPage> {
           : null,
       children: [
         for (final script in scripts)
-          _scriptRow(context, l10n, provider, script),
+          _scriptRow(context, l10n, state, provider, script),
       ],
     );
   }
@@ -448,10 +460,11 @@ class _SourcesPageState extends State<SourcesPage> {
   Widget _scriptRow(
     BuildContext context,
     AppLocalizations l10n,
+    SourcesState state,
     SourcesProvider provider,
     SourceScriptInfo script,
   ) {
-    final isActive = provider.activeScriptId == script.id;
+    final isActive = state.activeScriptId == script.id;
     return SettingsSwitchTile(
       switchKey: ValueKey('sourcesScriptSwitch_${script.id}'),
       icon: Icons.code_rounded,
@@ -463,7 +476,7 @@ class _SourcesPageState extends State<SourcesPage> {
       ].join(' · '),
       value: isActive,
       // 激活进行中禁用整行：避免并发切换脚本与引擎重启打架。
-      enabled: !provider.isActivating,
+      enabled: !state.isActivating,
       onChanged: (value) {
         if (value) {
           unawaited(_activate(context, provider, script));
@@ -598,10 +611,11 @@ class _SourcesPageState extends State<SourcesPage> {
   Widget _buildUpdateAlertActions(
     BuildContext context,
     AppLocalizations l10n,
+    SourcesState state,
     SourcesProvider provider,
     SourceScriptInfo? active,
   ) {
-    final alert = provider.lastUpdateAlert!;
+    final alert = state.lastUpdateAlert!;
     final handlers = <VoidCallback>[];
     final actions = <M3EButtonGroupAction>[];
 

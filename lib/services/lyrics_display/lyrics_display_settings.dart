@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/settings/settings_access.dart';
 import '../../data/settings/settings_keys.dart';
+import '../../utils/snapshot_source.dart';
 import '../../theme/scheme_builder.dart';
 
 /// 未同步歌词（无时间轴）的展示策略。
@@ -35,7 +36,7 @@ enum DesktopScrollMode { followSinging, constant }
 /// 桌面歌词颜色的取色来源。
 ///
 /// `custom` = 用户自定义色板；其余值取「跟随主题角色」——所用方案由
-/// [LyricsDisplaySettings.desktopSchemeSource] 决定（应用主题 / 当前曲目
+/// [LyricsDisplaySettingsState.desktopSchemeSource] 决定（应用主题 / 当前曲目
 /// 封面），两者都由 `ThemeProvider` 统一解析。
 ///
 /// `surface` 是主题表面色：深色主题下接近黑、浅色主题下接近白，适合做
@@ -50,7 +51,8 @@ enum LyricColorSource {
   surface,
 }
 
-/// 桌面悬浮歌词控制条按钮键（与 [LyricsDisplaySettings.desktopControls] 对应）。
+/// 桌面悬浮歌词控制条按钮键（与 [LyricsDisplaySettingsState.desktopControls]
+/// 对应）。
 abstract final class DesktopControlKeys {
   static const playPause = 'playPause';
   static const previous = 'previous';
@@ -62,6 +64,122 @@ abstract final class DesktopControlKeys {
   static const all = [playPause, previous, next, translation, lock, close];
 }
 
+/// 歌词显示配置的不可变快照。
+///
+/// 字段名沿用 [LyricsDisplaySettings] 原来的公开 getter，消费方读
+/// `ref.watch(lyricsDisplaySettingsProvider)` 后直接取同名字段；写入仍经
+/// 控制器的 `setXxx`。
+@immutable
+class LyricsDisplaySettingsState {
+  const LyricsDisplaySettingsState({
+    this.loaded = false,
+    this.offsetMs = LyricsDisplaySettings.defaultOffsetMs,
+    this.translationEnabled = LyricsDisplaySettings.defaultTranslationEnabled,
+    this.romaEnabled = LyricsDisplaySettings.defaultRomaEnabled,
+    this.unsyncedBehavior = LyricsDisplaySettings.defaultUnsyncedBehavior,
+    this.pageTranslationEnabled =
+        LyricsDisplaySettings.defaultPageTranslationEnabled,
+    this.pageRomaEnabled = LyricsDisplaySettings.defaultPageRomaEnabled,
+    this.desktopEnabled = LyricsDisplaySettings.defaultDesktopEnabled,
+    this.desktopFontSize = LyricsDisplaySettings.defaultDesktopFontSize,
+    this.desktopOpacity = LyricsDisplaySettings.defaultDesktopOpacity,
+    this.desktopPlayedColor = LyricsDisplaySettings.defaultDesktopPlayedColor,
+    this.desktopUnplayedColor =
+        LyricsDisplaySettings.defaultDesktopUnplayedColor,
+    this.desktopShadowColor = LyricsDisplaySettings.defaultDesktopShadowColor,
+    this.desktopPlayedColorSource =
+        LyricsDisplaySettings.defaultDesktopPlayedColorSource,
+    this.desktopUnplayedColorSource =
+        LyricsDisplaySettings.defaultDesktopUnplayedColorSource,
+    this.desktopShadowColorSource =
+        LyricsDisplaySettings.defaultDesktopShadowColorSource,
+    this.desktopSchemeSource = LyricsDisplaySettings.defaultDesktopSchemeSource,
+    this.desktopWidthPercent = LyricsDisplaySettings.defaultDesktopWidthPercent,
+    this.desktopMaxLines = LyricsDisplaySettings.defaultDesktopMaxLines,
+    this.desktopTextAlignX = LyricsDisplaySettings.defaultDesktopTextAlignX,
+    this.desktopScrollMode = LyricsDisplaySettings.defaultDesktopScrollMode,
+    this.desktopLock = LyricsDisplaySettings.defaultDesktopLock,
+    this.desktopFreezeOnScreenOff =
+        LyricsDisplaySettings.defaultDesktopFreezeOnScreenOff,
+    this.desktopHideOnPause = LyricsDisplaySettings.defaultDesktopHideOnPause,
+    this.desktopPauseBehavior =
+        LyricsDisplaySettings.defaultDesktopPauseBehavior,
+    this.desktopNoLyricsBehavior =
+        LyricsDisplaySettings.defaultDesktopNoLyricsBehavior,
+    this.desktopShowToggleAnimation =
+        LyricsDisplaySettings.defaultDesktopShowToggleAnimation,
+    this.desktopControls = LyricsDisplaySettings.defaultDesktopControls,
+    this.notificationEnabled = LyricsDisplaySettings.defaultNotificationEnabled,
+    this.notificationTarget = LyricsDisplaySettings.defaultNotificationTarget,
+    this.notificationFormat = LyricsDisplaySettings.defaultNotificationFormat,
+    this.notificationIncludeTranslation =
+        LyricsDisplaySettings.defaultNotificationIncludeTranslation,
+    this.notificationPauseBehavior =
+        LyricsDisplaySettings.defaultNotificationPauseBehavior,
+    this.bluetoothEnabled = LyricsDisplaySettings.defaultBluetoothEnabled,
+    this.bluetoothOnlyWhenA2dp =
+        LyricsDisplaySettings.defaultBluetoothOnlyWhenA2dp,
+    this.bluetoothTarget = LyricsDisplaySettings.defaultBluetoothTarget,
+    this.bluetoothFormat = LyricsDisplaySettings.defaultBluetoothFormat,
+    this.bluetoothIncludeTranslation =
+        LyricsDisplaySettings.defaultBluetoothIncludeTranslation,
+    this.bluetoothUpdateIntervalMs =
+        LyricsDisplaySettings.defaultBluetoothUpdateIntervalMs,
+    this.bluetoothPauseBehavior =
+        LyricsDisplaySettings.defaultBluetoothPauseBehavior,
+  });
+
+  /// 是否已完成一次持久化读取（设置页可据此区分「默认值」与「已加载」）。
+  final bool loaded;
+
+  final int offsetMs;
+  final bool translationEnabled;
+  final bool romaEnabled;
+  final UnsyncedBehavior unsyncedBehavior;
+
+  final bool pageTranslationEnabled;
+  final bool pageRomaEnabled;
+
+  final bool desktopEnabled;
+  final double desktopFontSize;
+  final double desktopOpacity;
+  final int desktopPlayedColor;
+  final int desktopUnplayedColor;
+  final int desktopShadowColor;
+  final LyricColorSource desktopPlayedColorSource;
+  final LyricColorSource desktopUnplayedColorSource;
+  final LyricColorSource desktopShadowColorSource;
+
+  final SurfaceColorSource desktopSchemeSource;
+  final double desktopWidthPercent;
+  final int desktopMaxLines;
+  final DesktopTextAlignX desktopTextAlignX;
+  final DesktopScrollMode desktopScrollMode;
+  final bool desktopLock;
+  final bool desktopFreezeOnScreenOff;
+  final bool desktopHideOnPause;
+  final LyricsPauseBehavior desktopPauseBehavior;
+  final DesktopNoLyricsBehavior desktopNoLyricsBehavior;
+  final bool desktopShowToggleAnimation;
+
+  /// 控制条按钮可见性（键 = [DesktopControlKeys]，只读）。
+  final Map<String, bool> desktopControls;
+
+  final bool notificationEnabled;
+  final LyricsMetadataTarget notificationTarget;
+  final LyricsMetadataFormat notificationFormat;
+  final bool notificationIncludeTranslation;
+  final LyricsPauseBehavior notificationPauseBehavior;
+
+  final bool bluetoothEnabled;
+  final bool bluetoothOnlyWhenA2dp;
+  final LyricsMetadataTarget bluetoothTarget;
+  final LyricsMetadataFormat bluetoothFormat;
+  final bool bluetoothIncludeTranslation;
+  final int bluetoothUpdateIntervalMs;
+  final LyricsPauseBehavior bluetoothPauseBehavior;
+}
+
 /// 歌词显示配置：歌词页（应用内）+ 输出侧共享项 + 桌面歌词 / 通知栏·锁屏 / 蓝牙三组。
 ///
 /// - 持久化为单 JSON 键（`lyrics_display_settings_v1`，跟人走），读取时与
@@ -70,7 +188,10 @@ abstract final class DesktopControlKeys {
 /// - 模型平台无关：颜色为 ARGB int、宽度为百分比、字号为逻辑字号
 ///   （Android 侧按 sp 解释，未来桌面窗口按逻辑 px 解释）；
 /// - 悬浮窗位置由原生侧自行持久化（系统级窗口状态），不进本模型。
-class LyricsDisplaySettings extends ChangeNotifier {
+///
+/// 可变字段只留在本类；[state] 每次生成不可变快照，[changes] 通知订阅面。
+class LyricsDisplaySettings
+    implements SnapshotSource<LyricsDisplaySettingsState> {
   LyricsDisplaySettings({required this._settings});
 
   static const int defaultOffsetMs = 0;
@@ -148,6 +269,16 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const LyricsPauseBehavior defaultBluetoothPauseBehavior =
       LyricsPauseBehavior.title;
 
+  /// 控制条按钮默认全显示。
+  static const Map<String, bool> defaultDesktopControls = {
+    DesktopControlKeys.playPause: true,
+    DesktopControlKeys.previous: true,
+    DesktopControlKeys.next: true,
+    DesktopControlKeys.translation: true,
+    DesktopControlKeys.lock: true,
+    DesktopControlKeys.close: true,
+  };
+
   static const List<int> offsetRange = [-500, 500];
   static const List<double> fontSizeRange = [12, 48];
   static const List<double> opacityRange = [0.2, 1.0];
@@ -163,6 +294,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const Duration persistenceDebounce = Duration(milliseconds: 400);
 
   final SettingsAccess _settings;
+  final SnapshotSignal _changes = SnapshotSignal();
 
   /// 连续滑杆的防抖计时；离散开关 / 下拉仍立即写。
   Timer? _persistTimer;
@@ -174,7 +306,6 @@ class LyricsDisplaySettings extends ChangeNotifier {
   bool _dirty = false;
 
   bool _loaded = false;
-  bool get loaded => _loaded;
 
   int _offsetMs = defaultOffsetMs;
   bool _translationEnabled = defaultTranslationEnabled;
@@ -206,9 +337,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
   DesktopNoLyricsBehavior _desktopNoLyricsBehavior =
       defaultDesktopNoLyricsBehavior;
   bool _desktopShowToggleAnimation = defaultDesktopShowToggleAnimation;
-  Map<String, bool> _desktopControls = {
-    for (final key in DesktopControlKeys.all) key: true,
-  };
+  Map<String, bool> _desktopControls = {...defaultDesktopControls};
 
   bool _notificationEnabled = defaultNotificationEnabled;
   LyricsMetadataTarget _notificationTarget = defaultNotificationTarget;
@@ -225,53 +354,53 @@ class LyricsDisplaySettings extends ChangeNotifier {
   int _bluetoothUpdateIntervalMs = defaultBluetoothUpdateIntervalMs;
   LyricsPauseBehavior _bluetoothPauseBehavior = defaultBluetoothPauseBehavior;
 
-  int get offsetMs => _offsetMs;
-  bool get translationEnabled => _translationEnabled;
-  bool get romaEnabled => _romaEnabled;
-  UnsyncedBehavior get unsyncedBehavior => _unsyncedBehavior;
+  /// 当前配置的不可变快照（唯一构造点：字段增删只改这里与状态类）。
+  @override
+  LyricsDisplaySettingsState get state => LyricsDisplaySettingsState(
+    loaded: _loaded,
+    offsetMs: _offsetMs,
+    translationEnabled: _translationEnabled,
+    romaEnabled: _romaEnabled,
+    unsyncedBehavior: _unsyncedBehavior,
+    pageTranslationEnabled: _pageTranslationEnabled,
+    pageRomaEnabled: _pageRomaEnabled,
+    desktopEnabled: _desktopEnabled,
+    desktopFontSize: _desktopFontSize,
+    desktopOpacity: _desktopOpacity,
+    desktopPlayedColor: _desktopPlayedColor,
+    desktopUnplayedColor: _desktopUnplayedColor,
+    desktopShadowColor: _desktopShadowColor,
+    desktopPlayedColorSource: _desktopPlayedColorSource,
+    desktopUnplayedColorSource: _desktopUnplayedColorSource,
+    desktopShadowColorSource: _desktopShadowColorSource,
+    desktopSchemeSource: _desktopSchemeSource,
+    desktopWidthPercent: _desktopWidthPercent,
+    desktopMaxLines: _desktopMaxLines,
+    desktopTextAlignX: _desktopTextAlignX,
+    desktopScrollMode: _desktopScrollMode,
+    desktopLock: _desktopLock,
+    desktopFreezeOnScreenOff: _desktopFreezeOnScreenOff,
+    desktopHideOnPause: _desktopHideOnPause,
+    desktopPauseBehavior: _desktopPauseBehavior,
+    desktopNoLyricsBehavior: _desktopNoLyricsBehavior,
+    desktopShowToggleAnimation: _desktopShowToggleAnimation,
+    desktopControls: Map.unmodifiable(_desktopControls),
+    notificationEnabled: _notificationEnabled,
+    notificationTarget: _notificationTarget,
+    notificationFormat: _notificationFormat,
+    notificationIncludeTranslation: _notificationIncludeTranslation,
+    notificationPauseBehavior: _notificationPauseBehavior,
+    bluetoothEnabled: _bluetoothEnabled,
+    bluetoothOnlyWhenA2dp: _bluetoothOnlyWhenA2dp,
+    bluetoothTarget: _bluetoothTarget,
+    bluetoothFormat: _bluetoothFormat,
+    bluetoothIncludeTranslation: _bluetoothIncludeTranslation,
+    bluetoothUpdateIntervalMs: _bluetoothUpdateIntervalMs,
+    bluetoothPauseBehavior: _bluetoothPauseBehavior,
+  );
 
-  bool get pageTranslationEnabled => _pageTranslationEnabled;
-  bool get pageRomaEnabled => _pageRomaEnabled;
-
-  bool get desktopEnabled => _desktopEnabled;
-  double get desktopFontSize => _desktopFontSize;
-  double get desktopOpacity => _desktopOpacity;
-  int get desktopPlayedColor => _desktopPlayedColor;
-  int get desktopUnplayedColor => _desktopUnplayedColor;
-  int get desktopShadowColor => _desktopShadowColor;
-  LyricColorSource get desktopPlayedColorSource => _desktopPlayedColorSource;
-  LyricColorSource get desktopUnplayedColorSource =>
-      _desktopUnplayedColorSource;
-  LyricColorSource get desktopShadowColorSource => _desktopShadowColorSource;
-
-  SurfaceColorSource get desktopSchemeSource => _desktopSchemeSource;
-  double get desktopWidthPercent => _desktopWidthPercent;
-  int get desktopMaxLines => _desktopMaxLines;
-  DesktopTextAlignX get desktopTextAlignX => _desktopTextAlignX;
-  DesktopScrollMode get desktopScrollMode => _desktopScrollMode;
-  bool get desktopLock => _desktopLock;
-  bool get desktopFreezeOnScreenOff => _desktopFreezeOnScreenOff;
-  bool get desktopHideOnPause => _desktopHideOnPause;
-  LyricsPauseBehavior get desktopPauseBehavior => _desktopPauseBehavior;
-  DesktopNoLyricsBehavior get desktopNoLyricsBehavior =>
-      _desktopNoLyricsBehavior;
-  bool get desktopShowToggleAnimation => _desktopShowToggleAnimation;
-  Map<String, bool> get desktopControls => Map.unmodifiable(_desktopControls);
-
-  bool get notificationEnabled => _notificationEnabled;
-  LyricsMetadataTarget get notificationTarget => _notificationTarget;
-  LyricsMetadataFormat get notificationFormat => _notificationFormat;
-  bool get notificationIncludeTranslation => _notificationIncludeTranslation;
-  LyricsPauseBehavior get notificationPauseBehavior =>
-      _notificationPauseBehavior;
-
-  bool get bluetoothEnabled => _bluetoothEnabled;
-  bool get bluetoothOnlyWhenA2dp => _bluetoothOnlyWhenA2dp;
-  LyricsMetadataTarget get bluetoothTarget => _bluetoothTarget;
-  LyricsMetadataFormat get bluetoothFormat => _bluetoothFormat;
-  bool get bluetoothIncludeTranslation => _bluetoothIncludeTranslation;
-  int get bluetoothUpdateIntervalMs => _bluetoothUpdateIntervalMs;
-  LyricsPauseBehavior get bluetoothPauseBehavior => _bluetoothPauseBehavior;
+  @override
+  Listenable get changes => _changes;
 
   /// 读取持久化配置（启动时调用一次；缺键回落默认值）。
   Future<void> init() async {
@@ -287,7 +416,7 @@ class LyricsDisplaySettings extends ChangeNotifier {
       }
     }
     _loaded = true;
-    notifyListeners();
+    _changes.notify();
   }
 
   /// 调整全局歌词偏移。
@@ -763,20 +892,19 @@ class LyricsDisplaySettings extends ChangeNotifier {
     return _enqueuePersist();
   }
 
-  @override
+  /// 取消未到期的防抖写，并把 pending 状态 best-effort 入队。
   void dispose() {
     _persistTimer?.cancel();
     _persistTimer = null;
     if (_dirty) {
-      // ChangeNotifier 没有异步释放钩子：best-effort 排入写队列，不等待完成。
+      // 释放路径没有异步钩子：best-effort 排入写队列，不等待完成。
       unawaited(_enqueuePersist());
     }
-    super.dispose();
   }
 
   void _commit({bool persist = true}) {
     _dirty = true;
-    notifyListeners();
+    _changes.notify();
     if (persist) {
       // 离散设置立即落盘；同时取消滑杆留下的防抖写，避免重复整文件重写。
       _persistTimer?.cancel();

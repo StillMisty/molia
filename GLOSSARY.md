@@ -306,7 +306,7 @@
 - **Swap session（切歌会话）** — `CoverSwapSession`：一次拖动/切歌从开始到落位的
   唯一状态机（起止身份/方向/旧邻位/阶段/方向提示/6 秒兜底），只决定「什么时候」；
   唯一快照入口 `observe`（切歌检测、空闲缓存与预览目标都从它派生，调用方不再各刷
-  一半）；只在离散迁移通知（`ChangeNotifier`），跟手逐帧进度不进会话。
+  一半）；只在离散迁移通知（`changes`），跟手逐帧进度不进会话。
 - **Initial identity（初始身份）** — `CoverSwapSession.adoptInitial`：deck 挂载时
   快照已有 `current`（冷启动恢复 / 系统媒体恢复）的稳态接管——只建立身份与邻位
   缓存，不启动切歌入场；首帧三槽位直接按队列渲染。只有空态出现首曲目才走
@@ -946,9 +946,10 @@
 ## AI 推歌
 
 - **AI DJ mode（AI 推歌模式）** — `lib/providers/ai_dj_provider.dart` 与
-  `lib/providers/ai_dj_history_controller.dart`：`AiDjProvider` 负责对外门面与
-  通知（生成编排在执行器、电台会话在 **AI radio session**、反馈账本在
-  **AI feedback book**，见下条）；
+  `lib/providers/ai_dj_history_controller.dart`：`AiDjProvider` 负责命令编排，
+  `state` 暴露不可变 `AiDjState`（UI 经 `aiDjProvider` 读快照、经
+  `aiDjControllerProvider` 发命令；生成编排在执行器、电台会话在
+  **AI radio session**、反馈账本在 **AI feedback book**，见下条）；
   `AiDjHistoryController` 独占**当前推荐（active batch）**、**历史推荐**及保留策略。
   `enabled` = 功能启用（持久化；退出队列不关功能）；`status` = 电台状态
   （off/preparing/playing/error：播放全部或点某首才接管队列）。只有显式
@@ -978,7 +979,7 @@
   每次从 live 快照派生 `upcoming` / `contains` / `missing` / `queuedAmong`，不持有
   计数器；`queuedCount` = 当前及之后仍在队的 AI 曲目数（页面「队列中还有 {count}
   首推荐」），随播放递减，不是累计加入数。
-- **当前推荐（active batch）** — `AiDjBatch` / `AiDjProvider.recommendations`：
+- **当前推荐（active batch）** — `AiDjBatch` / `AiDjState.recommendations`：
   AI 页与发现页轮播展示的那一批；持久化在推荐历史索引的 `activeBatchId`，
   启动时只加载它（详情懒加载）。换一批后旧 active 留在历史，不丢数据。
 - **历史推荐（recommendation history）** —
@@ -1574,5 +1575,5 @@
 - **Download task（下载任务）** — `DownloadTask`（`lib/services/download/download_queue.dart`）：一条任务的唯一状态载体，键 = `track.id.uri`（分项任务追加 `#lyrics` / `#cover`），持有曲目 / 任务种类 / 音质 / 是否带歌词封面 / 批量位置，以及状态（queued / running / completed / failed / cancelled）、进度与失败原因。进度只由任务自己 notify（100ms 合并，首个分片 / 100% / 终态立即送达），队列与服务不在进度时通知；音频失败任务保留供本次进程重试，完成 / 取消即移出队列。
 - **Download queue（下载队列）** — `DownloadQueue`（`lib/services/download/download_queue.dart`）：下载任务全局严格串行 FIFO 的唯一实现（单 worker，`scheduleMicrotask` 启动）。`enqueue` 同步进等待列表（批量一次入队全部）；同 key 已有排队 / 运行任务返回同一 future，失败 / 取消再入队则替换；`cancelQueued` 撤排队任务，运行中由服务取消 dio `CancelToken`；失败音频保留、分项失败自动移除，重试会新建不带批量位置的任务。**不持久化、无跨重启恢复**，重启只保留既有 `.part` 清扫。
 - **Download journal（下载提交日志）** — `lib/services/download/download_journal.dart`：文件型 write-ahead journal，只覆盖「音频 `.part` 写完 → rename → DB 落库」这段提交窗口。位置是应用支持目录 `download_journal/`（`DownloadStorage.journalRoot()`），与下载根 / 公共目录解耦；marker 为 `<md5(key)>.json`，`.tmp` + rename 原子写；写入失败会在 rename 前中止下载，不把没有恢复保障的文件落成最终文件。音频 `.part` 写完后、rename 前写 pending `DownloadedTrack`，最终落库后删除；启动时 `init` 在 `.part` 清扫前恢复：文件存在则补库，已有音频记录或文件不存在则删 marker（仅歌词 / 封面的分项记录不算已落库），补库失败保留 marker 下次再试。它**不是队列持久化**：排队 / 失败任务与并发语义完全不变，重启仍清空。
-- **Download progress channel（下载进度通道）** — 下载进度的消费面：`DownloadTask`（UI，100ms 合并）与系统通知 presenter（逐分块上报、500ms 节流）两条独立通道；`DownloadService` 仍是 `ChangeNotifier`，但只通知记录 / 能力 / 初始化变化，不再转发进度。旧 `progressForTrack` 作为 `taskForTrack(track)?.progress` 的兼容入口保留。
+- **Download progress channel（下载进度通道）** — 下载进度的消费面：`DownloadTask`（UI，100ms 合并）与系统通知 presenter（逐分块上报、500ms 节流）两条独立通道；`DownloadService` 自己只通知记录 / 能力 / 初始化变化（`changes`），不再转发进度。旧 `progressForTrack` 作为 `taskForTrack(track)?.progress` 的兼容入口保留。
 - **Download management page（下载管理页）** — `lib/pages/downloads_manage_page.dart`（设置 › 曲库与存储）：任务区只展示运行 / 等待 / 失败（等待超 20 首折叠），任务区订阅 `taskChanges`、每行订阅自己的任务；失败区可单条重试 / 移除与全部重试；**不展示已完成列表**（已完成在收藏 › 本地歌曲）。批量下载只入队不锁页；文件维护（`.part` 清扫 / 孤儿回收 / Android 补发布）经 `DownloadMaintenance` 单独 busy；孤儿扫描只认应用格式（音频 / `.lrc` / 封面图片），确认弹层展示数量与文件名；省流生效时下载前先确认。

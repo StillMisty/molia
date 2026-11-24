@@ -299,14 +299,14 @@ void main() {
     await provider.preferencesReady;
 
     // 恢复态：UI 能拿到曲目/封面/进度/队列。
-    expect(provider.hasRestoredSession, isTrue);
-    expect(provider.hasTrack, isTrue);
+    expect(provider.state.hasRestoredSession, isTrue);
+    expect(provider.state.hasTrack, isTrue);
     expect(provider.snapshot.current?.title, 'Title b');
     expect(
       provider.snapshot.current?.artwork?.uri.toString(),
       'https://img.example/b.jpg',
     );
-    expect(provider.currentTrackId, const TrackId('fake', 'b'));
+    expect(provider.state.currentTrackId, const TrackId('fake', 'b'));
     // 恢复会话保留队列里 index-1：左侧「上一首」封面不因重启丢失。
     expect(provider.snapshot.previous?.title, 'Title a');
     expect(provider.position.value, const Duration(seconds: 20));
@@ -321,7 +321,7 @@ void main() {
     await provider.togglePlayPause();
     expect(backend.calls, contains('load'));
     expect(backend.calls, contains('seek'));
-    expect(provider.hasRestoredSession, isFalse);
+    expect(provider.state.hasRestoredSession, isFalse);
     // 恢复播放后进度通道交还底层：落在保存的进度上。
     expect(provider.position.value, const Duration(seconds: 25));
   });
@@ -340,19 +340,19 @@ void main() {
     final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
-    expect(provider.hasRestoredSession, isTrue);
+    expect(provider.state.hasRestoredSession, isTrue);
 
     // 首曲跳过 previous：越界 no-op，保持恢复态。
     await provider.skipToPrevious();
     expect(backend.calls, isNot(contains('load')));
-    expect(provider.hasRestoredSession, isTrue);
+    expect(provider.state.hasRestoredSession, isTrue);
 
     // 切下一首：立即起播（与点队列条目同一语义）；不 seek 回旧曲进度。
     await provider.skipToNext();
     expect(backend.calls, contains('load'));
     expect(backend.lastRequest?.startIndex, 1);
     expect(backend.calls, isNot(contains('seek')));
-    expect(provider.hasRestoredSession, isFalse);
+    expect(provider.state.hasRestoredSession, isFalse);
     expect(provider.currentPosition, Duration.zero);
   });
 
@@ -479,7 +479,7 @@ void main() {
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
-    expect(provider.smartShuffleEnabled, isFalse);
+    expect(provider.state.smartShuffleEnabled, isFalse);
     expect(
       provider.restoredRoundWeighted,
       isFalse,
@@ -508,11 +508,11 @@ void main() {
     await provider.preferencesReady;
 
     // 恢复态展示会话里的模式。
-    expect(provider.currentMode, PlayMode.shuffle);
+    expect(provider.state.currentMode, PlayMode.shuffle);
 
     // 恢复态切换模式（模式按钮同路径）：UI 立即跟随。
     await provider.togglePlayMode();
-    expect(provider.currentMode, PlayMode.listLoop);
+    expect(provider.state.currentMode, PlayMode.listLoop);
     expect(provider.snapshot.mode, PlayMode.listLoop);
     expect(backend.snapshot.value.mode, PlayMode.listLoop);
 
@@ -529,7 +529,7 @@ void main() {
 
     await provider.resumeRestoredSession();
     expect(backend.snapshot.value.mode, PlayMode.shuffle);
-    expect(provider.currentMode, PlayMode.shuffle);
+    expect(provider.state.currentMode, PlayMode.shuffle);
   });
 
   test('启动恢复开关关闭：冷启动不装载恢复态，会话数据保留', () async {
@@ -549,9 +549,9 @@ void main() {
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
-    expect(provider.restoreSessionEnabled, isFalse);
-    expect(provider.hasRestoredSession, isFalse);
-    expect(provider.hasTrack, isFalse);
+    expect(provider.state.restoreSessionEnabled, isFalse);
+    expect(provider.state.hasRestoredSession, isFalse);
+    expect(provider.state.hasTrack, isFalse);
     // 会话没有被清掉：重新开启开关后仍可恢复。
     expect(await PlaybackSessionStore().load(), isNotNull);
   });
@@ -569,12 +569,12 @@ void main() {
     final provider = buildTestPlaybackProvider();
     addTearDown(provider.dispose);
     await provider.preferencesReady;
-    expect(provider.hasRestoredSession, isTrue);
+    expect(provider.state.hasRestoredSession, isTrue);
 
     await provider.setRestoreSessionEnabled(false);
-    expect(provider.restoreSessionEnabled, isFalse);
-    expect(provider.hasRestoredSession, isFalse);
-    expect(provider.hasTrack, isFalse);
+    expect(provider.state.restoreSessionEnabled, isFalse);
+    expect(provider.state.hasRestoredSession, isFalse);
+    expect(provider.state.hasTrack, isFalse);
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(kRestoreSessionEnabled.name), isFalse);
@@ -594,7 +594,7 @@ void main() {
     final provider = buildTestPlaybackProvider(settings: settings);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
-    expect(provider.hasRestoredSession, isTrue);
+    expect(provider.state.hasRestoredSession, isTrue);
     settings.mount(
       SettingsModule(
         keys: [kRestoreSessionEnabled],
@@ -603,15 +603,15 @@ void main() {
     );
 
     var notifies = 0;
-    provider.addListener(() => notifies++);
+    provider.changes.addListener(() => notifies++);
 
     // 远端同步应用关闭值：组合根挂载的 reload 撤下恢复态。
     await settings.applyRemote(kRestoreSessionEnabled, false);
     await settings.reloadApplied();
 
-    expect(provider.restoreSessionEnabled, isFalse);
-    expect(provider.hasRestoredSession, isFalse);
-    expect(provider.hasTrack, isFalse);
+    expect(provider.state.restoreSessionEnabled, isFalse);
+    expect(provider.state.hasRestoredSession, isFalse);
+    expect(provider.state.hasTrack, isFalse);
     // 通知经节流器派发（track 16ms / queue 300ms）。
     await Future<void>.delayed(const Duration(milliseconds: 350));
     expect(notifies, greaterThan(0), reason: '恢复态撤下后 UI 必须刷新');
@@ -634,8 +634,8 @@ void main() {
     final provider = buildTestPlaybackProvider(settings: settings);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
-    expect(provider.restoreSessionEnabled, isFalse);
-    expect(provider.hasRestoredSession, isFalse);
+    expect(provider.state.restoreSessionEnabled, isFalse);
+    expect(provider.state.hasRestoredSession, isFalse);
     settings.mount(
       SettingsModule(
         keys: [kRestoreSessionEnabled],
@@ -644,14 +644,14 @@ void main() {
     );
 
     var notifies = 0;
-    provider.addListener(() => notifies++);
+    provider.changes.addListener(() => notifies++);
 
     // 远端同步应用开启值：重新装载恢复态（会话数据仍在）。
     await settings.applyRemote(kRestoreSessionEnabled, true);
     await settings.reloadApplied();
 
-    expect(provider.restoreSessionEnabled, isTrue);
-    expect(provider.hasRestoredSession, isTrue);
+    expect(provider.state.restoreSessionEnabled, isTrue);
+    expect(provider.state.hasRestoredSession, isTrue);
     expect(provider.snapshot.current?.title, 'Title a');
     await Future<void>.delayed(const Duration(milliseconds: 350));
     expect(notifies, greaterThan(0), reason: '重新装载恢复态后 UI 必须刷新');

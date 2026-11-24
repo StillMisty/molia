@@ -10,15 +10,14 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../providers/app_providers.dart';
 import '../services/covers/cover_image_fetcher.dart';
-import '../services/data_saver_service.dart';
 import '../services/haptics.dart';
-import '../services/notification_service.dart';
 import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
 import 'labels/save_as_label.dart';
@@ -56,7 +55,7 @@ Future<CoverViewerAction?> showCoverViewer(
   );
 }
 
-class CoverViewerPage extends StatefulWidget {
+class CoverViewerPage extends ConsumerStatefulWidget {
   const CoverViewerPage({
     super.key,
     required this.coverUrl,
@@ -79,10 +78,10 @@ class CoverViewerPage extends StatefulWidget {
   final CoverOriginalSource? source;
 
   @override
-  State<CoverViewerPage> createState() => _CoverViewerPageState();
+  ConsumerState<CoverViewerPage> createState() => _CoverViewerPageState();
 }
 
-class _CoverViewerPageState extends State<CoverViewerPage> {
+class _CoverViewerPageState extends ConsumerState<CoverViewerPage> {
   late final CoverOriginalSource _source = widget.source ?? CoverImageFetcher();
 
   bool _saving = false;
@@ -231,14 +230,9 @@ class _CoverViewerPageState extends State<CoverViewerPage> {
   Future<void> _save() async {
     if (_saving) return;
     final l10n = _l10n(context);
-    final saveAs = context.read<SaveAs?>();
-    final notifications = context.read<NotificationService?>();
-    if (saveAs == null) {
-      notifications?.showErrorSnackBar(l10n.saveFailed);
-      return;
-    }
-
-    final dataSaver = context.read<DataSaverService?>();
+    final saveAs = ref.read(saveAsProvider);
+    final notifications = ref.read(notificationServiceProvider);
+    final dataSaver = ref.read(dataSaverServiceControllerProvider);
     if (_isNetworkUrl(widget.coverUrl) && (dataSaver?.active ?? false)) {
       final confirmed = await M3EDialog.show<bool>(
         context,
@@ -266,7 +260,7 @@ class _CoverViewerPageState extends State<CoverViewerPage> {
       final bytes = await _source.read(widget.coverUrl);
       if (!mounted) return;
       if (bytes == null) {
-        notifications?.showErrorSnackBar(l10n.coverLoadFailed);
+        notifications.showErrorSnackBar(l10n.coverLoadFailed);
         return;
       }
       final extension = CoverImageFetcher.extensionFor(
@@ -286,16 +280,16 @@ class _CoverViewerPageState extends State<CoverViewerPage> {
       if (!mounted) return;
       switch (result) {
         case SaveAsSaved(:final displayPath, :final kind):
-          notifications?.showSuccessSnackBar(
+          notifications.showSuccessSnackBar(
             savedLocationMessage(l10n, kind, displayPath),
           );
         case SaveAsCancelled():
           return;
         case SaveAsFailed():
-          notifications?.showErrorSnackBar(l10n.saveFailed);
+          notifications.showErrorSnackBar(l10n.saveFailed);
       }
     } catch (_) {
-      if (mounted) notifications?.showErrorSnackBar(l10n.saveFailed);
+      if (mounted) notifications.showErrorSnackBar(l10n.saveFailed);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

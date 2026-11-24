@@ -7,6 +7,8 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../providers/lyrics_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../playback/playback_power_policy.dart';
@@ -22,9 +24,12 @@ typedef LyricsStack = ({
 });
 
 /// 装配歌词会话（与播放页共享同一实例：去重 / 预取行为不变）。
-LyricsStack buildLyricsStack({required LocalDataStack local}) {
+LyricsStack buildLyricsStack({
+  required LocalDataStack local,
+  required ProviderContainer container,
+}) {
   return (
-    lyricsProvider: LyricsProvider(service: local.lyricsService),
+    lyricsProvider: container.read(lyricsProvider.notifier),
     lyricsSourceRegistry: local.lyricsSourceRegistry,
   );
 }
@@ -74,8 +79,8 @@ void wireNextTrackLyricsPreload({
     unawaited(lyricsProvider.preload(next));
   }
 
-  playback.addListener(syncNextTrackLyricsPreload);
-  powerPolicy?.addListener(syncNextTrackLyricsPreload);
+  playback.changes.addListener(syncNextTrackLyricsPreload);
+  powerPolicy?.changes.addListener(syncNextTrackLyricsPreload);
   syncNextTrackLyricsPreload();
 }
 
@@ -97,7 +102,7 @@ void wireLyricsSession({
     unawaited(lyricsProvider.ensureForTrack(playback.snapshot.current));
   }
 
-  playback.addListener(syncCurrentTrack);
-  powerPolicy?.addListener(syncCurrentTrack);
+  playback.changes.addListener(syncCurrentTrack);
+  powerPolicy?.changes.addListener(syncCurrentTrack);
   syncCurrentTrack();
 }

@@ -74,7 +74,7 @@ void main() {
     final records = DownloadRecords();
     addTearDown(records.dispose);
     var notifications = 0;
-    records.addListener(() => notifications++);
+    records.changes.addListener(() => notifications++);
 
     final first = record('1');
     records.put(first);
@@ -109,7 +109,7 @@ void main() {
     final records = DownloadRecords(records: [record('1'), record('2')]);
     addTearDown(records.dispose);
     var notifications = 0;
-    records.addListener(() => notifications++);
+    records.changes.addListener(() => notifications++);
 
     final replaced = [record('2', title: '新标题'), record('3')];
     records.replaceAll(replaced);
@@ -129,7 +129,7 @@ void main() {
     final records = DownloadRecords();
     addTearDown(records.dispose);
     var notifications = 0;
-    records.addListener(() => notifications++);
+    records.changes.addListener(() => notifications++);
 
     expect(records.initialized, isFalse);
     expect(records.supported, isFalse);
@@ -166,7 +166,7 @@ void main() {
       supported: true,
     );
     addTearDown(records.dispose);
-    records.addListener(() => notifications++);
+    records.changes.addListener(() => notifications++);
 
     expect(records.revision, 0);
     expect(records.initialized, isTrue);

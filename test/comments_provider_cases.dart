@@ -6,7 +6,10 @@ import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/comments_provider.dart';
 
+import 'package:molia/domain/ports/source_registry.dart';
+
 import 'support/fake_music_source.dart';
+import 'support/provider_test_scope.dart';
 
 /// 评论会话：热门 / 最新懒加载、分页、去重、错误与能力位。
 void main() {
@@ -46,14 +49,12 @@ void main() {
       ..onComments =
           onComments ?? (kind, page, limit) async => pageOf(kind, page);
     registry = FakeSourceRegistry({'wy': source});
-    provider = CommentsProvider(
-      service: CommentsService(registry: registry),
-      registry: registry,
-    );
+    final scope = ProviderTestScope();
+    scope.put<CommentsService>(CommentsService(registry: registry));
+    scope.put<SourceRegistry>(registry);
+    provider = scope.container.read(commentsProvider.notifier);
     return provider;
   }
-
-  tearDown(() => provider.dispose());
 
   test('open：加载热门首屏（含总数 / hasMore），最新 tab 懒加载', () async {
     build();

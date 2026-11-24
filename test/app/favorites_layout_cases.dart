@@ -1,17 +1,17 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/domain/models/local_cache_index.dart';
 import 'package:molia/domain/ports/local_cache_index.dart';
 import 'package:molia/l10n/app_localizations.dart';
-import 'package:molia/providers/library_provider.dart';
+import 'package:molia/app/bootstrap/app_runtime.dart';
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/download/download_records.dart';
 import 'package:molia/services/local_cache_index_store.dart';
 import 'package:molia/widgets/app_search_bar.dart';
 import 'package:molia/widgets/track_table_header.dart';
-import 'package:provider/provider.dart';
-import 'package:provider/single_child_widget.dart';
 
 import '../support/perf_app_harness.dart';
 
@@ -60,13 +60,13 @@ void main() {
   Future<void> pumpFavorites(
     WidgetTester tester, {
     Size size = const Size(500, 900),
-    List<SingleChildWidget> extraProviders = const [],
+    void Function(AppRuntime runtime)? configureRuntime,
   }) => pumpPerfApp(
     tester,
     desktopShell: false,
     favoritesCount: 5,
     size: size,
-    extraProviders: extraProviders,
+    configureRuntime: configureRuntime,
   );
 
   testWidgets('标题常态只有随机 / 搜索 / 更多，排序与封面收在 ⋮', (tester) async {
@@ -94,13 +94,17 @@ void main() {
     // 首屏自己的 skeleton → 正文交叉淡化先跑完，避免把离场层误判成本次回归。
     await tester.pumpAndSettle();
 
-    final library = Provider.of<LibraryProvider>(
+    final container = ProviderScope.containerOf(
       tester.element(find.text('Performance Track 0')),
-      listen: false,
     );
+    final library = container.read(libraryProvider);
+    final controller = container.read(libraryControllerProvider);
     final favorites = library.playlists.singleWhere((p) => p.isFavorites);
 
-    await library.setPlaylistCoverKey(favorites.id, 'playlist:__favorites__');
+    await controller.setPlaylistCoverKey(
+      favorites.id,
+      'playlist:__favorites__',
+    );
     // 只推进一帧：旧实现会在这里清掉曲目读投影并渲染整页 loading。
     await tester.pump();
 
@@ -129,11 +133,11 @@ void main() {
 
     await pumpFavorites(
       tester,
-      extraProviders: [
-        ChangeNotifierProvider<LocalCacheIndexStore>.value(value: index),
-        Provider<CacheService>.value(value: cache),
-        ChangeNotifierProvider<DownloadRecords>.value(value: downloads),
-      ],
+      configureRuntime: (runtime) {
+        runtime.put<LocalCacheIndexStore>(index);
+        runtime.put<CacheService>(cache);
+        runtime.put<DownloadRecords>(downloads);
+      },
     );
 
     await tester.tap(find.byKey(const Key('favoritesTitleSwitcher')));
