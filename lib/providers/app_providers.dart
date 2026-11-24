@@ -30,6 +30,7 @@ import 'package:molia/providers/library_collection_request.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/providers/snapshot_source.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/sync_provider.dart';
@@ -287,13 +288,17 @@ final shortcutSettingsProvider =
       ShortcutSettings
     >(() => LegacyListenableNotifier((ref) => _require<ShortcutSettings>(ref)));
 final audioFocusSettingsProvider =
-    NotifierProvider<
-      LegacyListenableNotifier<AudioFocusSettings>,
-      AudioFocusSettings
-    >(
-      () =>
-          LegacyListenableNotifier((ref) => _require<AudioFocusSettings>(ref)),
+    NotifierProvider<SnapshotNotifier<AudioFocusSettings, bool>, bool>(
+      () => SnapshotNotifier((ref) => _require<AudioFocusSettings>(ref)),
     );
+final maybeAudioFocusSettingsProvider =
+    NotifierProvider<NullableSnapshotNotifier<AudioFocusSettings, bool>, bool?>(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<AudioFocusSettings>(),
+      ),
+    );
+final audioFocusSettingsControllerProvider =
+    maybeSnapshotController<AudioFocusSettings>();
 final downloadRecordsProvider =
     NotifierProvider<
       LegacyListenableNotifier<DownloadRecords>,
@@ -353,7 +358,6 @@ Provider<T?> _maybeService<T extends Object>() =>
     Provider<T?>((ref) => ref.read(appRuntimeProvider).maybe<T>());
 
 final maybeDataSaverServiceProvider = _maybeListenable<DataSaverService>();
-final maybeAudioFocusSettingsProvider = _maybeListenable<AudioFocusSettings>();
 final maybeSourceSwapSettingsProvider = _maybeListenable<SourceSwapSettings>();
 final maybeLyricsDisplayProvider = _maybeListenable<LyricsDisplayProvider>();
 final maybeUpdateProvider = _maybeListenable<UpdateProvider>();

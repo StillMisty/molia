@@ -108,6 +108,25 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 - `NavProvider` → `NavState`
 - `TraySettings` → `TraySettingsState`
 
+### 启动期状态对象：快照 + 控制器
+
+组合根按启动顺序构造的状态对象（播放会话、资料库、歌词显示、设置与服务）
+不改成 `Notifier`：它们与启动顺序、平台通道、服务生命周期强耦合，正是 §2
+里「服务不改成 Notifier」的对象。它们统一改成：
+
+- 类不再 `extends ChangeNotifier`，自己的可变字段只留在内部；
+- `state` 暴露**不可变快照**（`@immutable`，字段名沿用旧 getter）；
+- `changes` 是 `SnapshotSignal`（只通知、不持有状态），保留
+  `Listenable` / `ValueListenable` 订阅面给播放服务、原生回调；
+- Riverpod 两面（`lib/providers/snapshot_source.dart`）：
+  - `xProvider` = `SnapshotNotifier` 镜像快照，UI `ref.watch` 读；
+  - `xControllerProvider` = `snapshotController<X>()`，命令 / 服务句柄从这里
+    `ref.read`。
+
+这样 UI 契约仍是「watch 快照、read 控制器发命令」，`lib/` 内不再有
+`ChangeNotifier`；`LegacyListenableNotifier` / `LazyListenableNotifier` 在
+迁移完成后删除。
+
 仍以 `ChangeNotifier` 实现、经 `LegacyListenableNotifier` 暴露的类有两类：
 启动期服务（`SourceManager`、`DownloadService`、`ScrobbleService`、数据层
 store…）与体量较大的页面状态（`PlaybackProvider`、`LibraryProvider`、

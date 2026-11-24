@@ -91,7 +91,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     final availability = SettingsSectionAvailability(
       dataSaver: ref.watch(maybeDataSaverServiceProvider),
       sourceSwap: ref.watch(maybeSourceSwapSettingsProvider),
-      audioFocus: ref.watch(maybeAudioFocusSettingsProvider),
+      audioFocus: ref.watch(audioFocusSettingsControllerProvider),
       lyricsDisplay: ref.watch(maybeLyricsDisplayProvider),
       nav: ref.read(navProvider.notifier),
       tray: ref.read(traySettingsProvider.notifier),
@@ -310,7 +310,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             builder: (context, ref, _) {
               final playWithOtherApps = ref.watch(
                 maybeAudioFocusSettingsProvider.select(
-                  (settings) => settings?.playWithOtherApps ?? false,
+                  (enabled) => enabled ?? false,
                 ),
               );
               return SettingsSwitchTile(
