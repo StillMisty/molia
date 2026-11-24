@@ -12,7 +12,7 @@ import '../services/lyrics_display/lyrics_display_settings.dart';
 import '../services/lyrics_display/lyrics_output.dart';
 import '../services/notification_permission.dart';
 import 'lyrics_provider.dart';
-import 'snapshot_source.dart';
+import '../utils/snapshot_source.dart';
 
 /// 桌面悬浮窗控制条动作 → 播放控制命令（由组合根接回 PlaybackProvider）。
 enum LyricsPlaybackCommand { playPause, previous, next }

@@ -185,13 +185,13 @@ void main() {
 
     test('发现 → 连接 → 投屏只暂停本地一次', () async {
       expect(await controller.discover(), [device]);
-      expect(controller.state, CastSessionState.idle);
+      expect(controller.state.session, CastSessionState.idle);
       await controller.connect(device);
-      expect(controller.state, CastSessionState.connected);
+      expect(controller.state.session, CastSessionState.connected);
       await controller.cast(localCandidate());
       expect(playback.pauseCalls, 1);
       expect(transport.played, hasLength(1));
-      expect(controller.current?.title, 'Song a');
+      expect(controller.state.current?.title, 'Song a');
       await controller.cast(localCandidate(id: 'b'));
       expect(playback.pauseCalls, 1, reason: '同一会话只暂停本地一次');
     });
@@ -213,7 +213,10 @@ void main() {
       final plays = transport.played.length;
       await controller.next();
       expect(transport.played.length, plays);
-      expect(controller.lastRejection, CastRejectionReason.headersRequired);
+      expect(
+        controller.state.lastRejection,
+        CastRejectionReason.headersRequired,
+      );
       expect(notices.last, CastNotice.sourceRejected);
     });
 
@@ -233,7 +236,7 @@ void main() {
         const CastRemoteState(position: Duration(seconds: 1), isPlaying: true),
       );
       await polling;
-      expect(controller.remote.position, const Duration(seconds: 30));
+      expect(controller.state.remote.position, const Duration(seconds: 30));
       expect(transport.calls, ['poll', 'seek:30000']);
 
       transport.pollGate = null;
@@ -257,10 +260,10 @@ void main() {
       await controller.cast(localCandidate());
       notices.clear();
       await controller.disconnect();
-      expect(controller.state, CastSessionState.idle);
+      expect(controller.state.session, CastSessionState.idle);
       expect(transport.calls.last, 'stop');
       expect(notices, [CastNotice.disconnected]);
-      expect(controller.localPaused, isFalse);
+      expect(controller.state.localPaused, isFalse);
       // CastPlaybackPort 没有 resume：编译期即保证不会自动恢复本地音频。
     });
   });

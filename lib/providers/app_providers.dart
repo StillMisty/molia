@@ -252,11 +252,23 @@ final aiDjProvider =
       () => SnapshotNotifier((ref) => _require<AiDjProvider>(ref)),
     );
 final aiDjControllerProvider = snapshotController<AiDjProvider>();
-final scrobbleServiceProvider =
+final scrobbleProvider =
     NotifierProvider<
-      LegacyListenableNotifier<ScrobbleService>,
-      ScrobbleService
-    >(() => LegacyListenableNotifier((ref) => _require<ScrobbleService>(ref)));
+      SnapshotNotifier<ScrobbleService, ScrobbleState>,
+      ScrobbleState
+    >(() => SnapshotNotifier((ref) => _require<ScrobbleService>(ref)));
+final maybeScrobbleProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<ScrobbleService, ScrobbleState>,
+      ScrobbleState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<ScrobbleService>(),
+      ),
+    );
+final scrobbleControllerProvider = snapshotController<ScrobbleService>();
+final maybeScrobbleControllerProvider =
+    maybeSnapshotController<ScrobbleService>();
 
 final lyricsDisplayProvider =
     NotifierProvider<
@@ -397,7 +409,6 @@ final maybeLyricsDisplayProvider =
       ),
     );
 final maybeUpdateProvider = _maybeListenable<UpdateProvider>();
-final maybeScrobbleServiceProvider = _maybeListenable<ScrobbleService>();
 final maybeLibraryAddSettingsProvider = _maybeListenable<LibraryAddSettings>();
 final maybeSyncProvider = _maybeListenable<SyncProvider>();
 final maybeSourcesProvider = _maybeListenable<SourcesProvider>();

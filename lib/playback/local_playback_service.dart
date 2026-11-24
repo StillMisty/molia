@@ -385,7 +385,7 @@ class LocalPlaybackService extends ChangeNotifier {
     _errorSubscription = _player.errorStream.listen(_onPlayerError);
     // 位置采样按前后台策略选择（前台 / 桌面歌词 = 高频流；后台播放 = 1s
     // 轮询；后台暂停 = 不采样），切换时先取消旧订阅 / Timer。
-    _powerPolicy.addListener(_syncPositionSampling);
+    _powerPolicy.changes.addListener(_syncPositionSampling);
     _syncPositionSampling();
     // 配置平台音频会话并接入中断 / 耳机拔出 / 输出设备变化。会话的配置与
     // 激活归生命周期；这里只负责把事件接到播放动作。不阻塞构造。
@@ -2118,7 +2118,7 @@ class LocalPlaybackService extends ChangeNotifier {
     _sleepFadeActive = false;
     _pauseIntentPending = false;
     _stopAfterCurrentTrack = false;
-    _powerPolicy.removeListener(_syncPositionSampling);
+    _powerPolicy.changes.removeListener(_syncPositionSampling);
     _stopPositionSampleTimer();
     _notifyThrottle?.cancel();
     _playerStateSubscription?.cancel();

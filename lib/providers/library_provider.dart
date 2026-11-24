@@ -29,7 +29,7 @@ import '../sources/source_track.dart';
 import 'library_outcome.dart';
 import 'library_read_projection.dart';
 import 'playback_provider.dart';
-import 'snapshot_source.dart';
+import '../utils/snapshot_source.dart';
 
 /// 资料库整表读取的意图：静默校准保持当前数据可见，显式读取可以翻 loading。
 typedef _LoadMode = LibraryReadIntent;
@@ -145,7 +145,7 @@ class LibraryProvider implements SnapshotSource<LibraryState> {
     _favorites = FavoriteFact(
       repository: _repository,
       readTimeout: _readTimeout,
-    )..addListener(_onFavoriteFactChanged);
+    )..changes.addListener(_onFavoriteFactChanged);
     _subscription = _repository.changes.listen(_onRepositoryChanged);
   }
 
@@ -1439,7 +1439,7 @@ class LibraryProvider implements SnapshotSource<LibraryState> {
     _historyRead.dispose();
     _playlistsRead.dispose();
     _favorites
-      ..removeListener(_onFavoriteFactChanged)
+      ..changes.removeListener(_onFavoriteFactChanged)
       ..dispose();
     for (final read in _playlistTracksReads.values) {
       read.dispose();

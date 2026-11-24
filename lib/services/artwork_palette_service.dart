@@ -503,7 +503,7 @@ class ArtworkThemeSync {
   }) : _presence = presence ?? AppPresence.instance,
        _powerPolicy = mobilePowerPolicy {
     _presence.addListener(_onSurfaceChanged);
-    _powerPolicy?.addListener(_onSurfaceChanged);
+    _powerPolicy?.changes.addListener(_onSurfaceChanged);
   }
 
   final Future<ArtworkPalette?> Function(String url) _load;
@@ -571,7 +571,7 @@ class ArtworkThemeSync {
   void dispose() {
     _disposed = true;
     _presence.removeListener(_onSurfaceChanged);
-    _powerPolicy?.removeListener(_onSurfaceChanged);
+    _powerPolicy?.changes.removeListener(_onSurfaceChanged);
     _timer?.cancel();
     _timer = null;
   }

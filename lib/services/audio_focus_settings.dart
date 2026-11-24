@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
-import '../providers/snapshot_source.dart';
+import '../utils/snapshot_source.dart';
 
 /// 音频焦点偏好：其他应用播放声音时是否继续播放（设置 › 播放，**默认开**）。
 ///

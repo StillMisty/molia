@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
-import 'snapshot_source.dart';
+import '../utils/snapshot_source.dart';
 
 /// 渠道选择对 UI 暴露的不可变快照。
 @immutable

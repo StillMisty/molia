@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/settings/settings_access.dart';
 import '../../data/settings/settings_keys.dart';
-import '../../providers/snapshot_source.dart';
+import '../../utils/snapshot_source.dart';
 import '../../theme/scheme_builder.dart';
 
 /// 未同步歌词（无时间轴）的展示策略。

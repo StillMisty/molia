@@ -7,7 +7,7 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/lyrics_display/desktop_lyrics_settings_page.dart';
 import 'package:molia/pages/lyrics_display/lyrics_content_settings_page.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
-import 'package:molia/providers/snapshot_source.dart';
+import 'package:molia/utils/snapshot_source.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_display/lyrics_output.dart';

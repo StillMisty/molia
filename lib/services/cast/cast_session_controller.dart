@@ -5,7 +5,8 @@
 /// - 命令串行执行（一次只发一条），远端轮询带代号，过期结果不会覆盖新命令；
 /// - 开始投屏只暂停本地播放，**没有任何**恢复本地播放的调用；
 /// - 断开 / 失败只发一次提示，本地保持暂停，绝不自动恢复出第二个声源；
-/// - 不伪造本地 `PlaybackSnapshot`：远端位置只在 [remote] 读模型里。
+/// - 不伪造本地 `PlaybackSnapshot`：远端位置只在
+///   [CastSessionSnapshot.remote] 读模型里。
 library;
 
 import 'dart:async';
@@ -14,10 +15,51 @@ import 'package:flutter/foundation.dart';
 
 import '../../domain/models/cast.dart';
 import '../../domain/ports/cast_ports.dart';
+import '../../utils/snapshot_source.dart';
 
 enum CastNotice { disconnected, noDevices, noNext, sourceRejected, failed }
 
-class CastSessionController extends ChangeNotifier {
+/// 投屏会话的不可变快照（阶段 / 设备 / 远端状态 / 发现结果）。
+///
+/// 状态变化只来自用户命令与低频远端轮询，全部进快照；订阅方经 [changes]
+/// 拿到通知后重读。
+@immutable
+class CastSessionSnapshot {
+  const CastSessionSnapshot({
+    required this.session,
+    required this.activeDevice,
+    required this.current,
+    required this.remote,
+    required this.lastRejection,
+    required this.devices,
+    required this.localPaused,
+  });
+
+  /// 会话阶段（发现 / 连接 / 已连接 / 出错 / 空闲）。
+  final CastSessionState session;
+
+  /// 当前投屏设备；未连接为 null。
+  final CastDevice? activeDevice;
+
+  /// 当前投送媒体；未投屏为 null。
+  final CastMedia? current;
+
+  /// 远端播放状态（位置 / 播放中 / 时长）。
+  final CastRemoteState remote;
+
+  /// 最近一次来源判定拒绝原因。
+  final CastRejectionReason? lastRejection;
+
+  /// 最近一次发现结果。
+  final List<CastDevice> devices;
+
+  /// 本地是否已被投屏暂停（断开也不恢复）。
+  final bool localPaused;
+
+  bool get isConnected => session == CastSessionState.connected;
+}
+
+class CastSessionController implements SnapshotSource<CastSessionSnapshot> {
   CastSessionController({
     required this.discovery,
     required this.transport,
@@ -41,21 +83,28 @@ class CastSessionController extends ChangeNotifier {
   bool _localPaused = false;
   bool _disposed = false;
 
+  final SnapshotSignal _changes = SnapshotSignal();
+
   /// 命令代号：每条新命令 +1；轮询返回时代号变了就丢弃。
   int _generation = 0;
 
   /// 命令串行链：所有远端命令按调用顺序执行。
   Future<void> _tail = Future<void>.value();
 
-  CastSessionState get state => _state;
-  CastDevice? get activeDevice => _activeDevice;
-  CastMedia? get current => _current;
-  CastRemoteState get remote => _remote;
-  CastRejectionReason? get lastRejection => _lastRejection;
-  List<CastDevice> get devices => _devices;
+  /// 不可变快照：UI 经 `castSessionProvider` 镜像它（每次 [changes] 后重建）。
+  @override
+  CastSessionSnapshot get state => CastSessionSnapshot(
+    session: _state,
+    activeDevice: _activeDevice,
+    current: _current,
+    remote: _remote,
+    lastRejection: _lastRejection,
+    devices: List<CastDevice>.unmodifiable(_devices),
+    localPaused: _localPaused,
+  );
 
-  /// 本地是否已被投屏暂停（断开也不恢复）。
-  bool get localPaused => _localPaused;
+  @override
+  Listenable get changes => _changes;
 
   bool get isConnected => _state == CastSessionState.connected;
 
@@ -243,13 +292,11 @@ class CastSessionController extends ChangeNotifier {
   void _notice(CastNotice notice) => onNotice?.call(notice);
 
   void _notify() {
-    if (!_disposed) notifyListeners();
+    if (!_disposed) _changes.notify();
   }
 
-  @override
   void dispose() {
     _disposed = true;
     unawaited(discovery.stop());
-    super.dispose();
   }
 }

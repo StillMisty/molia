@@ -6,6 +6,7 @@ import 'package:logging/logging.dart';
 import '../../domain/models/device_sync.dart';
 import '../../domain/ports/sync_known_store.dart';
 import '../../domain/ports/sync_transport.dart';
+import '../../utils/snapshot_source.dart';
 import 'sync_adapter.dart';
 import 'sync_book.dart';
 import 'sync_codec_port.dart';
@@ -39,7 +40,30 @@ import 'sync_transport_runtime.dart';
 /// - 每传输与每对端都有独立结果，单点失败不会被吞掉；
 /// - 失败原因是机器可读的 [SyncIssue]，UI 映射文案，原始细节只进日志与诊断；
 /// - 入站快照在本轮失败时放回队列（对端花网络推来的数据不能丢）。
-class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
+///
+/// 形态是「不可变快照 + 通知信号」（ADR-0041「启动期状态对象」）：[state]
+/// 只放 UI 关心的低频字段（初始化完成 / 是否在跑 / 最近一轮报告），[changes]
+/// 替代 `ChangeNotifier` 的订阅面；轮次 / 队列 / 游标语义不变。
+@immutable
+class SyncEngineSnapshot {
+  const SyncEngineSnapshot({
+    required this.initialized,
+    required this.syncing,
+    required this.lastReport,
+  });
+
+  /// 状态存储是否已初始化。
+  final bool initialized;
+
+  /// 是否有轮次在跑（含排队补跑）。
+  final bool syncing;
+
+  /// 最近一轮的完整结果；null = 本次进程内还没跑过。
+  final SyncRoundReport? lastReport;
+}
+
+class SyncEngine
+    implements SnapshotSource<SyncEngineSnapshot>, SyncSchedulerHost {
   factory SyncEngine({
     required SyncStateStore state,
     required List<SyncAdapter> adapters,
@@ -93,7 +117,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     _queue = SyncRoundQueue(
       runRound: _runQueuedRound,
       enabledCategories: () => _state.enabledCategories,
-      onChanged: notifyListeners,
+      onChanged: _notify,
     );
     for (final entry in runner.transports.entries) {
       // 引擎只负责订阅入站流；发布台账等轮次状态由 runner 自己持有。
@@ -131,6 +155,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   final Duration _inboundWindow;
 
   final DateTime Function() _clock;
+  final SnapshotSignal _changes = SnapshotSignal();
+  bool _disposed = false;
   final List<StreamSubscription<SyncEnvelope>> _incomingSubscriptions = [];
   final List<StreamSubscription<LanPeerSighting>> _sightingSubscriptions = [];
   final Logger _logger = Logger('molia.sync');
@@ -151,6 +177,17 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 「首次连通」通知流：每台设备只在第一次真正交换数据后发一次。
   final StreamController<SyncPeerState> _peerConnected =
       StreamController<SyncPeerState>.broadcast();
+
+  /// 不可变快照：同步页经 `SyncProvider.state` 组合它（每次 [changes] 后重建）。
+  @override
+  SyncEngineSnapshot get state => SyncEngineSnapshot(
+    initialized: _initialized,
+    syncing: _queue.running,
+    lastReport: _lastReport,
+  );
+
+  @override
+  Listenable get changes => _changes;
 
   bool get syncing => _queue.running;
 
@@ -198,7 +235,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       await _state.markFreshHandled();
     }
     _initialized = true;
-    notifyListeners();
+    _notify();
   }
 
   /// 从内存名册移除一台设备（用户「从本机移除」）。
@@ -391,7 +428,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 跑一轮并落日志 / 通知（阶段编排在 [SyncRoundRunner.runRound]）。
   ///
   /// 通知由队列在「是否有轮次在跑」翻转时发出：本方法只更新 `lastReport`
-  /// 与提交状态，不再逐轮 `notifyListeners`（否则一段补跑链会多出整树重建）。
+  /// 与提交状态，不再逐轮通知（否则一段补跑链会多出整树重建）。
   Future<SyncRoundReport> _runQueuedRound(SyncQueuedRound round) async {
     final report = await _runner.runRound(
       trigger: round.trigger,
@@ -430,8 +467,12 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 首次连通通知流（UI 消费：应用壳弹一次底栏提示）。
   Stream<SyncPeerState> get peerConnectedNotices => _peerConnected.stream;
 
-  @override
+  void _notify() {
+    if (!_disposed) _changes.notify();
+  }
+
   void dispose() {
+    _disposed = true;
     _inboundTimer?.cancel();
     _inboundTimer = null;
     for (final subscription in _incomingSubscriptions) {
@@ -443,7 +484,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     unawaited(_peerSightings.close());
     unawaited(_peerConnected.close());
     _runner.dispose();
-    super.dispose();
   }
 }
 

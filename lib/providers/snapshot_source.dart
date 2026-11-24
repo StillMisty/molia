@@ -1,53 +1,20 @@
-/// 启动期状态对象 ↔ Riverpod 快照的桥接契约。
+/// 启动期状态对象 ↔ Riverpod 快照的桥接（Riverpod 半边）。
 ///
-/// 组合根（`lib/app/bootstrap/`）按启动顺序构造的业务对象不再继承
-/// `ChangeNotifier`：自己持有可变字段，通过 [state] 暴露**不可变快照**，
-/// 通过 [changes] 发出变更信号。UI 侧统一经 [SnapshotNotifier] 读快照；
-/// 命令仍落在对象自己身上（经 `xxxControllerProvider` 取实例）。
+/// 契约本身（`SnapshotSource` / `SnapshotSignal`）在
+/// `lib/utils/snapshot_source.dart`：数据层与播放层不得 import providers，
+/// 但它们的启动期对象同样要实现这套契约。UI 侧统一经 [SnapshotNotifier]
+/// 读快照；命令仍落在对象自己身上（经 `xxxControllerProvider` 取实例）。
 ///
 /// 为什么状态不在 Notifier 里：这些对象与启动顺序、平台通道、服务生命周期
 /// 强耦合（见 ADR-0041 §2「服务不改成 Notifier」），容器只镜像它们的快照。
 library;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/bootstrap/runtime_providers.dart';
+import '../utils/snapshot_source.dart';
 
-/// 可镜像到 Riverpod 的启动期状态对象。
-abstract interface class SnapshotSource<S> {
-  /// 当前快照；[changes] 每次通知后由 provider 重新读取。
-  S get state;
-
-  /// 变更信号（替代 `ChangeNotifier.notifyListeners` 的订阅面）。
-  Listenable get changes;
-}
-
-/// 最小变更信号：只负责通知，不持有任何状态。
-///
-/// 用它可以保留 `Listenable` / `ValueListenable` 的既有接口（播放服务、
-/// 原生窗口回调），同时不再把状态锁进 `ChangeNotifier`。
-class SnapshotSignal implements Listenable {
-  final List<VoidCallback> _listeners = <VoidCallback>[];
-
-  @override
-  void addListener(VoidCallback listener) {
-    _listeners.add(listener);
-  }
-
-  @override
-  void removeListener(VoidCallback listener) {
-    _listeners.remove(listener);
-  }
-
-  /// 通知所有订阅者；通知期间的增删在副本上迭代。
-  void notify() {
-    if (_listeners.isEmpty) return;
-    for (final listener in List<VoidCallback>.of(_listeners)) {
-      listener();
-    }
-  }
-}
+export '../utils/snapshot_source.dart';
 
 /// 把启动期实例的不可变快照镜像成 Riverpod `Notifier<State>`。
 class SnapshotNotifier<C extends SnapshotSource<S>, S> extends Notifier<S> {

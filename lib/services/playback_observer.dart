@@ -177,7 +177,7 @@ class PlaybackObserver {
     _attached = true;
     _facade.snapshot.addListener(_onSnapshot);
     _presence.addListener(_onPresenceChanged);
-    _powerPolicy?.addListener(_onPowerPolicyChanged);
+    _powerPolicy?.changes.addListener(_onPowerPolicyChanged);
     _onSnapshot();
   }
 
@@ -187,7 +187,7 @@ class PlaybackObserver {
     _attached = false;
     _facade.snapshot.removeListener(_onSnapshot);
     _presence.removeListener(_onPresenceChanged);
-    _powerPolicy?.removeListener(_onPowerPolicyChanged);
+    _powerPolicy?.changes.removeListener(_onPowerPolicyChanged);
   }
 
   /// 回到可见：补一次封面预取。

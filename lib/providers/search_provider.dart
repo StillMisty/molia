@@ -14,7 +14,7 @@ import 'playback_provider.dart';
 import 'search_results.dart';
 import 'search_row.dart';
 import 'search_session.dart';
-import 'snapshot_source.dart';
+import '../utils/snapshot_source.dart';
 
 export 'search_input_binding.dart';
 export 'search_results.dart' show SearchResults;

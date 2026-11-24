@@ -15,7 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
 import '../domain/models/failure.dart';
-import 'snapshot_source.dart';
+import '../utils/snapshot_source.dart';
 
 final _logger = Logger('molia.source_fan_out');
 

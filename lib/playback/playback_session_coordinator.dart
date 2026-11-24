@@ -94,7 +94,7 @@ class PlaybackSessionCoordinator
     // 曲末完成只在事件到达时写一次：单曲循环 / 列表循环单曲重播没有
     // 「曲目 id 变化」的快照，不能只靠快照监听。
     _trackCompletions = _facade.trackCompletions.listen(_onTrackCompleted);
-    _powerPolicy.addListener(_onPowerPolicyChanged);
+    _powerPolicy.changes.addListener(_onPowerPolicyChanged);
     _wasForeground = _powerPolicy.isForeground;
     // 构造时同步一次快照：接线前真实播放可能已恢复曲目（如系统媒体会话），
     // 与观察者 attach 的「立即处理一次」同一口径（`_wasPlaying` 初值也由此对齐，
@@ -1104,7 +1104,7 @@ class PlaybackSessionCoordinator
 
   /// 拆线（组合根只负责创建；释放与 provider 同生命周期）。
   void dispose() {
-    _powerPolicy.removeListener(_onPowerPolicyChanged);
+    _powerPolicy.changes.removeListener(_onPowerPolicyChanged);
     _facade.snapshot.removeListener(_onLiveSnapshot);
     unawaited(_trackCompletions?.cancel());
     _trackCompletions = null;

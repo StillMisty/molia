@@ -97,7 +97,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       tray: ref.read(traySettingsProvider.notifier),
       update: ref.watch(maybeUpdateProvider),
       sources: ref.read(maybeSourcesProvider),
-      scrobble: ref.read(maybeScrobbleServiceProvider),
+      scrobble: ref.read(maybeScrobbleControllerProvider),
       libraryAdd: ref.read(maybeLibraryAddSettingsProvider),
       statistics: ref.read(playStatisticsServiceProvider),
       sync: ref.read(maybeSyncProvider),

@@ -371,7 +371,7 @@ void main() {
 
   test('通知契约：applyChange 一次一个，重复补丁不通知', () {
     var notifications = 0;
-    fact.addListener(() => notifications++);
+    fact.changes.addListener(() => notifications++);
 
     fact.applyChange(addToggle(track('1')));
     expect(notifications, 1);
@@ -382,7 +382,7 @@ void main() {
 
   test('通知契约：生命周期方法静默，读取结束只通知一次', () async {
     var notifications = 0;
-    fact.addListener(() => notifications++);
+    fact.changes.addListener(() => notifications++);
 
     fact.bindPlaylist(null, databaseCount: 3);
     fact.releaseRows();
@@ -398,7 +398,7 @@ void main() {
     await fact.ensureLoaded(force: true);
 
     var notifications = 0;
-    fact.addListener(() => notifications++);
+    fact.changes.addListener(() => notifications++);
     final gate = Completer<Set<String>>();
     repository.nextKeys = gate;
     final reading = fact.ensureLoaded(force: true);

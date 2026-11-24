@@ -80,7 +80,7 @@ void wireNextTrackLyricsPreload({
   }
 
   playback.changes.addListener(syncNextTrackLyricsPreload);
-  powerPolicy?.addListener(syncNextTrackLyricsPreload);
+  powerPolicy?.changes.addListener(syncNextTrackLyricsPreload);
   syncNextTrackLyricsPreload();
 }
 
@@ -103,6 +103,6 @@ void wireLyricsSession({
   }
 
   playback.changes.addListener(syncCurrentTrack);
-  powerPolicy?.addListener(syncCurrentTrack);
+  powerPolicy?.changes.addListener(syncCurrentTrack);
   syncCurrentTrack();
 }

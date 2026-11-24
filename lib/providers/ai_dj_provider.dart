@@ -38,7 +38,7 @@ import 'ai_feedback_book.dart';
 import 'ai_radio_session.dart';
 import 'library_provider.dart';
 import 'playback_provider.dart';
-import 'snapshot_source.dart';
+import '../utils/snapshot_source.dart';
 
 /// AI 推歌的不可变快照：UI 可见的全部状态（配置 / 开关 / 批次 / 反馈 / 历史）。
 ///

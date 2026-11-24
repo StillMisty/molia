@@ -127,7 +127,7 @@ void main() {
 
   test('init 幂等；写入类操作改状态并通知一次', () async {
     var notifications = 0;
-    control.addListener(() => notifications++);
+    control.changes.addListener(() => notifications++);
 
     await control.init();
     await control.init();
@@ -274,7 +274,7 @@ void main() {
     expect(control.peers, hasLength(1));
 
     var notifications = 0;
-    control.addListener(() => notifications++);
+    control.changes.addListener(() => notifications++);
     await control.removePeer('ghost');
     expect(control.peers, isEmpty, reason: '名册条目被移除');
     expect(control.manualPeers, isEmpty, reason: '地址簿条目一并移除');
@@ -393,7 +393,7 @@ void main() {
     final freshControl = SyncControlPlane(state: freshState, transports: {});
     addTearDown(freshControl.dispose);
     var notifications = 0;
-    freshControl.addListener(() => notifications++);
+    freshControl.changes.addListener(() => notifications++);
     final generated = await freshControl.ensurePassphrase();
     expect(generated, isNotEmpty);
     expect(freshControl.passphrase, generated);
