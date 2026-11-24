@@ -87,8 +87,10 @@ class ChannelSelection implements SnapshotSource<ChannelSelectionState> {
   String get key => _key;
 
   @override
-  ChannelSelectionState get state =>
-      ChannelSelectionState(key: _key, validKeys: _validKeys());
+  ChannelSelectionState get state => ChannelSelectionState(
+    key: _key,
+    validKeys: List.unmodifiable(_validKeys()),
+  );
 
   @override
   Listenable get changes => _changes;

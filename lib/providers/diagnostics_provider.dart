@@ -180,7 +180,7 @@ class DiagnosticsProvider implements SnapshotSource<DiagnosticsState> {
   DiagnosticsState get state => DiagnosticsState(
     summary: summary.value,
     checkResults: checkResults.value,
-    issueGroups: issueGroups.value,
+    issueGroups: List.unmodifiable(issueGroups.value),
     session: session.value,
     appInfo: appInfo.value,
     reportState: reportState.value,

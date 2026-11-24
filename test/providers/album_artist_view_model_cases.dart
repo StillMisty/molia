@@ -95,6 +95,11 @@ void main() {
       expect(snapshot.album?.name, '快照');
       expect(snapshot.items.single.id.uri, 'wy:快照');
       expect(identical(snapshot.items, snapshot.page.items), isTrue);
+      expect(
+        () => snapshot.items.add(snapshot.items.single),
+        throwsUnsupportedError,
+        reason: '分页结果用零拷贝只读视图',
+      );
     });
 
     test('过期响应丢弃：重试后先返回的旧页不覆盖新状态', () async {

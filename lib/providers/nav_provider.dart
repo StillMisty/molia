@@ -28,14 +28,15 @@ typedef _NavLayout = ({
 /// 导航偏好对 UI 暴露的不可变快照。
 @immutable
 class NavState {
-  const NavState({
-    required this.order,
-    required this.hidden,
+  NavState({
+    required List<ShellDestination> order,
+    required Set<ShellDestination> hidden,
     required this.homeDestination,
     required this.showLyricsOnEnter,
     required this.restoreLastDestination,
     required this.lastDestination,
-  });
+  }) : order = List.unmodifiable(order),
+       hidden = Set.unmodifiable(hidden);
 
   /// 全部目的地的当前顺序（含隐藏项，设置页按此顺序展示）。
   final List<ShellDestination> order;

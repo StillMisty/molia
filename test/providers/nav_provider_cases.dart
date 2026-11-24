@@ -67,6 +67,18 @@ void main() {
 
     expect(nav.homeDestination, ShellDestination.nowPlaying);
     expect(nav.effectiveHomeDestination, ShellDestination.nowPlaying);
+
+    final snapshot = nav.state;
+    expect(
+      () => snapshot.order.add(ShellDestination.library),
+      throwsUnsupportedError,
+      reason: '快照顺序是只读副本',
+    );
+    expect(
+      () => snapshot.hidden.add(ShellDestination.library),
+      throwsUnsupportedError,
+      reason: '快照隐藏集合是只读副本',
+    );
   });
 
   test('设置启动首页：持久化往返（重建 provider 读回）', () async {

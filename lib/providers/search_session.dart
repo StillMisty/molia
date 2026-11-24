@@ -425,7 +425,7 @@ class SearchSession implements SnapshotSource<SearchProjection> {
   SearchProjection get projection => SearchProjection(
     query: _query,
     kind: _kind,
-    supportedKinds: supportedKinds,
+    supportedKinds: List.unmodifiable(supportedKinds),
     results: currentResults,
     preview: preview.value,
     isBusy: isBusy,

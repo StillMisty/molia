@@ -58,6 +58,11 @@ void main() {
     expect(selection.state.key, 'wy');
     expect(selection.state.validKeys, ['wy', 'kg']);
     expect(selection.state.isValid, isTrue);
+    expect(
+      () => selection.state.validKeys.add('tx'),
+      throwsUnsupportedError,
+      reason: '快照里的可用渠道是只读副本',
+    );
 
     selection.select('wy');
     expect(notifications, 0, reason: '同值选择不发布');

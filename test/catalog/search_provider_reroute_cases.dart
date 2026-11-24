@@ -340,7 +340,12 @@ void main() {
     expect(state.isSearchActive, isTrue);
     expect(state.isSearchBusy, provider.isSearchBusy);
     expect(state.activeSourceKey, 'kw');
-    expect(state.sourceChannels, same(provider.sourceChannels));
+    expect(state.sourceChannels, provider.sourceChannels);
+    expect(
+      () => state.sourceChannels.add(state.sourceChannels.first),
+      throwsUnsupportedError,
+      reason: '快照里的渠道列表是只读副本',
+    );
     expect(state.songResults, same(provider.songResults));
     expect(state.projection.query, 'ab');
     expect(
