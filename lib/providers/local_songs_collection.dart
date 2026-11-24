@@ -8,6 +8,7 @@
 library;
 
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
@@ -85,9 +86,8 @@ class LocalSongsInput {
 
 /// 本地歌曲合集的不可变快照：可见行、计数与加载态。
 ///
-/// [rows] 就是合集自己缓存的那份列表（不复制、不包 `UnmodifiableListView`）：
-/// presenter 按列表引用判断视图能否复用，每次通知换新列表会破坏这层缓存。
-/// 列表只读由合集保证，消费方不得改写。
+/// [rows] 是合集自己缓存列表的零拷贝只读视图：包围一次、按引用复用，
+/// presenter 仍能用列表身份判断视图能否复用；消费方无法原地改写。
 @immutable
 class LocalSongsState {
   const LocalSongsState({
@@ -196,13 +196,13 @@ class LocalSongsCollection implements SnapshotSource<LocalSongsState> {
       for (final row in _cachedRows)
         if (!downloadKeys.contains(row.key)) row,
     ];
-    _rows = rows;
+    _rows = UnmodifiableListView(rows);
     _rowsSignature = signature;
     _rowsDownloads = input.downloads;
     _rowsIndexEntries = input.indexEntries;
     _rowsCachedRows = _cachedRows;
     _rowsRevision++;
-    return rows;
+    return _rows!;
   }
 
   /// [rows] 被替换的次数（内容变化才递增；测试 / 诊断用）。

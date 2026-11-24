@@ -93,6 +93,22 @@ void main() {
     expect(collection.loading, isFalse);
   });
 
+  test('行列表是零拷贝只读视图：重复读取保持同一引用', () async {
+    final localData = _FakeTrackLocalData(
+      (tracks) async => {for (final track in tracks) track.id},
+    );
+    final collection = LocalSongsCollection(
+      loadCachedAudioTrackIds: localData.cachedAudioTrackIds,
+    );
+    addTearDown(collection.dispose);
+
+    await collection.sync(inputFor(_FakeDownloads()));
+
+    final rows = collection.rows;
+    expect(identical(rows, collection.rows), isTrue);
+    expect(rows.clear, throwsUnsupportedError);
+  });
+
   test('索引行命中完整音频缓存时进入本地歌曲行', () async {
     final localData = _FakeTrackLocalData(
       (tracks) async => {for (final track in tracks) track.id},
