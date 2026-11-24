@@ -56,7 +56,7 @@ class _AnnualReportPageState extends ConsumerState<AnnualReportPage> {
         descriptor.key: descriptor.displayName,
     };
     // provider 可能在本帧才被懒创建：配置即通知，必须等首帧结束再写，
-    // 否则会在 ChangeNotifierProvider 挂载期间触发重建断言。
+    // 否则会在 provider 构建 / 通知期间触发「构建中修改状态」断言。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _provider.configure(

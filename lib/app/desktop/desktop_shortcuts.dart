@@ -71,7 +71,7 @@ class _DesktopShortcutsState extends ConsumerState<DesktopShortcuts> {
   @override
   void initState() {
     super.initState();
-    // 用 addListener 而不是 context.watch：本组件不含 UI，watch 会让整棵桌面壳
+    // 用 addListener 而不是 ref.watch：本组件不含 UI，watch 会让整棵桌面壳
     // 在每次绑定 / 开关变更时重建；这里只有「总开关翻转」需要动作——关闭时
     // 摘掉处理器（字面意义的完全不拦截），打开时挂回。
     ShortcutSettings.instance.addListener(_syncEnabled);
