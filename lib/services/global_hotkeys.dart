@@ -60,11 +60,11 @@ class _ShortcutSettingsView implements GlobalHotkeySettings {
 
   @override
   void addListener(VoidCallback listener) =>
-      ShortcutSettings.instance.addListener(listener);
+      ShortcutSettings.instance.changes.addListener(listener);
 
   @override
   void removeListener(VoidCallback listener) =>
-      ShortcutSettings.instance.removeListener(listener);
+      ShortcutSettings.instance.changes.removeListener(listener);
 }
 
 /// 全局热键注册层（系统级，窗口失焦也生效）。

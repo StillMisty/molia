@@ -16,6 +16,7 @@ import 'package:flutter/foundation.dart';
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_key.dart';
 import '../data/settings/settings_keys.dart';
+import '../utils/snapshot_signal.dart';
 import 'global_hotkeys.dart';
 import 'shortcut_bindings.dart';
 import 'shortcuts.dart';
@@ -63,8 +64,36 @@ final class ShortcutBindingRejected extends ShortcutBindingResult {
   final ShortcutBindingRejection reason;
 }
 
+/// 快捷键设置的不可变快照（UI 经 `shortcutSettingsProvider` 读）。
+///
+/// 录制态（[ShortcutSettings.isRecordingCombo]）不进快照：它只影响按键分发的
+/// 让位判定，不驱动 UI 重建。
+@immutable
+class ShortcutSettingsState {
+  const ShortcutSettingsState({
+    required this.inAppEnabled,
+    required this.globalEnabled,
+    required this.inAppBindings,
+    required this.globalBindings,
+  });
+
+  /// 软件内快捷键总开关。
+  final bool inAppEnabled;
+
+  /// 全局快捷键总开关。
+  final bool globalEnabled;
+
+  /// 软件内生效绑定。
+  final ShortcutBindings inAppBindings;
+
+  /// 全局生效绑定。
+  final ShortcutBindings globalBindings;
+}
+
 /// 两组快捷键的开关与绑定覆盖；单例，变更通知驱动 UI 与监听方。
-class ShortcutSettings extends ChangeNotifier {
+///
+/// 状态是只读快照 [state]，订阅面是 [changes]（ADR-0041「启动期状态对象」）。
+class ShortcutSettings implements SnapshotSource<ShortcutSettingsState> {
   ShortcutSettings._();
 
   /// 全局单例：UI、软件内处理器与系统级热键注册共享同一状态源。
@@ -73,6 +102,9 @@ class ShortcutSettings extends ChangeNotifier {
   /// 设置注册表（组合根启动时注入；reload 由组合根代绑，同语言 / 品牌名）。
   static SettingsAccess? _settings;
 
+  /// 变更信号（替代 `ChangeNotifier.notifyListeners` 的订阅面）。
+  final SnapshotSignal _changes = SnapshotSignal();
+
   /// 未接线就访问设置直接失败：静默 no-op 会让「改了绑定但没保存」在测试与
   /// 生产里都无声发生（组合根在 `catalog_stack.dart` 统一 attach）。
   static SettingsAccess get _requireSettings =>
@@ -80,7 +112,7 @@ class ShortcutSettings extends ChangeNotifier {
       (throw StateError('ShortcutSettings.attachSettings 未调用：快捷键设置在组合根装配前被访问'));
 
   /// 注入注册表并触发一次异步载入（组合根不必 await：读取完成后
-  /// [notifyListeners] 驱动 UI 与监听方）。
+  /// [changes] 通知驱动 UI 与监听方）。
   static void attachSettings(SettingsAccess settings) {
     _settings = settings;
     unawaited(load());
@@ -121,13 +153,24 @@ class ShortcutSettings extends ChangeNotifier {
   ShortcutBindings get inAppBindings => _inAppBindings;
   ShortcutBindings get globalBindings => _globalBindings;
 
+  @override
+  ShortcutSettingsState get state => ShortcutSettingsState(
+    inAppEnabled: _inAppEnabled,
+    globalEnabled: _globalEnabled,
+    inAppBindings: _inAppBindings,
+    globalBindings: _globalBindings,
+  );
+
+  @override
+  Listenable get changes => _changes;
+
   /// 是否正在录制组合键：软件内快捷键处理器据此整体让位——处理器在焦点分发
   /// 之前收到按键，不让位的话录制 Space / ←→ 会先触发播放命令。
   ///
   /// 系统级全局热键的回调（`lib/services/global_hotkeys.dart`）同样应跳过
   /// 执行：热键由系统派发，处理器让位管不到它。
   ///
-  /// 不 notifyListeners：处理器每次按键直接读实时值，没有 UI 依赖它重建。
+  /// 不进快照、也不通知：处理器每次按键直接读实时值，没有 UI 依赖它重建。
   bool get isRecordingCombo => _recordingOwner != null;
 
   /// 进入录制态；[owner] 是录制行自身，用于多行互斥。
@@ -158,7 +201,7 @@ class ShortcutSettings extends ChangeNotifier {
         ShortcutScope.global,
         globalRaw,
       );
-      self.notifyListeners();
+      self._changes.notify();
     } catch (_) {
       // 存储不可用时按默认跑（读取本身已兜底，这里只防意外）。
     }
@@ -171,7 +214,7 @@ class ShortcutSettings extends ChangeNotifier {
   Future<void> setInAppEnabled(bool value) async {
     if (_inAppEnabled == value) return;
     _inAppEnabled = value;
-    notifyListeners();
+    _changes.notify();
     await _write(kShortcutsEnabled, value);
   }
 
@@ -179,7 +222,7 @@ class ShortcutSettings extends ChangeNotifier {
   Future<void> setGlobalEnabled(bool value) async {
     if (_globalEnabled == value) return;
     _globalEnabled = value;
-    notifyListeners();
+    _changes.notify();
     await _write(kGlobalShortcutsEnabled, value);
   }
 
@@ -229,7 +272,7 @@ class ShortcutSettings extends ChangeNotifier {
     // 在值等于默认时仍然亮着。
     final override = combo == defaultCombo ? null : combo;
     _setBindings(scope, bindings.withOverride(command, override));
-    notifyListeners();
+    _changes.notify();
     await _persist(scope);
     return const ShortcutBindingAccepted();
   }
@@ -278,7 +321,7 @@ class ShortcutSettings extends ChangeNotifier {
           commandCombo == defaults[other] ? null : commandCombo,
         );
     _setBindings(scope, next);
-    notifyListeners();
+    _changes.notify();
     await _persist(scope);
     return true;
   }
@@ -300,7 +343,7 @@ class ShortcutSettings extends ChangeNotifier {
     // 全默认：无改动可做，也不写空串（不制造无意义的存储写入）。
     if (!ShortcutBindings.commandsOf(scope).any(bindings.isOverridden)) return;
     _setBindings(scope, bindings.cleared());
-    notifyListeners();
+    _changes.notify();
     await _persist(scope);
   }
 

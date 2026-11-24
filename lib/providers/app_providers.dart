@@ -316,9 +316,11 @@ final libraryAddSettingsControllerProvider =
 
 final shortcutSettingsProvider =
     NotifierProvider<
-      LegacyListenableNotifier<ShortcutSettings>,
-      ShortcutSettings
-    >(() => LegacyListenableNotifier((ref) => _require<ShortcutSettings>(ref)));
+      SnapshotNotifier<ShortcutSettings, ShortcutSettingsState>,
+      ShortcutSettingsState
+    >(() => SnapshotNotifier((ref) => _require<ShortcutSettings>(ref)));
+final shortcutSettingsControllerProvider =
+    snapshotController<ShortcutSettings>();
 final audioFocusSettingsProvider =
     NotifierProvider<SnapshotNotifier<AudioFocusSettings, bool>, bool>(
       () => SnapshotNotifier((ref) => _require<AudioFocusSettings>(ref)),
@@ -398,9 +400,17 @@ final maybeDataSaverServiceProvider =
     );
 final dataSaverServiceControllerProvider =
     maybeSnapshotController<DataSaverService>();
-final biliAccountProvider = Provider<BiliAccountService?>(
-  (ref) => ref.read(appRuntimeProvider).maybe<BiliAccountService>(),
-);
+final biliAccountProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<BiliAccountService, BiliAccountState>,
+      BiliAccountState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<BiliAccountService>(),
+      ),
+    );
+final biliAccountControllerProvider =
+    maybeSnapshotController<BiliAccountService>();
 final sourceManagerProvider =
     NotifierProvider<LegacyListenableNotifier<SourceManager>, SourceManager>(
       () => LegacyListenableNotifier((ref) => _require<SourceManager>(ref)),

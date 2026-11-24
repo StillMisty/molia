@@ -118,6 +118,10 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 - `state` 暴露**不可变快照**（`@immutable`，字段名沿用旧 getter）；
 - `changes` 是 `SnapshotSignal`（只通知、不持有状态），保留
   `Listenable` / `ValueListenable` 订阅面给播放服务、原生回调；
+- 快照契约本体（`SnapshotSource` / `SnapshotSignal`）在
+  `lib/utils/snapshot_signal.dart`：`lib/sources/` 等底层模块也要实现它，不能
+  反向依赖 provider 层；`lib/providers/snapshot_source.dart` 转出契约并提供
+  Riverpod 镜像；
 - Riverpod 两面（`lib/providers/snapshot_source.dart`）：
   - `xProvider` = `SnapshotNotifier` 镜像快照，UI `ref.watch` 读；
   - `xControllerProvider` = `snapshotController<X>()`，命令 / 服务句柄从这里
@@ -129,6 +133,24 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 
 已按此形态落地的对象：`AudioFocusSettings`（`bool` 快照）、`AiDjProvider`
 （`AiDjState`）、`LibraryProvider`（`LibraryState`：历史 / 列表 / 收藏键 / 版本戳）。
+
+### 设置与偏好（第六批）
+
+设置 / 设备本地偏好统一改成「不可变快照 + `changes`」；命令方法名与签名不变，
+加载完成后再通知：
+
+- `DataSaverService` → `DataSaverState`（开关 / 音质上限 / 封面省流 / 网络态）；
+  `blockNetworkArtwork` / `effectiveQuality` 是即时判定，仍直接读实例；
+- `DownloadSettings` → `DownloadSettingsState`；`LibraryAddSettings` →
+  `LibraryAddSettingsState`；`SourceSwapSettings` → `SourceSwapSettingsState`；
+- `ShortcutSettings` → `ShortcutSettingsState`（两组开关与绑定）；录制态不进
+  快照（只影响按键让位，不驱动 UI）；
+- `MusicFoldersStore` → `MusicFoldersState`；`PlaylistFolderCollapseController` →
+  `PlaylistFolderCollapseState`；`LocalCacheIndexStore` → `LocalCacheIndexState`；
+- `BiliAccountService` → `BiliAccountState`（只含展示面；Cookie 留在
+  `BiliSession`，不进快照、不写日志）；
+- `SourcePreferences` → `SourcePreferencesState`；`SourceManager` 订阅
+  `preferences.changes` 转发自己的通知。
 
 仍以 `ChangeNotifier` 实现、经 `LegacyListenableNotifier` 暴露的类有两类：
 启动期服务（`SourceManager`、`DownloadService`、`ScrobbleService`、数据层

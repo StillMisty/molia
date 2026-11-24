@@ -37,14 +37,21 @@ class _ShortcutSettingsPageState extends ConsumerState<ShortcutSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // 兼容层 provider 与单例是同一实例（组合根只登记一次）。
-    final settings = ref.watch(shortcutSettingsProvider);
+    // 快照负责重建，命令仍落在组合根登记的单例上（ADR-0041）。
+    final snapshot = ref.watch(shortcutSettingsProvider);
+    final settings = ref.read(shortcutSettingsControllerProvider);
     return SettingsSubPage(
       title: l10n.settingsShortcutsTitle,
       children: [
-        _buildScopeCard(context, l10n, settings, ShortcutScope.inApp),
+        _buildScopeCard(context, l10n, snapshot, settings, ShortcutScope.inApp),
         const SizedBox(height: kSettingsSectionSpacing),
-        _buildScopeCard(context, l10n, settings, ShortcutScope.global),
+        _buildScopeCard(
+          context,
+          l10n,
+          snapshot,
+          settings,
+          ShortcutScope.global,
+        ),
       ],
     );
   }
@@ -53,12 +60,13 @@ class _ShortcutSettingsPageState extends ConsumerState<ShortcutSettingsPage> {
   Widget _buildScopeCard(
     BuildContext context,
     AppLocalizations l10n,
+    ShortcutSettingsState snapshot,
     ShortcutSettings settings,
     ShortcutScope scope,
   ) {
     final inApp = scope == ShortcutScope.inApp;
-    final bindings = inApp ? settings.inAppBindings : settings.globalBindings;
-    final enabled = inApp ? settings.inAppEnabled : settings.globalEnabled;
+    final bindings = inApp ? snapshot.inAppBindings : snapshot.globalBindings;
+    final enabled = inApp ? snapshot.inAppEnabled : snapshot.globalEnabled;
     final hasOverrides = ShortcutBindings.commandsOf(scope)
         .any(bindings.isOverridden);
     return SettingsSectionCard(

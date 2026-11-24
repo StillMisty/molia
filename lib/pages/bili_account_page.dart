@@ -43,7 +43,7 @@ class _BiliAccountPageState extends ConsumerState<BiliAccountPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _service = ref.read(biliAccountProvider)!;
+    _service = ref.read(biliAccountControllerProvider)!;
     unawaited(_initialize());
   }
 
@@ -98,7 +98,7 @@ class _BiliAccountPageState extends ConsumerState<BiliAccountPage>
   List<Widget> _buildLoggedIn(
     BuildContext context,
     AppLocalizations l10n,
-    BiliAccountService service,
+    BiliAccountState service,
   ) {
     final name = service.account?.userName;
     return [
@@ -138,7 +138,7 @@ class _BiliAccountPageState extends ConsumerState<BiliAccountPage>
   List<Widget> _buildLoggedOut(
     BuildContext context,
     AppLocalizations l10n,
-    BiliAccountService service,
+    BiliAccountState service,
   ) {
     return [
       SettingsSectionCard(
