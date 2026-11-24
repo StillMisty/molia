@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import '../domain/models/album.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/album_repository.dart';
+import '../utils/snapshot_source.dart';
 import 'paged_list_controller.dart';
 
 /// 一页专辑响应：曲目与头部实体同页返回（头部随分页响应更新）。
@@ -22,8 +23,26 @@ class _AlbumPageResult extends PagedResult<Track> {
   final Album album;
 }
 
+/// 专辑页的不可变快照：头部实体 + 当前分页状态。
+///
+/// 字段名沿用旧 getter（`album` / `items`）；分页状态本身仍由
+/// [PagedListController] 发布 —— 快照只在它变更后重新读取一次，不复制列表。
+@immutable
+class AlbumViewState {
+  const AlbumViewState({required this.album, required this.page});
+
+  /// 最近一次成功响应携带的专辑实体；首屏成功前 / 重试后为 null。
+  final Album? album;
+
+  /// 当前分页状态（不可变值；控制器每次变更发布新实例）。
+  final PagedListState<Track> page;
+
+  /// 已加载曲目（与 [page] 同一份列表，不复制）。
+  List<Track> get items => page.items;
+}
+
 /// 专辑页状态机：首屏 / 加载更多 / 失败重试 / 过期响应丢弃。
-class AlbumViewModel extends ChangeNotifier {
+class AlbumViewModel implements SnapshotSource<AlbumViewState> {
   AlbumViewModel({
     required this._repository,
     required this.sourceKey,
@@ -34,24 +53,27 @@ class AlbumViewModel extends ChangeNotifier {
       // 平台分页边界会重复返回（忽略 page 时重复整表）：按 track id 跨页去重。
       keyOf: (track) => track.id.uri,
       onPageAccepted: _acceptPage,
-    )..addListener(notifyListeners);
+    )..addListener(_onPageChanged);
   }
 
   final AlbumRepository _repository;
   final String sourceKey;
   final String albumId;
 
+  final SnapshotSignal _changes = SnapshotSignal();
+
   late final PagedListController<Track> _controller;
 
-  /// 最近一次成功响应携带的专辑实体；首屏成功前 / [reset] 后为 null。
+  /// 最近一次成功响应携带的专辑实体；首屏成功前 / [retry] 后为 null。
   Album? _album;
 
-  Album? get album => _album;
+  @override
+  Listenable get changes => _changes;
 
-  /// 当前分页状态（不可变值；控制器每次变更发布新实例）。
-  PagedListState<Track> get state => _controller.state;
-
-  List<Track> get items => _controller.items;
+  /// 当前快照：实体与分页状态同帧读取（控制器已发布新状态后才通知）。
+  @override
+  AlbumViewState get state =>
+      AlbumViewState(album: _album, page: _controller.state);
 
   Future<void> loadFirstPage() => _controller.loadFirstPage();
 
@@ -82,11 +104,11 @@ class AlbumViewModel extends ChangeNotifier {
     if (page is _AlbumPageResult) _album = page.album;
   }
 
-  @override
+  void _onPageChanged() => _changes.notify();
+
   void dispose() {
     _controller
-      ..removeListener(notifyListeners)
+      ..removeListener(_onPageChanged)
       ..dispose();
-    super.dispose();
   }
 }

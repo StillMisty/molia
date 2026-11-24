@@ -19,7 +19,6 @@ import '../domain/ports/album_repository.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/album_view_model.dart';
 import '../providers/app_providers.dart';
-import '../providers/paged_list_controller.dart';
 import '../widgets/responsive.dart';
 import '../widgets/detail_page/detail_cover_header.dart';
 import '../widgets/favorite_action.dart';
@@ -113,9 +112,9 @@ class _AlbumPageState extends State<AlbumPage> {
     unawaited(
       _handoff.play(
         context,
-        _viewModel.items,
+        _viewModel.state.items,
         startIndex: index,
-        contextName: _viewModel.album?.name,
+        contextName: _viewModel.state.album?.name,
         fallbackContextName: widget.fallbackName,
       ),
     );
@@ -124,9 +123,9 @@ class _AlbumPageState extends State<AlbumPage> {
   /// 「随机播放全部」：洗牌与起播下标的顺序统一由 handoff 负责。
   Future<void> _playShuffled() => _handoff.play(
     context,
-    _viewModel.items,
+    _viewModel.state.items,
     shuffle: true,
-    contextName: _viewModel.album?.name,
+    contextName: _viewModel.state.album?.name,
     fallbackContextName: widget.fallbackName,
   );
 
@@ -139,8 +138,8 @@ class _AlbumPageState extends State<AlbumPage> {
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
     final body = ListenableBuilder(
-      listenable: _viewModel,
-      // view model 每次变更发布新的不可变分页状态：整块 body 按最新快照重建。
+      listenable: _viewModel.changes,
+      // view model 每次变更发布新的不可变快照：整块 body 按最新快照重建。
       builder: (context, _) => _buildBody(context, l10n, _viewModel.state),
     );
     if (widget.embedded) return body;
@@ -156,18 +155,18 @@ class _AlbumPageState extends State<AlbumPage> {
   Widget _buildBody(
     BuildContext context,
     AppLocalizations l10n,
-    PagedListState<Track> state,
+    AlbumViewState viewState,
   ) {
     return PagedTrackCollectionBody<Track>(
-      state: state,
+      state: viewState.page,
       headerBuilder: (context, state) {
-        final album = _viewModel.album;
+        final album = viewState.album;
         // 列表态必有实体（与曲目同一响应写入）；空值只为类型收窄。
         if (album == null) return const SizedBox.shrink();
         return _buildHeader(context, l10n, album, state.items.length);
       },
       rowBuilder: (context, index, count, tableColumns) =>
-          _buildTrackRow(context, index, count),
+          _buildTrackRow(context, viewState, index, count),
       onRetry: () => unawaited(_load()),
       onLoadMore: () => unawaited(_viewModel.loadMore()),
       emptyText: l10n.albumEmpty,
@@ -177,11 +176,16 @@ class _AlbumPageState extends State<AlbumPage> {
     );
   }
 
-  Widget _buildTrackRow(BuildContext context, int index, int count) {
-    final track = _viewModel.items[index];
+  Widget _buildTrackRow(
+    BuildContext context,
+    AlbumViewState viewState,
+    int index,
+    int count,
+  ) {
+    final track = viewState.items[index];
     return FavoriteTrackTile.track(
       track: track,
-      fallbackCoverUrl: _viewModel.album?.coverUrl,
+      fallbackCoverUrl: viewState.album?.coverUrl,
       position: calculateCardPosition(index, count),
       onTap: () => _playFrom(index),
       // 菜单行：成功也确认一句（动作藏在弹层里，弹层关闭后需要回执）。
@@ -220,7 +224,7 @@ class _AlbumPageState extends State<AlbumPage> {
         onPlay: () => _playFrom(0),
         onShuffle: () => unawaited(_playShuffled()),
         onAddToLibrary: () =>
-            unawaited(_handoff.addToLibrary(context, _viewModel.items)),
+            unawaited(_handoff.addToLibrary(context, _viewModel.state.items)),
       ),
     );
   }
