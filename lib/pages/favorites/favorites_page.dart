@@ -314,7 +314,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
   Future<void> _importCollection() => importFavoritesCollection(
     context: context,
     l10n: _l10n(context),
-    discover: ref.read(discoverProvider),
+    discover: ref.read(discoverProvider.notifier),
     isActive: () => mounted,
     selectCollection: _selectCollection,
     ioCommands: _ioCommands,

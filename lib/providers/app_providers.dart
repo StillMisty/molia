@@ -21,10 +21,11 @@ import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/domain/ports/album_repository.dart';
 import 'package:molia/domain/ports/artist_repository.dart';
 import 'package:molia/domain/ports/source_registry.dart';
+import 'package:molia/sources/builtin/builtin_transport.dart';
+import 'package:molia/sources/builtin/discover_source.dart';
 import 'package:molia/providers/ai_dj_provider.dart';
 import 'package:molia/providers/channel_selection.dart';
 import 'package:molia/providers/diagnostics_provider.dart';
-import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_collection_request.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
@@ -360,7 +361,6 @@ final maybeScrobbleServiceProvider = _maybeListenable<ScrobbleService>();
 final maybeLibraryAddSettingsProvider = _maybeListenable<LibraryAddSettings>();
 final maybeSyncProvider = _maybeListenable<SyncProvider>();
 final maybeSourcesProvider = _maybeListenable<SourcesProvider>();
-final maybeDiscoverProvider = _maybeService<DiscoverProvider>();
 final maybeAiDjProvider = _maybeListenable<AiDjProvider>();
 final maybeLibraryProvider = _maybeListenable<LibraryProvider>();
 final maybeSourceManagerProvider = _maybeService<SourceManager>();
@@ -476,25 +476,17 @@ final downloadRequestsProvider =
       }),
     );
 
+final discoverSourcesProvider = Provider<Map<String, DiscoverSource>>(
+  (ref) => BuiltinDiscover.sources,
+);
+final discoverBuiltinTransportProvider = Provider<BuiltinTransport>(
+  (ref) => BuiltinTransport(),
+);
+
 final sourcesProvider =
     NotifierProvider<LazyListenableNotifier<SourcesProvider>, SourcesProvider>(
       () => LazyListenableNotifier(
         (ref) => SourcesProvider(ref.read(sourceManagerProvider)),
-      ),
-    );
-
-final discoverProvider =
-    NotifierProvider<
-      LazyListenableNotifier<DiscoverProvider>,
-      DiscoverProvider
-    >(
-      () => LazyListenableNotifier(
-        (ref) => DiscoverProvider(
-          playbackProvider: ref.read(playbackProvider),
-          libraryProvider: ref.read(libraryProvider),
-          selection: ref.read(channelSelectionProvider),
-          builtinTransport: ref.read(sourceManagerProvider).builtinTransport,
-        ),
       ),
     );
 

@@ -42,7 +42,7 @@ final class SourceSwapProviderProvider
 }
 
 String _$sourceSwapProviderHash() =>
-    r'2b91fdc08ec4cca2c898743eb7f3ab84f3aa8321';
+    r'02615f36b19a3433a506a1ae4c43135b91c53da4';
 
 abstract class _$SourceSwapProvider extends $Notifier<SourceSwapState> {
   SourceSwapState build();

@@ -5,7 +5,7 @@ import 'package:molia/domain/models/discover.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/discover_tracks_page.dart';
 import 'package:molia/providers/channel_selection.dart';
-import 'package:molia/providers/discover_provider.dart';
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/paged_track_collection.dart';
@@ -24,7 +24,7 @@ void main() {
   late PlaybackProvider playback;
   late LibraryProvider library;
   late ChannelSelection selection;
-  late DiscoverProvider discover;
+  late ProviderTestScope scope;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -42,16 +42,17 @@ void main() {
       validKeys: () => const ['wy'],
       defaultKey: () => 'wy',
     );
-    discover = DiscoverProvider(
-      playbackProvider: playback,
-      libraryProvider: library,
-      selection: selection,
-      sources: {'wy': FakeDiscoverSource()},
+    scope = ProviderTestScope(
+      overrides: [
+        discoverSourcesProvider.overrideWithValue({'wy': FakeDiscoverSource()}),
+      ],
     );
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryProvider>(library);
+    scope.put<ChannelSelection>(selection);
   });
 
   tearDown(() {
-    discover.dispose();
     selection.dispose();
     library.dispose();
     playback.dispose();
@@ -62,8 +63,6 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final scope = ProviderTestScope();
-    scope.put<DiscoverProvider>(discover);
     putCoverStore(scope);
     await tester.pumpWidget(
       scope.wrap(

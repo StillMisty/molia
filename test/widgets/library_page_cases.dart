@@ -8,7 +8,7 @@ import 'package:molia/domain/models/source.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/library.dart';
 import 'package:molia/providers/channel_selection.dart';
-import 'package:molia/providers/discover_provider.dart';
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
@@ -131,7 +131,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _FakeSources sources;
-  late DiscoverProvider discover;
+  late ProviderTestScope scope;
   late ChannelSelection selection;
   late PlaybackProvider playback;
   late LibraryProvider library;
@@ -151,16 +151,19 @@ void main() {
     );
     library = LibraryProvider(repository: repo, playbackProvider: playback);
     search = SearchProvider(playback, selection: selection);
-    discover = DiscoverProvider(
-      playbackProvider: playback,
-      libraryProvider: library,
-      selection: selection,
-      sources: {'kw': _FakeDiscoverSource()},
+    scope = ProviderTestScope(
+      overrides: [
+        discoverSourcesProvider.overrideWithValue({
+          'kw': _FakeDiscoverSource(),
+        }),
+      ],
     );
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryProvider>(library);
+    scope.put<ChannelSelection>(selection);
   });
 
   tearDown(() {
-    discover.dispose();
     library.dispose();
     search.dispose();
     playback.dispose();
@@ -180,9 +183,7 @@ void main() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
     });
-    final scope = ProviderTestScope();
     scope.put<SourcesProvider>(sourcesOverride ?? sources);
-    scope.put<DiscoverProvider>(discover);
     scope.put<ChannelSelection>(selection);
     scope.put<PlaybackProvider>(playback);
     scope.put<LibraryProvider>(library);

@@ -4,7 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:molia/domain/models/discover.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/channel_selection.dart';
-import 'package:molia/providers/discover_provider.dart';
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/discover_playlists_tab.dart';
@@ -27,7 +27,7 @@ void main() {
   late LibraryProvider library;
   late ChannelSelection selection;
   late FakeDiscoverSource source;
-  late DiscoverProvider discover;
+  late ProviderTestScope scope;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -47,16 +47,17 @@ void main() {
       defaultKey: () => 'wy',
       initialKey: 'wy',
     );
-    discover = DiscoverProvider(
-      playbackProvider: playback,
-      libraryProvider: library,
-      selection: selection,
-      sources: {'wy': source},
+    scope = ProviderTestScope(
+      overrides: [
+        discoverSourcesProvider.overrideWithValue({'wy': source}),
+      ],
     );
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryProvider>(library);
+    scope.put<ChannelSelection>(selection);
   });
 
   tearDown(() async {
-    discover.dispose();
     selection.dispose();
     library.dispose();
     playback.dispose();
@@ -64,8 +65,6 @@ void main() {
   });
 
   Widget host() {
-    final scope = ProviderTestScope();
-    scope.put<DiscoverProvider>(discover);
     putCoverStore(scope);
     return scope.wrap(
       M3EMaterialApp(

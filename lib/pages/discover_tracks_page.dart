@@ -6,7 +6,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/discover.dart';
 import '../l10n/app_localizations.dart';
-import '../providers/app_providers.dart';
+import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/detail_page/detail_cover_header.dart';
@@ -122,7 +122,7 @@ class _DiscoverTracksPageState extends ConsumerState<DiscoverTracksPage> {
     unawaited(
       _handoff.play(
         context,
-        ref.read(discoverProvider).domainTracksOf(tracks),
+        ref.read(discoverProvider.notifier).domainTracksOf(tracks),
         startIndex: index,
         contextName: _collection.entity?.info.name,
         fallbackContextName: widget.title,
@@ -137,7 +137,7 @@ class _DiscoverTracksPageState extends ConsumerState<DiscoverTracksPage> {
     if (tracks.isEmpty) return Future.value();
     return _handoff.play(
       context,
-      ref.read(discoverProvider).domainTracksOf(tracks),
+      ref.read(discoverProvider.notifier).domainTracksOf(tracks),
       shuffle: true,
       contextName: _collection.entity?.info.name,
       fallbackContextName: widget.title,
@@ -156,7 +156,7 @@ class _DiscoverTracksPageState extends ConsumerState<DiscoverTracksPage> {
     }
     try {
       final result = await ref
-          .read(discoverProvider)
+          .read(discoverProvider.notifier)
           .importDetailToLibrary(
             DiscoverDetail(
               info: detail.info,

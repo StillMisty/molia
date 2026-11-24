@@ -8,7 +8,6 @@ import 'package:material_ui/material_ui.dart';
 import '../domain/models/discover.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/discover_tracks_page.dart';
-import '../providers/app_providers.dart';
 import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../services/haptics.dart';
@@ -135,7 +134,7 @@ class _DiscoverPlaylistsTabState extends ConsumerState<DiscoverPlaylistsTab>
 
   /// 触底自动加载：统一由 [PagedListAutoLoad] 驱动（失败后不自动重试，
   /// 保留页脚「重试」兜底）。
-  DiscoverProvider get _provider => ref.read(discoverProvider);
+  DiscoverProvider get _provider => ref.read(discoverProvider.notifier);
 
   void _ensureSourceLoaded() {
     if (!mounted) return;

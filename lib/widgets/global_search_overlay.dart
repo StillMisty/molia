@@ -47,6 +47,7 @@ import 'package:material_ui/material_ui.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/artist_page.dart';
 import '../providers/app_providers.dart';
+import '../providers/discover_provider.dart';
 import '../providers/search_assist_controller.dart';
 import '../providers/search_provider.dart';
 import '../services/escape_claims.dart';
@@ -358,8 +359,7 @@ class _GlobalSearchViewState extends ConsumerState<_GlobalSearchView> {
     _input = SearchInputBinding(session: _session, controller: _field);
     _assist = SearchAssistController(
       search: _search,
-      hotKeywords: () =>
-          ref.read(maybeDiscoverProvider)?.hotSearches ?? const <String>[],
+      hotKeywords: () => ref.read(discoverProvider).hotSearches,
     );
     _search.addListener(_onSearchChanged);
     _session.preview.addListener(_onPreviewChanged);

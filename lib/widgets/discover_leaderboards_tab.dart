@@ -5,7 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../domain/models/discover.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/discover_tracks_page.dart';
-import '../providers/app_providers.dart';
+import '../providers/discover_provider.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import 'app_network_image.dart';
@@ -61,7 +61,7 @@ class _DiscoverLeaderboardsTabState
 
   void _openBoard(DiscoverLeaderboard board) {
     HapticsService.lightImpact();
-    final provider = ref.read(discoverProvider);
+    final provider = ref.read(discoverProvider.notifier);
     final cachedCover = provider.leaderboardCoverOf(board);
     Navigator.of(context).push(
       M3EPageRoute<void>(
@@ -218,7 +218,9 @@ class _LeaderboardCoverState extends ConsumerState<_LeaderboardCover> {
   @override
   void initState() {
     super.initState();
-    _cover = ref.read(discoverProvider).loadLeaderboardCover(widget.board);
+    _cover = ref
+        .read(discoverProvider.notifier)
+        .loadLeaderboardCover(widget.board);
   }
 
   @override

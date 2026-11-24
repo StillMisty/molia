@@ -26,7 +26,6 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/channel_selection.dart';
-import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/local_library_provider.dart';
 import 'package:molia/providers/play_statistics_provider.dart';
@@ -179,13 +178,6 @@ Future<FakePlaybackFacade> pumpPerfApp(
     defaultKey: () => searchChannels.first,
   );
   addTearDown(selection.dispose);
-  final discover = DiscoverProvider(
-    playbackProvider: playback,
-    libraryProvider: library,
-    selection: selection,
-    sources: const {},
-  );
-  addTearDown(discover.dispose);
 
   final searchSource = FakeMusicSource(
     'kw',
@@ -248,7 +240,6 @@ Future<FakePlaybackFacade> pumpPerfApp(
     ..put<LibraryProvider>(library)
     ..put<SourcesProvider>(sources)
     ..put<ChannelSelection>(selection)
-    ..put<DiscoverProvider>(discover)
     ..put<SearchProvider>(search)
     ..put<LyricsService>(LyricsService(providers: const []))
     ..put<LyricsDisplaySettings>(lyricsDisplay)
@@ -258,6 +249,7 @@ Future<FakePlaybackFacade> pumpPerfApp(
     overrides: [
       appRuntimeProvider.overrideWithValue(runtime),
       settingsRegistryProvider.overrideWithValue(testSettingsRegistry()),
+      discoverSourcesProvider.overrideWithValue(const {}),
       ...realLibraryOverrides,
     ],
   );

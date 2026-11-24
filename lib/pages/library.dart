@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import '../domain/models/source.dart' show SourceDescriptor;
 import '../l10n/app_localizations.dart';
 import '../providers/app_providers.dart';
+import '../providers/discover_provider.dart';
 import '../widgets/responsive.dart';
 import '../widgets/scroll_to_top.dart';
 import '../widgets/discover_layout.dart';

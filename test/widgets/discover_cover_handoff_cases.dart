@@ -4,7 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/discover_tracks_page.dart';
 import 'package:molia/providers/channel_selection.dart';
-import 'package:molia/providers/discover_provider.dart';
+import 'package:molia/providers/app_providers.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/discover_leaderboards_tab.dart';
@@ -31,7 +31,7 @@ void main() {
   late LibraryProvider library;
   late ChannelSelection selection;
   late FakeDiscoverSource source;
-  late DiscoverProvider discover;
+  late ProviderTestScope scope;
 
   setUp(() {
     // PlaybackProvider 启动后会从偏好恢复上次播放；widget 测试没有插件，
@@ -53,16 +53,17 @@ void main() {
       defaultKey: () => 'wy',
       initialKey: 'wy',
     );
-    discover = DiscoverProvider(
-      playbackProvider: playback,
-      libraryProvider: library,
-      selection: selection,
-      sources: {'wy': source},
+    scope = ProviderTestScope(
+      overrides: [
+        discoverSourcesProvider.overrideWithValue({'wy': source}),
+      ],
     );
+    scope.put<PlaybackProvider>(playback);
+    scope.put<LibraryProvider>(library);
+    scope.put<ChannelSelection>(selection);
   });
 
   tearDown(() async {
-    discover.dispose();
     selection.dispose();
     library.dispose();
     playback.dispose();
@@ -70,8 +71,6 @@ void main() {
   });
 
   Widget host(Widget home) {
-    final scope = ProviderTestScope();
-    scope.put<DiscoverProvider>(discover);
     // 曲目行里的 TrackArtwork 从容器取封面存储（组合根接线）；
     // widget 测试也要补上，否则加载完成后行构建直接抛 provider 缺失。
     putCoverStore(scope);

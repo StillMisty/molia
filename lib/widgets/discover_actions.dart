@@ -4,7 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/discover.dart';
 import '../domain/models/track.dart';
-import '../providers/app_providers.dart';
+import '../providers/discover_provider.dart';
 import 'favorite_action.dart';
 import 'track_handoff.dart';
 import 'track_menu_tile.dart';
@@ -17,7 +17,9 @@ Future<void> toggleDiscoverFavorite(
   WidgetRef ref,
   DiscoverTrack track,
 ) async {
-  final outcome = await ref.read(discoverProvider).toggleFavorite(track);
+  final outcome = await ref
+      .read(discoverProvider.notifier)
+      .toggleFavorite(track);
   if (!context.mounted) return;
   showFavoriteFeedback(
     context,
@@ -35,7 +37,7 @@ Future<void> addDiscoverTrackToPlaylist(
   WidgetRef ref,
   DiscoverTrack track,
 ) {
-  final discover = ref.read(discoverProvider);
+  final discover = ref.read(discoverProvider.notifier);
   return const TrackHandoff().addPlaylistTracksToLibrary(context, [
     discover.toPlaylistTrack(track),
   ]);
@@ -67,12 +69,11 @@ class DiscoverTrackTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final favorite = ref.watch(
-      discoverProvider.select((provider) => provider.isFavorite(track)),
-    );
+    ref.watch(discoverProvider);
+    final favorite = ref.read(discoverProvider.notifier).isFavorite(track);
     // 菜单公共动作需要领域 Track 的能力位 / 平台 id；转换与播放同一入口，
     // 不另造一份映射（payload 只在这里透传，页面仍不读）。
-    final domainTrack = ref.read(discoverProvider).domainTracksOf([
+    final domainTrack = ref.read(discoverProvider.notifier).domainTracksOf([
       track,
     ]).single;
     return TrackMenuTile(

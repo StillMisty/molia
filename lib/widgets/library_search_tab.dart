@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/app_providers.dart';
+import '../providers/discover_provider.dart';
 import '../providers/search_assist_controller.dart';
 import '../providers/search_provider.dart';
 import '../theme/motion_policy.dart';
@@ -62,8 +63,7 @@ class _LibrarySearchTabState extends ConsumerState<LibrarySearchTab>
     );
     _assist = SearchAssistController(
       search: _searchProvider,
-      hotKeywords: () =>
-          ref.read(maybeDiscoverProvider)?.hotSearches ?? const <String>[],
+      hotKeywords: () => ref.read(discoverProvider).hotSearches,
     );
     _searchFocusNode.addListener(_onFocusChanged);
   }
