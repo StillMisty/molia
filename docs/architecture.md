@@ -1572,7 +1572,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   （`startSettle` / `land` / `releasePreview` / `settleCommit` / `crossfadeCorrection` /
   `hardReset` / `adoptSteadySlots` / `requestSkip` / `notifySwapped` / `armTimeout` …），
   次序不变量（例如「settling 前先把进度钉回起点」）由会话的调用顺序持有。会话是
-  `ChangeNotifier`，只在离散迁移通知；拖动跟手的逐帧进度不进会话。
+  快照对象（`SnapshotSource` / `changes`），只在离散迁移通知；拖动跟手的逐帧进度
+  不进会话。
 - **会话与阶段**：阶段 `idle → preview（跟手）→ committed（提交等待对账）→ settling
   （即时切歌完成中）` / `correcting`（对账不匹配校正）/ `returning`（松手未达标、
   取消或提交超时后的回退，预览目标保持到弹簧落位）。唯一一根进度控制器由 deck

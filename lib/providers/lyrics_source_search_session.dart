@@ -202,7 +202,7 @@ class LyricsSourceSearchSession
           ),
       ],
     );
-    _searchSession.changes.addListener(_notifyListeners);
+    _searchSession.changes.addListener(_publishChange);
   }
 
   /// 按渠道管理的顺序重排来源。
@@ -763,13 +763,13 @@ class LyricsSourceSearchSession
     _searchSession.notifyNow();
   }
 
-  void _notifyListeners() => _changes.notify();
+  void _publishChange() => _changes.notify();
 
   void dispose() {
     _disposed = true;
     _invalidatePreview();
     _previewCache.clear();
-    _searchSession.changes.removeListener(_notifyListeners);
+    _searchSession.changes.removeListener(_publishChange);
     _searchSession.dispose();
   }
 }

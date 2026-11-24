@@ -170,10 +170,10 @@ class SourceSwapProvider extends _$SourceSwapProvider {
       return _snapshot();
     }
     _searchSession = FanOutSearchSession<Track>(sources: _buildSearchSources);
-    _searchSession.changes.addListener(_notifyListeners);
+    _searchSession.changes.addListener(_publishChange);
     ref.onDispose(() {
       _disposed = true;
-      _searchSession.changes.removeListener(_notifyListeners);
+      _searchSession.changes.removeListener(_publishChange);
       _searchSession.dispose();
     });
     return _snapshot();
@@ -352,7 +352,7 @@ class SourceSwapProvider extends _$SourceSwapProvider {
     isSearching: _searchSession.isSearching,
   );
 
-  void _notifyListeners() {
+  void _publishChange() {
     if (_disposed) return;
     state = _snapshot();
   }
