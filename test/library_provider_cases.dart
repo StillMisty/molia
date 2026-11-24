@@ -1786,8 +1786,8 @@ void main() {
 
       var notifications = 0;
       void count() => notifications++;
-      provider.addListener(count);
-      addTearDown(() => provider.removeListener(count));
+      provider.changes.addListener(count);
+      addTearDown(() => provider.changes.removeListener(count));
 
       await provider.toggleFavorite(
         sourceKey: 'wy',
@@ -1826,8 +1826,8 @@ void main() {
 
       var notifications = 0;
       void count() => notifications++;
-      provider.addListener(count);
-      addTearDown(() => provider.removeListener(count));
+      provider.changes.addListener(count);
+      addTearDown(() => provider.changes.removeListener(count));
 
       await repository.removeTracksFromPlaylist(scratch, [
         (sourceKey: 'wy', songId: 'x'),
@@ -1836,6 +1836,39 @@ void main() {
       await provider.pendingReload;
 
       expect(notifications, 1, reason: '批量校准不应先闪一帧旧计数再刷新');
+    });
+  });
+
+  group('快照', () {
+    test('state 聚合历史 / 列表 / 收藏键与版本戳，并在通知后换新', () async {
+      await provider.refreshHistory(force: true);
+      await provider.refreshPlaylists(force: true);
+      await provider.ensureFavoritesLoaded(force: true);
+
+      expect(provider.state.playlists, provider.playlists);
+      expect(provider.state.history, provider.history);
+      expect(provider.state.isFavorite('wy', '1'), isFalse);
+      final favoritesRevision = provider.state.favoritesRevision;
+      final playlistsRevision = provider.state.playlistsRevision;
+
+      var notifications = 0;
+      void count() => notifications++;
+      provider.changes.addListener(count);
+      addTearDown(() => provider.changes.removeListener(count));
+
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+      );
+      await settle();
+
+      final state = provider.state;
+      expect(notifications, greaterThan(0));
+      expect(state.isFavorite('wy', '1'), isTrue);
+      expect(state.favoritesRevision, greaterThan(favoritesRevision));
+      expect(state.playlistsRevision, greaterThanOrEqualTo(playlistsRevision));
+      expect(state.customPlaylists, isEmpty, reason: '默认收藏不算自建列表');
     });
   });
 }

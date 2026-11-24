@@ -118,18 +118,22 @@ abstract interface class CollectionLibrary {
 }
 
 /// [CollectionLibrary] 的生产实现：把快照 / 意图映射到 [LibraryProvider]。
+///
+/// 值（列表 / 历史 / 读取阶段）来自 UI 正在 watch 的 [LibraryState]，命令与
+/// 列表曲目视图落在控制器上；两者都指向组合根登记的同一实例。
 class LibraryCollectionReader implements CollectionLibrary {
-  LibraryCollectionReader(this._provider);
+  LibraryCollectionReader(this._state, this._provider);
 
+  final LibraryState _state;
   final LibraryProvider _provider;
 
   @override
   CollectionLibrarySnapshot snapshot({int? playlistId}) {
     return CollectionLibrarySnapshot(
-      playlists: _provider.playlists,
-      history: _provider.history,
-      playlistsState: _provider.playlistsState,
-      historyState: _provider.historyState,
+      playlists: _state.playlists,
+      history: _state.history,
+      playlistsState: _state.playlistsState,
+      historyState: _state.historyState,
       playlistTracks: playlistId == null
           ? null
           : _provider.playlistTracksView(playlistId),

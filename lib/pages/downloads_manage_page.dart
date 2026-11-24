@@ -441,9 +441,14 @@ class _DownloadsManagePageState extends ConsumerState<DownloadsManagePage> {
   /// 选择歌单 → 批量下载（跳过已下载与本地曲目）。
   Future<void> _pickPlaylist() async {
     final l10n = AppLocalizations.of(context)!;
-    final LibraryProvider? library = ref.read(libraryProvider);
+    final LibraryState? library = ref.read(maybeLibraryProvider);
+    final LibraryProvider? libraryController = ref.read(
+      maybeLibraryControllerProvider,
+    );
     final DownloadManager? downloads = ref.read(downloadManagerProvider);
-    if (library == null || downloads == null) return;
+    if (library == null || libraryController == null || downloads == null) {
+      return;
+    }
     final playlists = library.playlists;
     if (playlists.isEmpty) {
       _showMessage(l10n.downloadsEmpty);
@@ -482,10 +487,11 @@ class _DownloadsManagePageState extends ConsumerState<DownloadsManagePage> {
       ),
     );
     if (picked == null || !mounted) return;
-    final tracks = await library.loadPlaylistTracks(picked.id);
+    final tracks = await libraryController.loadPlaylistTracks(picked.id);
     if (!mounted) return;
     final domainTracks = [
-      for (final track in tracks) library.trackFromPlaylistTrack(track),
+      for (final track in tracks)
+        libraryController.trackFromPlaylistTrack(track),
     ];
     await _batchDownload(domainTracks);
   }

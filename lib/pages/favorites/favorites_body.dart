@@ -406,7 +406,7 @@ class FavoritesBrowseData {
   final CollectionActions actions;
   final DownloadRecords? downloadRecords;
   final LyricsProvider lyrics;
-  final LibraryProvider library;
+  final LibraryState library;
   final bool Function() isActive;
 }
 

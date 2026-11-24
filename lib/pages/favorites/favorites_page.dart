@@ -272,7 +272,9 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
 
   /// 本页动作的统一入口：端口按此刻 context 组装，命令 / 结果都在模块内。
   CollectionActions get _actions => CollectionActions(
-    library: LibraryProviderCollectionActions(ref.read(libraryProvider)),
+    library: LibraryProviderCollectionActions(
+      ref.read(libraryControllerProvider),
+    ),
     handoff: TrackHandoffCollectionHandoff(
       context,
       random: widget.shuffleRandom,
@@ -334,7 +336,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
     return favoritesDownloadableTracks(
       view: view,
       selectedRows: _vm.selectedRows(view),
-      provider: ref.read(libraryProvider),
+      provider: ref.read(libraryControllerProvider),
       requests: requests,
     );
   }
@@ -343,18 +345,18 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
   Widget build(BuildContext context) {
     // 可见性门控：本页在壳层中常驻挂载，隐藏时放弃 provider 订阅，
     // 否则每次播放历史写入（每首歌一次）都会让整页 build 并重跑过滤 / 排序。
-    final provider = ShellPageVisibility.maybeVisibleOf(context) ?? true
+    final library = ShellPageVisibility.maybeVisibleOf(context) ?? true
         ? ref.watch(libraryProvider)
         : ref.read(libraryProvider);
     return ListenableBuilder(
       listenable: _vm,
-      builder: (context, _) => _buildPage(context, provider),
+      builder: (context, _) => _buildPage(context, library),
     );
   }
 
-  Widget _buildPage(BuildContext context, LibraryProvider provider) {
+  Widget _buildPage(BuildContext context, LibraryState library) {
     final l10n = _l10n(context);
-    final playlists = provider.playlists;
+    final playlists = library.playlists;
     final favoritesId = LibraryCollections.favoritesPlaylistId(playlists);
 
     final smartRows = ref.watch(
@@ -364,7 +366,10 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
     // 加载组合、选择失效与滚动键激活都在 sync 内完成，页面只消费结果。
     final sessionView = _vm.sync(
       CollectionSessionInput(
-        library: LibraryCollectionReader(provider),
+        library: LibraryCollectionReader(
+          library,
+          ref.read(libraryControllerProvider),
+        ),
         names: CollectionNames(
           favorites: l10n.favoritesPlaylistName,
           history: l10n.libraryHistory,
@@ -460,7 +465,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
             l10n: l10n,
             index: index,
             cache: cache,
-            library: ref.read(libraryProvider),
+            library: library,
             isActive: () => mounted,
           ),
         );
@@ -472,7 +477,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
             context: context,
             playlist: playlist,
             playlists: playlists,
-            provider: ref.read(libraryProvider),
+            provider: ref.read(libraryControllerProvider),
             isActive: () => mounted,
             onSaved: () => setState(() {}),
           ),
@@ -484,7 +489,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
           changeFavoritesPlaylistCover(
             context: context,
             playlist: playlist,
-            provider: ref.read(libraryProvider),
+            provider: ref.read(libraryControllerProvider),
             isActive: () => mounted,
           ),
         );
@@ -513,7 +518,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
             context: context,
             l10n: l10n,
             view: view,
-            provider: ref.read(libraryProvider),
+            provider: ref.read(libraryControllerProvider),
             ioCommands: () => _ioCommands(requests: activeRequests),
             isActive: () => mounted,
           ),
@@ -582,7 +587,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
           l10n: l10n,
           view: view,
           selectedRows: _vm.selectedRows(view),
-          provider: ref.read(libraryProvider),
+          provider: ref.read(libraryControllerProvider),
           requests: requests,
           session: _vm.session,
           ioCommands: () => _ioCommands(requests: requests),
@@ -663,7 +668,7 @@ class _FavoritesPageState extends ConsumerState<FavoritesPage> {
                           actions: _actions,
                           downloadRecords: ref.read(downloadRecordsProvider),
                           lyrics: ref.read(lyricsProvider.notifier),
-                          library: ref.read(libraryProvider),
+                          library: library,
                           isActive: () => mounted,
                         ),
                       ),

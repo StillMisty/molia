@@ -72,7 +72,7 @@ Future<FavoriteToggleOutcome?> toggleLibraryFavorite(
   final library = ProviderScope.containerOf(
     context,
     listen: false,
-  ).read(libraryProvider);
+  ).read(libraryControllerProvider);
   final outcome = await library.toggleFavoriteTrack(track);
   if (!context.mounted) return outcome;
   showFavoriteFeedback(context, outcome, feedback: feedback);

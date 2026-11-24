@@ -71,7 +71,8 @@ Duration localLibraryDebounce(Ref ref) => const Duration(milliseconds: 150);
 
 /// 曲库聚合读取的「资料库」输入；测试 / 性能场景可替换为真实内存库。
 @Riverpod(keepAlive: true, name: 'localLibraryLibraryProvider')
-LibraryProvider localLibraryLibrary(Ref ref) => ref.read(libraryProvider);
+LibraryProvider localLibraryLibrary(Ref ref) =>
+    ref.read(libraryControllerProvider);
 
 @Riverpod(keepAlive: true, name: 'localLibraryIsolateThresholdProvider')
 int localLibraryIsolateThreshold(Ref ref) => 2000;
@@ -107,7 +108,7 @@ class LocalLibraryProvider extends _$LocalLibraryProvider {
       stats.changes.listen((_) => schedule(browse: false, stats: true)),
     ];
     dl.addListener(_onDownloadsChanged);
-    lib.addListener(_onLibraryProviderChanged);
+    lib.changes.addListener(_onLibraryProviderChanged);
     ref.onDispose(() {
       _disposed = true;
       _timer?.cancel();
@@ -115,7 +116,7 @@ class LocalLibraryProvider extends _$LocalLibraryProvider {
         unawaited(subscription.cancel());
       }
       dl.removeListener(_onDownloadsChanged);
-      lib.removeListener(_onLibraryProviderChanged);
+      lib.changes.removeListener(_onLibraryProviderChanged);
     });
     schedule();
     return LocalLibraryState.empty;

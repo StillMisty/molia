@@ -208,9 +208,21 @@ final maybePlaybackProvider =
 
 final libraryProvider =
     NotifierProvider<
-      LegacyListenableNotifier<LibraryProvider>,
-      LibraryProvider
-    >(() => LegacyListenableNotifier((ref) => _require<LibraryProvider>(ref)));
+      SnapshotNotifier<LibraryProvider, LibraryState>,
+      LibraryState
+    >(() => SnapshotNotifier((ref) => _require<LibraryProvider>(ref)));
+final maybeLibraryProvider =
+    NotifierProvider<
+      NullableSnapshotNotifier<LibraryProvider, LibraryState>,
+      LibraryState?
+    >(
+      () => NullableSnapshotNotifier(
+        (ref) => ref.read(appRuntimeProvider).maybe<LibraryProvider>(),
+      ),
+    );
+final libraryControllerProvider = snapshotController<LibraryProvider>();
+final maybeLibraryControllerProvider =
+    maybeSnapshotController<LibraryProvider>();
 final searchProvider =
     NotifierProvider<LegacyListenableNotifier<SearchProvider>, SearchProvider>(
       () => LegacyListenableNotifier((ref) => _require<SearchProvider>(ref)),
@@ -366,7 +378,6 @@ final maybeLibraryAddSettingsProvider = _maybeListenable<LibraryAddSettings>();
 final maybeSyncProvider = _maybeListenable<SyncProvider>();
 final maybeSourcesProvider = _maybeListenable<SourcesProvider>();
 final maybeAiDjProvider = _maybeListenable<AiDjProvider>();
-final maybeLibraryProvider = _maybeListenable<LibraryProvider>();
 final maybeSourceManagerProvider = _maybeService<SourceManager>();
 
 // ---------------------------------------------------------------------------

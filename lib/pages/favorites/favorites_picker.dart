@@ -35,6 +35,7 @@ Future<CollectionPickerOutcome?> showFavoritesCollectionPicker({
   required List<PlaylistInfo> playlists,
   required int? favoritesId,
   required int selected,
+  required int historyCount,
   required LibraryProvider provider,
   required DownloadRecords? records,
   required FavoritesViewModel viewModel,
@@ -65,8 +66,6 @@ Future<CollectionPickerOutcome?> showFavoritesCollectionPicker({
     }
     folderCollapse.applyDefaults(folders, expanded: selectedFolder);
   }
-  final localLibraryIndex = provider.history; // 保持 provider 引用可读性
-  assert(localLibraryIndex.isNotEmpty || localLibraryIndex.isEmpty);
   return showCollectionPicker(
     context,
     title: l10n.favoritesSwitchTitle,
@@ -75,7 +74,7 @@ Future<CollectionPickerOutcome?> showFavoritesCollectionPicker({
       playlists: playlists,
       favoritesId: favoritesId,
       selected: selected,
-      historyCount: provider.history.length,
+      historyCount: historyCount,
       localSongsSupported: records?.supported ?? false,
       browseIndex: browseIndex,
     ),
@@ -123,7 +122,8 @@ Future<CollectionPickerOutcome?> openFavoritesCollectionPicker({
   required void Function(List<String> keys) onOrderChanged,
   required bool Function() isActive,
 }) {
-  final provider = ref.read(libraryProvider);
+  final library = ref.read(libraryProvider);
+  final provider = ref.read(libraryControllerProvider);
   final DownloadRecords? records = ref.read(downloadRecordsProvider);
   final LocalLibraryState localLibrary = ref.read(localLibraryProvider);
   return showFavoritesCollectionPicker(
@@ -133,6 +133,7 @@ Future<CollectionPickerOutcome?> openFavoritesCollectionPicker({
     playlists: playlists,
     favoritesId: favoritesId,
     selected: selected,
+    historyCount: library.history.length,
     provider: provider,
     records: records,
     viewModel: viewModel,

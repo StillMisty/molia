@@ -127,10 +127,13 @@ Riverpod 3 提供显式 provider 图、自动释放、`Ref` 依赖注入与 `Pro
 `ChangeNotifier`；`LegacyListenableNotifier` / `LazyListenableNotifier` 在
 迁移完成后删除。
 
+已按此形态落地的对象：`AudioFocusSettings`（`bool` 快照）、`LibraryProvider`
+（`LibraryState`：历史 / 列表 / 收藏键 / 版本戳）。
+
 仍以 `ChangeNotifier` 实现、经 `LegacyListenableNotifier` 暴露的类有两类：
 启动期服务（`SourceManager`、`DownloadService`、`ScrobbleService`、数据层
-store…）与体量较大的页面状态（`PlaybackProvider`、`LibraryProvider`、
-`AiDjProvider`、`DiscoverProvider` 等）。它们与启动顺序 / 服务生命周期
+store…）与体量较大的页面状态（`PlaybackProvider`、`AiDjProvider` 等）。
+它们与启动顺序 / 服务生命周期
 强耦合，内部快照化需要单独重排组合根，按模块继续推进；UI 契约已经统一为
 `ref`，后续替换不改变页面代码。
 

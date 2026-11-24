@@ -150,7 +150,7 @@ final class TrackHandoff {
     final LibraryProvider? library = ProviderScope.containerOf(
       context,
       listen: false,
-    ).read(libraryProvider);
+    ).read(maybeLibraryControllerProvider);
     if (library == null) return false;
     return addTracksToLibraryTarget(
       context,

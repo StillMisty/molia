@@ -26,7 +26,7 @@ Future<LxmcImportResult?> importLxmcFavoritesFlow(BuildContext context) async {
   final provider = ProviderScope.containerOf(
     context,
     listen: false,
-  ).read(libraryProvider);
+  ).read(libraryControllerProvider);
   // 数据层解码异常在服务内翻译成稳定原因，widget 不直接依赖 data 层。
   final service = LxmcImportService(importBytes: provider.importLxmcBytes);
   final messengerContext = context;
